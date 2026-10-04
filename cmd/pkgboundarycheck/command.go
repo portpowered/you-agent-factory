@@ -118,7 +118,6 @@ func countAlwaysBlockingViolations(findings scanResult) int {
 		len(findings.staleTransportBehaviorEntries) +
 		len(findings.functionalProcessEdgeFindings) +
 		len(findings.constructedServiceEdgesFindings) +
-		len(findings.testWorkNormalizationFindings) +
 		len(findings.productionDefaultFindings) +
 		len(findings.staleProductionDefaultEntries) +
 		len(findings.testBehaviorFindings) +

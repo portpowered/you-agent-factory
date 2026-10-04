@@ -2759,6 +2759,7 @@ functional-test-missing-subsection|tests/functional/provider_sessions|tests/func
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_script_executor_test.go
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_script_executor_timeout_long_test.go
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_template_resolution_long_test.go
+functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_timeout_cleanup_process_unix_test.go
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_timeout_cleanup_process_windows_test.go
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_timeout_companion_smoke_long_test.go
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/doc.go

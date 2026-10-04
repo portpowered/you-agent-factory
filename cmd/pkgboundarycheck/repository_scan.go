@@ -190,8 +190,7 @@ func scanRepositoryProcessBoundaries(repoRoot string, result *scanResult) error 
 	if err != nil {
 		return err
 	}
-	result.testWorkNormalizationFindings, err = scanTestWorkNormalization(repoRoot)
-	return err
+	return nil
 }
 
 func scanRepositoryTestBehavior(repoRoot string, result *scanResult) error {

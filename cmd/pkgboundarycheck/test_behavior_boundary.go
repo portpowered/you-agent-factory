@@ -667,3 +667,9 @@ func writeTestBehaviorBaselineSummary(writer io.Writer, count int) {
 	fmt.Fprintf(writer, "[agent-factory:pkg-boundary] active test behavior migration baseline: %d exact file/symbol edge(s)\n", count)
 	fmt.Fprintln(writer, "  deletion gate: preserve the named scenario at its correct owner or customer boundary, then delete its exact baseline entry.")
 }
+
+func isTestOwnedGoFile(filePath string) bool {
+	return strings.HasSuffix(filePath, "_test.go") ||
+		strings.HasPrefix(filePath, "internal/testutil/") ||
+		strings.HasPrefix(filePath, "tests/functional/internal/support/")
+}

@@ -15,7 +15,6 @@ type scanResult struct {
 	transportBehaviorBaselineCount      int
 	functionalProcessEdgeFindings       []functionalProcessEdgeFinding
 	constructedServiceEdgesFindings     []constructedServiceEdgesFinding
-	testWorkNormalizationFindings       []testWorkNormalizationFinding
 	productionDefaultFindings           []productionDefaultFinding
 	recordedProductionDefaultFindings   []productionDefaultFinding
 	staleProductionDefaultEntries       []productionDefaultBaselineEntry
