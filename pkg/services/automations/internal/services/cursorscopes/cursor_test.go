@@ -1,25 +1,26 @@
-package script_pollers_test
+package cursorscopes_test
 
 import (
 	"context"
 	"errors"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
 	"testing"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
 )
 
 func TestMemoryCursorRecorder_CommitsAndReadsOpaqueFacts(t *testing.T) {
 	t.Parallel()
 
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := cursorscopeswire.NewService(unexpectedCursorIO{})
 	ctx := context.Background()
 	const (
 		automationID = "workflow-cursor"
 		instanceID   = "instance-cursor-1"
 	)
 
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	if err := recorder.CommitCursor(ctx, cursorscopes.CursorScope{}, cursorscopes.CommitCursorRequest{
 		AutomationID: automationID,
 		InstanceID:   instanceID,
 		Cursor:       "opaque-cursor-1",
@@ -28,7 +29,7 @@ func TestMemoryCursorRecorder_CommitsAndReadsOpaqueFacts(t *testing.T) {
 		t.Fatalf("CommitCursor() error = %v", err)
 	}
 
-	cursor, err := recorder.GetCursor(ctx, automations.GetCursorRequest{
+	cursor, err := recorder.GetCursor(ctx, cursorscopes.CursorScope{}, automations.GetCursorRequest{
 		InstanceID:     instanceID,
 		ExpectedCursor: "opaque-cursor-1",
 	})
@@ -47,11 +48,11 @@ func TestMemoryCursorRecorder_CommitsAndReadsOpaqueFacts(t *testing.T) {
 func TestMemoryCursorRecorder_RejectsStaleExpectedCursor(t *testing.T) {
 	t.Parallel()
 
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := cursorscopeswire.NewService(unexpectedCursorIO{})
 	ctx := context.Background()
 	const instanceID = "instance-stale"
 
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	if err := recorder.CommitCursor(ctx, cursorscopes.CursorScope{}, cursorscopes.CommitCursorRequest{
 		AutomationID: "workflow-stale",
 		InstanceID:   instanceID,
 		Cursor:       "cursor-current",
@@ -59,13 +60,13 @@ func TestMemoryCursorRecorder_RejectsStaleExpectedCursor(t *testing.T) {
 		t.Fatalf("CommitCursor() error = %v", err)
 	}
 
-	_, err := recorder.GetCursor(ctx, automations.GetCursorRequest{
+	_, err := recorder.GetCursor(ctx, cursorscopes.CursorScope{}, automations.GetCursorRequest{
 		InstanceID:     instanceID,
 		ExpectedCursor: "cursor-stale",
 	})
 	assertAutomationsError(t, err, "script_poller.get_cursor", automations.ErrorCodeConflict, automations.ErrConflict)
 
-	err = recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	err = recorder.CommitCursor(ctx, cursorscopes.CursorScope{}, cursorscopes.CommitCursorRequest{
 		AutomationID:   "workflow-stale",
 		InstanceID:     instanceID,
 		ExpectedCursor: "cursor-stale",
@@ -73,7 +74,7 @@ func TestMemoryCursorRecorder_RejectsStaleExpectedCursor(t *testing.T) {
 	})
 	assertAutomationsError(t, err, "script_poller.commit_cursor", automations.ErrorCodeConflict, automations.ErrConflict)
 
-	cursor, err := recorder.GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
+	cursor, err := recorder.GetCursor(ctx, cursorscopes.CursorScope{}, automations.GetCursorRequest{InstanceID: instanceID})
 	if err != nil {
 		t.Fatalf("GetCursor() after stale commit = %v", err)
 	}

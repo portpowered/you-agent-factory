@@ -11,22 +11,23 @@ import (
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 type service struct {
-	effects reconciliation.Effects
+	lifecycle sourcelifecycle.SourceLifecycle
 
 	recordsMu sync.RWMutex
-	records   map[identityKey]*sourceRecord
+	records   map[sourceKey]*sourceRecord
 }
 
 var _ reconciliation.Service = (*service)(nil)
 
 // New constructs an inert deterministic reconciliation service.
-func New(effects reconciliation.Effects) reconciliation.Service {
+func New(lifecycle sourcelifecycle.SourceLifecycle) reconciliation.Service {
 	return &service{
-		effects: effects,
-		records: make(map[identityKey]*sourceRecord),
+		lifecycle: lifecycle,
+		records:   make(map[sourceKey]*sourceRecord),
 	}
 }
 
@@ -54,6 +55,12 @@ func (*service) Reconcile(
 		outcomes = append(outcomes, decide(spec, observation, exists))
 	}
 	return automations.ReconcileResult{Outcomes: outcomes}, nil
+}
+
+// sourceKey adds private runtime ownership without changing public identity.
+type sourceKey struct {
+	runtimeID string
+	identityKey
 }
 
 type identityKey struct {

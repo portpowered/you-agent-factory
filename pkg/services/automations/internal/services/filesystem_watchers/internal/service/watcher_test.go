@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -52,6 +53,7 @@ func newTestWatcher(
 		WalkDirectory:     walkDirectory,
 		WorkRequestIDs:    testWorkRequestIDGenerator,
 		Submitter:         submitter.Submit,
+		Clock:             clockwork.NewRealClock(),
 	})
 }
 

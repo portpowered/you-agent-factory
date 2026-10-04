@@ -89,3 +89,60 @@ func waitForRegisteredDirectory(t *testing.T, added <-chan string, want string) 
 		}
 	}
 }
+
+func TestFileWatcher_DiscoversFilesPublishedBeforeDirectoryRegistration(t *testing.T) {
+	for _, scenario := range []string{"startup_after_preseed", "new_channel", "new_work_type_and_channel"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			dir := setupWatchDir(t)
+			submitter := &recordingSubmitter{submitted: make(chan struct{}, 2)}
+			events := newScriptedEventWatcher()
+			clock := clockwork.NewFakeClock()
+			fw := newDebouncedTestWatcher(dir, submitter, clock, events)
+			if err := fw.PreseedInputs(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			workType := "request"
+			if scenario == "new_work_type_and_channel" {
+				workType = "new-type"
+			}
+			channel := filepath.Join(dir, workType, "execution-owned")
+			path := filepath.Join(channel, "input.md")
+			var cancel context.CancelFunc
+			var done <-chan error
+			if scenario != "startup_after_preseed" {
+				cancel, done = startDebouncedWatch(t, fw, events)
+				defer cancel()
+				waitForRegisteredDirectory(t, events.added, filepath.Join(dir, "request", "default"))
+			}
+			if err := os.MkdirAll(channel, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte("owned input"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "startup_after_preseed" {
+				cancel, done = startDebouncedWatch(t, fw, events)
+				defer cancel()
+			} else {
+				created := channel
+				if scenario == "new_work_type_and_channel" {
+					created = filepath.Dir(channel)
+				}
+				// Only the ancestor creation is observed. The file was published
+				// before Add, so no file event can rescue a missing discovery scan.
+				events.events <- fsnotify.Event{Name: created, Op: fsnotify.Create}
+			}
+			waitForRegisteredDirectory(t, events.added, channel)
+			advanceDebounce(t, clock)
+			waitForSubmitCount(t, submitter, 1)
+			requests := submitter.getWorkRequests()
+			item := requests[0].Works[0]
+			if item.WorkTypeID != workType || item.ExecutionID != "execution-owned" || string(item.Payload.([]byte)) != "owned input" {
+				t.Fatalf("discovered Work = %#v, want exact type, correlation and payload", item)
+			}
+			cancel()
+			waitForWatchDone(t, done)
+		})
+	}
+}

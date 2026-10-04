@@ -1,4 +1,4 @@
-package internal
+package service
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -26,25 +27,25 @@ const (
 )
 
 // StartCronWatchersForRuntime supervises cron workstations until ctx is canceled.
-func (s *Service) StartCronWatchersForRuntime(
+func (s *service) StartCronWatchersForRuntime(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 ) {
 	if factoryCfg == nil || runtimeCfg == nil || sidecars == nil || submitter == nil {
 		return
 	}
 
-	schedulerClock := s.supervisorClock()
+	schedulerClock := s.clock
 	scheduler, err := gocron.NewScheduler(
 		gocron.WithClock(schedulerClock),
 		gocron.WithLocation(time.UTC),
 	)
 	if err != nil {
-		s.logger().Error("cron scheduler disabled", zap.Error(err))
+		s.logger.Error("cron scheduler disabled", zap.Error(err))
 		return
 	}
 
@@ -55,54 +56,42 @@ func (s *Service) StartCronWatchersForRuntime(
 	}
 
 	scheduler.Start()
-	s.logger().Info("cron scheduler started", zap.Int("jobs", registered))
+	s.logger.Info("cron scheduler started", zap.Int("jobs", registered))
 	sidecars.Add(1)
 	go func() {
 		defer sidecars.Done()
 		<-ctx.Done()
 		if err := scheduler.Shutdown(); err != nil {
-			s.logger().Warn("cron scheduler shutdown failed", zap.Error(err))
+			s.logger.Warn("cron scheduler shutdown failed", zap.Error(err))
 		}
-		s.logger().Info("cron scheduler stopped")
+		s.logger.Info("cron scheduler stopped")
 	}()
 }
 
-// SubmitCronTick submits one cron workstation tick through the injected runtime submitter.
-func (s *Service) SubmitCronTick(
-	ctx context.Context,
-	runtimeCfg interfaces.RuntimeWorkstationLookup,
-	workflowIdentity string,
-	submitter WorkRequestSubmitter,
-	ws interfaces.FactoryWorkstationConfig,
-	firedAt time.Time,
-) error {
-	return s.submitCronTickForRuntime(ctx, runtimeCfg, workflowIdentity, submitter, ws, firedAt)
-}
-
-func (s *Service) registerCronJobs(
+func (s *service) registerCronJobs(
 	ctx context.Context,
 	scheduler gocron.Scheduler,
 	schedulerClock clockwork.Clock,
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 ) int {
 	registered := 0
-	workflowIdentity := s.workflowIdentity(factoryDir)
+	workflowIdentity := factoryDir
 	for _, workstation := range factoryCfg.Workstations {
 		ws := workstation
 		if ws.Kind != interfaces.WorkstationKindCron {
 			continue
 		}
 		if ws.Cron == nil {
-			s.logger().Warn("cron watcher disabled", zap.String("workstation", ws.Name), zap.String("reason", "missing cron configuration"))
+			s.logger.Warn("cron watcher disabled", zap.String("workstation", ws.Name), zap.String("reason", "missing cron configuration"))
 			continue
 		}
 		var err error
 		if strings.TrimSpace(ws.Cron.Every) != "" {
 			if _, invocationScoped := invocationParameterReference(ws.Cron.Every); invocationScoped {
-				s.logger().Info("invocation interval watcher awaiting controller Work",
+				s.logger.Info("invocation interval watcher awaiting controller Work",
 					zap.String("workstation", ws.Name),
 					zap.String("every", ws.Cron.Every),
 				)
@@ -117,7 +106,7 @@ func (s *Service) registerCronJobs(
 			}
 		}
 		if err != nil {
-			s.logger().Warn("cron watcher disabled",
+			s.logger.Warn("cron watcher disabled",
 				zap.String("workstation", ws.Name),
 				zap.Error(err),
 			)
@@ -129,14 +118,14 @@ func (s *Service) registerCronJobs(
 	return registered
 }
 
-func (s *Service) registerIntervalJob(
+func (s *service) registerIntervalJob(
 	ctx context.Context,
 	scheduler gocron.Scheduler,
 	schedulerClock clockwork.Clock,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	ws interfaces.FactoryWorkstationConfig,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 ) error {
 	every, err := time.ParseDuration(strings.TrimSpace(ws.Cron.Every))
 	if err != nil || every < time.Second || every > 7*24*time.Hour {
@@ -152,11 +141,11 @@ func (s *Service) registerIntervalJob(
 	if err != nil {
 		return fmt.Errorf("register interval %q: %w", ws.Cron.Every, err)
 	}
-	s.logger().Info("interval watcher registered", zap.String("workstation", ws.Name), zap.String("every", ws.Cron.Every))
+	s.logger.Info("interval watcher registered", zap.String("workstation", ws.Name), zap.String("every", ws.Cron.Every))
 	return nil
 }
 
-func (s *Service) registerCronJob(
+func (s *service) registerCronJob(
 	ctx context.Context,
 	scheduler gocron.Scheduler,
 	schedulerClock clockwork.Clock,
@@ -164,7 +153,7 @@ func (s *Service) registerCronJob(
 	workflowIdentity string,
 	ws interfaces.FactoryWorkstationConfig,
 	schedule string,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 ) error {
 	_, err := scheduler.NewJob(
 		gocron.CronJob(schedule, false),
@@ -175,20 +164,20 @@ func (s *Service) registerCronJob(
 	if err != nil {
 		return fmt.Errorf("register schedule %q: %w", schedule, err)
 	}
-	s.logger().Info("cron watcher registered",
+	s.logger.Info("cron watcher registered",
 		zap.String("workstation", ws.Name),
 		zap.String("schedule", schedule),
 	)
 	return nil
 }
 
-func (s *Service) triggerCronAtStart(
+func (s *service) triggerCronAtStart(
 	ctx context.Context,
 	schedulerClock clockwork.Clock,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	ws interfaces.FactoryWorkstationConfig,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 ) {
 	if ws.Cron == nil || !ws.Cron.TriggerAtStart {
 		return
@@ -196,44 +185,26 @@ func (s *Service) triggerCronAtStart(
 	s.runCronJob(ctx, runtimeCfg, workflowIdentity, ws, schedulerClock.Now().UTC(), submitter)
 }
 
-func (s *Service) runCronJob(
+func (s *service) runCronJob(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 ) {
 	if err := s.submitCronTickForRuntime(ctx, runtimeCfg, workflowIdentity, submitter, ws, firedAt); err != nil {
 		if ctx.Err() != nil {
 			return
 		}
-		s.logger().Error("cron watcher trigger failed",
+		s.logger.Error("cron watcher trigger failed",
 			zap.String("workstation", ws.Name),
 			zap.Error(err),
 		)
 	}
 }
 
-// WorkflowIdentityForFactoryDir resolves cron workflow identity from runtime factory directory.
-func (s *Service) WorkflowIdentityForFactoryDir(factoryDir string) string {
-	return s.workflowIdentity(factoryDir)
-}
-
-func (s *Service) workflowIdentity(factoryDir string) string {
-	if s != nil && s.workflowID != "" {
-		return s.workflowID
-	}
-	if factoryDir != "" {
-		return factoryDir
-	}
-	if s != nil {
-		return s.defaultFactoryDir
-	}
-	return ""
-}
-
-func (s *Service) cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
+func (s *service) cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	if ws.Cron == nil {
 		return "", fmt.Errorf("%w: missing cron config", cron.ErrInvalidSchedule)
 	}
@@ -247,11 +218,11 @@ func (s *Service) cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, 
 	return schedule, nil
 }
 
-func (s *Service) submitCronTickForRuntime(
+func (s *service) submitCronTickForRuntime(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
 ) error {
@@ -275,25 +246,27 @@ func (s *Service) submitCronTickForRuntime(
 			zap.Error(err),
 		}
 		if !failure.Retryable || attempt == attempts {
-			s.logger().Error("cron watcher trigger exhausted", fields...)
+			s.logger.Error("cron watcher trigger exhausted", fields...)
 			return err
 		}
 
-		s.logger().Warn("cron watcher trigger retrying", fields...)
+		s.logger.Warn("cron watcher trigger retrying", fields...)
+		timer := s.clock.NewTimer(cronRetryBackoff)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
-		case <-time.After(cronRetryBackoff):
+		case <-timer.Chan():
 		}
 	}
 	return nil
 }
 
-func (s *Service) submitCronTickAttempt(
+func (s *service) submitCronTickAttempt(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
-	submitter WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter,
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
 ) error {
@@ -323,7 +296,7 @@ func (s *Service) submitCronTickAttempt(
 		return fmt.Errorf("cron workstation %q: expected submitted tick at %s", ws.Name, firedAt.Format(time.RFC3339Nano))
 	}
 	metadata := submission.Metadata
-	s.logger().Info("cron watcher trigger submitted",
+	s.logger.Info("cron watcher trigger submitted",
 		zap.String("workstation", ws.Name),
 		zap.String("work_type", interfaces.SystemTimeWorkTypeID),
 		zap.String("state", interfaces.SystemTimePendingState),
@@ -334,7 +307,7 @@ func (s *Service) submitCronTickAttempt(
 	return nil
 }
 
-func (s *Service) cronAttemptContext(
+func (s *service) cronAttemptContext(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	ws interfaces.FactoryWorkstationConfig,
@@ -350,15 +323,7 @@ func (s *Service) cronAttemptContext(
 	return attemptCtx, cancel, nil
 }
 
-// CronExecutionTimeout resolves the execution timeout for a cron workstation from runtime config.
-func (s *Service) CronExecutionTimeout(
-	runtimeCfg interfaces.RuntimeWorkstationLookup,
-	ws interfaces.FactoryWorkstationConfig,
-) (time.Duration, error) {
-	return s.cronExecutionTimeout(runtimeCfg, ws)
-}
-
-func (s *Service) cronExecutionTimeout(
+func (s *service) cronExecutionTimeout(
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	ws interfaces.FactoryWorkstationConfig,
 ) (time.Duration, error) {
@@ -406,4 +371,13 @@ func ClassifyCronTriggerFailure(err error) CronTriggerFailure {
 		Type:      workerexecution.WorkFailureTypeInternalServerError,
 		Retryable: true,
 	}
+}
+
+func invocationParameterReference(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) < 4 || !strings.HasPrefix(trimmed, "${") || !strings.HasSuffix(trimmed, "}") {
+		return "", false
+	}
+	name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "${"), "}"))
+	return name, name != ""
 }

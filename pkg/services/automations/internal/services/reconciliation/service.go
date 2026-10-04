@@ -8,11 +8,17 @@ import (
 	"context"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 // Service owns detached reconciliation decisions and explicit source
 // lifecycle operations. Only lifecycle commands can apply supervision effects.
 type Service interface {
+	// Runtime-keyed controls isolate sources sharing a public identity. An empty
+	// runtime ID selects the detached public scope.
+	StartSourceForRuntime(context.Context, string, automations.StartSourceRequest) (automations.StartSourceResult, error)
+	StopSourceForRuntime(context.Context, string, automations.StopSourceRequest) (automations.StopSourceResult, error)
+	WaitSourceForRuntime(context.Context, string, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
 	Reconcile(context.Context, automations.ReconcileRequest) (automations.ReconcileResult, error)
 	StartSource(context.Context, automations.StartSourceRequest) (automations.StartSourceResult, error)
 	StopSource(context.Context, automations.StopSourceRequest) (automations.StopSourceResult, error)
@@ -22,29 +28,7 @@ type Service interface {
 	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
 }
 
-// Effects applies source-specific lifecycle effects without owning
-// reconciliation policy. Start is invoked only after the reconciler commits
-// the authoritative starting observation. Wait observes one already-started
-// transition; it must not activate or stop a source.
-type Effects struct {
-	Start func(context.Context, StartEffect) error
-	Stop  func(context.Context, StopEffect) error
-	Wait  func(context.Context, WaitEffect) (automations.SourceObservation, error)
-}
-
-// StartEffect identifies the one logical source activation to apply.
-type StartEffect struct {
-	Kind        string
-	Observation automations.SourceObservation
-}
-
-// StopEffect identifies the one logical source deactivation to apply.
-type StopEffect struct {
-	Observation automations.SourceObservation
-}
-
-// WaitEffect identifies the transition whose latest observation is requested.
-type WaitEffect struct {
-	Desired     automations.DesiredLifecycleState
-	Observation automations.SourceObservation
-}
+// Value aliases preserve lifecycle effect identity.
+type StartEffect = sourcelifecycle.StartEffect
+type StopEffect = sourcelifecycle.StopEffect
+type WaitEffect = sourcelifecycle.WaitEffect
