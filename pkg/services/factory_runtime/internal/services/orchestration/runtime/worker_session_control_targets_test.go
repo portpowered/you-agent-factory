@@ -299,59 +299,6 @@ func detachedTargetRequest() workers.ExecuteRequest {
 	}
 }
 
-type beginRuntimeAttemptService struct {
-	workersessions.Service
-	request       workersessions.RuntimeAttemptRequest
-	completed     *workers.WorkstationDispatchResult
-	completeErr   error
-	completeCalls int
-	beginErr      error
-	existing      workersessions.Session
-	getErr        error
-	closedRuntime string
-	closeErr      error
-	clock         platformclock.Source
-	cancel        func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
-}
-
-func (service *beginRuntimeAttemptService) CloseRuntimeAttempts(_ context.Context, runtimeID string) error {
-	service.closedRuntime = runtimeID
-	return service.closeErr
-}
-
-func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
-	if service.getErr != nil {
-		return workersessions.Session{}, service.getErr
-	}
-	return service.existing, nil
-}
-
-func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
-	_ context.Context,
-	request workersessions.RuntimeAttemptRequest,
-	clock platformclock.Source,
-	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
-) (workersessions.RuntimeAttempt, error) {
-	service.request = request
-	service.clock = clock
-	service.cancel = cancel
-	if service.beginErr != nil {
-		return nil, service.beginErr
-	}
-	return workersessions.RuntimeAttempt(func(
-		_ context.Context,
-		result workers.WorkstationDispatchResult,
-		err error,
-	) error {
-		service.completeCalls++
-		if service.completed == nil {
-			service.completed = &result
-			service.completeErr = err
-		}
-		return nil
-	}), nil
-}
-
 func TestCaptureAssociatedWorkerSessionTargets_IsolatesFactorySessionLedgersAndEmptyTurns(t *testing.T) {
 	currentFactorySession := &recordingfixtures.ScriptedRuntimeLedger{Events: []interfaces.FactoryEvent{
 		workerSessionAssociationEvent(t, 1, "current-association", "turn-1", "worker-current"),

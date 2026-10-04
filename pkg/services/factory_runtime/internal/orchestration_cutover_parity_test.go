@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -164,6 +165,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
 		nil,
+		platformclock.Real{},
 	).Build(
 		context.Background(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,

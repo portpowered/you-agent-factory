@@ -190,7 +190,7 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	}
 	runtime, err := New(
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, cfg.runtimeConfig, nil, nil,
-		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock,
+		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock, platformclock.Real{},
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
 		cfg.restoredWorldState, false, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
@@ -2027,7 +2027,9 @@ func (service *runtimeWorkerSessionsService) Get(
 func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
 	ctx context.Context,
 	request workersessions.RuntimeAttemptRequest,
+	execution workers.Service,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	if err := ctx.Err(); err != nil {

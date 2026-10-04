@@ -47,6 +47,7 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	providerSessions providersessions.Service,
+	workerAttemptScheduler platformclock.TimerSource,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
 		quorumPolicy,
@@ -66,6 +67,7 @@ func NewRuntimeFactory(
 		inputDirectoryWalker,
 		orchestrationCompilation,
 		providerSessions,
+		workerAttemptScheduler,
 	)
 }
 

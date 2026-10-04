@@ -460,6 +460,7 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil,
+		platformclock.Real{},
 	)
 }
 
@@ -480,6 +481,7 @@ func testRuntimeFactoryWithSinkCallbacks(
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil,
+		platformclock.Real{},
 	)
 }
 

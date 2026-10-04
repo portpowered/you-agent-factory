@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -56,6 +57,7 @@ type RuntimeFactory struct {
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
 	providerSessions         providersessions.Service
+	workerAttemptScheduler   platformclock.TimerSource
 }
 
 func NewRuntimeFactory(
@@ -76,6 +78,7 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	providerSessions providersessions.Service,
+	workerAttemptScheduler platformclock.TimerSource,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		quorumPolicy:             quorumPolicy,
@@ -95,6 +98,7 @@ func NewRuntimeFactory(
 		inputDirectoryWalker:     inputDirectoryWalker,
 		orchestrationCompilation: orchestrationCompilation,
 		providerSessions:         providerSessions,
+		workerAttemptScheduler:   workerAttemptScheduler,
 	}
 }
 
@@ -286,6 +290,7 @@ func (f *RuntimeFactory) Build(
 		mockWorkersConfig,
 		workerSessionsFactory,
 		f.providerSessions,
+		f.workerAttemptScheduler,
 		f.workService,
 		f.quorumPolicy,
 		f.outputShaping,
@@ -361,6 +366,7 @@ func assembleRuntimeBundle(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	providerSessions providersessions.Service,
+	workerAttemptScheduler platformclock.TimerSource,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
@@ -421,6 +427,7 @@ func assembleRuntimeBundle(
 		runtimeMode,
 		structuredLogger,
 		clock,
+		workerAttemptScheduler,
 		inlineDispatch,
 		eventHistory,
 		workerRecordingIdentity(runtimeInstanceID),

@@ -16,7 +16,7 @@ import (
 // InvokeSession and its attempt loop live beside the controls they race with.
 
 var _ interface {
-	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, platformclock.Source, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
+	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, workers.Service, platformclock.Source, platformclock.TimerSource, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 } = (*registry)(nil)
 
 // transitionToStarting atomically moves id from StateReserved to

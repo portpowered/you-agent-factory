@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -81,6 +82,8 @@ type runtimeConfig struct {
 	net                                *state.Net
 	scheduler                          scheduler.Scheduler
 	executeService                     executeCapability
+	workerExecution                    workers.Service
+	workerAttemptScheduler             platformclock.TimerSource
 	promptRenderer                     runtimePromptRenderer
 	templateFieldResolver              runtimeTemplateFieldResolver
 	promptSourceReader                 func(string) ([]byte, error)
@@ -135,7 +138,7 @@ var _ TickableFactory = (*factoryImpl)(nil)
 func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
-	statelessService executeCapability,
+	statelessService workers.Service,
 	workerSessionsService workersessions.Service,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	invocationInterpolation interfaces.InvocationInterpolationService,
@@ -145,6 +148,7 @@ func New(
 	runtimeMode interfaces.RuntimeMode,
 	logger logging.Logger,
 	clock factory.Clock,
+	workerAttemptScheduler platformclock.TimerSource,
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
 	recordingID string,
@@ -179,6 +183,8 @@ func New(
 		net:                                net,
 		scheduler:                          runtimeScheduler,
 		executeService:                     statelessService,
+		workerExecution:                    statelessService,
+		workerAttemptScheduler:             workerAttemptScheduler,
 		promptRenderer:                     promptRenderer,
 		templateFieldResolver:              templateFieldResolver,
 		workerSessions:                     workerSessionsService,

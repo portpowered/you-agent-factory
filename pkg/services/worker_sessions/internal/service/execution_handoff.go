@@ -744,11 +744,15 @@ func (r *registry) runtimeAttemptDispatchConflictLocked(key workersessions.Runti
 // execution, cancellation, and terminal race. The exact cancellation resource
 // is required before opening effects and installed with the RUNNING state.
 // The supplied fact clock is retained for opening, active duration and terminal
-// timing even after the live attempt handle is released.
+// timing even after the live attempt handle is released. Required execution
+// and deadline effects are supplied independently of direct-session defaults;
+// this observation-only opening does not invoke Workers or schedule a timer.
 func (r *registry) BeginRuntimeAttempt(
 	ctx context.Context,
 	req workersessions.RuntimeAttemptRequest,
+	executor workers.Service,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	if r == nil {
@@ -757,8 +761,14 @@ func (r *registry) BeginRuntimeAttempt(
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
+	if executor == nil {
+		return nil, ErrMissingExecution
+	}
 	if clock == nil {
 		return nil, ErrMissingClock
+	}
+	if scheduler == nil {
+		return nil, ErrMissingScheduler
 	}
 	if cancel == nil {
 		return nil, errRuntimeAttemptControlUnavailable
@@ -793,9 +803,9 @@ func (r *registry) BeginRuntimeAttempt(
 		context.WithoutCancel(ctx),
 		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
 		invocationPreparationOptions{runtimeOwned: true},
-		r.execution,
+		executor,
 		clock,
-		r.scheduler,
+		scheduler,
 	)
 	if err != nil {
 		return nil, err

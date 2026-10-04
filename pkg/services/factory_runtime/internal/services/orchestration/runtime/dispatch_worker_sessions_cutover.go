@@ -86,13 +86,15 @@ func runtimeAttemptPreparation(
 		return nil
 	}
 	recorder, ok := cfg.workerSessions.(interface {
-		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, platformclock.Source, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
+		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, workers.Service, platformclock.Source, platformclock.TimerSource, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 	})
 	if !ok || recorder == nil {
 		return nil
 	}
 	lifecycle := cfg.attempts
 	clock := cfg.clock
+	execution := cfg.workerExecution
+	scheduler := cfg.workerAttemptScheduler
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
 	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
@@ -111,7 +113,9 @@ func runtimeAttemptPreparation(
 				AttemptID: executeRequest.Correlation.AttemptID,
 				Execution: admissionRequest,
 			},
+			execution,
 			clock,
+			scheduler,
 			func(cancelCtx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
 				if lifecycle == nil {
 					return "", ErrAttemptLifecycleUnavailable
