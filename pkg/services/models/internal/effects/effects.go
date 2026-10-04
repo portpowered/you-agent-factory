@@ -11,7 +11,6 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	"go.uber.org/zap"
 	"net/http"
 	"sync/atomic"
 )
@@ -134,19 +133,6 @@ type LocalRuntimeHooks struct {
 	MarkLoadRequested        func(context.Context, time.Time)
 	MarkLoadFinished         func(context.Context, time.Time)
 	MarkLoadReused           func(context.Context)
-}
-
-type ProcessDependencies struct {
-	Logger                     *zap.Logger
-	Clock                      func() time.Time
-	PullMetrics                PullMetricsRecorder
-	RuntimeEvidence            RuntimeEvidenceRecorder
-	HostLogger                 HostDiagnosticLogger
-	HostMetrics                HostMetricsRecorder
-	LocalHooks                 LocalRuntimeHooks
-	ResolveHuggingFaceRevision func(context.Context, string) (string, error)
-	ResolveBackendArtifact     BackendArtifactResolver
-	BackendArtifactPlatform    models.AssetHostPlatform
 }
 
 // ResolvedHostConfiguration is the single Models-owned private fact set for

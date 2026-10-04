@@ -117,7 +117,6 @@ func (recorder *modelRuntimeEvidenceFileRecorder) RecordManagedChildEnvironment(
 		return record
 	})
 }
-
 func (recorder *modelRuntimeEvidenceFileRecorder) appendJSONLineLocked(
 	value func(uint64) any,
 ) {
@@ -140,7 +139,6 @@ func (recorder *modelRuntimeEvidenceFileRecorder) appendJSONLineLocked(
 	payload = append(payload, '\n')
 	_, _ = file.Write(payload)
 }
-
 func provideModelRuntimeEvidenceRecorder() (modelswire.RuntimeEvidenceRecorder, error) {
 	path := strings.TrimSpace(os.Getenv(modelRuntimeEvidenceEnvironment))
 	if path == "" {
@@ -181,28 +179,24 @@ func provideModelHostHTTP(edges serviceedges.Edges) modelswire.HostHTTPDoer {
 	}
 	return &http.Client{Timeout: modelHostHTTPTimeout}
 }
-
 func provideModelRuntimeHTTP(edges serviceedges.Edges) modelswire.RuntimeHTTPDoer {
 	if selected := edges.ModelRuntimeHTTPClient; selected != nil {
 		return modelswire.RuntimeHTTPDoer(selected)
 	}
 	return &http.Client{Timeout: modelRuntimeHTTPTimeout}
 }
-
 func provideModelRuntimeInspectFile(edges serviceedges.Edges) modelswire.RuntimeInspectFile {
 	if selected := edges.ModelRuntimeInspectFile; selected != nil {
 		return modelswire.RuntimeInspectFile(selected)
 	}
 	return os.Stat
 }
-
 func provideModelRuntimeTempDirectory(edges serviceedges.Edges) modelswire.RuntimeTempDirectory {
 	if selected := edges.ModelRuntimeTempDirectory; selected != nil {
 		return modelswire.RuntimeTempDirectory(selected)
 	}
 	return os.TempDir
 }
-
 func provideModelHostClock(edges serviceedges.Edges) modelswire.HostClock {
 
 	if selected := edges.ModelHostClock; selected != nil {
@@ -210,12 +204,10 @@ func provideModelHostClock(edges serviceedges.Edges) modelswire.HostClock {
 	}
 	return adaptModelHostClock(modelsClock{source: edges.Clock})
 }
-
 func provideModelNow(edges serviceedges.Edges) modelNow {
 
 	return edges.Clock.Now
 }
-
 func provideModelRuntimeRunner(edges serviceedges.Edges) (modelRuntimeRunner, error) {
 
 	if selected := edges.ModelRuntimeCommandRunner; selected != nil {
@@ -223,7 +215,6 @@ func provideModelRuntimeRunner(edges serviceedges.Edges) (modelRuntimeRunner, er
 	}
 	return providePlatformProcessCommandRunner(edges)
 }
-
 func provideModelHostLauncher(edges serviceedges.Edges, evidence modelRuntimeEvidenceSource) modelswire.HostProcessLauncher {
 
 	if selected := edges.ModelHostProcessLauncher; selected != nil {
@@ -233,7 +224,6 @@ func provideModelHostLauncher(edges serviceedges.Edges, evidence modelRuntimeEvi
 	childRecorder, _ = evidence.(managedChildEnvironmentRecorder)
 	return adaptModelHostProcessLauncher(modelsProcessLauncher{recorder: childRecorder})
 }
-
 func provideModelRuntimeEvidenceSource() (modelRuntimeEvidenceSource, error) {
 
 	source, err := provideModelRuntimeEvidenceRecorder()
@@ -242,15 +232,12 @@ func provideModelRuntimeEvidenceSource() (modelRuntimeEvidenceSource, error) {
 	}
 	return source, nil
 }
-
 func provideModelOrderedRuntimeEvidence(source modelRuntimeEvidenceSource) modelswire.RuntimeEvidenceRecorder {
 	return modelswire.NewOrderedRuntimeEvidenceRecorder(source)
 }
-
 func provideModelHostSymlinks() modelswire.HostResolveSymlinks {
 	return platformfilesystem.Local{}.EvalSymlinks
 }
-
 func provideModelHostProtocol(edges serviceedges.Edges, symlinks modelswire.HostResolveSymlinks) modelswire.HostProtocolNegotiator {
 
 	protocol := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
@@ -262,11 +249,9 @@ func provideModelHostProtocol(edges serviceedges.Edges, symlinks modelswire.Host
 	}
 	return protocol
 }
-
 func provideModelHostCompatibility(edges serviceedges.Edges) (modelswire.HostCompatibilityChecker, error) {
 	return provideModelHostCompatibilityChecker(edges, runtime.GOOS == "linux" && runtime.GOARCH == "amd64")
 }
-
 func provideModelBackendArtifactResolver(edges serviceedges.Edges, runner modelRuntimeRunner, client modelswire.AssetHTTPDoer) (modelswire.BackendArtifactResolver, error) {
 
 	if selected := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact); selected != nil {
@@ -288,7 +273,6 @@ func provideModelBackendArtifactResolver(edges serviceedges.Edges, runner modelR
 	}
 	return resolver, nil
 }
-
 func provideModelAssetRevision(edges serviceedges.Edges) modelAssetRevisionResolver {
 
 	if selected := edges.ModelResolveHuggingFaceRevision; selected != nil {
@@ -296,11 +280,9 @@ func provideModelAssetRevision(edges serviceedges.Edges) modelAssetRevisionResol
 	}
 	return modelswire.NewUnresolvedAssetRevisionResolver()
 }
-
 func provideModelRuntimeScopes() (modelswire.RuntimeScopes, error) {
 	return modelswire.NewRuntimeScopes(platformrandom.CryptoSource{})
 }
-
 func provideModelAssets(scopes modelswire.RuntimeScopes, platform models.AssetHostPlatform, client modelswire.AssetHTTPDoer,
 	endpoints models.RuntimeAssetEndpoints, mkdir modelswire.AssetMakeDirectories, stat modelswire.AssetInspectPath,
 	home modelswire.AssetResolveHomeDirectory, write modelswire.AssetWriteFile, rename modelswire.AssetRenamePath,
@@ -311,23 +293,18 @@ func provideModelAssets(scopes modelswire.RuntimeScopes, platform models.AssetHo
 	return modelswire.NewAssets(scopes, platform, client, endpoints, mkdir, stat, home, write, rename, remove,
 		read, readDir, create, open, env, revision, coordination)
 }
-
 func provideModelSlotFacts(state *modelswire.SlotState, scopes modelswire.RuntimeScopes, assets modelswire.Assets) modelswire.SlotFactsProvider {
 	return modelswire.NewSlotFacts(scopes, assets, state)
 }
-
 func provideModelHostLogger(logger *zap.Logger) modelswire.HostDiagnosticLogger {
 	return modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(logger))
 }
-
 func provideModelHostMetrics(edges serviceedges.Edges) modelswire.HostMetricsRecorder {
 	return modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder))
 }
-
 func provideModelSlotCoordinator(state *modelswire.SlotState, scopes modelswire.RuntimeScopes, clock modelswire.HostClock, logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder) modelswire.SlotCapacityCoordinator {
 	return modelswire.NewSlotCoordinator(state, scopes, clock, logger, metrics, 0)
 }
-
 func provideModelRuntimeHost(scopes modelswire.RuntimeScopes, assets modelswire.Assets, leases modelswire.HostLeases,
 	state *modelswire.SlotState, launcher modelswire.HostProcessLauncher, client modelswire.HostHTTPDoer,
 	clock modelswire.HostClock, logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder,
@@ -337,7 +314,6 @@ func provideModelRuntimeHost(scopes modelswire.RuntimeScopes, assets modelswire.
 	return modelswire.NewRuntimeHost(scopes, assets, leases, state, launcher, client, clock, logger, metrics,
 		platform, protocol, compatibility, symlinks, evidence, 0, 0)
 }
-
 func provideModelInvocationRuntime(edges serviceedges.Edges, runner modelRuntimeRunner, temp modelswire.RuntimeTempDirectory,
 	create modelswire.RuntimeCreateTempFile, write modelswire.AssetWriteFile, inspect modelswire.RuntimeInspectFile,
 	read modelswire.AssetReadFile, remove modelswire.AssetRemovePath) (modelswire.InvocationRuntime, error) {
@@ -346,26 +322,36 @@ func provideModelInvocationRuntime(edges serviceedges.Edges, runner modelRuntime
 		adaptModelASRBackend(edges.ModelASRBackend), adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
 		edges.ModelInvocationProtocolClient, edges.ModelInvocationGRPCDialer, runner, temp, create, write, inspect, read, remove)
 }
-
 func provideModelInference(scopes modelswire.RuntimeScopes, assets modelswire.Assets, catalog modelswire.Catalog,
-	host modelswire.RuntimeHost, runtime modelswire.InvocationRuntime, now modelNow) (modelswire.Inference, error) {
-	return modelswire.NewInference(scopes, assets, catalog, host, runtime, modelswire.NewInertInvocationArtifactFileSystem(), now)
+	host modelswire.RuntimeHost, runtime modelswire.InvocationRuntime, registrar *modelswire.InvocationArtifactRegistrar,
+	now modelNow, executionDeadline func() time.Duration) (modelswire.Inference, error) {
+	return modelswire.NewInference(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
 }
-
+func provideModelLocalRuntime(runner modelRuntimeRunner, client modelswire.RuntimeHTTPDoer, inspect modelswire.RuntimeInspectFile,
+	temp modelswire.RuntimeTempDirectory, create modelswire.RuntimeCreateTempFile) (modelswire.LocalRuntime, error) {
+	return modelswire.NewLocalRuntime(runner, client, inspect, temp, create)
+}
+func provideModelResourceLimiter(now modelNow) (*modelswire.ResourceLimiter, error) {
+	return modelswire.NewResourceLimiter(modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), now)
+}
+func provideModelScopedLocalExecution(scopes modelswire.RuntimeScopes, assets modelswire.Assets,
+	host modelswire.RuntimeHost, runtime modelswire.LocalRuntime, resources *modelswire.ResourceLimiter,
+	now modelNow) (modelswire.ScopedLocalExecution, error) {
+	return modelswire.NewScopedLocalExecution(scopes, assets, host, runtime, resources,
+		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), now)
+}
 func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	catalog modelswire.Catalog, host modelswire.RuntimeHost, inference modelswire.Inference,
-	launcher modelswire.HostProcessLauncher, hostHTTP modelswire.HostHTTPDoer, clock modelswire.HostClock,
-	runner modelRuntimeRunner, runtimeHTTP modelswire.RuntimeHTTPDoer, inspect modelswire.RuntimeInspectFile,
-	temp modelswire.RuntimeTempDirectory, create modelswire.RuntimeCreateTempFile, now modelNow,
-	logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder, evidence modelswire.RuntimeEvidenceRecorder,
-	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform, backend *zap.Logger) (models.Service, error) {
-
-	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, runner,
-		runtimeHTTP, inspect, temp, create, backend, now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
-		logger, metrics, modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), evidence,
-		edges.ModelResolveHuggingFaceRevision, resolver, platform)
+	resources *modelswire.ResourceLimiter, now modelNow,
+	localExecution modelswire.ScopedLocalExecution,
+	evidence modelswire.RuntimeEvidenceRecorder,
+	resolver modelswire.BackendArtifactResolver, revision modelAssetRevisionResolver,
+	platform models.AssetHostPlatform, backend *zap.Logger) (models.Service, error) {
+	return modelswire.NewService(scopes, assets, catalog, host, inference, resources, localExecution,
+		backend, now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
+		evidence,
+		revision, resolver, platform)
 }
-
 func provideModelHostCompatibilityChecker(
 	edges serviceedges.Edges,
 	useGallery bool,
@@ -383,7 +369,6 @@ func provideModelHostCompatibilityChecker(
 	}
 	return checker, nil
 }
-
 func newModelAssetHTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = (&net.Dialer{
@@ -394,7 +379,6 @@ func newModelAssetHTTPClient() *http.Client {
 	transport.ResponseHeaderTimeout = modelAssetResponseHeaderTimeout
 	return &http.Client{Transport: transport}
 }
-
 func adaptModelInvocationBackend(
 	next serviceedges.ModelInvocationBackend,
 ) modelswire.InvocationBackend {
@@ -408,7 +392,6 @@ func adaptModelInvocationBackend(
 		return next(ctx, request)
 	}
 }
-
 func adaptModelASRBackend(
 	next serviceedges.ModelASRBackend,
 ) modelswire.ASRBackend {
@@ -422,7 +405,6 @@ func adaptModelASRBackend(
 		return next(ctx, request)
 	}
 }
-
 func adaptModelEmbeddingBackend(
 	next serviceedges.ModelEmbeddingBackend,
 ) modelswire.EmbeddingBackend {
@@ -436,7 +418,6 @@ func adaptModelEmbeddingBackend(
 		return next(ctx, request)
 	}
 }
-
 func adaptModelBackendArtifactResolver(
 	next serviceedges.ModelResolveBackendArtifact,
 ) modelswire.BackendArtifactResolver {
@@ -531,7 +512,6 @@ func (adapter modelHostGRPCConnectionAdapter) Negotiate(
 		Ready:           result.Ready,
 	}, err
 }
-
 func (adapter modelHostGRPCConnectionAdapter) Close() error {
 	return adapter.next.Close()
 }
@@ -552,7 +532,6 @@ func (adapter modelHostCompatibilityCheckerAdapter) Check(
 		Platform:  configuration.Platform,
 	})
 }
-
 func adaptModelHostProtocolNegotiator(
 	negotiator modelHostProtocolEdge,
 ) modelswire.HostProtocolNegotiator {
@@ -561,7 +540,6 @@ func adaptModelHostProtocolNegotiator(
 	}
 	return modelHostProtocolNegotiatorAdapter{next: negotiator}
 }
-
 func adaptModelHostCompatibilityChecker(
 	checker modelHostCompatibilityEdge,
 ) modelswire.HostCompatibilityChecker {
@@ -632,7 +610,6 @@ func hostCommandLineLimit() int {
 	}
 	return 0
 }
-
 func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPlatform {
 	platform := edges.ModelAssetHostPlatform
 	if strings.TrimSpace(platform.OperatingSystem) == "" {
@@ -663,7 +640,6 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 	}
 	return platform
 }
-
 func linuxCUDAAvailable(
 	stat func(string) (os.FileInfo, error),
 	probe func(context.Context) ([]byte, error),
@@ -678,14 +654,12 @@ func linuxCUDAAvailable(
 	output, err := probe(ctx)
 	return err == nil && nvidiaGPUListed(output)
 }
-
 func windowsCUDAAvailable(probe func(context.Context) ([]byte, error)) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	output, err := probe(ctx)
 	return err == nil && nvidiaGPUListed(output)
 }
-
 func nvidiaGPUListed(output []byte) bool {
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(line)
@@ -704,7 +678,6 @@ func (clock modelsClock) Now() time.Time {
 	}
 	return time.Time{}
 }
-
 func (modelsClock) NewTimer(duration time.Duration) interface {
 	C() <-chan time.Time
 	Stop() bool
@@ -715,7 +688,6 @@ func (modelsClock) NewTimer(duration time.Duration) interface {
 type modelsTimer struct{ *time.Timer }
 
 func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
-
 func provideModelsCLIInvocationOperation(
 	invocation factorysessionwire.InvocationOperation,
 ) modelscli.InvocationOperation {
@@ -724,7 +696,6 @@ func provideModelsCLIInvocationOperation(
 	}
 	return modelsCLIInvocationOperation{invocation: invocation}
 }
-
 func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFileReader {
 	if readFile := edges.ModelCLIInputReadFile; readFile != nil {
 		return modelscli.InputFileReader(readFile)
@@ -749,7 +720,6 @@ func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFi
 	}
 	return readModelsCLIInputFile
 }
-
 func readModelsCLIInputFile(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -821,13 +791,11 @@ func (o modelsCLIInvocationOperation) InvokeModel(
 		Verbose:          target.Verbose,
 	}, modelName, request)
 }
-
 func (o modelsCLIInvocationOperation) ResolveModelInvocationFactoryDir(
 	factoryDir string,
 ) (string, error) {
 	return o.invocation.ResolveModelInvocationFactoryDir(factoryDir)
 }
-
 func (o modelsCLIInvocationOperation) ResolveModelInvocationFactoryDirForWorkingDirectory(
 	factoryDir string,
 	workingDirectory string,
@@ -840,14 +808,12 @@ func (o modelsCLIInvocationOperation) ResolveModelInvocationFactoryDirForWorking
 	}
 	return resolver.ResolveModelInvocationFactoryDirForWorkingDirectory(factoryDir, workingDirectory)
 }
-
 func (o modelsCLIInvocationOperation) ExportModelInvocationArtifact(
 	source string,
 	destination string,
 ) error {
 	return o.invocation.ExportModelInvocationArtifact(source, destination)
 }
-
 func (composition modelsCLIComposition) openModelsPresentationScope(
 	ctx context.Context,
 	cfg modelscli.InvokeConfig,
@@ -875,7 +841,6 @@ func (composition modelsCLIComposition) openModelsPresentationScope(
 	}
 	return composition.openStandaloneModelsScope(ctx, modelCacheDir, cfg.HomeDir)
 }
-
 func (composition modelsCLIComposition) openCatalogModelsScope(
 	ctx context.Context,
 	modelCacheDir string,
@@ -899,13 +864,11 @@ func (composition modelsCLIComposition) openCatalogModelsScope(
 	}
 	return composition.openStandaloneModelsScope(ctx, modelCacheDir, homeDirectory)
 }
-
 func catalogOperatorConfigPresent(homeDirectory string) bool {
 	path := filepath.Join(strings.TrimSpace(homeDirectory), ".you-agent-factory", "config.json")
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
 }
-
 func (composition modelsCLIComposition) openStandaloneModelsScope(
 	ctx context.Context,
 	modelCacheDir string,
@@ -942,7 +905,6 @@ func (composition modelsCLIComposition) openStandaloneModelsScope(
 		},
 	}, nil
 }
-
 func (composition modelsCLIComposition) loadStandaloneOperatorModels(
 	homeDirectory string,
 ) (map[string]models.ModelOverlay, error) {
@@ -955,7 +917,6 @@ func (composition modelsCLIComposition) loadStandaloneOperatorModels(
 	}
 	return projectModelsOperatorOverlays(config.Models), nil
 }
-
 func projectModelsOperatorOverlays(
 	configured map[string]operatorsettings.ModelConfig,
 ) map[string]models.ModelOverlay {
@@ -977,7 +938,6 @@ func projectModelsOperatorOverlays(
 	}
 	return projected
 }
-
 func cloneModelsOperatorString(value *string) *string {
 	if value == nil {
 		return nil

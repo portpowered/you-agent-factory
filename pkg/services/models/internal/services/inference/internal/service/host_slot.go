@@ -11,9 +11,6 @@ func (s *service) acquireHostSlot(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 ) (inference.HostHandleSlot, error) {
-	if s == nil || s.runtimeHost == nil {
-		return inference.HostHandleSlot{}, models.ErrUnavailable
-	}
 	result, err := s.runtimeHost.InspectModelHost(ctx, models.InspectModelHostRequest{
 		Scope: request.Scope,
 		Name:  request.ModelName,

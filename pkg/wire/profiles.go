@@ -74,9 +74,10 @@ func provideTerminalLoggerBuilder() terminalpolicy.LoggerBuilder {
 
 func provideLiveRecordingTargetPlanner(
 	reserver runtimeartifact.Reserver,
+	source platformclock.Source,
 ) recordings.LiveRecordingTargetPlanner {
 	return recordingswire.NewLiveRecordingTargetPlanner(
-		platformclock.Real{},
+		source,
 		reserver,
 		filepath.Join,
 	)
@@ -85,6 +86,7 @@ func provideLiveRecordingTargetPlanner(
 func provideCLIRunDefaults(
 	recordingTargets recordings.LiveRecordingTargetPlanner,
 	recordingsCLI recordingscli.Adapter,
+	source platformclock.Source,
 ) runcli.RunConfig {
 	return runcli.RunConfig{
 		RuntimeLogConfig:            logging.DefaultRuntimeLogConfig(),
@@ -92,7 +94,7 @@ func provideCLIRunDefaults(
 		RecordingTargetPlanner:      recordingTargets,
 		CanonicalSessionIDGenerator: uuid.NewString,
 		RecordingsCLI:               recordingsCLI,
-		Clock:                       platformclock.Real{},
+		Clock:                       source,
 	}
 }
 
@@ -506,6 +508,7 @@ func provideFactoryVisualizationFactory() factoryvisualization.RuntimeFactory {
 
 func provideWorkContentStagingService(
 	edges serviceedges.Edges,
+	source platformclock.Source,
 ) (work.ContentStagingService, error) {
 	filesystem := edges.WorkContentStagingFileSystem
 	if filesystem == nil {
@@ -517,7 +520,7 @@ func provideWorkContentStagingService(
 	}
 	clock := edges.WorkContentStagingClock
 	if clock == nil {
-		clock = platformclock.Real{}
+		clock = source
 	}
 	return workwire.NewContentStagingService(filesystem, random, clock, 0)
 }

@@ -584,8 +584,12 @@ func newASRLiveCorrelationModelsService(
 	if err != nil {
 		t.Fatalf("construct invocation runtime: %v", err)
 	}
+	registrar, err := modelswire.NewInvocationArtifactRegistrar(modelswire.NewInertInvocationArtifactFileSystem())
+	if err != nil {
+		t.Fatalf("construct artifact registrar: %v", err)
+	}
 	inference, err := modelswire.NewInference(scopes, assets, catalog, host, runtime,
-		modelswire.NewInertInvocationArtifactFileSystem(), time.Now)
+		registrar, time.Now, modelswire.NewExecutionDeadline())
 	if err != nil {
 		t.Fatalf("construct inference: %v", err)
 	}

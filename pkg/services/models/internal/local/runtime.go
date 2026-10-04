@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -56,13 +55,6 @@ type InvocationResponse struct {
 	Content string
 }
 
-func cloneModelInvocation(request ModelInvocation) ModelInvocation {
-	clone := request
-	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
-	clone.ModelBindings = cloneModelBindings(request.ModelBindings)
-	return clone
-}
-
 func cloneModelBindings(values []modelinference.ResolvedModelOperationBinding) []modelinference.ResolvedModelOperationBinding {
 	if len(values) == 0 {
 		return nil
@@ -86,159 +78,11 @@ type Runtime interface {
 
 type Hooks = modelseffects.LocalRuntimeHooks
 
-type Manager struct {
-	mu          sync.Mutex
-	entries     map[string]*managedLocalModelEntry
-	assetPuller AssetPuller
-	runtime     Runtime
-	hooks       Hooks
-	now         func() time.Time
-}
-
-// ErrInvalidDependencies classifies managed local-runtime construction failures.
+// ErrInvalidDependencies classifies local-runtime construction failures.
 var ErrInvalidDependencies = errors.New("managed local runtime dependencies are invalid")
-
-// NewManagedRuntime constructs managed local invocation behavior after
-// synchronously validating its required collaborators. It does not resolve
-// assets, load a runtime, or start lifecycle work during construction.
-func NewManagedRuntime(assetPuller AssetPuller, runtime Runtime, hooks Hooks, now func() time.Time) (*Manager, error) {
-	if isNilDependency(assetPuller) {
-		return nil, missingDependencyError("asset puller and cache resolver")
-	}
-	if isNilDependency(runtime) {
-		return nil, missingDependencyError("local invocation runtime")
-	}
-	if now == nil {
-		return nil, missingDependencyError("clock")
-	}
-	return newManager(assetPuller, runtime, hooks, now), nil
-}
-
-type managedLocalModelEntry struct {
-	mu     sync.Mutex
-	handle Handle
-}
-
-func newManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks, now func() time.Time) *Manager {
-	return &Manager{
-		entries:     make(map[string]*managedLocalModelEntry),
-		assetPuller: assetPuller,
-		runtime:     runtime,
-		hooks:       hooks,
-		now:         now,
-	}
-}
 
 func missingDependencyError(name string) error {
 	return fmt.Errorf("%w: %s is required", ErrInvalidDependencies, name)
-}
-
-func isNilDependency(value any) bool {
-	if value == nil {
-		return true
-	}
-	reflected := reflect.ValueOf(value)
-	switch reflected.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return reflected.IsNil()
-	default:
-		return false
-	}
-}
-
-// Invoke resolves, loads, and invokes a managed local model. handled is false
-// when the supplied worker is not owned by this runtime.
-func (m *Manager) Invoke(
-	ctx context.Context,
-	runtimeCfg *models.RuntimeConfig,
-	factoryCfg *models.RuntimeConfig,
-	workerDef *models.RuntimeWorker,
-	request ModelInvocation,
-) (InvocationResponse, bool, error) {
-	resource, resourceKey, ok := RuntimeResource(factoryCfg, workerDef)
-	if !ok || !m.runtime.Supports(resource, workerDef) {
-		return InvocationResponse{}, false, nil
-	}
-	loaded, err := runtimeCfgForLocalModel(runtimeCfg)
-	if err != nil {
-		return InvocationResponse{}, true, err
-	}
-	if _, err := EnsureManagedRuntimeReadyForInvocation(
-		loaded, workerDef.Model, m.assetPuller, DefaultManagedRuntimeSourceResolver(),
-	); err != nil {
-		return InvocationResponse{}, true, err
-	}
-	cacheLayout, err := m.assetPuller.ResolveModelCache(ctx, loaded, workerDef)
-	if err != nil {
-		return InvocationResponse{}, true, err
-	}
-	loadWorker := workerDef.Clone()
-	handle, err := m.loadHandle(ctx, resourceKey, LoadRequest{
-		Resource:  resource,
-		Worker:    &loadWorker,
-		ModelName: cacheLayout.ModelName,
-		CachePath: cacheLayout.CachePath,
-		Revision:  cacheLayout.Revision,
-		Files:     append([]string(nil), cacheLayout.Files...),
-	})
-	if err != nil {
-		return InvocationResponse{}, true, err
-	}
-	invokeWorker := workerDef.Clone()
-	response, err := handle.Invoke(ctx, InvocationRequest{
-		Resource: resource,
-		Worker:   &invokeWorker,
-		Request:  cloneModelInvocation(request),
-	})
-	return response, true, err
-}
-
-func runtimeCfgForLocalModel(runtimeCfg *models.RuntimeConfig) (*models.RuntimeConfig, error) {
-	if runtimeCfg == nil {
-		return nil, fmt.Errorf("loaded runtime config is required for local model execution")
-	}
-	return runtimeCfg, nil
-}
-
-func (m *Manager) loadHandle(ctx context.Context, key string, request LoadRequest) (Handle, error) {
-	entry := m.entry(key)
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-
-	if entry.handle != nil {
-		if m.hooks.MarkLoadReused != nil {
-			m.hooks.MarkLoadReused(ctx)
-		}
-		return entry.handle, nil
-	}
-	if m.hooks.MarkLoadRequested != nil {
-		m.hooks.MarkLoadRequested(ctx, m.now())
-	}
-	handle, err := m.runtime.Load(ctx, request)
-	if err != nil {
-		if m.hooks.MarkLoadFinished != nil {
-			m.hooks.MarkLoadFinished(ctx, m.now())
-		}
-		return nil, err
-	}
-	if m.hooks.MarkLoadFinished != nil {
-		m.hooks.MarkLoadFinished(ctx, m.now())
-	}
-	entry.handle = handle
-	return handle, nil
-}
-
-func (m *Manager) entry(key string) *managedLocalModelEntry {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	entry, ok := m.entries[key]
-	if ok {
-		return entry
-	}
-	entry = &managedLocalModelEntry{}
-	m.entries[key] = entry
-	return entry
 }
 
 func RuntimeResource(factoryCfg *models.RuntimeConfig, workerDef *models.RuntimeWorker) (models.RuntimeResource, string, bool) {
@@ -716,10 +560,19 @@ type localModelResourceReservation struct {
 }
 
 type ResourceLimiter struct {
-	mu      sync.Mutex
-	entries map[string]*ResourceLimiterEntry
-	hooks   Hooks
-	now     func() time.Time
+	mu           sync.Mutex
+	entries      map[scopedResourceKey]*ResourceLimiterEntry
+	closedScopes map[models.RuntimeScopeRef]bool
+	closed       bool
+	hooks        Hooks
+	now          func() time.Time
+}
+
+// Scopes used to own separate limiters. A shared limiter retains that capacity
+// boundary even when two scopes select the same model and backend.
+type scopedResourceKey struct {
+	scope    models.RuntimeScopeRef
+	resource string
 }
 
 type ResourceLimiterEntry struct {
@@ -727,6 +580,7 @@ type ResourceLimiterEntry struct {
 	cond     *sync.Cond
 	capacity int
 	inUse    int
+	closed   bool
 }
 
 func NewResourceLimiter(hooks Hooks, now func() time.Time) (*ResourceLimiter, error) {
@@ -734,9 +588,10 @@ func NewResourceLimiter(hooks Hooks, now func() time.Time) (*ResourceLimiter, er
 		return nil, missingDependencyError("resource limiter clock")
 	}
 	return &ResourceLimiter{
-		entries: make(map[string]*ResourceLimiterEntry),
-		hooks:   hooks,
-		now:     now,
+		entries:      make(map[scopedResourceKey]*ResourceLimiterEntry),
+		closedScopes: make(map[models.RuntimeScopeRef]bool),
+		hooks:        hooks,
+		now:          now,
 	}, nil
 }
 
@@ -750,6 +605,7 @@ func newLocalModelResourceLimiterEntry(capacity int) *ResourceLimiterEntry {
 // release function. A nil release means the worker has no local reservations.
 func (l *ResourceLimiter) Acquire(
 	ctx context.Context,
+	scope models.RuntimeScopeRef,
 	factoryCfg *models.RuntimeConfig,
 	workerDef *models.RuntimeWorker,
 ) (func(), error) {
@@ -760,12 +616,13 @@ func (l *ResourceLimiter) Acquire(
 	if len(reservations) == 0 {
 		return nil, nil
 	}
-	if err := l.acquire(ctx, reservations); err != nil {
+	acquired, err := l.acquire(ctx, scope, reservations)
+	if err != nil {
 		return nil, err
 	}
 	var once sync.Once
 	return func() {
-		once.Do(func() { l.release(reservations) })
+		once.Do(func() { releaseResourceReservations(acquired, reservations) })
 	}, nil
 }
 
@@ -830,62 +687,91 @@ func localModelResourceKey(resource models.RuntimeResource) string {
 	return strings.Join([]string{model, backend, loadPolicy}, "|")
 }
 
-func (l *ResourceLimiter) acquire(ctx context.Context, reservations []localModelResourceReservation) error {
-	if l == nil || len(reservations) == 0 {
-		return nil
+// CloseScope retires reservations and wakes waiters without affecting peer scopes.
+func (l *ResourceLimiter) CloseScope(scope models.RuntimeScopeRef) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.closedScopes[scope] = true
+	for key, entry := range l.entries {
+		if key.scope == scope {
+			entry.close()
+			delete(l.entries, key)
+		}
 	}
+}
 
+// Close retires all process-owned reservation state.
+func (l *ResourceLimiter) Close() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.closed = true
+	for key, entry := range l.entries {
+		entry.close()
+		delete(l.entries, key)
+	}
+	clear(l.closedScopes)
+}
+
+func (l *ResourceLimiter) acquire(ctx context.Context, scope models.RuntimeScopeRef,
+	reservations []localModelResourceReservation,
+) ([]*ResourceLimiterEntry, error) {
 	waitStartedAt := l.now()
 	if l.hooks.MarkResourceWaitStarted != nil {
 		l.hooks.MarkResourceWaitStarted(ctx, waitStartedAt)
 	}
-	acquired := make([]localModelResourceReservation, 0, len(reservations))
+	acquired := make([]*ResourceLimiterEntry, 0, len(reservations))
 	for _, reservation := range reservations {
-		entry := l.entry(reservation.key, reservation.capacity)
-		if err := entry.acquire(ctx, reservation.count); err != nil {
+		entry, err := l.entry(scopedResourceKey{scope: scope, resource: reservation.key}, reservation.capacity)
+		if err == nil {
+			err = entry.acquire(ctx, reservation.count)
+		}
+		if err != nil {
 			if l.hooks.MarkResourceWaitFinished != nil {
 				l.hooks.MarkResourceWaitFinished(ctx, l.now(), false)
 			}
-			l.release(acquired)
-			return err
+			releaseResourceReservations(acquired, reservations)
+			return nil, err
 		}
-		acquired = append(acquired, reservation)
+		acquired = append(acquired, entry)
 	}
 	if l.hooks.MarkResourceWaitFinished != nil {
 		l.hooks.MarkResourceWaitFinished(ctx, l.now(), true)
 	}
-	return nil
+	return acquired, nil
 }
 
-func (l *ResourceLimiter) release(reservations []localModelResourceReservation) {
-	if l == nil || len(reservations) == 0 {
-		return
-	}
-	for i := len(reservations) - 1; i >= 0; i-- {
-		reservation := reservations[i]
-		entry := l.entry(reservation.key, reservation.capacity)
-		entry.release(reservation.count)
+func releaseResourceReservations(entries []*ResourceLimiterEntry, reservations []localModelResourceReservation) {
+	for i := len(entries) - 1; i >= 0; i-- {
+		entries[i].release(reservations[i].count)
 	}
 }
 
-func (l *ResourceLimiter) entry(key string, capacity int) *ResourceLimiterEntry {
+func (l *ResourceLimiter) entry(key scopedResourceKey, capacity int) (*ResourceLimiterEntry, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
+	if l.closed || l.closedScopes[key.scope] {
+		return nil, models.ErrRuntimeScopeClosed
+	}
 	entry, ok := l.entries[key]
 	if !ok {
 		entry = newLocalModelResourceLimiterEntry(capacity)
 		l.entries[key] = entry
-		return entry
+		return entry, nil
 	}
-
 	entry.mu.Lock()
 	if capacity > 0 && (entry.capacity == 0 || capacity < entry.capacity) {
 		entry.capacity = capacity
 		entry.cond.Broadcast()
 	}
 	entry.mu.Unlock()
-	return entry
+	return entry, nil
+}
+
+func (e *ResourceLimiterEntry) close() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.closed = true
+	e.cond.Broadcast()
 }
 
 func (e *ResourceLimiterEntry) acquire(ctx context.Context, count int) error {
@@ -903,11 +789,14 @@ func (e *ResourceLimiterEntry) acquire(ctx context.Context, count int) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	for e.inUse+count > e.capacity {
+	for !e.closed && e.inUse+count > e.capacity {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("local model resource wait canceled: %w", err)
 		}
 		e.cond.Wait()
+	}
+	if e.closed {
+		return models.ErrRuntimeScopeClosed
 	}
 	e.inUse += count
 	return nil

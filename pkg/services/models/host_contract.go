@@ -222,10 +222,7 @@ func validateScopedModelHostRequest(scope RuntimeScopeRef, name string) error {
 	if scope.IsZero() {
 		return ErrRuntimeScopeInvalid
 	}
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("%w: empty model name", ErrNotFound)
-	}
-	return nil
+	return ValidateInspectRuntimeRequest(InspectRuntimeRequest{Name: name})
 }
 
 // ModelLeaseRef is an opaque Models-owned lease capability reference. Peers
@@ -283,7 +280,10 @@ type AcquireModelLeaseRequest struct {
 
 // Validate checks the plain lease-acquisition request.
 func (request AcquireModelLeaseRequest) Validate() error {
-	if err := validateScopedModelHostRequest(request.Scope, request.Name); err != nil {
+	if request.Scope.IsZero() {
+		return ErrRuntimeScopeInvalid
+	}
+	if err := ValidateAcquireLeaseRequest(AcquireLeaseRequest{ModelName: request.Name}); err != nil {
 		return err
 	}
 	if strings.TrimSpace(request.Holder) == "" {
@@ -342,7 +342,8 @@ func validateModelLeaseRequest(scope RuntimeScopeRef, lease ModelLeaseRef) error
 	if scope.IsZero() {
 		return ErrRuntimeScopeInvalid
 	}
-	if lease.IsZero() {
+	if err := ValidateReleaseLeaseRequest(ReleaseLeaseRequest{LeaseID: lease.String()}); err != nil {
+		// Scoped lease validation preserves its unwrapped missing-lease sentinel.
 		return ErrHostLeaseNotFound
 	}
 	return nil

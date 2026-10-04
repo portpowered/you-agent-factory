@@ -533,7 +533,7 @@ func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {
 		return recordings.LiveRecordingTarget{}, nil
 	})
 	recordingsCLI := provideRecordingsCLIAdapter()
-	defaults := provideCLIRunDefaults(planner, recordingsCLI)
+	defaults := provideCLIRunDefaults(planner, recordingsCLI, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 	if defaults.RecordingTargetPlanner == nil {
 		t.Fatal("CLI run defaults dropped the Wire-selected recording target planner")
 	}
@@ -549,7 +549,7 @@ func TestProductionLiveRecordingTargetPlannerIsUsable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provideRuntimeArtifactPathReserver: %v", err)
 	}
-	target, err := provideLiveRecordingTargetPlanner(reserver).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+	target, err := provideLiveRecordingTargetPlanner(reserver, selectedTestTimeEdges(serviceedges.Edges{}).Clock).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
 		HomeDir:            t.TempDir(),
 		CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 		ReportedSessionID:  "~default",

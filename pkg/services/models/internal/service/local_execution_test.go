@@ -17,53 +17,389 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"go.uber.org/zap"
 )
 
 func TestServiceOwnsLeaseAndLocalModelInvocation(t *testing.T) {
 	worker := modelRuntimeWorker{
 		Name: "voice-local", Type: models.RuntimeWorkerTypeModel,
 		Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
-		Resources: []modelRuntimeResource{{Name: "voice-cache"}},
+		Resources: []modelRuntimeResource{{Name: "voice-cache", Capacity: 1}},
 	}
 	cfg := &testFactoryConfig{
 		Name: "test", Workers: []modelRuntimeWorker{worker},
 		Resources: []modelRuntimeResource{{
 			Name: "voice-cache", Type: models.RuntimeResourceTypeModel, Model: "voice",
-			Backend: "TEST", LoadPolicy: "ON_DEMAND",
+			Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1,
 		}},
 	}
 	loaded := projectTestModelsRuntimeConfig(t.TempDir(), cfg)
 	host := &leaseTestHost{}
 	runtime := &leaseTestRuntime{}
+	resources, err := localmodels.NewResourceLimiter(modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopeA, err := (models.RuntimeScopeRef{}).Parse("factory-session:executor:a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopeB, err := (models.RuntimeScopeRef{}).Parse("factory-session:executor:b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	releaseA, err := resources.Acquire(ctx, scopeA, loaded, &worker)
+	if err != nil || releaseA == nil {
+		t.Fatalf("reserve scope A: %v", err)
+	}
+	defer releaseA()
 	execution, err := newLocalExecutor(
-		func() *modelRuntimeConfig { return loaded },
-		host, leaseTestAssets{}, runtime, nil, nil, modelseffects.LocalRuntimeHooks{},
+		host, runtime, resources, modelseffects.LocalRuntimeHooks{},
 		time.Now,
 	)
 	if err != nil {
 		t.Fatalf("new local execution: %v", err)
 	}
 
-	result, err := execution.InvokeLocal(context.Background(), models.LocalInvocationRequest{
+	result, err := execution.InvokeLocal(ctx, models.LocalInvocationRequest{
+		Scope:  scopeB,
 		Holder: "dispatch-1",
 		Worker: models.LocalWorker{
 			Name: worker.Name, Type: worker.Type, Model: worker.Model,
 			ModelLocality: worker.ModelLocality,
-			Resources:     []models.LocalResource{{Name: "voice-cache"}},
+			Resources:     []models.LocalResource{{Name: "voice-cache", Capacity: 1}},
 		},
 		Resources: []models.LocalResource{{
 			Name: "voice-cache", Type: models.RuntimeResourceTypeModel, Model: "voice",
-			Backend: "TEST", LoadPolicy: "ON_DEMAND",
+			Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1,
 		}},
 		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
-	})
+	}, loaded, leaseTestAssets{})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if !result.Handled || result.Content != "local" || host.acquires != 1 || host.releases != 1 || runtime.loads != 1 {
 		t.Fatalf("result=%q acquire/release=%d/%d loads=%d", result.Content, host.acquires, host.releases, runtime.loads)
 	}
+	// Invocation reserved B, progressed while A was held, and released B.
+	releaseB, err := resources.Acquire(ctx, scopeB, loaded, &worker)
+	if err != nil || releaseB == nil {
+		t.Fatalf("capacity after invocation: %v", err)
+	}
+	releaseB()
+}
+
+func TestLocalExecutorRequiresLeaseCollaborators(t *testing.T) {
+	t.Parallel()
+	var nilHost *leaseTestHost
+	var nilRuntime *leaseTestRuntime
+	for _, test := range []struct {
+		name    string
+		host    modelhost.Host
+		runtime localmodels.Runtime
+	}{
+		{"missing host", nil, &leaseTestRuntime{}},
+		{"typed nil host", nilHost, &leaseTestRuntime{}},
+		{"missing runtime", &leaseTestHost{}, nil},
+		{"typed nil runtime", &leaseTestHost{}, nilRuntime},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			executor, err := newLocalExecutor(
+				test.host, test.runtime, mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
+			if executor != nil || !errors.Is(err, ErrInvalidDependencies) {
+				t.Fatalf("constructor = %v, %v; want invalid dependencies", executor, err)
+			}
+		})
+	}
+}
+
+func TestLocalExecutorReleasesLeaseAndCapacityOnFailure(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("selected execution failure")
+	for _, test := range []struct {
+		name                                  string
+		cacheErr, loadErr, invokeErr, wantErr error
+		leases, loads, invokes                int
+		acquireErr                            error
+	}{
+		{"cache", failure, nil, nil, failure, 1, 0, 0, nil},
+		{"load", nil, failure, nil, failure, 1, 2, 0, nil},
+		{"invoke", nil, nil, failure, failure, 1, 1, 2, nil},
+		{"cancel", nil, nil, context.Canceled, context.Canceled, 1, 1, 2, nil},
+		{"unsupported", nil, nil, nil, nil, 0, 0, 0, nil},
+		{"missing runtime", nil, nil, nil, models.ErrMissing, 0, 0, 0, models.ErrMissing},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:executor:" + test.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := models.LocalInvocationRequest{
+				Scope: scope, Holder: "dispatch-1",
+				Worker: models.LocalWorker{Name: "voice-local", Type: models.RuntimeWorkerTypeModel,
+					Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
+					Resources: []models.LocalResource{{Name: "voice-cache", Capacity: 1}}},
+				Resources: []models.LocalResource{{Name: "voice-cache", Type: models.RuntimeResourceTypeModel,
+					Model: "voice", Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1}},
+			}
+			config, worker := localExecutionConfiguration(request)
+			host := &leaseTestHost{}
+			assets := executorFailureAssets{err: test.cacheErr}
+			runtime := &executorFailureRuntime{supported: test.name != "unsupported", loadErr: test.loadErr, invokeErr: test.invokeErr}
+			resources := mustResourceLimiter(t)
+			executor, err := newLocalExecutorWithLeases(
+				func(ctx context.Context, _ models.RuntimeScopeRef, config *models.RuntimeConfig, name, _ string) (modelhost.Lease, error) {
+					if test.acquireErr != nil {
+						return modelhost.Lease{}, test.acquireErr
+					}
+					return host.AcquireLease(ctx, config, name, modelhost.LeaseOptions{})
+				}, func(ctx context.Context, _ models.RuntimeScopeRef, id string) error {
+					return host.ReleaseLease(ctx, id)
+				},
+				runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second) //nolint:testsleep // Failure ceiling detects leaked capacity; completion is driven by injected effects.
+			defer cancel()
+			for attempt := 0; attempt < 2; attempt++ {
+				result, err := executor.InvokeLocal(ctx, request, config, assets)
+				if !errors.Is(err, test.wantErr) || result.Handled != (test.name != "unsupported") || result.Content != "" {
+					t.Fatalf("attempt %d: result=%#v error=%v, want %v", attempt, result, err, test.wantErr)
+				}
+				wantLeases := (attempt + 1) * test.leases
+				if host.acquires != wantLeases || host.releases != wantLeases {
+					t.Fatalf("attempt %d: acquired/released=%d/%d, want %d each", attempt, host.acquires, host.releases, wantLeases)
+				}
+				release, err := resources.Acquire(ctx, scope, config, worker)
+				if err != nil || release == nil {
+					t.Fatalf("capacity after attempt %d: %v", attempt, err)
+				}
+				release()
+			}
+			if runtime.loads != test.loads || runtime.invokes != test.invokes {
+				t.Fatalf("loads/invokes=%d/%d, want %d/%d", runtime.loads, runtime.invokes, test.loads, test.invokes)
+			}
+		})
+	}
+}
+
+type executorFailureAssets struct {
+	leaseTestAssets
+	err error
+}
+
+func (a executorFailureAssets) ResolveModelCache(ctx context.Context, config *models.RuntimeConfig,
+	worker *models.RuntimeWorker) (localmodels.CacheLayout, error) {
+	if a.err != nil {
+		return localmodels.CacheLayout{}, a.err
+	}
+	return a.leaseTestAssets.ResolveModelCache(ctx, config, worker)
+}
+
+type executorFailureRuntime struct {
+	supported          bool
+	loadErr, invokeErr error
+	loads, invokes     int
+}
+
+func TestLocalExecutorScopedHandlesRetainIsolationAndRetireOnClose(t *testing.T) {
+	t.Parallel()
+	request := scopedHandleRequest(t, "a")
+	peer := scopedHandleRequest(t, "b")
+	config, _ := localExecutionConfiguration(request)
+	host := &leaseTestHost{}
+	runtime := &executorFailureRuntime{supported: true}
+	executor, err := newLocalExecutor(host,
+		runtime, mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, request := range []models.LocalInvocationRequest{request, peer, request, peer, request, peer} {
+		// Every local worker taxonomy uses the same scoped handle and lease path.
+		request.Worker.Type = []string{models.RuntimeWorkerTypeModel, models.RuntimeWorkerTypeInference, models.RuntimeWorkerTypeAgent}[index/2]
+		if result, err := executor.InvokeLocal(t.Context(), request, config, leaseTestAssets{}); err != nil || !result.Handled {
+			t.Fatalf("invoke %s = %#v, %v", request.Scope, result, err)
+		}
+	}
+	if runtime.loads != 2 || runtime.invokes != 6 || host.acquires != 6 || host.releases != 6 {
+		t.Fatalf("loads/invokes/acquires/releases = %d/%d/%d/%d", runtime.loads, runtime.invokes, host.acquires, host.releases)
+	}
+	executor.CloseScope(request.Scope)
+	executor.CloseScope(request.Scope)
+	if _, err := executor.InvokeLocal(t.Context(), request, config, leaseTestAssets{}); !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("closed scope invoke = %v", err)
+	}
+	if _, err := executor.InvokeLocal(t.Context(), peer, config, leaseTestAssets{}); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.loads != 2 || runtime.invokes != 7 || host.acquires != host.releases {
+		t.Fatalf("peer after close: loads/invokes/acquires/releases = %d/%d/%d/%d", runtime.loads, runtime.invokes, host.acquires, host.releases)
+	}
+	executor.Close()
+	executor.Close()
+	if _, err := executor.InvokeLocal(t.Context(), peer, config, leaseTestAssets{}); !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("closed executor invoke = %v", err)
+	}
+}
+
+func TestRootCloseRuntimeScopeDuringLocalLoadPreventsLateInvocation(t *testing.T) {
+	t.Parallel()
+	for _, processClose := range []bool{false, true} {
+		t.Run(fmt.Sprintf("processClose=%t", processClose), func(t *testing.T) {
+			t.Parallel()
+			scopes, err := runtimescopeswire.NewService(func() string { return "close-local-load" })
+			if err != nil {
+				t.Fatal(err)
+			}
+			opened, err := scopes.Open(models.RuntimeBinding{RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			scope, err := (models.RuntimeScopeRef{}).Parse(string(opened))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := scopedHandleRequest(t, "unused")
+			request.Scope = scope
+			config, _ := localExecutionConfiguration(request)
+			runtime := &gatedLocalRuntime{started: make(chan struct{}), resume: make(chan struct{})}
+			t.Cleanup(func() {
+				select {
+				case <-runtime.resume:
+				default:
+					close(runtime.resume)
+				}
+			})
+			host := &leaseTestHost{}
+			resources := mustResourceLimiter(t)
+			bound, err := newLocalExecutionFixture(func() *models.RuntimeConfig { return config }, host, leaseTestAssets{}, runtime, resources)
+			if err != nil {
+				t.Fatal(err)
+			}
+			root := &Root{runtimeScopes: scopes, resources: resources, runtimeHost: &shutdownTrackingRuntimeHost{}, pullModel: compatibilityLocalExecution{bound}.PullModelForScope, invokeLocal: compatibilityLocalExecution{bound}.InvokeLocal, closeScopedExecution: compatibilityLocalExecution{bound}.CloseScope, closeExecution: compatibilityLocalExecution{bound}.Close}
+			done := make(chan error, 1)
+			go func() { _, err := root.InvokeLocal(t.Context(), request); done <- err }()
+			awaitCloseRaceSignal(t, runtime.started, "local load started")
+			if processClose {
+				if err := root.Close(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if _, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{Scope: scope}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			close(runtime.resume)
+			assertClosedLocalLoad(t, done, runtime, host, bound.local)
+		})
+	}
+}
+
+func assertClosedLocalLoad(t *testing.T, done <-chan error, runtime *gatedLocalRuntime,
+	host *leaseTestHost, executor *localExecutor) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if !errors.Is(err, models.ErrRuntimeScopeClosed) {
+			t.Fatalf("late invoke = %v", err)
+		}
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; the done channel observes close winning the gated load.
+		t.Fatal("local invocation did not return")
+	}
+	if runtime.invokes != 0 || host.acquires != 1 || host.releases != 1 {
+		t.Fatalf("late invokes/acquires/releases = %d/%d/%d", runtime.invokes, host.acquires, host.releases)
+	}
+	if len(executor.entries) != 0 {
+		t.Fatal("closed scope retained local handles")
+	}
+}
+
+func scopedHandleRequest(t *testing.T, name string) models.LocalInvocationRequest {
+	t.Helper()
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:local-handles:" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return models.LocalInvocationRequest{Scope: scope, Holder: "dispatch-1",
+		Worker: models.LocalWorker{Name: "voice", Type: models.RuntimeWorkerTypeModel, Model: "voice",
+			ModelLocality: models.RuntimeModelLocalityLocal, Resources: []models.LocalResource{{Name: "cache", Capacity: 1}}},
+		Resources: []models.LocalResource{{Name: "cache", Type: models.RuntimeResourceTypeModel,
+			Model: "voice", Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1}},
+	}
+}
+
+type gatedLocalRuntime struct {
+	started, resume chan struct{}
+	invokes         int
+}
+
+func TestLocalExecutorScopedHandleTracksSelectedCacheRevision(t *testing.T) {
+	t.Parallel()
+	request := scopedHandleRequest(t, "cache-revision")
+	config, _ := localExecutionConfiguration(request)
+	layout := localmodels.CacheLayout{ModelName: "voice", CachePath: "cache-a", Revision: "revision-a"}
+	runtime := &executorFailureRuntime{supported: true}
+	host := &leaseTestHost{}
+	executor, err := newLocalExecutor(host,
+		runtime, mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, selection := range []localmodels.CacheLayout{
+		layout, layout,
+		{ModelName: "voice", CachePath: "cache-b", Revision: "revision-a"},
+		{ModelName: "voice", CachePath: "cache-b", Revision: "revision-b"},
+	} {
+		layout = selection
+		if _, err := executor.InvokeLocal(t.Context(), request, config, selectedLayoutAssets{layout: &layout}); err != nil {
+			t.Fatal(err)
+		}
+		if want := []int{1, 1, 2, 3}[index]; runtime.loads != want {
+			t.Fatalf("selection %d loads = %d, want %d", index, runtime.loads, want)
+		}
+	}
+	if runtime.invokes != 4 || host.acquires != 4 || host.releases != 4 {
+		t.Fatalf("invokes/acquires/releases = %d/%d/%d", runtime.invokes, host.acquires, host.releases)
+	}
+}
+
+type selectedLayoutAssets struct {
+	leaseTestAssets
+	layout *localmodels.CacheLayout
+}
+
+func (a selectedLayoutAssets) ResolveModelCache(context.Context, *models.RuntimeConfig,
+	*models.RuntimeWorker) (localmodels.CacheLayout, error) {
+	return *a.layout, nil
+}
+
+func (*gatedLocalRuntime) Supports(models.RuntimeResource, *models.RuntimeWorker) bool { return true }
+func (r *gatedLocalRuntime) Load(context.Context, localmodels.LoadRequest) (localmodels.Handle, error) {
+	close(r.started)
+	<-r.resume
+	return r, nil
+}
+func (r *gatedLocalRuntime) Invoke(context.Context, localmodels.InvocationRequest) (localmodels.InvocationResponse, error) {
+	r.invokes++
+	return localmodels.InvocationResponse{Content: "late"}, nil
+}
+
+func (r *executorFailureRuntime) Supports(models.RuntimeResource, *models.RuntimeWorker) bool {
+	return r.supported
+}
+func (r *executorFailureRuntime) Load(context.Context, localmodels.LoadRequest) (localmodels.Handle, error) {
+	r.loads++
+	if r.loadErr != nil {
+		return nil, r.loadErr
+	}
+	return r, nil
+}
+func (r *executorFailureRuntime) Invoke(context.Context, localmodels.InvocationRequest) (localmodels.InvocationResponse, error) {
+	r.invokes++
+	return localmodels.InvocationResponse{}, r.invokeErr
 }
 
 func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
@@ -85,12 +421,8 @@ func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
 	host := &leaseTestHost{}
 	runtime := &leaseTestRuntime{}
 	assets := leaseTestAssets{}
-	bound, err := newRuntimeWithHostEdges(
-		models.RuntimeScopeRef{},
-		func() *modelRuntimeConfig { return loaded },
-		zap.NewNop(), time.Now, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
-		assets, runtime, nil, host,
-	)
+	bound, err := newLocalExecutionFixture(func() *modelRuntimeConfig { return loaded }, host,
+		assets, runtime, mustResourceLimiter(t))
 	if err != nil {
 		t.Fatalf("new bound runtime: %v", err)
 	}
@@ -111,10 +443,7 @@ func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
 	}
 
 	root := &Root{
-		runtimeScopes: scopes,
-		runtimeByScope: map[models.RuntimeScopeRef]models.Service{
-			scope: bound,
-		},
+		runtimeScopes: scopes, pullModel: compatibilityLocalExecution{bound}.PullModelForScope, invokeLocal: compatibilityLocalExecution{bound}.InvokeLocal, closeScopedExecution: compatibilityLocalExecution{bound}.CloseScope, closeExecution: compatibilityLocalExecution{bound}.Close,
 	}
 	result, err := root.InvokeLocal(context.Background(), models.LocalInvocationRequest{
 		Scope:  scope,
@@ -505,4 +834,151 @@ func stringPointer(value string) *string { return &value }
 func loadPolicyPointer() *models.LoadPolicy {
 	policy := models.LoadPolicyOnDemand
 	return &policy
+}
+
+func TestRootInvokeLocalScopedExecutionUsesSelectedRuntime(t *testing.T) {
+	t.Parallel()
+	runtime := &decliningScopedRuntime{}
+	args := newRootConstructionArgs(t)
+	args.localRuntime = runtime
+	args.bindExecution(t)
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runtime.workers) != 0 {
+		t.Fatal("construction called local runtime")
+	}
+	scopes := make([]models.RuntimeScopeRef, 2)
+	for index := range scopes {
+		opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		scopes[index] = opened.Scope
+	}
+	for index, name := range []string{"scope-a", "scope-b", "scope-a", "scope-b"} {
+		result, err := root.InvokeLocal(t.Context(), models.LocalInvocationRequest{
+			Scope: scopes[index%2],
+			Worker: models.LocalWorker{Name: name, Type: models.RuntimeWorkerTypeModel,
+				Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
+				Resources: []models.LocalResource{{Name: "voice-cache"}}},
+			Resources: []models.LocalResource{{Name: "voice-cache", Type: models.RuntimeResourceTypeModel,
+				Model: "voice", Backend: "TEST", LoadPolicy: "ON_DEMAND"}},
+		})
+		if err != nil || result.Handled {
+			t.Fatalf("selected runtime decline: result=%#v error=%v", result, err)
+		}
+	}
+	for _, scope := range scopes {
+		if _, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{Scope: scope}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(runtime.workers, []string{"scope-a", "scope-b", "scope-a", "scope-b"}) {
+		t.Fatalf("selected runtime workers=%v", runtime.workers)
+	}
+}
+
+type decliningScopedRuntime struct{ workers []string }
+
+func (r *decliningScopedRuntime) Supports(_ models.RuntimeResource, worker *models.RuntimeWorker) bool {
+	r.workers = append(r.workers, worker.Name)
+	return false
+}
+func (*decliningScopedRuntime) Load(context.Context, localmodels.LoadRequest) (localmodels.Handle, error) {
+	panic("declined runtime must not load")
+}
+
+func mustResourceLimiter(t *testing.T) *localmodels.ResourceLimiter {
+	t.Helper()
+	resources, err := localmodels.NewResourceLimiter(modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resources
+}
+
+func TestRootCloseRuntimeScopeRetiresSharedResourcesAndPreservesPeer(t *testing.T) {
+	t.Parallel()
+	args := newRootConstructionArgs(t)
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := models.RuntimeConfig{Resources: []models.RuntimeResource{{
+		Name: "voice", Type: models.RuntimeResourceTypeModel, Model: "voice", Capacity: 1,
+		Backend: "TEST", LoadPolicy: "ON_DEMAND",
+	}}}
+	worker := models.RuntimeWorker{ModelLocality: models.RuntimeModelLocalityLocal,
+		Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}}
+	open := func() models.RuntimeScopeRef {
+		result, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{
+			Config: models.RuntimeScopeConfig{Runtime: config},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.Scope
+	}
+	scopeA, scopeB := open(), open()
+	releaseA, err := args.resources.Acquire(t.Context(), scopeA, &config, &worker)
+	if err != nil || releaseA == nil {
+		t.Fatalf("reserve A: %v", err)
+	}
+	closed, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{Scope: scopeA})
+	if err != nil || !closed.Closed {
+		t.Fatalf("close A: %#v, %v", closed, err)
+	}
+	releaseA()
+	if release, err := args.resources.Acquire(t.Context(), scopeA, &config, &worker); release != nil || !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("reserve closed A: %v, has release=%t", err, release != nil)
+	}
+	for range 3 {
+		release, err := args.resources.Acquire(t.Context(), scopeB, &config, &worker)
+		if err != nil || release == nil {
+			t.Fatalf("reserve peer B: %v", err)
+		}
+		release()
+	}
+}
+
+func TestRuntimeServiceInvokeLocalSelectsConfigurationPerCall(t *testing.T) {
+	t.Parallel()
+	config := &models.RuntimeConfig{FactoryDirectory: "revision-a", BaseDirectory: "cache-a"}
+	calls := 0
+	executor, err := newLocalExecutor(&operationConfigHost{}, &operationConfigRuntime{},
+		mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := &localExecutionFixture{assetPuller: operationConfigAssets{}, runtimeConfig: func() *models.RuntimeConfig {
+		calls++
+		return config
+	}, local: executor}
+	request := scopedHandleRequest(t, "operation-config")
+	unmanaged := request
+	unmanaged.Worker.Type = "COMMAND"
+	if result, err := runtime.InvokeLocal(t.Context(), unmanaged); err != nil || result.Handled || calls != 0 {
+		t.Fatalf("unmanaged invocation = %#v, %v; configuration calls = %d", result, err, calls)
+	}
+	for index, directory := range []string{"cache-a", "cache-b"} {
+		config = &models.RuntimeConfig{FactoryDirectory: "revision", BaseDirectory: directory}
+		result, err := runtime.InvokeLocal(t.Context(), request)
+		if err != nil || result.Content != directory+"|revision|http://revision" || calls != index+1 {
+			t.Fatalf("selected invocation = %#v, %v; configuration calls = %d", result, err, calls)
+		}
+	}
+}
+
+func assertLateResolutionFinished(t *testing.T, ctx context.Context, done <-chan error, want error) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if !errors.Is(err, want) {
+			t.Fatalf("late resolution = %v, want %v", err, want)
+		}
+	case <-ctx.Done():
+		t.Fatal("late resolution did not return")
+	}
 }

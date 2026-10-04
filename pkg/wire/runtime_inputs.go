@@ -64,7 +64,9 @@ func provideRunInputPathInspector() platformfilesystem.PathInspector {
 type runtimeArtifactClock func() time.Time
 type runtimeArtifactIDGenerator func() string
 
-func provideRuntimeArtifactClock() runtimeArtifactClock             { return time.Now }
+func provideRuntimeArtifactClock(source platformclock.Source) runtimeArtifactClock {
+	return source.Now
+}
 func provideRuntimeArtifactIDGenerator() runtimeArtifactIDGenerator { return uuid.NewString }
 
 func provideRuntimeLoggerFactory() factoryruntime.RuntimeLoggerFactory {
@@ -295,10 +297,6 @@ func provideSessionStartRequestFactory() runcli.SessionStartRequestFactory {
 // the long-lived runtime-opening Factory. Operation calls receive only
 // invocation data and observation fallbacks; they do not re-read Edges or
 // manufacture replacement runners.
-func provideFactoryRuntimeClock(edges serviceedges.Edges) factoryruntime.Clock {
-	return edges.Clock
-}
-
 func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) factorysessionwire.ProviderOverrideService {
 	return edges.ProviderOverride
 }

@@ -669,14 +669,10 @@ func newModelsServiceWithFixtureEffects(
 }
 
 func composeModelsService(
-	assetPlatform models.AssetHostPlatform,
-	assetHTTP AssetHTTPDoer,
-	assetEndpoints models.RuntimeAssetEndpoints,
-	assetMkdirAll AssetMakeDirectories,
-	assetStat AssetInspectPath,
-	assetHome AssetResolveHomeDirectory,
-	assetWriteFile AssetWriteFile,
-	assetRename AssetRenamePath,
+	assetPlatform models.AssetHostPlatform, assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints, assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath, assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile, assetRename AssetRenamePath,
 	assetRemove AssetRemovePath,
 	assetReadFile AssetReadFile,
 	assetReadDir AssetReadDirectory,
@@ -720,11 +716,8 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	assetService, err := NewAssets(
-		runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat, assetHome,
-		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
-		resolveEnvironment, revisionResolver, assetCoordination,
-	)
+	assetService, err := NewAssets(runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen, resolveEnvironment, revisionResolver, assetCoordination)
 	if err != nil {
 		return nil, err
 	}
@@ -739,10 +732,8 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	runtimeHost, err := NewRuntimeHost(
-		runtimeScopes, assetService, leases, state, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
-		assetPlatform, protocolNegotiator, compatibilityChecker, resolveSymlinks, runtimeEvidence, 0, 0,
-	)
+	runtimeHost, err := NewRuntimeHost(runtimeScopes, assetService, leases, state, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
+		assetPlatform, protocolNegotiator, compatibilityChecker, resolveSymlinks, runtimeEvidence, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -753,16 +744,29 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	inferenceService, err := NewInference(runtimeScopes, assetService, catalogService, runtimeHost, runtime, inference.InertArtifactFileSystem{}, now)
+	registrar, err := NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
 	if err != nil {
 		return nil, err
 	}
-	return NewService(
-		runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
-		processLauncher, hostHTTP, hostClock, runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile,
-		logger, now, pullMetrics, hostLogger, hostMetrics, localHooks, runtimeEvidence,
-		firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform,
-	)
+	inferenceService, err := NewInference(runtimeScopes, assetService, catalogService, runtimeHost, runtime, registrar, now, NewExecutionDeadline())
+	if err != nil {
+		return nil, err
+	}
+	localRuntime, err := NewLocalRuntime(runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile)
+	if err != nil {
+		return nil, err
+	}
+	resources, err := NewResourceLimiter(localHooks, now)
+	if err != nil {
+		return nil, err
+	}
+	execution, err := NewScopedLocalExecution(runtimeScopes, assetService, runtimeHost, localRuntime, resources, localHooks, now)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
+		resources, execution, logger, now, pullMetrics,
+		runtimeEvidence, revisionResolver, backendResolver, assetPlatform)
 }
 
 func firstRevisionResolver(

@@ -3,17 +3,14 @@ package service
 import (
 	"context"
 	"errors"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
@@ -52,20 +49,19 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 		mutate  func(*rootConstructionArgs)
 		message string
 	}{
-		{name: "process launcher", mutate: func(args *rootConstructionArgs) { args.processLauncher = nil }, message: "model host process launcher"},
-		{name: "host HTTP client", mutate: func(args *rootConstructionArgs) { args.hostHTTP = nil }, message: "model host HTTP client"},
-		{name: "host clock", mutate: func(args *rootConstructionArgs) { args.hostClock = nil }, message: "model host clock"},
-		{name: "runtime command runner", mutate: func(args *rootConstructionArgs) { args.runtimeRunner = nil }, message: "model runtime command runner"},
-		{name: "runtime HTTP client", mutate: func(args *rootConstructionArgs) { args.runtimeHTTP = nil }, message: "model runtime HTTP client"},
-		{name: "runtime file inspector", mutate: func(args *rootConstructionArgs) { args.runtimeInspect = nil }, message: "model runtime file inspector"},
-		{name: "runtime temp directory", mutate: func(args *rootConstructionArgs) { args.runtimeTempDir = nil }, message: "model runtime temporary directory resolver"},
-		{name: "runtime temp file", mutate: func(args *rootConstructionArgs) { args.runtimeTempFile = nil }, message: "model runtime temporary file creator"},
+		{name: "scoped pull", mutate: func(args *rootConstructionArgs) { args.pullModel = nil }, message: "scoped model pull"},
+		{name: "local invocation", mutate: func(args *rootConstructionArgs) { args.invokeLocal = nil }, message: "scoped local invocation"},
+		{name: "scope close", mutate: func(args *rootConstructionArgs) { args.closeScope = nil }, message: "scoped execution close"},
+		{name: "execution close", mutate: func(args *rootConstructionArgs) { args.closeExecution = nil }, message: "execution close"},
+		{name: "resource limiter", mutate: func(args *rootConstructionArgs) { args.resources = nil }, message: "local model resource limiter"},
 		{name: "runtime scopes", mutate: func(args *rootConstructionArgs) { args.runtimeScopes = nil }, message: "Models Runtime Scopes service"},
 		{name: "catalog", mutate: func(args *rootConstructionArgs) { args.catalog = nil }, message: "Models Catalog service"},
 		{name: "assets", mutate: func(args *rootConstructionArgs) { args.assets = nil }, message: "Models Assets service"},
 		{name: "runtime host", mutate: func(args *rootConstructionArgs) { args.runtimeHost = nil }, message: "Models Runtime Host service"},
 		{name: "inference", mutate: func(args *rootConstructionArgs) { args.inference = nil }, message: "Models Inference service"},
-		{name: "process clock", mutate: func(args *rootConstructionArgs) { args.process.Clock = nil }, message: "Models process clock"},
+		{name: "logger", mutate: func(args *rootConstructionArgs) { args.logger = nil }, message: "Models logger"},
+		{name: "revision resolver", mutate: func(args *rootConstructionArgs) { args.revisionResolver = nil }, message: "Models revision resolver"},
+		{name: "process clock", mutate: func(args *rootConstructionArgs) { args.now = nil }, message: "Models process clock"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -80,38 +76,32 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 }
 
 type rootConstructionArgs struct {
-	processLauncher modelhost.ProcessLauncher
-	hostHTTP        modelhost.HTTPDoer
-	hostClock       modelhost.Clock
-	runtimeRunner   platformprocess.CommandRunner
-	runtimeHTTP     localmodels.HTTPDoer
-	runtimeInspect  localmodels.InspectFile
-	runtimeTempDir  localmodels.TempDirectory
-	runtimeTempFile localmodels.CreateTempFile
-	runtimeScopes   runtimescopes.Service
-	catalog         modelcatalog.Service
-	assets          scopedassets.Service
-	runtimeHost     runtimehost.Service
-	inference       inference.Service
-	process         modelseffects.ProcessDependencies
+	localRuntime     localmodels.Runtime
+	pullModel        func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	invokeLocal      func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+	closeScope       func(models.RuntimeScopeRef)
+	closeExecution   func()
+	resources        *localmodels.ResourceLimiter
+	runtimeScopes    runtimescopes.Service
+	catalog          modelcatalog.Service
+	assets           scopedassets.Service
+	runtimeHost      runtimehost.Service
+	inference        inference.Service
+	logger           *zap.Logger
+	now              func() time.Time
+	revisionResolver func(context.Context, string) (string, error)
 }
 
 func (args rootConstructionArgs) build() (*Root, error) {
 	return NewRoot(
-		args.processLauncher,
-		args.hostHTTP,
-		args.hostClock,
-		args.runtimeRunner,
-		args.runtimeHTTP,
-		args.runtimeInspect,
-		args.runtimeTempDir,
-		args.runtimeTempFile,
+		args.resources, args.pullModel, args.invokeLocal, args.closeScope, args.closeExecution,
 		args.runtimeScopes,
 		args.catalog,
 		args.assets,
 		args.runtimeHost,
 		args.inference,
-		args.process,
+		args.logger, args.now, nil, nil,
+		args.revisionResolver, nil, models.AssetHostPlatform{},
 	)
 }
 
@@ -132,25 +122,60 @@ func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
 		t.Fatalf("construct catalog: %v", err)
 	}
 	events := []string{}
-	return rootConstructionArgs{
-		processLauncher: rootConstructionProcessLauncher{},
-		hostHTTP:        http.DefaultClient,
-		hostClock:       rootConstructionClock{},
-		runtimeRunner:   rootConstructionCommandRunner{},
-		runtimeHTTP:     http.DefaultClient,
-		runtimeInspect:  os.Stat,
-		runtimeTempDir:  os.TempDir,
-		runtimeTempFile: func(dir, pattern string) (localmodels.TempFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
+	args := rootConstructionArgs{
+		localRuntime:  &leaseTestRuntime{},
+		resources:     mustResourceLimiter(t),
 		runtimeScopes: scopes,
 		catalog:       catalog,
 		assets:        inferenceRecordingAssetsService{},
 		runtimeHost:   &joinedHostService{events: &events},
 		inference:     &joinedInferenceService{events: &events},
-		process: modelseffects.ProcessDependencies{
-			Logger: zap.NewNop(), Clock: time.Now,
-		},
+		logger:        zap.NewNop(), now: time.Now,
+		revisionResolver: func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved },
+	}
+	args.bindExecution(t)
+	return args
+}
+
+func (args *rootConstructionArgs) bindExecution(t *testing.T) {
+	t.Helper()
+	execution, err := NewScopedLocalExecution(args.runtimeScopes, args.assets, args.runtimeHost, args.localRuntime, args.resources, modelseffects.LocalRuntimeHooks{}, args.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args.pullModel, args.invokeLocal = execution.PullModelForScope, execution.InvokeLocal
+	args.closeScope, args.closeExecution = execution.CloseScope, execution.Close
+}
+
+func TestNewRootResolvesScopedReferenceWithSelectedEffect(t *testing.T) {
+	t.Parallel()
+	args := newRootConstructionArgs(t)
+	const revision = "0123456789abcdef0123456789abcdef01234567"
+	calls := 0
+	args.revisionResolver = func(ctx context.Context, source string) (string, error) {
+		calls++
+		if ctx != t.Context() || source != "hf://selected/repository@main" {
+			t.Fatalf("resolver input = %v, %q, want selected context and source", ctx, source)
+		}
+		return revision, nil
+	}
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatal("construction invoked revision effect")
+	}
+	opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := root.ResolveModelReference(t.Context(), models.ResolveModelReferenceRequest{
+		Scope: opened.Scope, Reference: models.ModelReference{NameOrURI: "hf://selected/repository@main"},
+	})
+	if err != nil || calls != 1 || result.Resolved.Provenance.ImmutableRevision != revision ||
+		result.Resolved.Definition.Source != "hf://selected/repository@"+revision {
+		t.Fatalf("resolution = %#v, %v, calls=%d, want selected immutable revision once", result, err, calls)
 	}
 }
 
@@ -179,46 +204,11 @@ func TestRootDelegatesInferenceThroughInjectedOwner(t *testing.T) {
 	}
 }
 
-func TestBoundServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	svc := &Service{}
-	_, err := svc.ListCatalog(ctx, models.ListModelsRequest{})
-	assertContractOnlyUnsupported(t, "ListCatalog", err)
-	_, err = svc.GetCatalogModel(ctx, models.GetModelRequest{})
-	assertContractOnlyUnsupported(t, "GetCatalogModel", err)
-	_, err = svc.GetModelReadiness(ctx, models.GetModelReadinessRequest{})
-	assertContractOnlyUnsupported(t, "GetModelReadiness", err)
-	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
-	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
-	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
-	_, err = svc.EnsureModelHost(ctx, models.EnsureModelHostRequest{})
-	assertContractOnlyUnsupported(t, "EnsureModelHost", err)
-	_, err = svc.InspectModelHost(ctx, models.InspectModelHostRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelHost", err)
-	_, err = svc.StopModelHost(ctx, models.StopModelHostRequest{})
-	assertContractOnlyUnsupported(t, "StopModelHost", err)
-	_, err = svc.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "AcquireModelLease", err)
-	_, err = svc.GetModelLease(ctx, models.GetModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "GetModelLease", err)
-	_, err = svc.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "ReleaseModelLease", err)
-	_, err = svc.InvokeModelWithLease(ctx, models.InvokeModelRequest{})
-	assertContractOnlyUnsupported(t, "InvokeModelWithLease", err)
-	_, err = svc.CancelInvocation(ctx, models.CancelInvocationRequest{})
-	assertContractOnlyUnsupported(t, "CancelInvocation", err)
-}
-
 func TestRootCloseShutsDownRuntimeHost(t *testing.T) {
 	t.Parallel()
 
 	host := &shutdownTrackingRuntimeHost{}
-	root := &Root{runtimeHost: host}
+	root := &Root{runtimeHost: host, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	if err := root.Close(context.Background()); err != nil {
 		t.Fatalf("Root.Close() error = %v, want nil", err)
 	}
@@ -259,10 +249,9 @@ func TestScopedRuntimeResolutionDoesNotReplaceInjectedInferenceOwner(t *testing.
 
 	privateInference := &delegatingInferenceService{}
 	root := &Root{
-		runtimeScopes:  scopes,
-		assets:         inferenceRecordingAssetsService{},
-		inference:      privateInference,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+		runtimeScopes: scopes,
+		assets:        inferenceRecordingAssetsService{},
+		inference:     privateInference,
 	}
 
 	_, err = root.PullModelForScope(context.Background(), models.PullModelRequest{
@@ -300,14 +289,13 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
+	registrar, err := inferencewire.NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
+	if err != nil {
+		t.Fatalf("construct artifact registrar: %v", err)
+	}
 	inference, err := inferencewire.NewService(
-		scopes,
-		assets,
-		catalog,
-		runtimeHost,
-		constructionInvocationRuntime{},
-		inference.InertArtifactFileSystem{},
-		clock.Now,
+		scopes, assets, catalog, runtimeHost, constructionInvocationRuntime{},
+		registrar, clock.Now, inferencewire.NewExecutionDeadline(),
 	)
 	if err != nil {
 		t.Fatalf("construct Inference: %v", err)
@@ -324,7 +312,7 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 	}
 }
 
-func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
+func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 	t.Parallel()
 
 	scopes, err := runtimescopeswire.NewService(func() string { return "root-construction-test" })
@@ -347,117 +335,29 @@ func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Runtime Host: %v", err)
 	}
+	registrar, err := inferencewire.NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
+	if err != nil {
+		t.Fatalf("construct artifact registrar: %v", err)
+	}
 	inferenceService, err := inferencewire.NewService(
 		scopes, assets, catalog, runtimeHost, constructionInvocationRuntime{},
-		inference.InertArtifactFileSystem{}, clock.Now,
+		registrar, clock.Now, inferencewire.NewExecutionDeadline(),
 	)
 	if err != nil {
 		t.Fatalf("construct Inference: %v", err)
 	}
 	root, err := NewRoot(
-		rootConstructionProcessLauncher{}, http.DefaultClient, rootConstructionClock{}, rootConstructionCommandRunner{},
-		http.DefaultClient, os.Stat, os.TempDir,
-		func(string, string) (localmodels.TempFile, error) { return rootConstructionTempFile{}, nil },
-		scopes, catalog, assets, runtimeHost, inferenceService,
-		modelseffects.ProcessDependencies{Clock: time.Now},
+		mustResourceLimiter(t), inertScopedLocalExecution{}.PullModelForScope, inertScopedLocalExecution{}.InvokeLocal, inertScopedLocalExecution{}.CloseScope, inertScopedLocalExecution{}.Close, scopes, catalog, assets, runtimeHost, inferenceService,
+		zap.NewNop(), time.Now, nil, nil,
+		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	if root == nil || root.resolveHuggingFaceRevision == nil || root.process.Logger == nil {
+	if root == nil || root.resolveHuggingFaceRevision == nil || root.logger == nil {
 		t.Fatal("NewRoot did not retain a usable root with default logger/revision resolver")
 	}
 }
-
-func TestNewRootRejectsMissingRequiredComposedDependencies(t *testing.T) {
-	t.Parallel()
-
-	validLauncher := rootConstructionProcessLauncher{}
-	validHTTP := http.DefaultClient
-	validClock := rootConstructionClock{}
-	validRunner := rootConstructionCommandRunner{}
-	validTempFile := func(string, string) (localmodels.TempFile, error) {
-		return rootConstructionTempFile{}, nil
-	}
-	construct := func(
-		processLauncher modelhost.ProcessLauncher,
-		hostHTTP modelhost.HTTPDoer,
-		hostClock modelhost.Clock,
-		runtimeRunner platformprocess.CommandRunner,
-		runtimeHTTP localmodels.HTTPDoer,
-		runtimeInspect localmodels.InspectFile,
-		runtimeTempDir localmodels.TempDirectory,
-		runtimeTempFile localmodels.CreateTempFile,
-	) error {
-		_, err := NewRoot(
-			processLauncher, hostHTTP, hostClock, runtimeRunner, runtimeHTTP, runtimeInspect,
-			runtimeTempDir, runtimeTempFile, nil, nil, nil, nil, nil,
-			modelseffects.ProcessDependencies{Clock: time.Now},
-		)
-		return err
-	}
-
-	missing := []struct {
-		name string
-		call func() error
-	}{
-		{name: "model host process launcher", call: func() error {
-			return construct(nil, validHTTP, validClock, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model host HTTP client", call: func() error {
-			return construct(validLauncher, nil, validClock, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model host clock", call: func() error {
-			return construct(validLauncher, validHTTP, nil, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime command runner", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, nil, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime HTTP client", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, nil, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime file inspector", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, nil, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime temporary directory resolver", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, os.Stat, nil, validTempFile)
-		}},
-		{name: "model runtime temporary file creator", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, os.Stat, os.TempDir, nil)
-		}},
-	}
-	for _, test := range missing {
-		t.Run(test.name, func(t *testing.T) {
-			if err := test.call(); !errors.Is(err, ErrInvalidDependencies) {
-				t.Fatalf("NewRoot missing %s error = %v, want ErrInvalidDependencies", test.name, err)
-			}
-		})
-	}
-}
-
-type rootConstructionCommandRunner struct{}
-
-func (rootConstructionCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{}, nil
-}
-
-type rootConstructionProcessLauncher struct{}
-
-func (rootConstructionProcessLauncher) Start(context.Context, modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
-	return nil, nil
-}
-
-type rootConstructionClock struct{}
-
-func (rootConstructionClock) Now() time.Time { return time.Unix(0, 0) }
-func (rootConstructionClock) NewTimer(time.Duration) modelhost.Timer {
-	return rootConstructionTimer{}
-}
-
-type rootConstructionTimer struct{}
-
-func (rootConstructionTimer) C() <-chan time.Time { return nil }
-func (rootConstructionTimer) Stop() bool          { return true }
 
 type rootConstructionTempFile struct{}
 
@@ -568,10 +468,8 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	}
 	root, scope, host := newJoinedInvocationRoot(t, &events, inference)
 	core, observed := observer.New(zap.InfoLevel)
-	root.process = modelseffects.ProcessDependencies{
-		Logger: zap.New(core),
-		Clock:  func() time.Time { return time.Unix(123, 0) },
-	}
+	root.logger = zap.New(core)
+	root.now = func() time.Time { return time.Unix(123, 0) }
 
 	result, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
 	if err != nil {
@@ -689,9 +587,7 @@ func TestRootInvokeModelScopesTerminalEvidencePerInvocation(t *testing.T) {
 	}
 	root, scope, _ := newJoinedInvocationRoot(t, &events, inference)
 	sink := &rootRuntimeEvidenceRecords{}
-	root.process = modelseffects.ProcessDependencies{
-		RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
-	}
+	root.runtimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		if _, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope)); err != nil {
@@ -822,58 +718,36 @@ func TestRootInvokeModelValidatesSlotsBeforeAssetAndHostEffects(t *testing.T) {
 	}
 }
 
-func TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion(t *testing.T) {
+func TestRootCloseRuntimeScopePreventsConcurrentPullResolution(t *testing.T) {
 	t.Parallel()
-
 	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:close-race")
 	if err != nil {
-		t.Fatalf("parse runtime scope: %v", err)
+		t.Fatal(err)
 	}
 	scopes := newCloseRaceRuntimeScopes()
-	runtime := &closeRaceRuntime{}
-	root := &Root{
-		runtimeScopes:  scopes,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+	args := newRootConstructionArgs(t)
+	args.runtimeScopes = scopes
+	args.bindExecution(t)
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
 	}
-	invokeResult := make(chan error, 1)
+	result := make(chan error, 1)
 	go func() {
-		resolved, invokeErr := root.scopedRuntimeWithBuilder(
-			scope,
-			func(models.RuntimeBinding) (models.Service, error) { return runtime, nil },
-		)
-		if invokeErr == nil {
-			_, invokeErr = resolved.InvokeLocal(
-				context.Background(),
-				models.LocalInvocationRequest{Scope: scope},
-			)
-		}
-		invokeResult <- invokeErr
+		_, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Scope: scope, Name: "voice"})
+		result <- err
 	}()
-
 	awaitCloseRaceSignal(t, scopes.resolveStarted, "initial scope resolution")
-	if _, err := root.CloseRuntimeScope(
-		context.Background(),
-		models.CloseRuntimeScopeRequest{Scope: scope},
-	); err != nil {
-		t.Fatalf("CloseRuntimeScope() error = %v, want nil", err)
+	if _, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{Scope: scope}); err != nil {
+		t.Fatal(err)
 	}
-
 	select {
-	case err := <-invokeResult:
+	case err := <-result:
 		if !errors.Is(err, models.ErrRuntimeScopeClosed) {
-			t.Fatalf("concurrent InvokeLocal() error = %v, want ErrRuntimeScopeClosed", err)
+			t.Fatalf("late pull: %v", err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("concurrent InvokeLocal() did not return")
-	}
-	if runtime.invokeCalls != 0 {
-		t.Fatalf("closed-scope runtime invocation calls = %d, want 0", runtime.invokeCalls)
-	}
-	root.runtimeMu.RLock()
-	retained := root.runtimeByScope[scope]
-	root.runtimeMu.RUnlock()
-	if retained != nil {
-		t.Fatal("runtime capability was reinserted after its scope closed")
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; the result channel observes scope closure during resolution.
+		t.Fatal("late pull did not return")
 	}
 }
 
@@ -926,19 +800,6 @@ func (scopes *closeRaceRuntimeScopes) Close(runtimescopes.Reference) error {
 	return nil
 }
 
-type closeRaceRuntime struct {
-	models.Service
-	invokeCalls int
-}
-
-func (runtime *closeRaceRuntime) InvokeLocal(
-	context.Context,
-	models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	runtime.invokeCalls++
-	return models.LocalInvocationResult{}, nil
-}
-
 func awaitCloseRaceSignal(t *testing.T, signal <-chan struct{}, description string) {
 	t.Helper()
 	select {
@@ -957,4 +818,107 @@ func newRuntimeHostFixture(scopes runtimescopes.Service, assets scopedassets.Ser
 		return nil, err
 	}
 	return runtimehostwire.NewService(scopes, assets, leases, state, launcher, httpDoer, clock, logger, metrics, platform, protocol, compatibility, resolve, evidence, idle, maximum)
+}
+
+type inertScopedLocalExecution struct{}
+
+func (inertScopedLocalExecution) PullModelForScope(context.Context, models.PullModelRequest) (models.PullResult, error) {
+	return models.PullResult{}, models.ErrNotFound
+}
+
+func (inertScopedLocalExecution) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+	return models.LocalInvocationResult{}, nil
+}
+func (inertScopedLocalExecution) CloseScope(models.RuntimeScopeRef) {}
+func (inertScopedLocalExecution) Close()                            {}
+
+type compatibilityLocalExecution struct{ *localExecutionFixture }
+
+func (e compatibilityLocalExecution) CloseScope(scope models.RuntimeScopeRef) {
+	e.local.CloseScope(scope)
+}
+func (e compatibilityLocalExecution) Close() { e.local.Close() }
+
+// Configuration resolution is a component boundary: a successful lookup can
+// complete after close, without permitting a new host or asset effect.
+func TestRootScopedExecutionCloseWinningConfigurationResolution(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"invoke", "pull"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			args := newRootConstructionArgs(t)
+			gate := &gatedConfigurationScopes{Service: args.runtimeScopes, started: make(chan struct{}), resume: make(chan struct{})}
+			args.runtimeScopes = gate
+			assets := &preparationAssetService{}
+			args.assets = assets
+			args.bindExecution(t)
+			root, err := args.build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			var resumeOnce sync.Once
+			resume := func() { resumeOnce.Do(func() { close(gate.resume) }) }
+			defer resume()
+			done := make(chan error, 1)
+			go func() {
+				if operation == "pull" {
+					result, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: opened.Scope, Name: "voice"})
+					if result.CachePath != "" {
+						err = errors.New("closed pull published a cache")
+					}
+					done <- err
+					return
+				}
+				request := scopedHandleRequest(t, "config-close")
+				request.Scope = opened.Scope
+				result, err := root.InvokeLocal(ctx, request)
+				if result.Content != "" {
+					err = errors.New("closed invocation published content")
+				}
+				done <- err
+			}()
+			awaitCloseRaceSignal(t, gate.started, "configuration lookup")
+			if _, err := root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: opened.Scope}); err != nil {
+				t.Fatal(err)
+			}
+			resume()
+			select {
+			case err := <-done:
+				if !errors.Is(err, models.ErrRuntimeScopeClosed) {
+					t.Fatalf("late %s: %v", operation, err)
+				}
+			case <-ctx.Done():
+				t.Fatal("late operation did not return")
+			}
+			if assets.request.Name != "" || args.localRuntime.(*leaseTestRuntime).loads != 0 {
+				t.Fatal("closed configuration reached assets or runtime")
+			}
+		})
+	}
+}
+
+type gatedConfigurationScopes struct {
+	runtimescopes.Service
+	started, resume chan struct{}
+	once            sync.Once
+}
+
+func (s *gatedConfigurationScopes) Resolve(ref runtimescopes.Reference) (models.RuntimeBinding, error) {
+	binding, err := s.Service.Resolve(ref)
+	if err != nil {
+		return binding, err
+	}
+	lookup := binding.RuntimeConfig
+	binding.RuntimeConfig = func() *models.RuntimeConfig {
+		config := lookup()
+		s.once.Do(func() { close(s.started); <-s.resume })
+		return config
+	}
+	return binding, nil
 }
