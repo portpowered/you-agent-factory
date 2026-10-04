@@ -29,7 +29,7 @@ type deliveryAttempt struct {
 
 func (service *Service) deliver(
 	parent context.Context,
-	request webhooks.StartRequest,
+	request *activation,
 	definition factorydefinitions.FactoryWebhookConfig,
 	event recordings.CanonicalEvent,
 	secret string,

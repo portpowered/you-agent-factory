@@ -206,12 +206,6 @@
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
     {
-      "packagePath": "pkg/services/providers/transports/mcp",
-      "fileCount": 16,
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
-    },
-    {
       "packagePath": "pkg/services/recordings/internal",
       "fileCount": 20,
       "owner": "backend-maintainers",
@@ -230,12 +224,6 @@
       "removalReason": "Split replay ingestion, validation, and execution responsibilities."
     },
     {
-      "packagePath": "pkg/services/recordings/transports/mcp",
-      "fileCount": 19,
-      "owner": "backend-maintainers",
-      "removalReason": "P5B-2 added the Recordings owner MCP history operation; split this package into focused sub-packages and remove this entry after the transport cutover."
-    },
-    {
       "packagePath": "pkg/services/work",
       "fileCount": 24,
       "owner": "work-maintainers",
@@ -250,12 +238,6 @@
     {
       "packagePath": "pkg/services/work/transports/http",
       "fileCount": 23,
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
-    },
-    {
-      "packagePath": "pkg/services/work/transports/mcp",
-      "fileCount": 18,
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
