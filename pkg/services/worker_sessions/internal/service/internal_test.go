@@ -151,6 +151,177 @@ func runtimeAttemptCanceledDispatch(dispatchID string) workers.WorkstationDispat
 	return result
 }
 
+// These are supplied component identities, not evidence of production allocation.
+const perRuntimeLogicalDispatchID = "shared-logical-dispatch"
+
+type perRuntimeAttemptFixture struct {
+	service *registry
+	request workersessions.RuntimeAttemptRequest
+	attempt workersessions.RuntimeAttempt
+}
+
+func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
+	t.Helper()
+	service, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{},
+		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)},
+		unavailableProviderSessions{}, newInterruptRecordingService())
+	if err != nil {
+		t.Fatalf("New(%s): %v", suffix, err)
+	}
+	fixture := &perRuntimeAttemptFixture{
+		service: service.(*registry),
+		request: workersessions.RuntimeAttemptRequest{
+			ID: "worker-" + suffix, AttemptID: "physical-" + suffix,
+			Execution: dispatchHandoff(perRuntimeLogicalDispatchID),
+		},
+	}
+	fixture.request.Execution.Execution.FactorySessionID = "factory-" + suffix
+	fixture.request.Execution.Execution.RecordingID = "recording-" + suffix
+	fixture.request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-" + suffix}
+	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	if err != nil || fixture.attempt == nil {
+		t.Fatalf("BeginRuntimeAttempt(%s) = %v, %v", suffix, fixture.attempt, err)
+	}
+	// Close both observation windows even when an assertion exits the test early.
+	t.Cleanup(func() {
+		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+			t.Errorf("cleanup Complete(%s): %v", suffix, err)
+		}
+	})
+	return fixture
+}
+
+func assertPerRuntimeAttemptState(t *testing.T, fixture *perRuntimeAttemptFixture, want workersessions.State) workersessions.Session {
+	t.Helper()
+	session := getCharacterizationSession(t, fixture.service, fixture.request.ID)
+	if session.ID != fixture.request.ID || session.State != want {
+		t.Fatalf("Get(%s) = %#v, want %s", fixture.request.ID, session, want)
+	}
+	return session
+}
+
+type perRuntimeCancellation struct {
+	mu      sync.Mutex
+	calls   int
+	invoked chan struct{}
+	err     error
+}
+
+func bindPerRuntimeCancellation(t *testing.T, fixture *perRuntimeAttemptFixture, cause error) *perRuntimeCancellation {
+	t.Helper()
+	control := &perRuntimeCancellation{invoked: make(chan struct{}, 1), err: cause}
+	if err := fixture.service.BindRuntimeAttemptCancellation(fixture.request.ID, perRuntimeLogicalDispatchID, control.cancel); err != nil {
+		t.Fatalf("BindRuntimeAttemptCancellation(%s): %v", fixture.request.ID, err)
+	}
+	return control
+}
+
+func (control *perRuntimeCancellation) cancel(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+	control.mu.Lock()
+	control.calls++
+	control.mu.Unlock()
+	select {
+	case control.invoked <- struct{}{}:
+	default:
+	}
+	return workers.WorkstationDispatchCancelOutcomeCanceled, control.err
+}
+
+func assertPerRuntimeCancellationCalls(t *testing.T, control *perRuntimeCancellation, want int) {
+	t.Helper()
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if control.calls != want {
+		t.Fatalf("bound cancellation calls = %d, want %d", control.calls, want)
+	}
+}
+
+func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
+	t.Parallel()
+	sink := newEventsAppender()
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
+	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	for _, pair := range [][2]*perRuntimeAttemptFixture{{a, b}, {b, a}} {
+		if _, err := pair[0].service.Get(context.Background(), workersessions.GetRequest{ID: pair[1].request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+			t.Fatalf("peer Get error = %v, want ErrSessionNotFound", err)
+		}
+	}
+	controlA := bindPerRuntimeCancellation(t, a, nil)
+	controlB := bindPerRuntimeCancellation(t, b, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	completed := make(chan error, 1)
+	go func() {
+		defer close(done)
+		select {
+		case <-controlA.invoked:
+			completed <- a.attempt.Complete(context.Background(), runtimeAttemptCanceledDispatch(perRuntimeLogicalDispatchID), nil)
+		case <-ctx.Done():
+		}
+	}()
+	t.Cleanup(func() {
+		cancel()
+		if err := waitControlledSignal(done, 30*time.Second); err != nil {
+			t.Errorf("owned completion join: %v", err)
+		}
+	})
+	result, err := a.service.Cancel(context.Background(), workersessions.ControlRequest{ID: a.request.ID})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled || result.DispatchID != perRuntimeLogicalDispatchID {
+		t.Fatalf("Cancel(A) = %#v, %v, want APPLIED/CANCELED and logical dispatch", result, err)
+	}
+	if err := waitControlledSignal(done, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-completed; err != nil {
+		t.Fatalf("Complete(A): %v", err)
+	}
+	assertPerRuntimeCancellationCalls(t, controlA, 1)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	assertPerRuntimeAttemptState(t, a, workersessions.StateCanceled)
+	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	if err := b.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatalf("Complete(B): %v", err)
+	}
+	assertPerRuntimeAttemptState(t, b, workersessions.StateCompleted)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+}
+
+func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
+	t.Parallel()
+	sink := newEventsAppender()
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	cause := errors.New("injected A-only cancellation failure")
+	controlA := bindPerRuntimeCancellation(t, a, cause)
+	controlB := bindPerRuntimeCancellation(t, b, nil)
+	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
+	beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	result, err := a.service.Cancel(context.Background(), workersessions.ControlRequest{ID: a.request.ID})
+	if !errors.Is(err, cause) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning || result.DispatchID != perRuntimeLogicalDispatchID {
+		t.Fatalf("Cancel(A) = %#v, %v, want FAILED/RUNNING with typed cause", result, err)
+	}
+	select {
+	case <-controlA.invoked:
+	default:
+		t.Fatal("Cancel(A) did not reach its bound operation")
+	}
+	assertPerRuntimeCancellationCalls(t, controlA, 1)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
+	if afterB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning); !reflect.DeepEqual(beforeB, afterB) {
+		t.Fatalf("failed A control changed B: before=%#v after=%#v", beforeB, afterB)
+	}
+	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+			t.Fatalf("Complete(%s): %v", fixture.request.ID, err)
+		}
+		assertPerRuntimeAttemptState(t, fixture, workersessions.StateCompleted)
+	}
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+}
+
 func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
