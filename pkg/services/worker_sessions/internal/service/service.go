@@ -130,8 +130,9 @@ type registry struct {
 var _ workersessions.Service = (*registry)(nil)
 
 // New constructs the process-local Worker Session registry from its required
-// lifecycle, time, and Provider Sessions collaborators. A nil logger falls
-// back to logging.NoopLogger. A nil execution, Events appender, clock, or
+// lifecycle, time, and Provider Sessions collaborators. The supplied logger
+// is retained directly; callers disabling logging supply logging.NoopLogger{}.
+// A nil execution, Events appender, clock, or
 // Provider Sessions service is rejected: the registry cannot truthfully
 // supervise, time, or enrich an observation without each of them. The supplied
 // scheduler owns safety deadlines independently of the fact clock.
@@ -182,7 +183,7 @@ func New(
 		scheduler:                   scheduler,
 		providerSessions:            providerSessions,
 		recording:                   recording,
-		logger:                      logging.EnsureLogger(logger),
+		logger:                      logger,
 		lifecycleCtx:                lifecycleCtx,
 		lifecycleCancel:             lifecycleCancel,
 		startsDone:                  startsDone,

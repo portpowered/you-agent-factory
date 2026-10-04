@@ -94,7 +94,7 @@ func (l *controlClaimLogger) Info(message string, _ ...any) {
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), nil, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -7768,7 +7768,8 @@ func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapt
 
 func newService(execution any, eventsAppender EventsAppender, logger logging.Logger) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	// Fixtures explicitly supply disabled logging when no observer is selected.
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -7786,7 +7787,7 @@ func newServiceWithRecording(
 	recording recordings.WorkerSessionRecordingService,
 ) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, recording)
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, recording)
 	if err != nil {
 		return nil, err
 	}
