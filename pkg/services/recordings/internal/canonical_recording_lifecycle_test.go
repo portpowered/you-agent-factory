@@ -16,6 +16,7 @@ import (
 	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
 	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
@@ -652,19 +653,26 @@ type staticRecordingClock struct {
 
 func (clock staticRecordingClock) Now() time.Time { return clock.at }
 
-// TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess proves
-// canonical replay stays equivalent to the retained projection of the same
-// finalized recording scope, and that equivalence survives concurrent access:
-// several replays of two distinct scopes run at once and each one completes
-// with exactly its own scope's retained world state, never another scope's.
+// The native replay owner receives detached finalized facts and a stateless
+// projection double. Concurrent plans must retain their own identity, prefix,
+// terminal cursor and supplied projection; public journeys prove composition.
 func TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
-	root := newScopedQueryRoot(t)
+	projection := concurrentReplayProjection{}
 	scopes := []finalizedReplayScope{
-		newFinalizedReplayScope(t, root, "concurrent-replay-a"),
-		newFinalizedReplayScope(t, root, "concurrent-replay-b"),
+		newFinalizedReplayScope(t, projection, "concurrent-replay-a"),
+		newFinalizedReplayScope(t, projection, "concurrent-replay-b"),
 	}
+	snapshots := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{}}
+	for _, scope := range scopes {
+		finished := time.Unix(1_700_000_100, 0).UTC()
+		snapshots.byID[scope.id] = recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{RecordingID: scope.id, Scope: scope.eventScope, State: recordings.RecordingFinalized, FinalizedAt: &finished},
+			Events: scope.events,
+		}
+	}
+	owner := replaywire.NewService(snapshots, projection, nil, nil)
 
 	var wait sync.WaitGroup
 	errs := make(chan error, len(scopes)*8)
@@ -673,7 +681,7 @@ func TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess(t *tes
 			wait.Add(1)
 			go func() {
 				defer wait.Done()
-				replayed, err := replayScopeWorldState(root, scope)
+				replayed, err := replayScopeWorldState(owner, scope)
 				if err != nil {
 					errs <- err
 					return
@@ -696,71 +704,50 @@ func TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess(t *tes
 }
 
 type finalizedReplayScope struct {
-	ref        recordings.RecordingScopeRef
+	id         recordings.RecordingID
 	eventScope recordings.CanonicalEventScope
 	events     []recordings.CanonicalEvent
 	retained   recordings.WorldStateView
 }
 
-// newFinalizedReplayScope records two canonical facts for one Factory Session,
-// finalizes the recording, opens its scope, and captures the retained
-// projection every concurrent replay of that scope must reproduce.
-func newFinalizedReplayScope(t *testing.T, root recordings.Service, sessionID string) finalizedReplayScope {
+// Detached facts avoid running ledger, lifecycle or projection policy here.
+func newFinalizedReplayScope(t *testing.T, projection recordings.ProjectionService, sessionID string) finalizedReplayScope {
 	t.Helper()
-	eventScope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
-	bound, err := root.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: recordings.RecordingID("recording-" + sessionID),
-		Artifact:    recordings.RecordingArtifactReference("recording://" + sessionID),
-		Scope:       eventScope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording(%s): %v", sessionID, err)
-	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
 	events := []recordings.CanonicalEvent{
-		scopedScopeEvent(sessionID+"-event-1", 0, eventScope),
-		scopedScopeEvent(sessionID+"-event-2", 1, eventScope),
-	}
-	for index, event := range events {
-		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID, Event: event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent(%s)[%d]: %v", sessionID, index, err)
-		}
-	}
-	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_100, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording(%s): %v", sessionID, err)
-	}
-	opened, err := root.OpenRecordingScope(context.Background(), recordings.OpenRecordingScopeRequest{
-		RecordingID: bound.Status.RecordingID, Scope: eventScope,
-	})
-	if err != nil {
-		t.Fatalf("OpenRecordingScope(%s): %v", sessionID, err)
-	}
-	retained, err := root.ReconstructRecordingScope(context.Background(), recordings.ReconstructRecordingScopeRequest{
-		Scope: opened.Scope, SelectedTick: 4,
-	})
-	if err != nil {
-		t.Fatalf("ReconstructRecordingScope(%s): %v", sessionID, err)
-	}
-	if retained.WorldState.Scope != eventScope {
-		t.Fatalf("retained projection scope = %#v, want %#v", retained.WorldState.Scope, eventScope)
+		scopedScopeEvent(sessionID+"-event-1", 0, scope),
+		scopedScopeEvent(sessionID+"-event-2", 1, scope),
 	}
 	return finalizedReplayScope{
-		ref: opened.Scope, eventScope: eventScope, events: events, retained: retained.WorldState,
+		id: recordings.RecordingID("recording-" + sessionID), eventScope: scope, events: events,
+		retained: reconstructProjectionView(t, projection, scope, events),
 	}
+}
+
+type concurrentReplayProjection struct{ recordings.ProjectionService }
+
+func (concurrentReplayProjection) ReconstructFactoryWorldState(events []recordings.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	// Echo input identity so an incorrect plan prefix is observable without
+	// executing real projection policy or sharing mutable fake state.
+	return recordings.FactoryWorldState{Tick: tick, FactoryStateReason: events[len(events)-1].Id}, nil
 }
 
 // replayScopeWorldState drives one complete canonical replay of a finalized
 // scope and returns the world state its terminal observation reports.
 func replayScopeWorldState(
-	root recordings.Service,
+	owner recordingsreplay.Service,
 	scope finalizedReplayScope,
 ) (recordings.WorldStateView, error) {
-	planned, err := root.CreateReplayPlanScope(context.Background(), recordings.CreateReplayPlanScopeRequest{
-		Scope:         scope.ref,
+	loaded, err := owner.LoadReplayRecording(recordings.LoadReplayRecordingRequest{RecordingID: scope.id})
+	if err != nil {
+		return recordings.WorldStateView{}, err
+	}
+	if loaded.Recording.RecordingID != scope.id || loaded.Recording.Scope != scope.eventScope || !reflect.DeepEqual(loaded.Recording.Events, scope.events) {
+		return recordings.WorldStateView{}, errors.New("loaded replay facts crossed recording identity")
+	}
+	through := scope.events[len(scope.events)-1].Cursor
+	planned, err := owner.CreateReplayPlan(recordings.CreateReplayPlanRequest{
+		Recording: loaded.Recording, ExpectedThrough: &through,
 		SchemaVersion: recordings.ReplayPlanSchemaV1,
 		Timing:        recordings.ReplayTimingOrderOnly,
 		SelectedTick:  4,
@@ -768,13 +755,22 @@ func replayScopeWorldState(
 	if err != nil {
 		return recordings.WorldStateView{}, err
 	}
-	var observed recordings.ObserveReplayScopeResult
-	for range scope.events {
-		observed, err = root.ObserveReplayScope(context.Background(), recordings.ObserveReplayScopeRequest{
-			Scope: scope.ref, Plan: planned.Plan.Handle,
-		})
+	if planned.Plan.RecordingID != scope.id || planned.Plan.Scope != scope.eventScope || planned.Plan.TotalEvents != len(scope.events) {
+		return recordings.WorldStateView{}, errors.New("replay plan crossed recording identity")
+	}
+	var observed recordings.ObserveReplayResult
+	for index, event := range scope.events {
+		observed, err = owner.ObserveReplay(recordings.ObserveReplayRequest{Plan: planned.Plan.Handle})
 		if err != nil {
 			return recordings.WorldStateView{}, err
+		}
+		if observed.Observation.Plan != planned.Plan.Handle || observed.Observation.ProcessedEvents != index+1 ||
+			observed.Observation.TotalEvents != len(scope.events) || observed.Observation.Through == nil || *observed.Observation.Through != event.Cursor ||
+			observed.Observation.WorldState.Scope != scope.eventScope {
+			return recordings.WorldStateView{}, errors.New("replay observation crossed plan, prefix or scope")
+		}
+		if index < len(scope.events)-1 && observed.Observation.Kind != recordings.ReplayProgress {
+			return recordings.WorldStateView{}, errors.New("replay completed before its final fact")
 		}
 	}
 	if observed.Observation.Kind != recordings.ReplayCompleted {

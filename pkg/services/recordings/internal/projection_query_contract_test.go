@@ -6,7 +6,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -755,20 +754,27 @@ func newScopeAdapterFixture(artifacts artifactsexport.Service, replay recordings
 	return root, ref
 }
 
-func TestBeginRecordingScopeCancellationWithoutClockCleansUp(t *testing.T) {
+func TestBeginRecordingScopeCancellationWithZeroClockCleansUp(t *testing.T) {
 	t.Parallel()
-
 	ctx, cancel := context.WithCancel(context.Background())
-	planner := cancelingRecordingTargetPlanner{cancel: cancel}
-	root := NewServiceWithLifecycleEffects(
-		&stubLedger{}, projectionquerywire.NewService(), planner, nil, nil, nil,
-	)
-	if _, err := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
-		Enabled: true,
-		Scope:   recordings.CanonicalEventScope{FactorySessionID: "cancel-without-clock"},
-		Target:  recordings.RecordingTargetRequest{HomeDir: "home"},
-	}); !errors.Is(err, context.Canceled) {
-		t.Fatalf("BeginRecordingScope cancellation without clock = %v, want context.Canceled", err)
+	defer cancel()
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "cancel-zero-clock", Scope: recordings.CanonicalEventScope{FactorySessionID: "cancel-zero-clock"}, State: recordings.RecordingActive,
+	}}
+	lifecycle := cancelAfterStartLifecycle{activeRuntimeLifecycle: owner, cancel: cancel}
+	root := NewCombinedService(nil, nil, lifecycle, nil, nil, nil, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	request := recordings.BeginRecordingScopeRequest{Enabled: true, Scope: owner.status.Scope, Target: recordings.RecordingTargetRequest{HomeDir: "home"}}
+	result, err := root.BeginRecordingScope(ctx, request)
+	if !errors.Is(err, context.Canceled) || !result.Scope.IsZero() {
+		t.Fatalf("canceled BeginRecordingScope = (%#v, %v), want no scope and context.Canceled", result, err)
+	}
+	if owner.started.Scope != request.Scope || owner.started.Target != request.Target || !owner.started.Enabled {
+		t.Fatalf("start request = %#v, want selected request", owner.started)
+	}
+	want := []recordings.FinishRecordingRequest{{RecordingID: owner.status.RecordingID}}
+	if !reflect.DeepEqual(owner.finishes, want) || len(root.scopeByRef) != 0 {
+		t.Fatalf("cleanup = %#v, bindings = %d, want one finish with exact supplied zero time and no binding", owner.finishes, len(root.scopeByRef))
 	}
 }
 
@@ -852,15 +858,6 @@ func (service *foreignArtifactExportService) ReadPortableArtifact(_ context.Cont
 	return recordings.ReadPortableArtifactResult{Artifact: service.Artifact}, nil
 }
 
-type cancelingRecordingTargetPlanner struct {
-	cancel context.CancelFunc
-}
-
-func (planner cancelingRecordingTargetPlanner) PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-	planner.cancel()
-	return recordings.LiveRecordingTarget{ServicePath: "recording-target", ReportedPath: "recording-target"}, nil
-}
-
 type cancelAfterFirstErrContext struct {
 	calls int
 }
@@ -936,32 +933,4 @@ func assertScopeSubscribeError(
 func malformedScope(ref recordings.RecordingScopeRef) recordings.RecordingScopeRef {
 	unknown, _ := (recordings.RecordingScopeRef{}).Parse(ref.String() + "0")
 	return unknown
-}
-
-func newScopedQueryRoot(t *testing.T) recordings.Service {
-	return newScopedQueryRootWithLogger(t, logging.NoopLogger{})
-}
-
-func newScopedQueryRootWithLogger(t *testing.T, logger logging.Logger) recordings.Service {
-	t.Helper()
-	publication, err := NewPortableArtifactPublication(
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
-	root := NewServiceWithLifecycleEffectsAndLogger(
-		&stubLedger{}, projectionquerywire.NewService(), nil, nil, nil, publication,
-		logger,
-	)
-	if root == nil {
-		t.Fatal("NewServiceWithLifecycleEffects returned nil")
-	}
-	return root
 }
