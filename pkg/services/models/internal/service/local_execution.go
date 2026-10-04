@@ -14,15 +14,15 @@ import (
 )
 
 // localExecutor owns all Models implementation collaborators required for
-// managed local invocation.
+// managed local invocation. Configuration is detached operation data; retaining a
+// loader here would bind shared execution behavior to the first scope.
 type localExecutor struct {
-	runtimeConfig models.RuntimeConfigLoader
-	host          modelhost.Host
-	assets        localmodels.AssetPuller
-	runtime       localmodels.Runtime
-	resources     *localmodels.ResourceLimiter
-	hooks         modelseffects.LocalRuntimeHooks
-	now           func() time.Time
+	host      modelhost.Host
+	assets    localmodels.AssetPuller
+	runtime   localmodels.Runtime
+	resources *localmodels.ResourceLimiter
+	hooks     modelseffects.LocalRuntimeHooks
+	now       func() time.Time
 
 	mu           sync.Mutex
 	entries      map[localExecutionKey]*localExecutionEntry
@@ -41,7 +41,6 @@ type localExecutionEntry struct {
 }
 
 func newLocalExecutor(
-	runtimeConfig models.RuntimeConfigLoader,
 	host modelhost.Host,
 	assets localmodels.AssetPuller,
 	runtime localmodels.Runtime,
@@ -49,9 +48,6 @@ func newLocalExecutor(
 	hooks modelseffects.LocalRuntimeHooks,
 	now func() time.Time,
 ) (*localExecutor, error) {
-	if runtimeConfig == nil {
-		return nil, missingDependencyError("local executor runtime configuration lookup")
-	}
 	if isNilDependency(host) {
 		return nil, missingDependencyError("local executor model host")
 	}
@@ -68,21 +64,21 @@ func newLocalExecutor(
 		return nil, missingDependencyError("local executor clock")
 	}
 	return &localExecutor{
-		runtimeConfig: runtimeConfig,
-		host:          host,
-		assets:        assets,
-		runtime:       runtime,
-		resources:     resources,
-		hooks:         hooks,
-		now:           now,
-		entries:       make(map[localExecutionKey]*localExecutionEntry),
-		closedScopes:  make(map[models.RuntimeScopeRef]bool),
+		host:         host,
+		assets:       assets,
+		runtime:      runtime,
+		resources:    resources,
+		hooks:        hooks,
+		now:          now,
+		entries:      make(map[localExecutionKey]*localExecutionEntry),
+		closedScopes: make(map[models.RuntimeScopeRef]bool),
 	}, nil
 }
 
 func (e *localExecutor) InvokeLocal(
 	ctx context.Context,
 	request models.LocalInvocationRequest,
+	runtimeConfig *models.RuntimeConfig,
 ) (models.LocalInvocationResult, error) {
 	if e == nil || !request.Worker.UsesManagedRuntime() {
 		return models.LocalInvocationResult{}, nil
@@ -90,7 +86,6 @@ func (e *localExecutor) InvokeLocal(
 	if err := e.admitInvocation(ctx, request.Scope); err != nil {
 		return models.LocalInvocationResult{Handled: true}, err
 	}
-	runtimeConfig := e.runtimeConfig()
 	if runtimeConfig == nil {
 		return models.LocalInvocationResult{Handled: true}, fmt.Errorf("loaded runtime config is required for local model execution")
 	}

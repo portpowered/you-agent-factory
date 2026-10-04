@@ -877,7 +877,6 @@ func newRuntimeWithHostEdges(
 		return nil, err
 	}
 	localExecutor, err := newLocalExecutor(
-		runtimeConfig,
 		modelHost,
 		assetPuller,
 		localRuntime,
@@ -961,5 +960,8 @@ func (s *runtimeService) InvokeLocal(ctx context.Context, request models.LocalIn
 	if err := models.ValidateLocalInvocationRequest(request); err != nil {
 		return models.LocalInvocationResult{}, err
 	}
-	return s.local.InvokeLocal(ctx, request)
+	if s.local == nil || !request.Worker.UsesManagedRuntime() {
+		return models.LocalInvocationResult{}, nil
+	}
+	return s.local.InvokeLocal(ctx, request, s.runtimeConfig())
 }
