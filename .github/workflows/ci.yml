@@ -373,6 +373,7 @@ jobs:
         run: |
           go test -race ./pkg/services/recordings/internal/services/worker_capture/internal/service ./pkg/platform/replay -count=1 -timeout=5m
           go test -race ./tests/functional/workers/inference -run 'TestWSRFT004|TestWSRFT009|TestWorkerRecordingSurvivesTempCleanup' -count=1 -p=2 -timeout=5m
+          go test -race ./pkg/services/worker_sessions/internal/service -count=1 -timeout=5m
       - name: Save unit coverage Go build and test cache
         if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

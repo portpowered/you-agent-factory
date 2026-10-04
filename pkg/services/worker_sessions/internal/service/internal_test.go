@@ -4557,54 +4557,176 @@ func TestCommitContinuationLineageRejectsUnresolvableSourceAndKeepsLiveTruth(t *
 	}
 }
 
-// sendPendingReservations sends two reservations on the gate. close() may
-// return without consuming the second send, so the sender exits on stop and
-// signals done so the test can join it.
-func sendPendingReservations(gate *controlHistoryGate, received, release, stop, done chan struct{}) {
-	defer close(done)
-	gate.done <- struct{}{}
-	close(received)
-	<-release
+// pendingReservationsFixture owns the synthetic notifications used to exercise
+// close's wait loop. Every wait can be stopped even if an assertion aborts.
+type pendingReservationsFixture struct {
+	gate          *controlHistoryGate
+	notifications chan struct{}
+	received      chan struct{}
+	release       chan struct{}
+	secondSend    chan struct{}
+	startClose    chan struct{}
+	stop          chan struct{}
+	senderDone    chan struct{}
+	closerDone    chan struct{}
+	cleanupOnce   sync.Once
+}
+
+func newPendingReservationsFixture(t *testing.T) *pendingReservationsFixture {
+	t.Helper()
+	notifications := make(chan struct{})
+	fixture := &pendingReservationsFixture{
+		gate:          &controlHistoryGate{pending: true, done: notifications},
+		notifications: notifications,
+		received:      make(chan struct{}),
+		release:       make(chan struct{}),
+		secondSend:    make(chan struct{}),
+		startClose:    make(chan struct{}),
+		stop:          make(chan struct{}),
+		senderDone:    make(chan struct{}),
+		closerDone:    make(chan struct{}),
+	}
+	t.Cleanup(func() { fixture.cleanup(t) })
+	go fixture.send()
+	go func() {
+		defer close(fixture.closerDone)
+		select {
+		case <-fixture.startClose:
+		case <-fixture.stop:
+		}
+		fixture.gate.close()
+	}()
+	return fixture
+}
+
+func (fixture *pendingReservationsFixture) send() {
+	defer close(fixture.senderDone)
 	select {
-	case gate.done <- struct{}{}:
-	case <-stop:
+	case fixture.notifications <- struct{}{}:
+	case <-fixture.stop:
+		return
+	}
+	close(fixture.received)
+	select {
+	case <-fixture.release:
+	case <-fixture.stop:
+		return
+	}
+	close(fixture.secondSend)
+	select {
+	case fixture.notifications <- struct{}{}:
+	case <-fixture.stop:
 	}
 }
 
-func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T) {
-	pendingGate := &controlHistoryGate{pending: true, done: make(chan struct{})}
-	pendingClosed := make(chan struct{})
-	pendingReceived := make(chan struct{})
-	pendingRelease := make(chan struct{})
-	senderStop := make(chan struct{})
-	senderDone := make(chan struct{})
-	go func() {
-		pendingGate.close()
-		close(pendingClosed)
-	}()
-	go sendPendingReservations(pendingGate, pendingReceived, pendingRelease, senderStop, senderDone)
+func (fixture *pendingReservationsFixture) cleanup(t *testing.T) {
+	t.Helper()
+	fixture.cleanupOnce.Do(func() {
+		close(fixture.stop)
+		if err := waitControlledSignal(fixture.senderDone, 30*time.Second); err != nil {
+			t.Fatalf("pending reservation sender cleanup: %v", err)
+		}
+		// Join before closing the immutable notification channel: the sender may
+		// still be attempting either rendezvous, and gate.done can be reset.
+		fixture.gate.mu.Lock()
+		fixture.gate.pending = false
+		fixture.gate.done = nil
+		fixture.gate.mu.Unlock()
+		close(fixture.notifications)
+		if err := waitControlledSignal(fixture.closerDone, 30*time.Second); err != nil {
+			t.Fatalf("pending reservation closer cleanup: %v", err)
+		}
+	})
+}
+
+func TestControlHistoryGateFixtureCleanupJoinsEveryPhase(t *testing.T) {
+	for _, phase := range []string{"before initial rendezvous", "awaiting release", "unreceived second send"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			fixture := newPendingReservationsFixture(t)
+			if phase != "before initial rendezvous" {
+				close(fixture.startClose)
+				if err := waitControlledSignal(fixture.received, 30*time.Second); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if phase == "unreceived second send" {
+				fixture.gate.mu.Lock()
+				fixture.gate.pending = false
+				fixture.gate.mu.Unlock()
+				// Let close finish while the sender still waits for release, guaranteeing
+				// that its second notification has no receiver.
+				select {
+				case fixture.notifications <- struct{}{}:
+				case <-fixture.closerDone:
+				case <-time.After(30 * time.Second):
+					t.Fatal("closer did not receive the final reservation notification")
+				}
+				if err := waitControlledSignal(fixture.closerDone, 30*time.Second); err != nil {
+					t.Fatal(err)
+				}
+				close(fixture.release)
+				if err := waitControlledSignal(fixture.secondSend, 30*time.Second); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fixture.cleanup(t)
+			fixture.cleanup(t)
+			for _, done := range []chan struct{}{fixture.senderDone, fixture.closerDone} {
+				select {
+				case <-done:
+				default:
+					t.Fatal("cleanup returned before an owned goroutine finished")
+				}
+			}
+			if fixture.gate.acquire() {
+				t.Fatal("cleanup left the gate open")
+			}
+		})
+	}
+}
+
+func assertControlHistoryGateCloseWaitsForPendingReservation(t *testing.T) {
+	t.Helper()
+	fixture := newPendingReservationsFixture(t)
+	pendingGate := fixture.gate
+	close(fixture.startClose)
 	select {
-	case <-pendingReceived:
-	case <-time.After(time.Second):
+	case <-fixture.received:
+	case <-time.After(30 * time.Second):
 		t.Fatal("controlHistoryGate.close() did not wait for a pending reservation")
+	}
+	select {
+	case <-fixture.closerDone:
+		t.Fatal("controlHistoryGate.close() finished before the pending reservation drained")
+	default:
 	}
 	pendingGate.mu.Lock()
 	pendingGate.pending = false
 	pendingGate.mu.Unlock()
-	close(pendingRelease)
+	close(fixture.release)
 	select {
-	case <-pendingClosed:
-	case <-time.After(time.Second):
+	case <-fixture.closerDone:
+	case <-time.After(30 * time.Second):
 		t.Fatal("controlHistoryGate.close() did not finish after the pending reservation drained")
 	}
-	close(senderStop)
-	<-senderDone
+	fixture.cleanup(t)
+}
+
+func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T) {
+	assertControlHistoryGateCloseWaitsForPendingReservation(t)
 
 	gate := &controlHistoryGate{}
 	if !gate.acquire() {
 		t.Fatal("controlHistoryGate.acquire() = false, want true")
 	}
 	closed := make(chan struct{})
+	t.Cleanup(func() {
+		gate.release()
+		if err := waitControlledSignal(closed, 30*time.Second); err != nil {
+			t.Fatalf("control gate closer cleanup: %v", err)
+		}
+	})
 	go func() {
 		gate.close()
 		close(closed)
@@ -4612,7 +4734,7 @@ func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T)
 	gate.release()
 	select {
 	case <-closed:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("controlHistoryGate.close() did not finish after release")
 	}
 	gate.release()
