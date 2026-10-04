@@ -207,9 +207,6 @@ FUNCTIONAL_TEST_GO ?= $(GO)
 # can be reported by its compact terminal verdict step. An unset path preserves
 # the historical fail-fast target behavior.
 FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
-BACKEND_SIZE_ROOT ?= .
-PACKAGE_MAINT_ROOT ?= .
-PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
 PACKAGE_BOUNDARY_ALL ?= 0
 PACKAGE_BOUNDARY_BASE_REF ?=
@@ -217,7 +214,6 @@ PACKAGE_STRUCTURE_ROOT ?= .
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
 # "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
 # Entries are keyed by source content, never by checkout path, so a fresh worktree
@@ -246,7 +242,7 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci-lint-run repolint test-sleep-check compatibility-alias-check retired-surface-check fmt-check contracts-check
+LINT_TARGETS_BASE := vet pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci-lint-run repolint lint-migration-smoke test-sleep-check retired-surface-check fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -291,7 +287,7 @@ define run_timed_step
 endef
 
 
-.PHONY: golangci golangci-lint-run repolint lint-baseline-growth
+.PHONY: golangci golangci-lint-run repolint lint-baseline-growth lint-migration-smoke
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
@@ -323,9 +319,9 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: lint-full test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
+.PHONY: lint-full test-sleep-check pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
-.PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
+.PHONY: retired-surface-check readme-check deadcode dashboard-verify
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
@@ -1002,9 +998,6 @@ lint:
 lint-full:
 	$(MAKE) lint LINT_FULL=1
 
-backend-size:
-	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
-
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
 
@@ -1012,12 +1005,6 @@ backend-dependency-graph:
 # locally and required by the CI publisher after both measured lanes pass.
 architecture:
 	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
-
-pkg-maint:
-	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")
-
-pkg-file-count:
-	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
 
 pkg-boundary:
 	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
@@ -1073,7 +1060,13 @@ endif
 # repository's go/analysis analyzers (cmd/repolint) through go vet -vettool.
 golangci: golangci-lint-run repolint
 
+LINT_MIGRATION_COHORT ?= all
+
+lint-migration-smoke:
+	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(GOLANGCI_LINT)"
+
 golangci-lint-run:
+	@git merge-base HEAD origin/main
 	$(GOLANGCI_LINT) run ./...
 
 .PHONY: repolint-build
@@ -1097,9 +1090,6 @@ lint-baseline-growth: repolint-build
 
 test-sleep-check:
 	$(call run_lint_checker,./cmd/testsleepcheck,-root ".")
-
-compatibility-alias-check:
-	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")
 
 retired-surface-check:
 	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")

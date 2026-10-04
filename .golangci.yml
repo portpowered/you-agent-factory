@@ -18,6 +18,8 @@ linters:
   default: none
   enable:
     - forbidigo
+    - revive
+    - gocyclo
   settings:
     forbidigo:
       # Resolve identifiers through go/types so import aliases cannot hide a call.
@@ -31,9 +33,23 @@ linters:
           msg: construct the application logger only at the approved composition boundary and propagate it
         - pattern: '^logging\.BuildTerminalLogger$'
           msg: accept or propagate an injected logger
+    revive:
+      enable-default-rules: false
+      rules:
+        - name: file-length-limit
+          arguments:
+            - max: 1000
+              skip-comments: true
+              skip-blank-lines: true
+        - name: function-length
+          arguments: [0, 100]
+    gocyclo:
+      min-complexity: 15
   exclusions:
     generated: lax
     rules:
+      - linters: [revive, gocyclo]
+        path-except: '^(cmd|internal|pkg|tests)/'
       # The logging boundary applies to production code under cmd, internal and pkg.
       - linters: [forbidigo]
         path-except: '^(cmd|internal|pkg)/'
@@ -47,5 +63,6 @@ issues:
   # Ratchet: only violations introduced since the merge base fail. Requires
   # origin/main to be fetched; Backend Lint checks out with fetch-depth 0.
   new-from-merge-base: origin/main
+  whole-files: false
   max-issues-per-linter: 0
   max-same-issues: 0
