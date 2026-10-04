@@ -676,6 +676,9 @@ func (a *attempt) execute(
 	client, connection := process.client, process.connection
 
 	client.reset(request.ProgressObserver)
+	// Every exit below, including early failures that never reach a
+	// completed/failed progress close, must stop this turn's delivery goroutine.
+	defer client.release()
 	session, err := a.openSession(ctx, cwd, connection, initialized, request, resume)
 	if err != nil {
 		return providers.ExecuteResult{}, err
@@ -1620,12 +1623,30 @@ type client struct {
 // diagnostics.
 func (c *client) reset(observe providers.ProgressObserver) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.permissionWasDenied = false
 	c.text.Reset()
 	c.sessionID = ""
 	c.startupChunk = ""
+	previous := c.stream
 	c.stream = newPromptProgressStream(observe)
+	c.mu.Unlock()
+	// A turn replaced before it was closed would otherwise strand its delivery
+	// goroutine. Close is idempotent and flushes queued facts, and runs outside
+	// the lock so a slow observer cannot block the client.
+	if previous != nil {
+		previous.close()
+	}
+}
+
+// release stops the current turn's delivery goroutine after flushing queued
+// facts. It is idempotent and safe after completeProgress or failProgress.
+func (c *client) release() {
+	c.mu.Lock()
+	stream := c.stream
+	c.mu.Unlock()
+	if stream != nil {
+		stream.close()
+	}
 }
 
 // suppressStartupChunk records the exact startup banner text the session

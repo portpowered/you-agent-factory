@@ -6,9 +6,39 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/goleak"
+
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
+
+// TestClientReleaseAndResetStopDeliveryGoroutine proves a turn that never
+// reaches completeProgress/failProgress still stops its dispatcher goroutine,
+// whether it is released explicitly or replaced by the next reset.
+func TestClientReleaseAndResetStopDeliveryGoroutine(t *testing.T) {
+	observe := func(providers.ExecuteProgress) {}
+	c := &client{}
+	c.reset(observe)
+	first := c.stream.dispatcher
+	c.reset(observe)
+	select {
+	case <-first.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("reset did not stop the replaced turn's dispatcher goroutine")
+	}
+	second := c.stream.dispatcher
+	c.release()
+	select {
+	case <-second.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("release did not stop the dispatcher goroutine")
+	}
+	c.release() // idempotent
+}
 
 func TestMapSessionUpdateCompletedToolWithDiffKeepsOwningTool(t *testing.T) {
 	status := acpsdk.ToolCallStatusCompleted

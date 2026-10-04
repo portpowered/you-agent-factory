@@ -43,6 +43,7 @@ func newStartupTurnHarness(t *testing.T) *startupTurnHarness {
 	harness.client.reset(func(fact providers.ExecuteProgress) {
 		harness.observed = append(harness.observed, fact)
 	})
+	t.Cleanup(harness.client.release)
 	return harness
 }
 

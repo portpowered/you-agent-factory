@@ -38,7 +38,8 @@ loop this lane.
    - verify the change solves the stated problem without obvious regressions
    - check architecture and dependency fit
    - evaluate readability and maintainability
-   - confirm appropriate tests and quality-check evidence
+   - confirm the diff carries the tests for the behavior it changes (tests ship in the same PR as the product change); hosted CI is the quality-check evidence
+   - judge the diff against the acceptance criteria plus the hosted CI. Never demand characterization PRs, evidence documents, per-head checklist files, pre-change witnesses, or "baseline proof" as merge conditions
    - treat hallucinated APIs, stale patterns, hidden side effects, and subtle edge cases in AI-authored code as high-risk review targets
    - request changes for correctness issues, security issues, missing required tests, prompt-rule violations, hidden side effects, dead code, or oversized unclear helpers
    - approve only when the change is correct, adequately tested, and within the defined expectations
@@ -50,31 +51,17 @@ loop this lane.
 4. Run: gh pr diff $prNumber  — to see the full diff
 4.1. If the diff contains `prd.json` or `progress.txt`, that is BLOCKING:
    these are untracked worktree scaffolding (deleted from main 2026-08-11,
-   PR #1886) and must be removed from the branch (`git rm` during rebase)
+   PR #1886) and must be removed from the branch (`git rm` in a new commit)
    before merge. State this as the exact fix in your comment.
 5. Read the changed files to understand the implementation in full
 6. Read surrounding codebase code (the code the PR touches) to check for pattern conformance
 
-### Step 2 — Run quality checks
-Run: make test
-Report any failures. Failing checks are a BLOCKING issue.
-Scope exception: if a previous review pass recorded a green `make test` for
-the CURRENT head in the PR conversation, or required CI enforces the full
-suite on this head, you may instead run only the test packages the diff
-touches (state which you ran). Do not spend the whole session re-running an
-already-verified full suite.
-
-Known-baseline lint policy (recorded 2026-08-08): `make lint` cannot
-currently pass end-to-end on main — the `pkg-boundary` target carries
-172 pre-existing domain→transport import violations owned by the
-packaged-service-structure migration backlog, and several committed
-PSS inventories (packagetargetmanifestcheck tests) have drifted on
-main. When a PRD requires lint: enforce that the branch introduces NO
-NEW violations relative to current main (compare `make lint` output on
-the PR head vs main), and that the ratcheted gates that ARE green on
-main — backend-size, pkg-maint, pkg-file-count, pkg-structure, vet —
-stay green on the head. Do not block a lane on pre-existing debt it
-did not touch; do record which gate outputs you compared.
+### Step 2 — Quality checks come from hosted CI
+Do NOT run `make lint`, `make test`, `make test-functional`, `make verify-pr`,
+or any `-race` run locally in review. Hosted CI is the evidence: read the
+required check states in Step 2.1. A required check that fails on code this PR
+changed is a BLOCKING issue; a failure in a package the diff does not touch is
+operator-owned (see Step 2.1) and never blocks the PR.
 
 If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md. This worker starts without the Playwright MCP, so run the browser check in a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. The nested session loads the full browser tooling for that step only. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 
@@ -167,7 +154,8 @@ command prints `Runtime log:`, resolve that path before continuing and stop the
 proof immediately if it is outside the scratch directory. Real or paid remote
 dependencies may be exercised only when the plan authorizes them and declares
 the applicable safety, call, cost, and duration budget. Limit the proof to one
-narrow delivered flow and a few minutes; do not turn it into a broad suite.
+narrow delivered flow and a few minutes; do not turn it into a broad suite, and
+do not run `make` suites or `-race` for it.
 
 Post the exact commands, verbatim output, and exit codes from this independent
 proof in a PR conversation comment. Never put runtime-proof evidence in a
@@ -262,13 +250,6 @@ first time you raise a blocker set, or a new blocker on a head pushed since
 your last pass. Holds are bounded by the review visit cap, so a genuinely
 stuck lane still surfaces without you forcing a rejection.
 
-Exception: before treating a required-check failure as an unchanged,
-already-told-to blocker under this rule, first run the stale-head-only
-classification in Step 6 (Required-check and stale-head routing) below -- a
-stale-head-only failure is not covered by this convergence rule even on a
-repeat pass, because the explicit rebase instruction is concrete executor
-work the executor has not yet been given by review.
-
 ### Step 5 - handle feedback
 
 - Post a PR comment with your review summary, including the acceptance criteria checklist results, only after the required CI state is terminal for the current head or you have concrete independent review findings to report.
@@ -282,14 +263,16 @@ Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or
 
 ### Step 6 - merge if correct. 
 
-If you believe that the PR is complete and the CI passes, please merge the PR. 
+If the PR has passing required checks, no content blocker, and GitHub
+mergeable state `MERGEABLE`, merge it with `gh pr merge <n> --squash`, even if
+the head is behind main. Do NOT rebase, and do NOT require checks to re-run
+after a sync, before merging. A merge queue is being enabled; the same command
+enqueues the PR.
 
-If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
+Only a real merge conflict (mergeable state `CONFLICTING`) sends the PR back:
+tell the processor to resolve the conflicts, rebase, and push.
 
-#### Required-check and stale-head routing
-
-This classification runs regardless of, and before, the Step 4.2
-convergence/hold decision.
+#### Required-check routing
 
 Before deciding to merge, never run `gh pr merge --admin` or use an
 administrative/bypass flag to force a merge past a failing required status
@@ -297,20 +280,8 @@ check. A required status check is enforced by the repository ruleset, so an
 administrator cannot make a failing head eligible by bypassing it; the PR
 needs a new head on which the required checks pass.
 
-Classify a required-check failure as **stale-head-only** only when every
-failing required check is explained by commits merged since the PR head and
-there is no unresolved content-level blocker. Verify that condition against
-`origin/main` before routing it, using a behind-main merge-base and/or a
-failure signature that is already fixed on the current `origin/main` checks.
-Do not call a check stale merely because the PR is old, main has advanced, or
-one check happens to be green on main while another failure remains
-unexplained.
-
-When, and only when, every failing required check meets that stale-head-only
-test, post a PR conversation comment with this exact instruction and end
-through the **REJECTED** route so process receives concrete work:
-
-> Rebase onto origin/main and push a new head -- git fetch origin && git rebase origin/main, resolve conflicts, then push. This is a stale-head issue, not a content defect.
+A behind-main head is not by itself a defect. A failing required check on code
+the PR changed is a content blocker; return it through the **REJECTED** route.
 
 ### Step 7 - respond back
 
@@ -325,8 +296,8 @@ field. Set `decision` to:
   independent findings, and INCLUDES a red required check whose failing test is
   untouched by the PR diff: rerun the failed jobs once with
   `gh run rerun <id> --failed`, then return `CONTINUE`. If it fails identically
-  on the same head with the same signature, ask the mailbox (see "Operator
-  questions (mailbox)") naming the test, and still return `CONTINUE`. A hold
+  on the same head with the same signature, the failure is operator-owned: name
+  the test in one PR comment, do not ask the mailbox, and return `CONTINUE`. A hold
   posts no PR comment, routes the task back through the `ci-wait` gate, and
   re-enters review without a failed worker session or consecutive-failure
   strike;
@@ -338,8 +309,9 @@ field. Set `decision` to:
   closed by its owner, or the scope is already merged elsewhere. `FAILED` KILLS
   THE WHOLE LANE: it escalates and fails the lane's idea. Missing
   prerequisites, baseline-ownership questions, unrelated red checks and
-  evidence-authority questions are NEVER `FAILED`; they are `CONTINUE` plus a
-  mailbox request.
+  evidence-authority questions are NEVER `FAILED`; the standing rules answer
+  them (merge on green; untouched-package failures are operator-owned), and
+  only a question they do not answer is `CONTINUE` plus a mailbox request.
 
 Never return a bare routing value, a marker-only line, or a Markdown-wrapped
 response. The configured `decision-envelope` parser is the only response
@@ -347,7 +319,10 @@ routing contract for this workstation.
 
 ## Operator questions (mailbox)
 
-Before asking: if the packet contradicts repository reality and a
+Before asking, check whether the standing rules already answer the question.
+Questions about evidence, authority, or untouched-package CI are answered by
+the rules: merge on green, and failures in untouched packages are
+operator-owned. Do not ask the mailbox about them. Also: if the packet contradicts repository reality and a
 conservative reading exists that weakens no acceptance criterion, raises no
 baseline and widens no scope, take it, record it (in `progress.txt` and the PR body), and
 continue. Ask the mailbox only when no such reading exists. Examples:
@@ -358,8 +333,8 @@ continue. Ask the mailbox only when no such reading exists. Examples:
   file or delete the dead export, and never raise the baseline.
 - A literal criterion contradicts documented current behavior (for example
   "quiet emits no output" when the docs say quiet emits the raw result, or
-  "every event has sessionId" when startup frames have none): characterize
-  what exists and record the gap.
+  "every event has sessionId" when startup frames have none): assert
+  what exists in the product-change PR and record the gap.
 - A criterion assumes an ID is globally unique when the contract makes it
   session-scoped: assert uniqueness within the session.
 

@@ -22,9 +22,9 @@ type lifecycleControlFactory struct {
 
 var _ factory.Service = (*lifecycleControlFactory)(nil)
 
-func newLifecycleControlFactory(state interfaces.FactoryState) *lifecycleControlFactory {
+func newLifecycleControlFactory(t *testing.T, state interfaces.FactoryState) *lifecycleControlFactory {
 	f := &lifecycleControlFactory{
-		executeObserverFactory: &executeObserverFactory{},
+		executeObserverFactory: newExecuteObserverFactory(t),
 		state:                  state,
 	}
 	f.syncEngineState()
@@ -160,7 +160,7 @@ func TestPauseRunningHostedInstanceReturnsAcceptedAndLeavesPaused(t *testing.T) 
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	handle := startReadyHostedHandle(t, host, factoryStub, "runtime-pause-running")
 
 	result, err := host.Pause(context.Background(), handle)
@@ -179,7 +179,7 @@ func TestPauseAlreadyPausedReturnsNoOpWithoutChangingHandle(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	handle := startReadyHostedHandle(t, host, factoryStub, "runtime-pause-noop")
 
 	if _, err := host.Pause(context.Background(), handle); err != nil {
@@ -198,7 +198,7 @@ func TestResumePausedHostedInstanceReturnsAcceptedAndRestoresRunning(t *testing.
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	handle := startReadyHostedHandle(t, host, factoryStub, "runtime-resume-paused")
 
 	if _, err := host.Pause(context.Background(), handle); err != nil {
@@ -217,7 +217,7 @@ func TestResumeAlreadyRunningReturnsNoOp(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	handle := startReadyHostedHandle(t, host, factoryStub, "runtime-resume-noop")
 
 	first, err := host.Resume(context.Background(), handle)
@@ -248,7 +248,7 @@ func TestPauseResumeRejectStoppedFailedAndUnknownStates(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			host := newTestHost(t)
-			factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+			factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 			handle := startReadyHostedHandle(t, host, factoryStub, "runtime-reject-"+tc.name)
 
 			factoryStub.mu.Lock()
@@ -289,7 +289,7 @@ func TestPauseResumeRejectInvalidAndUnregisteredHandles(t *testing.T) {
 		t.Fatalf("Resume(nil) error = %v, want runtime-handle validation error", err)
 	}
 
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	handle := startReadyHostedHandle(t, host, factoryStub, "runtime-unregistered")
 	host.removeHandle(handle.(*factoryhost.Handle))
 
@@ -307,7 +307,7 @@ func TestPauseResumeDoesNotStartNewHandle(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	handle := startReadyHostedHandle(t, host, factoryStub, "runtime-single-handle")
 
 	if _, err := host.Pause(context.Background(), handle); err != nil {
