@@ -55,13 +55,7 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 	if len(lifecycle.appendRequests) != 3 {
 		t.Fatalf("append requests = %d, want initial, work request, and terminal events", len(lifecycle.appendRequests))
 	}
-	for index, request := range lifecycle.appendRequests {
-		if request.RecordingID != recorder.recordingID || request.Event.Scope.FactorySessionID != scope.FactorySessionID ||
-			request.Event.Sequence != int64(index) || request.Event.Cursor.Sequence != int64(index) ||
-			request.Event.Cursor.StreamGenerationID != string(recorder.recordingID) {
-			t.Fatalf("append request %d = %#v", index, request)
-		}
-	}
+	assertRuntimeRecorderAppendRequests(t, lifecycle.appendRequests, recorder.recordingID, scope)
 
 	recordedWorkEvent := lifecycle.appendRequests[1].Event
 	if recordedWorkEvent.ID != runtimeEvent.Id {
@@ -86,6 +80,19 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 	}
 
 	assertTerminalRunPayload(t, finishedEvent.Payload, startedAt, finishedAt)
+}
+
+func assertRuntimeRecorderAppendRequests(t *testing.T, requests []recordings.AppendLifecycleEventRequest,
+	id recordings.LifecycleRecordingID, scope recordings.CanonicalEventScope,
+) {
+	t.Helper()
+	for index, request := range requests {
+		if request.RecordingID != id || request.Event.Scope.FactorySessionID != scope.FactorySessionID ||
+			request.Event.Sequence != int64(index) || request.Event.Cursor.Sequence != int64(index) ||
+			request.Event.Cursor.StreamGenerationID != string(id) {
+			t.Fatalf("append request %d = %#v", index, request)
+		}
+	}
 }
 
 func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) {

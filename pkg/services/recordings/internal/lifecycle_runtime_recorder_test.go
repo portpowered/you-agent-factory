@@ -57,25 +57,31 @@ func TestLifecycleRuntimeRecorderForwardsFailuresFlushAndFinalization(t *testing
 	if !errors.Is(err, producerErr) || !errors.Is(err, finalWriteErr) {
 		t.Fatalf("Finalize error = %v, want producer and final-write identities", err)
 	}
-
-	if len(lifecycle.failureRequests) != 1 {
-		t.Fatalf("failure requests = %#v, want one pending producer failure", lifecycle.failureRequests)
-	}
-	failure := lifecycle.failureRequests[0]
-	if failure.RecordingID != recorder.recordingID || failure.Cause != producerErr ||
-		failure.Failure.Code != "producer_boundary_failed" || !failure.Failure.RecordedAt.Equal(startedAt) {
-		t.Fatalf("producer failure request = %#v", failure)
-	}
-	if lifecycle.flushRequest.RecordingID != recorder.recordingID || lifecycle.flushCalls != 1 ||
-		lifecycle.finishRequest.RecordingID != recorder.recordingID ||
-		lifecycle.finishRequest.FinishedAt != finishedAt || lifecycle.finishCalls != 1 {
-		t.Fatalf("flush/finish requests = %#v / %#v", lifecycle.flushRequest, lifecycle.finishRequest)
-	}
+	assertRuntimeRecorderLifecycleRequests(t, lifecycle, recorder.recordingID, producerErr, startedAt, finishedAt)
 	if err := recorder.Finalize(finishedAt); !errors.Is(err, finalWriteErr) || lifecycle.finishCalls != 1 {
 		t.Fatalf("repeated Finalize = %v, finish calls = %d", err, lifecycle.finishCalls)
 	}
 	if !errors.Is(recorder.Err(), producerErr) || !errors.Is(recorder.Err(), finalWriteErr) {
 		t.Fatalf("recorder.Err = %v, want preserved owner causes", recorder.Err())
+	}
+}
+
+func assertRuntimeRecorderLifecycleRequests(t *testing.T, lifecycle *stubRecordingLifecycle,
+	id recordings.LifecycleRecordingID, producerErr error, startedAt, finishedAt time.Time,
+) {
+	t.Helper()
+	if len(lifecycle.failureRequests) != 1 {
+		t.Fatalf("failure requests = %#v, want one pending producer failure", lifecycle.failureRequests)
+	}
+	failure := lifecycle.failureRequests[0]
+	if failure.RecordingID != id || failure.Cause != producerErr ||
+		failure.Failure.Code != "producer_boundary_failed" || !failure.Failure.RecordedAt.Equal(startedAt) {
+		t.Fatalf("producer failure request = %#v", failure)
+	}
+	if lifecycle.flushRequest.RecordingID != id || lifecycle.flushCalls != 1 ||
+		lifecycle.finishRequest.RecordingID != id ||
+		lifecycle.finishRequest.FinishedAt != finishedAt || lifecycle.finishCalls != 1 {
+		t.Fatalf("flush/finish requests = %#v / %#v", lifecycle.flushRequest, lifecycle.finishRequest)
 	}
 }
 
