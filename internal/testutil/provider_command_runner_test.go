@@ -63,7 +63,7 @@ func TestAdaptPlatformCommandRunnerRunMapsRequestAndResult(t *testing.T) {
 		},
 	}
 	adapted := AdaptPlatformCommandRunner(runner)
-	if adapted == nil {
+	if adapted.Run == nil || adapted.RunStreaming == nil {
 		t.Fatal("AdaptPlatformCommandRunner() = nil, want adapter")
 	}
 	request := providers.CommandRequest{
@@ -105,13 +105,9 @@ func TestAdaptPlatformCommandRunnerStreamingFallsBackAndPublishesOutput(t *testi
 		Stderr: []byte("stderr"),
 	}}
 	adapted := AdaptPlatformCommandRunner(runner)
-	streaming, ok := adapted.(providers.StreamingCommandRunner)
-	if !ok {
-		t.Fatal("AdaptPlatformCommandRunner() does not expose streaming effect")
-	}
 	var streams []string
 	var chunks []string
-	result, err := streaming.RunStreaming(context.Background(), providers.CommandRequest{}, func(stream string, chunk []byte) error {
+	result, err := adapted.RunStreaming(context.Background(), providers.CommandRequest{}, func(stream string, chunk []byte) error {
 		streams = append(streams, stream)
 		chunks = append(chunks, string(chunk))
 		return nil
@@ -138,13 +134,9 @@ func TestAdaptPlatformCommandRunnerStreamingPreservesObserverError(t *testing.T)
 		},
 	}
 	adapted := AdaptPlatformCommandRunner(runner)
-	streaming, ok := adapted.(providers.StreamingCommandRunner)
-	if !ok {
-		t.Fatal("AdaptPlatformCommandRunner() does not expose streaming effect")
-	}
 	wantErr := errors.New("observer stopped")
 	var calls int
-	result, err := streaming.RunStreaming(context.Background(), providers.CommandRequest{}, func(_ string, _ []byte) error {
+	result, err := adapted.RunStreaming(context.Background(), providers.CommandRequest{}, func(_ string, _ []byte) error {
 		calls++
 		return wantErr
 	})
@@ -162,7 +154,8 @@ func TestAdaptPlatformCommandRunnerStreamingPreservesObserverError(t *testing.T)
 func TestAdaptPlatformCommandRunnerNilAndEmptyOutput(t *testing.T) {
 	t.Parallel()
 
-	if AdaptPlatformCommandRunner(nil) != nil {
+	adapted := AdaptPlatformCommandRunner(nil)
+	if adapted.Run != nil || adapted.RunStreaming != nil {
 		t.Fatal("AdaptPlatformCommandRunner(nil) returned an adapter")
 	}
 	if err := publishCompleteOutput(nil, nil, nil); err != nil {
@@ -174,9 +167,10 @@ func TestAdaptPlatformCommandRunnerNilAndEmptyOutput(t *testing.T) {
 // into the Providers-owned execution effect contract for component fixtures.
 func AdaptPlatformCommandRunner(runner platformprocess.CommandRunner) providers.CommandRunner {
 	if runner == nil {
-		return nil
+		return providers.CommandRunner{}
 	}
-	return platformCommandRunner{runner: runner}
+	effect := platformCommandRunner{runner: runner}
+	return providers.CommandRunner{Run: effect.Run, RunStreaming: effect.RunStreaming}
 }
 
 type platformCommandRunner struct {

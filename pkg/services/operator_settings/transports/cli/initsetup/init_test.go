@@ -11,17 +11,14 @@ import (
 	"strings"
 	"testing"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestConfigurerRequiresSuppliedProviderBeforePersistence(t *testing.T) {
@@ -199,15 +196,7 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 }
 
 func testConfigService() operatorsettings.Service {
-	providersRoot, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
-		nil,
-		nil,
-		nil,
-		providerswire.Configuration{})
-	if err != nil {
-		panic(err)
-	}
+	providersRoot := internaltestproviders.StandardCatalog()
 	files := platformfilesystem.Local{}
 	createTemp := operatorsettings.CreateTemporaryFile(func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 		return os.CreateTemp(dir, pattern)
@@ -301,63 +290,4 @@ func (adapter *recordingCLIAdapter) Configure(config operatorsettingscli.Configu
 	adapter.calls++
 	adapter.config = config
 	return adapter.failure
-}
-
-// newTestProvidersService assembles the fixture's explicit sibling owners.
-func newTestProvidersService(probe providerswire.CatalogProbeOperation, scheduler platformclock.TimerSource, logger logging.Logger, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, antigravity providerswire.AgyEffect, codex providerswire.CodexEffect, claude providerswire.ClaudeEffect, configuration providerswire.Configuration) (providers.Service, error) {
-	config, err := providerswire.PrepareConfiguration(configuration)
-	if err != nil {
-		return nil, err
-	}
-	catalogService, err := providerswire.NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
-	if err != nil {
-		return nil, err
-	}
-	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
-	if err != nil {
-		return nil, err
-	}
-	// Absent fixture routes receive completed command effects with a disabled edge.
-	if antigravity == nil {
-		antigravity = providerswire.NewAgyCommandEffect((disabledNativeRunner{"Antigravity"}).commandEffect(), platformclock.Real{}, scheduler)
-	}
-	if codex == nil {
-		codex = providerswire.NewCodexEffect((disabledNativeRunner{"Codex"}).commandEffect(), platformclock.Real{})
-	}
-	if claude == nil {
-		claude = providerswire.NewClaudeEffect((disabledNativeRunner{"Claude"}).commandEffect(), platformclock.Real{})
-	}
-	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
-	if err != nil {
-		return nil, err
-	}
-	executionService, err := providerswire.NewExecutionService(catalogService, registrations)
-	if err != nil {
-		return nil, err
-	}
-	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
-}
-
-type disabledNativeRunner struct{ name string }
-
-func (runner disabledNativeRunner) Run(context.Context, providers.CommandRequest) (providers.CommandResult, error) {
-	return providers.CommandResult{}, providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindDependency,
-		Message: runner.name + " native execution is unavailable",
-	}
-}
-
-// RunStreaming supplies the buffered fixture's completed stdout chunk.
-func (runner disabledNativeRunner) RunStreaming(ctx context.Context, request providers.CommandRequest, observe providers.OutputChunkObserver) (providers.CommandResult, error) {
-	result, err := runner.Run(ctx, request)
-	if len(result.Stdout) > 0 && observe != nil {
-		if observeErr := observe(providers.OutputStreamStdout, result.Stdout); err == nil {
-			err = observeErr
-		}
-	}
-	return result, err
-}
-
-func (runner disabledNativeRunner) commandEffect() providers.CommandRunner {
-	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }
