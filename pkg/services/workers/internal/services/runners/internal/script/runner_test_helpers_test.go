@@ -333,3 +333,16 @@ func assertAttributedObservations(t *testing.T, log *observationLog, request wor
 		}
 	}
 }
+
+func newTestRunner(
+	t *testing.T,
+	config Config,
+	commandRunner workerprocess.CommandRunner,
+) workers.Runner {
+	t.Helper()
+	scriptRunner, err := New(config, testDependencies(commandRunner, emptyDocs))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	return scriptRunner
+}
