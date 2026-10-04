@@ -144,6 +144,29 @@ func TestServiceShapeBuildConfigurations(t *testing.T) {
 	})
 }
 
+func TestServiceShapeOSDeclarations(t *testing.T) {
+	const unit = "pkg/services/shapeos"
+	var keys []string
+	for _, platform := range []string{"windows", "linux"} {
+		file := unit + "/service_" + platform + ".go"
+		keys = append(keys,
+			"service-root-interface-count|"+unit+"|"+unit+"/service.go:Service,"+file+":Platform",
+			"service-root-exported-function|"+unit+"|"+file+"#Existing")
+	}
+	useFixtures(t, keys...)
+	for _, platform := range []string{"windows", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			// Only package loading crosses GOOS; no foreign executable is run.
+			// Serialize because the compiler environment and fixture ledger are global.
+			t.Setenv("GOOS", platform)
+			t.Setenv("GOARCH", "amd64")
+			t.Setenv("CGO_ENABLED", "0")
+			t.Setenv("GOFLAGS", "")
+			analysistest.Run(t, analysistest.TestData(), ServiceShape, "m/"+unit)
+		})
+	}
+}
+
 func TestServiceShapeRecursiveLocations(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
