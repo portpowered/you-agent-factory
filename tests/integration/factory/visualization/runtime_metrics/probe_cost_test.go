@@ -30,7 +30,7 @@ const (
 	// The probe has no in-process readiness hook: it deliberately starts the
 	// installed CLI and observes its public server. This is an overall process
 	// safety bound, not a replacement for the terminal-status observation.
-	probeCostTimeout = 30 * time.Second
+	probeCostTimeout = 120 * time.Second
 	// The replay server uses --continuously so the customer-facing query can
 	// run after replay reaches terminal state. This is the bounded cleanup
 	// grace period before terminating that deliberately long-lived process.

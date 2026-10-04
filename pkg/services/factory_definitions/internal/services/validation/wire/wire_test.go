@@ -38,21 +38,7 @@ func stubLoadCanonical(payload []byte, _ factoryroot.WorkstationLoader) (factory
 
 func TestWire_NewServiceConstructsValidationSubservice(t *testing.T) {
 	t.Parallel()
-	validator := factoryvalidation.New(nil)
-	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:    validator,
-		Effective:     validator,
-		LoadCanonical: stubLoadCanonical,
-	})
-	if err != nil {
-		t.Fatalf("validationwire.NewService: %v", err)
-	}
+	validator := factoryvalidation.New(nil, stubLoadCanonical)
+	svc := validationwire.NewService(validator, validator, stubLoadCanonical, nil, nil)
 	var _ validationservice.Service = svc
-}
-
-func TestWire_NewServiceRejectsMissingDependencies(t *testing.T) {
-	t.Parallel()
-	if _, err := validationwire.NewService(validationservice.Dependencies{}); err == nil {
-		t.Fatal("expected dependency error")
-	}
 }

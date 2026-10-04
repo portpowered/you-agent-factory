@@ -15,7 +15,9 @@ import (
 func TestOrchestrationSemanticValidation_DefinitionsOwnedStrategyCheckWithoutRuntimePort(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return nil, nil
+	})
 	cfg := &factorydefinitions.FactoryConfig{
 		Name: "unsupported-orchestrator",
 		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
@@ -56,7 +58,7 @@ func TestOrchestrationSemanticValidation_InvalidOrchestrationReturnsDefinitionsO
 			ID:       "factory",
 			Location: factorydefinitions.ValidationSubjectLocationDefinition,
 		},
-	}}})
+	}}}, semanticTestCanonicalLoader)
 
 	result := validator.Validate(context.Background(), cfg, nil)
 	found := false
@@ -82,7 +84,7 @@ func TestOrchestrationSemanticValidation_ValidOrchestrationProducesNoRuntimeTarg
 	t.Parallel()
 
 	cfg := validJavaScriptOrchestratorConfig()
-	validator := factoryvalidation.New(runtimeSemanticValidationStub{})
+	validator := factoryvalidation.New(runtimeSemanticValidationStub{}, semanticTestCanonicalLoader)
 
 	result := validator.Validate(context.Background(), cfg, nil)
 	for _, target := range result.Targets {
@@ -120,4 +122,8 @@ func (s runtimeSemanticValidationStub) ValidateJavaScriptFactoryDefinition(
 	_ factorydefinitions.WorkflowSourceReader,
 ) []factorydefinitions.ValidationTarget {
 	return append([]factorydefinitions.ValidationTarget(nil), s.targets...)
+}
+
+func semanticTestCanonicalLoader([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	return nil, nil
 }

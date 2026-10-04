@@ -12,7 +12,7 @@ import (
 )
 
 func testFactoryDefinitionValidator() *factoryvalidation.Service {
-	return factoryvalidation.New(nil)
+	return factoryvalidation.New(nil, testCanonicalFactoryLoader)
 }
 
 func validateEditableFactorySnapshotForTest(
@@ -25,7 +25,7 @@ func validateEditableFactorySnapshotForTest(
 		snapshot,
 		loader,
 		func(snapshot *factorydefinitions.FactorySnapshot, loader factorydefinitions.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapEditableFactorySnapshot(snapshot, loader, testCanonicalFactoryLoader)
+			return validationentry.MapEditableFactorySnapshot(snapshot, loader)
 		},
 		testFactoryDefinitionValidator(),
 	)

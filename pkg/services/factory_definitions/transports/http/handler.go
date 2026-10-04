@@ -19,21 +19,15 @@ type Adapter struct {
 	logger          *zap.Logger
 }
 
-// Dependencies are the exact injected roles used by the Factory Definitions HTTP
-// adapter. They are supplied by composition or focused fake-root tests.
-type Dependencies struct {
-	DefinitionsRoot factorydefinitions.Service
-	Validation      factorydefinitions.SubmittedDefinitionValidationOperation
-}
-
 // NewHandler constructs an inert Factory Definitions HTTP adapter.
-func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+func NewHandler(
+	definitions factorydefinitions.Service,
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	logger *zap.Logger,
+) *Adapter {
 	return &Adapter{
-		definitionsRoot: deps.DefinitionsRoot,
-		validation:      deps.Validation,
+		definitionsRoot: definitions,
+		validation:      validation,
 		logger:          logger,
 	}
 }

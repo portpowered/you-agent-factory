@@ -15,11 +15,6 @@ type effectiveCatalog struct {
 	normalize factorydefinitions.EffectiveFactoryDefinitionNormalizer
 }
 
-type effectiveCatalogService struct {
-	factorydefinitions.Service
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation
-}
-
 // EffectiveCatalogService is the read-only Factory Definitions owner used by
 // transports that do not require a Factory Session.
 type EffectiveCatalogService struct {
@@ -41,22 +36,6 @@ func NewEffectiveCatalog(
 	return catalog.listEffectiveFactories, nil
 }
 
-// AttachEffectiveCatalog returns the Factory Definitions service with
-// effective discovery delegated to listEffective while preserving every other
-// root operation.
-func AttachEffectiveCatalog(
-	service factorydefinitions.Service,
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
-) (factorydefinitions.Service, error) {
-	if service == nil {
-		return nil, fmt.Errorf("Factory Definitions service is required")
-	}
-	if listEffective == nil {
-		return nil, fmt.Errorf("effective Factory catalog is required")
-	}
-	return effectiveCatalogService{Service: service, listEffective: listEffective}, nil
-}
-
 // NewEffectiveCatalogService constructs the read-only Factory Definitions
 // service slice used by transports that do not require a Factory Session.
 func NewEffectiveCatalogService(
@@ -66,13 +45,6 @@ func NewEffectiveCatalogService(
 		return nil, fmt.Errorf("effective Factory catalog is required")
 	}
 	return &EffectiveCatalogService{listEffective: listEffective}, nil
-}
-
-func (s effectiveCatalogService) ListEffectiveFactories(
-	ctx context.Context,
-	request factorydefinitions.ListEffectiveFactoriesRequest,
-) (factorydefinitions.ListEffectiveFactoriesResult, error) {
-	return s.listEffective(ctx, request)
 }
 
 func (s *EffectiveCatalogService) ListEffectiveFactories(

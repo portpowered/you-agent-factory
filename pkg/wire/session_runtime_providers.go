@@ -456,13 +456,13 @@ func provideOrchestratorDefinitionValidator(
 
 func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
-	loader *factorydefinitionswire.Loader,
+	compilation factorydefinitionswire.Compilation,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitions.ValidationOperations {
 	_ = workflows
 	return factorydefinitionswire.NewValidationOperations(
 		orchestratorValidator,
-		loader.LoadSourceFromCanonicalJSON,
+		compilation.LoadCanonicalFactorySource,
 	)
 }
 
@@ -511,10 +511,7 @@ func provideFactoryDefinitionPersistence(
 	return factorydefinitionswire.Persistence(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(
-				payload,
-				loader.LoadSourceFromCanonicalJSON,
-			)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		loader,
 		pruneRemovedDocs,
@@ -544,7 +541,6 @@ func provideFactoryScaffoldInitializer(
 }
 func provideEditableFactoryValidator(
 	validator factorydefinitions.DefinitionValidationOperation,
-	loader *factorydefinitionswire.Loader,
 ) factorysessions.EditableFactoryValidator {
 	return func(
 		ctx context.Context,
@@ -559,11 +555,7 @@ func provideEditableFactoryValidator(
 				snapshot *factorydefinitions.FactorySnapshot,
 				workstationLoader factorydefinitions.WorkstationLoader,
 			) (factorydefinitions.DefinitionValidationRequest, error) {
-				return validationentry.MapEditableFactorySnapshot(
-					snapshot,
-					workstationLoader,
-					loader.LoadSourceFromCanonicalJSON,
-				)
+				return validationentry.MapEditableFactorySnapshot(snapshot, workstationLoader)
 			},
 			validator,
 		)

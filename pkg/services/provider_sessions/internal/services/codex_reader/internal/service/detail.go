@@ -102,12 +102,6 @@ const (
 )
 
 func resolveCodexSessionFile(ctx context.Context, files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CodexWalkDirectory, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, root, id string) (resolvedCodexSessionFile, error) {
-	if walkDirectory == nil {
-		return resolvedCodexSessionFile{}, fmt.Errorf("codex session directory walker is required")
-	}
-	if resolveSymlinks == nil {
-		return resolvedCodexSessionFile{}, fmt.Errorf("codex session symlink resolver is required")
-	}
 	if err := ctx.Err(); err != nil {
 		return resolvedCodexSessionFile{}, err
 	}

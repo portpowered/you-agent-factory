@@ -530,9 +530,9 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	}
 
 	composition := newFoldPreservationComposition()
-	validator := factorydefinitionswire.NewValidationOperations(nil)
+	validator := factorydefinitionswire.NewValidationOperations(nil, composition.LoadCanonicalJSON)
 	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+		return validationentry.MapFactoryJSONForPersistence(payload)
 	}
 	persistence := composition.Persistence(validator, mapInput)
 	loader := composition.Loader()
@@ -585,10 +585,13 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 		validator,
 		persistence,
 		loader,
+		compilationForLoader(loader),
+		validationForLoader(loader, requiredToolChecker, stubOrchestratorValidator{}),
+		runtimeSnapshotForLoader(loader, stubSessionHost{}),
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		fileSystem,
+		factorydefinitionswire.NewCatalogService(namedPaths, fileSystem),
 		factorydefinitionswire.StaticClock(time.Unix(0, 0)),
 		fileSystem,
 		listEffective,
@@ -646,7 +649,7 @@ func newFoldPreservationComposition() factorydefinitiontestcomposition.Compositi
 		SafeLayoutSegment: authoredmapping.SafeFactoryLayoutSegment,
 		SafePromptPath:    authoredmapping.SafePromptFilePath,
 		MapPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,

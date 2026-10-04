@@ -874,6 +874,8 @@ func TestCancel_RuntimeAttemptRepeatNoopRetainsAdmittedDispatchID(t *testing.T) 
 func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *testing.T) {
 	t.Run("opening failure terminalizes without claiming runtime ownership", func(t *testing.T) {
 		r := newTestRegistry(t)
+		logger := &recordingLogger{}
+		r.logger = logger
 		r.events = &runtimeAttemptBrokenAppender{err: errors.New("opening publication failed")}
 
 		_, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
@@ -882,6 +884,11 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 		})
 		if !errors.Is(err, workersessions.ErrStartOpeningPublication) {
 			t.Fatalf("BeginRuntimeAttempt() error = %v, want ErrStartOpeningPublication", err)
+		}
+		rejected := logger.entriesFor("worker session opening publication rejected")
+		if len(rejected) != 1 || rejected[0].fields["stage"] != "publish_opening_record" ||
+			!strings.Contains(fmt.Sprint(rejected[0].fields["error"]), "opening publication failed") {
+			t.Fatalf("opening rejection log entries = %#v, want one entry carrying the underlying error", rejected)
 		}
 		session, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-opening-failure"})
 		if getErr != nil {
@@ -7673,4 +7680,32 @@ func TestScriptDeadlineUsesAuthoredBudgetOrCallerCancellation(t *testing.T) {
 // otherwise surfaces as teardown hangs and cross-test interference.
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
+}
+
+func TestInterruptSuccessorMatchesAcceptsAdmittedStatesIncludingFastCompletion(t *testing.T) {
+	reference := providers.SessionRef{}
+	const sourceDispatch = "source-dispatch"
+	for _, tc := range []struct {
+		state workersessions.State
+		want  bool
+	}{
+		{workersessions.StateStarting, true},
+		{workersessions.StateRunning, true},
+		{workersessions.StateCompleted, true},
+		{workersessions.StateFailed, false},
+		{workersessions.StateCanceled, false},
+		{workersessions.StateReserved, false},
+	} {
+		session := workersessions.Session{
+			ID:    "successor",
+			State: tc.state,
+			ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+				Reference:  reference,
+				DispatchID: continuationDispatchID(sourceDispatch, "successor"),
+			},
+		}
+		if got := interruptSuccessorMatches(session, reference, sourceDispatch); got != tc.want {
+			t.Errorf("state %s: interruptSuccessorMatches = %v, want %v", tc.state, got, tc.want)
+		}
+	}
 }

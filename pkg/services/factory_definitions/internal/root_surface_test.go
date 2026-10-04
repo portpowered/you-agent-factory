@@ -10,6 +10,9 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
 func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.T) {
@@ -33,9 +36,16 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 		staticClock{instant: time.Unix(0, 0)},
 		platformfilesystem.Local{},
 		rootSurfaceValidator{},
-		func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		validationwire.NewService(factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, nil
-		},
+		}), factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return nil, nil
+		}),
+			func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				return nil, nil
+			}, nil, nil),
+		factorydefinitions.UnimplementedService{},
+		factorydefinitions.UnimplementedService{},
 		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, nil
 		},
@@ -63,7 +73,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 			return nil, nil
 		},
 		rootSurfaceNamedPaths{},
-		platformfilesystem.Local{},
+		catalogwire.NewService(rootSurfaceNamedPaths{}, platformfilesystem.Local{}),
 		packagedCatalog,
 		factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(context.Context, factorydefinitions.PackagedFactoryInstallParams) (factorydefinitions.PackagedFactoryInstallResult, error) {
@@ -73,6 +83,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 		rootSurfaceRequiredToolChecker{},
 		rootSurfaceOrchestratorValidator{},
 		stubAuthoringLayout{},
+		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
 	)
 	if root == nil {
 		t.Fatal("NewWithAuthoringLayout() = nil, want composed Factory Definitions root")

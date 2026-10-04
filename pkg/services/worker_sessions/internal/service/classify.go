@@ -833,11 +833,12 @@ func (r *registry) publishOpeningRecord(
 		openingErr := fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingOpening, err)
 		if recording != nil {
 			if abortErr := recording.Abort(context.WithoutCancel(ctx), openingErr); abortErr != nil {
-				r.logger.Info(
+				r.logger.Warn(
 					"worker session recording opening cleanup failed",
 					"sessionID", id,
 					"attemptID", attemptID,
 					"outcome", "cleanup_failed",
+					"error", abortErr.Error(),
 				)
 			}
 		}
@@ -847,11 +848,12 @@ func (r *registry) publishOpeningRecord(
 	if recording != nil {
 		if err := recording.AwaitOpening(ctx); err != nil {
 			if abortErr := recording.Abort(context.WithoutCancel(ctx), err); abortErr != nil {
-				r.logger.Info(
+				r.logger.Warn(
 					"worker session recording opening cleanup failed",
 					"sessionID", id,
 					"attemptID", attemptID,
 					"outcome", "cleanup_failed",
+					"error", abortErr.Error(),
 				)
 			}
 			pub.mu.Unlock()

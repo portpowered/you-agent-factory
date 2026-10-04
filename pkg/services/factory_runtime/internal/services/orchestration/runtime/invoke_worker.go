@@ -101,6 +101,7 @@ func startThroughStatelessWorkers(
 	)
 	if startErr != nil && errors.Is(startErr, workersessions.ErrStartOpeningPublication) {
 		result, dispatchErr := failedWorkstationDispatchResult(request, startErr)
+		markPreAdmissionInfrastructureFailure(&result)
 		if accept != nil {
 			accept(context.Background(), request, result, dispatchErr)
 		}
@@ -120,6 +121,18 @@ func isLogicalWorkstationDispatch(
 	name := firstRuntimeValue(request.WorkstationName, request.Execution.Dispatch.WorkstationName)
 	workstation, found := lookup.Workstation(name)
 	return found && workstation != nil && workstation.Type == interfaces.WorkstationTypeLogical
+}
+
+// markPreAdmissionInfrastructureFailure classifies a failure that happened
+// before Workers admission (no script, model, or provider ran) as retryable.
+// The transitioner then requeues the consumed input through its existing
+// intermittent-failure arc, bounded by the circuit breaker visit limits,
+// instead of routing the Work to its terminal failure place.
+func markPreAdmissionInfrastructureFailure(result *workers.WorkstationDispatchResult) {
+	result.Result.FailureMetadata = &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyRetryable,
+		Type:   workers.WorkFailureTypeInternalServerError,
+	}
 }
 
 func failedWorkstationDispatchResult(

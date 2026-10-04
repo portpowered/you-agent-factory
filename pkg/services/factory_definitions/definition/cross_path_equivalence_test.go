@@ -11,7 +11,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
-	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
@@ -95,13 +94,7 @@ func newRootCatalogServiceForPeer(t *testing.T) factoryroot.Service {
 	if err != nil {
 		t.Fatalf("namedpaths.New: %v", err)
 	}
-	catalogService, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("catalogwire.NewService: %v", err)
-	}
+	catalogService := catalogwire.NewService(paths, fileSystem)
 	return factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService)
 }
 

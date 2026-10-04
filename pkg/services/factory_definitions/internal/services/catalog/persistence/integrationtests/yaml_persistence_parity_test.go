@@ -151,7 +151,7 @@ func persistAuthoredFactory(
 		t.Fatalf("load authored source %s: %v", sourcePath, err)
 	}
 	persistence := factorydefinitioncomposition.FactoryDefinitionPersistenceWithValidator(
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON),
 	)
 	result, err := persistence.PersistNamedFactory(
 		context.Background(),
