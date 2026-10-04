@@ -12,6 +12,153 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestAgyQuietConcurrentSuccessAndFailureKeepSeparateStreams exercises two
+// explicit Factory Sessions on the reusable public process. Both commands
+// reach a scenario-owned gate before either returns; captured CLI streams and
+// retained Factory Events are the customer observers, not the runner ledger.
+func TestAgyQuietConcurrentSuccessAndFailureKeepSeparateStreams(t *testing.T) {
+	t.Parallel()
+	fixture := agySharedProcess(t)
+	host := fixture.startRoleHost(t)
+	trace := newAgySharedLifecycleTrace()
+	t.Cleanup(func() { trace.log(t) })
+	ctx, cancel := context.WithTimeout(t.Context(), agySharedInvocationTimeout)
+	defer cancel()
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	success := startAgyQuietInvocation(t, ctx, fixture, host, "quiet-success", trace, release)
+	failure := startAgyQuietInvocation(t, ctx, fixture, host, "quiet-failure", trace, release)
+	if err := trace.waitForBothEntered(ctx); err != nil {
+		for _, invocation := range []*agyQuietInvocation{success, failure} {
+			select {
+			case <-invocation.done:
+				t.Logf("early quiet exit: err=%v stdout=%q stderr=%q", invocation.err, invocation.inputs.Stdout(), invocation.inputs.Stderr())
+			default:
+			}
+		}
+		t.Fatalf("quiet invocations did not overlap at their command gates: %v", err)
+	}
+	unblock()
+	success.wait(t, ctx)
+	failure.wait(t, ctx)
+	assertAgyQuietSuccess(t, success)
+	assertAgyQuietFailure(t, failure)
+	successEvents := support.GetFactoryEventsForSessionAt(t, host.baseURL, success.sessionID)
+	failureEvents := support.GetFactoryEventsForSessionAt(t, host.baseURL, failure.sessionID)
+	assertAgySingleDispatch(t, successEvents, factoryapi.WorkOutcomeAccepted)
+	assertAgySingleDispatch(t, failureEvents, factoryapi.WorkOutcomeFailed)
+	assertAgyFactoryEventOrderForSession(t, success.sessionID, successEvents)
+	assertAgyFactoryEventOrderForSession(t, failure.sessionID, failureEvents)
+}
+
+type agyQuietInvocation struct {
+	inputs    *support.CapturedInputs
+	sessionID string
+	done      chan struct{}
+	err       error
+}
+
+func startAgyQuietInvocation(t *testing.T, ctx context.Context, fixture *agySharedProcessFixture,
+	host *agySharedRoleHost, selector string, trace *agySharedLifecycleTrace, release <-chan struct{},
+) *agyQuietInvocation {
+	t.Helper()
+	route := fixture.routes[selector]
+	route.setRelease(release)
+	if err := trace.expectRoute(selector); err != nil {
+		t.Fatal(err)
+	}
+	if err := route.bindLifecycleTrace("", trace); err != nil {
+		t.Fatal(err)
+	}
+	opened := support.OpenFactorySessionAt(t, host.baseURL, host.factories[route.factoryName])
+	id := opened.Session.Id
+	if err := fixture.runner.registerScope(id, route); err != nil {
+		t.Fatal(err)
+	}
+	if err := route.setLifecycleTraceScope(id, trace); err != nil {
+		t.Fatal(err)
+	}
+	invocationContext, cancel := context.WithCancel(ctx)
+	inputs := support.FakeInputs(invocationContext, []string{
+		"you", "--remote", "--server", host.baseURL, "run", "--session", id,
+		"--named", route.factoryName, "--cut-path", route.assetPath, "--quiet",
+	})
+	inputs.Input.Env = agySharedEnvironment(host.homeDir)
+	inputs.Input.WorkingDirectory = route.workDir
+	invocation := &agyQuietInvocation{inputs: inputs, sessionID: id, done: make(chan struct{})}
+	t.Cleanup(func() {
+		cancel()
+		// Failure ceiling only: cancellation should promptly join the invocation.
+		cleanupContext, cleanupCancel := context.WithTimeout(context.Background(), agySharedInvocationTimeout)
+		defer cleanupCancel()
+		invocation.wait(t, cleanupContext)
+		fixture.runner.unregisterScope(id, route)
+		support.CloseFactorySessionAt(t, host.baseURL, id)
+		route.unbindLifecycleTrace(trace)
+		route.setRelease(nil)
+	})
+	go func() {
+		defer close(invocation.done)
+		invocation.err = fixture.process.Execute(inputs.Input)
+	}()
+	return invocation
+}
+
+func (invocation *agyQuietInvocation) wait(t *testing.T, ctx context.Context) {
+	t.Helper()
+	select {
+	case <-invocation.done:
+	case <-ctx.Done():
+		t.Fatalf("quiet invocation did not join: %v", ctx.Err())
+	}
+}
+
+func assertAgyQuietSuccess(t *testing.T, invocation *agyQuietInvocation) {
+	t.Helper()
+	if invocation.err != nil {
+		t.Fatalf("quiet success failed: %v", invocation.err)
+	}
+	var trace struct {
+		Result struct {
+			Response string `json:"response"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(agyColdWatchCompleteReportTrace(t), &trace); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(invocation.inputs.Stdout()); got != trace.Result.Response {
+		t.Fatalf("quiet stdout = %q, want raw primary result %q", got, trace.Result.Response)
+	}
+	if got := invocation.inputs.Stderr(); got != "" {
+		t.Fatalf("quiet success stderr = %q, want empty", got)
+	}
+}
+
+func assertAgyQuietFailure(t *testing.T, invocation *agyQuietInvocation) {
+	t.Helper()
+	if invocation.err == nil {
+		t.Fatal("quiet native failure succeeded")
+	}
+	if got := invocation.inputs.Stdout(); got != "" {
+		t.Fatalf("quiet failure stdout = %q, want empty", got)
+	}
+	var response factoryapi.ErrorResponse
+	// Unmarshal rejects trailing output, including a second response or logs.
+	if err := json.Unmarshal([]byte(invocation.inputs.Stderr()), &response); err != nil {
+		t.Fatalf("quiet failure stderr is not one ErrorResponse: %v; stderr=%q", err, invocation.inputs.Stderr())
+	}
+	if string(response.Code) != "INVOCATION_RUNTIME_FAILURE" || string(response.Family) != "INTERNAL_SERVER_ERROR" || response.Message == "" {
+		t.Fatalf("quiet failure ErrorResponse = %#v", response)
+	}
+	for _, secret := range []string{"quiet-secret-peer-token", "quiet-secret-peer-diagnostic", "Recommendation: pass"} {
+		if strings.Contains(invocation.inputs.Stderr(), secret) {
+			t.Fatalf("quiet failure leaked %q", secret)
+		}
+	}
+}
+
 // TestAgySharedProcessFailureThenSuccessRecovers proves that an empty
 // provider result cannot poison a later invocation on the reusable process.
 // The two named-Factory executions retain separate Work, dispatch, event and

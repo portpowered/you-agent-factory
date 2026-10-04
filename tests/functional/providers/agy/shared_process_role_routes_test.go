@@ -8,6 +8,13 @@ import (
 
 func (fixture *agySharedProcessFixture) registerRoleColdWatchRoutes(t *testing.T) {
 	t.Helper()
+	fixture.addRoleRoute(t, "quiet-success", agyColdWatchFactoryName,
+		"clip-fixture.mp4", agyColdWatchCompleteReportTrace(t))
+	fixture.addRoleRouteWithOutcomes(t, "quiet-failure", agyColdWatchFactoryName,
+		"clip-fixture.mp4", agySharedCommandOutcome{result: platformprocess.CommandResult{
+			Stdout: []byte("authentication failed: quiet-secret-peer-token"),
+			Stderr: []byte("quiet-secret-peer-diagnostic"), ExitCode: 1,
+		}})
 	fixture.addRoleRoute(t, "role-cold-watch-complete", agyColdWatchFactoryName,
 		"clip-fixture.mp4", agyColdWatchCompleteReportTrace(t))
 	fixture.addRoleRoute(t, "role-cold-watch-incomplete-video-watch", agyColdWatchFactoryName,
