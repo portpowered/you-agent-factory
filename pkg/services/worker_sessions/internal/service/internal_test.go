@@ -7674,3 +7674,31 @@ func TestScriptDeadlineUsesAuthoredBudgetOrCallerCancellation(t *testing.T) {
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
+
+func TestInterruptSuccessorMatchesAcceptsAdmittedStatesIncludingFastCompletion(t *testing.T) {
+	reference := providers.SessionRef{}
+	const sourceDispatch = "source-dispatch"
+	for _, tc := range []struct {
+		state workersessions.State
+		want  bool
+	}{
+		{workersessions.StateStarting, true},
+		{workersessions.StateRunning, true},
+		{workersessions.StateCompleted, true},
+		{workersessions.StateFailed, false},
+		{workersessions.StateCanceled, false},
+		{workersessions.StateReserved, false},
+	} {
+		session := workersessions.Session{
+			ID:    "successor",
+			State: tc.state,
+			ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+				Reference:  reference,
+				DispatchID: continuationDispatchID(sourceDispatch, "successor"),
+			},
+		}
+		if got := interruptSuccessorMatches(session, reference, sourceDispatch); got != tc.want {
+			t.Errorf("state %s: interruptSuccessorMatches = %v, want %v", tc.state, got, tc.want)
+		}
+	}
+}
