@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
@@ -131,4 +132,15 @@ func NewCatalogPathsService(
 		return nil, err
 	}
 	return impl, nil
+}
+
+// Catalog is the completed private catalog supplied to Definitions composition.
+type Catalog = catalog.Service
+
+// NewCatalogService constructs the catalog independently from its direct ports.
+func NewCatalogService(
+	paths factorydefinitions.NamedPathResolver,
+	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+) Catalog {
+	return catalogwire.NewService(paths, fileSystem)
 }

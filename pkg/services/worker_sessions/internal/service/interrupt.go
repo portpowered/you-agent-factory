@@ -672,7 +672,7 @@ func interruptSuccessorMatches(
 	reference providers.SessionRef,
 	sourceDispatchID string,
 ) bool {
-	return session.ID != "" && session.State == workersessions.StateRunning &&
+	return session.ID != "" && interruptSuccessorAdmittedState(session.State) &&
 		session.ProviderSessionAssociation != nil &&
 		session.ProviderSessionAssociation.Reference == reference &&
 		session.ProviderSessionAssociation.DispatchID == continuationDispatchID(sourceDispatchID, session.ID)

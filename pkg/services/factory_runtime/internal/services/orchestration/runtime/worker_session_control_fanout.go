@@ -540,10 +540,11 @@ func (s *recordedWorkerSessionObservation) recordedObservationFacts(
 	}
 	sort.Strings(dispatchIDs)
 	facts := make([]recordedDispatchObservation, 0, len(dispatchIDs))
+	index := newRecordedDispatchEventIndex(cloneAndSortFactoryEvents(ordered))
 	for _, dispatchID := range dispatchIDs {
 		facts = append(facts, s.annotateRecordedFact(recordedDispatchFact(
 			dispatchID, associations[dispatchID], requests, completed,
-			world.ProviderSessions, world.ActiveDispatches, ordered,
+			world.ProviderSessions, world.ActiveDispatches, index,
 		)))
 	}
 	return facts, nil

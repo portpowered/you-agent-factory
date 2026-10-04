@@ -61,15 +61,18 @@ Do NOT run `make lint`, `make test`, `make test-functional`, `make verify-pr`,
 or any `-race` run locally in review. Hosted CI is the evidence: read the
 required check states in Step 2.1. A required check that fails on code this PR
 changed is a BLOCKING issue; a failure in a package the diff does not touch is
-operator-owned (see Step 2.1) and never blocks the PR.
+handled by Step 2.1 recovery and never requires speculative author changes.
 
 If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md. This worker starts without the Playwright MCP, so run the browser check in a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. The nested session loads the full browser tooling for that step only. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 
 ### Step 2.1 — Reconcile CI state before commenting
-- CI is guaranteed TERMINAL on arrival: this work item reached you through the
+After merge has been armed or enqueued, Step 6 owns the bounded in-visit wait.
+Queue progress must not take the ordinary pending-CI CONTINUE route below.
+
+- For a never-queued PR, CI is normally terminal on arrival: this work item reached you through the
   `ci-wait` gate, a script workstation that only releases a task into review
   once every required check on the current head is finished (pass or fail).
-  You never need to watch, poll, or wait for CI in this session — read the
+  For ordinary head CI, do not watch or manually poll in this session — read the
   final check states with `gh pr view --json headRefOid,mergeStateStatus,statusCheckRollup`
   and `gh pr checks` and review against them.
 - If you somehow observe required checks that are still `PENDING`, `QUEUED`,
@@ -78,19 +81,36 @@ If the change involves modification to the website, you should use the playwrigh
   hold routes this task back through the `ci-wait` gate, which does the
   waiting for you and costs no review visit. Never end with `REJECTED`
   merely because CI is pending — waiting on CI is not executor rework.
-- Known-baseline flake policy: if a required check fails ONLY on a test in a
-  package the PR diff does not touch, and that test is a known baseline flake
-  (see the deflake lane list in docs/temp/scale-program-rules.md in the root
-  repo, or verify it reproduces on the base SHA), rerun the failed jobs ONCE
-  (`gh run rerun <id> --failed`) and immediately end `CONTINUE` — the
-  `ci-wait` gate waits out the rerun and hands the task back to review with
-  terminal checks. If on that next pass the rerun greened, proceed. If
-  the same untouched-package flake fails twice, post ONE comment naming the
-  test and the owning deflake lane, state explicitly "NO EXECUTOR ACTION
-  REQUIRED — waiting on baseline deflake", and end `CONTINUE`. That is a wait
-  on another lane, not executor rework, so it takes the hold route; post that
-  comment at most once and stay silent on later holds for the same flake. Never
-  demand code changes for a baseline flake in a package the diff does not touch.
+- Untouched-required-check recovery: when every red required check is caused
+  only by failures in packages the PR diff does not touch, rerun each failed
+  workflow once with `gh run rerun <id> --failed`. Establish ownership from
+  current-head job diagnostics and the PR diff; a dependent policy check counts
+  only when its logs prove it failed solely because of those same failures.
+  Do not require a known-flake list or another baseline run.
+  Inspect current-head attempt history so an already completed rerun is not
+  repeated. Before each mutation, refresh the PR head and diff; if another
+  push changed them, discard the stale diagnosis and reconcile the new head.
+  Preserve remote work; never force-push recovery.
+  This is the explicit exception to the ordinary-head no-watch rule above.
+  Keep the rerun reconciliation in this visit using one bounded watcher
+  (`gh run watch <id>` or `gh pr checks <n> --watch --interval 180`),
+  within the remaining worker budget. If it greens, follow Step 6.
+  If it remains red, run `git fetch origin main`, then
+  `git merge origin/main` in the lane checkout, push the resulting head, and
+  re-arm `gh pr merge <n> --squash`. Then follow Step 6's bounded queue wait.
+  This recovery takes precedence over the unchanged-head hold, behind-main
+  no-sync rule, and ordinary untouched-red CONTINUE route.
+  NEVER post an "operator-owned CI hold" or hand back the unchanged head for
+  this condition. Escalate the same untouched failure only after terminal
+  checks fail on a head containing freshly fetched current main, verified by
+  `git merge-base --is-ancestor origin/main HEAD`; refresh main before deciding.
+  If main is already contained, the merge may be a no-op: do not manufacture
+  an empty commit or repeatedly rerun. Preserve run, attempt, head, package,
+  failure-signature, and main-ancestry evidence in a PR comment.
+  Mixed touched/untouched failures or uncertain ownership do not qualify.
+  Keep touched failures on the existing concrete-rework route. Git conflicts,
+  push/auth failures, pending checks, and dependency outages use their actual
+  recovery owner; never bypass checks, invent a product fix, or claim MERGED.
 - Required-job timeout policy: a configured job time limit is a delivery
   constraint. If a required check is cancelled at that limit, inspect the job
   and step durations, logs, current-head attempt history, and a comparable
@@ -228,10 +248,15 @@ operator to file separately. From the third review pass onward the decision
 bar is: MERGE unless an unfixed previously-flagged blocker or red required CI
 remains.
 
-Route a converged repeat review as a HOLD. If the head has not moved since
-your last pass and you have no NEW independent finding — including the case
-where you are only re-confirming a blocker set the executor was already told
-about — end with `CONTINUE` and post no new PR comment.
+After enqueue or auto-merge arming, follow Step 6 inside this visit; do not
+route queue waiting through another review visit.
+
+Route a converged repeat review as a HOLD only after applying Step 2.1:
+a qualifying terminal untouched-red result must perform that recovery, even
+on an unchanged head. For other genuine waiting states, if the head has not
+moved since your last pass and you have no NEW independent finding, end with
+`CONTINUE` and post no new PR comment. Do not re-send unchanged executor
+blockers.
 
 Exception — a hold is ONLY for waiting states. If the head is unchanged,
 every required check is terminal and green, and no unfixed previously-flagged
@@ -261,16 +286,27 @@ stuck lane still surfaces without you forcing a rejection.
 
 Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.
 
-### Step 6 - merge if correct. 
+### Step 6 - merge if correct.
 
-If the PR has passing required checks, no content blocker, and GitHub
-mergeable state `MERGEABLE`, merge it with `gh pr merge <n> --squash`, even if
-the head is behind main. Do NOT rebase, and do NOT require checks to re-run
-after a sync, before merging. A merge queue is being enabled; the same command
-enqueues the PR.
+If required checks pass and no content blocker remains, inspect mergeability.
+For `MERGEABLE`, run `gh pr merge <n> --squash`, even when the head is behind main.
+Do not rebase or require checks to rerun merely because the head is behind main.
+The merge command can enqueue the PR or arm auto-merge instead of merging immediately.
 
-Only a real merge conflict (mergeable state `CONFLICTING`) sends the PR back:
-tell the processor to resolve the conflicts, rebase, and push.
+After enqueue or auto-merge arming, hand waiting to ci-wait inside this review visit.
+Run `python factory/scripts/ci-wait.py <lane-name> "PR #<n>"` from this lane's checkout.
+Keep that script invocation running and collect its final JSON and exit status.
+The script owns polling. Do not repeat review or emit CONTINUE solely to await the queue.
+When ci-wait reports `prState: MERGED` and `reason: pr-merged`, follow Step 0 and finish with ACCEPTED.
+Never infer merge from a successful enqueue command, terminal checks, or exit zero alone.
+
+For `pr-ejected`, inspect current queue, checks, and mergeability evidence before deciding the existing failure or rework route.
+For an OPEN terminal-check result during handoff, reconcile merge state before continuing the bounded wait.
+Keep this exceptional reconciliation inside the remaining worker budget. Never mark an OPEN PR ACCEPTED.
+For deadline or dependency uncertainty, report the diagnostic and use the existing external-hold route.
+Do not restart a full polling budget repeatedly inside one review visit.
+
+Only `CONFLICTING` requires conflict resolution, rebase, and a pushed correction from the processor.
 
 #### Required-check routing
 
@@ -280,8 +316,11 @@ check. A required status check is enforced by the repository ruleset, so an
 administrator cannot make a failing head eligible by bypassing it; the PR
 needs a new head on which the required checks pass.
 
-A behind-main head is not by itself a defect. A failing required check on code
-the PR changed is a content blocker; return it through the **REJECTED** route.
+A behind-main head is not by itself a defect. If every red required check
+has only proven untouched-package causes, follow Step 2.1's one-rerun,
+merge-main, push and squash-re-arm recovery before considering escalation.
+A failing required check on code the PR changed is a content blocker;
+return it through the **REJECTED** route. Never bypass required checks.
 
 ### Step 7 - respond back
 
@@ -291,16 +330,15 @@ review summary and acceptance-criteria checklist in the envelope's `feedback`
 field. Set `decision` to:
 
 - `ACCEPTED` only when the PR is complete, approved, and merged;
-- `CONTINUE` = waiting on CI or on external state, with no author change
-  needed. This includes a repeat pass on an unchanged head with no new
-  independent findings, and INCLUDES a red required check whose failing test is
-  untouched by the PR diff: rerun the failed jobs once with
-  `gh run rerun <id> --failed`, then return `CONTINUE`. If it fails identically
-  on the same head with the same signature, the failure is operator-owned: name
-  the test in one PR comment, do not ask the mailbox, and return `CONTINUE`. A hold
-  posts no PR comment, routes the task back through the `ci-wait` gate, and
-  re-enters review without a failed worker session or consecutive-failure
-  strike;
+- `CONTINUE` = waiting on genuinely pending CI or external state with no
+  available recovery action. After enqueue/arming, keep Step 6's bounded wait
+  inside this visit; queue waiting alone never emits CONTINUE.
+  A terminal untouched-red result invokes Step 2.1 recovery, including on an
+  unchanged head; it must never take the ordinary hold or unchanged handback.
+  Only persistence of the same untouched failure after current main is
+  contained permits operator escalation. Deadline/dependency uncertainty must
+  identify the unavailable edge and completed recovery actions; it is not
+  evidence that the untouched failure persisted on current main;
 - `REJECTED` = the PR's own diff needs author changes; the task goes back to
   process. Use it for concrete executor rework the executor has not already
   been given, such as a newly raised blocker, a new blocker on a pushed head,
@@ -310,7 +348,7 @@ field. Set `decision` to:
   THE WHOLE LANE: it escalates and fails the lane's idea. Missing
   prerequisites, baseline-ownership questions, unrelated red checks and
   evidence-authority questions are NEVER `FAILED`; the standing rules answer
-  them (merge on green; untouched-package failures are operator-owned), and
+  them (merge on green; apply Step 2.1 untouched-check recovery), and
   only a question they do not answer is `CONTINUE` plus a mailbox request.
 
 Never return a bare routing value, a marker-only line, or a Markdown-wrapped
@@ -321,8 +359,10 @@ routing contract for this workstation.
 
 Before asking, check whether the standing rules already answer the question.
 Questions about evidence, authority, or untouched-package CI are answered by
-the rules: merge on green, and failures in untouched packages are
-operator-owned. Do not ask the mailbox about them. Also: if the packet contradicts repository reality and a
+the rules: merge on green and apply Step 2.1 recovery for proven
+untouched-package failures. Do not ask permission for that recovery; only
+persistence on a head containing freshly fetched current main permits
+escalation. Also: if the packet contradicts repository reality and a
 conservative reading exists that weakens no acceptance criterion, raises no
 baseline and widens no scope, take it, record it (in `progress.txt` and the PR body), and
 continue. Ask the mailbox only when no such reading exists. Examples:
@@ -339,10 +379,12 @@ continue. Ask the mailbox only when no such reading exists. Examples:
   session-scoped: assert uniqueness within the session.
 
 Some questions are owned by the operator, not by you: an ambiguous or
-contradictory acceptance contract, a scope or authority decision, a policy
-choice, baseline ownership, or an unrelated red required check that persists
-after one rerun. Never settle one with your own guess, and never treat a guess
-as operator authority. Never return `FAILED` over one.
+contradictory acceptance contract, a scope or authority decision, or a policy
+choice. An unrelated red required check becomes an escalation only when the
+same untouched failure persists after Step 2.1 recovery on a head containing
+freshly fetched current main. Rerun and merge-main recovery require no mailbox
+permission. Never settle an operator-owned question with a guess, and never
+return `FAILED` merely for unrelated red checks.
 
 1. Find the main checkout: the parent of
    `git rev-parse --path-format=absolute --git-common-dir`. Your worktree lives

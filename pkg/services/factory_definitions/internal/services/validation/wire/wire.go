@@ -1,37 +1,19 @@
-// Package wire constructs the Factory Definitions validation subservice from
-// exact injected validation and canonical-load ports.
+// Package wire constructs the Factory Definitions validation owner from direct ports.
 package wire
 
 import (
-	"fmt"
-
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
 )
 
-// NewService constructs the private validation subservice from exact injected
-// validation-operation and canonical-load ports. Callers must supply
-// Dependencies; this constructor does not select Runtime/Petri implementations
-// or take Wire/root construction ownership.
-func NewService(deps validationservice.Dependencies) (validationservice.Service, error) {
-	if deps.Operations == nil {
-		return nil, fmt.Errorf("construct Factory Definitions validation: definition validation operation is required")
-	}
-	if deps.Effective == nil {
-		return nil, fmt.Errorf("construct Factory Definitions validation: effective definition validation operation is required")
-	}
-	if deps.LoadCanonical == nil {
-		return nil, fmt.Errorf("construct Factory Definitions validation: canonical Factory loader is required")
-	}
-	service := validationserviceimpl.New(
-		deps.Operations,
-		deps.Effective,
-		deps.LoadCanonical,
-		deps.RequiredToolChecker,
-		deps.OrchestratorValidator,
-	)
-	if service == nil {
-		return nil, fmt.Errorf("construct Factory Definitions validation: implementation rejected its dependencies")
-	}
-	return service, nil
+// NewService constructs an inert validation owner from completed collaborators.
+func NewService(
+	operations factorydefinitions.DefinitionValidationOperation,
+	effective factorydefinitions.EffectiveDefinitionValidationOperation,
+	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+) validationservice.Service {
+	return validationserviceimpl.New(operations, effective, loadCanonical, requiredToolChecker, orchestratorValidator)
 }

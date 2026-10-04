@@ -446,15 +446,28 @@ func provideFactoryDefinitionsRuntimeRouter() *factorysessions.DefinitionRuntime
 	return factorysessionwire.NewDefinitionRuntimeRouter()
 }
 
+func provideFactoryDefinitionCompilation(
+	loader *factorydefinitionswire.Loader,
+) factorydefinitionswire.Compilation {
+	return factorydefinitionswire.NewCompilationService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		factorydefinitionswire.FactoryConfigJSONEncoder(),
+	)
+}
+
 func provideFactoryDefinitionsRoot(
 	router *factorysessions.DefinitionRuntimeRouter,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *factorydefinitionswire.Loader,
+	compilation factorydefinitionswire.Compilation,
+	validationService factorydefinitionswire.Validation,
+	runtimeSnapshot factorydefinitionswire.RuntimeSnapshot,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	catalogService factorydefinitionswire.Catalog,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -474,10 +487,13 @@ func provideFactoryDefinitionsRoot(
 		validator,
 		persistence,
 		loader,
+		compilation,
+		validationService,
+		runtimeSnapshot,
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		namedFactoryCatalogFileSystem,
+		catalogService,
 		clock,
 		versionFileSystem,
 		listEffective,
@@ -493,18 +509,47 @@ func provideFactoryDefinitionsRoot(
 // provideFactoryRuntimeRoot composes the singular process-scoped Runtime root.
 // Factory Sessions supplies the activation operation with each request.
 func provideFactoryRuntimeRoot(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflowDefinitions,
-	clock factoryruntime.Clock,
+	orchestration factoryruntimewire.Orchestration,
+	instanceHost factoryruntimewire.InstanceHost,
+	dispatchPlan factoryruntimewire.DispatchPlanning,
 ) (factorysessionwire.FactoryRuntimeRoot, error) {
-	return factoryruntimewire.NewService(
-		newID,
-		workflows,
-		nil,
-		clock,
-		func(context.Context, workers.WorkstationDispatchRequest) error {
-			return factoryruntime.ErrNotRunning
+	return factoryruntimewire.NewService(orchestration, instanceHost, dispatchPlan)
+}
+
+// provideRuntimeOrchestration completes the process owner with both workflow ports.
+func provideRuntimeOrchestration(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflows) factoryruntimewire.Orchestration {
+	return factoryruntimewire.NewOrchestration(newID, workflows, workflows)
+}
+
+// provideRuntimeDispatchPlanning supplies explicit dormant edges until activation
+// owns per-runtime planning (T15). No missing effect selects a fallback.
+func provideRuntimeDispatchPlanning() factoryruntimewire.DispatchPlanning {
+	return factoryruntimewire.NewDispatchPlanning(
+		func(context.Context, workers.WorkstationDispatchRequest) error { return factoryruntime.ErrNotRunning },
+		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+			return workers.WorkstationDispatchCancelResult{}, factoryruntime.ErrNotRunning
 		},
-		nil,
+	)
+}
+
+func provideFactoryDefinitionValidationOwner(
+	operations factorydefinitions.ValidationOperations,
+	compilation factorydefinitionswire.Compilation,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+) factorydefinitionswire.Validation {
+	return factorydefinitionswire.NewValidationService(operations, operations, compilation.LoadCanonicalFactorySource, requiredToolChecker, orchestratorValidator)
+}
+
+// provideFactoryDefinitionRuntimeSnapshot binds the session query without executing it.
+func provideFactoryDefinitionRuntimeSnapshot(
+	loader *factorydefinitionswire.Loader,
+	router *factorysessions.DefinitionRuntimeRouter,
+) factorydefinitionswire.RuntimeSnapshot {
+	return factorydefinitionswire.NewRuntimeSnapshot(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		router.Host().WorkstationLoader,
+		factorydefinitions.FileReader(loader.ReadFile),
 	)
 }

@@ -1,19 +1,13 @@
-// Package orchestrationowner is the composition-root entrypoint for the
-// parent-private Factory Runtime orchestration owner.
+// Package orchestrationowner projects the completed Runtime owner onto its
+// public construction capabilities.
 package orchestrationowner
 
 import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
+	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 )
 
-// New constructs the Runtime JavaScript orchestration execute/resume port.
-func New(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflows,
-) factoryruntime.OrchestrationJavaScriptExecution {
-	if workflows == nil {
-		return nil
-	}
-	return orchestrationwire.New(newID, workflows, workflows)
+// New exposes execution on the completed owner without another service graph.
+func New(service orchestration.Service) factoryruntime.OrchestrationJavaScriptExecution {
+	return service
 }

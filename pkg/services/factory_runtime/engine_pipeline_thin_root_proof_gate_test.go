@@ -2,333 +2,64 @@ package factory_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/internal/ownershipinventory"
-	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// DEL-RUN-ENGINE-PIPELINE story 006 proves the thin Runtime root, wire
-// construction, and reduced structure debt for deleted engine/pipeline packages.
-// Each subtest asserts one observable completion invariant for reviewers.
-// Baseline burn-down subtests live in wire/engine_pipeline_baseline_gate_test.go;
-// deletion and test-support proofs live in sibling wire proof tests.
+func TestPublishedServiceRejectsOperationsBeforeActivation(t *testing.T) {
+	t.Parallel()
 
-func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing.T) {
-	root := testutil.MustRepoRoot(t)
-	serviceRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
-
-	runCanonicalRootDirectoriesProof(t, serviceRoot)
-	runUnexpectedRootChildrenProof(t, root)
-	runDeletedPublicPipelineDirectoriesProof(t, serviceRoot)
-	runServiceDirectoryProof(t, serviceRoot)
-	runCheckpointRecoveryProof(t, serviceRoot)
-	runPublishedServiceBoundaryProof(t)
-	runOwnershipInventoryProof(t, root)
-	runPackageStructureBaselineProof(t, root)
-	runPackageTargetManifestProof(t, root)
-	runInternalServicesLayoutProof(t, serviceRoot)
-}
-
-func runCanonicalRootDirectoriesProof(t *testing.T, serviceRoot string) {
-	t.Run("canonical_root_directories", func(t *testing.T) {
-		t.Parallel()
-
-		entries, err := os.ReadDir(serviceRoot)
-		if err != nil {
-			t.Fatalf("ReadDir(%q) = %v", serviceRoot, err)
-		}
-		spec, ok := ownershipinventory.OwnerTopLevelSpecFor("factory_runtime")
-		if !ok {
-			t.Fatal("OwnerTopLevelSpecFor(factory_runtime) ok = false")
-		}
-
-		var gotRootDirs []string
-		for _, entry := range entries {
-			if entry.IsDir() {
-				gotRootDirs = append(gotRootDirs, entry.Name())
-			}
-		}
-		slices.Sort(gotRootDirs)
-
-		wantRetain := slices.Clone(spec.ExpectedRetain)
-		slices.Sort(wantRetain)
-		for _, name := range wantRetain {
-			if !slices.Contains(gotRootDirs, name) {
-				t.Fatalf("service root missing canonical retain directory %q; got %v", name, gotRootDirs)
-			}
-		}
-		for _, moved := range foldedEnginePipelineTopLevelChildren() {
-			if slices.Contains(gotRootDirs, moved) {
-				t.Fatalf("folded engine-pipeline package %q must not remain as a public top-level directory", moved)
-			}
-		}
-		for _, moved := range []string{"testkit", "exhaustiontests"} {
-			if slices.Contains(gotRootDirs, moved) {
-				t.Fatalf("internalized public test-support directory %q must not remain at Runtime root", moved)
-			}
-		}
-	})
-}
-
-func runUnexpectedRootChildrenProof(t *testing.T, root string) {
-	t.Run("unexpected_root_children_recorded_as_move_debt_only", func(t *testing.T) {
-		t.Parallel()
-
-		live, err := ownershipinventory.ListOwnerTopLevelChildren(root, "factory_runtime")
-		if err != nil {
-			t.Fatalf("ListOwnerTopLevelChildren(factory_runtime) = %v", err)
-		}
-		spec, ok := ownershipinventory.OwnerTopLevelSpecFor("factory_runtime")
-		if !ok {
-			t.Fatal("OwnerTopLevelSpecFor(factory_runtime) ok = false")
-		}
-		for _, name := range live {
-			if slices.Contains(spec.ExpectedRetain, name) {
-				continue
-			}
-			if !slices.Contains(spec.Unexpected, name) {
-				t.Fatalf(
-					"live top-level child %q is neither canonical retain %v nor committed unexpected move debt %v",
-					name,
-					spec.ExpectedRetain,
-					spec.Unexpected,
-				)
-			}
-		}
-	})
-}
-
-func runDeletedPublicPipelineDirectoriesProof(t *testing.T, serviceRoot string) {
-	t.Run("deleted_public_pipeline_directories_absent", func(t *testing.T) {
-		t.Parallel()
-
-		for _, name := range foldedEnginePipelineTopLevelChildren() {
-			path := filepath.Join(serviceRoot, name)
-			if _, err := os.Stat(path); err == nil {
-				t.Fatalf("deleted public pipeline package %q still exists at %s", name, path)
-			} else if !os.IsNotExist(err) {
-				t.Fatalf("stat %s: %v", path, err)
-			}
-		}
-	})
-}
-
-func runServiceDirectoryProof(t *testing.T, serviceRoot string) {
-	t.Run("service_directory_absent", func(t *testing.T) {
-		t.Parallel()
-
-		for _, rel := range []string{"service", filepath.Join("service", "host")} {
-			path := filepath.Join(serviceRoot, rel)
-			if _, err := os.Stat(path); err == nil {
-				t.Fatalf("deleted public package directory still exists: %s", path)
-			} else if !os.IsNotExist(err) {
-				t.Fatalf("stat %s: %v", path, err)
-			}
-		}
-	})
-}
-
-func runCheckpointRecoveryProof(t *testing.T, serviceRoot string) {
-	t.Run("checkpoint_recovery_undisturbed", func(t *testing.T) {
-		t.Parallel()
-
-		recoveryRoot := filepath.Join(serviceRoot, "internal", "services", "checkpoint_recovery")
-		info, err := os.Stat(recoveryRoot)
-		if err != nil {
-			t.Fatalf("checkpoint_recovery nested service missing (IMP-RUN-04 must remain undisturbed): %v", err)
-		}
-		if !info.IsDir() {
-			t.Fatal("checkpoint_recovery nested service is not a directory")
-		}
-	})
-}
-
-func runPublishedServiceBoundaryProof(t *testing.T) {
-	t.Run("wire_constructs_published_control_observation_dispatch", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := context.Background()
-		service, err := factoryruntimewire.NewService(
-			func() string { return "del-run-engine-pipeline-thin-root-proof-id" },
-			nil,
-			nil,
-			clockwork.NewFakeClock(),
-			func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
-			func(
-				context.Context,
-				workers.WorkstationDispatchCancelRequest,
-			) (workers.WorkstationDispatchCancelResult, error) {
-				return workers.WorkstationDispatchCancelResult{}, nil
-			},
-		)
-		if err != nil {
-			t.Fatalf("NewService() error = %v", err)
-		}
-		var published factoryruntime.Service = service
-		if published == nil {
-			t.Fatal("NewService() returned nil published Service root")
-		}
-
-		_, err = published.Observe(ctx, factoryruntime.ObserveRequest{
-			Scope: factoryruntime.ObservationScopeStatus,
-		})
-		if !errors.Is(err, factoryruntime.ErrNotRunning) {
-			t.Fatalf("Observe(STATUS) error = %v, want ErrNotRunning", err)
-		}
-
-		_, err = published.PlanDispatch(ctx, factoryruntime.PlanDispatchRequest{
-			DispatchID: "del-run-engine-pipeline-thin-root-proof-dispatch",
-		})
-		if !errors.Is(err, factoryruntime.ErrNotRunning) {
-			t.Fatalf("PlanDispatch() error = %v, want ErrNotRunning", err)
-		}
-
-		_, err = published.ControlPause(ctx, factoryruntime.PauseRequest{})
-		if !errors.Is(err, factoryruntime.ErrNotRunning) {
-			t.Fatalf("ControlPause() error = %v, want ErrNotRunning", err)
-		}
-	})
-}
-
-func runOwnershipInventoryProof(t *testing.T, root string) {
-	t.Run("ownership_inventory_omits_deleted_public_pipeline_packages", func(t *testing.T) {
-		t.Parallel()
-
-		inventory, err := ownershipinventory.Load(root)
-		if err != nil {
-			t.Fatalf("Load() error = %v", err)
-		}
-		for _, row := range inventory.Packages {
-			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
-				needle := "factory_runtime/" + deleted
-				if strings.Contains(row.PackagePath, needle) {
-					t.Fatalf("ownership inventory still lists deleted pipeline path: %s", row.PackagePath)
-				}
-			}
-		}
-	})
-}
-
-func runPackageStructureBaselineProof(t *testing.T, root string) {
-	t.Run("package_structure_baseline_omits_deleted_public_pipeline_directories", func(t *testing.T) {
-		t.Parallel()
-
-		for _, entry := range loadPackageStructureBaselineEntries(t, root) {
-			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
-				deletedPath := "pkg/services/factory_runtime/" + deleted
-				if entry.FilePath == deletedPath || strings.HasPrefix(entry.FilePath, deletedPath+"/") {
-					t.Fatalf(
-						"package-structure baseline still lists deleted pipeline path %q under rule %q",
-						entry.FilePath,
-						entry.Rule,
-					)
-				}
-			}
-		}
-	})
-}
-
-func runPackageTargetManifestProof(t *testing.T, root string) {
-	t.Run("unfinished_package_moves_omit_deleted_public_pipeline_packages", func(t *testing.T) {
-		t.Parallel()
-
-		moves := loadUnfinishedPackageMoves(t, root)
-		if len(moves.Moves) == 0 {
-			t.Fatal("unfinished package move ledger is empty; this proof needs live rows to scan")
-		}
-		for _, row := range moves.Moves {
-			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
-				deletedPath := "pkg/services/factory_runtime/" + deleted
-				if row.PackagePath == deletedPath || strings.HasPrefix(row.PackagePath, deletedPath+"/") {
-					t.Fatalf("unfinished package move ledger still lists deleted pipeline package %q", row.PackagePath)
-				}
-			}
-		}
-	})
-}
-
-func runInternalServicesLayoutProof(t *testing.T, serviceRoot string) {
-	t.Run("internal_services_layout", func(t *testing.T) {
-		t.Parallel()
-
-		subservicesRoot := filepath.Join(serviceRoot, "internal", "services")
-		subentries, err := os.ReadDir(subservicesRoot)
-		if err != nil {
-			t.Fatalf("ReadDir(%q) = %v", subservicesRoot, err)
-		}
-		var gotSubservices []string
-		for _, entry := range subentries {
-			if entry.IsDir() {
-				gotSubservices = append(gotSubservices, entry.Name())
-			}
-		}
-		slices.Sort(gotSubservices)
-		wantSubservices := []string{
-			"checkpoint_recovery",
-			"dispatch_planning",
-			"instance_host",
-			"orchestration",
-		}
-		slices.Sort(wantSubservices)
-		if !slices.Equal(gotSubservices, wantSubservices) {
-			t.Fatalf("internal/services directories = %v, want %v", gotSubservices, wantSubservices)
-		}
-	})
-}
-
-// unfinishedPackageMoves is the consolidated ledger of packages that still have
-// an open Packaged Service Structure move. It is the single place a package path
-// can be named after the per-package destination enumerations were retired.
-type unfinishedPackageMoves struct {
-	Moves []struct {
-		PackagePath string `json:"packagePath"`
-	} `json:"moves"`
-}
-
-type packageStructureBaselineEntry struct {
-	Rule     string `json:"rule"`
-	FilePath string `json:"filePath"`
-}
-
-func loadUnfinishedPackageMoves(t *testing.T, root string) unfinishedPackageMoves {
-	t.Helper()
-
-	path := filepath.Join(root, "docs", "internal", "baselines", "unfinished-package-moves.json")
-	payload, err := os.ReadFile(path)
+	ctx := context.Background()
+	clock := clockwork.NewFakeClock()
+	scheduler := platformclock.Real{}
+	lifecycle, err := factoryruntimewire.NewLifecycle(clock, scheduler)
 	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", path, err)
+		t.Fatalf("NewLifecycle() error = %v", err)
 	}
-	var moves unfinishedPackageMoves
-	if err := json.Unmarshal(payload, &moves); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
-	}
-	return moves
-}
-
-func loadPackageStructureBaselineEntries(t *testing.T, root string) []packageStructureBaselineEntry {
-	t.Helper()
-
-	path := filepath.Join(root, "docs", "internal", "baselines", "package-structure-baseline.json")
-	payload, err := os.ReadFile(path)
+	host, err := factoryruntimewire.NewInstanceHost(clock, scheduler, lifecycle)
 	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", path, err)
+		t.Fatalf("NewInstanceHost() error = %v", err)
 	}
-	var baseline struct {
-		Entries []packageStructureBaselineEntry `json:"entries"`
+	orchestration := factoryruntimewire.NewOrchestration(
+		func() string { return "del-run-engine-pipeline-thin-root-proof-id" }, nil, nil,
+	)
+	dispatchPlan := factoryruntimewire.NewDispatchPlanning(
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+			return workers.WorkstationDispatchCancelResult{}, nil
+		},
+	)
+	service, err := factoryruntimewire.NewService(orchestration, host, dispatchPlan)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
 	}
-	if err := json.Unmarshal(payload, &baseline); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
+	var published factoryruntime.Service = service
+	if published == nil {
+		t.Fatal("NewService() returned nil published Service root")
 	}
-	return baseline.Entries
+
+	_, err = published.Observe(ctx, factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeStatus,
+	})
+	if !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("Observe(STATUS) error = %v, want ErrNotRunning", err)
+	}
+
+	_, err = published.PlanDispatch(ctx, factoryruntime.PlanDispatchRequest{
+		DispatchID: "del-run-engine-pipeline-thin-root-proof-dispatch",
+	})
+	if !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("PlanDispatch() error = %v, want ErrNotRunning", err)
+	}
+
+	_, err = published.ControlPause(ctx, factoryruntime.PauseRequest{})
+	if !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("ControlPause() error = %v, want ErrNotRunning", err)
+	}
 }

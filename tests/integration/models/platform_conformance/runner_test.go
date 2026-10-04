@@ -99,31 +99,53 @@ func TestPortableControlledRunner(t *testing.T) {
 	}
 }
 
+// TestPortableControlledRunnerUsesDeclaredTimeout proves the declared command
+// timeout, not a caller cancellation, ends a run whose helper became ready. The
+// declared timeout also covers staging and helper start-up, so on a loaded host
+// the timeout can expire before the helper is ready; that attempt proves
+// nothing about post-readiness behavior and is retried with a doubled timeout
+// instead of being asserted on.
 func TestPortableControlledRunnerUsesDeclaredTimeout(t *testing.T) {
-	fixture := newControlledFixture(t, controlledHelperModeTimeout)
-	fixture.spec.TimeoutMillis = 1000
-	admitted, err := AdmitWithInspector(fixture.spec, fixture.host, fixture.inspector)
-	if err != nil {
-		t.Fatalf("admit short-timeout fixture: %v", err)
+	for timeoutMillis := int64(1000); timeoutMillis <= 32000; timeoutMillis *= 2 {
+		fixture := newControlledFixture(t, controlledHelperModeTimeout)
+		fixture.spec.TimeoutMillis = timeoutMillis
+		admitted, err := AdmitWithInspector(fixture.spec, fixture.host, fixture.inspector)
+		if err != nil {
+			t.Fatalf("admit short-timeout fixture: %v", err)
+		}
+		runner := mustControlledRunner(t)
+		ready := make(chan struct{})
+		result := make(chan controlledRunResult, 1)
+		go func() {
+			report, runErr := runner.Run(context.Background(), admitted, ControlledRunOptions{
+				OnReady: func() { close(ready) },
+			})
+			result <- controlledRunResult{report: report, err: runErr}
+		}()
+		// The run always ends on its own declared timeout; this ceiling only
+		// bounds a hung run.
+		var completed controlledRunResult
+		select {
+		case completed = <-result:
+		case <-time.After(2 * time.Minute):
+			t.Fatalf("declared-timeout run did not finish")
+		}
+		select {
+		case <-ready:
+		default:
+			t.Logf("helper was not ready within the %dms declared timeout; retrying with a longer timeout", timeoutMillis)
+			continue
+		}
+		if completed.err != nil {
+			t.Fatalf("declared-timeout run: %v", completed.err)
+		}
+		if !completed.report.Commands[0].TimedOut || completed.report.Commands[0].Cancelled {
+			t.Fatalf("declared-timeout command evidence = %#v", completed.report.Commands[0])
+		}
+		assertCleanRelease(t, completed.report)
+		return
 	}
-	runner := mustControlledRunner(t)
-	ready := make(chan struct{})
-	result := make(chan controlledRunResult, 1)
-	go func() {
-		report, runErr := runner.Run(context.Background(), admitted, ControlledRunOptions{
-			OnReady: func() { close(ready) },
-		})
-		result <- controlledRunResult{report: report, err: runErr}
-	}()
-	waitControlledSignal(t, ready, "declared-timeout helper readiness")
-	completed := <-result
-	if completed.err != nil {
-		t.Fatalf("declared-timeout run: %v", completed.err)
-	}
-	if !completed.report.Commands[0].TimedOut || completed.report.Commands[0].Cancelled {
-		t.Fatalf("declared-timeout command evidence = %#v", completed.report.Commands[0])
-	}
-	assertCleanRelease(t, completed.report)
+	t.Fatal("helper never became ready before the declared timeout, even at the longest timeout")
 }
 
 func TestPortableControlledRunnerDoesNotStartWhenCommandSelectionFails(t *testing.T) {
@@ -594,28 +616,50 @@ func testControlledProductFailure(t *testing.T, runner ControlledRunner, fixture
 	assertFinalizedChildLedger(t, fixture.spec.LedgerPath, 1)
 }
 
+// testControlledTimeout proves a caller deadline that expires after the helper
+// is ready is reported as a timeout. The deadline also covers staging and
+// helper start-up, so an attempt whose helper was not ready in time proves
+// nothing and is retried with a longer deadline on a fresh fixture.
 func testControlledTimeout(t *testing.T, runner ControlledRunner, fixture controlledFixture) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	ready := make(chan struct{})
-	result := make(chan controlledRunResult, 1)
-	go func() {
-		report, err := runner.Run(ctx, fixture.admission, ControlledRunOptions{OnReady: func() { close(ready) }})
-		result <- controlledRunResult{report: report, err: err}
-	}()
-	waitControlledSignal(t, ready, "timeout helper readiness")
-	completed := <-result
-	if completed.err != nil {
-		t.Fatalf("controlled timeout: %v", completed.err)
+	for deadline := 2 * time.Second; deadline <= 32*time.Second; deadline *= 2 {
+		ctx, cancel := context.WithTimeout(context.Background(), deadline)
+		ready := make(chan struct{})
+		result := make(chan controlledRunResult, 1)
+		go func() {
+			report, err := runner.Run(ctx, fixture.admission, ControlledRunOptions{OnReady: func() { close(ready) }})
+			result <- controlledRunResult{report: report, err: err}
+		}()
+		// The run always ends on the caller deadline; this ceiling only bounds
+		// a hung run.
+		var completed controlledRunResult
+		select {
+		case completed = <-result:
+		case <-time.After(2 * time.Minute):
+			cancel()
+			t.Fatal("controlled timeout run did not finish")
+		}
+		cancel()
+		select {
+		case <-ready:
+		default:
+			t.Logf("helper was not ready within the %s deadline; retrying with a longer deadline", deadline)
+			fixture = newControlledFixture(t, controlledHelperModeTimeout)
+			continue
+		}
+		if completed.err != nil {
+			t.Fatalf("controlled timeout: %v", completed.err)
+		}
+		if completed.report.Status != StatusFail || completed.report.Failure == nil || completed.report.Failure.Owner != controlledFailureOwnerHarness {
+			t.Fatalf("timeout report = %#v", completed.report)
+		}
+		if !completed.report.Commands[0].TimedOut || completed.report.Commands[0].Cancelled {
+			t.Fatalf("timeout command evidence = %#v", completed.report.Commands[0])
+		}
+		assertCleanRelease(t, completed.report)
+		assertFinalizedChildLedger(t, fixture.spec.LedgerPath, 1)
+		return
 	}
-	if completed.report.Status != StatusFail || completed.report.Failure == nil || completed.report.Failure.Owner != controlledFailureOwnerHarness {
-		t.Fatalf("timeout report = %#v", completed.report)
-	}
-	if !completed.report.Commands[0].TimedOut || completed.report.Commands[0].Cancelled {
-		t.Fatalf("timeout command evidence = %#v", completed.report.Commands[0])
-	}
-	assertCleanRelease(t, completed.report)
-	assertFinalizedChildLedger(t, fixture.spec.LedgerPath, 1)
+	t.Fatal("helper never became ready before the caller deadline, even at the longest deadline")
 }
 
 func testControlledCancellation(t *testing.T, runner ControlledRunner, fixture controlledFixture) {

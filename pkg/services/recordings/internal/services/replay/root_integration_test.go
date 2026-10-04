@@ -6,20 +6,15 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
-type unusedLedger struct {
-	recordings.Ledger
-}
-
-func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
+func TestReplayLoadsFinalizedFactsAndObservesOrderedProgress(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-	)
 	recording := recordings.ReplayRecordingFacts{
 		RecordingID: "recording-root-replay",
 		Events: []recordings.CanonicalEvent{
@@ -27,6 +22,13 @@ func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
 			rootReplayEvent("root-replay-event-2", 1),
 		},
 	}
+	finishedAt := time.Unix(1_700_000_200, 0).UTC()
+	lifecycle := &snapshotLifecycle{snapshot: recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{RecordingID: recording.RecordingID, FinalizedAt: &finishedAt},
+		Events: recording.Events,
+	}}
+	projection := &replayProjection{}
+	root := replaywire.NewService(lifecycle, projection, nil, nil)
 	if _, err := root.CreateReplayPlan(recordings.CreateReplayPlanRequest{
 		SchemaVersion: recordings.ReplayPlanSchemaV1,
 		Timing:        recordings.ReplayTimingOrderOnly,
@@ -37,29 +39,8 @@ func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
 		t.Fatalf("CreateReplayPlan missing recording id = %v, want ErrCorruptReplayInput", err)
 	}
 
-	bound, err := root.BindRecording(recordings.BindRecordingRequest{
-		Artifact: "artifact:root-replay",
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
-	for index, event := range recording.Events {
-		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID,
-			Event:       event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent[%d]: %v", index, err)
-		}
-	}
-	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_200, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
-
 	loaded, err := root.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: recording.RecordingID,
 	})
 	if err != nil {
 		t.Fatalf("LoadReplayRecording: %v", err)
@@ -83,36 +64,43 @@ func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
 	if err != nil || progress.Observation.Kind != recordings.ReplayProgress {
 		t.Fatalf("ObserveReplay progress = (%#v, %v)", progress, err)
 	}
+	if progress.Observation.ProcessedEvents != 1 || len(projection.events) != 1 || projection.events[0].Id != string(recording.Events[0].ID) {
+		t.Fatalf("first replay observation = %#v, projection prefix = %#v", progress, projection.events)
+	}
+	assertReplayCompletion(t, root, planned.Plan.Handle, projection, recording.Events[1])
+	if lifecycle.selected != recording.RecordingID {
+		t.Fatalf("lifecycle selection = %q, want %q", lifecycle.selected, recording.RecordingID)
+	}
 }
 
-func TestAcceptedRecordingsRootLoadsUnfinalizedRecordingForResume(t *testing.T) {
+func assertReplayCompletion(t *testing.T, replay recordingsreplay.Service, plan recordings.ReplayPlanHandle, projection *replayProjection, last recordings.CanonicalEvent) {
+	t.Helper()
+	completed, err := replay.ObserveReplay(recordings.ObserveReplayRequest{Plan: plan})
+	if err != nil || completed.Observation.Kind != recordings.ReplayCompleted || completed.Observation.ProcessedEvents != 2 || len(projection.events) != 2 {
+		t.Fatalf("completed replay = (%#v, %v), projection prefix = %#v", completed, err, projection.events)
+	}
+	if projection.events[1].Id != string(last.ID) || completed.Observation.Through == nil || *completed.Observation.Through != last.Cursor {
+		t.Fatalf("replay lost final event identity or cursor: events=%#v observation=%#v", projection.events, completed.Observation)
+	}
+}
+
+func TestReplayLoadsUnfinalizedSnapshotForResume(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-	)
-	bound, err := root.BindRecording(recordings.BindRecordingRequest{
+	recording := recordings.ReplayRecordingFacts{
 		RecordingID: "recording-root-resume",
-		Artifact:    "artifact:root-resume",
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
+		Events: []recordings.CanonicalEvent{
+			rootReplayEvent("root-resume-event-1", 0),
+			rootReplayEvent("root-resume-event-2", 1),
+		},
 	}
-	for index, event := range []recordings.CanonicalEvent{
-		rootReplayEvent("root-resume-event-1", 0),
-		rootReplayEvent("root-resume-event-2", 1),
-	} {
-		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID,
-			Event:       event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent[%d]: %v", index, err)
-		}
-	}
-
+	lifecycle := &snapshotLifecycle{snapshot: recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{RecordingID: recording.RecordingID},
+		Events: recording.Events,
+	}}
+	root := replaywire.NewService(lifecycle, &replayProjection{}, nil, nil)
 	loaded, err := root.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: recording.RecordingID,
 	})
 	if err != nil {
 		t.Fatalf("LoadReplayRecordingForResume: %v", err)
@@ -121,7 +109,7 @@ func TestAcceptedRecordingsRootLoadsUnfinalizedRecordingForResume(t *testing.T) 
 		t.Fatalf("resume result = %#v, want two complete events without truncation", loaded)
 	}
 	if _, err := root.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: recording.RecordingID,
 	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
 		t.Fatalf("neutral load error = %v, want ErrReplayRecordingNotFinalized", err)
 	}
@@ -140,4 +128,27 @@ func rootReplayEvent(id string, sequence recordings.CanonicalEventSequence) reco
 		RecordedAt:  time.Unix(1_700_000_000, 0).UTC(),
 		Payload:     `{"type":"WORK_REQUEST"}`,
 	}
+}
+
+// Embedding only supplies unused interface methods; any unexpected operation
+// panics rather than silently constructing a collaborator or accepting a call.
+type snapshotLifecycle struct {
+	recordinglifecycle.Service
+	snapshot recordinglifecycle.Snapshot
+	selected recordings.RecordingID
+}
+
+func (lifecycle *snapshotLifecycle) Snapshot(id recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
+	lifecycle.selected = id
+	return lifecycle.snapshot, nil
+}
+
+type replayProjection struct {
+	recordings.ProjectionService
+	events []recordings.FactoryEvent
+}
+
+func (projection *replayProjection) ReconstructFactoryWorldState(events []recordings.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	projection.events = append([]recordings.FactoryEvent(nil), events...)
+	return recordings.FactoryWorldState{Tick: tick}, nil
 }

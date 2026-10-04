@@ -21,9 +21,6 @@ type debounceScheduler struct {
 }
 
 func newDebounceScheduler(clock debounceClock, window time.Duration) *debounceScheduler {
-	if clock == nil {
-		clock = clockwork.NewRealClock()
-	}
 	if window <= 0 {
 		window = defaultDebounceWindow
 	}

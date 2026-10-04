@@ -9,49 +9,73 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
+	"go.uber.org/zap"
 )
 
-func provideAutomationHostedSourceInputs(
-	edges serviceedges.Edges,
-) (automationswire.HostedSourceInputs, error) {
-	checkpointStore := edges.HostedLinearCheckpointStore
-	if checkpointStore == nil {
-		var err error
-		checkpointStore, err = automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
-		if err != nil {
-			return automationswire.HostedSourceInputs{}, err
-		}
+func provideAutomationHostedClock(edges serviceedges.Edges) automations.HostedLinearClock {
+	if edges.HostedClock != nil {
+		return edges.HostedClock
 	}
-	clock := edges.HostedClock
-	if clock == nil {
-		clock = clockwork.NewRealClock()
+	return clockwork.NewRealClock()
+}
+func provideAutomationHostedHTTPClient(edges serviceedges.Edges) automations.HostedLinearHTTPDoer {
+	if edges.HostedHTTPClient != nil {
+		return edges.HostedHTTPClient
 	}
-	httpClient := edges.HostedHTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: automations.HostedLinearDefaultRequestTimeout}
+	return &http.Client{Timeout: automations.HostedLinearDefaultRequestTimeout}
+}
+func provideAutomationHostedSecretResolver(edges serviceedges.Edges) automations.HostedLinearSecretResolver {
+	if edges.HostedSecretResolver != nil {
+		return edges.HostedSecretResolver
 	}
-	secretResolver := edges.HostedSecretResolver
-	if secretResolver == nil {
-		secretResolver = automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
+	return automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
+}
+func provideAutomationHostedCheckpointStore(edges serviceedges.Edges) (automations.HostedLinearCheckpointStore, error) {
+	if edges.HostedLinearCheckpointStore != nil {
+		return edges.HostedLinearCheckpointStore, nil
 	}
-	cursorFileSystem := edges.AutomationsCursorFileSystem
-	if cursorFileSystem == nil {
-		cursorFileSystem = platformfilesystem.Local{}
+	return automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+}
+func provideAutomationsCursorFileSystem(edges serviceedges.Edges) automationswire.CursorPersistenceFileSystem {
+	if edges.AutomationsCursorFileSystem != nil {
+		return edges.AutomationsCursorFileSystem
 	}
-	return automationswire.HostedSourceInputs{
-		Clock:            clock,
-		HTTPClient:       httpClient,
-		SecretResolver:   secretResolver,
-		LinearEndpoint:   edges.HostedLinearEndpoint,
-		CheckpointStore:  checkpointStore,
-		CursorFileSystem: cursorFileSystem,
-	}, nil
+	return platformfilesystem.Local{}
+}
+func provideAutomationsHostedPollers(logger *zap.Logger, clock automations.HostedLinearClock,
+	client automations.HostedLinearHTTPDoer, secrets automations.HostedLinearSecretResolver,
+	checkpoints automations.HostedLinearCheckpointStore, edges serviceedges.Edges) automations.HostedPollers {
+	return automationswire.NewHostedPollers(logger, clock, client, secrets, edges.HostedLinearEndpoint, checkpoints)
+}
+
+// Until T01 integration, retain the existing full-clock selection at canonical composition.
+func provideAutomationsClock(clock factoryruntime.Clock) automationswire.Clock {
+	if scheduler, ok := clock.(clockwork.Clock); ok {
+		return scheduler
+	}
+	return clockwork.NewRealClock()
+}
+func provideAutomationsScriptPollers(logger *zap.Logger, clock automationswire.Clock,
+	runner platformprocess.CommandRunner, policy factorydefinitions.WorkstationExecutionPolicyService,
+	cursors automationswire.CursorScopes) automationswire.ScriptPollers {
+	return automationswire.NewScriptPollers(logger, clock, runner, workerswire.ResolveTemplateFields, policy, cursors)
+}
+func provideAutomationsOwner(logger *zap.Logger, clock automationswire.Clock,
+	lifecycle automationswire.SourceLifecycle, reconciler automationswire.Reconciliation,
+	scripts automationswire.ScriptPollers, cron automationswire.Cron, watchers automationswire.FilesystemWatchers,
+	hosted automations.HostedPollers, policy factorydefinitions.WorkstationExecutionPolicyService,
+	cursors automationswire.CursorScopes) *automationswire.Owner {
+	return automationswire.NewService(logger, clock, lifecycle, reconciler, scripts, cron, watchers,
+		hosted, policy, cursors, true, "", "", "")
 }
 
 func provideFactoryWebhooksService(

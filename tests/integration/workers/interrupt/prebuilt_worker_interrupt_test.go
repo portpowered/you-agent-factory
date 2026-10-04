@@ -104,9 +104,12 @@ func TestPrebuiltWorkerInterruptStopsExactChildAndAdmitsOneSuccessor(t *testing.
 	if interruptResponse.Source.State != factoryapi.WorkerSessionInterruptSnapshotState("CANCELED") {
 		t.Fatalf("interrupt source snapshot = %#v, want CANCELED", interruptResponse.Source)
 	}
+	// The snapshot is read after admission, so a fast successor may already be
+	// COMPLETED on a loaded host; that is still an admitted successor.
 	if interruptResponse.Successor.State != factoryapi.WorkerSessionInterruptSnapshotState("STARTING") &&
-		interruptResponse.Successor.State != factoryapi.WorkerSessionInterruptSnapshotState("RUNNING") {
-		t.Fatalf("interrupt successor snapshot = %#v, want admitted active state", interruptResponse.Successor)
+		interruptResponse.Successor.State != factoryapi.WorkerSessionInterruptSnapshotState("RUNNING") &&
+		interruptResponse.Successor.State != factoryapi.WorkerSessionInterruptSnapshotState("COMPLETED") {
+		t.Fatalf("interrupt successor snapshot = %#v, want admitted state", interruptResponse.Successor)
 	}
 
 	waitForInterruptMarker(t, ctx, filepath.Join(stateDir, "successor.started"))

@@ -117,7 +117,9 @@ func TestStart_SubscriptionFromZeroCursor_ObservesOpeningRecord(t *testing.T) {
 // handoff.
 func TestStart_OpeningRecordPublicationFailure_TerminalizesFailedWithoutCallingWorkers(t *testing.T) {
 	execution := succeedingExecution()
-	registry, err := newService(executionBoundary{execution: execution}, &brokenEventsAppender{}, nil)
+	registry, err := newService(executionBoundary{execution: execution}, &brokenEventsAppender{
+		err: errors.New(`sidecar secret=sentinel-5291 path=C:\private\recording.worker.jsonl`),
+	}, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -134,6 +136,9 @@ func TestStart_OpeningRecordPublicationFailure_TerminalizesFailedWithoutCallingW
 	}
 	if got := result.Session.Result.Cause.Kind; got != workersessions.FailureCauseEventPublicationFailure {
 		t.Fatalf("Start() cause kind = %q, want EVENT_PUBLICATION_FAILURE", got)
+	}
+	if got := result.Session.Result.Cause.Detail; got != "the Worker Session opening record could not be published" {
+		t.Fatalf("Start() cause detail = %q, want the canonical safe detail", got)
 	}
 	if got := execution.callCount(); got != 0 {
 		t.Fatalf("Start() called Workers %d times, want 0 when opening record publication fails", got)

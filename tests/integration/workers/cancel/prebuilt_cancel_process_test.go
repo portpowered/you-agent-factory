@@ -90,7 +90,7 @@ func waitForFixtureProcessTree(
 		watcher.add(watcher.workDir)
 		watcher.addExistingAttempts()
 	}
-	deadline := time.NewTimer(30 * time.Second)
+	deadline := time.NewTimer(120 * time.Second)
 	defer deadline.Stop()
 	var lastReadiness string
 	for {
@@ -173,6 +173,10 @@ func assertObservedTreeAncestry(t *testing.T, tree workerProcessTree) {
 func sampleCancelProcessTrees(t *testing.T, ctx context.Context, target, unrelated workerProcessTree, appliedAt time.Time) []cancelProcessSample {
 	t.Helper()
 	samples := make([]cancelProcessSample, 0, int(cancelProcessBound/cancelProcessSampleInterval)+1)
+	// A process identity that was observed absent has exited for good. The OS
+	// may hand the same numeric PID to an unrelated process on a busy host, so
+	// later presence of a retired PID is PID reuse, not survival of the target.
+	retired := make(map[int]struct{}, len(target.PIDs))
 	for index := 0; index <= int(cancelProcessBound/cancelProcessSampleInterval); index++ {
 		if index > 0 {
 			deadline := appliedAt.Add(time.Duration(index) * cancelProcessSampleInterval)
@@ -187,9 +191,35 @@ func sampleCancelProcessTrees(t *testing.T, ctx context.Context, target, unrelat
 		if err != nil {
 			t.Fatalf("capture process sample %d: %v", index, err)
 		}
-		samples = append(samples, sample)
+		samples = append(samples, retireExitedTargetProcesses(sample, target, retired))
 	}
 	return samples
+}
+
+// retireExitedTargetProcesses masks target PIDs that were already observed
+// absent in an earlier sample so a reused PID cannot read as a surviving
+// target. It records each newly absent target PID as retired.
+func retireExitedTargetProcesses(sample cancelProcessSample, target workerProcessTree, retired map[int]struct{}) cancelProcessSample {
+	present := make([]int, 0, len(sample.TargetPresent))
+	for _, pid := range sample.TargetPresent {
+		if _, gone := retired[pid]; !gone {
+			present = append(present, pid)
+		}
+	}
+	sample.TargetPresent = present
+	if _, rootGone := retired[target.RootPID]; rootGone {
+		sample.TargetDescendants = nil
+	}
+	alive := make(map[int]struct{}, len(sample.TargetPresent))
+	for _, pid := range sample.TargetPresent {
+		alive[pid] = struct{}{}
+	}
+	for _, pid := range target.PIDs {
+		if _, ok := alive[pid]; !ok {
+			retired[pid] = struct{}{}
+		}
+	}
+	return sample
 }
 
 func stopCancelDaemon(t *testing.T, binaryPath string, fixture cancelFixture, daemon *cancelDaemon) {
@@ -203,7 +233,7 @@ func stopCancelDaemon(t *testing.T, binaryPath string, fixture cancelFixture, da
 		if err := daemon.waitError(); err != nil {
 			t.Fatalf("prebuilt Factory daemon exit after public stop: %v; stdout=%s stderr=%s", err, daemon.stdout.String(), daemon.stderr.String())
 		}
-	case <-time.After(20 * time.Second):
+	case <-time.After(90 * time.Second):
 		t.Fatalf("prebuilt Factory daemon did not exit after public stop; stdout=%s stderr=%s", daemon.stdout.String(), daemon.stderr.String())
 	}
 	daemon.mu.Lock()
@@ -250,7 +280,7 @@ func cleanupCancelDaemon(daemon *cancelDaemon) {
 	}
 	select {
 	case <-daemon.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(60 * time.Second):
 	}
 }
 

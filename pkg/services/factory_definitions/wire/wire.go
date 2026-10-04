@@ -16,11 +16,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
-	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
-	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	runtimesnapshotwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/wire"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
@@ -29,20 +25,22 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-// NewService constructs an inert Factory Definitions root from construction and
-// process-edge ports. It composes the accepted root through parent-private catalog
-// Wire and the accepted service assembly without publishing owner types on the
-// returned peer surface.
+// NewService constructs an inert Factory Definitions root from completed catalog,
+// validation, compilation and runtime snapshot owners plus construction and process-edge ports. Private owner
+// types remain behind the returned peer surface.
 func NewService(
 	sessionHost factorydefinitions.SessionHost,
 	activationGateway factorydefinitions.DefinitionActivationGateway,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *compilationloading.Loader,
+	compilation Compilation,
+	validationService Validation,
+	runtimeSnapshot RuntimeSnapshot,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	catalogService Catalog,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -63,7 +61,6 @@ func NewService(
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		namedFactoryCatalogFileSystem,
 		clock,
 		versionFileSystem,
 		listEffective,
@@ -77,9 +74,9 @@ func NewService(
 		return nil, err
 	}
 	return composeService(
-		sessionHost, activationGateway, validator, persistence, loader,
+		sessionHost, activationGateway, validator, persistence, loader, compilation, validationService, runtimeSnapshot,
 		applySupportedFiles, applyStarterWork, namedPaths,
-		namedFactoryCatalogFileSystem, clock, versionFileSystem, listEffective,
+		catalogService, clock, versionFileSystem, listEffective,
 		packagedCatalog, packagedInstaller, requiredToolChecker,
 		orchestratorValidator, portableFileSystem, directoryReplacementStore,
 		options...,
@@ -92,10 +89,13 @@ func composeService(
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *compilationloading.Loader,
+	compilation Compilation,
+	validationService Validation,
+	runtimeSnapshot RuntimeSnapshot,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	catalogService Catalog,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -107,7 +107,7 @@ func composeService(
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 	options ...CompositionOption,
 ) (factorydefinitions.Service, error) {
-	preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, compilation, authoringLayout, err := composeFactoryDefinitionSupport(
+	preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, authoringLayout, err := composeFactoryDefinitionSupport(
 		loader,
 		applySupportedFiles,
 		applyStarterWork,
@@ -126,7 +126,9 @@ func composeService(
 		clock,
 		versionFileSystem,
 		validator,
-		loader.LoadSourceFromCanonicalJSON,
+		validationService,
+		runtimeSnapshot,
+		compilation,
 		func(
 			factoryDir string,
 			workstationLoader factorydefinitions.WorkstationLoader,
@@ -148,26 +150,20 @@ func composeService(
 		captureFactorySnapshot,
 		persistence.ReplaceFactoryLayout,
 		namedPaths,
-		namedFactoryCatalogFileSystem,
+		catalogService,
 		packagedCatalog,
 		packagedInstaller,
 		requiredToolChecker,
 		orchestratorValidator,
 		authoringLayout,
+		listEffective,
 		options...,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
 	}
 
-	return attachFactoryDefinitionServices(
-		definitions,
-		listEffective,
-		snapshotsPortability,
-		compilation,
-		loader,
-		sessionHost,
-	)
+	return factorydefinitionsinternal.AttachSnapshotsPortability(definitions, snapshotsPortability)
 }
 
 func composeFactoryDefinitionSupport(
@@ -182,7 +178,6 @@ func composeFactoryDefinitionSupport(
 	factorydefinitions.PortableFactoryConfigPreparer,
 	factorydefinitions.FactorySnapshotCapturer,
 	snapshotsportability.Service,
-	compilationservice.Service,
 	authoringlayout.Service,
 	error,
 ) {
@@ -197,31 +192,20 @@ func composeFactoryDefinitionSupport(
 		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
 	})
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
-		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
-	})
-	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions compilation: %w", err)
-	}
-	if compilation == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions: compilation subservice rejected its dependencies")
+		return nil, nil, nil, nil, err
 	}
 	authoringFS, err := resolveAuthoringLayoutFilesystem(portableFileSystem)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	pruneRemovedDocs, err := internalportableconfig.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
 	authoringLayout, err := NewAuthoringLayoutService(AuthoringLayoutDependencies{
 		Validator: validator,
 		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, loader.LoadSourceFromCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		Loader:             loader,
 		MaterializeFiles:   internalportableconfig.NewMaterializer(portableFileSystem),
@@ -235,50 +219,9 @@ func composeFactoryDefinitionSupport(
 		Directories:        directoryReplacementStore,
 	})
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
-	return preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, compilation, authoringLayout, nil
-}
-
-func attachFactoryDefinitionServices(
-	definitions factorydefinitions.Service,
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
-	snapshotsPortability snapshotsportability.Service,
-	compilation compilationservice.Service,
-	loader *compilationloading.Loader,
-	sessionHost factorydefinitions.SessionHost,
-) (factorydefinitions.Service, error) {
-	attached, err := factorydefinitionsinternal.AttachEffectiveCatalog(definitions, listEffective)
-	if err != nil {
-		return nil, err
-	}
-	if attached == nil {
-		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
-	}
-	withSnapshots, err := factorydefinitionsinternal.AttachSnapshotsPortability(attached, snapshotsPortability)
-	if err != nil {
-		return nil, err
-	}
-	if withSnapshots == nil {
-		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
-	}
-	runtimeSnapshot, err := runtimesnapshotwire.NewService(
-		loader.LoadSourceFromCanonicalJSON,
-		loader.LoadSourceFromFactoryDir,
-		func() factorydefinitions.WorkstationLoader { return sessionHost.WorkstationLoader() },
-		factorydefinitions.FileReader(loader.ReadFile),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct Factory Definitions runtime snapshot resolver: %w", err)
-	}
-	withRuntimeSnapshot, err := factorydefinitionsinternal.AttachRuntimeSnapshot(withSnapshots, runtimeSnapshot.ResolveRuntimeSnapshot)
-	if err != nil {
-		return nil, err
-	}
-	if withRuntimeSnapshot == nil {
-		return nil, fmt.Errorf("construct Factory Definitions: runtime snapshot attachment rejected its dependencies")
-	}
-	return attachCompilation(withRuntimeSnapshot, compilation), nil
+	return preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, authoringLayout, nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
@@ -291,7 +234,6 @@ func validateDependencies(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -325,9 +267,6 @@ func validateDependencies(
 	}
 	if namedPaths == nil {
 		return fmt.Errorf("construct Factory Definitions: named path resolver is required")
-	}
-	if namedFactoryCatalogFileSystem == nil {
-		return fmt.Errorf("construct Factory Definitions: named Factory catalog filesystem is required")
 	}
 	if clock == nil {
 		return fmt.Errorf("construct Factory Definitions: clock is required")
@@ -390,31 +329,6 @@ func StaticClock(instant time.Time) factorydefinitions.Clock {
 type staticClock struct{ instant time.Time }
 
 func (c staticClock) Now() time.Time { return c.instant }
-
-type compilationAttachedService struct {
-	factorydefinitions.Service
-	compilation compilationservice.Service
-}
-
-func attachCompilation(
-	service factorydefinitions.Service,
-	compilation compilationservice.Service,
-) factorydefinitions.Service {
-	if service == nil || compilation == nil {
-		return service
-	}
-	return compilationAttachedService{
-		Service:     service,
-		compilation: compilation,
-	}
-}
-
-func (s compilationAttachedService) CompileEffectiveFactorySource(
-	ctx context.Context,
-	request factorydefinitions.CompileEffectiveFactorySourceRequest,
-) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
-	return s.compilation.CompileEffectiveFactorySource(ctx, request)
-}
 
 type authoringLayoutFilesystem interface {
 	portablefiles.FileSystem

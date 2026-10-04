@@ -220,14 +220,10 @@ The package layout is guarded mechanically:
 - `make pkg-boundary` checks dependency and ownership boundaries.
 - `make pkg-structure` checks repository-specific package and functional-test
   shape.
-- `make package-target-manifest-check` validates the remaining package migration
-  rows in `docs/internal/baselines/unfinished-package-moves.json`, the single
-  ledger of unfinished migration intent shared with
-  `make ownership-inventory-check`. A package that stays where it already lives
-  derives its destination from its own path and carries no row, so package churn
-  inside a service needs no ledger edit. A row naming a package that no longer
-  exists fails the check. The ledger only shrinks; when it reaches zero rows it
-  is deleted along with its loaders and checks.
+- The finished migration inventories (`ownership-inventory-check` and
+  `package-target-manifest-check`) were retired. This document is now the
+  record of the package layout; `docs/internal/baselines/unfinished-package-moves.json`
+  remains as a plain ledger of unfinished moves and is no longer gated.
 - `make lint` runs these checks with the rest of the lint suite.
 
 Mechanical baselines may record temporary, deletion-only debt. Those baselines

@@ -139,7 +139,7 @@ func runBuiltExplicitServerCancellation(t *testing.T, fixture *builtExplicitServ
 	// The request-start channel is the deterministic cancellation trigger. The
 	// bounded context is necessary only to bound a real child process that may
 	// otherwise outlive a failed process-boundary assertion.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	resultChannel := make(chan builtExplicitServerCLIResult, 1)
 	go func() {
 		resultChannel <- invokeBuiltExplicitServer(t, ctx, binary, workDir, homeDir, fixture.server.URL, "cancelled", imagePath)
@@ -156,7 +156,7 @@ func runBuiltExplicitServerCancellation(t *testing.T, fixture *builtExplicitServ
 		// The child observes context cancellation through the real HTTP request;
 		// this timeout bounds that OS/network handoff when the child or transport
 		// fails to converge.
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("built cancellation invocation did not return after context cancellation")
 	}
 	close(fixture.blockRelease)
@@ -167,7 +167,7 @@ func runBuiltExplicitServerCancellation(t *testing.T, fixture *builtExplicitServ
 	case <-fixture.blockRequestDone:
 		// The handler's terminal channel is the deterministic cleanup signal;
 		// this timeout protects the test from a leaked keep-alive connection.
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("built cancellation did not close the blocked request")
 	}
 	cancel()

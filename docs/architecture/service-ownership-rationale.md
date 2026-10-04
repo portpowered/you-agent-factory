@@ -10,7 +10,8 @@ It is prose, not a ratchet. Nothing here is counted, diffed, or gated by a
 lint target, and adding a package or a service does not require editing it to
 keep a checker green. Content that *must not regress* lives under
 [`docs/internal/baselines/`](../internal/baselines/README.md) instead — today
-that is the unfinished-package-move ledger and the ownership-inventory freeze.
+that is the baseline files listed there. The retired ownership-inventory freeze is
+replaced by [Backend Package Structure](packaged-structure.md).
 
 For the live package layout and the rules that are enforced mechanically, see
 [Backend Package Structure](packaged-structure.md). For public resource

@@ -68,50 +68,11 @@ func (counts *classifiedDependencyViolationCounts) add(class boundarySourceClass
 
 func countClassifiedDependencyViolations(findings scanResult) classifiedDependencyViolationCounts {
 	var counts classifiedDependencyViolationCounts
-	for _, finding := range findings.retiredPackageImportFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, finding := range findings.applicationGraphImportFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, finding := range findings.domainTransportFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, finding := range findings.peerServiceImportFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, finding := range findings.testServiceImportFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, finding := range findings.supportServiceImportFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
 	for _, finding := range findings.serviceConstructionFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, finding := range findings.transportImplementationFindings {
 		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
 	}
 	for _, finding := range findings.externalImplementationFindings {
 		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, entry := range findings.stalePeerServiceBaselineEntries {
-		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
-		if err == nil {
-			counts.add(class)
-		}
-	}
-	for _, entry := range findings.staleTestServiceBaselineEntries {
-		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
-		if err == nil {
-			counts.add(class)
-		}
-	}
-	for _, entry := range findings.staleSupportServiceBaselineEntries {
-		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
-		if err == nil {
-			counts.add(class)
-		}
 	}
 	for _, entry := range findings.staleServiceConstructionEntries {
 		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
@@ -143,44 +104,10 @@ func countProductionBoundaryFindings[T any](findings []T, class func(T) boundary
 
 func testOnlyDependencyFindings(findings scanResult) scanResult {
 	result := scanResult{}
-	result.retiredPackageImportFindings = filterRetiredPackageImportsByClass(findings.retiredPackageImportFindings, testOnlySourceClass)
-	result.applicationGraphImportFindings = filterApplicationGraphImportsByClass(findings.applicationGraphImportFindings, testOnlySourceClass)
-	result.domainTransportFindings = filterDomainTransportFindingsByClass(findings.domainTransportFindings, testOnlySourceClass)
-	result.peerServiceImportFindings = filterPeerServiceImportsByClass(findings.peerServiceImportFindings, testOnlySourceClass)
-	result.testServiceImportFindings = filterTestServiceImportsByClass(findings.testServiceImportFindings, testOnlySourceClass)
-	result.supportServiceImportFindings = filterSupportServiceImportsByClass(findings.supportServiceImportFindings, testOnlySourceClass)
 	result.serviceConstructionFindings = filterServiceConstructionFindingsByClass(findings.serviceConstructionFindings, testOnlySourceClass)
-	result.transportImplementationFindings = filterTransportImplementationFindingsByClass(findings.transportImplementationFindings, testOnlySourceClass)
 	result.externalImplementationFindings = filterTransportImplementationFindingsByClass(findings.externalImplementationFindings, testOnlySourceClass)
-	result.stalePeerServiceBaselineEntries = filterPeerServiceBaselineEntriesByClass(findings.stalePeerServiceBaselineEntries, testOnlySourceClass)
-	result.staleTestServiceBaselineEntries = filterTestServiceBaselineEntriesByClass(findings.staleTestServiceBaselineEntries, testOnlySourceClass)
-	result.staleSupportServiceBaselineEntries = filterSupportServiceBaselineEntriesByClass(findings.staleSupportServiceBaselineEntries, testOnlySourceClass)
 	result.staleServiceConstructionEntries = filterServiceConstructionBaselineEntriesByClass(findings.staleServiceConstructionEntries, testOnlySourceClass)
 	return result
-}
-
-func filterRetiredPackageImportsByClass(findings []retiredPackageImportFinding, want boundarySourceClass) []retiredPackageImportFinding {
-	return filterByClass(findings, want, func(finding retiredPackageImportFinding) boundarySourceClass { return finding.class }, func(finding retiredPackageImportFinding) string { return finding.filePath })
-}
-
-func filterApplicationGraphImportsByClass(findings []applicationGraphImportFinding, want boundarySourceClass) []applicationGraphImportFinding {
-	return filterByClass(findings, want, func(finding applicationGraphImportFinding) boundarySourceClass { return finding.class }, func(finding applicationGraphImportFinding) string { return finding.filePath })
-}
-
-func filterDomainTransportFindingsByClass(findings []domainTransportImportFinding, want boundarySourceClass) []domainTransportImportFinding {
-	return filterByClass(findings, want, func(finding domainTransportImportFinding) boundarySourceClass { return finding.class }, func(finding domainTransportImportFinding) string { return finding.filePath })
-}
-
-func filterPeerServiceImportsByClass(findings []peerServiceImportFinding, want boundarySourceClass) []peerServiceImportFinding {
-	return filterByClass(findings, want, func(finding peerServiceImportFinding) boundarySourceClass { return finding.class }, func(finding peerServiceImportFinding) string { return finding.filePath })
-}
-
-func filterTestServiceImportsByClass(findings []testServiceImportFinding, want boundarySourceClass) []testServiceImportFinding {
-	return filterByClass(findings, want, func(finding testServiceImportFinding) boundarySourceClass { return finding.class }, func(finding testServiceImportFinding) string { return finding.filePath })
-}
-
-func filterSupportServiceImportsByClass(findings []supportServiceImportFinding, want boundarySourceClass) []supportServiceImportFinding {
-	return filterByClass(findings, want, func(finding supportServiceImportFinding) boundarySourceClass { return finding.class }, func(finding supportServiceImportFinding) string { return finding.filePath })
 }
 
 func filterServiceConstructionFindingsByClass(findings []serviceConstructionFinding, want boundarySourceClass) []serviceConstructionFinding {
@@ -189,27 +116,6 @@ func filterServiceConstructionFindingsByClass(findings []serviceConstructionFind
 
 func filterTransportImplementationFindingsByClass(findings []transportServiceImplementationFinding, want boundarySourceClass) []transportServiceImplementationFinding {
 	return filterByClass(findings, want, func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class }, func(finding transportServiceImplementationFinding) string { return finding.filePath })
-}
-
-func filterPeerServiceBaselineEntriesByClass(findings []peerServiceImportBaselineEntry, want boundarySourceClass) []peerServiceImportBaselineEntry {
-	return filterByClass(findings, want, func(finding peerServiceImportBaselineEntry) boundarySourceClass {
-		class, _ := sourceClassFromBaseline(finding.Class, finding.FilePath)
-		return class
-	}, func(finding peerServiceImportBaselineEntry) string { return finding.FilePath })
-}
-
-func filterTestServiceBaselineEntriesByClass(findings []testServiceImportBaselineEntry, want boundarySourceClass) []testServiceImportBaselineEntry {
-	return filterByClass(findings, want, func(finding testServiceImportBaselineEntry) boundarySourceClass {
-		class, _ := sourceClassFromBaseline(finding.Class, finding.FilePath)
-		return class
-	}, func(finding testServiceImportBaselineEntry) string { return finding.FilePath })
-}
-
-func filterSupportServiceBaselineEntriesByClass(findings []supportServiceImportBaselineEntry, want boundarySourceClass) []supportServiceImportBaselineEntry {
-	return filterByClass(findings, want, func(finding supportServiceImportBaselineEntry) boundarySourceClass {
-		class, _ := sourceClassFromBaseline(finding.Class, finding.FilePath)
-		return class
-	}, func(finding supportServiceImportBaselineEntry) string { return finding.FilePath })
 }
 
 func filterServiceConstructionBaselineEntriesByClass(findings []serviceConstructionBaselineEntry, want boundarySourceClass) []serviceConstructionBaselineEntry {

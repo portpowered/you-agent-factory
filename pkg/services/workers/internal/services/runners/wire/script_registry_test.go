@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -131,5 +132,117 @@ func assertEffectCalls(
 			wantCommand,
 			wantDocs,
 		)
+	}
+}
+
+type scriptNonStreamingCommand struct{}
+
+func (scriptNonStreamingCommand) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	panic("construction must not execute command effects")
+}
+
+func TestScriptImplementationRejectsInvalidConfigurationAndEffects(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		message string
+		mutate  func(*runners.ScriptConfig, *runners.ScriptDependencies)
+	}{
+		{"command", "script command is required", func(c *runners.ScriptConfig, d *runners.ScriptDependencies) {
+			c.Command = "  "
+			*d = runners.ScriptDependencies{}
+		}},
+		{"command runner", "script command runner is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.CommandRunner = nil }},
+		{"typed nil command runner", "script command runner is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) {
+			d.CommandRunner = (*scriptConformanceCommand)(nil)
+		}},
+		{"streaming", "script command runner must support streaming", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) {
+			d.CommandRunner = scriptNonStreamingCommand{}
+		}},
+		{"docs", "script Factory docs loader is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.FactoryDocs = nil }},
+		{"clock", "script clock is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.Now = nil }},
+		{"publisher", "script progress publisher is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.Publish = nil }},
+		{"recorder", "script event recorder is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.Record = nil }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			agentDeps, config, deps, inferenceConfig, inferenceDeps := validProductionRegistryInputs()
+			var calls atomic.Int32
+			deps.CommandRunner = &scriptConformanceCommand{calls: &calls}
+			deps.FactoryDocs = func(string) (map[string]string, error) { calls.Add(1); return nil, nil }
+			deps.Now = func() time.Time { calls.Add(1); return time.Unix(0, 0) }
+			deps.Publish = func(workers.ProgressFragment) { calls.Add(1) }
+			deps.Record = func(workers.ScriptEvent) { calls.Add(1) }
+			test.mutate(&config, &deps)
+			runner, err := scriptImplementation(config, deps)
+			if runner != nil {
+				t.Fatal("invalid construction returned a runner")
+			}
+			assertScriptConstructionError(t, err, test.message)
+			registry, err := NewProductionRegistry(agentDeps, config, deps, inferenceConfig, inferenceDeps)
+			if registry != nil {
+				t.Fatal("invalid construction returned a registry")
+			}
+			if !errors.Is(err, workers.ErrInvalidRunnerRegistration) {
+				t.Fatalf("registry error = %v, want invalid registration", err)
+			}
+			if !strings.Contains(err.Error(), "script runner construction failed") {
+				t.Fatalf("registry error = %v, want script identity", err)
+			}
+			assertScriptConstructionError(t, err, test.message)
+			if calls.Load() != 0 {
+				t.Fatalf("construction effect calls = %d, want zero", calls.Load())
+			}
+		})
+	}
+}
+
+func assertScriptConstructionError(t *testing.T, err error, message string) {
+	t.Helper()
+	var providerError *workers.ProviderError
+	if !errors.As(err, &providerError) {
+		t.Fatalf("error = %v, want ProviderError", err)
+	}
+	if providerError.Type != workers.WorkFailureTypeMisconfigured {
+		t.Fatalf("failure type = %v, want MISCONFIGURED", providerError.Type)
+	}
+	if providerError.Message != message {
+		t.Fatalf("message = %q, want %q", providerError.Message, message)
+	}
+	if providerError.Cause != nil {
+		t.Fatalf("cause = %v, want nil", providerError.Cause)
+	}
+}
+
+func TestScriptImplementationDefersEffectsUntilRequestSelectedExecution(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	command := &scriptConformanceCommand{calls: &calls}
+	deps := scriptDependencies(command, func(string) (map[string]string, error) { calls.Add(1); return nil, nil })
+	deps.Now = func() time.Time { calls.Add(1); return time.Unix(0, 0) }
+	deps.Publish = func(workers.ProgressFragment) { calls.Add(1) }
+	deps.Record = func(workers.ScriptEvent) { calls.Add(1) }
+	runner, err := scriptImplementation(runners.ScriptConfig{RequestSelected: true}, deps)
+	if err != nil {
+		t.Fatalf("construction error = %v", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("construction effect calls = %d, want zero", calls.Load())
+	}
+	request := scriptRequest()
+	request.Command = "selected-command"
+	result, err := runner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute error = %v", err)
+	}
+	if result.Content != "fixture output" {
+		t.Fatalf("content = %q, want fixture output", result.Content)
+	}
+	if command.Request().Command != "selected-command" {
+		t.Fatalf("command = %q, want selected-command", command.Request().Command)
+	}
+	if calls.Load() == 0 {
+		t.Fatal("Execute did not invoke effects")
 	}
 }

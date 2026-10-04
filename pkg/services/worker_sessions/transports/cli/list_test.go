@@ -619,3 +619,18 @@ func testHTTPProtocol(t *testing.T) clihttp.Protocol {
 func intPtr(value int) *int              { return &value }
 func int64Ptr(value int64) *int64        { return &value }
 func timePtr(value time.Time) *time.Time { return &value }
+
+func TestWorkerSessionsListTransportErrorClassifiesClientTimeout(t *testing.T) {
+	endpoint := "http://127.0.0.1:7437/factory-sessions/s/worker-sessions?workId=w"
+	timeout := workerSessionsListTransportError(endpoint, &url.Error{Op: "Get", URL: endpoint, Err: context.DeadlineExceeded})
+	if timeout.Code != WorkerSessionListRequestTimeoutCode || !errors.Is(timeout, context.DeadlineExceeded) {
+		t.Fatalf("deadline error = %v, want %s wrapping DeadlineExceeded", timeout, WorkerSessionListRequestTimeoutCode)
+	}
+	if strings.Contains(timeout.Message, "not reachable") {
+		t.Fatalf("timeout message %q must not claim the factory is unreachable", timeout.Message)
+	}
+	refused := workerSessionsListTransportError(endpoint, errors.New("dial tcp: connection refused"))
+	if refused.Code != "FACTORY_UNREACHABLE" {
+		t.Fatalf("refused error code = %s, want FACTORY_UNREACHABLE", refused.Code)
+	}
+}
