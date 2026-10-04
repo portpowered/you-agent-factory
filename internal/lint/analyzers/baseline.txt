@@ -153,3 +153,8 @@ service-construction|pkg/services/factory_sessions/internal/sessionservice|pkg/s
 service-construction|tests/functional/internal/support|pkg/services/operator_settings/wire.NewConfigDocumentService
 service-construction|tests/functional/internal/support|pkg/services/operator_settings/wire.NewServiceFromConfigDocument
 service-construction|tests/functional/internal/support|pkg/services/providers/wire.NewService
+transport-concurrency|pkg/transports/acp/internal/stdio|make(chan)
+transport-concurrency|pkg/transports/acp/internal/stdio|sync.Mutex
+transport-lifecycle|pkg/transports/acp/internal/stdio|time.NewTimer
+transport-lifecycle|pkg/transports/cli/run|context.WithCancel
+transport-platform-selection|pkg/transports/acp/internal/stdio|pkg/platform/logging.EnsureLogger
