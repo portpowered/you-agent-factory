@@ -112,10 +112,63 @@ func TestConstructionRegisteredProviderBaseline(t *testing.T) {
 // baseline fixture state requires serial execution.
 func TestConstructionRegisteredProviderParity(t *testing.T) {
 	useFixtures(t)
-	cases := []struct {
-		unit, name string
-		count      int
-	}{
+	cases := registeredProviderParityCases()
+	registry := registeredFixtureRegistry(ConstructionEnforce)
+	expected := map[ConstructionSymbol]int{}
+	for _, test := range cases {
+		caller := ConstructionSymbol{ImportPath: "m/" + test.unit, Name: test.name}
+		expected[caller] = test.count
+		registry.Allowances = append(registry.Allowances, ConstructionAllowance{
+			Caller: caller, Callee: registry.Constructors[0].Symbol, FilePath: test.unit + "/provider.go",
+			Kind: "focused-provider", OwnerTask: "T20", Reason: "Retained compile-valid provider behavior.",
+		})
+	}
+	analyzer := registeredConstructionAnalyzer(registry)
+	run := analyzer.Run
+	analyzer.Run = func(pass *analysis.Pass) (any, error) {
+		result, err := run(pass)
+		if err != nil {
+			return result, err
+		}
+		reportRegistry := registry
+		reportRegistry.CapabilitySets = []ConstructionCapabilitySet{{Name: "fixture", OwnerTask: "T20", Mode: ConstructionReport}}
+		report, err := runRegisteredConstruction(pass, reportRegistry)
+		if err != nil {
+			return result, err
+		}
+		findings, observations := result.([]ConstructionFinding), report.([]ConstructionFinding)
+		if len(findings) != len(observations) {
+			t.Errorf("enforce/report count mismatch: %d/%d", len(findings), len(observations))
+		}
+		counts := map[ConstructionSymbol]int{}
+		for i, finding := range findings {
+			counts[finding.Caller]++
+			if finding.Callee != registry.Constructors[0].Symbol || finding.Line == 0 || finding.Mode != ConstructionEnforce {
+				t.Errorf("invalid finding: %#v", finding)
+			}
+			finding.Mode = ConstructionReport
+			if i < len(observations) && finding != observations[i] {
+				t.Errorf("report changed finding: %#v / %#v", finding, observations[i])
+			}
+		}
+		for caller, count := range expected {
+			if caller.ImportPath == pass.Pkg.Path() && counts[caller] != count {
+				t.Errorf("%s count=%d, want %d", caller, counts[caller], count)
+			}
+		}
+		return result, nil
+	}
+	analysistest.Run(t, analysistest.TestData(), analyzer,
+		"m/pkg/registeredprovidercycles", "m/pkg/registeredproviderdebt", "m/pkg/registeredproviderexecution")
+}
+
+type registeredProviderParityCase struct {
+	unit, name string
+	count      int
+}
+
+func registeredProviderParityCases() []registeredProviderParityCase {
+	return []registeredProviderParityCase{
 		{"pkg/registeredprovidercycles", "Case01", 1},
 		{"pkg/registeredprovidercycles", "Case02", 1},
 		{"pkg/registeredprovidercycles", "Case03", 1},
@@ -199,51 +252,4 @@ func TestConstructionRegisteredProviderParity(t *testing.T) {
 		{"pkg/registeredproviderexecution", "Case11", 0},
 		{"pkg/registeredproviderexecution", "Case12", 0},
 	}
-	registry := registeredFixtureRegistry(ConstructionEnforce)
-	expected := map[ConstructionSymbol]int{}
-	for _, test := range cases {
-		caller := ConstructionSymbol{ImportPath: "m/" + test.unit, Name: test.name}
-		expected[caller] = test.count
-		registry.Allowances = append(registry.Allowances, ConstructionAllowance{
-			Caller: caller, Callee: registry.Constructors[0].Symbol, FilePath: test.unit + "/provider.go",
-			Kind: "focused-provider", OwnerTask: "T20", Reason: "Retained compile-valid provider behavior.",
-		})
-	}
-	analyzer := registeredConstructionAnalyzer(registry)
-	run := analyzer.Run
-	analyzer.Run = func(pass *analysis.Pass) (any, error) {
-		result, err := run(pass)
-		if err != nil {
-			return result, err
-		}
-		reportRegistry := registry
-		reportRegistry.CapabilitySets = []ConstructionCapabilitySet{{Name: "fixture", OwnerTask: "T20", Mode: ConstructionReport}}
-		report, err := runRegisteredConstruction(pass, reportRegistry)
-		if err != nil {
-			return result, err
-		}
-		findings, observations := result.([]ConstructionFinding), report.([]ConstructionFinding)
-		if len(findings) != len(observations) {
-			t.Errorf("enforce/report count mismatch: %d/%d", len(findings), len(observations))
-		}
-		counts := map[ConstructionSymbol]int{}
-		for i, finding := range findings {
-			counts[finding.Caller]++
-			if finding.Callee != registry.Constructors[0].Symbol || finding.Line == 0 || finding.Mode != ConstructionEnforce {
-				t.Errorf("invalid finding: %#v", finding)
-			}
-			finding.Mode = ConstructionReport
-			if i < len(observations) && finding != observations[i] {
-				t.Errorf("report changed finding: %#v / %#v", finding, observations[i])
-			}
-		}
-		for caller, count := range expected {
-			if caller.ImportPath == pass.Pkg.Path() && counts[caller] != count {
-				t.Errorf("%s count=%d, want %d", caller, counts[caller], count)
-			}
-		}
-		return result, nil
-	}
-	analysistest.Run(t, analysistest.TestData(), analyzer,
-		"m/pkg/registeredprovidercycles", "m/pkg/registeredproviderdebt", "m/pkg/registeredproviderexecution")
 }

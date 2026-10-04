@@ -93,34 +93,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 				indirect = registeredIndirectProviderCalls(decl)
 			}
 			called := map[ast.Expr]bool{}
-			ast.Inspect(decl, func(node ast.Node) bool {
-				call, ok := node.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				markRegisteredCallee(called, call.Fun)
-				callee := values.resolve(pass, call.Fun, map[types.Object]bool{})
-				if getter, ok := getters[callee]; ok {
-					add(caller, callee, getter.Constructor, getter.Rule, call.Pos())
-				}
-				for _, constructor := range registry.Constructors {
-					if constructor.Symbol != callee || !registeredProhibitedKind(constructor, registry.Types) {
-						continue
-					}
-					allowed := slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
-						return a.Caller == caller && a.Callee == callee && a.FilePath == filename
-					})
-					if allowed && !indirect[call] && !recursive && !debt {
-						continue
-					}
-					rule := "registered-construction"
-					if allowed && debt && !recursive && !indirect[call] {
-						rule = "unresolved-focused-provider-dispatch"
-					}
-					add(caller, callee, constructor, rule, call.Pos())
-				}
-				return true
-			})
+			scanRegisteredCalls(pass, registry, values, getters, decl, caller, filename, called, indirect, recursive, debt, add)
 			ast.Inspect(decl, func(node ast.Node) bool {
 				expr, ok := node.(ast.Expr)
 				if !ok {
@@ -155,6 +128,41 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 		"required-dependency-guard", "required-receiver-guard", "required-dependency-assertion-guard", "unresolved-required-dependency-guard",
 		"service-getter-locator", "unresolved-service-getter-locator", "unresolved-service-getter-reference"), blocking, false)
 	return findings, nil
+}
+
+func scanRegisteredCalls(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues,
+	getters map[ConstructionSymbol]registeredGetterFact, decl ast.Decl, caller ConstructionSymbol, filename string,
+	called map[ast.Expr]bool, indirect map[*ast.CallExpr]bool, recursive, debt bool,
+	add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
+) {
+	ast.Inspect(decl, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		markRegisteredCallee(called, call.Fun)
+		callee := values.resolve(pass, call.Fun, map[types.Object]bool{})
+		if getter, ok := getters[callee]; ok {
+			add(caller, callee, getter.Constructor, getter.Rule, call.Pos())
+		}
+		for _, constructor := range registry.Constructors {
+			if constructor.Symbol != callee || !registeredProhibitedKind(constructor, registry.Types) {
+				continue
+			}
+			allowed := slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
+				return a.Caller == caller && a.Callee == callee && a.FilePath == filename
+			})
+			if allowed && !indirect[call] && !recursive && !debt {
+				continue
+			}
+			rule := "registered-construction"
+			if allowed && debt && !recursive && !indirect[call] {
+				rule = "unresolved-focused-provider-dispatch"
+			}
+			add(caller, callee, constructor, rule, call.Pos())
+		}
+		return true
+	})
 }
 
 func registeredProhibitedKind(constructor ConstructionConstructor, classified []ConstructionType) bool {
