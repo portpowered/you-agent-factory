@@ -24,7 +24,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -166,8 +165,8 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	unsupportedProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
-		providerswire.NewCodexEffect(workerswire.NewProviderCommandRunner(route), platformclock.Real{}),
-		providerswire.NewClaudeEffect(workerswire.NewProviderCommandRunner(route), platformclock.Real{}),
+		providerswire.NewCodexEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
+		providerswire.NewClaudeEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
 		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
@@ -609,4 +608,20 @@ func copyInvokeContinueDirectory(sourceDir, targetDir string) error {
 		}
 		return os.WriteFile(targetPath, data, info.Mode().Perm())
 	})
+}
+
+// invokeContinueProviderRunner projects this controlled external route into the
+// public Providers effect without importing a peer construction package.
+type invokeContinueProviderRunner struct {
+	runner platformprocess.CommandRunner
+}
+
+func (runner invokeContinueProviderRunner) Run(ctx context.Context, request providers.CommandRequest) (providers.CommandResult, error) {
+	result, err := runner.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
+		Env: request.Env, WorkDir: request.WorkDir,
+		ExecutionScopeID: request.FactorySessionID, ExecutionLogger: request.ExecutionLogger,
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providers.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
 }
