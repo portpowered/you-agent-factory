@@ -267,7 +267,7 @@ func TestRootCloseRuntimeScopeDuringLocalLoadPreventsLateInvocation(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			root := &Root{runtimeScopes: scopes, resources: resources, runtimeHost: &shutdownTrackingRuntimeHost{}, localExecution: compatibilityLocalExecution{bound}}
+			root := &Root{runtimeScopes: scopes, resources: resources, runtimeHost: &shutdownTrackingRuntimeHost{}, pullModel: compatibilityLocalExecution{bound}.PullModelForScope, invokeLocal: compatibilityLocalExecution{bound}.InvokeLocal, closeScopedExecution: compatibilityLocalExecution{bound}.CloseScope, closeExecution: compatibilityLocalExecution{bound}.Close}
 			done := make(chan error, 1)
 			go func() { _, err := root.InvokeLocal(t.Context(), request); done <- err }()
 			awaitCloseRaceSignal(t, runtime.started, "local load started")
@@ -431,7 +431,7 @@ func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
 	}
 
 	root := &Root{
-		runtimeScopes: scopes, localExecution: compatibilityLocalExecution{bound},
+		runtimeScopes: scopes, pullModel: compatibilityLocalExecution{bound}.PullModelForScope, invokeLocal: compatibilityLocalExecution{bound}.InvokeLocal, closeScopedExecution: compatibilityLocalExecution{bound}.CloseScope, closeExecution: compatibilityLocalExecution{bound}.Close,
 	}
 	result, err := root.InvokeLocal(context.Background(), models.LocalInvocationRequest{
 		Scope:  scope,
@@ -829,6 +829,7 @@ func TestRootInvokeLocalScopedExecutionUsesSelectedRuntime(t *testing.T) {
 	runtime := &decliningScopedRuntime{}
 	args := newRootConstructionArgs(t)
 	args.localRuntime = runtime
+	args.bindExecution(t)
 	root, err := args.build()
 	if err != nil {
 		t.Fatal(err)

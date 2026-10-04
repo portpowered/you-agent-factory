@@ -557,10 +557,9 @@ func TestRootPullModelForScopeRoutesDottedOperatorNameBeforeLegacyCatalogPull(t 
 	source := "file:///models/audio-cpp/index-tts2_5-orig.gguf"
 	backend := "localai-audio-cpp"
 	loadPolicy := models.LoadPolicyOnDemand
-	root, scope, assets := newPullFallbackRoot(t, name, map[string]models.ModelOverlay{
+	root, scope, assets, runtime := newPullFallbackRoot(t, name, map[string]models.ModelOverlay{
 		name: {Source: &source, Backend: &backend, LoadPolicy: &loadPolicy, Operations: []string{models.OperationTTS}},
 	})
-	runtime := root.localExecution.(*pullCatalogMissRuntime)
 	runtime.err = models.ErrAssetSourceMissing
 	resolved, err := root.ResolveModelReference(context.Background(), models.ResolveModelReferenceRequest{
 		Scope: scope, Reference: models.ModelReference{NameOrURI: name},

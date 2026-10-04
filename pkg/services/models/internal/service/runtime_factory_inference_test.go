@@ -49,7 +49,10 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 		mutate  func(*rootConstructionArgs)
 		message string
 	}{
-		{name: "scoped execution", mutate: func(args *rootConstructionArgs) { args.localRuntime = nil }, message: "scoped local execution"},
+		{name: "scoped pull", mutate: func(args *rootConstructionArgs) { args.pullModel = nil }, message: "scoped model pull"},
+		{name: "local invocation", mutate: func(args *rootConstructionArgs) { args.invokeLocal = nil }, message: "scoped local invocation"},
+		{name: "scope close", mutate: func(args *rootConstructionArgs) { args.closeScope = nil }, message: "scoped execution close"},
+		{name: "execution close", mutate: func(args *rootConstructionArgs) { args.closeExecution = nil }, message: "execution close"},
 		{name: "resource limiter", mutate: func(args *rootConstructionArgs) { args.resources = nil }, message: "local model resource limiter"},
 		{name: "runtime scopes", mutate: func(args *rootConstructionArgs) { args.runtimeScopes = nil }, message: "Models Runtime Scopes service"},
 		{name: "catalog", mutate: func(args *rootConstructionArgs) { args.catalog = nil }, message: "Models Catalog service"},
@@ -74,6 +77,10 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 
 type rootConstructionArgs struct {
 	localRuntime     localmodels.Runtime
+	pullModel        func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	invokeLocal      func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+	closeScope       func(models.RuntimeScopeRef)
+	closeExecution   func()
 	resources        *localmodels.ResourceLimiter
 	runtimeScopes    runtimescopes.Service
 	catalog          modelcatalog.Service
@@ -86,9 +93,8 @@ type rootConstructionArgs struct {
 }
 
 func (args rootConstructionArgs) build() (*Root, error) {
-	execution, _ := NewScopedLocalExecution(args.runtimeScopes, args.assets, args.runtimeHost, args.localRuntime, args.resources, modelseffects.LocalRuntimeHooks{}, args.now)
 	return NewRoot(
-		args.resources, execution,
+		args.resources, args.pullModel, args.invokeLocal, args.closeScope, args.closeExecution,
 		args.runtimeScopes,
 		args.catalog,
 		args.assets,
@@ -116,7 +122,7 @@ func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
 		t.Fatalf("construct catalog: %v", err)
 	}
 	events := []string{}
-	return rootConstructionArgs{
+	args := rootConstructionArgs{
 		localRuntime:  &leaseTestRuntime{},
 		resources:     mustResourceLimiter(t),
 		runtimeScopes: scopes,
@@ -127,6 +133,18 @@ func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
 		logger:        zap.NewNop(), now: time.Now,
 		revisionResolver: func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved },
 	}
+	args.bindExecution(t)
+	return args
+}
+
+func (args *rootConstructionArgs) bindExecution(t *testing.T) {
+	t.Helper()
+	execution, err := NewScopedLocalExecution(args.runtimeScopes, args.assets, args.runtimeHost, args.localRuntime, args.resources, modelseffects.LocalRuntimeHooks{}, args.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args.pullModel, args.invokeLocal = execution.PullModelForScope, execution.InvokeLocal
+	args.closeScope, args.closeExecution = execution.CloseScope, execution.Close
 }
 
 func TestNewRootResolvesScopedReferenceWithSelectedEffect(t *testing.T) {
@@ -225,7 +243,7 @@ func TestRootCloseShutsDownRuntimeHost(t *testing.T) {
 	t.Parallel()
 
 	host := &shutdownTrackingRuntimeHost{}
-	root := &Root{runtimeHost: host, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{}}
+	root := &Root{runtimeHost: host, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	if err := root.Close(context.Background()); err != nil {
 		t.Fatalf("Root.Close() error = %v, want nil", err)
 	}
@@ -364,7 +382,7 @@ func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 		t.Fatalf("construct Inference: %v", err)
 	}
 	root, err := NewRoot(
-		mustResourceLimiter(t), inertScopedLocalExecution{}, scopes, catalog, assets, runtimeHost, inferenceService,
+		mustResourceLimiter(t), inertScopedLocalExecution{}.PullModelForScope, inertScopedLocalExecution{}.InvokeLocal, inertScopedLocalExecution{}.CloseScope, inertScopedLocalExecution{}.Close, scopes, catalog, assets, runtimeHost, inferenceService,
 		zap.NewNop(), time.Now, nil, nil,
 		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
 	)
@@ -744,6 +762,7 @@ func TestRootCloseRuntimeScopePreventsConcurrentPullResolution(t *testing.T) {
 	scopes := newCloseRaceRuntimeScopes()
 	args := newRootConstructionArgs(t)
 	args.runtimeScopes = scopes
+	args.bindExecution(t)
 	root, err := args.build()
 	if err != nil {
 		t.Fatal(err)
@@ -867,6 +886,7 @@ func TestRootScopedExecutionCloseWinningConfigurationResolution(t *testing.T) {
 			args.runtimeScopes = gate
 			assets := &preparationAssetService{}
 			args.assets = assets
+			args.bindExecution(t)
 			root, err := args.build()
 			if err != nil {
 				t.Fatal(err)

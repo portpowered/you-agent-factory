@@ -329,7 +329,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{}}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
 
 	directList, err := privateCatalog.ListCatalog(
@@ -449,7 +449,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{}}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
 
 	assertCatalogGetFailureParity(t, root, privateCatalog, models.GetModelRequest{
@@ -548,7 +548,7 @@ func newCompatibilityParityFixture(t *testing.T) compatibilityParityFixture {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{}}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
 		Config: models.RuntimeScopeConfig{Runtime: runtimeConfig},
 	})
@@ -790,7 +790,7 @@ func newScopedCatalogRoot(t *testing.T) *Root {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	return &Root{runtimeScopes: scopes, catalog: catalog, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{}}
+	return &Root{runtimeScopes: scopes, catalog: catalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 }
 
 func scopedCatalogWorker(name, model, operation string) models.RuntimeWorker {

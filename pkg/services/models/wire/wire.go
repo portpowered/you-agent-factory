@@ -127,11 +127,15 @@ func NewService(
 	runtimeEvidence RuntimeEvidenceRecorder, legacyRevisionOverride func(context.Context, string) (string, error),
 	backendResolver BackendArtifactResolver, assetPlatform models.AssetHostPlatform,
 ) (models.Service, error) {
+	if isNilDependency(localExecution) {
+		return nil, fmt.Errorf("construct Models: scoped local execution is required")
+	}
 	if legacyRevisionOverride == nil {
 		legacyRevisionOverride = NewUnresolvedAssetRevisionResolver()
 	}
 	return modelsservice.NewRoot(
-		resources, localExecution,
+		resources, localExecution.PullModelForScope, localExecution.InvokeLocal,
+		localExecution.CloseScope, localExecution.Close,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
 		logger, now, pullMetrics, runtimeEvidence,
 		legacyRevisionOverride, backendResolver, assetPlatform,

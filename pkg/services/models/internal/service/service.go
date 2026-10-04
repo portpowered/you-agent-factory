@@ -104,7 +104,7 @@ func (o *Root) CloseRuntimeScope(
 		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
 	}
 	o.resources.CloseScope(request.Scope)
-	o.localExecution.CloseScope(request.Scope)
+	o.closeScopedExecution(request.Scope)
 	if closer, ok := o.runtimeHost.(interface {
 		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
 	}); ok {

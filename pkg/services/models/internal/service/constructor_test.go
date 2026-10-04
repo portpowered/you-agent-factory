@@ -484,7 +484,7 @@ func newScopedLocalRoot(t *testing.T, started, resume chan struct{}) (*modelsser
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := modelsservice.NewRoot(resources, execution,
+	root, err := modelsservice.NewRoot(resources, execution.PullModelForScope, execution.InvokeLocal, execution.CloseScope, execution.Close,
 		scopes, struct{ modelcatalog.Service }{}, assets, host, struct{ inference.Service }{}, zap.NewNop(), time.Now, nil, nil,
 		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{})
 	if err != nil {
@@ -650,5 +650,80 @@ func TestRootScopedExecutionReleasesCapacityOnFailure(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Root accepts each operation independently; construction must not activate any
+// of them, and cleanup must retain the selected scope and observation context.
+func TestRootScopedExecutionUsesIndividualOperations(t *testing.T) {
+	t.Parallel()
+	scopes, err := runtimescopeswire.NewService(func() string { return "individual-operations" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources, err := localmodels.NewResourceLimiter(modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type contextKey struct{}
+	ctx := context.WithValue(t.Context(), contextKey{}, "selected")
+	var pulled, invoked, closed models.RuntimeScopeRef
+	var stopped bool
+	pull := func(callCtx context.Context, request models.PullModelRequest) (models.PullResult, error) {
+		if callCtx.Value(contextKey{}) != "selected" || request.Name != "selected-model" {
+			t.Fatal("pull lost input or observation context")
+		}
+		pulled = request.Scope
+		return models.PullResult{ModelName: request.Name, Outcome: "ALREADY_PRESENT"}, nil
+	}
+	invoke := func(callCtx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+		if callCtx.Value(contextKey{}) != "selected" || request.Holder != "selected-holder" {
+			t.Fatal("invoke lost input or observation context")
+		}
+		invoked = request.Scope
+		return models.LocalInvocationResult{Handled: true, Content: "selected-output"}, nil
+	}
+	root, err := modelsservice.NewRoot(resources, pull, invoke,
+		func(scope models.RuntimeScopeRef) { closed = scope }, func() { stopped = true },
+		scopes, struct{ modelcatalog.Service }{}, struct{ scopedassets.Service }{}, &scopedLocalRootHost{}, struct{ inference.Service }{},
+		zap.NewNop(), time.Now, nil, nil,
+		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pulled.IsZero() || !invoked.IsZero() || !closed.IsZero() || stopped {
+		t.Fatal("construction activated execution")
+	}
+	opened, err := root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertIndividualExecutionResults(t, root, ctx, opened.Scope, &pulled, &invoked)
+	assertIndividualExecutionCleanup(t, root, ctx, opened.Scope, &closed, &stopped)
+}
+
+func assertIndividualExecutionResults(t *testing.T, root *modelsservice.Root, ctx context.Context, scope models.RuntimeScopeRef, pulled, invoked *models.RuntimeScopeRef) {
+	t.Helper()
+	result, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: scope, Name: "selected-model"})
+	if err != nil || result.ModelName != "selected-model" || *pulled != scope {
+		t.Fatalf("pull=%#v, %v, scope=%s", result, err, pulled)
+	}
+	output, err := root.InvokeLocal(ctx, models.LocalInvocationRequest{Scope: scope, Holder: "selected-holder"})
+	if err != nil || !output.Handled || output.Content != "selected-output" || *invoked != scope {
+		t.Fatalf("invoke=%#v, %v, scope=%s", output, err, invoked)
+	}
+}
+
+func assertIndividualExecutionCleanup(t *testing.T, root *modelsservice.Root, ctx context.Context, scope models.RuntimeScopeRef, closed *models.RuntimeScopeRef, stopped *bool) {
+	t.Helper()
+	closeResult, err := root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: scope})
+	if err != nil || !closeResult.Closed || *closed != scope || *stopped {
+		t.Fatalf("scope close=%#v, %v, scope=%s, stopped=%t", closeResult, err, closed, *stopped)
+	}
+	if err := root.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !*stopped {
+		t.Fatal("process close did not retire execution")
 	}
 }

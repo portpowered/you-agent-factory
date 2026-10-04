@@ -84,7 +84,7 @@ func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			root, scope, assets := newPullFallbackRoot(t, name)
+			root, scope, assets, _ := newPullFallbackRoot(t, name)
 			result, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
 				Scope: scope,
 				Name:  name,
@@ -106,7 +106,7 @@ func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T
 func TestRootPullModelForScopePreservesUnknownCatalogMiss(t *testing.T) {
 	t.Parallel()
 
-	root, scope, assets := newPullFallbackRoot(t, "")
+	root, scope, assets, _ := newPullFallbackRoot(t, "")
 	_, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
 		Scope: scope,
 		Name:  "unknown-model",
@@ -122,8 +122,7 @@ func TestRootPullModelForScopePreservesUnknownCatalogMiss(t *testing.T) {
 func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
 	t.Parallel()
 
-	root, scope, assets := newPullFallbackRoot(t, "")
-	runtime := root.localExecution.(*pullCatalogMissRuntime)
+	root, scope, assets, runtime := newPullFallbackRoot(t, "")
 	runtime.result = models.PullResult{
 		ModelName:          "factory-model",
 		ProviderLocality:   string(models.LocalityLocal),
@@ -149,7 +148,7 @@ func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
 	}
 }
 
-func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]models.ModelOverlay) (*Root, models.RuntimeScopeRef, *preparationAssetService) {
+func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]models.ModelOverlay) (*Root, models.RuntimeScopeRef, *preparationAssetService, *pullCatalogMissRuntime) {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return "pull-fallback-test" })
 	if err != nil {
@@ -176,13 +175,14 @@ func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]
 			Readiness: models.AssetReadinessAvailable,
 		},
 	}}
+	runtime := &pullCatalogMissRuntime{err: models.ErrNotFound}
 	root := &Root{
-		runtimeScopes:  scopes,
-		assets:         assets,
-		localExecution: &pullCatalogMissRuntime{err: models.ErrNotFound},
-		logger:         zap.NewNop(), now: time.Now,
+		runtimeScopes: scopes,
+		assets:        assets,
+		pullModel:     runtime.PullModelForScope,
+		logger:        zap.NewNop(), now: time.Now,
 	}
-	return root, scope, assets
+	return root, scope, assets, runtime
 }
 
 type pullCatalogMissRuntime struct {

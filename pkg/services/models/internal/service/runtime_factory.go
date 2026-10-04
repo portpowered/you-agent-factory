@@ -25,7 +25,10 @@ import (
 // It is inert until a customer operation activates the selected scope.
 type Root struct {
 	resources                  *localmodels.ResourceLimiter
-	localExecution             ScopedLocalExecution
+	pullModel                  func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	invokeLocal                func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+	closeScopedExecution       func(models.RuntimeScopeRef)
+	closeExecution             func()
 	runtimeScopes              runtimescopes.Service
 	assets                     scopedassets.Service
 	runtimeHost                runtimehost.Service
@@ -47,7 +50,10 @@ var _ models.Service = (*Root)(nil)
 
 func NewRoot(
 	resources *localmodels.ResourceLimiter,
-	localExecution ScopedLocalExecution,
+	pullModel func(context.Context, models.PullModelRequest) (models.PullResult, error),
+	invokeLocal func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error),
+	closeScopedExecution func(models.RuntimeScopeRef),
+	closeExecution func(),
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
@@ -85,14 +91,24 @@ func NewRoot(
 	if now == nil {
 		return nil, missingDependencyError("Models process clock")
 	}
-	if isNilDependency(localExecution) {
-		return nil, missingDependencyError("scoped local execution")
+	if pullModel == nil {
+		return nil, missingDependencyError("scoped model pull")
+	}
+	if invokeLocal == nil {
+		return nil, missingDependencyError("scoped local invocation")
+	}
+	if closeScopedExecution == nil {
+		return nil, missingDependencyError("scoped execution close")
+	}
+	if closeExecution == nil {
+		return nil, missingDependencyError("execution close")
 	}
 	if resolveRevision == nil {
 		return nil, missingDependencyError("Models revision resolver")
 	}
 	return &Root{
-		resources: resources, localExecution: localExecution,
+		resources: resources, pullModel: pullModel, invokeLocal: invokeLocal,
+		closeScopedExecution: closeScopedExecution, closeExecution: closeExecution,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
@@ -150,7 +166,7 @@ func (o *Root) Close(ctx context.Context) error {
 	}
 	// Retire admission before the external shutdown/join can block. A late
 	// resolution must not begin invocation while the host is stopping.
-	o.localExecution.Close()
+	o.closeExecution()
 	if err := shutdown.Shutdown(ctx); err != nil {
 		return err
 	}
@@ -231,7 +247,7 @@ func (o *Root) PullModelForScope(
 	if err := models.ValidatePullModelRequest(request); err != nil {
 		return models.PullResult{}, err
 	}
-	if o == nil || o.runtimeScopes == nil || isNilDependency(o.localExecution) {
+	if o == nil || o.runtimeScopes == nil || o.pullModel == nil {
 		return models.PullResult{}, models.ErrUnsupportedOperation
 	}
 	if request.Scope.IsZero() {
@@ -258,7 +274,7 @@ func (o *Root) pullScopedModel(ctx context.Context, request models.PullModelRequ
 	if hasOverlay {
 		return o.pullResolvedModelAfterCatalogMiss(ctx, request, models.ErrNotFound)
 	}
-	result, err := o.localExecution.PullModelForScope(ctx, request)
+	result, err := o.pullModel(ctx, request)
 	if err == nil || !errors.Is(err, models.ErrNotFound) {
 		return result, err
 	}
@@ -896,5 +912,5 @@ func (o *Root) InvokeLocal(
 	ctx context.Context,
 	request models.LocalInvocationRequest,
 ) (models.LocalInvocationResult, error) {
-	return o.localExecution.InvokeLocal(ctx, request)
+	return o.invokeLocal(ctx, request)
 }
