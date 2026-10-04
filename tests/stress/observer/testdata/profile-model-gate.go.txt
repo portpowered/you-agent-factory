@@ -75,6 +75,7 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
  defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();gate.release("profile-model-work");if err:=ops.Close(cleanup,cycle);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}()
  generation,runtimeID,err:=ops.Open(ctx,cycle,false);if err!=nil{t.Fatal(err)};cycle.Generations=append(cycle.Generations,generation);cycle.RuntimeIDs=append(cycle.RuntimeIDs,runtimeID)
  routes:=[]string{"profile-model-work","profile-model-peer"}
+ peerCtx,cancelPeer:=context.WithCancel(ctx);defer cancelPeer()
  done:=make(chan error,2);started,joined:=0,0
  defer func(){
   cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
@@ -85,7 +86,7 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
  var scope string
  for _,text:=range routes {
   started++
-  go func(){result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});t.Logf("public model outcome mode=%s route=%s result=%#v error=%v",r.Mode,text,result,err);done<-checkModelDiagnosticResult(r.Mode,text,result,err)}()
+  go func(){invokeCtx:=ctx;if text=="profile-model-peer"{invokeCtx=peerCtx};result,err:=service.Invoke(invokeCtx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});t.Logf("public model outcome mode=%s route=%s result=%#v error=%v",r.Mode,text,result,err);done<-checkModelDiagnosticResult(r.Mode,text,result,err)}()
   // Observe terminal refusal as well as acquisition; a held peer cannot return.
   select{case request:=<-gate.routes[text].observed:
    if scope!="" && scope!=request.Scope.String(){t.Fatal("public model Work changed scope")};scope=request.Scope.String()
@@ -104,6 +105,7 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
   if err=gate.release(routes[0]);err!=nil{t.Fatal(err)}
   select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
   if err=ops.Cancel(ctx,cycle);err!=nil{t.Fatal(err)}
+  cancelPeer() // Cancel the owned caller wait after the public stop joined.
  } else {for _,text:=range routes{if err=gate.release(text);err!=nil{t.Fatal(err)}}}
  for joined<started{select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}}
  for _,text:=range routes{if err=gate.join(ctx,text);err!=nil{t.Fatal(err)}}

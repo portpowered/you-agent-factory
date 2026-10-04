@@ -387,7 +387,8 @@ attribution remain available. It skips before construction under `-short`.
 scenario and returns a controlled inference error for the held peer. It requires
 FAILED/INVOCATION_RUNTIME_FAILURE while the other Work completes.
 `TestLifecycleProfileModelCancelDiagnostic` completes one Work, then cancels the
-explicit session while its peer remains held. It requires the peer's public
+explicit session while its peer remains held, then cancels the owned peer caller
+context after the public stop joins. It requires the peer's public
 CANCELED/INVOCATION_CANCELED outcome and joins its callback before observation.
 Both selectors require zero holders and retained terminal leases, followed by
 session, Execute/server and Process.Close joins. Run each on the prepared
