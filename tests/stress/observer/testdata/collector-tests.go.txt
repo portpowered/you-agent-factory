@@ -1,0 +1,33 @@
+package baselineobservation
+
+import "testing"
+
+func TestInProcessObserverCollectorFailures(t *testing.T) {
+	Close()
+	t.Cleanup(Close)
+	if _, err := Capture(); err == nil {
+		t.Fatal("empty inventory reported success")
+	}
+	if _, err := CaptureOwner("absent"); err == nil {
+		t.Fatal("missing owner reported zero")
+	}
+	Register("instance_host", "panic", "fixture", func() OwnerSnapshot { panic("unreadable") })
+	if _, err := Capture(); err == nil {
+		t.Fatal("read panic reported success")
+	}
+	Unregister("panic")
+	Register("instance_host", "duplicate", "fixture", func() OwnerSnapshot {
+		return OwnerSnapshot{Kind: "instance_host", OwnerIdentity: "duplicate", Source: "fixture", Host: &HostSnapshot{Handles: []HandleEntry{}}}
+	})
+	Register("instance_host", "duplicate", "fixture", func() OwnerSnapshot { return OwnerSnapshot{} })
+	if _, err := Capture(); err == nil {
+		t.Fatal("duplicate registration reported success")
+	}
+	Close()
+	Register("models_leases", "incomplete", "fixture", func() OwnerSnapshot {
+		return OwnerSnapshot{Kind: "models_leases", OwnerIdentity: "incomplete", Source: "fixture"}
+	})
+	if _, err := Capture(); err == nil {
+		t.Fatal("incomplete owner reported success")
+	}
+}

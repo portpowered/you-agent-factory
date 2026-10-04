@@ -5,8 +5,6 @@
 # Established rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
 application-graph-test|tests/integration/models_test|pkg/wire
-domain-transport-test|pkg/services/costs/internal/service|pkg/transports/http/client
-domain-transport-test|pkg/services/costs/internal/service|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/apitypes
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping
@@ -1871,8 +1869,6 @@ testsleep-deadline-test|pkg/platform/metrics|pkg/platform/metrics/runtime_metric
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_cancellation_unix_test.go::TestExecCommandRunner_ContextCancelReturnsWhenDescendantKeepsPipeOpen::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::2
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::1
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::2
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_grace_unix_test.go::reapCommandHelperLeader::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_test.go::TestExecCommandRunner_ContextDeadlineReturnsSystemError::deadline::1
 testsleep-deadline-test|pkg/platform/taskgroup|pkg/platform/taskgroup/task_group_test.go::TestGroupDoneClosesAfterEveryTaskReturnsRegardlessOfOutcome::deadline::1

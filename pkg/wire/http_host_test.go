@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -320,6 +321,7 @@ func TestFactoryWebhooksDefaultClientDoesNotFollowRedirects(t *testing.T) {
 	deadLetters := make(chan []byte, 1)
 	events := &wireWebhookEvents{event: wireWebhookEvent()}
 	selected := serviceedges.Edges{
+		Clock: platformclock.Real{}, ProcessScheduler: platformclock.Real{},
 		FactoryWebhookSecretResolver: func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 			return "redirect-secret", nil
 		},

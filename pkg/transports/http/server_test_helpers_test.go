@@ -793,7 +793,7 @@ func TestServerRoutesMetricsCostsThroughInjectedOwnerHandler(t *testing.T) {
 			FactorySessions: []costs.Rollup{},
 		}, nil
 	})
-	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(query, "metrics", "settings"), zap.NewNop())
+	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(query, "metrics", "settings", costsTestScopeResolver{}), zap.NewNop())
 	server := NewServerWithRecordingsAndCosts(nil, nil, nil, nil, nil, nil, zap.NewNop(), costsHandler)
 
 	recorder := httptest.NewRecorder()
@@ -828,4 +828,11 @@ func TestServerReportsUnavailableCostsHandlerAsInternalError(t *testing.T) {
 	if response.Code != factoryapi.ErrorResponseCode("INTERNAL_ERROR") {
 		t.Fatalf("error response = %#v", response)
 	}
+}
+
+// costsTestScopeResolver explicitly selects the fixture's requested identity.
+type costsTestScopeResolver struct{}
+
+func (costsTestScopeResolver) ResolveRuntimeMetricsScope(_ context.Context, id string) (factorysessions.RuntimeMetricsScope, error) {
+	return factorysessions.RuntimeMetricsScope{RequestedFactorySessionID: id, RetainedFactorySessionIDs: []string{id}}, nil
 }

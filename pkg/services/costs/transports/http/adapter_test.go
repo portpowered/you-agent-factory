@@ -46,7 +46,7 @@ func TestAdapterMapsExactReportAndRuntimeInputs(t *testing.T) {
 			ProviderModels: []costs.ProviderModelRollup{{Provider: "provider", Model: "known", Rollup: costs.Rollup{Key: "provider/known", Currency: "USD", Status: costs.StatusPriced, KnownCost: &amount, PricedSubtotal: &amount, TokenTotals: costs.TokenTotals{TotalTokens: &totalTokens, InputTokens: &inputTokens, OutputTokens: &outputTokens}, UnpricedPairs: []costs.UnpricedPair{}}}},
 		}, nil
 	})
-	adapter := NewAdapter(query, " metrics-root ", " settings.json ")
+	adapter := NewAdapter(query, " metrics-root ", " settings.json ", identityScopeResolver())
 	if adapter == nil {
 		t.Fatal("NewAdapter() returned nil")
 	}
@@ -158,7 +158,7 @@ func TestAdapterMapsBothPriceSourcesAndOmitsSourceForUnpricedRows(t *testing.T) 
 		}, nil
 	})
 
-	got, err := NewAdapter(query, "metrics", "settings").GetMetricsCosts(context.Background(), "")
+	got, err := NewAdapter(query, "metrics", "settings", identityScopeResolver()).GetMetricsCosts(context.Background(), "")
 	if err != nil {
 		t.Fatalf("GetMetricsCosts() error = %v", err)
 	}
@@ -259,9 +259,53 @@ func assertMappedReportOptionalJSON(t *testing.T, got factoryapi.CostsReport) {
 	}
 }
 
-func TestNewAdapterRejectsMissingQuery(t *testing.T) {
+func identityScopeResolver() metricsScopeResolverFunc {
+	return metricsScopeResolverFunc(func(_ context.Context, id string) (factorysessions.RuntimeMetricsScope, error) {
+		return factorysessions.RuntimeMetricsScope{RequestedFactorySessionID: id, RetainedFactorySessionIDs: []string{id}}, nil
+	})
+}
+
+func TestAdapterPropagatesQueryFailure(t *testing.T) {
 	t.Parallel()
-	if got := NewAdapter(nil, "metrics", "settings"); got != nil {
-		t.Fatalf("NewAdapter(nil) = %#v, want nil", got)
+	want := errors.New("query unavailable")
+	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		return costs.Report{}, want
+	})
+	_, err := NewAdapter(query, "metrics", "settings", identityScopeResolver()).GetMetricsCosts(context.Background(), "session")
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want original failure", err)
+	}
+}
+
+func TestAdapterFailsClosedForEmptyRetainedScope(t *testing.T) {
+	t.Parallel()
+	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		t.Fatal("query widened after empty scope")
+		return costs.Report{}, nil
+	})
+	resolver := metricsScopeResolverFunc(func(context.Context, string) (factorysessions.RuntimeMetricsScope, error) {
+		return factorysessions.RuntimeMetricsScope{}, nil
+	})
+	_, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), "selected")
+	var typed *costs.QueryError
+	if !errors.As(err, &typed) || typed.Kind != costs.QueryErrorMetricsFailed {
+		t.Fatalf("error=%v, want metrics failure", err)
+	}
+}
+func TestAdapterAllSessionsDoesNotResolveScope(t *testing.T) {
+	t.Parallel()
+	query := costs.CostsQuery(func(_ context.Context, request costs.QueryRequest) (costs.Report, error) {
+		if request.FactorySessionID != "" || len(request.RetainedFactorySessionIDs) != 0 {
+			t.Fatalf("request=%#v", request)
+		}
+		return costs.Report{Status: costs.StatusNoUsage}, nil
+	})
+	resolver := metricsScopeResolverFunc(func(context.Context, string) (factorysessions.RuntimeMetricsScope, error) {
+		t.Fatal("all-session query resolved a selector")
+		return factorysessions.RuntimeMetricsScope{}, nil
+	})
+	_, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), " ")
+	if err != nil {
+		t.Fatal(err)
 	}
 }
