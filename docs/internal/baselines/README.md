@@ -1,5 +1,9 @@
 # Repository baselines
 
+> Functional OS enforcement now uses depguard and forbidigo through `make
+> golangci`. The OS spawn baseline and machine eligibility inventory (historical
+> rows R-18/R-19 below) are retired; existing sites use the merge-base ratchet.
+
 > Retired (LG-3): `ownership-inventory-check`, `package-target-manifest-check`, the
 > ownership-inventory freeze and its snapshot files (rows R-09 and S-03 through S-08
 > below, plus `ownership-inventory.json` and `package-target-test-only-baseline.json`)

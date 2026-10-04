@@ -264,18 +264,16 @@ func NewRuntimeBuild(
 	recordingsRuntime recordings.RuntimeScopeService,
 	loadFactory factory.LoadedFactoryLoader,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
-) (*runtimebuild.Service, error) {
+	preparation *runtimebuild.Service,
+	requestResolver *runtime.WorkstationRequestExecutor,
+) (*runtimebuild.CompatibilityBuild, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
 	}
-	return runtimebuild.New(
-		defaultWorkerModelProvider,
-		defaultWorkerModel,
-		applyOperatorDefaults,
-		recordPath,
-		workflowID,
-		workstationLoader,
-		loadFactory,
+	return runtimebuild.BindCompatibility(preparation, runtimebuild.BuildDefaults{
+		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+		ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+	},
 		providerOverride,
 		providerCommandRunner,
 		scriptCommandRunner,
@@ -291,7 +289,6 @@ func NewRuntimeBuild(
 			return mockCommandRunnerFactory(config, runtimeConfig, next)
 		},
 		clock,
-		runtimeFactory.newID,
 		baseLogger,
 		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
 			var progressPublisher workers.ProgressPublisher
@@ -338,6 +335,7 @@ func NewRuntimeBuild(
 				worldStateProjector,
 				recordingsRuntime,
 				initialFactorySnapshot,
+				requestResolver,
 			)
 		},
 		petriMutationRecorder,
@@ -374,6 +372,7 @@ func buildBundle(
 	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
+	requestResolver *runtime.WorkstationRequestExecutor,
 ) (*factoryhost.Bundle, error) {
 	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
 		spec, defaultSessionID, recordingsRuntime, initialFactorySnapshot,
@@ -389,7 +388,7 @@ func buildBundle(
 		sessionID,
 		skipBuiltInPrerequisiteValidation,
 		invocationSkipPermissionsOverride,
-		runtimeFactory,
+		requestResolver,
 		mockWorkersConfig,
 		workerSessionsFactory,
 	)
@@ -451,7 +450,7 @@ func prepareRuntimeBundleWorkers(
 	sessionID string,
 	skipBuiltInPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	runtimeFactory *RuntimeFactory,
+	requestResolver *runtime.WorkstationRequestExecutor,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 ) (workers.Service, factory.WorkerSessionsFactory, error) {
@@ -470,7 +469,7 @@ func prepareRuntimeBundleWorkers(
 		sessionID,
 		skipBuiltInPrerequisiteValidation,
 		invocationSkipPermissionsOverride,
-		runtimeFactory,
+		requestResolver,
 		mockWorkersConfig,
 	), workerSessionsFactory, nil
 }
@@ -482,7 +481,7 @@ func newRuntimeWorkersService(
 	sessionID string,
 	skipBuiltInPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	runtimeFactory *RuntimeFactory,
+	requestResolver *runtime.WorkstationRequestExecutor,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) workers.Service {
 	canonicalSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
@@ -504,28 +503,17 @@ func newRuntimeWorkersService(
 		runtimeID:                         spec.RuntimeInstanceID,
 		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID),
 	}
-	if runtimeFactory != nil && spec.LoadedFactoryCfg != nil {
-		resolver := runtime.NewWorkstationRequestExecutor(runtime.WorkstationRequestExecutorConfig{
-			Service:                    service,
-			RuntimeDefinitions:         spec.LoadedFactoryCfg,
-			InvocationInterpolation:    runtimeFactory.invocationInterpolation,
-			InvocationFileReader:       invocationFileReader(runtimeFactory.inputFiles),
-			PromptSourceReader:         invocationFileReader(runtimeFactory.inputFiles),
-			WorkflowContext:            RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), canonicalSessionID),
-			FactorySessionID:           canonicalSessionID,
-			RuntimeID:                  spec.RuntimeInstanceID,
-			RecordingID:                workerRecordingIdentity(spec.RuntimeInstanceID),
-			NewID:                      runtimeFactory.newID,
-			PromptRenderer:             service,
-			TemplateFieldResolver:      service,
-			MockWorkers:                mockWorkersConfig,
-			ProgressPublisher:          providerSessionProgress.Publish,
-			ExpectedArtifactFileSystem: runtimeFactory.inputFiles,
+	if requestResolver != nil && spec.LoadedFactoryCfg != nil {
+		service.workstationResolver = runtime.BindWorkstationRequests(requestResolver, runtime.WorkstationRequestValues{
+			RuntimeDefinitions: spec.LoadedFactoryCfg,
+			WorkflowContext:    RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), canonicalSessionID).Clone(),
+			FactorySessionID:   canonicalSessionID, RuntimeID: spec.RuntimeInstanceID,
+			RecordingID: workerRecordingIdentity(spec.RuntimeInstanceID), GenerationID: spec.RuntimeInstanceID,
+			FactoryDirectory: spec.LoadedFactoryCfg.FactoryDir(), RuntimeBaseDir: spec.ExecutionBaseDir,
+			MockWorkers: mockWorkersConfig.Clone(),
 		})
-		if typed, ok := resolver.(runtime.WorkstationExecutionResolver); ok {
-			service.workstationResolver = typed
-		}
 	}
+
 	return service
 }
 

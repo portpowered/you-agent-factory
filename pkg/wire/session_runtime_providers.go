@@ -232,10 +232,7 @@ func providerCommandRunnerWithLogging(
 }
 
 func effectiveProviderCommandClock(edges serviceedges.Edges) platformclock.Source {
-	if edges.Clock != nil {
-		return edges.Clock
-	}
-	return platformclock.Real{}
+	return edges.Clock
 }
 
 // A Now-only override controls duration views without acquiring timer capability.
