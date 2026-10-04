@@ -320,6 +320,23 @@ func characterizeComposedReplayClock(t *testing.T, explicit bool) {
 	}
 	events := support.GetFactoryEventsAt(t, url)
 	after := time.Now()
+	assertComposedReplayEventOrigins(t, events, explicit, processTime, before, after)
+	if explicit {
+		// C04: independent scheduling cannot rewrite historical public facts.
+		scheduler.SetTick(60)
+		assertComposedReplayHistoryUnchanged(t, url, events, listed)
+	}
+	command.Stop(t)
+	if runner.calls.Load() != 0 {
+		t.Fatalf("replay provider calls = %d, want 0", runner.calls.Load())
+	}
+	if got, err := os.ReadFile(artifactPath); err != nil || !bytes.Equal(got, payload) {
+		t.Fatalf("source artifact changed after replay: %v", err)
+	}
+}
+
+func assertComposedReplayEventOrigins(t *testing.T, events []factoryapi.FactoryEvent, explicit bool, processTime, before, after time.Time) {
+	t.Helper()
 	seenRun, seenWork := false, false
 	for _, event := range events {
 		at := event.Context.EventTime
@@ -343,22 +360,15 @@ func characterizeComposedReplayClock(t *testing.T, explicit bool) {
 	if !seenRun || !seenWork {
 		t.Fatalf("public replay facts missing Run Request or Work Request: run=%t work=%t", seenRun, seenWork)
 	}
-	if explicit {
-		// C04: independent scheduling cannot rewrite historical public facts.
-		scheduler.SetTick(60)
-		if got := support.GetFactoryEventsAt(t, url); !reflect.DeepEqual(got, events) {
-			t.Fatal("scheduler advancement changed terminal replay history")
-		}
-		if got := support.ListDefaultSessionWork(t, url); !reflect.DeepEqual(got, listed) {
-			t.Fatal("scheduler advancement changed terminal replay Work")
-		}
+}
+
+func assertComposedReplayHistoryUnchanged(t *testing.T, url string, events []factoryapi.FactoryEvent, listed factoryapi.ListWorkResponse) {
+	t.Helper()
+	if got := support.GetFactoryEventsAt(t, url); !reflect.DeepEqual(got, events) {
+		t.Fatal("scheduler advancement changed terminal replay history")
 	}
-	command.Stop(t)
-	if runner.calls.Load() != 0 {
-		t.Fatalf("replay provider calls = %d, want 0", runner.calls.Load())
-	}
-	if got, err := os.ReadFile(artifactPath); err != nil || !bytes.Equal(got, payload) {
-		t.Fatalf("source artifact changed after replay: %v", err)
+	if got := support.ListDefaultSessionWork(t, url); !reflect.DeepEqual(got, listed) {
+		t.Fatal("scheduler advancement changed terminal replay Work")
 	}
 }
 
