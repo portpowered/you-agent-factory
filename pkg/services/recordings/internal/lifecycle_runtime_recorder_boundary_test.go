@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"strings"
-	"testing"
-	"time"
 )
 
 type runtimeRoot interface {
@@ -240,17 +243,11 @@ func assertTerminalRunPayload(t *testing.T, rawPayload string, startedAt, finish
 	}
 }
 
-func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *testing.T) {
+func TestProjectionOwnerReconstructsCanonicalFactoryWorldStateFromFixture(t *testing.T) {
 	t.Parallel()
 
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	root := NewService(
-		NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil), projectionquerywire.NewService(),
-	)
-	opening, ok := root.(recordings.RuntimeScopeService)
-	if !ok {
-		t.Fatal("Recordings root does not expose RuntimeScopeService")
-	}
+	projection := projectionquerywire.NewService()
 
 	factorySnapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
 		"name": "roundtrip-factory",
@@ -270,7 +267,7 @@ func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *test
 
 	const workID = "work-roundtrip"
 	const traceID = "trace-roundtrip"
-	restored, err := opening.ReconstructCanonicalFactoryWorldState(
+	restored, err := projection.ReconstructFactoryWorldState(
 		roundtripFixtureEvents(t, base, factorySnapshot),
 		1,
 	)
@@ -320,11 +317,10 @@ func mustMarshalRoundtripTest(t *testing.T, value any) []byte {
 }
 
 func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T) {
-	service := NewRuntimeRoot(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	root, ok := service.(runtimeRoot)
-	if !ok || root == nil {
-		t.Fatal("NewRuntimeRoot() returned nil")
-	}
+	t.Parallel()
+	router := newRuntimeLedgerRouter(nil)
+	root := NewCombinedService(router, nil, nil, nil, nil, nil, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, router, nil, nil, nil, nil).(*combinedService)
 	topology := runtimeOpeningTopology{}
 	now := func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
 
@@ -337,6 +333,7 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	if err != nil {
 		t.Fatalf("OpenRuntime(first): %v", err)
 	}
+	t.Cleanup(func() { _ = first.Recorder.Finalize(now().Add(time.Second)) })
 	second, err := root.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
 		Topology:         topology,
 		Now:              now,
@@ -346,6 +343,7 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	if err != nil {
 		t.Fatalf("OpenRuntime(second): %v", err)
 	}
+	t.Cleanup(func() { _ = second.Recorder.Finalize(now().Add(time.Second)) })
 	if first.Ledger == second.Ledger {
 		t.Fatal("OpenRuntime returned the same ledger for concurrent sessions")
 	}
@@ -365,8 +363,8 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	if err := first.Recorder.Finalize(finishedAt.Add(time.Second)); err != nil {
 		t.Fatalf("Finalize(first) second call: %v", err)
 	}
-	if _, err := root.SubscribeFrom(context.Background(), recordings.SubscribeRequest{
-		Scope: recordings.CanonicalEventScope{FactorySessionID: "session-one"},
+	if _, err := router.Subscribe(context.Background(), nil, factorydefinitions.FactoryEventReconnectScope{
+		SessionID: "session-one",
 	}); !errors.Is(err, recordings.ErrReconnectCursorUnavailable) {
 		t.Fatalf("Subscribe(closed first session) = %v, want isolated route failure", err)
 	}
@@ -377,6 +375,39 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	}
 	if err := second.Recorder.Finalize(finishedAt); err != nil {
 		t.Fatalf("Finalize(second): %v", err)
+	}
+}
+
+type runtimeOpeningProjection struct {
+	recordings.ProjectionService
+	events []recordings.FactoryEvent
+	tick   int
+	result recordings.FactoryWorldState
+	err    error
+}
+
+func (projection *runtimeOpeningProjection) ReconstructFactoryWorldState(events []recordings.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	projection.events = events
+	projection.tick = tick
+	return projection.result, projection.err
+}
+
+func TestRuntimeRootForwardsCanonicalWorldStateAndProjectionCause(t *testing.T) {
+	t.Parallel()
+	ownerErr := errors.New("projection failed")
+	projection := &runtimeOpeningProjection{result: recordings.FactoryWorldState{Tick: 7}, err: ownerErr}
+	root := NewCombinedService(nil, projection, nil, nil, nil, nil, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	events := []recordings.FactoryEvent{{Id: "selected-event", Type: recordings.FactoryEventTypeWorkRequest}}
+	state, err := root.ReconstructCanonicalFactoryWorldState(events, 7)
+	if !errors.Is(err, ownerErr) || !reflect.DeepEqual(state, projection.result) ||
+		!reflect.DeepEqual(projection.events, events) || projection.tick != 7 {
+		t.Fatalf("projection forwarding = (%#v, %v), inputs = (%#v, %d)", state, err, projection.events, projection.tick)
+	}
+	projection.err = nil
+	state, err = root.ReconstructCanonicalFactoryWorldState(events, 7)
+	if err != nil || !reflect.DeepEqual(state, projection.result) {
+		t.Fatalf("projection success = (%#v, %v), want supplied result", state, err)
 	}
 }
 
