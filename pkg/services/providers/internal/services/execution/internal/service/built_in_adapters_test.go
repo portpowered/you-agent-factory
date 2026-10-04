@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+
+	"go.uber.org/goleak"
 )
 
 func TestBuiltInRegistrationsSelectOnlyAntigravityCodexAndClaudeAdapters(t *testing.T) {
@@ -40,4 +42,10 @@ func TestBuiltInRegistrationsSelectOnlyAntigravityCodexAndClaudeAdapters(t *test
 	if !strings.Contains(byID[providers.IDAntigravity], "Antigravity") {
 		t.Fatalf("Antigravity adapter message = %q", byID[providers.IDAntigravity])
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

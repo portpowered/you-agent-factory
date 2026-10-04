@@ -6,6 +6,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+
+	"go.uber.org/goleak"
 )
 
 func TestMapProgressFragment_PreservesOnlyProjectableProgressPhases(t *testing.T) {
@@ -77,4 +79,10 @@ func TestMapProgressFragment_PreservesProviderWithoutSessionReference(t *testing
 	if event.ProviderSessionRef != nil {
 		t.Fatalf("event.ProviderSessionRef = %#v, want nil", event.ProviderSessionRef)
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

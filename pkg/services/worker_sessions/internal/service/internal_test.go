@@ -26,6 +26,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+
+	"go.uber.org/goleak"
 )
 
 // unusedExecution is a Workers service double that fails
@@ -7055,4 +7057,10 @@ func TestScriptDeadlineUsesAuthoredBudgetOrCallerCancellation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

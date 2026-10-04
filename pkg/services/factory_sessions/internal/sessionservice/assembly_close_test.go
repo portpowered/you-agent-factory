@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+
+	"go.uber.org/goleak"
 )
 
 type closingDurableOwner struct {
@@ -154,4 +156,10 @@ func TestStopLiveRuntimeSidecars_MissingSidecarsSkipsLifecycleFallback(t *testin
 	if lifecycle.stopSidecarsCalls != 0 {
 		t.Fatalf("runtimeLifecycle.StopSidecars calls = %d, want 0", lifecycle.stopSidecarsCalls)
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

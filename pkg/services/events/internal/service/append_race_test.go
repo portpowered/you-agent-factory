@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+
+	"go.uber.org/goleak"
 )
 
 // TestAppend_ConcurrentAppendsAssignUniqueContiguousPositions proves that
@@ -122,4 +124,10 @@ func TestAppend_ConcurrentDuplicateAppendsConvergeOnOneAcceptedRecord(t *testing
 	if len(ids) != 1 {
 		t.Fatalf("observed %d distinct Record.IDs, want exactly 1: every racer must resolve to the same accepted record", len(ids))
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

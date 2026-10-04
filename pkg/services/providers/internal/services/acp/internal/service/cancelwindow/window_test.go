@@ -13,6 +13,8 @@ import (
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+
+	"go.uber.org/goleak"
 )
 
 // noopClient satisfies acpsdk.Client with no behavior; these tests only
@@ -471,4 +473,10 @@ func TestWindowTryCancelReturnsSendFailurePromptlyWithoutWaitingForDoneToClose(t
 	case <-time.After(2 * time.Second):
 		t.Fatal("TryCancel() hung instead of returning promptly after the send failed")
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

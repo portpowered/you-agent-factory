@@ -17,6 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+
+	"go.uber.org/goleak"
 )
 
 func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.T) {
@@ -852,3 +854,9 @@ func (s *capturedTurnWorkerSessions) cancel(ctx context.Context, dispatchID stri
 }
 
 var _ workersessions.Service = (*capturedTurnWorkerSessions)(nil)
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}

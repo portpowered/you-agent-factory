@@ -398,6 +398,7 @@ Rules:
 - Retries, timeouts, cancellation, and backpressure behavior **MUST** be deliberate.
 - Resource acquisition and cleanup **MUST** be paired clearly.
 - Long-lived goroutines, watchers, subprocesses, and background loops **MUST** have explicit shutdown behavior.
+- Packages that spawn goroutines or processes **SHOULD** enable `go.uber.org/goleak` via `TestMain` (`goleak.VerifyTestMain(m)`), adding only narrow `IgnoreTopFunction` entries with a comment for known long-lived globals. Do not ignore leaks from production code.
 - High-volume paths **SHOULD** be measurable and testable under stress.
 - Race-prone state mutation **MUST** be guarded by design, not luck.
 

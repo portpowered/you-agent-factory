@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"go.uber.org/goleak"
 )
 
 func TestContextLineReaderReadsBoundedLines(t *testing.T) {
@@ -77,4 +79,10 @@ func TestContextLineReaderRejectsInvalidConstructionAndReads(t *testing.T) {
 	if _, err := valid.ReadLine(nil); err == nil {
 		t.Fatal("ReadLine(nil) error = nil")
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

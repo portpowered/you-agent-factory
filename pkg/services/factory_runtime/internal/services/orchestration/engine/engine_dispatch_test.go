@@ -16,6 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+
+	"go.uber.org/goleak"
 )
 
 func TestEngine_SameWorkObserveAndConsumeDispatchesInOneTick(t *testing.T) {
@@ -948,4 +950,10 @@ func TestDispatchResultHookWhileAutomaticTicksPaused_BuffersUntilResume(t *testi
 	if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 {
 		t.Fatalf("dispatch history = %d, want 1 after resume", len(engine.GetRuntimeStateSnapshot().DispatchHistory))
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }
