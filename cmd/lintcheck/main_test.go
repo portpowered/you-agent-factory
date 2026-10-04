@@ -236,3 +236,30 @@ func TestParseConfigRejectsMissingPackage(t *testing.T) {
 		t.Fatal("parseConfig succeeded without checker package")
 	}
 }
+
+func TestProcessCheckerSharesCompiledCheckerAcrossCheckouts(t *testing.T) {
+	driver := testDriver(t)
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	environment := map[string]string{"LINT_CHECKER_TEST_VALUE": "shared"}
+
+	for _, label := range []string{"first checkout", "second checkout"} {
+		fixtureRoot := writeCheckerFixture(t, "same")
+		if output, err := runDriver(driver, fixtureRoot, cacheDir, false, environment, label); err != nil {
+			t.Fatalf("%s checker run: %v; output: %s", label, err, output)
+		}
+	}
+	if cacheFiles := lintCheckerCacheFiles(t, cacheDir); len(cacheFiles) != 1 {
+		t.Fatalf("cached checker files = %v, want one executable shared by both checkouts", cacheFiles)
+	}
+}
+
+func TestPortablePathIsRelativeInsideModuleOnly(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "module")
+	if got := portablePath(filepath.Join(root, "cmd", "x"), root); got != "module:cmd/x" {
+		t.Fatalf("inside path = %q", got)
+	}
+	outside := filepath.Join(t.TempDir(), "elsewhere")
+	if got := portablePath(outside, root); got != filepath.ToSlash(outside) {
+		t.Fatalf("outside path = %q", got)
+	}
+}

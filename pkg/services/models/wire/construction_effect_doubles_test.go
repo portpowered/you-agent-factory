@@ -90,7 +90,7 @@ func validConstructionEdges() constructionEdges {
 func (edges constructionEdges) newServiceWithInvocationProtocol(
 	client InvocationProtocolClient,
 ) (models.Service, error) {
-	return NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
+	return newModelsServiceWithFixtureEffects(
 		edges.assetPlatform,
 		edges.assetHTTP,
 		edges.assetEndpoints,
@@ -605,4 +605,171 @@ func (connection *embeddingRuntimeConnection) Close() error {
 func (runtime *recordingInvocationRuntime) Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
 	runtime.calls++
 	return runtime.result, runtime.err
+}
+
+// newModelsServiceWithFixtureEffects
+// adds the optional private evidence sink used by the compiled integration
+// witness. The existing constructor remains unchanged for ordinary callers.
+func newModelsServiceWithFixtureEffects(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+	backendResolver BackendArtifactResolver,
+	invocationProtocol InvocationProtocolClient,
+	protocolDialer InvocationProtocolDialer,
+	invocationBackend InvocationBackend,
+	asrBackend ASRBackend,
+	embeddingBackend EmbeddingBackend,
+	runtimeEvidence RuntimeEvidenceRecorder,
+	revisionResolvers ...func(context.Context, string) (string, error),
+) (models.Service, error) {
+	return composeModelsService(
+		assetPlatform, assetHTTP, assetEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir,
+		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
+		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
+		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination,
+		runtimeEvidence, resolveSymlinks, backendResolver,
+		invocationRuntimeOptions{
+			Backend: invocationBackend, ASR: asrBackend, Embedding: embeddingBackend,
+			Client: invocationProtocol, Dialer: protocolDialer,
+		}, revisionResolvers...,
+	)
+}
+
+func composeModelsService(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
+	runtimeEvidence RuntimeEvidenceRecorder,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+	backendResolver BackendArtifactResolver,
+	runtimeOptions invocationRuntimeOptions,
+	revisionResolvers ...func(context.Context, string) (string, error),
+) (models.Service, error) {
+	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
+	runtimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(runtimeEvidence)
+	revisionResolver := firstRevisionResolver(revisionResolvers)
+	if revisionResolver == nil {
+		revisionResolver = NewUnresolvedAssetRevisionResolver()
+	}
+	if resolveEnvironment == nil {
+		resolveEnvironment = func(string) string { return "" }
+	}
+	runtimeScopes, err := NewRuntimeScopes(issuerEntropy)
+	if err != nil {
+		return nil, err
+	}
+	assetService, err := NewAssets(
+		runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
+		resolveEnvironment, revisionResolver, assetCoordination,
+	)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := NewCatalog(runtimeScopes, NewCatalogReadinessQuery(assetService))
+	if err != nil {
+		return nil, err
+	}
+	state := NewSlotState()
+	facts := NewSlotFacts(runtimeScopes, assetService, state)
+	coordinator := NewSlotCoordinator(state, runtimeScopes, hostClock, hostLogger, hostMetrics, 0)
+	leases, err := NewHostLeases(hostClock, facts, coordinator)
+	if err != nil {
+		return nil, err
+	}
+	runtimeHost, err := NewRuntimeHost(
+		runtimeScopes, assetService, leases, state, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
+		assetPlatform, protocolNegotiator, compatibilityChecker, resolveSymlinks, runtimeEvidence, 0, 0,
+	)
+	if err != nil {
+		return nil, err
+	}
+	runtime, err := NewInvocationRuntime(
+		runtimeOptions.Backend, runtimeOptions.ASR, runtimeOptions.Embedding, runtimeOptions.Client, runtimeOptions.Dialer,
+		runtimeRunner, runtimeTempDir, runtimeTempFile, assetWriteFile, runtimeInspect, assetReadFile, assetRemove,
+	)
+	if err != nil {
+		return nil, err
+	}
+	inferenceService, err := NewInference(runtimeScopes, assetService, catalogService, runtimeHost, runtime, inference.InertArtifactFileSystem{}, now)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(
+		runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
+		processLauncher, hostHTTP, hostClock, runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile,
+		logger, now, pullMetrics, hostLogger, hostMetrics, localHooks, runtimeEvidence,
+		firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform,
+	)
+}
+
+func firstRevisionResolver(
+	resolvers []func(context.Context, string) (string, error),
+) func(context.Context, string) (string, error) {
+	if len(resolvers) == 0 {
+		return nil
+	}
+	return resolvers[0]
 }

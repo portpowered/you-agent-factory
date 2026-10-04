@@ -88,23 +88,10 @@ func New(
 	readDirectory modelseffects.AssetReadDirectory,
 	createFile modelseffects.AssetCreateFile,
 	openFile modelseffects.AssetOpenFile,
-	options ...assets.ConstructionOptions,
+	resolveEnvironment modelseffects.AssetResolveEnvironment,
+	resolveRevision func(context.Context, string) (string, error),
+	coordination modelseffects.AssetStagingCoordination,
 ) assets.Service {
-	resolveEnvironment := modelseffects.AssetResolveEnvironment(func(string) string { return "" })
-	var resolveRevision func(context.Context, string) (string, error)
-	var coordination modelseffects.AssetStagingCoordination
-	if len(options) > 0 {
-		if options[0].ResolveEnvironment != nil {
-			resolveEnvironment = options[0].ResolveEnvironment
-		}
-		resolveRevision = options[0].ResolveRevision
-		coordination = options[0].Coordination
-	}
-	if resolveRevision == nil {
-		resolveRevision = func(context.Context, string) (string, error) {
-			return "", models.ErrModelRevisionUnresolved
-		}
-	}
 	instance := &service{
 		scopes:             scopes,
 		platform:           platform,

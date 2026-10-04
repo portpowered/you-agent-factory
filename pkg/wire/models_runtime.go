@@ -19,7 +19,6 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -165,200 +164,206 @@ func provideModelRuntimeEvidenceRecorder() (modelswire.RuntimeEvidenceRecorder, 
 	return &modelRuntimeEvidenceFileRecorder{path: path}, nil
 }
 
-// TODO: this should be decomposed, we should inject these independently.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
-	processClock := edges.Clock
-	assetPlatform := provideModelAssetHostPlatform(edges)
-	assetEndpoints := edges.ModelAssetEndpoints
-	assetEnvironment := edges.ModelAssetResolveEnvironment
-	if assetEnvironment == nil {
-		assetEnvironment = os.Getenv
-	}
+// These distinct effect types keep asset-disabled revision resolution and
+// the legacy Root override independent, and preserve the Models runner selection.
+type modelAssetRevisionResolver func(context.Context, string) (string, error)
+type modelNow func() time.Time
+type modelRuntimeRunner interface{ platformprocess.CommandRunner }
 
-	assetHTTP := edges.ModelAssetHTTPClient
-	if assetHTTP == nil {
-		assetHTTP = newModelAssetHTTPClient()
-	}
-	assetMkdirAll := edges.ModelAssetMakeDirectories
-	if assetMkdirAll == nil {
-		assetMkdirAll = os.MkdirAll
-	}
-	assetStat := edges.ModelAssetInspectPath
-	if assetStat == nil {
-		assetStat = os.Stat
-	}
-	assetHome := edges.ModelAssetResolveHomeDirectory
-	if assetHome == nil {
-		assetHome = os.UserHomeDir
-	}
-	assetWriteFile := edges.ModelAssetWriteFile
-	if assetWriteFile == nil {
-		assetWriteFile = os.WriteFile
-	}
-	assetRename := edges.ModelAssetRenamePath
-	if assetRename == nil {
-		assetRename = os.Rename
-	}
-	assetRemove := edges.ModelAssetRemovePath
-	if assetRemove == nil {
-		assetRemove = os.Remove
-	}
-	assetReadFile := edges.ModelAssetReadFile
-	if assetReadFile == nil {
-		assetReadFile = os.ReadFile
-	}
-	assetReadDir := edges.ModelAssetReadDirectory
-	if assetReadDir == nil {
-		assetReadDir = os.ReadDir
-	}
-	assetCreate := edges.ModelAssetCreateFile
-	if assetCreate == nil {
-		assetCreate = func(path string) (io.WriteCloser, error) { return os.Create(path) }
-	}
-	assetOpen := edges.ModelAssetOpenFile
-	if assetOpen == nil {
-		assetOpen = func(path string) (io.ReadCloser, error) { return os.Open(path) }
-	}
-	var assetCoordination modelswire.AssetStagingCoordination
-	var coordinationErr error
-	if factory := edges.ModelAssetStagingCoordinationFactory; factory != nil {
-		assetCoordination, coordinationErr = factory()
-	} else {
-		assetCoordination, coordinationErr = platformlocking.New(platformlocking.LocalFileSystem{})
-	}
-	if coordinationErr != nil {
-		return nil, fmt.Errorf("construct Models asset staging coordination: %w", coordinationErr)
-	}
+// Child-process observations retain access to the original evidence sink.
+type modelRuntimeEvidenceSource interface {
+	modelswire.RuntimeEvidenceRecorder
+}
 
-	hostHTTP := edges.ModelHostHTTPClient
-	if hostHTTP == nil {
-		hostHTTP = &http.Client{Timeout: modelHostHTTPTimeout}
+func provideModelHostHTTP(edges serviceedges.Edges) modelswire.HostHTTPDoer {
+	if selected := edges.ModelHostHTTPClient; selected != nil {
+		return modelswire.HostHTTPDoer(selected)
 	}
-	hostClock := edges.ModelHostClock
-	if hostClock == nil {
-		hostClock = modelsClock{source: processClock}
+	return &http.Client{Timeout: modelHostHTTPTimeout}
+}
+
+func provideModelRuntimeHTTP(edges serviceedges.Edges) modelswire.RuntimeHTTPDoer {
+	if selected := edges.ModelRuntimeHTTPClient; selected != nil {
+		return modelswire.RuntimeHTTPDoer(selected)
 	}
-	protocolDialer := edges.ModelInvocationGRPCDialer
-	protocolNegotiator := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
-	if protocolNegotiator == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
-		protocolNegotiator = modelswire.PinnedGRPCNegotiator{
-			Dialer: modelHostGRPCDialerAdapter{next: edges.ModelHostGRPCDialer},
-		}
+	return &http.Client{Timeout: modelRuntimeHTTPTimeout}
+}
+
+func provideModelRuntimeInspectFile(edges serviceedges.Edges) modelswire.RuntimeInspectFile {
+	if selected := edges.ModelRuntimeInspectFile; selected != nil {
+		return modelswire.RuntimeInspectFile(selected)
 	}
-	if protocolNegotiator == nil {
-		protocolNegotiator = modelswire.NewPinnedGRPCHostProtocolNegotiator(
-			protocolDialer, platformfilesystem.Local{}.EvalSymlinks,
-		)
+	return os.Stat
+}
+
+func provideModelRuntimeTempDirectory(edges serviceedges.Edges) modelswire.RuntimeTempDirectory {
+	if selected := edges.ModelRuntimeTempDirectory; selected != nil {
+		return modelswire.RuntimeTempDirectory(selected)
 	}
-	runtimeRunner := edges.ModelRuntimeCommandRunner
-	if runtimeRunner == nil {
-		var runnerErr error
-		runtimeRunner, runnerErr = providePlatformProcessCommandRunner(edges)
-		if runnerErr != nil {
-			return nil, runnerErr
-		}
+	return os.TempDir
+}
+
+func provideModelHostClock(edges serviceedges.Edges) modelswire.HostClock {
+
+	if selected := edges.ModelHostClock; selected != nil {
+		return adaptModelHostClock(selected)
 	}
-	useGallery := runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
-	compatibilityChecker, compatibilityErr := provideModelHostCompatibilityChecker(edges, useGallery)
-	if compatibilityErr != nil {
-		return nil, compatibilityErr
+	return adaptModelHostClock(modelsClock{source: edges.Clock})
+}
+
+func provideModelNow(edges serviceedges.Edges) modelNow {
+
+	return edges.Clock.Now
+}
+
+func provideModelRuntimeRunner(edges serviceedges.Edges) (modelRuntimeRunner, error) {
+
+	if selected := edges.ModelRuntimeCommandRunner; selected != nil {
+		return selected, nil
 	}
-	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
-	if backendArtifactResolver == nil {
-		var resolverErr error
-		if useGallery {
-			var installer modelswire.GalleryBackendInstaller
-			installer, resolverErr = newLocalAIGalleryInstaller(runtimeRunner, assetHTTP)
-			if resolverErr == nil {
-				backendArtifactResolver, resolverErr = newLinuxBackendArtifactResolver(installer, assetHTTP)
-			}
-		} else {
-			backendArtifactResolver, resolverErr = modelswire.NewPublishedBackendArtifactResolver(assetHTTP)
-		}
-		if resolverErr != nil {
-			return nil, fmt.Errorf("construct Models backend artifact selector: %w", resolverErr)
-		}
+	return providePlatformProcessCommandRunner(edges)
+}
+
+func provideModelHostLauncher(edges serviceedges.Edges, evidence modelRuntimeEvidenceSource) modelswire.HostProcessLauncher {
+
+	if selected := edges.ModelHostProcessLauncher; selected != nil {
+		return adaptModelHostProcessLauncher(selected)
 	}
-	runtimeHTTP := edges.ModelRuntimeHTTPClient
-	if runtimeHTTP == nil {
-		runtimeHTTP = &http.Client{Timeout: modelRuntimeHTTPTimeout}
-	}
-	runtimeInspect := edges.ModelRuntimeInspectFile
-	if runtimeInspect == nil {
-		runtimeInspect = os.Stat
-	}
-	runtimeTempDir := edges.ModelRuntimeTempDirectory
-	if runtimeTempDir == nil {
-		runtimeTempDir = os.TempDir
-	}
-	runtimeTempFile := edges.ModelRuntimeCreateTempFile
-	if runtimeTempFile == nil {
-		runtimeTempFile = func(dir, pattern string) (interface {
-			Close() error
-			Name() string
-		}, error) {
-			return os.CreateTemp(dir, pattern)
-		}
-	}
-	runtimeEvidence, err := provideModelRuntimeEvidenceRecorder()
+	var childRecorder managedChildEnvironmentRecorder
+	childRecorder, _ = evidence.(managedChildEnvironmentRecorder)
+	return adaptModelHostProcessLauncher(modelsProcessLauncher{recorder: childRecorder})
+}
+
+func provideModelRuntimeEvidenceSource() (modelRuntimeEvidenceSource, error) {
+
+	source, err := provideModelRuntimeEvidenceRecorder()
 	if err != nil {
 		return nil, fmt.Errorf("construct Models runtime evidence recorder: %w", err)
 	}
-	launcher := edges.ModelHostProcessLauncher
-	if launcher == nil {
-		var childRecorder managedChildEnvironmentRecorder
-		if candidate, ok := runtimeEvidence.(managedChildEnvironmentRecorder); ok {
-			childRecorder = candidate
-		}
-		launcher = modelsProcessLauncher{recorder: childRecorder}
-	}
+	return source, nil
+}
 
-	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
-		assetPlatform,
-		assetHTTP,
-		assetEndpoints,
-		modelswire.AssetMakeDirectories(assetMkdirAll),
-		modelswire.AssetInspectPath(assetStat),
-		modelswire.AssetResolveHomeDirectory(assetHome),
-		modelswire.AssetWriteFile(assetWriteFile),
-		modelswire.AssetRenamePath(assetRename),
-		modelswire.AssetRemovePath(assetRemove),
-		modelswire.AssetReadFile(assetReadFile),
-		modelswire.AssetReadDirectory(assetReadDir),
-		modelswire.AssetCreateFile(assetCreate),
-		modelswire.AssetOpenFile(assetOpen),
-		adaptModelHostProcessLauncher(launcher),
-		hostHTTP,
-		adaptModelHostClock(hostClock),
-		runtimeRunner,
-		runtimeHTTP,
-		modelswire.RuntimeInspectFile(runtimeInspect),
-		modelswire.RuntimeTempDirectory(runtimeTempDir),
-		adaptModelRuntimeTempFile(runtimeTempFile),
-		zap.NewNop(),
-		processClock.Now,
-		platformrandom.CryptoSource{},
-		adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
-		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
-		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
-		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
-		assetEnvironment,
-		protocolNegotiator,
-		compatibilityChecker,
-		assetCoordination,
-		platformfilesystem.Local{}.EvalSymlinks,
-		backendArtifactResolver,
-		edges.ModelInvocationProtocolClient,
-		protocolDialer,
-		adaptModelInvocationBackend(edges.ModelInvocationBackend),
-		adaptModelASRBackend(edges.ModelASRBackend),
-		adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
-		runtimeEvidence,
-		edges.ModelResolveHuggingFaceRevision,
-	)
+func provideModelOrderedRuntimeEvidence(source modelRuntimeEvidenceSource) modelswire.RuntimeEvidenceRecorder {
+	return modelswire.NewOrderedRuntimeEvidenceRecorder(source)
+}
+
+func provideModelHostSymlinks() modelswire.HostResolveSymlinks {
+	return platformfilesystem.Local{}.EvalSymlinks
+}
+
+func provideModelHostProtocol(edges serviceedges.Edges, symlinks modelswire.HostResolveSymlinks) modelswire.HostProtocolNegotiator {
+
+	protocol := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
+	if protocol == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
+		protocol = modelswire.PinnedGRPCNegotiator{Dialer: modelHostGRPCDialerAdapter{next: edges.ModelHostGRPCDialer}}
+	}
+	if protocol == nil {
+		protocol = modelswire.NewPinnedGRPCHostProtocolNegotiator(edges.ModelInvocationGRPCDialer, symlinks)
+	}
+	return protocol
+}
+
+func provideModelHostCompatibility(edges serviceedges.Edges) (modelswire.HostCompatibilityChecker, error) {
+	return provideModelHostCompatibilityChecker(edges, runtime.GOOS == "linux" && runtime.GOARCH == "amd64")
+}
+
+func provideModelBackendArtifactResolver(edges serviceedges.Edges, runner modelRuntimeRunner, client modelswire.AssetHTTPDoer) (modelswire.BackendArtifactResolver, error) {
+
+	if selected := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact); selected != nil {
+		return selected, nil
+	}
+	var resolver modelswire.BackendArtifactResolver
+	var err error
+	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		var installer modelswire.GalleryBackendInstaller
+		installer, err = newLocalAIGalleryInstaller(runner, client)
+		if err == nil {
+			resolver, err = newLinuxBackendArtifactResolver(installer, client)
+		}
+	} else {
+		resolver, err = modelswire.NewPublishedBackendArtifactResolver(client)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("construct Models backend artifact selector: %w", err)
+	}
+	return resolver, nil
+}
+
+func provideModelAssetRevision(edges serviceedges.Edges) modelAssetRevisionResolver {
+
+	if selected := edges.ModelResolveHuggingFaceRevision; selected != nil {
+		return selected
+	}
+	return modelswire.NewUnresolvedAssetRevisionResolver()
+}
+
+func provideModelRuntimeScopes() (modelswire.RuntimeScopes, error) {
+	return modelswire.NewRuntimeScopes(platformrandom.CryptoSource{})
+}
+
+func provideModelAssets(scopes modelswire.RuntimeScopes, platform models.AssetHostPlatform, client modelswire.AssetHTTPDoer,
+	endpoints models.RuntimeAssetEndpoints, mkdir modelswire.AssetMakeDirectories, stat modelswire.AssetInspectPath,
+	home modelswire.AssetResolveHomeDirectory, write modelswire.AssetWriteFile, rename modelswire.AssetRenamePath,
+	remove modelswire.AssetRemovePath, read modelswire.AssetReadFile, readDir modelswire.AssetReadDirectory,
+	create modelswire.AssetCreateFile, open modelswire.AssetOpenFile, env modelswire.AssetResolveEnvironment,
+	revision modelAssetRevisionResolver, coordination modelswire.AssetStagingCoordination) (modelswire.Assets, error) {
+
+	return modelswire.NewAssets(scopes, platform, client, endpoints, mkdir, stat, home, write, rename, remove,
+		read, readDir, create, open, env, revision, coordination)
+}
+
+func provideModelSlotFacts(state *modelswire.SlotState, scopes modelswire.RuntimeScopes, assets modelswire.Assets) modelswire.SlotFactsProvider {
+	return modelswire.NewSlotFacts(scopes, assets, state)
+}
+
+func provideModelHostLogger() modelswire.HostDiagnosticLogger {
+	return modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop()))
+}
+
+func provideModelHostMetrics(edges serviceedges.Edges) modelswire.HostMetricsRecorder {
+	return modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder))
+}
+
+func provideModelSlotCoordinator(state *modelswire.SlotState, scopes modelswire.RuntimeScopes, clock modelswire.HostClock, logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder) modelswire.SlotCapacityCoordinator {
+	return modelswire.NewSlotCoordinator(state, scopes, clock, logger, metrics, 0)
+}
+
+func provideModelRuntimeHost(scopes modelswire.RuntimeScopes, assets modelswire.Assets, leases modelswire.HostLeases,
+	state *modelswire.SlotState, launcher modelswire.HostProcessLauncher, client modelswire.HostHTTPDoer,
+	clock modelswire.HostClock, logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder,
+	platform models.AssetHostPlatform, protocol modelswire.HostProtocolNegotiator, compatibility modelswire.HostCompatibilityChecker,
+	symlinks modelswire.HostResolveSymlinks, evidence modelswire.RuntimeEvidenceRecorder) (modelswire.RuntimeHost, error) {
+
+	return modelswire.NewRuntimeHost(scopes, assets, leases, state, launcher, client, clock, logger, metrics,
+		platform, protocol, compatibility, symlinks, evidence, 0, 0)
+}
+
+func provideModelInvocationRuntime(edges serviceedges.Edges, runner modelRuntimeRunner, temp modelswire.RuntimeTempDirectory,
+	create modelswire.RuntimeCreateTempFile, write modelswire.AssetWriteFile, inspect modelswire.RuntimeInspectFile,
+	read modelswire.AssetReadFile, remove modelswire.AssetRemovePath) (modelswire.InvocationRuntime, error) {
+
+	return modelswire.NewInvocationRuntime(adaptModelInvocationBackend(edges.ModelInvocationBackend),
+		adaptModelASRBackend(edges.ModelASRBackend), adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
+		edges.ModelInvocationProtocolClient, edges.ModelInvocationGRPCDialer, runner, temp, create, write, inspect, read, remove)
+}
+
+func provideModelInference(scopes modelswire.RuntimeScopes, assets modelswire.Assets, catalog modelswire.Catalog,
+	host modelswire.RuntimeHost, runtime modelswire.InvocationRuntime, now modelNow) (modelswire.Inference, error) {
+	return modelswire.NewInference(scopes, assets, catalog, host, runtime, modelswire.NewInertInvocationArtifactFileSystem(), now)
+}
+
+func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
+	catalog modelswire.Catalog, host modelswire.RuntimeHost, inference modelswire.Inference,
+	launcher modelswire.HostProcessLauncher, hostHTTP modelswire.HostHTTPDoer, clock modelswire.HostClock,
+	runner modelRuntimeRunner, runtimeHTTP modelswire.RuntimeHTTPDoer, inspect modelswire.RuntimeInspectFile,
+	temp modelswire.RuntimeTempDirectory, create modelswire.RuntimeCreateTempFile, now modelNow,
+	logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder, evidence modelswire.RuntimeEvidenceRecorder,
+	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform) (models.Service, error) {
+
+	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, runner,
+		runtimeHTTP, inspect, temp, create, zap.NewNop(), now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
+		logger, metrics, modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), evidence,
+		edges.ModelResolveHuggingFaceRevision, resolver, platform)
 }
 
 func provideModelHostCompatibilityChecker(

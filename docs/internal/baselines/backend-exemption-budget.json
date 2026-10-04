@@ -573,12 +573,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/wire/models_runtime.go#provideModelsService",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/wire/recordings_artifacts_export_composition_test.go#TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -1324,12 +1318,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/models/transports/mcp/invoke_with_lease_test.go#TestBind_InvokeWithLeaseSuccessReturnsInvokeFactsFromInjectedRoot",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/models/wire/wire.go#validateConstructionInputs",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
@@ -2091,12 +2079,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/wire/models_runtime.go#provideModelsService",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/wire/recordings_artifacts_export_composition_test.go#TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2614,12 +2596,6 @@
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
       "target": "pkg/transports/http/servertests/server_durable_session_execution_test.go#TestLifecycleControls_PreserveRunningSessionReadParity",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/wire/models_runtime.go#provideModelsService",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
