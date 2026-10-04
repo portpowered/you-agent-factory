@@ -433,7 +433,7 @@ func TestRuntimeRootActiveRecordingOwnsOpaqueScopeAndFinalizesOnce(t *testing.T)
 	owner.status.AcceptedEvents = 1
 	opened.Ledger.RecordRunRequest()
 	scopeStatus := queryActiveScope(t, root, opened.Scope)
-	assertActiveRuntimeQueryDetached(t, scopeStatus, owner.status)
+	assertActiveRuntimeQueryDetached(t, scopeStatus, owner)
 	scopeStatus = queryActiveScope(t, root, opened.Scope)
 	owner.status.AcceptedEvents = 2
 	appendActiveScopeEvent(t, root, opened.Scope, scopeStatus)
@@ -450,8 +450,12 @@ func TestRuntimeRootActiveRecordingOwnsOpaqueScopeAndFinalizesOnce(t *testing.T)
 	assertActiveScopeClosed(t, root, opened.Scope)
 }
 
-func assertActiveRuntimeQueryDetached(t *testing.T, result recordings.QueryRecordingScopeResult, status recordings.RecordingStatusFacts) {
+func assertActiveRuntimeQueryDetached(t *testing.T, result recordings.QueryRecordingScopeResult, owner *activeRuntimeLifecycle) {
 	t.Helper()
+	status := owner.status
+	if owner.statusRequest.RecordingID != status.RecordingID {
+		t.Fatalf("status request = %#v, want selected recording %q", owner.statusRequest, status.RecordingID)
+	}
 	if result.Status.EventScope != status.Scope || result.Status.AcceptedEvents != status.AcceptedEvents ||
 		*result.Status.LastEvent != *status.LastEvent {
 		t.Fatalf("scope status = %#v, want selected owner's supplied status %#v", result, status)
@@ -468,10 +472,11 @@ func assertActiveRuntimeQueryDetached(t *testing.T, result recordings.QueryRecor
 // and public functional witnesses own terminal state and persistence policy.
 type activeRuntimeLifecycle struct {
 	recordinglifecycle.Service
-	status   recordings.RecordingStatusFacts
-	started  recordings.StartRecordingRequest
-	events   []recordings.RecordRecordingEventRequest
-	finishes []recordings.FinishRecordingRequest
+	status        recordings.RecordingStatusFacts
+	started       recordings.StartRecordingRequest
+	events        []recordings.RecordRecordingEventRequest
+	finishes      []recordings.FinishRecordingRequest
+	statusRequest recordings.RecordingStatusRequest
 }
 
 func (owner *activeRuntimeLifecycle) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
@@ -484,7 +489,8 @@ func (owner *activeRuntimeLifecycle) RecordRecordingEvent(request recordings.Rec
 	return recordings.RecordRecordingEventResult{Status: owner.status}, nil
 }
 
-func (owner *activeRuntimeLifecycle) QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+func (owner *activeRuntimeLifecycle) QueryRecordingStatus(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+	owner.statusRequest = request
 	return recordings.RecordingStatusResult{Status: owner.status}, nil
 }
 
