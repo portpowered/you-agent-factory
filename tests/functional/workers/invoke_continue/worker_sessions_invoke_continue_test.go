@@ -14,6 +14,9 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -359,17 +362,33 @@ func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *in
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	scenario := fixture.scenario(t, "unsupported-provider")
+	// Capability facts are immutable at root construction. This one incapable
+	// route needs a separate process; ordinary peers retain native continuation.
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: scenario.providerRunner,
+		ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{
+			Provider:     providers.IDCodex,
+			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+		}},
+	})
+	t.Cleanup(func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), invokeContinuePackageFixtureTimeout)
+		defer cancel()
+		if err := process.Close(closeCtx); err != nil {
+			t.Errorf("close incapable process: %v", err)
+		}
+	})
 	executionPath := filepath.Join(fixture.rootDir, "unsupported-execution.json")
 	document := invokeContinueExecutionDocument(invokeContinueExecutionSpec{
 		requestID: "unsupported-invoke-request", workerSessionID: "unsupported-source", dispatchID: "unsupported-dispatch",
-		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "initial provider output",
+		factorySessionID: "~default", workingDirectory: scenario.workingDirectory, userMessage: "initial provider output",
 	})
 	delete(document["execution"].(map[string]any), "executorProvider")
 	writeInvokeContinueJSON(t, executionPath, document)
 	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
 	invoke.Input.Env = scenario.environment()
 	invoke.Input.WorkingDirectory = scenario.workingDirectory
-	if err := fixture.process.Execute(invoke.Input); err != nil {
+	if err := process.Execute(invoke.Input); err != nil {
 		t.Fatalf("unsupported continuation source invoke: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
 	}
 	continuation := support.FakeInputs(ctx, []string{
@@ -378,7 +397,7 @@ func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *in
 	})
 	continuation.Input.Env = scenario.environment()
 	continuation.Input.WorkingDirectory = scenario.workingDirectory
-	if err := fixture.process.Execute(continuation.Input); err == nil {
+	if err := process.Execute(continuation.Input); err == nil {
 		t.Fatal("unsupported provider continuation succeeded, want one terminal failure")
 	}
 	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_FAILED")

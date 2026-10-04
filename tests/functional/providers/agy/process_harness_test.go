@@ -48,22 +48,7 @@ func TestAgyRequestOverridesRemainScopedThroughPublicRun(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || strings.TrimSpace(inputs.Stdout()) != "override answer COMPLETE" || inputs.Stderr() != "" {
-				t.Fatalf("invocation = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
-			}
-			if route.callCount()-before != 1 {
-				t.Fatalf("provider calls = %d, want 1", route.callCount()-before)
-			}
-			request := route.lastRequest()
-			if request.WorkDir != route.workDir || request.ExecutionScopeID == "" || scopes[request.ExecutionScopeID] {
-				t.Fatalf("provider workdir/scope = %q/%q, want this workspace and a fresh invocation scope", request.WorkDir, request.ExecutionScopeID)
-			}
-			scopes[request.ExecutionScopeID] = true
-			if !containsArgPair(request.Args, "--model", test.model) ||
-				!containsArgPair(request.Args, "--print-timeout", "2m") ||
-				containsArg(request.Args, "--dangerously-skip-permissions") {
-				t.Fatalf("provider argv = %#v, want model %s and authored timeout/permission policy", request.Args, test.model)
-			}
+			assertAgyScopedOverride(t, inputs, err, route, before, scopes, test.model)
 		})
 	}
 }
@@ -282,4 +267,24 @@ func containsArgPair(args []string, flag, value string) bool {
 		}
 	}
 	return false
+}
+
+func assertAgyScopedOverride(t *testing.T, inputs *support.CapturedInputs, err error, route *agySharedCommandRoute, before int, scopes map[string]bool, model string) {
+	t.Helper()
+	if err != nil || strings.TrimSpace(inputs.Stdout()) != "override answer COMPLETE" || inputs.Stderr() != "" {
+		t.Fatalf("invocation = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if route.callCount()-before != 1 {
+		t.Fatalf("provider calls = %d, want 1", route.callCount()-before)
+	}
+	request := route.lastRequest()
+	if request.WorkDir != route.workDir || request.ExecutionScopeID == "" || scopes[request.ExecutionScopeID] {
+		t.Fatalf("provider workdir/scope = %q/%q, want this workspace and a fresh invocation scope", request.WorkDir, request.ExecutionScopeID)
+	}
+	scopes[request.ExecutionScopeID] = true
+	if !containsArgPair(request.Args, "--model", model) ||
+		!containsArgPair(request.Args, "--print-timeout", "2m") ||
+		containsArg(request.Args, "--dangerously-skip-permissions") {
+		t.Fatalf("provider argv = %#v, want model %s and authored timeout/permission policy", request.Args, model)
+	}
 }

@@ -124,41 +124,8 @@ func testDeliveredACPWorkerCancelPeer(t *testing.T) {
 	readers := make(map[string]*bufio.Reader)
 	pids := make(map[string]int)
 	for _, id := range []string{"cancelled", "survivor"} {
-		request := map[string]any{
-			"requestId": id, "workerSessionId": id,
-			"execution": map[string]any{
-				"factorySessionId": "~default", "workstationName": "__provider_invocation__", "workerType": "direct-worker",
-				"workingDirectory": directory, "workstationType": "MODEL_WORKSTATION", "runnerId": id,
-				"executorProvider": "ACP", "modelProvider": id, "model": "fixture", "userMessage": "complete one turn",
-				"dispatch": map[string]any{"dispatchId": id, "workstationName": "__provider_invocation__", "workerType": "direct-worker"},
-			},
-		}
-		payload, err := json.Marshal(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		stdout, stderr, runErr := invokeCLI(ctx, binary, directory, env,
-			"--remote", "--server", baseURL, "--json", "worker-sessions", "invoke", "--async", "--execution", string(payload), "--retry-max-attempts", "1")
-		var admission factoryapi.WorkerSessionStartResponse
-		if err := json.Unmarshal([]byte(stdout), &admission); err != nil || runErr != nil || !admission.Accepted || admission.WorkerSessionId != id || admission.RequestId != id {
-			t.Fatalf("async admission: result=%#v error=%v stdout=%q stderr=%q", admission, runErr, stdout, stderr)
-		}
-		connection, err := listener.Accept()
-		if err != nil {
-			t.Fatal(err)
-		}
+		connection, reader, pid := admitDeliveredControlledPeer(t, ctx, binary, directory, env, baseURL, id, listener, deadline)
 		defer connection.Close()
-		if err := connection.SetDeadline(deadline); err != nil {
-			t.Fatal(err)
-		}
-		reader := bufio.NewReader(connection)
-		line, err := reader.ReadString('\n')
-		var observedID string
-		var pid int
-		_, parseErr := fmt.Sscanf(line, "%s started %d\n", &observedID, &pid)
-		if err != nil || parseErr != nil || observedID != id || pid <= 0 {
-			t.Fatalf("real prompt readiness = %q, error=%v", line, err)
-		}
 		connections[id] = connection
 		readers[id] = reader
 		pids[id] = pid
@@ -166,16 +133,7 @@ func testDeliveredACPWorkerCancelPeer(t *testing.T) {
 	if pids["cancelled"] == pids["survivor"] {
 		t.Fatal("concurrent prompts must own distinct real processes")
 	}
-	stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
-		"--remote", "--server", baseURL, "--json", "worker-sessions", "cancel", "cancelled")
-	var control factoryapi.WorkerSessionControlResponse
-	if decodeErr := json.Unmarshal([]byte(stdout), &control); err != nil || decodeErr != nil || control.WorkerSessionId != "cancelled" || string(control.Outcome) != "APPLIED" || string(control.State) != "CANCELED" {
-		t.Fatalf("selected cancel: result=%#v error=%v stdout=%q stderr=%q", control, err, stdout, stderr)
-	}
-	var survivor factoryapi.WorkerSessionObservation
-	if err := json.Unmarshal(deliveredACPRead(t, ctx, client, baseURL+"/worker-sessions/survivor"), &survivor); err != nil || survivor.EndedAt != nil || string(survivor.State) != "RUNNING" {
-		t.Fatalf("peer after selected cancel = %#v error=%v", survivor, err)
-	}
+	assertDeliveredSelectedCancel(t, ctx, binary, directory, env, baseURL, client)
 	if _, err := fmt.Fprintf(connections["survivor"], "observe-exit %d\n", pids["cancelled"]); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +144,7 @@ func testDeliveredACPWorkerCancelPeer(t *testing.T) {
 	if _, err := io.WriteString(connections["survivor"], "release\n"); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, err = invokeCLI(ctx, binary, directory, env,
+	stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
 		"--remote", "--server", baseURL, "--json", "worker-sessions", "stream", "--worker-session-id", "survivor", "--follow")
 	if err != nil || !strings.Contains(stdout, "delivered EOF primary result") {
 		t.Fatalf("surviving stream: error=%v stdout=%q stderr=%q", err, stdout, stderr)
@@ -350,28 +308,7 @@ func testDeliveredACPDaemonRecoversAfterDisconnect(t *testing.T) {
 	client := &http.Client{Timeout: 20 * time.Second}
 	defer client.CloseIdleConnections()
 	first := invokeDeliveredACPWorkflow(t, ctx, client, baseURL, "disconnect")
-	if first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
-		t.Fatalf("disconnected session = %#v, want FAILED", first)
-	}
-	if first.Result != nil && first.Result.PrimaryResult != nil && len(*first.Result.PrimaryResult) != 0 {
-		t.Fatalf("disconnected session returned primary content: %#v", first.Result)
-	}
-	assertDeliveredLaunchJournal(t, journal, "disconnect\n")
-	var dispatches factoryapi.ListFactorySessionDispatchesResponse
-	data := deliveredACPRead(t, ctx, client, baseURL+"/factory-sessions/"+first.SessionId+"/dispatches")
-	if err := json.Unmarshal(data, &dispatches); err != nil {
-		t.Fatal(err)
-	}
-	if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].FailureDetail == nil {
-		t.Fatalf("failed dispatches = %#v, want one typed failure", dispatches)
-	}
-	// Preserve the documented detached-retry outcome: reconciliation currently
-	// replaces the initial disconnect with unsupported continuation. The direct
-	// delivered witness above separately pins the exact disconnect diagnostic.
-	detail := dispatches.Dispatches[0].FailureDetail
-	if detail.Reason != factoryapi.WorkFailureTypePermanentBadRequest || detail.Message != "provider session continuation is unsupported" {
-		t.Fatalf("disconnect reconciliation = %#v", detail)
-	}
+	assertDeliveredDisconnectedSession(t, ctx, client, baseURL, first, journal)
 	second := invokeDeliveredACPWorkflow(t, ctx, client, baseURL, "recovery")
 	if second.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded || second.SessionId == first.SessionId {
 		t.Fatalf("recovery session = %#v, want distinct SUCCEEDED session", second)
@@ -573,5 +510,85 @@ func assertDeliveredUnsupportedVersion(t *testing.T, stdout, stderr string, err 
 	}
 	if strings.Contains(stdout+stderr, "disconnected before responding") || strings.Contains(stdout, "status: SUCCESS") || strings.Contains(stdout, "delivered EOF primary result") {
 		t.Fatalf("unsupported version became disconnect or success: stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
+func admitDeliveredControlledPeer(t *testing.T, ctx context.Context, binary, directory string, env []string, baseURL, id string, listener net.Listener, deadline time.Time) (net.Conn, *bufio.Reader, int) {
+	t.Helper()
+	request := map[string]any{
+		"requestId": id, "workerSessionId": id,
+		"execution": map[string]any{
+			"factorySessionId": "~default", "workstationName": "__provider_invocation__", "workerType": "direct-worker",
+			"workingDirectory": directory, "workstationType": "MODEL_WORKSTATION", "runnerId": id,
+			"executorProvider": "ACP", "modelProvider": id, "model": "fixture", "userMessage": "complete one turn",
+			"dispatch": map[string]any{"dispatchId": id, "workstationName": "__provider_invocation__", "workerType": "direct-worker"},
+		},
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, runErr := invokeCLI(ctx, binary, directory, env,
+		"--remote", "--server", baseURL, "--json", "worker-sessions", "invoke", "--async", "--execution", string(payload), "--retry-max-attempts", "1")
+	var admission factoryapi.WorkerSessionStartResponse
+	if err := json.Unmarshal([]byte(stdout), &admission); err != nil || runErr != nil || !admission.Accepted || admission.WorkerSessionId != id || admission.RequestId != id {
+		t.Fatalf("async admission: result=%#v error=%v stdout=%q stderr=%q", admission, runErr, stdout, stderr)
+	}
+	connection, err := listener.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+	if err := connection.SetDeadline(deadline); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(connection)
+	line, err := reader.ReadString('\n')
+	var observedID string
+	var pid int
+	_, parseErr := fmt.Sscanf(line, "%s started %d\n", &observedID, &pid)
+	if err != nil || parseErr != nil || observedID != id || pid <= 0 {
+		t.Fatalf("real prompt readiness = %q, error=%v", line, err)
+	}
+	return connection, reader, pid
+}
+
+func assertDeliveredSelectedCancel(t *testing.T, ctx context.Context, binary, directory string, env []string, baseURL string, client *http.Client) {
+	t.Helper()
+	stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
+		"--remote", "--server", baseURL, "--json", "worker-sessions", "cancel", "cancelled")
+	var control factoryapi.WorkerSessionControlResponse
+	if decodeErr := json.Unmarshal([]byte(stdout), &control); err != nil || decodeErr != nil || control.WorkerSessionId != "cancelled" || string(control.Outcome) != "APPLIED" || string(control.State) != "CANCELED" {
+		t.Fatalf("selected cancel: result=%#v error=%v stdout=%q stderr=%q", control, err, stdout, stderr)
+	}
+	var survivor factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal(deliveredACPRead(t, ctx, client, baseURL+"/worker-sessions/survivor"), &survivor); err != nil || survivor.EndedAt != nil || string(survivor.State) != "RUNNING" {
+		t.Fatalf("peer after selected cancel = %#v error=%v", survivor, err)
+	}
+}
+
+func assertDeliveredDisconnectedSession(t *testing.T, ctx context.Context, client *http.Client, baseURL string, first factoryapi.FactorySessionSyncExecutionResponse, journal string) {
+	t.Helper()
+	if first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("disconnected session = %#v, want FAILED", first)
+	}
+	if first.Result != nil && first.Result.PrimaryResult != nil && len(*first.Result.PrimaryResult) != 0 {
+		t.Fatalf("disconnected session returned primary content: %#v", first.Result)
+	}
+	assertDeliveredLaunchJournal(t, journal, "disconnect\n")
+	var dispatches factoryapi.ListFactorySessionDispatchesResponse
+	data := deliveredACPRead(t, ctx, client, baseURL+"/factory-sessions/"+first.SessionId+"/dispatches")
+	if err := json.Unmarshal(data, &dispatches); err != nil {
+		t.Fatal(err)
+	}
+	if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].FailureDetail == nil {
+		t.Fatalf("failed dispatches = %#v, want one typed failure", dispatches)
+	}
+	// Preserve the documented detached-retry outcome: reconciliation currently
+	// replaces the initial disconnect with unsupported continuation. The direct
+	// delivered witness above separately pins the exact disconnect diagnostic.
+	detail := dispatches.Dispatches[0].FailureDetail
+	if detail.Reason != factoryapi.WorkFailureTypePermanentBadRequest || detail.Message != "provider session continuation is unsupported" {
+		t.Fatalf("disconnect reconciliation = %#v", detail)
 	}
 }

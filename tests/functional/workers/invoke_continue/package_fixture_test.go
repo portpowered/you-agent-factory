@@ -18,12 +18,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -162,24 +159,7 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		return nil, err
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
-	unsupportedProvider, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
-		nil,
-		providerswire.NewCodexEffect((invokeContinueProviderRunner{route}).commandEffect(), platformclock.Real{}),
-		providerswire.NewClaudeEffect((invokeContinueProviderRunner{route}).commandEffect(), platformclock.Real{}),
-		providerswire.Configuration{CatalogOverrides: []providerswire.CatalogCapabilityOverride{providerswire.CatalogCapabilityOverride{
-			Provider:     providers.IDCodex,
-			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
-		}}})
-	if err != nil {
-		return nil, fmt.Errorf("build unsupported continuation provider: %w", err)
-	}
-	for index := range setup.scenarios {
-		if setup.scenarios[index].name == "unsupported-provider" {
-			setup.scenarios[index].unsupportedProvider = unsupportedProvider
-		}
-	}
-	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route, unsupportedProvider)
+	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route)
 	if err != nil {
 		return nil, err
 	}

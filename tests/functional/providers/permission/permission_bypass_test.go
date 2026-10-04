@@ -81,20 +81,7 @@ func TestDirectProviderCapabilityDenialDoesNotPoisonFreshAttempt(t *testing.T) {
 			t.Fatalf("direct outcome = %q, decode=%v; want a fresh session", inputs.Stdout(), decodeErr)
 		}
 		sessions[outcome.SessionID] = true
-		if denied {
-			if err != nil || outcome.Status != "FAILED" || runner.CallCount() != before || inputs.Stderr() != "" {
-				t.Fatalf("denied outcome=%q error=%v calls=%d stderr=%q", outcome.Status, err, runner.CallCount()-before, inputs.Stderr())
-			}
-			continue
-		}
-		if err != nil || outcome.Status != "SUCCEEDED" || !strings.Contains(inputs.Stdout(), "fresh direct attempt COMPLETE") || inputs.Stderr() != "" {
-			t.Fatalf("fresh attempt = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
-		}
-		requests := runner.Requests()
-		if len(requests) != before+1 || requests[before].Command != "codex" ||
-			slices.Contains(requests[before].Args, "--dangerously-bypass-approvals-and-sandbox") {
-			t.Fatalf("fresh command requests = %#v, want one ordinary Codex attempt", requests)
-		}
+		assertDirectCapabilityAttempt(t, denied, inputs, err, outcome.Status, runner, before)
 	}
 }
 
@@ -186,4 +173,22 @@ func permissionBypassWorkerConfig(provider string) string {
 		"stopToken: COMPLETE\n" +
 		"---\n" +
 		"Process the input task.\n"
+}
+
+func assertDirectCapabilityAttempt(t *testing.T, denied bool, inputs *support.CapturedInputs, err error, status string, runner *support.ShapedProviderCommandRunner, before int) {
+	t.Helper()
+	if denied {
+		if err != nil || status != "FAILED" || runner.CallCount() != before || inputs.Stderr() != "" {
+			t.Fatalf("denied outcome=%q error=%v calls=%d stderr=%q", status, err, runner.CallCount()-before, inputs.Stderr())
+		}
+		return
+	}
+	if err != nil || status != "SUCCEEDED" || !strings.Contains(inputs.Stdout(), "fresh direct attempt COMPLETE") || inputs.Stderr() != "" {
+		t.Fatalf("fresh attempt = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	requests := runner.Requests()
+	if len(requests) != before+1 || requests[before].Command != "codex" ||
+		slices.Contains(requests[before].Args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("fresh command requests = %#v, want one ordinary Codex attempt", requests)
+	}
 }

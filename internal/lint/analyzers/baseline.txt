@@ -123,7 +123,6 @@ service-construction-test|pkg/services/factory_visualization/wire|pkg/services/r
 service-construction-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/worker_sessions/wire_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire.NewService
-service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/providers/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions.NewProviderSessionObservationPublisher
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire.NewService
 service-construction-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire.NewService
@@ -134,7 +133,6 @@ service-construction-test|tests/functional/runtime_api|pkg/services/work.NewRequ
 service-construction-test|tests/functional/runtime_api|pkg/services/work/wire.NewRuntimeService
 service-construction-test|tests/functional/sessions_test|pkg/services/factory_sessions/wire.NewLiveChangeCoordinator
 service-construction-test|tests/functional/workers/inference_test|pkg/services/recordings/wire.NewWorkerRecordingFileWriter
-service-construction-test|tests/functional/workers/invoke_continue|pkg/services/providers/wire.NewService
 service-construction|pkg/services/factory_runtime/internal|pkg/services/worker_sessions.NewProviderSessionObservationPublisher
 service-construction|pkg/services/factory_sessions/internal/execution|pkg/services/factory_runtime.NewWorkflowSourceReader
 service-construction|pkg/services/factory_sessions/internal/sessionservice|pkg/services/work.NewInvocationPolicyService
