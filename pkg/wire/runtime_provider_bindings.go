@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -32,11 +34,14 @@ import (
 func newConfiguredProvidersService(
 	options []providerswire.Option,
 	agyRunner platformprocess.CommandRunner,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	logger logging.Logger,
 ) (providers.Service, error) {
 	options = append(options, providerswire.WithAgyCommandRunner(
 		workerswire.NewProviderCommandRunner(agyRunner),
 	))
-	return providerswire.NewService(providerswire.IdentityCatalogProbe, options...)
+	return providerswire.NewService(providerswire.IdentityCatalogProbe, clock, scheduler, logger, options...)
 }
 
 type modelsProcessLauncher struct {

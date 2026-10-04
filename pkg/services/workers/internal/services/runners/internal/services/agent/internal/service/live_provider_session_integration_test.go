@@ -38,9 +38,10 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *testing.T) {
 	command := newLiveSessionCommandRunner()
 	providerService, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		providerswire.WithWorkersCommandRunner(command),
-		providerswire.WithLogger(logging.NoopLogger{}),
-	)
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{},
+		providerswire.WithWorkersCommandRunner(command))
 	if err != nil {
 		t.Fatalf("providers wire NewService() error = %v", err)
 	}

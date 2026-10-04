@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -142,10 +144,14 @@ func TestNewServiceRejectsManifestIntegrationPermissionBypassMismatch(t *testing
 		},
 	}
 	integration := ProgressingExternalIntegration("mismatch-provider", "must not execute")
-	_, err := NewService(IdentityCatalogProbe, WithRegistrations(Registration{
-		Manifest:    manifest,
-		Integration: integration,
-	}))
+	_, err := NewService(IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{},
+		WithRegistrations(Registration{
+			Manifest:    manifest,
+			Integration: integration,
+		}))
 	if err == nil || !strings.Contains(err.Error(), `integration maximum capability "permission_bypass" contradicts`) {
 		t.Fatalf("NewService() error = %v, want manifest/integration permission-bypass mismatch", err)
 	}

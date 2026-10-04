@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -271,7 +273,11 @@ func startInvokeContinuePackageProcess(
 	unsupportedProvider providers.Service,
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
-	fallbackProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe, providerswire.WithCommandRunner(route))
+	fallbackProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{},
+		providerswire.WithCommandRunner(route))
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("build fixture provider fallback: %w", err)
 	}

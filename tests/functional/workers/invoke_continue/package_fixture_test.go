@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -161,12 +163,14 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
 	unsupportedProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{},
 		providerswire.WithCommandRunner(route),
 		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
-		}),
-	)
+		}))
 	if err != nil {
 		return nil, fmt.Errorf("build unsupported continuation provider: %w", err)
 	}

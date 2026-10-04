@@ -167,7 +167,6 @@ func provideConfiguredProvidersService(
 	}
 	options := []providerswire.Option{
 		providerswire.WithAgyPTYEffect(agyPTYEffect),
-		providerswire.WithAgyCommandClock(effectiveProviderCommandClock(edges)),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(provideProvidersExecutableLocator(edges)),
 		providerswire.WithStdioPipeFactory(provideProvidersStdioPipeFactory(edges)),
@@ -184,7 +183,7 @@ func provideConfiguredProvidersService(
 		options = append(options, providerswire.WithWorkersCommandRunner(
 			workerswire.NewProviderCommandRunner(loggedRunner),
 		))
-		return newConfiguredProvidersService(options, loggedRunner)
+		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{})
 	}
 	if edges.ProviderCommandRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
@@ -196,7 +195,7 @@ func provideConfiguredProvidersService(
 		options = append(options, providerswire.WithWorkersCommandRunner(
 			workerswire.NewProviderCommandRunner(loggedRunner),
 		))
-		return newConfiguredProvidersService(options, loggedRunner)
+		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{})
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
@@ -211,7 +210,7 @@ func provideConfiguredProvidersService(
 	options = append(options, providerswire.WithWorkersCommandRunner(
 		workerswire.NewProviderCommandRunner(loggedRunner),
 	))
-	return newConfiguredProvidersService(options, loggedRunner)
+	return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{})
 }
 
 func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess.ExecutableLocator {
@@ -247,6 +246,14 @@ func providerCommandRunnerWithLogging(
 func effectiveProviderCommandClock(edges serviceedges.Edges) platformclock.Source {
 	if edges.Clock != nil {
 		return edges.Clock
+	}
+	return platformclock.Real{}
+}
+
+// A Now-only override controls duration views without acquiring timer capability.
+func effectiveProviderScheduler(edges serviceedges.Edges) platformclock.TimerSource {
+	if scheduler, ok := edges.Clock.(platformclock.TimerSource); ok {
+		return scheduler
 	}
 	return platformclock.Real{}
 }

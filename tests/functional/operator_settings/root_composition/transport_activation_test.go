@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
@@ -120,7 +121,10 @@ func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *t
 
 func newRoutedOperatorSettingsRoot(t *testing.T, fixture *sharedOperatorSettingsFixture) operatorsettings.Service {
 	t.Helper()
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -39,7 +40,10 @@ func newWireCompositionRoot(t *testing.T) (operatorsettings.Service, string) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -213,7 +217,10 @@ func TestWireCompositionUpdateACPAgentProfileRejectsBlankCandidate(t *testing.T)
 func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -235,7 +242,10 @@ func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -259,7 +269,10 @@ func TestWireCompositionRegisterDefaultsResolutionFromHomeRestoresAdapterOwnersh
 func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -292,7 +305,10 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -322,7 +338,10 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -346,7 +365,10 @@ func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing
 func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

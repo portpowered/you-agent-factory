@@ -622,7 +622,10 @@ func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 			Readiness:     descriptor.Readiness,
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
-	}))
+	}),
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -677,7 +680,10 @@ func TestRootConstructionIsInert(t *testing.T) {
 	) (catalog.ProbeFacts, error) {
 		probeCalls++
 		return catalog.ProbeFacts{}, nil
-	}))
+	}),
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -894,9 +900,11 @@ func (session *mockPTYSession) Close() error { return nil }
 func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
 	service, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{},
 		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
-		providerswire.WithAgyPTYEffect(providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{})),
-	)
+		providerswire.WithAgyPTYEffect(providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{})))
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -906,7 +914,10 @@ func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) pr
 func mustRootService(t *testing.T) *providerservice.Service {
 	t.Helper()
 
-	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}

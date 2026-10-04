@@ -103,14 +103,12 @@ type wireOptions struct {
 	catalogOverrides   []catalog.CapabilityOverride
 	commandRunner      providerservice.CommandRunner
 	agyCommandRunner   providerservice.CommandRunner
-	agyCommandClock    platformclock.Source
 	agyPTYEffect       AgyEffect
 	acpIntegrations    []providers.ACPIntegration
 	commandFactory     platformprocess.CommandFactory
 	executableLocator  platformprocess.ExecutableLocator
 	stdioPipes         platformprocess.StdioPipeFactory
 	registrations      ProviderRegistrations
-	logger             logging.Logger
 }
 
 type registrationsOption struct {
@@ -259,18 +257,6 @@ func WithAgyCommandRunner(runner any) Option {
 	return agyCommandRunnerOption{runner: runner}
 }
 
-type agyCommandClockOption struct {
-	clock platformclock.Source
-}
-
-func (o agyCommandClockOption) apply(opts *wireOptions) { opts.agyCommandClock = o.clock }
-
-// WithAgyCommandClock injects the timing source used by AGY command
-// diagnostics and duration facts.
-func WithAgyCommandClock(clock platformclock.Source) Option {
-	return agyCommandClockOption{clock: clock}
-}
-
 type agyPTYEffectOption struct {
 	effect AgyEffect
 }
@@ -292,24 +278,11 @@ func WithWorkersCommandRunner(runner any) Option {
 	return commandEffectRunnerOption{runner: providerservice.AdaptCommandRunner(runner)}
 }
 
-type loggerOption struct {
-	logger logging.Logger
-}
-
-func (o loggerOption) apply(opts *wireOptions) { opts.logger = o.logger }
-
-// WithLogger injects the safe structured logger the constructed root uses for
-// accepted-intent and terminal-outcome operation records, including
-// ControlAttempt. A nil or omitted logger falls back to logging.NoopLogger.
-func WithLogger(logger logging.Logger) Option {
-	return loggerOption{logger: logger}
-}
-
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
 // The caller supplies the completed readiness projection; this boundary never
 // substitutes an identity projection for a missing effect.
-func NewService(probe CatalogProbeOperation, options ...Option) (providers.Service, error) {
+func NewService(probe CatalogProbeOperation, clock platformclock.Source, scheduler platformclock.TimerSource, logger logging.Logger, options ...Option) (providers.Service, error) {
 	var config wireOptions
 	for _, option := range options {
 		if option != nil {
@@ -336,13 +309,14 @@ func NewService(probe CatalogProbeOperation, options ...Option) (providers.Servi
 		catalogService,
 		config.commandRunner,
 		config.agyCommandRunner,
-		config.agyCommandClock,
+		clock,
+		scheduler,
 		config.agyPTYEffect,
 		acp,
 		config.commandFactory,
 		config.executableLocator,
 		config.stdioPipes,
-		config.logger,
+		logger,
 		config.registrations...,
 	)
 }
@@ -386,7 +360,8 @@ func newRootWithOptions(
 	catalogService catalog.Service,
 	commandRunner providerservice.CommandRunner,
 	agyCommandRunner providerservice.CommandRunner,
-	agyCommandClock platformclock.Source,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 	agyPTYEffect AgyEffect,
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
@@ -398,12 +373,7 @@ func newRootWithOptions(
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
-	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, agyCommandClock, agyPTYEffect)
-	scheduler, ok := agyCommandClock.(platformclock.TimerSource)
-	if !ok {
-		scheduler = platformclock.Real{}
-	}
-	logger = logging.EnsureLogger(logger)
+	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, clock, scheduler, agyPTYEffect)
 	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes, scheduler, logger)
 	if err != nil {
 		return nil, err
@@ -548,24 +518,18 @@ func (writer *externalResponseWriter) Close(_ context.Context, completion Comple
 func executionserviceRegistrations(
 	commandRunner providerservice.CommandRunner,
 	agyCommandRunner providerservice.CommandRunner,
-	agyCommandClock platformclock.Source,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 	agyPTYEffect AgyEffect,
 ) []execution.Registration {
-	if agyCommandClock == nil {
-		agyCommandClock = platformclock.Real{}
-	}
-	scheduler, ok := agyCommandClock.(platformclock.TimerSource)
-	if !ok {
-		scheduler = platformclock.Real{}
-	}
 	antigravity := agyPTYEffect
 	if agyCommandRunner != nil {
-		antigravity = executionwire.NewAgyCommandEffect(agyCommandRunner, agyCommandClock, scheduler)
+		antigravity = executionwire.NewAgyCommandEffect(agyCommandRunner, clock, scheduler)
 	}
 	return executionwire.BuiltInRegistrations(
 		antigravity,
-		executionwire.NewCodexEffect(commandRunner, platformclock.Real{}),
-		executionwire.NewClaudeEffect(commandRunner, platformclock.Real{}),
+		executionwire.NewCodexEffect(commandRunner, clock),
+		executionwire.NewClaudeEffect(commandRunner, clock),
 	)
 }
 

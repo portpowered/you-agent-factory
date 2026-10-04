@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -304,7 +305,10 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 	t.Parallel()
 
 	logger := &recordingControlLogger{}
-	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe, providerswire.WithLogger(logger))
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{},
+		platformclock.Real{},
+		logger)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() = %v", err)
 	}

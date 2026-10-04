@@ -15,6 +15,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -124,8 +125,10 @@ func newLegacyAgyProvidersService(
 		t.Fatalf("NewAgyPTYAllocator() error = %v", err)
 	}
 	service, err := NewService(IdentityCatalogProbe,
-		WithAgyPTYEffect(NewAgyPTYEffect(allocator, legacyAgyExecutableLocator{path: executable}, platformfilesystem.Local{}, clock, AgyPTYPolicy{})),
-	)
+		platformclock.Real{},
+		platformclock.Real{},
+		logging.NoopLogger{},
+		WithAgyPTYEffect(NewAgyPTYEffect(allocator, legacyAgyExecutableLocator{path: executable}, platformfilesystem.Local{}, clock, AgyPTYPolicy{})))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
