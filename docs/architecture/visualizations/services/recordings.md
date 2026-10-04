@@ -184,5 +184,4 @@ flowchart LR
 | [`pkg/services/recordings/internal/sessionprojectionfacts`](../../../../pkg/services/recordings/internal/sessionprojectionfacts) | 11 | 1 | XX% | XX% |
 | [`pkg/services/recordings/transports/cli`](../../../../pkg/services/recordings/transports/cli) | 357 | 1 | 98.0% | 58.5% |
 | [`pkg/services/recordings/transports/http`](../../../../pkg/services/recordings/transports/http) | 379 | 2 | 92.3% | XX% |
-| [`pkg/services/recordings/transports/mcp`](../../../../pkg/services/recordings/transports/mcp) | 1251 | 11 | 82.6% | 10.9% |
 | [`pkg/services/recordings/wire`](../../../../pkg/services/recordings/wire) | 1246 | 8 | XX% | 12.0% |

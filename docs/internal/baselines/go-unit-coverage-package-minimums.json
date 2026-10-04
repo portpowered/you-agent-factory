@@ -909,10 +909,6 @@
       "minimum": 91.66
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/mcp",
-      "minimum": 81.48
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions",
       "minimum": 66.12
     },
@@ -1133,10 +1129,6 @@
       "minimum": 78.83
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/mcp",
-      "minimum": 75.87
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models",
       "minimum": 86.83
     },
@@ -1341,10 +1333,6 @@
       "minimum": 88.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp",
-      "minimum": 75.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings",
       "minimum": 0.00
     },
@@ -1431,10 +1419,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http",
       "minimum": 77.80
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp",
-      "minimum": 75.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
@@ -1527,10 +1511,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/http",
       "minimum": 64.50
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/mcp",
-      "minimum": 75.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions",
