@@ -3,7 +3,8 @@ package analyzers
 import (
 	"go/ast"
 	"go/parser"
-	"go/token"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,13 @@ var serviceRootPorts = map[string][]string{
 var supportRoots = []string{"internal/configcontractsmoke", "internal/testutil", "tests/functional/internal/support"}
 
 var layeringRules = []layeringRule{
+	{
+		name: "constructed-service-edges",
+		hint: "inject exact external-effect ports from pkg/wire instead of the broad Edges bag",
+		violates: func(e edge) bool {
+			return !e.test && under(e.importer, "pkg/services") && !under(e.importer, "pkg/services/edges") && e.importee == "pkg/services/edges"
+		},
+	},
 	{
 		name: "application-graph",
 		hint: "only pkg/root and pkg/wire may import pkg/wire; tests build the application through root.BuildProcess",
@@ -191,31 +199,26 @@ func runLayering(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 	importer := strings.TrimSuffix(unit, "_test")
+	// Preserve the legacy eight-family predicate; this does not authorize
+	// recreating the retired config/internal families in product code.
+	if tail, ok := strings.CutPrefix(importer, "pkg/"); ok {
+		family, _, _ := strings.Cut(tail, "/")
+		if !slices.Contains([]string{"config", "initializer", "internal", "platform", "root", "services", "transports", "wire"}, family) {
+			pass.Reportf(pass.Files[0].Package, "package-family: unapproved package family pkg/%s; use the owning service, platform or transport package", family)
+		}
+	}
 	var found []violation
 	hasTests := false
 	visit := func(file *ast.File, filename string) {
+		if (importer == "pkg/transports/http/client" || importer == "pkg/transports/http/generated") && !ast.IsGenerated(file) {
+			pass.Reportf(file.Package, "generated-only: handwritten Go file in generated-only package %s; generate source with the standard Code generated ... DO NOT EDIT. marker", importer)
+		}
 		if ast.IsGenerated(file) {
 			return
 		}
 		test := strings.HasSuffix(filename, "_test.go")
 		hasTests = hasTests || test
-		for _, spec := range file.Imports {
-			path, err := strconv.Unquote(spec.Path.Value)
-			if err != nil || !strings.HasPrefix(path, modulePrefix) {
-				continue
-			}
-			e := edge{importer: importer, importee: strings.TrimPrefix(path, modulePrefix), test: test}
-			for _, rule := range layeringRules {
-				if !rule.violates(e) {
-					continue
-				}
-				name := rule.name
-				if test {
-					name += "-test"
-				}
-				found = append(found, violation{rule: name, importer: unit, importee: e.importee, pos: spec.Pos(), hint: rule.hint})
-			}
-		}
+		found = append(found, layeringImports(file, importer, unit, test)...)
 	}
 	for _, file := range pass.Files {
 		visit(file, pass.Fset.Position(file.Pos()).Filename)
@@ -223,15 +226,48 @@ func runLayering(pass *analysis.Pass) (any, error) {
 	// Files excluded by build constraints are invisible to the type checker;
 	// their imports are read with the one allowed parse (ImportsOnly) so the
 	// edge rules do not depend on the GOOS or tags of the vet run.
-	for _, name := range pass.IgnoredFiles {
+	visited := map[string]bool{}
+	for _, name := range slices.Concat(pass.IgnoredFiles, pass.OtherFiles) {
 		if !strings.HasSuffix(name, ".go") {
 			continue
 		}
-		file, err := parser.ParseFile(token.NewFileSet(), name, nil, parser.ImportsOnly|parser.ParseComments)
-		if err == nil {
-			visit(file, name)
+		name = filepath.Clean(name)
+		if visited[name] {
+			continue
 		}
+		visited[name] = true
+		contents, err := pass.ReadFile(name)
+		if err != nil {
+			return nil, err
+		}
+		file, err := parser.ParseFile(pass.Fset, name, contents, parser.ImportsOnly|parser.ParseComments)
+		if err != nil {
+			return nil, err
+		}
+		visit(file, name)
 	}
 	reportAgainstBaseline(pass, unit, layeringRuleNames, found, hasTests)
 	return nil, nil
+}
+
+func layeringImports(file *ast.File, importer, unit string, test bool) []violation {
+	var found []violation
+	for _, spec := range file.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil || !strings.HasPrefix(path, modulePrefix) {
+			continue
+		}
+		e := edge{importer: importer, importee: strings.TrimPrefix(path, modulePrefix), test: test}
+		for _, rule := range layeringRules {
+			if !rule.violates(e) {
+				continue
+			}
+			name := rule.name
+			if test {
+				name += "-test"
+			}
+			found = append(found, violation{rule: name, importer: unit, importee: e.importee, pos: spec.Pos(), hint: rule.hint})
+		}
+	}
+	return found
 }

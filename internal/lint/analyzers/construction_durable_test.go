@@ -53,7 +53,8 @@ func TestConstructionExcludedRetiredProviderImport(t *testing.T) {
 			compiled := fset.AddFile("compiled.go", -1, 20)
 			var diagnostics []analysis.Diagnostic
 			pass := &analysis.Pass{
-				Fset: fset, Pkg: types.NewPackage("m/"+unit, "fixture"),
+				Analyzer: DurableConstruction,
+				Fset:     fset, Pkg: types.NewPackage("m/"+unit, "fixture"),
 				Files:        []*ast.File{{Package: compiled.Pos(0)}},
 				IgnoredFiles: []string{filename}, OtherFiles: []string{filename},
 				Report: func(d analysis.Diagnostic) { diagnostics = append(diagnostics, d) },
