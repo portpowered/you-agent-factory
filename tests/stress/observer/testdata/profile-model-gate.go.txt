@@ -24,7 +24,7 @@ import (
  models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-// A narrow composed acquisition check, not the complete two-holder capability.
+// A narrow two-holder acquisition check, not the complete fault/cancel capability.
 func TestLifecycleProfileModelDiagnostic(t *testing.T) {
  if testing.Short(){t.Skip("dedicated public Models acquisition diagnostic")}
  r:=newSampleProfile("model_diagnostic");defer r.emit(t);r.load(t)
@@ -47,27 +47,40 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
  cycle:=&profileCycle{SessionID:id,Generations:[]string{},RuntimeIDs:[]string{}}
  defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();gate.release("profile-model-work");if err:=ops.Close(cleanup,cycle);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}()
  generation,runtimeID,err:=ops.Open(ctx,cycle,false);if err!=nil{t.Fatal(err)};cycle.Generations=append(cycle.Generations,generation);cycle.RuntimeIDs=append(cycle.RuntimeIDs,runtimeID)
- done:=make(chan error,1)
- joined:=false
- defer func(){if !joined{gate.release("profile-model-work");select{case err:=<-done:if err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)};case <-time.After(30*time.Second):r.CleanupErrors=append(r.CleanupErrors,"public model Work not joined");t.Error("public model Work not joined")}}}()
- go func(){result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:"profile-model-work"},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:"profile-model-work"}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});if err==nil && result.Status!=sessions.InvocationTerminalStatusCompleted{err=fmt.Errorf("public model Work failed: %#v",result)};done<-err}()
- // Observe terminal refusal as well as admission; no timeout hides early errors.
- var request models.InvokeModelRequest
- select{case request=<-gate.routes["profile-model-work"].observed:case err=<-done:joined=true;t.Fatalf("Work ended before acquisition: %v",err);case <-ctx.Done():t.Fatal(ctx.Err())}
- defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();gate.release("profile-model-work");if err:=gate.join(cleanup,"profile-model-work");err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}()
+ routes:=[]string{"profile-model-work","profile-model-peer"}
+ done:=make(chan error,2);started,joined:=0,0
+ defer func(){
+  cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
+  for _,text:=range routes{gate.release(text)}
+  for joined<started{select{case err:=<-done:joined++;if err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)};case <-cleanup.Done():r.CleanupErrors=append(r.CleanupErrors,"public model Work not joined");t.Error("public model Work not joined");return}}
+  for _,text:=range routes[:started]{if err:=gate.join(cleanup,text);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}
+ }()
+ var scope string
+ for _,text:=range routes {
+  started++
+  go func(){result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});if err==nil && result.Status!=sessions.InvocationTerminalStatusCompleted{err=fmt.Errorf("public model Work %s failed: %#v",text,result)};done<-err}()
+  // Observe terminal refusal as well as acquisition; a held peer cannot return.
+  select{case request:=<-gate.routes[text].observed:
+   if scope!="" && scope!=request.Scope.String(){t.Fatal("public model Work changed scope")};scope=request.Scope.String()
+  case err=<-done:joined++;t.Fatalf("Work ended before acquisition: %v",err)
+  case <-ctx.Done():t.Fatal(ctx.Err())}
+ }
  attempt:=&profileAttempt{SessionID:&id,Generations:cycle.Generations}
  active:=r.capture(t,artifact,"CAPACITY_ACTIVE",attempt,bootstrap);r.Final=append(r.Final,active)
- slot:=request.Scope.String()+"|EMBED";leaseID,ownerID:="",""
- for _,owner:=range active.Report.Owners{if owner.Leases!=nil && owner.Leases.CapacityHolders[slot]==1{ownerID=owner.OwnerIdentity;for _,lease:=range owner.Leases.LeaseRecords{if lease.Scope==request.Scope.String() && lease.ModelName=="embed" && lease.Status=="ACTIVE" && lease.Claimed{if leaseID!=""{t.Fatal("duplicate active lease")};leaseID=lease.Key}}}}
- if leaseID=="" || ownerID==""{t.Fatal("missing real Models capacity attribution")}
- if err=gate.release("profile-model-work");err!=nil{t.Fatal(err)}
- select{case err=<-done:joined=true;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
- if err=gate.join(ctx,"profile-model-work");err!=nil{t.Fatal(err)}
+ slot:=scope+"|EMBED";leaseIDs:=map[string]bool{};ownerID:=""
+ for _,owner:=range active.Report.Owners{if owner.Leases!=nil && owner.Leases.CapacityHolders[slot]==2{
+  if ownerID!=""{t.Fatal("duplicate Models capacity owner")};ownerID=owner.OwnerIdentity
+  for _,lease:=range owner.Leases.LeaseRecords{if lease.Scope==scope && lease.ModelName=="embed" && lease.Status=="ACTIVE" && lease.Claimed{if leaseIDs[lease.Key]{t.Fatal("duplicate active lease")};leaseIDs[lease.Key]=true}}
+ }}
+ if len(leaseIDs)!=2 || ownerID==""{t.Fatal("missing two real same-slot Models capacity holders")}
+ for _,text:=range routes{if err=gate.release(text);err!=nil{t.Fatal(err)}}
+ for joined<started{select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}}
+ for _,text:=range routes{if err=gate.join(ctx,text);err!=nil{t.Fatal(err)}}
  released:=r.capture(t,artifact,"CAPACITY_RELEASED",attempt,bootstrap);r.Final=append(r.Final,released)
- found:=false
- for _,owner:=range released.Report.Owners{if owner.OwnerIdentity!=ownerID{continue};if owner.Leases.CapacityHolders[slot]!=0{t.Fatal("capacity remained held after terminal Work")};for _,lease:=range owner.Leases.LeaseRecords{if lease.Key==leaseID{found=lease.Status=="RELEASED" || lease.Status=="EXPIRED"}}}
- if !found{t.Fatal("released lease record missing or active")}
- t.Logf("composed public acquisition session=%s scope=%s owner=%s slot=%s lease=%s; one holder, public capacity=2; multiplicity remains unproven",id,request.Scope.String(),ownerID,slot,leaseID)
+ found:=0
+ for _,owner:=range released.Report.Owners{if owner.OwnerIdentity!=ownerID{continue};if owner.Leases.CapacityHolders[slot]!=0{t.Fatal("capacity remained held after terminal Works")};for _,lease:=range owner.Leases.LeaseRecords{if leaseIDs[lease.Key] && (lease.Status=="RELEASED" || lease.Status=="EXPIRED"){found++}}}
+ if found!=2{t.Fatal("released lease records missing or active")}
+ t.Logf("composed public acquisition session=%s scope=%s owner=%s slot=%s leases=%v; two holders, public capacity=2",id,scope,ownerID,slot,leaseIDs)
 }
 
 // Installed only at ModelInvocationBackend, after the real Models owner has

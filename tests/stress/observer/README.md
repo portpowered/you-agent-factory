@@ -372,13 +372,13 @@ do not establish real capacity acquisition or baseline acceptance.
 `TestLifecycleProfileModelDiagnostic` is a narrow public acquisition selector
 on the prepared artifact (`-test.short=false -test.count=1 -test.timeout=2m`).
 Set `OBSERVER_REPORT` to an absolute diagnostic output path. It starts an
-explicit session with the published invocation content contract, holds one
-EMBED call at the controlled effect, records CAPACITY_ACTIVE, then joins both
+explicit session with the published invocation content contract, holds two
+EMBED calls at the controlled effect, records CAPACITY_ACTIVE, then joins both
 the effect and terminal Work before CAPACITY_RELEASED. The scenario asserts
-one attributed ACTIVE claimed lease and one integer slot holder, followed by
-zero holders and the retained RELEASED/EXPIRED record. It closes the session
+two attributed ACTIVE claimed leases and two integer holders in one slot, followed by
+zero holders and both retained RELEASED/EXPIRED records. It closes the session
 and joins the host and process. Public configured capacity is 2; this narrow
-selector does not prove two-holder multiplicity, fault/cancellation composition
+selector proves same-slot multiplicity but does not prove fault/cancellation composition
 or the complete capability. Its report uses mode `model_diagnostic` and stays
 `complete:false`, with empty samples and capacityWitnesses; raw checkpoints and
 attribution remain available. It skips before construction under `-short`.
