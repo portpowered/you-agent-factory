@@ -1,6 +1,0 @@
-package service
-
-func compose() {
-	NewFakeServiceFromContractFixtures()
-	ProjectPersistence()
-}

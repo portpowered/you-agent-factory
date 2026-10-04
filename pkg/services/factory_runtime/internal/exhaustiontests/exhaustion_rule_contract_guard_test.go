@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 var retiredAuthoredExhaustionIdentifiers = map[string]struct{}{
@@ -107,7 +105,7 @@ func walkProductionPkgFilesAtRoot(pkgRoot string, visit func(path, rel string, f
 			return walkErr
 		}
 		if entry.IsDir() {
-			if contractguard.ShouldSkipDir(pkgRoot, path, "api/generated") {
+			if shouldSkipDir(pkgRoot, path, "api/generated") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -223,4 +221,29 @@ func writeExhaustionRuleGuardFixture(t *testing.T, root, relativePath, contents 
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+// shouldSkipDir reports whether a broad handwritten-source guard should skip
+// the provided directory because it is hidden metadata or an explicit
+// generated/build-output subtree outside the guard's intended surface.
+func shouldSkipDir(scanRoot, path string, explicitSkips ...string) bool {
+	rel, err := filepath.Rel(scanRoot, path)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if rel == "." {
+		return false
+	}
+	for _, part := range strings.Split(rel, "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	for _, skip := range explicitSkips {
+		if rel == filepath.ToSlash(filepath.Clean(skip)) {
+			return true
+		}
+	}
+	return false
 }

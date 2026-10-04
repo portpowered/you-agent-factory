@@ -16,9 +16,9 @@ import (
 func NewService(
 	sessions stateaccess.SessionResolver,
 	snapshots stateaccess.SnapshotReader,
-	durability ...work.CompletedFlushSequenceReader,
+	durability work.CompletedFlushSequenceReader,
 ) stateaccess.Service {
-	return internalservice.New(sessions, snapshots, durability...)
+	return internalservice.New(sessions, snapshots, durability)
 }
 
 type runtimeSessionResolver struct {
@@ -28,9 +28,6 @@ type runtimeSessionResolver struct {
 // NewRuntimeSessionResolver adapts Work's consumer-owned runtime resolver into
 // the parent-private Session adapter port used by state_access.
 func NewRuntimeSessionResolver(runtimes work.RuntimeResolver) stateaccess.SessionResolver {
-	if runtimes == nil {
-		return nil
-	}
 	return runtimeSessionResolver{runtimes: runtimes}
 }
 

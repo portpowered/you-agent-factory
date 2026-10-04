@@ -90,7 +90,7 @@ func TestRuntimeBuildDefensiveConstructionBoundaries(t *testing.T) {
 	if err := applyOperatorDefaultsToLoadedConfig("", "", nil); err != nil {
 		t.Fatalf("applyOperatorDefaultsToLoadedConfig(nil) error = %v", err)
 	}
-	var svc *Service
+	var svc *CompatibilityBuild
 	if _, err := svc.Build(context.Background(), SessionBuildSpec{}); err == nil {
 		t.Fatal("nil service Build() succeeded")
 	}
