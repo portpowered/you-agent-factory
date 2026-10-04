@@ -719,6 +719,87 @@ func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
 	}
 }
 
+func TestStartInitialFailurePreservesReplacementAndPeerSelection(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"replacement during readiness", "peer during readiness", "replacement during stop", "closed service with peer"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			sessions := newRuntimeBindingState()
+			peer := registerTestSession(sessions, "peer")
+			var active runtimebinding.State
+			startupErr := errors.New("initial readiness failed")
+			peerCtx, cancelPeer := context.WithCancel(context.Background())
+			defer cancelPeer()
+			var expected *livesession.LiveSession
+			var failed factory.RuntimeRun
+			selectSurvivor := func(session *livesession.LiveSession) {
+				expected = session
+				active.SetActive(peerCtx, session.ID, runtimebinding.HandleFromSession(session))
+			}
+			lifecycle := startupReadinessLifecycle{readiness: func(_ context.Context, run factory.RuntimeRun) error {
+				failed = run
+				switch phase {
+				case "replacement during readiness":
+					selectSurvivor(registerTestSession(sessions, "initial"))
+				case "peer during readiness":
+					selectSurvivor(peer)
+				case "closed service with peer":
+					sessions.Unregister("initial")
+					selectSurvivor(peer)
+				}
+				return startupErr
+			}}
+			stop := func(run factory.RuntimeRun) error {
+				if run != failed {
+					t.Fatal("startup rollback stopped a surviving run")
+				}
+				run.CancelRun()
+				<-run.RunDoneCh()
+				if phase == "replacement during stop" {
+					selectSurvivor(registerTestSession(sessions, "initial"))
+				}
+				return nil
+			}
+			removed := false
+			run, err := runtimebinding.StartInitial(
+				context.Background(), context.Background(), sessions, &active,
+				"initial", "/factory", &hostedInstanceFake{}, factorysessions.Target{},
+				interfaces.RuntimeModeService, lifecycle, stop, func(string) { removed = true },
+			)
+			if run != nil || (phase == "closed service with peer" && err != nil) ||
+				(phase != "closed service with peer" && !errors.Is(err, startupErr)) {
+				t.Fatalf("failed initial start = (%v, %v)", run, err)
+			}
+			if failed == nil || !failed.Completed() {
+				t.Fatal("failed run was not joined")
+			}
+			if phase == "replacement during readiness" && removed {
+				t.Fatal("startup rollback invoked replacement removal effects")
+			}
+			selected := active.Active()
+			if selected == nil || selected.Context != peerCtx || selected.Handle != runtimebinding.HandleFromSession(expected) {
+				t.Fatalf("survivor selection = %#v", selected)
+			}
+			for _, session := range []*livesession.LiveSession{peer, expected} {
+				if sessions.Resolve(session.ID) != session || runtimebinding.HandleFromSession(session).Completed() {
+					t.Fatal("startup rollback retired or canceled a survivor")
+				}
+				if _, err := sessions.ResponseStreams().Streams(session.ID).Subscribe("next", 0); err != nil {
+					t.Fatalf("survivor response stream: %v", err)
+				}
+			}
+			if err := runtimebinding.StopSession(sessions, &active, expected.ID, lifecycle.Stop); err != nil {
+				t.Fatalf("close surviving selection: %v", err)
+			}
+			if expected != peer {
+				if err := runtimebinding.StopSession(sessions, &active, peer.ID, lifecycle.Stop); err != nil {
+					t.Fatalf("close surviving peer: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestCurrentBundleIgnoresPreparedDefaultWithoutLiveHandle(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	prepared := &hostedInstanceFake{dir: "/prepared"}

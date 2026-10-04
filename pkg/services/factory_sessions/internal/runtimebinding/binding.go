@@ -769,16 +769,34 @@ func HandleStartFailure(
 	mode interfaces.RuntimeMode,
 	onSessionRemoved func(string),
 ) error {
+	// Readiness may have published a replacement or selected a peer before
+	// returning. Cleanup owns the failed run, never a fresh lookup by ID.
+	var failed *livesession.LiveSession
+	if state != nil {
+		failed = state.Resolve(sessionID)
+		if HandleFromSession(failed) != handle {
+			failed = nil
+		}
+	}
+	if active := runtimeState.Active(); active != nil && active.Handle == handle {
+		runtimeState.retireActive(active.SessionID, handle, nil)
+	}
+	retireFailed := func() {
+		if failed != nil {
+			state.UnregisterGeneration(failed)
+		}
+		if onSessionRemoved != nil && (state == nil || state.Resolve(sessionID) == nil) {
+			onSessionRemoved(sessionID)
+		}
+	}
 	if SessionClosedDuringStartup(state, sessionID, mode) {
-		runtimeState.ClearActive()
-		unregisterSession(state, sessionID, onSessionRemoved)
+		retireFailed()
 		if stop != nil {
 			_ = stop(handle)
 		}
 		return nil
 	}
-	runtimeState.ClearActive()
-	unregisterSession(state, sessionID, onSessionRemoved)
+	retireFailed()
 	var stopErr error
 	if stop != nil {
 		stopErr = stop(handle)
