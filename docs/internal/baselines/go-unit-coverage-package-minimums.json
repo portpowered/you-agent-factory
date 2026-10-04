@@ -1273,6 +1273,10 @@
       "minimum": 88.43
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata",
+      "minimum": 78.57
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
       "minimum": 75.40
     },
@@ -1283,10 +1287,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow",
       "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/internal/service",
-      "minimum": 78.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/internal/service",

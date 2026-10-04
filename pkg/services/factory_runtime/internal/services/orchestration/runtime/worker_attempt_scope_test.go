@@ -280,3 +280,42 @@ func (probe *scopedWorkerListProbe) ListWorkerSessionObservations(_ context.Cont
 	probe.request = req
 	return workersessions.ListWorkerSessionObservationsResult{}, nil
 }
+
+func TestWorkerSessionReadTranslatesPublicScopeToImmutableExecutionOwner(t *testing.T) {
+	t.Parallel()
+	for _, requested := range []string{"", "public-live-uuid", "~default", "foreign-session"} {
+		t.Run(requested, func(t *testing.T) {
+			t.Parallel()
+			probe := &scopedWorkerReadProbe{err: errors.New("selected read effect")}
+			runtime := &factoryImpl{cfg: &runtimeConfig{workerSessions: probe,
+				publicSessionID: "public-live-uuid", workflowContext: &factory_context.FactoryContext{SessionID: "~default"}}}
+			reader := runtime.WorkerSessionsObservationForSession("public-live-uuid")
+			_, getErr := reader.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{
+				WorkerSessionID: "recorded-worker", FactorySessionID: requested,
+			})
+			_, streamErr := reader.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+				WorkerSessionID: "recorded-worker", FactorySessionID: requested,
+			})
+			_, transcriptErr := reader.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{
+				WorkerSessionID: "recorded-worker", FactorySessionID: requested,
+			})
+			wantErr, wantCalls := probe.err, 3
+			if requested == "foreign-session" {
+				wantErr, wantCalls = workersessions.ErrObservationSessionNotFound, 0
+			}
+			for _, err := range []error{getErr, streamErr, transcriptErr} {
+				if !errors.Is(err, wantErr) {
+					t.Errorf("read = %v, want %v", err, wantErr)
+				}
+			}
+			if len(probe.scopes) != wantCalls {
+				t.Fatalf("read calls = %d, want %d", len(probe.scopes), wantCalls)
+			}
+			for _, scope := range probe.scopes {
+				if scope != "~default" {
+					t.Fatalf("execution scope = %q, want ~default", scope)
+				}
+			}
+		})
+	}
+}

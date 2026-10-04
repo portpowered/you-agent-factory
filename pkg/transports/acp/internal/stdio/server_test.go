@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"io"
 	"os"
 	"reflect"
@@ -61,7 +62,7 @@ var _ logging.Logger = (*recordingLogger)(nil)
 
 func TestNewPerformsNoIO(t *testing.T) {
 	logger := &recordingLogger{}
-	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	if server == nil {
 		t.Fatal("New(nil, nil, nil, nil, nil, nil, nil, nil, nil) returned nil")
 	}
@@ -71,7 +72,7 @@ func TestNewPerformsNoIO(t *testing.T) {
 }
 
 func TestServeRejectsMissingStreams(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	buf := &bytes.Buffer{}
 
 	cases := []struct {
@@ -106,7 +107,7 @@ func TestServeRejectsNilServer(t *testing.T) {
 }
 
 func TestServeReturnsOnCleanEOF(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	err := server.Serve(context.Background(), strings.NewReader("first line\nsecond line\n"), &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("Serve() error = %v, want nil on clean EOF", err)
@@ -117,7 +118,7 @@ func TestServeRejectsAlreadyCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	err := server.Serve(ctx, strings.NewReader(""), &bytes.Buffer{})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Serve() error = %v, want context.Canceled", err)
@@ -153,7 +154,7 @@ func TestServeRejectsContextCancelledBetweenReads(t *testing.T) {
 		return buf.Write(p)
 	})
 
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	err := server.Serve(ctx, in, out)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Serve() error = %v, want context.Canceled", err)
@@ -165,7 +166,7 @@ func TestServeRejectsContextCancelledBetweenReads(t *testing.T) {
 
 func TestServeMintsDistinctConnectionIDsPerInvocation(t *testing.T) {
 	logger := &recordingLogger{}
-	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 
 	if err := server.Serve(context.Background(), strings.NewReader(""), &bytes.Buffer{}); err != nil {
 		t.Fatalf("Serve() first call error = %v", err)
@@ -187,7 +188,7 @@ func TestServeMintsDistinctConnectionIDsPerInvocation(t *testing.T) {
 
 func TestServeLogsStartAndTerminalOutcomeWithoutPayload(t *testing.T) {
 	logger := &recordingLogger{}
-	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 
 	payload := "super-secret-prompt-content"
 	if err := server.Serve(context.Background(), strings.NewReader(payload+"\n"), &bytes.Buffer{}); err != nil {
@@ -315,7 +316,7 @@ func TestServeRespondsToValidInitializeRequests(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out := &bytes.Buffer{}
-			server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 			if err := server.Serve(context.Background(), strings.NewReader(initializeLine(tc.id)), out); err != nil {
 				t.Fatalf("Serve() error = %v", err)
 			}
@@ -339,7 +340,7 @@ func TestServeFramesOneResponsePerCompleteInputLine(t *testing.T) {
 	input := initializeLine("1") + initializeLine("2")
 
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -363,7 +364,7 @@ func TestServeSkipsEmptyLines(t *testing.T) {
 	input := "\n" + initializeLine("1") + "\n"
 
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -373,7 +374,7 @@ func TestServeSkipsEmptyLines(t *testing.T) {
 
 func TestServeIsolatesConnectionsReusingTheSameWireID(t *testing.T) {
 	logger := &recordingLogger{}
-	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 
 	firstOut := &bytes.Buffer{}
 	if err := server.Serve(context.Background(), strings.NewReader(initializeLine("1")), firstOut); err != nil {
@@ -423,7 +424,7 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethod(t *testing.T) {
 			input := fmt.Sprintf(`{"jsonrpc":"2.0","id":9,"method":%q,"params":{}}`, method) + "\n"
 
 			out := &bytes.Buffer{}
-			server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 			if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 				t.Fatalf("Serve() error = %v", err)
 			}
@@ -444,7 +445,7 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethod(t *testing.T) {
 // id could ever be recovered from input this broken.
 func TestServeRespondsWithParseErrorForMalformedJSON(t *testing.T) {
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	if err := server.Serve(context.Background(), strings.NewReader("{not json\n"), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -508,7 +509,7 @@ func TestServeRespondsWithInvalidRequestForStructurallyInvalidShapes(t *testing.
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out := &bytes.Buffer{}
-			server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 			if err := server.Serve(context.Background(), strings.NewReader(tc.line), out); err != nil {
 				t.Fatalf("Serve() error = %v", err)
 			}
@@ -540,7 +541,7 @@ func TestServeRespondsWithInvalidParamsForBadInitializeParams(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out := &bytes.Buffer{}
-			server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 			if err := server.Serve(context.Background(), strings.NewReader(tc.line), out); err != nil {
 				t.Fatalf("Serve() error = %v", err)
 			}
@@ -565,7 +566,7 @@ func TestServeMapsUnsupportedProtocolVersionToCorrelatedFactsWithNoCapabilities(
 	line := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":99}}` + "\n"
 
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -602,7 +603,7 @@ func TestServeEmitsNoResponseForAValidNotification(t *testing.T) {
 	line := `{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}` + "\n"
 
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -630,7 +631,7 @@ func TestServeEmitsNoResponseForAnUnsupportedNoIDMessage(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out := &bytes.Buffer{}
-			server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 			if err := server.Serve(context.Background(), strings.NewReader(tc.line), out); err != nil {
 				t.Fatalf("Serve() error = %v", err)
 			}
@@ -648,7 +649,7 @@ func TestServeContinuesProcessingAfterARecoverableRequestError(t *testing.T) {
 	input := "{not json\n" + initializeLine("1")
 
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	if err := server.Serve(context.Background(), strings.NewReader(input), out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -706,7 +707,7 @@ func TestServeErrorResponsesAndDiagnosticsNeverLeakSeededSensitiveSentinels(t *t
 			t.Run(sentinel+"/"+name, func(t *testing.T) {
 				out := &bytes.Buffer{}
 				logger := &recordingLogger{}
-				server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil)
+				server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 				if err := server.Serve(context.Background(), strings.NewReader(line), out); err != nil {
 					t.Fatalf("Serve() error = %v", err)
 				}
@@ -781,7 +782,7 @@ func TestServeReturnsContextErrorOnMidReadCancellation(t *testing.T) {
 		return pr.Read(p)
 	})
 
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	done := make(chan error, 1)
 	go func() {
 		done <- server.Serve(ctx, in, &bytes.Buffer{})
@@ -835,7 +836,7 @@ func TestServeLogsCancelledOutcomeDistinctFromError(t *testing.T) {
 	})
 
 	logger := &recordingLogger{}
-	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	done := make(chan error, 1)
 	go func() {
 		done <- server.Serve(ctx, in, &bytes.Buffer{})
@@ -878,7 +879,7 @@ func TestServeRejectsPartialTrailingFrameAsProtocolFailure(t *testing.T) {
 	partial := strings.TrimSuffix(initializeLine("1"), "\n")
 
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	err := server.Serve(context.Background(), strings.NewReader(partial), out)
 	if err == nil {
 		t.Fatal("Serve() error = nil, want a protocol failure for a partial trailing frame")
@@ -900,7 +901,7 @@ func TestServeRejectsPartialTrailingFrameAfterACompleteLine(t *testing.T) {
 	input := initializeLine("1") + `{"jsonrpc":"2.0","id":2,"method":"initialize"`
 
 	out := &bytes.Buffer{}
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	err := server.Serve(context.Background(), strings.NewReader(input), out)
 	if !errors.Is(err, errPartialTrailingFrame) {
 		t.Fatalf("Serve() error = %v, want errPartialTrailingFrame", err)
@@ -940,7 +941,7 @@ func TestServeSurfacesWriterFailureAndStopsFurtherWrites(t *testing.T) {
 	wantErr := errors.New("acp test: simulated write failure")
 	writer := &countingErrorWriter{err: wantErr}
 
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	input := initializeLine("1") + initializeLine("2")
 	err := server.Serve(context.Background(), strings.NewReader(input), writer)
 	if !errors.Is(err, wantErr) {
@@ -970,7 +971,7 @@ func TestServeAsyncPromptResponseWriteFailureEndsConnectionWithoutInputEOF(t *te
 	wantErr := errors.New("acp test: simulated async write failure")
 	writer := &countingErrorWriter{err: wantErr}
 
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 
 	pr, pw := io.Pipe()
 	t.Cleanup(func() {
@@ -1015,7 +1016,7 @@ func (shortWriter) Write(p []byte) (int, error) {
 // reported as io.ErrShortWrite and ends the connection, so a truncated
 // response can never be mistaken for a successful initialize exchange.
 func TestServeTreatsShortWriteAsFailureNotSuccess(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	err := server.Serve(context.Background(), strings.NewReader(initializeLine("1")), shortWriter{})
 	if !errors.Is(err, io.ErrShortWrite) {
 		t.Fatalf("Serve() error = %v, want io.ErrShortWrite", err)
@@ -1091,7 +1092,7 @@ func TestServeHandlesConcurrentConnectionsWithoutRaces(t *testing.T) {
 	const concurrency = 20
 
 	logger := &syncRecordingLogger{}
-	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(logger, nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 
 	outs := make([]*bytes.Buffer, concurrency)
 	errs := make([]error, concurrency)
@@ -1173,7 +1174,7 @@ func TestServe_PipeSmoke_RealStdioInitializeExchangeAndCleanEOF(t *testing.T) {
 		_ = stdoutWrite.Close()
 	})
 
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- server.Serve(context.Background(), stdinRead, stdoutWrite)
@@ -1211,5 +1212,70 @@ func TestServe_PipeSmoke_RealStdioInitializeExchangeAndCleanEOF(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Serve did not return after stdin closed")
+	}
+}
+
+func TestServeExplicitRecordingRolesPreserveOutputAndWarnings(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		failure error
+		active  bool
+		warning bool
+	}{
+		{name: "disabled", failure: fmt.Errorf("wrapped: %w", acp.ErrWireRecordingDisabled)},
+		{name: "unavailable", failure: errors.New("secret opener diagnostic"), warning: true},
+		{name: "missing resource", warning: true},
+		{name: "active", active: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			logger := &recordingLogger{}
+			transcript := &capturingTranscript{}
+			connection := ""
+			recorder := func(id string) (acp.WireTranscript, error) {
+				connection = id
+				if test.active {
+					return transcript, nil
+				}
+				return nil, test.failure
+			}
+			server := New(logger, nil, nil, nil, nil, nil, nil, recorder, nil, testInvocationScope)
+			if connection != "" || len(logger.entries) != 0 {
+				t.Fatal("construction executed recorder or logger")
+			}
+			var out bytes.Buffer
+			if err := server.Serve(context.Background(), strings.NewReader("malformed\n"), &out); err != nil {
+				t.Fatal(err)
+			}
+			if connection == "" || !strings.Contains(out.String(), "Parse error") {
+				t.Fatalf("connection = %q, output = %q", connection, out.String())
+			}
+			assertRecordingWarnings(t, logger, test.warning)
+			records, closed := transcript.snapshot()
+			if test.active && (!closed || len(records) != 2) {
+				t.Fatalf("active transcript: closed = %v, records = %d", closed, len(records))
+			}
+			if !test.active && (closed || len(records) != 0) {
+				t.Fatal("inactive recorder acquired a resource")
+			}
+		})
+	}
+}
+
+func assertRecordingWarnings(t *testing.T, logger *recordingLogger, wantWarning bool) {
+	t.Helper()
+	warnings := 0
+	for _, entry := range logger.entries {
+		if entry.level == "warn" && entry.message == "acp wire transcript unavailable" {
+			warnings++
+		}
+		if strings.Contains(fmt.Sprint(entry), "secret opener diagnostic") {
+			t.Fatal("opener failure leaked into diagnostics")
+		}
+	}
+	if (warnings == 1) != wantWarning {
+		t.Fatalf("unavailable warnings = %d, want warning = %v", warnings, wantWarning)
 	}
 }

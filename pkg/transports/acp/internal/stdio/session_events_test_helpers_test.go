@@ -202,7 +202,7 @@ func newStreamingTestServer(t *testing.T, factoryTarget *fakeFactoryTargetServic
 	eventsSvc := &fakeEventsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	resolveHomeDir := func() (string, error) { return "/home/operator", nil }
-	server := New(nil, chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir, nil, nil, testStartResolver)
+	server := New(testLogger(), chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir, nil, nil, testStartResolver, testInvocationScope)
 	return server, eventsSvc
 }
 func assistantMessagePayload(text string) workers.MessagePayload {

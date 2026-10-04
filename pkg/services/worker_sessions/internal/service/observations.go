@@ -525,7 +525,13 @@ func observationFactoryScopeMatches(metadata *observation, factorySessionIDs ...
 	if len(factorySessionIDs) == 0 || strings.TrimSpace(factorySessionIDs[0]) == "" {
 		return true
 	}
-	return metadata != nil && metadata.factorySessionID == strings.TrimSpace(factorySessionIDs[0])
+	if metadata == nil {
+		return false
+	}
+	scope := strings.TrimSpace(factorySessionIDs[0])
+	// A direct process-owned Worker has no Factory execution correlation. Its
+	// compatibility session route belongs only to the primary runtime alias.
+	return metadata.factorySessionID == scope || (metadata.direct && metadata.factorySessionID == "" && scope == workers.DefaultSessionID)
 }
 
 // baseObservation projects the registry-owned identity, correlation, and

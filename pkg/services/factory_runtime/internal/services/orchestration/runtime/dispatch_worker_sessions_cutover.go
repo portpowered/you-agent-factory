@@ -198,6 +198,7 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 		factorySessionID,
 	)
 	view.runtimeID = strings.TrimSpace(f.cfg.runtimeID)
+	view.executionFactorySessionID = canonicalSessionIDFromFactoryConfig(f.cfg)
 	return view
 }
 
@@ -205,18 +206,19 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 // the detached Worker Session observation vocabulary.
 type recordedWorkerSessionObservation struct {
 	workersessions.Service
-	ledger              recordings.RuntimeLedger
-	durability          recordings.CompletedFlushWatermarkReader
-	projector           factory.WorldStateProjector
-	clock               factory.Clock
-	providerSessions    providersessions.Service
-	replayEvents        []interfaces.FactoryEvent
-	restoredWorldState  *interfaces.FactoryWorldState
-	restoredEventPrefix []interfaces.FactoryEvent
-	recordingID         string
-	recordingReader     recordings.WorkerRecordingReader
-	factorySessionID    string
-	runtimeID           string
+	ledger                    recordings.RuntimeLedger
+	durability                recordings.CompletedFlushWatermarkReader
+	projector                 factory.WorldStateProjector
+	clock                     factory.Clock
+	providerSessions          providersessions.Service
+	replayEvents              []interfaces.FactoryEvent
+	restoredWorldState        *interfaces.FactoryWorldState
+	restoredEventPrefix       []interfaces.FactoryEvent
+	recordingID               string
+	recordingReader           recordings.WorkerRecordingReader
+	factorySessionID          string
+	executionFactorySessionID string
+	runtimeID                 string
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)

@@ -27,5 +27,5 @@ top-level tests; row 5 and the shared fixture's new boundary cases contain
 nested control cases. CASE-08, CASE-16, and CASE-22 are post-migration
 characterization additions owned by TASK-002, not pre-migration assertions
 silently claimed by this ledger. The unsupported-provider witness uses the
-production Providers wire with a route-specific capability override and the
+root.BuildProcess with an immutable capability override in a separate process and the
 existing command-runner edge; it does not use an in-process provider fake.

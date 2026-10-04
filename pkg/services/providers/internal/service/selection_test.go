@@ -110,9 +110,9 @@ func mustSelectionRoot(t *testing.T, descriptors ...providers.Descriptor) provid
 	t.Helper()
 
 	catalog := &selectionCatalogStub{descriptors: descriptors}
-	root, err := New(catalog, selectionExecutionStub{}, logging.NoopLogger{})
+	root, err := NewWithACP(catalog, selectionExecutionStub{}, internalDisabledACP{}, nil, logging.NoopLogger{}, internalDisabledACP{})
 	if err != nil {
-		t.Fatalf("New() = %v", err)
+		t.Fatalf("NewWithACP() = %v", err)
 	}
 	return root
 }
@@ -183,7 +183,7 @@ func missingSelectionPrerequisite(prerequisites []providers.Prerequisite) bool {
 	return false
 }
 
-type selectionExecutionStub struct{}
+type selectionExecutionStub struct{ internalExecutionStub }
 
 func (selectionExecutionStub) Execute(
 	context.Context,

@@ -223,3 +223,27 @@ func TestKeyedRuntimeDirectTopicKeepsCompatibility(t *testing.T) {
 		t.Fatalf("direct topic = %s", got)
 	}
 }
+
+func TestKeyedRuntimeDirectReadAcceptsOnlyDefaultCompatibilityScope(t *testing.T) {
+	t.Parallel()
+	for _, state := range []workersessions.State{workersessions.StateRunning, workersessions.StateCompleted} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			registry := newObservationRegistry(nil, nil)
+			registry.sessions["direct-worker"] = observationSession("direct-worker", state)
+			registry.observations["direct-worker"] = &observation{direct: true, attemptID: "direct-attempt"}
+			for _, scope := range []string{"", "~default", "foreign-session"} {
+				got, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{
+					WorkerSessionID: "direct-worker", FactorySessionID: scope,
+				})
+				if scope == "foreign-session" {
+					if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+						t.Fatalf("foreign read = %+v, %v", got, err)
+					}
+				} else if err != nil || got.WorkerSessionID != "direct-worker" || got.State != state || !got.Direct || got.FactorySessionID != "" {
+					t.Fatalf("direct read (%s) = %+v, %v", scope, got, err)
+				}
+			}
+		})
+	}
+}

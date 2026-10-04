@@ -267,10 +267,14 @@ func (s *recordedWorkerSessionObservation) observationReadScope(requested string
 		return requested, nil
 	}
 	owner := strings.TrimSpace(s.factorySessionID)
-	if requested != "" && requested != owner {
+	executionOwner := strings.TrimSpace(s.executionFactorySessionID)
+	if executionOwner == "" {
+		executionOwner = owner
+	}
+	if requested != "" && requested != owner && requested != executionOwner {
 		return "", workersessions.ErrObservationSessionNotFound
 	}
-	return owner, nil
+	return executionOwner, nil
 }
 
 func (s *recordedWorkerSessionObservation) streamRecorded(

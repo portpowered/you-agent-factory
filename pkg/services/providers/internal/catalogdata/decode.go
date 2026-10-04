@@ -1,5 +1,5 @@
-// Package service implements the packaged Providers catalog.
-package service
+// Package catalogdata validates and decodes detached packaged provider facts.
+package catalogdata
 
 import (
 	"encoding/json"
@@ -9,7 +9,6 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/portpowered/infinite-you/internal/providerprofiles"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	builtins "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins"
 )
 
 type catalogDocument struct {
@@ -41,13 +40,9 @@ var registeredRuntimeProfiles = func() map[string]struct{} {
 	return result
 }()
 
-type Service struct {
-	integrations []providers.ACPIntegration
-}
-
-var _ builtins.Service = (*Service)(nil)
-
-func New(document []byte) (builtins.Service, error) {
+// DecodeACPIntegrations validates the runtime projection and returns detached
+// integration values without constructing a catalog service.
+func DecodeACPIntegrations(document []byte) ([]providers.ACPIntegration, error) {
 	var decoded catalogDocument
 	if err := json.Unmarshal(document, &decoded); err != nil {
 		return nil, fmt.Errorf("decode packaged provider catalog: %w", err)
@@ -61,7 +56,7 @@ func New(document []byte) (builtins.Service, error) {
 		}
 		integrations = append(integrations, integration)
 	}
-	return &Service{integrations: integrations}, nil
+	return integrations, nil
 }
 
 func decodeIntegration(index int, entry catalogACPIntegration, seen map[string]string) (providers.ACPIntegration, error) {
@@ -83,7 +78,7 @@ func decodeIntegration(index int, entry catalogACPIntegration, seen map[string]s
 	return providers.ACPIntegration{
 		ID:                    string(name),
 		Name:                  name,
-		Aliases:               aliases,
+		Aliases:               append([]string(nil), aliases...),
 		Transport:             "stdio",
 		Command:               strings.TrimSpace(entry.Command),
 		Arguments:             append([]string(nil), entry.Arguments...),
@@ -170,12 +165,4 @@ func sameStrings(left, right []string) bool {
 		}
 	}
 	return true
-}
-
-func (service *Service) ACPIntegrations() []providers.ACPIntegration {
-	result := make([]providers.ACPIntegration, len(service.integrations))
-	for index, integration := range service.integrations {
-		result[index] = integration.Clone()
-	}
-	return result
 }

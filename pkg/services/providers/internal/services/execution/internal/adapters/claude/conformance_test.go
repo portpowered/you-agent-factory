@@ -27,7 +27,7 @@ func TestClaudeAdapterConformance(t *testing.T) {
 func newClaudeConformanceRoot(
 	attempt execution.Attempt,
 ) (providers.Service, error) {
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +36,13 @@ func newClaudeConformanceRoot(
 		execution.Registration{
 			Provider: providers.IDClaude,
 			Attempt:  attempt,
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalog, executionService, logging.NoopLogger{})
+	return providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 }
 
 type claudeConformanceState struct {

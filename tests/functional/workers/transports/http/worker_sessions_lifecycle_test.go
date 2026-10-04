@@ -61,6 +61,7 @@ func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
 		t.Fatalf("read Worker Session event stream: %v", events.err)
 	}
 	assertCompletedWorkerSessionEvents(t, events.frames, "disconnect-session")
+	assertTerminalWorkerSessionScopeCompatibility(t, server.URL(), "disconnect-session", "COMPLETED")
 	replay := postDirectWorkerSession(t, context.Background(), server.URL(), "disconnect-request", "disconnect-session", "disconnect-dispatch")
 	defer replay.Body.Close()
 	if replay.StatusCode != http.StatusAccepted {
@@ -76,6 +77,7 @@ func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
 	if runner.callCount() != 1 {
 		t.Fatalf("worker command calls = %d, want one after disconnect and replay", runner.callCount())
 	}
+	assertDefaultFactoryWorkerRetainedScope(t, server.URL())
 	functionalevidence.Covers(t, "rest/startWorkerSession")
 }
 
@@ -174,7 +176,7 @@ func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 	}
 	runner.waitStarted(t)
 
-	eventResponse, eventCancel := openWorkerSessionEventStream(t, server.URL(), "control-session")
+	eventResponse, eventCancel := openScopedWorkerSessionEventStream(t, server.URL(), resolvedDefaultWorkerSessionID(t, server.URL()), "control-session")
 	defer eventCancel()
 	defer eventResponse.Body.Close()
 	eventsResult := make(chan workerSessionTerminalEventsResult, 1)
@@ -208,6 +210,7 @@ func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 	}
 	assertSingleTerminalWorkerSessionEvent(t, events.frames, "control-session", "CANCELED")
 	assertOrderedWorkerSessionControlBracket(t, events.frames, "control-session", "CANCELED")
+	assertTerminalWorkerSessionScopeCompatibility(t, server.URL(), "control-session", "CANCELED")
 
 	repeated := postWorkerSessionControl(t, server.URL(), "control-session", "cancel")
 	defer repeated.Body.Close()
@@ -413,9 +416,14 @@ func directWorkerSessionPayload(requestID, sessionID, dispatchID string) factory
 
 func openWorkerSessionEventStream(t *testing.T, baseURL, workerSessionID string) (*http.Response, context.CancelFunc) {
 	t.Helper()
+	return openScopedWorkerSessionEventStream(t, baseURL, "~default", workerSessionID)
+}
+
+func openScopedWorkerSessionEventStream(t *testing.T, baseURL, sessionID, workerSessionID string) (*http.Response, context.CancelFunc) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), functionalWorkerSignalTimeout)
 	endpoint := strings.TrimSuffix(baseURL, "/") +
-		"/factory-sessions/~default/worker-sessions/" + url.PathEscape(workerSessionID) + "/events"
+		"/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions/" + url.PathEscape(workerSessionID) + "/events"
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		cancel()
@@ -676,4 +684,108 @@ func assertSingleTerminalWorkerSessionEvent(
 func workerSessionEventPhase(frame factoryapi.WorkerSessionEvent) string {
 	phase, _ := frame.Event.Payload["phase"].(string)
 	return phase
+}
+
+func resolvedDefaultWorkerSessionID(t *testing.T, baseURL string) string {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/factory-sessions/~default", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("default Factory Session status = %d", response.StatusCode)
+	}
+	var session factoryapi.FactorySession
+	if err := json.NewDecoder(response.Body).Decode(&session); err != nil {
+		t.Fatal(err)
+	}
+	if session.Id == "" || session.Id == "~default" || !session.IsDefault {
+		t.Fatalf("resolved default = %+v", session)
+	}
+	return session.Id
+}
+
+func assertTerminalWorkerSessionScopeCompatibility(t *testing.T, baseURL, workerID, phase string) {
+	t.Helper()
+	for _, selector := range []string{"~default", resolvedDefaultWorkerSessionID(t, baseURL)} {
+		response, cancel := openScopedWorkerSessionEventStream(t, baseURL, selector, workerID)
+		frames, observedPhase, err := readWorkerSessionEventStreamUntilTerminal(response)
+		response.Body.Close()
+		cancel()
+		if err != nil || observedPhase != phase {
+			t.Fatalf("terminal stream through %s = %s, %v; want %s", selector, observedPhase, err, phase)
+		}
+		assertSingleTerminalWorkerSessionEvent(t, frames, workerID, phase)
+	}
+}
+
+// API admission supplies the real Factory Worker whose durable event route is
+// under test. The existing host and controlled command edge are reused.
+func assertDefaultFactoryWorkerRetainedScope(t *testing.T, baseURL string) {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, "~default"))
+	defer stream.Close()
+	name := "retained-scope-proof"
+	submitted := support.SubmitSessionWorkAt(t, baseURL, "~default", factoryapi.SubmitWorkRequest{
+		Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": name},
+	})
+	worker := waitForRouteCharacterizationDispatch(t, stream, support.StringPointerValue(submitted.WorkId))
+	for _, selector := range []string{"~default", resolvedDefaultWorkerSessionID(t, baseURL)} {
+		assertRecordedFactoryWorkerScope(t, baseURL, selector, worker.workerSessionID)
+	}
+}
+
+func assertRecordedFactoryWorkerScope(t *testing.T, baseURL, selector, workerID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), functionalWorkerSignalTimeout)
+	defer cancel()
+	endpoint := baseURL + "/factory-sessions/" + url.PathEscape(selector) + "/worker-sessions/" + url.PathEscape(workerID) + "/events?replayOnly=true"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("retained Factory Worker through %s: HTTP %d", selector, response.StatusCode)
+	}
+	assertRecordedFactoryWorkerFrames(t, response, selector, workerID)
+}
+
+func assertRecordedFactoryWorkerFrames(t *testing.T, response *http.Response, selector, workerID string) {
+	t.Helper()
+	scanner := bufio.NewScanner(response.Body)
+	complete, terminal := false, false
+	for scanner.Scan() {
+		if !strings.HasPrefix(scanner.Text(), "data:") {
+			continue
+		}
+		var frame factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(scanner.Text(), "data:"))), &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame.WorkerSessionId != workerID || frame.FactorySessionId == nil || *frame.FactorySessionId != selector {
+			t.Fatalf("retained Worker identity through %s = %+v", selector, frame)
+		}
+		if frame.ReplaySummary != nil {
+			complete = frame.ReplaySummary.Complete
+		}
+		if frame.Event.SourceType == "factory_event" && frame.Event.SchemaId == string(factoryapi.FactoryEventTypeDispatchResponse) {
+			terminal = true
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !complete || !terminal {
+		t.Fatalf("retained Factory Worker through %s: complete=%t terminal=%t", selector, complete, terminal)
+	}
 }

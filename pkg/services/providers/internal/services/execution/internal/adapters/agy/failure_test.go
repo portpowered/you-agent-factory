@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
@@ -21,7 +22,7 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 	cases := []struct {
 		name        string
 		allocator   agypty.PTYAllocator
-		setup       func(t *testing.T) (executable string, deps agy.ExecutableDependencies)
+		setup       func(t *testing.T) (executable string)
 		ctx         context.Context
 		wantKind    providers.ExecuteFailureKind
 		wantMessage string
@@ -29,10 +30,10 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 		{
 			name:      "missing executable",
 			allocator: &stubAllocator{result: agypty.SessionResult{}},
-			setup: func(t *testing.T) (string, agy.ExecutableDependencies) {
+			setup: func(t *testing.T) string {
 				factoryRoot := t.TempDir()
 				missing := filepath.Join(factoryRoot, "missing-agy")
-				return missing, executableDependencies(nil)
+				return missing
 			},
 			wantKind:    providers.ExecuteFailureKindDependency,
 			wantMessage: "Agy executable could not be found.",
@@ -94,16 +95,13 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 				ctx = context.Background()
 			}
 			executable := "agy"
-			deps := executableDependencies(nil)
 			if tc.setup != nil {
-				executable, deps = tc.setup(t)
+				executable = tc.setup(t)
 			}
 			factoryRoot := t.TempDir()
-			effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-				FactoryRoot:            factoryRoot,
-				Allocator:              tc.allocator,
-				Executable:             executable,
-				ExecutableDependencies: deps,
+			effect := agy.NewPTYEffect(tc.allocator, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+				FactoryRoot: factoryRoot,
+				Executable:  executable,
 			})
 			_, err := effect.Execute(ctx, execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:    providers.IDAntigravity,
@@ -118,17 +116,15 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 func TestPTYEffectDeadlineTimeoutOutranksOutputDetail(t *testing.T) {
 	t.Parallel()
 
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot: t.TempDir(),
-		Allocator: &failureStubAllocator{
-			result: agypty.SessionResult{
-				ExitCode:    1,
-				CleanedText: "token=customer-secret-value",
-			},
-			runErr: context.DeadlineExceeded,
+	effect := agy.NewPTYEffect(&failureStubAllocator{
+		result: agypty.SessionResult{
+			ExitCode:    1,
+			CleanedText: "token=customer-secret-value",
 		},
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+		runErr: context.DeadlineExceeded,
+	}, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: t.TempDir(),
+		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:    providers.IDAntigravity,
@@ -146,11 +142,9 @@ func TestPTYEffectMissingExecutableViaExecNotFound(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	missingExecutable := filepath.Join(factoryRoot, "missing-agy")
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}},
-		Executable:             missingExecutable,
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(&stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}}, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  missingExecutable,
 	})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
@@ -164,13 +158,11 @@ func TestPTYEffectMissingExecutableViaExecNotFound(t *testing.T) {
 func TestPTYEffectTimeoutDoesNotTreatPartialOutputAsSuccess(t *testing.T) {
 	t.Parallel()
 
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+	effect := agy.NewPTYEffect(&failureStubAllocator{result: agypty.SessionResult{
+		ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
+	}, runErr: agypty.ErrSessionTimedOut}, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
 		FactoryRoot: t.TempDir(),
-		Allocator: &failureStubAllocator{result: agypty.SessionResult{
-			ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
-		}, runErr: agypty.ErrSessionTimedOut},
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:    providers.IDAntigravity,
@@ -260,14 +252,9 @@ func assertExecuteFailure(
 func TestPTYEffectClassifiesExecErrNotFoundAsMissingExecutable(t *testing.T) {
 	t.Parallel()
 
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+	effect := agy.NewPTYEffect(&errorAllocator{err: fmt.Errorf("start child: %w", exec.ErrNotFound)}, fakeExecutableLocator(map[string]string{"agy": "/missing/agy"}), executableInspector("/missing/agy"), platformclock.Real{}, agy.PTYPolicy{
 		FactoryRoot: t.TempDir(),
-		Allocator:   &errorAllocator{err: fmt.Errorf("start child: %w", exec.ErrNotFound)},
 		Executable:  "agy",
-		ExecutableDependencies: executableDependencies(
-			map[string]string{"agy": "/missing/agy"},
-			"/missing/agy",
-		),
 	})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,

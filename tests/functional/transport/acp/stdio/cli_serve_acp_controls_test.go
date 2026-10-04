@@ -110,6 +110,7 @@ func TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession(t *testing.T)
 
 	harness.sendPrompt(t, 3, sessionID, "close this in-flight prompt")
 	harness.runner.waitForStart(t, 1)
+	harness.waitForCapturedSession(t, sessionID)
 	harness.sendClose(t, 4, sessionID)
 
 	responses := harness.responsesThroughPromptTerminal(t, "3", "4")
@@ -163,6 +164,7 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 
 	harness.sendPrompt(t, 4, sessionID, "close this later active prompt")
 	harness.runner.waitForStart(t, 2)
+	harness.waitForCapturedSession(t, sessionID)
 	harness.sendClose(t, 5, sessionID)
 	responses := harness.responsesThroughPromptTerminal(t, "4", "5")
 	assertPromptStopReason(t, responses["4"], acpsdk.StopReasonCancelled)
@@ -303,6 +305,30 @@ func (h *serveACPControlHarness) sendClose(t *testing.T, id int, sessionID strin
 	writeRPCLine(t, h.stdinWrite, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"session/close","params":{"sessionId":%q}}`, id, sessionID))
 }
 
+// A live Worker tool call is delivered by the response bridge only after
+// startup has returned and ACP has recorded the episode's pending Factory
+// Session identity. Provider start can occur during startup, before close has
+// a captured target. Observe the public update instead of racing that edge.
+func (h *serveACPControlHarness) waitForCapturedSession(t *testing.T, sessionID string) {
+	t.Helper()
+	for {
+		frame := readRPCFrame(t, h.stdout)
+		if frame.Method != string(acpsdk.ClientMethodSessionUpdate) {
+			t.Fatalf("expected captured-session readiness update, got response id %s: %+v", frame.ID, frame.Error)
+		}
+		var notification acpsdk.SessionNotification
+		if err := json.Unmarshal(frame.Params, &notification); err != nil {
+			t.Fatalf("unmarshal readiness session/update: %v", err)
+		}
+		if string(notification.SessionId) != sessionID {
+			t.Fatalf("readiness sessionId = %q, want %q", notification.SessionId, sessionID)
+		}
+		if call := notification.Update.ToolCall; call != nil && call.ToolCallId != "" {
+			return
+		}
+	}
+}
+
 func (h *serveACPControlHarness) sendLoad(t *testing.T, id int, sessionID string) {
 	t.Helper()
 	writeRPCLine(t, h.stdinWrite, fmt.Sprintf(
@@ -391,6 +417,10 @@ func (h *serveACPControlHarness) responsesThroughPromptTerminal(t *testing.T, pr
 		delete(pending, id)
 		if id == promptID {
 			promptTerminalSeen = true
+		} else {
+			// Diagnose a rejected close immediately: an uncancelled provider
+			// cannot produce the terminal prompt we would otherwise await.
+			assertCloseResponse(t, frame)
 		}
 	}
 	if !promptTerminalSeen {

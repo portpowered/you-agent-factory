@@ -40,29 +40,24 @@ type EffectResult struct {
 
 // NewRegistration binds one Claude effect to the canonical Claude identity.
 func NewRegistration(effect Effect) execution.Registration {
+	continuation := newContinuationAttempt(effect)
 	return execution.Registration{
 		Provider: providers.IDClaude,
-		Attempt:  newAttempt(effect),
-		Continue: newContinuationAttempt(effect),
+		Attempt:  newAttempt(continuation),
+		Continue: continuation,
 	}
 }
 
-func newAttempt(effect Effect) execution.Attempt {
-	if effect == nil {
-		return unavailableAttempt
-	}
+func newAttempt(continuation execution.ContinuationAttempt) execution.Attempt {
 	return func(
 		ctx context.Context,
 		request providers.ExecuteRequest,
 	) (providers.ExecuteResult, error) {
-		return newContinuationAttempt(effect)(ctx, execution.ContinuationRequest{ExecuteRequest: request})
+		return continuation(ctx, execution.ContinuationRequest{ExecuteRequest: request})
 	}
 }
 
 func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
-	if effect == nil {
-		return unavailableContinuationAttempt
-	}
 	return func(
 		ctx context.Context,
 		request execution.ContinuationRequest,
@@ -152,26 +147,6 @@ func nativeFailure(err error) (execution.AttemptFailure, bool) {
 		return execution.AttemptFailure{Declared: &declared}, true
 	}
 	return execution.AttemptFailure{NativeError: err}, true
-}
-
-func unavailableAttempt(
-	context.Context,
-	providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	return providers.ExecuteResult{}, providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindDependency,
-		Message: "Claude native execution is unavailable",
-	}
-}
-
-func unavailableContinuationAttempt(
-	context.Context,
-	execution.ContinuationRequest,
-) (providers.ExecuteResult, error) {
-	return providers.ExecuteResult{}, providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindDependency,
-		Message: "Claude native execution is unavailable",
-	}
 }
 
 func cloneMetadata(metadata map[string]string) map[string]string {

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 
@@ -13,12 +12,10 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 type unavailableProviderSessions struct {
@@ -30,20 +27,13 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 }
 
 // TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation
-// composes the real Providers root, native Codex streaming adapter, Agent
-// runner, and Worker Sessions bridge. The command runner is the controlled
-// external edge: it reports a provider-authored thread while live, then
-// verifies Resume reaches the exact thread through Providers.Continue.
+// supplies a completed Providers fake to the Agent runner and Worker Sessions
+// bridge. It reports a provider-authored thread while live and verifies Resume
+// reaches the exact thread through Providers.ContinueReference.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *testing.T) {
-	command := newLiveSessionCommandRunner()
-	providerService, err := providerswire.NewService(
-		providerswire.WithWorkersCommandRunner(command),
-		providerswire.WithLogger(logging.NoopLogger{}),
-	)
-	if err != nil {
-		t.Fatalf("providers wire NewService() error = %v", err)
-	}
+	command := &liveSessionProvidersFake{initialSessionObserved: make(chan struct{})}
+	providerService := command
 	bridge := &workersessions.ProviderSessionObservationPublisher{}
 	var sessions workersessions.Service
 	runner, err := New(providerService, func(fragment workers.ProgressFragment) {
@@ -107,8 +97,8 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 	if completed.result.Session.State != workersessions.StateCompleted || completed.result.Session.ProviderSessionAssociation == nil || completed.result.Session.ProviderSessionAssociation.Reference != want {
 		t.Fatalf("Start() final session = %#v, want COMPLETED with retained exact reference %#v", completed.result.Session, want)
 	}
-	if args := command.resumeArgs(); !containsLiveSessionSequence(args, "resume", want.ID) {
-		t.Fatalf("continued Codex args = %#v, want exact resume identity %q", args, want.ID)
+	if reference := command.resumeReference(); reference != want {
+		t.Fatalf("continued provider reference = %#v, want exact identity %#v", reference, want)
 	}
 }
 
@@ -132,50 +122,37 @@ func liveSessionStartRequest() workersessions.InvokeSessionRequest {
 	}
 }
 
-type liveSessionCommandRunner struct {
+// The supplied provider reports a live session before cancellation and captures
+// the exact opaque reference on continuation; native decoding is provider-owned.
+type liveSessionProvidersFake struct {
+	providers.Service
 	initialSessionObserved chan struct{}
 	mu                     sync.Mutex
-	resume                 workerprocess.CommandRequest
+	resume                 providers.SessionRef
 }
 
-func newLiveSessionCommandRunner() *liveSessionCommandRunner {
-	return &liveSessionCommandRunner{initialSessionObserved: make(chan struct{})}
-}
-
-func (r *liveSessionCommandRunner) Run(ctx context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
-	return r.RunStreaming(ctx, request, nil)
-}
-
-func (r *liveSessionCommandRunner) RunStreaming(
-	ctx context.Context,
-	request workerprocess.CommandRequest,
-	observe workerprocess.OutputChunkObserver,
-) (workerprocess.CommandResult, error) {
-	if containsLiveSessionSequence(request.Args, "resume", "codex-live-thread-1") {
-		r.mu.Lock()
-		r.resume = request
-		r.resume.Args = append([]string(nil), request.Args...)
-		r.mu.Unlock()
-		emitLiveSessionChunk(observe, `{"type":"thread.started","thread_id":"codex-live-thread-1"}`+"\n")
-		emitLiveSessionChunk(observe, `{"type":"item.completed","item":{"id":"message-resumed","type":"agent_message","text":"resumed exact output"}}`+"\n")
-		return workerprocess.CommandResult{}, nil
-	}
-	emitLiveSessionChunk(observe, `{"type":"thread.started","thread_id":"codex-live-thread-1"}`+"\n")
+func (r *liveSessionProvidersFake) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "codex-live-thread-1"}
+	request.ObserveSession(reference)
 	close(r.initialSessionObserved)
 	<-ctx.Done()
-	return workerprocess.CommandResult{}, ctx.Err()
+	return providers.ExecuteResult{SessionRef: &reference}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled, Message: "provider invocation was canceled"}
 }
-
-func (r *liveSessionCommandRunner) resumeArgs() []string {
+func (r *liveSessionProvidersFake) ContinueReference(_ context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	r.mu.Lock()
+	r.resume = reference
+	r.mu.Unlock()
+	request.Attempt.ObserveSession(reference)
+	return providers.ContinueReferenceResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeResumed, Result: providers.ExecuteResult{Content: "resumed exact output", SessionRef: &reference}}, nil
+}
+func (r *liveSessionProvidersFake) resumeReference() providers.SessionRef {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]string(nil), r.resume.Args...)
-}
-
-func emitLiveSessionChunk(observe workerprocess.OutputChunkObserver, payload string) {
-	if observe != nil {
-		observe(workerprocess.OutputStreamStdout, []byte(payload))
-	}
+	return r.resume
 }
 
 type liveSessionService struct {
@@ -242,13 +219,4 @@ func cloneLiveSessionStringMap(value map[string]string) map[string]string {
 		clone[key] = item
 	}
 	return clone
-}
-
-func containsLiveSessionSequence(values []string, first, second string) bool {
-	for index := 0; index+1 < len(values); index++ {
-		if strings.TrimSpace(values[index]) == first && strings.TrimSpace(values[index+1]) == second {
-			return true
-		}
-	}
-	return false
 }

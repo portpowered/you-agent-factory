@@ -83,7 +83,7 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	}
 	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID:  workerSessionID,
-		FactorySessionID: scope.effectiveID,
+		FactorySessionID: scope.observationID(),
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
@@ -130,7 +130,7 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	}
 	result, err := observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		ProviderSession:  providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
-		FactorySessionID: scope.effectiveID,
+		FactorySessionID: scope.observationID(),
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
@@ -169,7 +169,7 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	}
 	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID:  workerSessionID,
-		FactorySessionID: scope.effectiveID,
+		FactorySessionID: scope.observationID(),
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("get Worker Session observation: %w", err)
@@ -179,7 +179,7 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	}
 	result, err := observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		WorkerSessionID:  workerSessionID,
-		FactorySessionID: scope.effectiveID,
+		FactorySessionID: scope.observationID(),
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
@@ -296,7 +296,7 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 	}
 	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID:  workerSessionID,
-		FactorySessionID: scope.effectiveID,
+		FactorySessionID: scope.observationID(),
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get Worker Session observation: %w", err)
@@ -306,7 +306,7 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 	}
 	subscription, err := observations.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
 		WorkerSessionID:  workerSessionID,
-		FactorySessionID: scope.effectiveID,
+		FactorySessionID: scope.observationID(),
 		Limit:            workersessions.DefaultObservationStreamLimit,
 		ReplayOnly:       replayOnly,
 		Cursor:           cursor,
@@ -432,6 +432,16 @@ func (a *Adapter) resolveWorkerSessionScope(ctx context.Context, sessionID strin
 	}
 	scope.defaultScope = resolved.IsDefault
 	return scope, nil
+}
+
+// observationID preserves the default runtime's immutable execution owner.
+// EffectiveID still selects the resolved live runtime; it is not an execution
+// identity when the public default alias resolves to a live UUID.
+func (scope workerSessionScope) observationID() string {
+	if scope.defaultScope {
+		return defaultFactorySessionAlias
+	}
+	return scope.effectiveID
 }
 
 func (a *Adapter) observationsForScope(scope workerSessionScope) observationService {
