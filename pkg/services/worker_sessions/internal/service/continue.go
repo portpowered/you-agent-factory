@@ -824,9 +824,69 @@ func (r *registry) associateProviderSessionLocked(
 	}, nil
 }
 
-// CloseRuntimeAttempts joins the admitted attempts of one runtime without
-// stopping process admission or discarding retained observations. The runtime
-// owns admission and must quiesce its opener before calling this operation.
+type runtimeAdmission struct {
+	closed   bool
+	openings int
+	drained  chan struct{}
+}
+
+// runtimeAdmissionLocked returns scope-owned admission state under r.mu.
+func (r *registry) runtimeAdmissionLocked(runtimeID string) *runtimeAdmission {
+	if r.runtimeAdmissions == nil {
+		r.runtimeAdmissions = make(map[string]*runtimeAdmission)
+	}
+	admission := r.runtimeAdmissions[runtimeID]
+	if admission == nil {
+		admission = &runtimeAdmission{drained: make(chan struct{})}
+		close(admission.drained)
+		r.runtimeAdmissions[runtimeID] = admission
+	}
+	return admission
+}
+
+func (r *registry) beginRuntimeOpening(runtimeID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	admission := r.runtimeAdmissionLocked(runtimeID)
+	if admission.closed {
+		return false
+	}
+	if admission.openings == 0 {
+		admission.drained = make(chan struct{})
+	}
+	admission.openings++
+	return true
+}
+
+func (r *registry) finishRuntimeOpening(runtimeID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	admission := r.runtimeAdmissions[runtimeID]
+	admission.openings--
+	if admission.openings == 0 {
+		close(admission.drained)
+	}
+}
+
+func (r *registry) closeRuntimeAdmission(ctx context.Context, runtimeID string) error {
+	r.mu.Lock()
+	admission := r.runtimeAdmissionLocked(runtimeID)
+	admission.closed = true
+	drained := admission.drained
+	r.mu.Unlock()
+	r.logger.Info("runtime Worker admission closed", "runtimeID", runtimeID, "outcome", "closed")
+	select {
+	case <-drained:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// CloseRuntimeAttempts seals this runtime's admission, joins opening effects,
+// then joins its admitted attempts without discarding retained observations.
+// An opening that loses the final admission race terminalizes its own capture;
+// the closed runtime ID cannot admit another attempt. Peer scopes stay open.
 func (r *registry) CloseRuntimeAttempts(ctx context.Context, runtimeID string) error {
 	ctx = runtimeAttemptContext(ctx)
 	runtimeID = strings.TrimSpace(runtimeID)
@@ -834,6 +894,9 @@ func (r *registry) CloseRuntimeAttempts(ctx context.Context, runtimeID string) e
 		return workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := r.closeRuntimeAdmission(ctx, runtimeID); err != nil {
 		return err
 	}
 	r.mu.RLock()

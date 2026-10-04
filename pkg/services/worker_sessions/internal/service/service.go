@@ -89,6 +89,9 @@ type registry struct {
 	runtimeAttemptControls map[string]*runtimeAttempt
 	// runtimeAttemptOwners reserves a scoped key before any opening effects.
 	runtimeAttemptOwners map[workersessions.RuntimeAttemptKey]string
+	// runtimeAdmissions fences opening effects against scoped runtime close.
+	// Closed scopes remain sealed while their observations remain retained.
+	runtimeAdmissions map[string]*runtimeAdmission
 	// latestRuntimeDispatchIDs retains the last exact dispatch identity per
 	// Runtime-owned Worker Session after its live cancellation handle completes,
 	// so terminal NOOP controls can still return the admitted identity.

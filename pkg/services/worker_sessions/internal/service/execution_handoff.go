@@ -751,6 +751,10 @@ func (r *registry) BeginRuntimeAttempt(
 	ctx = runtimeAttemptContext(ctx)
 	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
 	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalDispatchID}
+	if !r.beginRuntimeOpening(key.RuntimeID) {
+		return nil, workersessions.ErrStartAdmissionFailed
+	}
+	defer r.finishRuntimeOpening(key.RuntimeID)
 	r.mu.RLock()
 	conflict := r.runtimeAttemptDispatchConflictLocked(key, req.ID, attemptID)
 	r.mu.RUnlock()
@@ -792,9 +796,13 @@ func (r *registry) BeginRuntimeAttempt(
 		attemptID:  attemptID,
 		completed:  make(chan struct{}),
 	}
-	if !r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle) {
-		r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
-		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	if err := r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle); err != nil {
+		if errors.Is(err, workersessions.ErrStartAdmissionFailed) {
+			_ = handle.Complete(ctx, canceledBeforeAdmissionResult(execution), workers.ErrWorkstationDispatchCanceled)
+		} else {
+			r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
+		}
+		return nil, err
 	}
 	opened = true
 	return workersessions.RuntimeAttempt(handle.Complete), nil
@@ -821,9 +829,12 @@ func (r *registry) releaseRuntimeAttemptKey(key workersessions.RuntimeAttemptKey
 	}
 }
 
-func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handle *runtimeAttempt) bool {
+func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handle *runtimeAttempt) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if admission := r.runtimeAdmissions[handle.key.RuntimeID]; admission != nil && admission.closed {
+		return workersessions.ErrStartAdmissionFailed
+	}
 	if r.runtimeAttempts == nil {
 		r.runtimeAttempts = make(map[string]struct{})
 	}
@@ -834,7 +845,7 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 		r.latestRuntimeDispatchIDs = make(map[string]string)
 	}
 	if r.runtimeAttemptOwners[handle.key] != workerID || r.runtimeAttemptDispatchConflictLocked(handle.key, workerID, attemptID) {
-		return false
+		return workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 	r.dispatchOwners[logicalDispatchID] = workerID
 	r.runtimeAttempts[workerID] = struct{}{}
@@ -843,5 +854,5 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 		r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
 	}
 	r.runtimeAttemptControls[workerID] = handle
-	return true
+	return nil
 }

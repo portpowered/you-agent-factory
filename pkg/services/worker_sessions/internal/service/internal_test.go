@@ -74,10 +74,15 @@ type controlClaimLogger struct {
 	claimed chan struct{}
 	release chan struct{}
 	once    sync.Once
+	message string
 }
 
 func (l *controlClaimLogger) Info(message string, _ ...any) {
-	if message != "worker session control claimed" {
+	want := l.message
+	if want == "" {
+		want = "worker session control claimed"
+	}
+	if message != want {
 		return
 	}
 	l.once.Do(func() { close(l.claimed) })
@@ -527,6 +532,7 @@ func TestKeyedRuntimeCloseJoinsOwnedCaptureAndPreservesPeer(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	assertPerRuntimeFirstTerminal(t, a, sink, workersessions.StateCanceled)
+	assertClosedRuntimeRejectsOpening(t, a, sink)
 	assertPerRuntimeCancellationCalls(t, controlA, 1)
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
 	if err := a.service.CloseRuntimeAttempts(ctx, a.request.Key.RuntimeID); err != nil {
@@ -565,6 +571,7 @@ func TestKeyedRuntimeCloseFailureAndInvalidScopePreserveLiveAttempts(t *testing.
 	if err := a.service.CloseRuntimeAttempts(context.Background(), a.request.Key.RuntimeID); !errors.Is(err, cause) {
 		t.Fatalf("close failure = %v, want exact cause", err)
 	}
+	assertClosedRuntimeRejectsOpening(t, a, sink)
 	assertPerRuntimeCancellationCalls(t, controlA, 1)
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
 	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
@@ -573,6 +580,181 @@ func TestKeyedRuntimeCloseFailureAndInvalidScopePreserveLiveAttempts(t *testing.
 	assertPerRuntimeCaptureNotAborted(t, b)
 	publishPerRuntimeProgress(t, a, sink)
 	publishPerRuntimeProgress(t, b, sink)
+}
+
+func assertClosedRuntimeRejectsOpening(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture) {
+	t.Helper()
+	request := fixture.request
+	request.ID += "-after-close"
+	request.Key.DispatchID = "new-dispatch"
+	request.Execution.Execution.Dispatch.DispatchID = request.Key.DispatchID
+	before := sink.requestsFor("")
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+	if attempt != nil || !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
+		t.Fatalf("closed runtime admission = %v, %v", attempt, err)
+	}
+	if _, err := fixture.service.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("closed runtime created Worker identity: %v", err)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("closed runtime appended opening records")
+	}
+}
+
+func TestKeyedRuntimeCloseDuringOpeningSealsOnlyOwnedScope(t *testing.T) {
+	t.Parallel()
+	for _, failOpening := range []bool{false, true} {
+		t.Run(fmt.Sprintf("opening-fails=%t", failOpening), func(t *testing.T) {
+			t.Parallel()
+			verifyRuntimeCloseDuringOpening(t, failOpening)
+		})
+	}
+}
+
+func verifyRuntimeCloseDuringOpening(t *testing.T, failOpening bool) {
+	t.Helper()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	controlB := bindPerRuntimeCancellation(t, b, nil)
+	a := preparePerRuntimeAttemptFixture(t, "a", sink, b)
+	boundary := EventsAppender(sink)
+	if failOpening {
+		boundary = &perRuntimeRejectOpeningAppender{EventsAppender: sink, topic: workersessions.Topic(a.request.ID), err: errors.New("owned opening failed")}
+	}
+	gate := &keyedOpeningGate{EventsAppender: boundary, topic: workersessions.Topic(a.request.ID), entered: make(chan struct{}), release: make(chan struct{})}
+	var release sync.Once
+	unblock := func() { release.Do(func() { close(gate.release) }) }
+	a.service.events = gate
+	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{}), message: "runtime Worker admission closed"}
+	close(logger.release)
+	a.service.logger = logger
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	opened := make(chan error, 1)
+	openingDone := make(chan struct{})
+	go func() {
+		defer close(openingDone)
+		attempt, err := a.service.BeginRuntimeAttempt(ctx, a.request)
+		if attempt != nil {
+			_ = attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+		}
+		opened <- err
+	}()
+	t.Cleanup(func() {
+		unblock()
+		if err := waitControlledSignal(openingDone, 30*time.Second); err != nil {
+			t.Errorf("opening cleanup join: %v", err)
+		}
+	})
+	if err := waitControlledSignal(gate.entered, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	closed := make(chan error, 1)
+	closingDone := make(chan struct{})
+	go func() {
+		defer close(closingDone)
+		closed <- a.service.CloseRuntimeAttempts(ctx, a.request.Key.RuntimeID)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		if err := waitControlledSignal(closingDone, 30*time.Second); err != nil {
+			t.Errorf("closing cleanup join: %v", err)
+		}
+	})
+	if err := waitControlledSignal(logger.claimed, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	assertClosedRuntimeRejectsOpening(t, a, sink)
+	select {
+	case err := <-closed:
+		t.Fatalf("close missed opening effects: %v", err)
+	default:
+	}
+	unblock()
+	assertRuntimeOpeningClosed(t, ctx, a, opened, closed, failOpening)
+	assertRuntimeClosedOpeningRecords(t, a, sink, failOpening)
+	assertClosedRuntimeRejectsOpening(t, a, sink)
+	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	assertPerRuntimeCaptureNotAborted(t, b)
+	publishPerRuntimeProgress(t, b, sink)
+	c := newPerRuntimeAttemptFixture(t, "new-peer", sink, b)
+	assertPerRuntimeAttemptState(t, c, workersessions.StateRunning)
+}
+
+func assertRuntimeClosedOpeningRecords(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, failed bool) {
+	t.Helper()
+	handle := fixture.capture.delegate.handleFor(t, fixture.request.ID)
+	if failed {
+		handle.mu.Lock()
+		defer handle.mu.Unlock()
+		if handle.abortCalls != 1 || handle.closeCalls != 0 || handle.terminalCalls != 0 {
+			t.Fatalf("failed opening cleanup = %d/%d/%d", handle.abortCalls, handle.closeCalls, handle.terminalCalls)
+		}
+		return
+	}
+	appends := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	if len(appends) != 2 || appends[0].SourceEventID != "started" || appends[1].SourceEventID != "terminal" {
+		t.Fatalf("close during opening records = %#v", appends)
+	}
+	assertPerRuntimeTerminalPayload(t, fixture, appends[1], decodePerRuntimeDraft(t, appends[1]), workersessions.StateCanceled)
+}
+
+func TestKeyedRuntimeCloseBeforeOpeningAndCanceledCaller(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	fixture := preparePerRuntimeAttemptFixture(t, "unopened", sink)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := fixture.service.CloseRuntimeAttempts(canceled, fixture.request.Key.RuntimeID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled caller = %v", err)
+	}
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	if err != nil {
+		t.Fatalf("canceled close prevented admission: %v", err)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.service.CloseRuntimeAttempts(context.Background(), "not-yet-opened"); err != nil {
+		t.Fatal(err)
+	}
+	fixture.request.Key.RuntimeID = "not-yet-opened"
+	fixture.request.Execution.Execution.RuntimeID = fixture.request.Key.RuntimeID
+	assertClosedRuntimeRejectsOpening(t, fixture, sink)
+}
+
+func assertRuntimeOpeningClosed(t *testing.T, ctx context.Context, fixture *perRuntimeAttemptFixture, opened, closed <-chan error, failOpening bool) {
+	t.Helper()
+	want := workersessions.ErrStartAdmissionFailed
+	state := workersessions.StateCanceled
+	if failOpening {
+		want = workersessions.ErrStartOpeningPublication
+		state = workersessions.StateFailed
+	}
+	select {
+	case err := <-opened:
+		if !errors.Is(err, want) {
+			t.Fatalf("opening after close = %v, want %v", err, want)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("close after opening drain = %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	assertPerRuntimeAttemptState(t, fixture, state)
+	handle := fixture.capture.delegate.handleFor(t, fixture.request.ID)
+	if !failOpening {
+		if closes, terminals := handle.counts(); closes != 1 || terminals != 1 {
+			t.Fatalf("opening capture finalized %d/%d times, want 1/1", closes, terminals)
+		}
+	}
 }
 
 func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
