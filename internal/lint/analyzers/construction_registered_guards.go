@@ -10,11 +10,12 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-// This increment seeds provenance from declared required parameters and
-// classified receivers only. Storage and helper propagation remain scanner-owned.
+// Guard provenance follows declared required parameters, classified receivers
+// and constructor result fields. Same-package helpers remain scanner-owned.
 func scanRegisteredConstructionGuards(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues,
 	add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
 ) {
+	stored := registeredConstructionStorage(pass, registry, values)
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
 			continue
@@ -38,10 +39,15 @@ func scanRegisteredConstructionGuards(pass *analysis.Pass, registry Construction
 					slices.Contains(constructor.Results, ConstructionSymbol{ImportPath: caller.ImportPath, Name: caller.Receiver}) {
 					required[sig.Recv()] = "required-receiver-guard"
 				}
-				if len(required) == 0 {
+				if len(required) == 0 && sig.Recv() == nil {
 					continue
 				}
-				p := registeredGuardOrigins{pass: pass, values: values, required: required, assertions: registeredGuardAssertions(pass, fn.Body)}
+				p := registeredGuardOrigins{pass: pass, values: values, required: required, assertions: registeredGuardAssertions(pass, fn.Body),
+					receiver: sig.Recv()}
+				if sig.Recv() != nil && registeredStorageResult(sig.Recv().Type(), constructor) {
+					p.fields = stored[constructor.Symbol]
+				}
+				p.fieldMutations = p.mutatedFields(fn.Body)
 				p.scan(fn.Body, func(rule string, pos token.Pos) { add(caller, constructor.Symbol, constructor, rule, pos) })
 			}
 		}
@@ -49,10 +55,13 @@ func scanRegisteredConstructionGuards(pass *analysis.Pass, registry Construction
 }
 
 type registeredGuardOrigins struct {
-	pass       *analysis.Pass
-	values     registeredValues
-	required   map[types.Object]string
-	assertions map[types.Object]registeredGuardAssertion
+	pass           *analysis.Pass
+	values         registeredValues
+	required       map[types.Object]string
+	assertions     map[types.Object]registeredGuardAssertion
+	receiver       *types.Var
+	fields         map[*types.Var]string
+	fieldMutations map[*types.Var]bool
 }
 
 type registeredGuardAssertion struct {
@@ -110,6 +119,18 @@ func (p registeredGuardOrigins) origin(expr ast.Expr, status bool, visited map[t
 		}
 	case *ast.Ident:
 		return p.objectOrigin(p.pass.TypesInfo.ObjectOf(expr), status, visited)
+	case *ast.SelectorExpr:
+		if !status {
+			selection := p.pass.TypesInfo.Selections[expr]
+			if selection != nil && selection.Kind() == types.FieldVal && p.receiverAlias(expr.X, map[types.Object]bool{}) {
+				field := selection.Obj().(*types.Var)
+				rule := p.fields[field]
+				if rule != "" && (p.fieldMutations[field] || p.storageMutated(expr.X, map[types.Object]bool{})) {
+					return "unresolved-required-dependency-guard"
+				}
+				return rule
+			}
+		}
 	}
 	return ""
 }
