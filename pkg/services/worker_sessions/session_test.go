@@ -54,14 +54,17 @@ func TestSession_Validate_AcceptsNonEmptyIDAndAcceptedState(t *testing.T) {
 func TestPublish_CanonicalMockUsagePreservesExplicitZeroesAndModel(t *testing.T) {
 	t.Parallel()
 	spy := &workerRecordSpy{}
-	publisher := workersessions.ProgressPublisherForTest(spy, func(workers.ProgressFragment) {})
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID: "worker-1",
-		Kind:       workers.ProgressFragmentKind,
-		Type:       "usage.updated",
-		Provider:   "codex",
-		Payload:    `{"inputTokens":0,"outputTokens":5,"reasoningOutputTokens":0,"totalTokens":5,"model":"gpt-5-codex"}`,
-	})
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", workers.ProgressFragment{
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-usage", AttemptID: "attempt-usage"},
+		DispatchID:  "dispatch-usage",
+		Kind:        workers.ProgressFragmentKind,
+		Type:        "usage.updated",
+		Provider:    "codex",
+		Payload:     `{"inputTokens":0,"outputTokens":5,"reasoningOutputTokens":0,"totalTokens":5,"model":"gpt-5-codex"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(spy.published) != 1 {
 		t.Fatalf("published records = %d, want exactly one usage record", len(spy.published))
@@ -646,14 +649,17 @@ func TestProviderSessionObservationPublisher_SuppressesProviderIdentityDisagreem
 func TestPublish_MalformedCanonicalUsageFallsBackToUsedTokens(t *testing.T) {
 	t.Parallel()
 	spy := &workerRecordSpy{}
-	publisher := workersessions.ProgressPublisherForTest(spy, func(workers.ProgressFragment) {})
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID: "worker-usage",
-		Kind:       workers.ProgressFragmentKind,
-		Type:       "usage.updated",
-		Payload:    "{malformed",
-		Metadata:   map[string]string{"used_tokens": "7"},
-	})
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", workers.ProgressFragment{
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-usage", AttemptID: "attempt-usage"},
+		DispatchID:  "dispatch-usage",
+		Kind:        workers.ProgressFragmentKind,
+		Type:        "usage.updated",
+		Payload:     "{malformed",
+		Metadata:    map[string]string{"used_tokens": "7"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(spy.published) != 1 {
 		t.Fatalf("published records = %d, want one usage record", len(spy.published))
@@ -669,13 +675,16 @@ func TestPublish_MalformedCanonicalUsageFallsBackToUsedTokens(t *testing.T) {
 		t.Fatalf("usage payload total tokens = %d, want 7", payload.TotalTokens)
 	}
 
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID: "worker-usage-empty-object",
-		Kind:       workers.ProgressFragmentKind,
-		Type:       "usage.updated",
-		Payload:    `{}`,
-		Metadata:   map[string]string{"used_tokens": "8"},
-	})
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", workers.ProgressFragment{
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-usage", AttemptID: "attempt-usage"},
+		DispatchID:  "dispatch-usage",
+		Kind:        workers.ProgressFragmentKind,
+		Type:        "usage.updated",
+		Payload:     `{}`,
+		Metadata:    map[string]string{"used_tokens": "8"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if len(spy.published) != 2 {
 		t.Fatalf("published records after empty canonical object = %d, want two usage records", len(spy.published))
 	}
