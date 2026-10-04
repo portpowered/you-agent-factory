@@ -4,52 +4,23 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"slices"
-	"strings"
 
 	"golang.org/x/tools/go/analysis"
 )
 
 // Guard provenance follows declared required parameters, classified receivers
-// and constructor result fields. Same-package helpers remain scanner-owned.
+// and constructor result fields through same-package helper calls.
 func scanRegisteredConstructionGuards(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues,
 	add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
 ) {
-	stored := registeredConstructionStorage(pass, registry, values)
-	for _, file := range pass.Files {
-		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
-			continue
-		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
-				continue
-			}
-			obj := pass.TypesInfo.Defs[fn.Name].(*types.Func)
-			caller := registeredConstructionSymbol(obj)
-			sig := obj.Type().(*types.Signature)
-			for _, constructor := range registry.Constructors {
-				required := map[types.Object]string{}
-				if constructor.Symbol == caller {
-					for _, param := range constructor.RequiredParameters {
-						required[sig.Params().At(param.Index)] = "required-dependency-guard"
-					}
-				}
-				if sig.Recv() != nil && registeredProhibitedKind(constructor, registry.Types) &&
-					slices.Contains(constructor.Results, ConstructionSymbol{ImportPath: caller.ImportPath, Name: caller.Receiver}) {
-					required[sig.Recv()] = "required-receiver-guard"
-				}
-				if len(required) == 0 && sig.Recv() == nil {
-					continue
-				}
-				p := registeredGuardOrigins{pass: pass, values: values, required: required, assertions: registeredGuardAssertions(pass, fn.Body),
-					receiver: sig.Recv()}
-				if sig.Recv() != nil && registeredStorageResult(sig.Recv().Type(), constructor) {
-					p.fields = stored[constructor.Symbol]
-				}
-				p.fieldMutations = p.mutatedFields(fn.Body)
-				p.scan(fn.Body, func(rule string, pos token.Pos) { add(caller, constructor.Symbol, constructor, rule, pos) })
-			}
+	helpers := registeredConstructionHelpers(pass, values)
+	stored := registeredConstructionStorage(pass, registry, values, helpers)
+	for _, constructor := range registry.Constructors {
+		origins := helpers.requiredOrigins(constructor, registry.Types, stored[constructor.Symbol])
+		for _, fn := range helpers.functions {
+			caller := registeredConstructionSymbol(pass.TypesInfo.Defs[fn.Name])
+			p := helpers.context(fn, origins[caller], constructor, stored[constructor.Symbol])
+			p.scan(fn.Body, func(rule string, pos token.Pos) { add(caller, constructor.Symbol, constructor, rule, pos) })
 		}
 	}
 }
@@ -62,6 +33,8 @@ type registeredGuardOrigins struct {
 	receiver       *types.Var
 	fields         map[*types.Var]string
 	fieldMutations map[*types.Var]bool
+	helpers        *registeredGuardHelpers
+	activeHelpers  map[ConstructionSymbol]bool
 }
 
 type registeredGuardAssertion struct {
@@ -110,6 +83,9 @@ func (p registeredGuardOrigins) origin(expr ast.Expr, status bool, visited map[t
 			}
 		}
 	case *ast.CallExpr:
+		if !status && p.helpers != nil {
+			return p.helperOrigin(expr)
+		}
 		if status {
 			for _, arg := range expr.Args {
 				if p.origin(arg, true, map[types.Object]bool{}) != "" {
@@ -153,7 +129,11 @@ func (p registeredGuardOrigins) objectOrigin(obj types.Object, status bool, visi
 			}
 		}
 	} else if rule == "" {
-		rule = p.origin(p.values.initial[obj], status, visited)
+		if call := p.values.tuples[obj]; call != nil && !status && p.helpers != nil {
+			rule = p.helperOrigin(call)
+		} else {
+			rule = p.origin(p.values.initial[obj], status, visited)
+		}
 	}
 	if rule != "" && p.values.mutated[obj] {
 		return "unresolved-required-dependency-guard"

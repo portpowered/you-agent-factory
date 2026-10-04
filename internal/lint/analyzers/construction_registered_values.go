@@ -9,12 +9,13 @@ import (
 
 type registeredValues struct {
 	initial map[types.Object]ast.Expr
+	tuples  map[types.Object]*ast.CallExpr
 	mutated map[types.Object]bool
 	safe    map[ast.Expr]bool
 }
 
 func registeredConstructionValues(pass *analysis.Pass) registeredValues {
-	v := registeredValues{initial: map[types.Object]ast.Expr{}, mutated: map[types.Object]bool{}, safe: map[ast.Expr]bool{}}
+	v := registeredValues{initial: map[types.Object]ast.Expr{}, tuples: map[types.Object]*ast.CallExpr{}, mutated: map[types.Object]bool{}, safe: map[ast.Expr]bool{}}
 	called := map[ast.Expr]bool{}
 	for _, file := range pass.Files {
 		ast.Inspect(file, func(node ast.Node) bool {
@@ -22,6 +23,9 @@ func registeredConstructionValues(pass *analysis.Pass) registeredValues {
 			case *ast.CallExpr:
 				markRegisteredCallee(called, n.Fun)
 			case *ast.ValueSpec:
+				for _, name := range n.Names {
+					v.recordTuple(pass, name, n.Values)
+				}
 				if len(n.Names) == len(n.Values) {
 					for i, name := range n.Names {
 						v.initial[pass.TypesInfo.Defs[name]] = n.Values[i]
@@ -30,6 +34,7 @@ func registeredConstructionValues(pass *analysis.Pass) registeredValues {
 			case *ast.AssignStmt:
 				for i, left := range n.Lhs {
 					if id, ok := left.(*ast.Ident); ok {
+						v.recordTuple(pass, id, n.Rhs)
 						if obj := pass.TypesInfo.Defs[id]; obj != nil && n.Tok.String() == ":=" && len(n.Lhs) == len(n.Rhs) {
 							v.initial[obj] = n.Rhs[i]
 						} else if pass.TypesInfo.Defs[id] == nil {
@@ -83,6 +88,17 @@ func registeredConstructionValues(pass *analysis.Pass) registeredValues {
 		}
 	}
 	return v
+}
+
+func (v registeredValues) recordTuple(pass *analysis.Pass, id *ast.Ident, right []ast.Expr) {
+	if pass.TypesInfo.Defs[id] == nil || len(right) != 1 {
+		return
+	}
+	if call, ok := right[0].(*ast.CallExpr); ok {
+		if _, tuple := pass.TypesInfo.TypeOf(call).(*types.Tuple); tuple {
+			v.tuples[pass.TypesInfo.Defs[id]] = call
+		}
+	}
 }
 
 func (v registeredValues) resolve(pass *analysis.Pass, expr ast.Expr, visited map[types.Object]bool) ConstructionSymbol {

@@ -12,7 +12,7 @@ import (
 
 // Field identity comes from compiler declarations, including grouped and
 // embedded fields. Conflicting writes retain debt rather than choosing a branch.
-func registeredConstructionStorage(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues) map[ConstructionSymbol]map[*types.Var]string {
+func registeredConstructionStorage(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues, helpers *registeredGuardHelpers) map[ConstructionSymbol]map[*types.Var]string {
 	stored := map[ConstructionSymbol]map[*types.Var]string{}
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
@@ -29,7 +29,7 @@ func registeredConstructionStorage(pass *analysis.Pass, registry ConstructionReg
 					continue
 				}
 				p := registeredGuardOrigins{pass: pass, values: values, required: map[types.Object]string{},
-					assertions: registeredGuardAssertions(pass, fn.Body)}
+					assertions: registeredGuardAssertions(pass, fn.Body), helpers: helpers}
 				for _, param := range constructor.RequiredParameters {
 					p.required[obj.Type().(*types.Signature).Params().At(param.Index)] = "required-dependency-guard"
 				}

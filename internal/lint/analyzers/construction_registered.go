@@ -14,7 +14,7 @@ import (
 )
 
 // RegisteredConstruction migrates qualified construction calls and references.
-// The legacy scanner still owns storage, helper, getter and provider provenance
+// The legacy scanner still owns getter and provider provenance
 // until their typed replacements are complete. Report mode never enables an owner.
 var RegisteredConstruction = registeredConstructionAnalyzer(RepositoryConstructionRegistry())
 
