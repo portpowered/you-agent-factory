@@ -4,13 +4,130 @@ import (
  "encoding/json"
  "fmt"
  "sort"
+ "strings"
  "testing"
+
+ "github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
 )
 
 type profileBarrier struct {
  Name string `json:"name"`
  Joined bool `json:"joined"`
  Error *string `json:"error"`
+}
+
+// This is report validation, not acquisition evidence. Only the composed
+// public Models fixture may populate witnesses used for completeness.
+type profileCapacityWitness struct {
+ Origin string `json:"origin"`
+ SessionID string `json:"factorySessionID"`
+ ScopeID string `json:"scopeID"`
+ ModelName string `json:"modelName"`
+ OwnerIdentity string `json:"ownerIdentity"`
+ Slot string `json:"slot"`
+ Holders int `json:"holders"`
+ PublicCapacity int `json:"publicCapacity"`
+ InvocationIDs []string `json:"invocationIDs"`
+ LeaseIDs []string `json:"leaseIDs"`
+ Released bool `json:"releasedUnderOwnerPolicy"`
+ Multiplicity string `json:"multiplicityDisposition"`
+ Checkpoints []profileCheckpoint `json:"checkpoints"`
+}
+
+func validateProfileCapacityWitness(w profileCapacityWitness) error {
+ if w.Origin!="composed_public_models" || w.SessionID=="" || w.ScopeID=="" || w.ModelName=="" || w.OwnerIdentity=="" || w.Slot=="" {
+  return fmt.Errorf("missing composed public Models attribution")
+ }
+ if w.Holders<1 || w.PublicCapacity<1 || w.Holders>w.PublicCapacity || !w.Released {
+  return fmt.Errorf("missing capacity or owner-policy release")
+ }
+ if w.Slot!=w.ScopeID+"|"+strings.ToUpper(strings.TrimSpace(w.ModelName)){return fmt.Errorf("slot scope/model attribution mismatch")}
+ if w.PublicCapacity>1 && (w.Holders<2 || w.Multiplicity!="exercised") || w.PublicCapacity==1 && (w.Holders!=1 || w.Multiplicity!="public_capacity_one") {
+  return fmt.Errorf("public multiplicity not exercised")
+ }
+ for _,ids:=range [][]string{w.InvocationIDs,w.LeaseIDs} {
+  seen:=map[string]bool{}
+  if len(ids)!=w.Holders{return fmt.Errorf("holder identities do not match multiplicity")}
+  for _,id:=range ids{if id=="" || seen[id]{return fmt.Errorf("empty or duplicate holder identity")};seen[id]=true}
+ }
+ if len(w.Checkpoints)!=2{return fmt.Errorf("capacity active/released checkpoints required")}
+ for index,c:=range w.Checkpoints {
+  stage:="CAPACITY_ACTIVE";if index==1{stage="CAPACITY_RELEASED"}
+  if c.Stage!=stage || c.Report.FactorySessionID==nil || *c.Report.FactorySessionID!=w.SessionID || len(c.Report.RuntimeGenerationIDs)==0 {
+   return fmt.Errorf("capacity checkpoint lifecycle attribution mismatch")
+  }
+  if err:=validateReport(c.Report);err!=nil{return err}
+  if len(c.Barriers)==0{return fmt.Errorf("missing capacity checkpoint barrier")}
+  for _,b:=range c.Barriers{if b.Name=="" || !b.Joined || b.Error!=nil{return fmt.Errorf("failed capacity checkpoint barrier")}}
+  var leases *baselineobservation.LeaseSnapshot
+  for _,owner:=range c.Report.Owners{if owner.OwnerIdentity==w.OwnerIdentity && owner.Kind=="models_leases"{leases=owner.Leases}}
+  if leases==nil{return fmt.Errorf("capacity owner unavailable")}
+  expected:=w.Holders;if index==1{expected=0}
+  if leases.CapacityHolders[w.Slot]!=expected{return fmt.Errorf("capacity slot multiplicity mismatch")}
+  for _,id:=range w.LeaseIDs {
+   matches:=0
+   for _,record:=range leases.LeaseRecords {
+    if record.Key!=id{continue};matches++
+    if record.Scope!=w.ScopeID || record.ModelName!=w.ModelName{return fmt.Errorf("lease scope/model attribution mismatch")}
+    // Existing owner policy retains the claimed flag after release/expiry.
+    if index==0 && (record.Status!="ACTIVE" || !record.Claimed) || index==1 && record.Status!="RELEASED" && record.Status!="EXPIRED"{return fmt.Errorf("lease disposition mismatch")}
+   }
+   if matches!=1{return fmt.Errorf("missing or duplicate retained lease identity")}
+  }
+ }
+ active,released:=w.Checkpoints[0].Report,w.Checkpoints[1].Report
+ if active.Artifact!=released.Artifact || active.FixtureScope!=released.FixtureScope || len(active.RuntimeGenerationIDs)!=len(released.RuntimeGenerationIDs){return fmt.Errorf("capacity checkpoint identity changed")}
+ for i,id:=range active.RuntimeGenerationIDs{if id=="" || id!=released.RuntimeGenerationIDs[i]{return fmt.Errorf("capacity runtime generation changed")}}
+ return nil
+}
+
+func TestLifecycleProfileReportCapacityAttribution(t *testing.T) {
+ t.Parallel()
+ fresh:=func()profileCapacityWitness {
+  session:="session"
+  checkpoints:=[]profileCheckpoint{}
+  for i,stage:=range []string{"CAPACITY_ACTIVE","CAPACITY_RELEASED"} {
+   report:=validObserverReport();report.FactorySessionID=&session;report.RuntimeGenerationIDs=[]string{"generation"}
+   owner:=report.Owners[0].Leases
+   owner.LeaseRecords=[]baselineobservation.LeaseRecord{}
+   for _,id:=range []string{"lease-1","lease-2"}{status:="ACTIVE";if i==1{status="RELEASED"};owner.LeaseRecords=append(owner.LeaseRecords,baselineobservation.LeaseRecord{Key:id,Scope:"scope",ModelName:"model",Status:status,Claimed:true})}
+   owner.LeaseRecordCount=2;report.Totals.LeaseRecordCount=2
+   owner.CapacityHolders=map[string]int{"scope|MODEL":2}
+   if i==1{owner.CapacityHolders=map[string]int{};owner.CapacityHoldersTotal=0;report.Totals.CapacityHoldersTotal=0}
+   checkpoints=append(checkpoints,profileCheckpoint{Report:report,Stage:stage,Barriers:[]profileBarrier{{Name:"controlled gate / joined invocation",Joined:true}}})
+  }
+  return profileCapacityWitness{Origin:"composed_public_models",SessionID:session,ScopeID:"scope",ModelName:"model",OwnerIdentity:"leases",Slot:"scope|MODEL",Holders:2,PublicCapacity:2,InvocationIDs:[]string{"work-1","work-2"},LeaseIDs:[]string{"lease-1","lease-2"},Released:true,Multiplicity:"exercised",Checkpoints:checkpoints}
+ }
+ if err:=validateProfileCapacityWitness(fresh());err!=nil{t.Fatal(err)}
+ cases:=map[string]func(*profileCapacityWitness){
+  "synthetic":func(w *profileCapacityWitness){w.Origin="synthetic_calibration"},
+  "empty activity":func(w *profileCapacityWitness){w.Holders=0},
+  "missing owner":func(w *profileCapacityWitness){w.OwnerIdentity="absent"},
+  "wrong slot":func(w *profileCapacityWitness){w.Slot="other"},
+  "capacity exceeded":func(w *profileCapacityWitness){w.PublicCapacity=1},
+  "claimed release":func(w *profileCapacityWitness){w.Released=false},
+  "nil identities":func(w *profileCapacityWitness){w.InvocationIDs=nil},
+  "duplicate invocations":func(w *profileCapacityWitness){w.InvocationIDs[1]=w.InvocationIDs[0]},
+  "duplicate leases":func(w *profileCapacityWitness){w.LeaseIDs[1]=w.LeaseIDs[0]},
+  "missing lease":func(w *profileCapacityWitness){w.LeaseIDs[1]="absent"},
+  "wrong scope":func(w *profileCapacityWitness){w.ScopeID="peer"},
+  "wrong model":func(w *profileCapacityWitness){w.ModelName="peer"},
+  "missing checkpoint":func(w *profileCapacityWitness){w.Checkpoints=w.Checkpoints[:1]},
+  "failed join":func(w *profileCapacityWitness){w.Checkpoints[1].Barriers[0].Joined=false},
+  "missing barrier":func(w *profileCapacityWitness){w.Checkpoints[1].Barriers=nil},
+  "missing inventory":func(w *profileCapacityWitness){w.Checkpoints[1].Report.OwnerInventoryComplete=false},
+  "wrong session":func(w *profileCapacityWitness){w.SessionID="peer"},
+  "unclaimed active":func(w *profileCapacityWitness){w.Checkpoints[0].Report.Owners[0].Leases.LeaseRecords[0].Claimed=false},
+  "erased retained record":func(w *profileCapacityWitness){w.Checkpoints[1].Report.Owners[0].Leases.LeaseRecords=w.Checkpoints[1].Report.Owners[0].Leases.LeaseRecords[:1];w.Checkpoints[1].Report.Owners[0].Leases.LeaseRecordCount=1;w.Checkpoints[1].Report.Totals.LeaseRecordCount=1},
+  "changed artifact":func(w *profileCapacityWitness){w.Checkpoints[1].Report.Artifact.SourceCommit="peer"},
+  "changed generation":func(w *profileCapacityWitness){w.Checkpoints[1].Report.RuntimeGenerationIDs[0]="peer"},
+ }
+ for name,change:=range cases{t.Run(name,func(t *testing.T){w:=fresh();change(&w);if validateProfileCapacityWitness(w)==nil{t.Fatal("invalid capacity accepted")}})}
+ w:=fresh();w.Checkpoints[1].Report.Owners[0].Leases.LeaseRecords[0].Status="EXPIRED"
+ if err:=validateProfileCapacityWitness(w);err!=nil{t.Fatal("honest expired record rejected",err)}
+ before,err:=json.Marshal(w);if err!=nil{t.Fatal(err)}
+ if err=validateProfileCapacityWitness(w);err!=nil{t.Fatal(err)}
+ after,err:=json.Marshal(w);if err!=nil || string(before)!=string(after){t.Fatal("validation mutated detached observation")}
 }
 type profileCheckpoint struct {
  Report checkpointReport

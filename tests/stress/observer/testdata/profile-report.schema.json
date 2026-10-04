@@ -551,7 +551,10 @@
           "invocationIDs",
           "releasedUnderOwnerPolicy",
           "multiplicityDisposition",
-          "checkpoints"
+          "checkpoints",
+          "factorySessionID",
+          "modelName",
+          "leaseIDs"
         ],
         "properties": {
           "origin": {
@@ -585,7 +588,9 @@
             "items": {
               "type": "string",
               "minLength": 1
-            }
+            },
+            "minItems": 1,
+            "uniqueItems": true
           },
           "releasedUnderOwnerPolicy": {
             "type": "boolean"
@@ -600,6 +605,23 @@
             "type": "array",
             "items": {
               "$ref": "#/$defs/profileCheckpoint"
+            }
+          },
+          "factorySessionID": {
+            "type": "string",
+            "minLength": 1
+          },
+          "modelName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "leaseIDs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
             }
           }
         }

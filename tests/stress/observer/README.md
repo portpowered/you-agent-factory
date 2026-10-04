@@ -335,3 +335,14 @@ artifact; T27-P01 owns the confirmed no-co-tenant measurement window and actual
 baseline; T22-P01 owns the matching <=10% median/p95 comparison. I01 and VAL01
 remain separate. Author delivery stops at pushed head, non-draft PR, CI started
 and addressed blocking feedback; review owns hosted race, terminal CI and merge.
+
+Capacity report validation now requires the composed witness to retain the
+Factory Session, model scope, model name, owner, slot, invocation IDs and lease
+IDs. Both CAPACITY_ACTIVE and CAPACITY_RELEASED checkpoints must carry joined
+barriers and matching artifact/runtime identities. The active slot's integer
+count must match the witness, and each named lease must be claimed and ACTIVE.
+After joined cleanup the slot has zero holders while every named record remains
+RELEASED or EXPIRED. Existing owner policy retains the claimed flag on terminal
+records; validation does not rewrite it. Synthetic calibration cannot satisfy
+this completeness check. The public acquisition fixture and full selector remain
+unfinished; these accounting tests alone do not prove composed Models activity.

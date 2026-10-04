@@ -37,6 +37,7 @@ type profileManifest struct {
 type sampleProfile struct {
  Mode string
  Cycles []profileCycle
+ CapacityWitnesses []profileCapacityWitness
  Manifest profileManifest
  ManifestPath,ManifestSHA256 string
  Attempts []profileAttempt
@@ -68,7 +69,7 @@ func TestLifecycleProfileCapability(t *testing.T) {
 }
 
 func newSampleProfile(mode string)*sampleProfile {
- return &sampleProfile{Mode:mode,Cycles:[]profileCycle{},ManifestPath:os.Getenv("OBSERVER_PROFILE_MANIFEST"),Attempts:[]profileAttempt{},Final:[]profileCheckpoint{},Errors:[]string{},CleanupErrors:[]string{},LastBarrier:"manifest identity",Started:time.Now().UTC().Format(time.RFC3339Nano)}
+ return &sampleProfile{Mode:mode,Cycles:[]profileCycle{},CapacityWitnesses:[]profileCapacityWitness{},ManifestPath:os.Getenv("OBSERVER_PROFILE_MANIFEST"),Attempts:[]profileAttempt{},Final:[]profileCheckpoint{},Errors:[]string{},CleanupErrors:[]string{},LastBarrier:"manifest identity",Started:time.Now().UTC().Format(time.RFC3339Nano)}
 }
 
 // This dedicated tool is sequential because it observes all process owners.
@@ -220,7 +221,7 @@ func (r *sampleProfile) emit(t *testing.T) {
  summaries:=map[string]profileSummary{"inert":summarizeProfile(r.Attempts,"inert",false),"session":summarizeProfile(r.Attempts,"session",false)}
  payload:=map[string]any{"schemaVersion":1,"mode":r.Mode,"manifestPath":r.ManifestPath,"manifestSHA256":r.ManifestSHA256,
  "hostWindow":map[string]any{"confirmed":false,"authorityReference":nil,"host":host,"cpu":fmt.Sprintf("%s/%s; CPUs=%d",runtime.GOOS,runtime.GOARCH,runtime.NumCPU()),"memory":"not measured; shared host","cache":"owned runtime paths; cached preparation toolchain","startedUTC":r.Started,"endedUTC":time.Now().UTC().Format(time.RFC3339Nano),"coTenantBreach":false},
- "complete":complete,"baselineQualified":false,"lastBarrier":r.LastBarrier,"errors":r.Errors,"cleanupErrors":r.CleanupErrors,"attempts":r.Attempts,"summaries":summaries,"cycles":r.Cycles,"capacityWitnesses":[]any{},"finalCheckpoints":r.Final,
+ "complete":complete,"baselineQualified":false,"lastBarrier":r.LastBarrier,"errors":r.Errors,"cleanupErrors":r.CleanupErrors,"attempts":r.Attempts,"summaries":summaries,"cycles":r.Cycles,"capacityWitnesses":r.CapacityWitnesses,"finalCheckpoints":r.Final,
  "overhead":map[string]any{"methodSHA256":r.Manifest.MethodSHA256,"registrationCallbacks":r.Callbacks,"retainedOwnerCallbacks":r.Callbacks,"snapshotCount":r.SnapshotCount,"captureOutsideSpanNs":r.CaptureNs,"serializationOutsideSpanNs":int64(0),"matchedFinalRequired":true}}
  path:=os.Getenv("OBSERVER_REPORT")
  data,err:=writeProfileReport(path,payload,json.MarshalIndent,os.WriteFile,time.Now)
@@ -248,6 +249,10 @@ func writeProfileReport(path string,payload map[string]any,encode func(any,strin
 }
 
 func (r *sampleProfile) validateSamples() error {
+ if r.Mode=="capability" || r.Mode=="profile" {
+  if len(r.CapacityWitnesses)==0{return fmt.Errorf("missing composed public Models capacity witness")}
+  for _,w:=range r.CapacityWitnesses{if err:=validateProfileCapacityWitness(w);err!=nil{return err}}
+ }
  if len(r.Errors)>0 || len(r.CleanupErrors)>0 || r.Errors==nil || r.CleanupErrors==nil {return fmt.Errorf("workload or cleanup failure")}
  if len(r.Attempts)!=2 || len(r.Final)!=2 {return fmt.Errorf("incomplete sample workload")}
  kinds:=map[string]bool{};ids:=map[string]bool{}
