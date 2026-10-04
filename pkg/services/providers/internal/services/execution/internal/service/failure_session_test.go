@@ -129,6 +129,43 @@ func TestExecuteAppliesDefaultMessageForSessionNotFound(t *testing.T) {
 	}
 }
 
+func TestExecuteAppliesDefaultMessageForCapabilityMismatch(t *testing.T) {
+	t.Parallel()
+	service := mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCapabilityMismatch}
+	})
+	_, err := service.Execute(t.Context(), providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "capability-failure"})
+	var failure providers.ExecuteFailure
+	if !errors.Is(err, providers.ErrCapabilityMismatch) || !errors.As(err, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindCapabilityMismatch ||
+		failure.Message != "provider does not support the requested capability" {
+		t.Fatalf("Execute error = %#v, want classified capability failure with default message", err)
+	}
+}
+
+func TestExecutePreservesSafeFailurePathAndRedactsRequestSecrets(t *testing.T) {
+	t.Parallel()
+	const path = "C:/provider/work"
+	const secret = "private-request-secret"
+	service := mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "cannot open " + path + " with " + secret,
+			Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+				providers.ExecuteDiagnosticMetadataSafeFailureMessage: "true",
+			}},
+		}
+	})
+	_, err := service.Execute(t.Context(), providers.ExecuteRequest{
+		Provider: providers.IDCodex, AttemptID: "safe-path", WorkingDirectory: path, SystemPrompt: secret,
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency ||
+		failure.Message != "cannot open "+path+" with <redacted>" {
+		t.Fatalf("Execute failure = %#v, want actionable path with request secret redacted", err)
+	}
+}
+
 func TestExecuteCarriesLifecycleFailureSession(t *testing.T) {
 	t.Parallel()
 

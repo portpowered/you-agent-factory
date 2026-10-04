@@ -80,6 +80,9 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("argv = %#v, want shell-free -p print mode with stream-json output", request.Args)
 	}
 	assertAgyFinalOnlyCompletion(t, events, responseEvents, "agy functional answer COMPLETE")
+	if calls := fixture.ptyHost.calls.Load(); calls != 0 {
+		t.Fatalf("legacy PTY host calls = %d, want command selection without PTY launch", calls)
+	}
 }
 
 // TestAgyNativeFailureThroughRootBuildProcessIsSafe proves native Agy failures

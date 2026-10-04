@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -108,9 +111,24 @@ type agySharedProcessFixture struct {
 	routes   map[string]*agySharedCommandRoute
 	roleMu   sync.Mutex
 	roleHost *agySharedRoleHost
+	ptyHost  agyUnusedPTYHost
 
 	closeOnce sync.Once
 	closeErr  error
+}
+
+// Command selection must remain usable even when the legacy host cannot
+// allocate. Counters observe only the replaceable OS edge, never PTY internals.
+type agyUnusedPTYHost struct{ calls atomic.Int32 }
+
+func (host *agyUnusedPTYHost) Allocate(context.Context) (platformpty.Allocation, error) {
+	host.calls.Add(1)
+	return nil, platformpty.ErrUnsupportedPlatform
+}
+
+func (host *agyUnusedPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
+	host.calls.Add(1)
+	return nil, nil, platformpty.ErrUnsupportedPlatform
 }
 
 type agySharedRoleHost struct {
@@ -183,6 +201,7 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      fixture.api.start,
 		ProviderCommandRunner: fixture.runner,
+		AgyPTYHost:            &fixture.ptyHost,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess(shared AGY fixture): %v", err)

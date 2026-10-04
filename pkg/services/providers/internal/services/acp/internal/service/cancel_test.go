@@ -110,6 +110,30 @@ func newTeardownScheduler() *teardownScheduler {
 	return &teardownScheduler{clock: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *teardownTimer, 4)}
 }
 func (scheduler *teardownScheduler) Now() time.Time { return scheduler.clock.Now() }
+func (scheduler *teardownScheduler) After(duration time.Duration) <-chan time.Time {
+	return scheduler.clock.NewTimer(duration).C()
+}
+
+func TestTeardownSchedulerAfterUsesLogicalTime(t *testing.T) {
+	t.Parallel()
+	scheduler := newTeardownScheduler()
+	after := scheduler.After(500 * time.Millisecond)
+	scheduler.clock.SetTick(499)
+	select {
+	case <-after:
+		t.Fatal("After fired before its logical deadline")
+	default:
+	}
+	scheduler.clock.SetTick(500)
+	select {
+	case observed := <-after:
+		if !observed.Equal(scheduler.Now()) {
+			t.Fatalf("After = %v, want logical time %v", observed, scheduler.Now())
+		}
+	default:
+		t.Fatal("After did not fire at its logical deadline")
+	}
+}
 func (scheduler *teardownScheduler) NewTimer(duration time.Duration) platformclock.Timer {
 	timer := &teardownTimer{Timer: scheduler.clock.NewTimer(duration), duration: duration}
 	scheduler.created <- timer
