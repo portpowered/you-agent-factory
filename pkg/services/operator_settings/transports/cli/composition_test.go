@@ -57,7 +57,7 @@ func TestBindConfigureDelegatesThroughAdapterService(t *testing.T) {
 	}
 }
 
-func TestBindConfigureMatchesFreeFunctionFacade(t *testing.T) {
+func TestBindConfigureMatchesAdapterService(t *testing.T) {
 	t.Parallel()
 
 	configureErr := errors.New("configure failed")
@@ -71,7 +71,7 @@ func TestBindConfigureMatchesFreeFunctionFacade(t *testing.T) {
 		Output:  bytes.NewBuffer(nil),
 	}
 	boundErr := operation(cfg)
-	directErr := operatorsettingscli.Configure(cfg, root)
+	directErr := operatorsettingscli.New(root).Configure(cfg)
 	if (boundErr == nil) != (directErr == nil) {
 		t.Fatalf("bound error = %v, direct error = %v", boundErr, directErr)
 	}
@@ -120,7 +120,7 @@ func TestBindResolveOperatorDefaultsDelegatesThroughAdapterService(t *testing.T)
 	}
 }
 
-func TestBindResolveOperatorDefaultsMatchesFreeFunctionFacade(t *testing.T) {
+func TestBindResolveOperatorDefaultsMatchesAdapterService(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -129,12 +129,11 @@ func TestBindResolveOperatorDefaultsMatchesFreeFunctionFacade(t *testing.T) {
 
 	flags := operatorsettings.FlagOverrides{WorkerModelProvider: "DEFAULT"}
 	resolvedBound, boundErr := operation(homeDir, operatorsettings.Defaults{}, flags)
-	resolvedDirect, directErr := operatorsettingscli.ResolveOperatorDefaults(
+	resolvedDirect, directErr := operatorsettingscli.New(root).ResolveOperatorDefaults(
 		operatorsettingscli.ResolveOperatorDefaultsConfig{
 			HomeDir: homeDir,
 			Flags:   flags,
 		},
-		root,
 	)
 	if (boundErr == nil) != (directErr == nil) {
 		t.Fatalf("bound error = %v, direct error = %v", boundErr, directErr)

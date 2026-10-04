@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -19,7 +19,7 @@ func TestEnginePipelineDeletionProof_WireConstructsPublishedControlObservationDi
 	t.Parallel()
 
 	ctx := context.Background()
-	service, err := factoryruntimewire.NewService(
+	service, err := newCompletedRuntimeRoot(
 		func() string { return "del-run-engine-pipeline-proof-id" },
 		nil,
 		nil,
@@ -31,6 +31,7 @@ func TestEnginePipelineDeletionProof_WireConstructsPublishedControlObservationDi
 		) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

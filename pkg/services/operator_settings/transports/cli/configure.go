@@ -34,20 +34,6 @@ type ConfigureConfig struct {
 	NewLineReader ContextLineReaderFactory
 }
 
-// Configure delegates configure intent to the Settings-owned CLI adapter
-// Service and surfaces typed results, validation failures, and cancel outcomes
-// for CLI consumption.
-func Configure(cfg ConfigureConfig, root operatorsettings.Service) error {
-	if err := ValidateConfigureBoundary(cfg); err != nil {
-		return err
-	}
-	adapter := New(root)
-	if adapter == nil {
-		return fmt.Errorf("operator settings service is required")
-	}
-	return adapter.Configure(cfg)
-}
-
 // ValidateConfigureBoundary rejects configure inputs before Settings root access.
 func ValidateConfigureBoundary(cfg ConfigureConfig) error {
 	if cfg.Context == nil {

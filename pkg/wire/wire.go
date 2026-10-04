@@ -4,6 +4,7 @@ package wire
 
 import (
 	"context"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
@@ -18,6 +19,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -61,7 +63,11 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,
 	provideChatSessionsService,
-	provideOperatorSettingsService,
+	settingswire.NewDocumentService,
+	settingswire.NewResolutionService,
+	settingswire.NewService,
+	settingswire.NewCLIService,
+	provideOperatorSettingsDocumentPreserver,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
 	provideACPServerFactorySessionStartResolver,
@@ -216,7 +222,11 @@ var servicesSet = wire.NewSet(
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
-	provideFactoryWebhooksService,
+	provideFactoryWebhookHTTPClient,
+	provideFactoryWebhookSecretResolver,
+	provideFactoryWebhookClock,
+	provideFactoryWebhookDeadLetterAppender,
+	webhookswire.NewService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
@@ -302,6 +312,10 @@ var servicesSet = wire.NewSet(
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewAssembly,
 	provideFactoryRuntimeRoot,
+	provideRuntimeOrchestration,
+	provideRuntimeDispatchPlanning,
+	factoryruntimewire.NewLifecycle,
+	factoryruntimewire.NewInstanceHost,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.ProviderSessionsPorts), "*"),
 	wire.Struct(new(factorysessionwire.FactoryRuntimePorts), "*"),
