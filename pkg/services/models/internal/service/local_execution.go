@@ -127,11 +127,17 @@ func (e *localExecutor) invokeWithLease(
 		return models.LocalInvocationResult{Handled: true}, err
 	}
 	defer func() {
-		_ = e.host.ReleaseLease(ctx, lease.ID)
+		_ = e.host.ReleaseLease(context.WithoutCancel(ctx), lease.ID)
 	}()
+	if err := e.admitInvocation(ctx, scope); err != nil {
+		return models.LocalInvocationResult{Handled: true}, err
+	}
 
 	cacheLayout, err := assets.ResolveModelCache(ctx, runtimeConfig, worker)
 	if err != nil {
+		return models.LocalInvocationResult{Handled: true}, err
+	}
+	if err := e.admitInvocation(ctx, scope); err != nil {
 		return models.LocalInvocationResult{Handled: true}, err
 	}
 	loadWorker := worker.Clone()
@@ -172,6 +178,9 @@ func (e *localExecutor) loadHandle(
 	}
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	if err := e.admitInvocation(ctx, key.scope); err != nil {
+		return nil, err
+	}
 
 	if entry.handle != nil {
 		if e.hooks.MarkLoadReused != nil {

@@ -967,3 +967,15 @@ func TestRuntimeServiceInvokeLocalSelectsConfigurationPerCall(t *testing.T) {
 		}
 	}
 }
+
+func assertLateResolutionFinished(t *testing.T, ctx context.Context, done <-chan error, want error) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if !errors.Is(err, want) {
+			t.Fatalf("late resolution = %v, want %v", err, want)
+		}
+	case <-ctx.Done():
+		t.Fatal("late resolution did not return")
+	}
+}

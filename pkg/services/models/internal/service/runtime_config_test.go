@@ -866,3 +866,114 @@ func TestLocalExecutorMissingOperationAssetsFailsBeforeEffects(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalExecutorLateResolutionReleasesLeaseWithoutFurtherEffects(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"lease", "assets"} {
+		for _, stop := range []string{"scope", "process", "cancel"} {
+			t.Run(stage+"/"+stop, func(t *testing.T) {
+				t.Parallel()
+				a, b := scopedHandleRequest(t, "late-a"), scopedHandleRequest(t, "late-b")
+				configA := &models.RuntimeConfig{FactoryDirectory: "revision-a", BaseDirectory: "cache-a"}
+				configB := &models.RuntimeConfig{FactoryDirectory: "revision-b", BaseDirectory: "cache-b"}
+				started, resume := make(chan struct{}), make(chan struct{})
+				defer close(resume)
+				host := &lateResolutionHost{stage: stage, started: started, resume: resume}
+				assets := &lateResolutionAssets{stage: stage, started: started, resume: resume}
+				runtime, resources := &operationConfigRuntime{}, mustResourceLimiter(t)
+				executor, err := newLocalExecutor(host, runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+				defer cancel()
+				invocationCtx, cancelInvocation := context.WithCancel(ctx)
+				defer cancelInvocation()
+				done := make(chan error, 1)
+				go func() {
+					result, err := executor.InvokeLocal(invocationCtx, a, configA, assets)
+					if !result.Handled || result.Content != "" {
+						err = fmt.Errorf("late result = %#v: %w", result, err)
+					}
+					done <- err
+				}()
+				select {
+				case <-started:
+				case <-ctx.Done():
+					t.Fatal("resolution did not start")
+				}
+				assertOperationConfigInvocation(t, executor, ctx, b, configB)
+				want := stopLateResolution(executor, a.Scope, stop, cancelInvocation)
+				resume <- struct{}{}
+				assertLateResolutionFinished(t, ctx, done, want)
+				if stage == "lease" && assets.calls.Load() != 0 {
+					t.Fatal("retired acquisition entered assets")
+				}
+				if runtime.loads.Load() != 1 || host.canceledRelease.Load() {
+					t.Fatalf("loads=%d canceled cleanup=%v", runtime.loads.Load(), host.canceledRelease.Load())
+				}
+				if stop != "process" {
+					assertOperationConfigInvocation(t, executor, ctx, b, configB)
+				}
+				host.assertEveryLeaseReleasedOnce(t)
+				factory, worker := localExecutionConfiguration(a)
+				release, err := resources.Acquire(ctx, a.Scope, factory, worker)
+				if err != nil || release == nil {
+					t.Fatalf("late invocation retained capacity: %v", err)
+				}
+				release()
+			})
+		}
+	}
+}
+
+func stopLateResolution(executor *localExecutor, scope models.RuntimeScopeRef, stop string, cancel context.CancelFunc) error {
+	switch stop {
+	case "scope":
+		executor.CloseScope(scope)
+	case "process":
+		executor.Close()
+	case "cancel":
+		cancel()
+		return context.Canceled
+	}
+	return models.ErrRuntimeScopeClosed
+}
+
+type lateResolutionHost struct {
+	operationConfigHost
+	stage           string
+	started, resume chan struct{}
+	canceledRelease atomic.Bool
+}
+
+func (h *lateResolutionHost) AcquireLease(ctx context.Context, config *models.RuntimeConfig,
+	name string, options modelhost.LeaseOptions) (modelhost.Lease, error) {
+	if h.stage == "lease" && config.FactoryDirectory == "revision-a" {
+		close(h.started)
+		<-h.resume
+	}
+	return h.operationConfigHost.AcquireLease(ctx, config, name, options)
+}
+
+func (h *lateResolutionHost) ReleaseLease(ctx context.Context, id string) error {
+	if ctx.Err() != nil {
+		h.canceledRelease.Store(true)
+	}
+	return h.operationConfigHost.ReleaseLease(ctx, id)
+}
+
+type lateResolutionAssets struct {
+	operationSelectedAssets
+	stage           string
+	started, resume chan struct{}
+}
+
+func (a *lateResolutionAssets) ResolveModelCache(ctx context.Context, config *models.RuntimeConfig,
+	worker *models.RuntimeWorker) (localmodels.CacheLayout, error) {
+	if a.stage == "assets" {
+		close(a.started)
+		<-a.resume
+	}
+	return a.operationSelectedAssets.ResolveModelCache(ctx, config, worker)
+}
