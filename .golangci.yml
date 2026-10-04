@@ -18,8 +18,11 @@ linters:
   default: none
   enable:
     - forbidigo
+    - depguard
   settings:
     forbidigo:
+      # Examples remain functional source; they cannot escape the OS boundary.
+      exclude-godoc-examples: false
       # Resolve identifiers through go/types so import aliases cannot hide a call.
       analyze-types: true
       forbid:
@@ -31,17 +34,38 @@ linters:
           msg: construct the application logger only at the approved composition boundary and propagate it
         - pattern: '^logging\.BuildTerminalLogger$'
           msg: accept or propagate an injected logger
+        - pattern: '^exec\.(Command|CommandContext)$'
+          # Same-named functions in other packages are not process launchers.
+          pkg: '^os/exec$'
+          msg: functional tests must replace process effects or move real OS proof to integration
+    depguard:
+      rules:
+        functional-no-os-exec:
+          list-mode: lax
+          files: ["**/tests/functional/**/*.go", "!**/tests/functional/internal/support/**", "!**/testdata/**"]
+          deny:
+            - pkg: os/exec$
+              desc: functional scenarios replace process effects; real OS proof belongs in integration
   exclusions:
     generated: lax
     rules:
       # The logging boundary applies to production code under cmd, internal and pkg.
       - linters: [forbidigo]
         path-except: '^(cmd|internal|pkg)/'
+        text: 'injected logger|application logger'
       - linters: [forbidigo]
         path: '_test\.go$'
+        text: 'injected logger|application logger'
       # The approved composition boundary that may acquire loggers.
       - linters: [forbidigo]
         path: '^(pkg/wire/profiles\.go|pkg/transports/cli/root\.go|pkg/transports/cli/terminalpolicy/policy\.go|pkg/platform/logging/logger\.go)$'
+        text: 'injected logger|application logger'
+      - linters: [forbidigo]
+        path-except: '^tests/functional/'
+        text: 'functional tests must replace process effects'
+      - linters: [forbidigo]
+        path: '^tests/functional/internal/support/|(^|/)testdata/'
+        text: 'functional tests must replace process effects'
 
 issues:
   # Ratchet: only violations introduced since the merge base fail. Requires

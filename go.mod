@@ -3,6 +3,8 @@ module github.com/portpowered/infinite-you
 go 1.25.0
 
 require (
+	github.com/OpenPeeDeeP/depguard/v2 v2.2.1
+	github.com/ashanbrown/forbidigo/v2 v2.3.0
 	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20251201205617-2bb4c724c0f9
 	github.com/fsnotify/fsnotify v1.9.0
@@ -43,6 +45,8 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/subcommands v1.2.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

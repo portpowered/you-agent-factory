@@ -242,7 +242,7 @@ endif
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint compatibility-alias-check retired-surface-check deadcode fmt-check contracts-check
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint compatibility-alias-check retired-surface-check deadcode fmt-check contracts-check
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -287,7 +287,7 @@ endef
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-localai-runner-v2-component test-localai-runner-v2-prebuilt test-integration-models-managed-process build-integration-models-managed-process-helper test-integration-models-asr-live-correlation build-integration-models-asr-live-correlation-harness test-contract test-stress test-release
-.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-os-boundary-check functional-test-viz
+.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-backend-conformance test-backend-conformance-live test-root-process-acceptance long-tests long-tests-managed-runtime
@@ -690,9 +690,6 @@ test-functional-resumed-successor-artifact:
 
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
-
-functional-os-boundary-check:
-	$(call run_lint_checker,./cmd/functionalosboundarycheck,-root "." -baseline "docs/internal/baselines/functional-os-spawn-baseline.json" -inventory "docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json")
 
 # functional-test-viz is the single functional-report entrypoint. It runs the
 # configured fresh functional coverage tier exactly once (including its

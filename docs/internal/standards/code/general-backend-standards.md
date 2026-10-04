@@ -315,6 +315,12 @@ Rules:
 - Integration tests **MUST** consume an artifact compiled once by the invoking
   build or release lane. They **MUST NOT** compile inside test setup and
   **MUST** keep the real-boundary case set intentionally small.
+- `make golangci` enforces the functional OS boundary with depguard (`os/exec`
+  imports) and type-aware forbidigo (`Command`/`CommandContext`). These rules
+  cover functional scenarios and helpers, excluding shared
+  `tests/functional/internal/support` and testdata. Existing sites use the
+  `origin/main` merge-base ratchet; new or moved sites fail. Real OS proof
+  belongs in integration. Backend Lint owns this enforcement.
 - Inventory, package-shape, dependency-direction, source-topology, and similar
   structural enforcement **MUST** be implemented as lint or static checks, not
   runtime tests, unless that structure is itself a published customer contract.
