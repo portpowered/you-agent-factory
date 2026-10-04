@@ -1430,13 +1430,6 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 		t.Fatal("BeginRuntimeAttempt() returned a nil handle")
 	}
 
-	r.mu.RLock()
-	_, runtimeOwned := r.runtimeAttempts["worker-1"]
-	ownerID := r.dispatchOwners["dispatch-1"]
-	r.mu.RUnlock()
-	if !runtimeOwned || ownerID != "worker-1" {
-		t.Fatalf("runtime ownership = %v, dispatch owner = %q, want true and worker-1", runtimeOwned, ownerID)
-	}
 	running, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
 	if err != nil {
 		t.Fatalf("Get() after BeginRuntimeAttempt error = %v, want nil", err)
@@ -1457,12 +1450,6 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	}
 	if completed.State != workersessions.StateCompleted || completed.Result == nil || completed.Result.Outcome != workersessions.TerminalOutcomeCompleted {
 		t.Fatalf("completed session = %#v, want absorbing COMPLETED result", completed)
-	}
-	r.mu.RLock()
-	_, runtimeOwned = r.runtimeAttempts["worker-1"]
-	r.mu.RUnlock()
-	if runtimeOwned {
-		t.Fatal("runtime attempt ownership remained after Complete")
 	}
 }
 
@@ -1556,11 +1543,11 @@ func TestRuntimeAttempt_ProviderAssociationRetainsPhysicalIdentity(t *testing.T)
 			if fromResult {
 				result.Result.Continuation = &providers.ContinuationRef{Provider: string(reference.Provider), Kind: reference.Kind, ProviderSessionID: reference.ID}
 			} else {
-				association, err := r.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
-					DispatchID: "logical-dispatch", Reference: reference,
+				association, err := r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+					WorkerSessionID: request.ID, DispatchID: "logical-dispatch", Reference: reference,
 				})
 				if err != nil || association.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
-					t.Fatalf("ObserveProviderSession = %#v, %v", association, err)
+					t.Fatalf("AssociateProviderSession = %#v, %v", association, err)
 				}
 				assertRuntimePhysicalAssociation(t, r, request.ID, reference)
 			}
@@ -2119,12 +2106,9 @@ func TestBeginRuntimeAttempt_InitializesOwnershipMapsWithNilContext(t *testing.T
 	if err := attempt.Complete(nil, runtimeAttemptCompletedDispatch("dispatch-map-init"), nil); err != nil {
 		t.Fatalf("Complete() error = %v, want nil", err)
 	}
-	r.mu.RLock()
-	_, runtimeOwned := r.runtimeAttempts["worker-map-init"]
-	ownerID := r.dispatchOwners["dispatch-map-init"]
-	r.mu.RUnlock()
-	if runtimeOwned || ownerID != "worker-map-init" {
-		t.Fatalf("post-completion ownership = %v, dispatch owner = %q, want false and worker-map-init", runtimeOwned, ownerID)
+	session := getCharacterizationSession(t, r, "worker-map-init")
+	if session.State != workersessions.StateCompleted {
+		t.Fatalf("post-completion state = %s, want COMPLETED", session.State)
 	}
 }
 
@@ -6567,6 +6551,63 @@ func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 		t.Fatalf("selected retry terminal facts: %#v, %v", observation, err)
 	}
 	assertSelectedAttemptLineage(t, sink, request.ID, workers.AttemptReasonRetry, facts.Now().Add(-time.Second))
+}
+
+func TestKeyedRuntimeOpeningPreservesDirectProviderRoute(t *testing.T) {
+	t.Parallel()
+	r := newRuntimeIdentityRegistry(t)
+	direct := startSelectedEffectsInvocation(t, r, "direct-peer", "success", 2035)
+	dispatchID := direct.id + "-dispatch"
+	request := workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: dispatchID},
+		ID:  "runtime-peer", AttemptID: "runtime-physical", Execution: runtimeAttemptHandoff(dispatchID),
+	}
+	assertRuntimeDirectCollisionRejected(t, r, request, direct)
+	attempt, err := r.BeginRuntimeAttempt(context.Background(), request, r.execution, direct.facts, direct.scheduler, runtimeAttemptNoopCancellation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(dispatchID), nil) })
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "direct-provider"}
+	assertDirectProviderRoute(t, r, direct.id, dispatchID, reference, workersessions.ProviderSessionAssociationOutcomeAccepted)
+	if session := getCharacterizationSession(t, r, request.ID); session.ProviderSessionAssociation != nil || session.State != workersessions.StateRunning {
+		t.Fatalf("direct provider observation mutated runtime peer: %#v", session)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(dispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	assertDirectProviderRoute(t, r, direct.id, dispatchID, reference, workersessions.ProviderSessionAssociationOutcomeDuplicate)
+	assertSelectedEffectsObservation(t, r, direct, workersessions.StateRunning)
+	close(direct.release)
+	if result := awaitSelectedEffectsInvocation(t, direct); result.Session.State != workersessions.StateCompleted || result.Dispatch.Result.Output != direct.id || result.Session.ProviderSessionAssociation == nil || result.Session.ProviderSessionAssociation.Reference != reference {
+		t.Fatalf("direct execution lost output/provider after runtime completion: %#v", result)
+	}
+	if session := getCharacterizationSession(t, r, request.ID); session.State != workersessions.StateCompleted || session.ProviderSessionAssociation != nil {
+		t.Fatalf("runtime retained foreign provider association: %#v", session)
+	}
+}
+
+func assertRuntimeDirectCollisionRejected(t *testing.T, r *registry, request workersessions.RuntimeAttemptRequest, direct selectedEffectsInvocation) {
+	t.Helper()
+	request.AttemptID = ""
+	attempt, err := r.BeginRuntimeAttempt(context.Background(), request, r.execution, direct.facts, direct.scheduler, runtimeAttemptNoopCancellation)
+	if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("direct physical collision = %v, %v, want no handle/attempt mismatch", attempt, err)
+	}
+	if _, err := r.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("rejected collision reserved identity: %v", err)
+	}
+	assertSelectedEffectsObservation(t, r, direct, workersessions.StateRunning)
+}
+
+func assertDirectProviderRoute(t *testing.T, r *registry, id, dispatchID string, reference providers.SessionRef, outcome workersessions.ProviderSessionAssociationOutcome) {
+	t.Helper()
+	association, err := r.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+		DispatchID: dispatchID, Reference: reference,
+	})
+	if err != nil || association.Outcome != outcome || association.Association.WorkerSessionID != id {
+		t.Fatalf("direct provider route = %#v, %v, want %s/%s", association, err, id, outcome)
+	}
 }
 
 func assertSelectedAttemptLineage(t *testing.T, sink *perRuntimeAppendCapture, id string, reason workers.AttemptReason, started time.Time) {

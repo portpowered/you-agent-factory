@@ -733,8 +733,7 @@ func (r *registry) runtimeAttemptDispatchConflictLocked(key workersessions.Runti
 	if !owned || ownerID == workerID || attemptID != key.DispatchID {
 		return false
 	}
-	peer := r.runtimeAttemptControls[ownerID]
-	return peer == nil || peer.key == key
+	return true
 }
 
 // BeginRuntimeAttempt opens the Worker Session observation and recording
@@ -868,16 +867,12 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 	if r.runtimeAttempts == nil {
 		r.runtimeAttempts = make(map[string]struct{})
 	}
-	if r.dispatchOwners == nil {
-		r.dispatchOwners = make(map[string]string)
-	}
 	if r.latestRuntimeDispatchIDs == nil {
 		r.latestRuntimeDispatchIDs = make(map[string]string)
 	}
 	if r.runtimeAttemptOwners[handle.key] != workerID || r.runtimeAttemptDispatchConflictLocked(handle.key, workerID, attemptID) {
 		return workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
-	r.dispatchOwners[logicalDispatchID] = workerID
 	r.runtimeAttempts[workerID] = struct{}{}
 	r.latestRuntimeDispatchIDs[workerID] = logicalDispatchID
 	if r.runtimeAttemptControls == nil {

@@ -70,12 +70,12 @@ type registry struct {
 	continuationSources         map[string]string
 	interruptReplays            map[string]*interruptReplay
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
-	// currently supervised Workers dispatch to its stable session identity.
-	// Provider progress names dispatches, never Worker Sessions, so this map is
-	// the only accepted route from a provider observation to its owner.
+	// directly supervised Workers dispatch to its stable session identity.
+	// Runtime attempts use runtimeAttemptOwners and explicit Worker identities;
+	// they must never replace a direct provider observation's route.
 	dispatchOwners map[string]string
 	// runtimeAttempts marks sessions opened by Factory Runtime's detached
-	// execution path. Those attempts share the provider-observation lookup but
+	// execution path. Those attempts use scoped provider-observation lookup and
 	// deliberately do not install Worker Sessions-owned supervision: Runtime
 	// remains the sole admission, cancellation, and execution owner.
 	runtimeAttempts        map[string]struct{}
