@@ -54,7 +54,7 @@ Run preparation from the tool worktree and compilation from the source worktree:
 
 ```powershell
 $toolWorkspace = (Get-Location).Path
-$pinWorkspace = Join-Path $toolWorkspace '.artifacts/observer-pin-source'
+$pinWorkspace = Join-Path (Split-Path $toolWorkspace -Parent) 'fi-t27-observer-pin-source-20261003'
 $pinOutput = Join-Path $toolWorkspace '.artifacts/observer-pin'
 git worktree add --detach $pinWorkspace 95e213cfb35b50236fd7a34ad66c797d2ee7b5b6
 $env:GOPROXY = 'off'
@@ -81,6 +81,8 @@ executable's hash against the supplied artifact hash. Use a committed clean
 tool revision, preserve the manifest/backing files and complete stdout/stderr
 outside the PR diff, and record results in a PR comment. The prepared manifest
 attests all injected backing files, source commit, tool commit and overlay.
+Keep pinned source outside the tool checkout: some repository lint scanners
+walk ignored directories and would otherwise count historical source as current.
 
 One BuildProcess serves the entire sequential scenario. Execute starts an idle
 continuous host using a test-owned home and HTTP binding. The API starter's
