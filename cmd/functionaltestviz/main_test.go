@@ -2,11 +2,134 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestRunFunctionalSuiteCoverageAndFailureHandoff(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		coverageCode int
+		renderCode   int
+		handoff      bool
+		wantCode     int
+		wantCommands int
+	}{
+		{"success", 0, 0, false, 0, 2},
+		{"coverage failure", 1, 0, false, 1, 1},
+		{"coverage failure handoff", 1, 0, true, 0, 2},
+		{"coverage infrastructure failure", 2, 0, true, 2, 1},
+		{"renderer failure", 0, 3, true, 3, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := functionalSuiteTestConfig(t)
+			if tc.handoff {
+				cfg.exitCodePath = filepath.Join(filepath.Dir(cfg.logPath), "exit.txt")
+			}
+			var commands [][]string
+			runner := func(name string, args []string, log io.Writer) (int, error) {
+				if name != cfg.goBinary {
+					t.Fatalf("executable = %q, want %q", name, cfg.goBinary)
+				}
+				commands = append(commands, slices.Clone(args))
+				code := tc.renderCode
+				if len(commands) == 1 {
+					if !slices.Equal(args, coverageCommandArguments(cfg)) {
+						t.Fatalf("first command = %v, want coverage directly", args)
+					}
+					code = tc.coverageCode
+					writeSuiteTestCoverage(t, cfg, log)
+				} else {
+					if len(args) < 2 || args[1] != "./cmd/functionaltestviz" {
+						t.Fatalf("second command = %v, want renderer", args)
+					}
+					if err := writeTextFile(cfg.outputPath, "Rendered functional coverage\n"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if code != 0 {
+					return code, fmt.Errorf("command failed: %d", code)
+				}
+				return 0, nil
+			}
+			var stdout bytes.Buffer
+			err := runFunctionalSuite(cfg, &stdout, io.Discard, runner)
+			if tc.wantCode == 0 && err != nil {
+				t.Fatalf("run suite: %v", err)
+			}
+			if tc.wantCode != 0 {
+				var exitErr suiteExitError
+				if !errors.As(err, &exitErr) || exitErr.code != tc.wantCode {
+					t.Fatalf("error = %v, want suite exit %d", err, tc.wantCode)
+				}
+			}
+			if len(commands) != tc.wantCommands {
+				t.Fatalf("commands = %v, want %d", commands, tc.wantCommands)
+			}
+			assertSuiteTestArtifacts(t, cfg, stdout.String(), tc.coverageCode, tc.wantCode)
+		})
+	}
+}
+
+func functionalSuiteTestConfig(t *testing.T) config {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("GITHUB_STEP_SUMMARY", filepath.Join(root, "job-summary.md"))
+	return config{
+		goBinary: "test-go", jobs: 2,
+		coverageSummaryPath: filepath.Join(root, "coverage.json"),
+		timingSummaryPath:   filepath.Join(root, "timing.json"),
+		outputPath:          filepath.Join(root, "tests.md"),
+		logPath:             filepath.Join(root, "command.log"),
+		profilePath:         filepath.Join(root, "coverage.out"),
+		verdictPath:         filepath.Join(root, "verdict.txt"),
+	}
+}
+
+func writeSuiteTestCoverage(t *testing.T, cfg config, log io.Writer) {
+	t.Helper()
+	for _, path := range []string{cfg.coverageSummaryPath, cfg.timingSummaryPath} {
+		if err := writeTextFile(path, `{"packages":[{"package":"github.com/portpowered/infinite-you/pkg/example","coveragePercent":42,"seconds":1}]}`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _ = fmt.Fprintln(log, "coverage not evaluated: package floors were NOT checked")
+}
+
+func assertSuiteTestArtifacts(t *testing.T, cfg config, stdout string, coverageCode, suiteCode int) {
+	t.Helper()
+	if !strings.Contains(stdout, "pkg/example 42.0%") {
+		t.Fatalf("console report missing: %q", stdout)
+	}
+	summary, err := os.ReadFile(os.Getenv("GITHUB_STEP_SUMMARY"))
+	if err != nil || len(summary) == 0 {
+		t.Fatalf("published job summary = %q, error = %v", summary, err)
+	}
+	if cfg.exitCodePath == "" {
+		return
+	}
+	exit, err := os.ReadFile(cfg.exitCodePath)
+	if err != nil || string(exit) != strconv.Itoa(coverageCode)+"\n" {
+		t.Fatalf("coverage exit handoff = %q, error = %v", exit, err)
+	}
+	if suiteCode == 0 {
+		verdict, err := os.ReadFile(cfg.verdictPath)
+		outcome := "green"
+		if coverageCode != 0 {
+			outcome = "test-failure"
+		}
+		if err != nil || !strings.Contains(string(verdict), "Functional coverage outcome: "+outcome) {
+			t.Fatalf("verdict = %q, error = %v", verdict, err)
+		}
+	}
+}
 
 func TestRunRequiresCoverageSummary(t *testing.T) {
 	t.Parallel()

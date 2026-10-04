@@ -37,7 +37,7 @@ type consoleTimingSummary struct {
 	} `json:"packages"`
 }
 
-func runFunctionalSuite(cfg config, stdout, stderr io.Writer) error {
+func runFunctionalSuite(cfg config, stdout, stderr io.Writer, runCommand func(string, []string, io.Writer) (int, error)) error {
 	if err := validateSuiteConfig(cfg); err != nil {
 		return err
 	}
@@ -57,22 +57,18 @@ func runFunctionalSuite(cfg config, stdout, stderr io.Writer) error {
 		cfg.jobs,
 	)
 
-	status, runErr := runLoggedCommand(cfg.goBinary, []string{"run", "./cmd/functionalboundarycheck"}, logFile)
-	coverageStatus := 0
-	if runErr == nil {
-		status, runErr = runLoggedCommand(cfg.goBinary, coverageCommandArguments(cfg), logFile)
-		coverageStatus = status
-		if cfg.exitCodePath != "" {
-			if err := writeTextFile(cfg.exitCodePath, strconv.Itoa(status)+"\n"); err != nil {
-				return err
-			}
-			if status == 1 {
-				runErr = nil
-			}
+	status, runErr := runCommand(cfg.goBinary, coverageCommandArguments(cfg), logFile)
+	coverageStatus := status
+	if cfg.exitCodePath != "" {
+		if err := writeTextFile(cfg.exitCodePath, strconv.Itoa(status)+"\n"); err != nil {
+			return err
+		}
+		if status == 1 {
+			runErr = nil
 		}
 	}
 	if runErr == nil {
-		status, runErr = runLoggedCommand(cfg.goBinary, []string{
+		status, runErr = runCommand(cfg.goBinary, []string{
 			"run", "./cmd/functionaltestviz",
 			"-coverage-summary", cfg.coverageSummaryPath,
 			"-timing-summary", cfg.timingSummaryPath,
