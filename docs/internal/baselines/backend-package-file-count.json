@@ -8,12 +8,6 @@
       "removalReason": "Split process execution responsibilities into durable child packages."
     },
     {
-      "packagePath": "pkg/services/automations/internal",
-      "fileCount": 18,
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
-    },
-    {
       "packagePath": "pkg/services/automations/internal/services/filesystem_watchers/internal/service",
       "fileCount": 16,
       "owner": "backend-maintainers",

@@ -68,8 +68,6 @@ func (s *service) StartCronWatchersForRuntime(
 	}()
 }
 
-// SubmitCronTick submits one cron workstation tick through the injected runtime submitter.
-
 func (s *service) registerCronJobs(
 	ctx context.Context,
 	scheduler gocron.Scheduler,
@@ -206,8 +204,6 @@ func (s *service) runCronJob(
 	}
 }
 
-// WorkflowIdentityForFactoryDir resolves cron workflow identity from runtime factory directory.
-
 func (s *service) cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	if ws.Cron == nil {
 		return "", fmt.Errorf("%w: missing cron config", cron.ErrInvalidSchedule)
@@ -326,8 +322,6 @@ func (s *service) cronAttemptContext(
 	attemptCtx, cancel := context.WithTimeout(ctx, timeout)
 	return attemptCtx, cancel, nil
 }
-
-// CronExecutionTimeout resolves the execution timeout for a cron workstation from runtime config.
 
 func (s *service) cronExecutionTimeout(
 	runtimeCfg interfaces.RuntimeWorkstationLookup,

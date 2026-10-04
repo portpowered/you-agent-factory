@@ -825,7 +825,7 @@ func seedLifecycleCursor(t *testing.T, service *Service, dir, id string) {
 	t.Helper()
 	poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
 	runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: cursorPollerOutput(id)}}}}
-	err := service.RunScriptPoller(context.Background(), runner, internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker), poller, worker,
+	err := runScopedScriptPollerFixture(service, context.Background(), runner, internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker), poller, worker,
 		func(context.Context, work.WorkRequest) error { return nil })
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
 		t.Fatalf("seed poll error = %v, want terminal exit after successful commit", err)
@@ -865,29 +865,34 @@ func TestRuntimeLifecycle_UsesInjectedCronAndWatcherOperations(t *testing.T) {
 	clock := clockwork.NewFakeClock()
 	crons := &runtimeCronRecorder{}
 	watchers := &runtimeWatcherRecorder{}
-	service := newTestService(zap.NewNop(), clock, &internalScriptPollerRunner{}, "", "", nil, nil, nil, crons, watchers)
+	service := newTestService(zap.NewNop(), clock, &internalScriptPollerRunner{}, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, crons, watchers)
 	if crons.calls != 0 || len(watchers.roots) != 0 {
 		t.Fatal("construction executed source operations")
 	}
 	for _, name := range []string{"alpha", "beta"} {
 		request := injectedSourceActivation(name)
+		request.Inputs.StartSchedulers = true
+		request.Snapshot.Invocation.WorkflowID = name
+		request.Snapshot.EffectiveFactory.Workstations = []factorydefinitions.FactoryWorkstationConfig{{Name: "clock", Kind: factorydefinitions.WorkstationKindCron, Cron: &factorydefinitions.CronConfig{Every: "1h", TriggerAtStart: true}}}
+		var observed string
+		request.Inputs.Submitter = func(_ context.Context, request work.WorkRequest) error { observed = request.RequestID; return nil }
 		if _, err := service.ActivateRuntime(context.Background(), request); err != nil {
 			t.Fatalf("ActivateRuntime(%s): %v", name, err)
 		}
+		if err := service.Root().StartRuntime(context.Background(), name); err != nil {
+			t.Fatal(err)
+		}
+		if observed != name {
+			t.Fatalf("runtime %s admitted request %q", name, observed)
+		}
+
 		t.Cleanup(func() {
 			_, err := service.DeactivateRuntime(context.Background(), automations.RuntimeDeactivationRequest{RuntimeID: name})
 			if err != nil {
 				t.Errorf("DeactivateRuntime(%s): %v", name, err)
 			}
 		})
-		var observed string
-		submit := func(_ context.Context, request work.WorkRequest) error { observed = request.RequestID; return nil }
-		if err := service.SubmitCronTick(context.Background(), nil, name, submit, factorydefinitions.FactoryWorkstationConfig{Name: "clock"}, clock.Now()); err != nil {
-			t.Fatalf("SubmitCronTick(%s): %v", name, err)
-		}
-		if observed != name {
-			t.Fatalf("runtime %s admitted request %q", name, observed)
-		}
+
 	}
 	expectedRoots := []string{filepath.Join("/factories/alpha", factorydefinitions.InputsDir), filepath.Join("/factories/beta", factorydefinitions.InputsDir)}
 	if crons.calls != 2 || !slices.Equal(watchers.roots, expectedRoots) || watchers.preseeds != 2 {

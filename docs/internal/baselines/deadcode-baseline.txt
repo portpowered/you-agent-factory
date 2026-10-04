@@ -593,8 +593,6 @@ pkg/platform/process/log_effect.go: unreachable func: execCommandRunnerWithLogge
 pkg/platform/random/crypto.go: unreachable func: SourceFunc.Int63n
 pkg/platform/wiretranscript/opener.go: unreachable func: unmarshalRecord
 pkg/platform/wiretranscript/tee.go: unreachable func: ReadAll
-pkg/services/automations/internal/script_poller.go: unreachable func: ParseScriptPollerOutput
-pkg/services/automations/internal/script_poller.go: unreachable func: ScriptPollerCommandRequest
 pkg/services/automations/internal/services/filesystem_watchers/internal/service/test_helpers.go: unreachable func: cloneWorkRequest
 pkg/services/automations/internal/services/filesystem_watchers/internal/service/test_helpers.go: unreachable func: recordingSubmitter.Submit
 pkg/services/automations/internal/services/filesystem_watchers/internal/service/test_helpers.go: unreachable func: recordingSubmitter.drainSubmitted

@@ -225,7 +225,7 @@ func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
 	worker := internalCanonicalScriptPollerWorker()
 	runtimeCfg := internalScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
 
-	err := service.RunScriptPoller(
+	err := runScopedScriptPollerFixture(service,
 		context.Background(),
 		runner,
 		runtimeCfg,
@@ -669,7 +669,7 @@ func TestGetCursorPreservesOpaqueFactsWithoutCommandOrAdmission(t *testing.T) {
 				factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
 			poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
 			admissions := 0
-			err = service.RunScriptPoller(ctx, runner, internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker), poller, worker,
+			err = runScopedScriptPollerFixture(service, ctx, runner, internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker), poller, worker,
 				func(context.Context, work.WorkRequest) error { admissions++; return nil })
 			if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
 				t.Fatalf("poll cycle = %v, want terminal exit after commit", err)
@@ -721,7 +721,7 @@ func TestGetCursorAfterFailedReplacementPreservesPriorOpaqueFacts(t *testing.T) 
 	}
 	runner.outcomes = []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: output}}}
 	submit := func(context.Context, work.WorkRequest) error { admissions++; return nil }
-	err = service.RunScriptPoller(ctx, runner, config, poller, worker, submit)
+	err = runScopedScriptPollerFixture(service, ctx, runner, config, poller, worker, submit)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
 		t.Fatalf("initial poll = %v, want successful commit then terminal exit", err)
 	}
@@ -732,7 +732,7 @@ func TestGetCursorAfterFailedReplacementPreservesPriorOpaqueFacts(t *testing.T) 
 	}
 	files.err = errors.New("controlled cursor replacement failure")
 	runner.outcomes = []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: cursorPollerOutput("replacement")}}, {}}
-	err = service.RunScriptPoller(ctx, runner, config, poller, worker, submit)
+	err = runScopedScriptPollerFixture(service, ctx, runner, config, poller, worker, submit)
 	var typed *automations.Error
 	if !errors.As(err, &typed) || typed.Op != scriptpollers.CommitCursorOperation ||
 		typed.Code != automations.ErrorCodeFailed || !errors.Is(err, files.err) {
@@ -793,4 +793,12 @@ func newTestServiceWithCursorFileSystem(logger *zap.Logger, clock Clock, runner 
 	}
 	return New(logger, clock, lifecycle, reconciliationwire.NewService(lifecycle), pollers,
 		cronService, watchers, hosted, policy, cursors, files != nil, workflowID, factoryDir, cursorBaseDir)
+}
+
+func runScopedScriptPollerFixture(owner *Service, ctx context.Context, runner platformprocess.CommandRunner,
+	runtimeCfg interfaces.RuntimeConfigLookup, workstation interfaces.FactoryWorkstationConfig,
+	worker *interfaces.FactoryWorkerConfig, submit automations.WorkRequestSubmitter) error {
+	supervision := scriptpollers.SupervisionFor(strings.TrimSpace(owner.workflowID), workstation.Name)
+	supervision.CursorScope = owner.cursorScope
+	return owner.scriptPollers.RunScriptPoller(ctx, runner, runtimeCfg, workstation, worker, supervision, submit)
 }

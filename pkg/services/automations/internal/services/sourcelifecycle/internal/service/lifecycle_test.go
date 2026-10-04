@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type scriptAttempt struct {
@@ -231,5 +234,56 @@ func assertScriptAttemptIdentities(t *testing.T, a, b scriptAttempt) {
 		if attempt.automationID != "selected-script-id" || attempt.scope != expected {
 			t.Fatalf("%s source identity=%q scope=%+v, want selected script identity and %+v", id, attempt.automationID, attempt.scope, expected)
 		}
+	}
+}
+
+func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	svc := &service{logger: zap.New(logCore)}
+
+	missingBinding := interfaces.FactoryWorkstationConfig{
+		Name: "missing-binding",
+		Kind: interfaces.WorkstationKindPoller,
+	}
+	missingWorker := interfaces.FactoryWorkstationConfig{
+		Name:           "missing-worker",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "unknown-worker",
+	}
+	unsupportedHosted := interfaces.FactoryWorkstationConfig{
+		Name:           "unsupported-hosted",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "github-poller",
+	}
+	githubWorker := &interfaces.FactoryWorkerConfig{
+		Name:     "github-poller",
+		Type:     interfaces.WorkerTypeHosted,
+		Provider: "github",
+	}
+
+	factoryCfg := &interfaces.FactoryConfig{
+		Workers: []interfaces.FactoryWorkerConfig{{Name: githubWorker.Name}},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			missingBinding,
+			missingWorker,
+			unsupportedHosted,
+		},
+	}
+	runtimeCfg := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{githubWorker.Name: githubWorker}}
+
+	var sidecars sync.WaitGroup
+	svc.startPollersForRuntime(sourcelifecycle.RuntimeSourceConfiguration{},
+		context.Background(),
+		&sidecars,
+		factoryCfg,
+		runtimeCfg,
+		func(context.Context, work.WorkRequest) error { return nil },
+	)
+
+	if observedLogs.FilterMessage("script poller disabled").Len() != 2 {
+		t.Fatalf("script poller disabled logs = %d, want 2", observedLogs.FilterMessage("script poller disabled").Len())
+	}
+	if observedLogs.FilterMessage("hosted poller disabled").Len() != 1 {
+		t.Fatalf("hosted poller disabled logs = %d, want 1", observedLogs.FilterMessage("hosted poller disabled").Len())
 	}
 }

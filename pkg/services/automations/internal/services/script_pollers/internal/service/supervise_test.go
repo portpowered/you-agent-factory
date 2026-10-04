@@ -370,3 +370,18 @@ func waitForScriptPollerRunnerCalls(t *testing.T, runner *sequenceCommandRunner,
 	}
 	t.Fatalf("timed out waiting for %d runner call(s); got %d", want, runner.callCount())
 }
+
+func TestRunScriptPoller_UsesWorkerTimeout(t *testing.T) {
+	t.Parallel()
+	runner := &sequenceCommandRunner{outcomes: []runOutcome{{waitForCancel: true}}}
+	svc := newScriptPollersService(runner)
+	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
+	worker.Timeout = "1ms"
+	config := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err := svc.RunScriptPoller(ctx, runner, config, poller, worker, scriptpollers.ScriptPollerSupervision{}, func(context.Context, work.WorkRequest) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("RunScriptPoller error=%v, want worker timeout", err)
+	}
+}

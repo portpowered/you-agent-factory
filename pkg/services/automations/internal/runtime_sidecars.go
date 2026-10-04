@@ -126,3 +126,21 @@ func (s *Service) monitorSchedulerSource(
 		s.loggerValue.Error("wait scheduler source reconciliation failed", zap.Error(err))
 	}
 }
+
+// WorkflowIdentityForFactoryDir resolves cron workflow identity from runtime factory directory.
+func (s *Service) WorkflowIdentityForFactoryDir(factoryDir string) string {
+	return s.workflowIdentity(factoryDir)
+}
+
+func (s *Service) workflowIdentity(factoryDir string) string {
+	if s != nil && s.workflowID != "" {
+		return s.workflowID
+	}
+	if factoryDir != "" {
+		return factoryDir
+	}
+	if s != nil {
+		return s.defaultFactoryDir
+	}
+	return ""
+}

@@ -358,18 +358,11 @@ func TestNewRootUsesDurableCursorRecorderAcrossReconstruction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot(first): %v", err)
 	}
-	operation, ok := first.Operations.(interface {
-		RunScriptPoller(
-			context.Context,
-			platformprocess.CommandRunner,
-			factorydefinitions.RuntimeConfigLookup,
-			factorydefinitions.FactoryWorkstationConfig,
-			*factorydefinitions.FactoryWorkerConfig,
-			automations.WorkRequestSubmitter,
-		) error
-	})
-	if !ok {
-		t.Fatal("NewRoot(first) operations do not expose script-poller execution")
+	// Seed through the selected script owner, then inspect through the published
+	// Root. Execution helpers are no longer an alternate root capability.
+	operation := automationswire.NewScriptPollers(ports.logger, ports.clock, cursorCommandRunner{stdout: durableCursorStdout}, ports.resolveTemplates, ports.executionPolicy, automationswire.NewCursorScopes(inputs.CursorFileSystem))
+	if _, err := first.GetCursor(context.Background(), automations.GetCursorRequest{InstanceID: scriptpollers.SupervisionFor("workflow-durable-root", "durable-poller").InstanceID}); !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("first.GetCursor before execution=%v, want not found", err)
 	}
 	poller := factorydefinitions.FactoryWorkstationConfig{
 		Name:           "durable-poller",
@@ -387,6 +380,7 @@ func TestNewRootUsesDurableCursorRecorderAcrossReconstruction(t *testing.T) {
 		cursorRuntimeConfig{factoryDir: baseDir, worker: worker, workstation: poller},
 		poller,
 		worker,
+		scriptpollers.ScriptPollerSupervision{AutomationID: "workflow-durable-root", InstanceID: scriptpollers.SupervisionFor("workflow-durable-root", poller.Name).InstanceID, CursorScope: scriptpollers.CursorScope{BaseDir: baseDir}},
 		func(context.Context, work.WorkRequest) error { return nil },
 	); err == nil {
 		t.Fatal("RunScriptPoller() error = nil, want terminal poller exit after commit")
