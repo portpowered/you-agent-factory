@@ -104,12 +104,13 @@ func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
-	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+	factoryFields := map[string]any{
 		"credential": "runtime-secret",
 		"items":      []any{map[string]any{"token": "item-secret", "label": "visible"}},
 		"a/b":        map[string]any{"~key": "escaped-secret"},
 		"scalar":     "leaf",
-	})
+	}
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factoryFields)
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
@@ -156,6 +157,7 @@ func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 	if len(owner.events) != 2 || len(owner.finishes) != 1 {
 		t.Fatalf("lifecycle requests = %#v / %#v, want initial, terminal and one Finish", owner.events, owner.finishes)
 	}
+	assertCapturedFactoryPayload(t, owner.events[0].Event.Payload, factoryFields)
 	want := []recordings.RecordingSecret{
 		{JSONPointer: "/factory/credential", Provenance: recordings.RecordingSecretProvenanceDeclared},
 		{JSONPointer: "/factory/items/0/token", Provenance: recordings.RecordingSecretProvenanceDeclared},
@@ -170,6 +172,19 @@ func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 		}
 	}
 	assertTerminalRunPayload(t, owner.events[1].Event.Payload, startedAt, startedAt.Add(time.Minute))
+}
+
+func assertCapturedFactoryPayload(t *testing.T, rawPayload string, want map[string]any) {
+	t.Helper()
+	var payload struct {
+		Factory map[string]any `json:"factory"`
+	}
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		t.Fatalf("decode initial event payload: %v", err)
+	}
+	if !reflect.DeepEqual(payload.Factory, want) {
+		t.Fatalf("initial Factory payload = %#v, want captured snapshot %#v", payload.Factory, want)
+	}
 }
 
 type invocationSensitiveLoadedFactory struct {
