@@ -3,7 +3,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -29,15 +28,6 @@ var _ instancehost.Service = (*Host)(nil)
 // starting a hosted run loop, attaching sidecars, publishing a replacement, or
 // finalizing artifacts.
 func New(clock factoryruntime.Clock, scheduler platformclock.TimerSource, lifecycle *factoryhost.LifecycleService) (instancehost.Service, error) {
-	if clock == nil {
-		return nil, fmt.Errorf("%w: clock is required", instancehost.ErrInvalidDependencies)
-	}
-	if scheduler == nil {
-		return nil, fmt.Errorf("%w: scheduler is required", instancehost.ErrInvalidDependencies)
-	}
-	if lifecycle == nil {
-		return nil, fmt.Errorf("%w: lifecycle is required", instancehost.ErrInvalidDependencies)
-	}
 	return &Host{clock: clock, scheduler: scheduler, lifecycle: lifecycle, mu: &sync.Mutex{}, handles: make(map[string]*factoryhost.Handle)}, nil
 }
 

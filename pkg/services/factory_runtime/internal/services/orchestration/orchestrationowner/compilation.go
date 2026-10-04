@@ -22,9 +22,6 @@ func (a *compilationAdapter) Compile(
 	ctx context.Context,
 	req factoryruntime.OrchestrationCompileRequest,
 ) (factoryruntime.OrchestrationCompileResult, error) {
-	if a == nil || a.service == nil {
-		return factoryruntime.OrchestrationCompileResult{}, fmt.Errorf("orchestration compilation is required")
-	}
 	result, err := a.service.Compile(ctx, orchestration.CompileRequest{
 		Config:       req.Config,
 		FactoryDir:   req.FactoryDir,
@@ -42,9 +39,6 @@ func (a *compilationAdapter) CompilePetriNet(
 	ctx context.Context,
 	req factoryruntime.OrchestrationCompileRequest,
 ) (*state.Net, error) {
-	if a == nil || a.service == nil {
-		return nil, fmt.Errorf("orchestration compilation is required")
-	}
 	result, err := a.service.Compile(ctx, orchestration.CompileRequest{
 		Config:       req.Config,
 		FactoryDir:   req.FactoryDir,

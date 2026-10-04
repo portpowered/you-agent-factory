@@ -3,27 +3,16 @@ package service
 import (
 	"context"
 	"errors"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 )
-
-func TestNewRequiresClock(t *testing.T) {
-	t.Parallel()
-
-	host, err := New(nil, nil, nil)
-	if host != nil || err == nil || !errors.Is(err, instancehost.ErrInvalidDependencies) ||
-		!strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("New() = (%v, %v), want invalid-dependencies clock error", host, err)
-	}
-}
 
 func TestNewConstructsInertHost(t *testing.T) {
 	t.Parallel()
@@ -58,29 +47,6 @@ func newHostWithLifecycle(clock factoryruntime.Clock, scheduler platformclock.Ti
 		return nil, err
 	}
 	return New(clock, scheduler, lifecycle)
-}
-
-func TestNewRequiresCompletedLifecycleAndScheduler(t *testing.T) {
-	t.Parallel()
-	clock := clockwork.NewFakeClock()
-	lifecycle, err := factoryhost.NewLifecycleService(clock, platformclock.Real{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, test := range []struct {
-		name      string
-		scheduler platformclock.TimerSource
-		lifecycle *factoryhost.LifecycleService
-	}{
-		{"scheduler", nil, lifecycle}, {"lifecycle", platformclock.Real{}, nil},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			host, err := New(clock, test.scheduler, test.lifecycle)
-			if host != nil || !errors.Is(err, instancehost.ErrInvalidDependencies) || !strings.Contains(err.Error(), test.name+" is required") {
-				t.Fatalf("New = %v, %v; want missing %s", host, err, test.name)
-			}
-		})
-	}
 }
 
 func TestScopeSharesControlsAndPreservesIndependentFactClocks(t *testing.T) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,23 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
 )
-
-func TestNewLifecycleService_RequiresClock(t *testing.T) {
-	t.Parallel()
-
-	service, err := factoryhost.NewLifecycleService(nil, platformclock.Real{})
-	if service != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("NewLifecycleService() = (%v, %v), want nil service and clock dependency error", service, err)
-	}
-}
-
-func TestNewLifecycleService_RequiresScheduler(t *testing.T) {
-	t.Parallel()
-	service, err := factoryhost.NewLifecycleService(clockwork.NewFakeClock(), nil)
-	if service != nil || err == nil || !strings.Contains(err.Error(), "scheduler is required") {
-		t.Fatalf("NewLifecycleService() = (%v, %v), want scheduler dependency error", service, err)
-	}
-}
 
 // readinessTimers exposes creation and firing separately so readiness can be
 // observed without advancing replay facts or sleeping for a wall-clock poll.
@@ -176,15 +158,6 @@ func TestLifecycleService_ReadinessUsesSchedulerAndStopUsesReplayFactClock(t *te
 	}
 	if !recording.finishedAt.Equal(finishedAt.Add(24 * time.Hour)) {
 		t.Fatalf("recording finished at %s, want selected replay time", recording.finishedAt)
-	}
-}
-
-func TestFinalizeArtifacts_RequiresClock(t *testing.T) {
-	t.Parallel()
-
-	err := factoryhost.FinalizeArtifacts(&factoryhost.Bundle{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("FinalizeArtifacts() error = %v, want required clock error", err)
 	}
 }
 
@@ -344,30 +317,6 @@ func TestStopPreservesFailuresAfterCanceledRun(t *testing.T) {
 				t.Fatalf("Stop = %v, lost worker drain failure", err)
 			}
 		})
-	}
-}
-
-func TestStop_RequiresClockBeforeMutatingHandle(t *testing.T) {
-	t.Parallel()
-
-	handle := &factoryhost.Handle{RunDone: make(chan struct{})}
-	err := factoryhost.Stop(handle, nil)
-	if err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("Stop() error = %v, want required clock error", err)
-	}
-	select {
-	case <-handle.RunDone:
-		t.Fatal("Stop() mutated handle before rejecting missing clock")
-	default:
-	}
-}
-
-func TestPublishFactoryChange_RequiresClock(t *testing.T) {
-	t.Parallel()
-
-	err := factoryhost.PublishFactoryChange(context.Background(), nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("PublishFactoryChange() error = %v, want required clock error", err)
 	}
 }
 

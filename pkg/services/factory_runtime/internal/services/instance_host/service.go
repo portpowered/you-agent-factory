@@ -5,13 +5,9 @@ package instance_host
 
 import (
 	"context"
-	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
-
-// ErrInvalidDependencies classifies instance-host construction failures.
-var ErrInvalidDependencies = errors.New("factory runtime instance host dependencies are invalid")
 
 // ReplaceRequest configures hosted-runtime replacement through instance_host.
 type ReplaceRequest struct {

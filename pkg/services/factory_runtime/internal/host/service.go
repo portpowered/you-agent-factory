@@ -16,12 +16,6 @@ type LifecycleService struct {
 }
 
 func NewLifecycleService(clock factory.Clock, scheduler platformclock.TimerSource) (*LifecycleService, error) {
-	if clock == nil {
-		return nil, fmt.Errorf("construct Factory Runtime lifecycle service: clock is required")
-	}
-	if scheduler == nil {
-		return nil, fmt.Errorf("construct Factory Runtime lifecycle service: scheduler is required")
-	}
 	return &LifecycleService{clock: clock, scheduler: scheduler}, nil
 }
 

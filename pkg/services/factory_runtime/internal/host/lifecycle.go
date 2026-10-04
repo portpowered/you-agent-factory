@@ -217,9 +217,6 @@ func Stop(handle *Handle, clock factory.Clock) error {
 	if handle == nil {
 		return nil
 	}
-	if clock == nil {
-		return fmt.Errorf("stop Factory Runtime: clock is required")
-	}
 	StopSidecars(handle)
 	handle.CancelRun()
 	runErr := handle.Wait()
@@ -252,9 +249,6 @@ func withoutRunCancellation(err error) error {
 func FinalizeArtifacts(bundle *Bundle, clock factory.Clock) error {
 	if bundle == nil {
 		return nil
-	}
-	if clock == nil {
-		return fmt.Errorf("finalize Factory Runtime artifacts: clock is required")
 	}
 	var errs []error
 	if bundle.Recording != nil {
@@ -316,7 +310,7 @@ func observeRuntimeMetrics(
 	handle *Handle,
 	clock platformclock.TimerSource,
 ) {
-	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil || clock == nil {
+	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
 		return
 	}
 	observer := runtimeMetricsObserver{}

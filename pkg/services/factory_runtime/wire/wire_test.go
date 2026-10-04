@@ -13,24 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestNewLifecycleRejectsMissingTimeSources(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name      string
-		clock     factoryruntime.Clock
-		scheduler platformclock.TimerSource
-	}{
-		{"clock", nil, platformclock.Real{}}, {"scheduler", clockwork.NewFakeClock(), nil},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			lifecycle, err := NewLifecycle(test.clock, test.scheduler)
-			if err == nil || lifecycle != nil {
-				t.Fatalf("NewLifecycle = %v, %v; want missing %s", lifecycle, err, test.name)
-			}
-		})
-	}
-}
-
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
