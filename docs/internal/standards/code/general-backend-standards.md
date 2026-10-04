@@ -356,6 +356,15 @@ Minimum expectations for non-trivial backend changes:
 - Concurrency-sensitive behavior has race, stress, or repeat-run coverage where relevant.
 - Public contract changes have contract or smoke coverage.
 
+### Timing in tests
+
+Fixed sleeps and short fixed deadlines are the dominant source of CI-load flakes.
+
+- Tests **MUST** wait for an event, channel, or observable condition, not for elapsed time. Poll a condition (for example the functional `WaitFor...` support helpers) instead of `time.Sleep`.
+- Code under test that depends on time **MUST** take the injectable `pkg/platform/clock` source, and tests **SHOULD** use `clock.Deterministic` so time advances only when the test says so.
+- A timeout in a test is a failure ceiling, not an expectation. It **MUST** be generous (tens of seconds or more) so a loaded host does not trip it, and a test **MUST NOT** assert that elapsed time falls inside a tight window.
+- `make test-sleep-check` (part of `make lint`) ratchets `time.Sleep`, literal deadlines of five seconds or less (`time.After`, `time.NewTimer`, `context.WithTimeout`/`WithDeadline`), and elapsed-time comparisons against `docs/internal/baselines/test-sleep-deadline-baseline.json`. New sites fail the check; removing sites never does. Regenerate the baseline only to remove entries (`go run ./cmd/testsleepcheck -regenerate`). A genuinely necessary site may be exempted inline with `//nolint:testsleep // reason`; the reason is mandatory.
+
 ### 8. CI/CD and Automated Enforcement
 
 Best practices **MUST** be enforced by CI/CD, not only by documentation.
