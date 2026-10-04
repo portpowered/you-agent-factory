@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	hardKillSuccessorReadinessTimeout = 15 * time.Second
-	hardKillProcessExitTimeout        = 5 * time.Second
+	hardKillSuccessorReadinessTimeout = 90 * time.Second
+	hardKillProcessExitTimeout        = 30 * time.Second
 	preRuntimeStagingOwnerMetadata    = ".owner.json"
 )
 

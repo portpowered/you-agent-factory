@@ -3,7 +3,9 @@ package restart_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,8 +109,10 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	assertRestoredReviewDispatchOwners(t, second.baseURL, second.sessionID, dispatchA, dispatchB)
 	activeObservation := evidence.capturePublicObservation(t, "successor-after-migration-with-active-owners", second.baseURL)
 	assertRestartPublicCounts(t, activeObservation, 1, 4, 2, 2)
-	if activeObservation.WorkerSessionCount != 2 || activeObservation.ActiveWorkerSessionCount != 2 {
-		t.Fatalf("active public Worker Session counts = total:%d active:%d, want 2/2", activeObservation.WorkerSessionCount, activeObservation.ActiveWorkerSessionCount)
+	// Terminal Worker Sessions left by the pre-resume attempt may still be
+	// listed for the same Work, so only the active set is exact.
+	if activeObservation.WorkerSessionCount < 2 || activeObservation.ActiveWorkerSessionCount != 2 {
+		t.Fatalf("active public Worker Session counts = total:%d active:%d, want 2/2\n%s", activeObservation.WorkerSessionCount, activeObservation.ActiveWorkerSessionCount, describeRestoredReviewWorkerSessions(t, second.baseURL))
 	}
 	evidence.addTiming("successor-ready-to-two-active-owners", time.Since(second.readyAt))
 	workerBarrier.releaseWorkers()
@@ -287,4 +291,21 @@ func restoredReviewBatchJSON(t *testing.T, workType string) string {
 		t.Fatalf("marshal restored review batch: %v", err)
 	}
 	return string(raw)
+}
+
+func describeRestoredReviewWorkerSessions(t *testing.T, baseURL string) string {
+	t.Helper()
+	var out strings.Builder
+	for _, workID := range []string{restoredReviewTaskA, restoredReviewTaskB, restoredReviewWorkA, restoredReviewWorkB} {
+		listed, err := readBoardWorkerSessions(t.Context(), baseURL, "", workID)
+		if err != nil {
+			fmt.Fprintf(&out, "work %s: %v\n", workID, err)
+			continue
+		}
+		for _, observation := range listed.Sessions {
+			raw, _ := json.Marshal(observation)
+			fmt.Fprintf(&out, "work %s: %s\n", workID, raw)
+		}
+	}
+	return out.String()
 }
