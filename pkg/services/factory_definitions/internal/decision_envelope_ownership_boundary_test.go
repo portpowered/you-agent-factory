@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 const (
@@ -96,21 +94,6 @@ func TestDecisionEnvelopeOwnershipBoundary_TransitionalGoalShimDelegatesToDecisi
 	envelopePath := filepath.Join("services", "invocation_policy", "decisionenvelope", "service.go")
 	if _, err := os.Stat(envelopePath); err != nil {
 		t.Fatalf("invocation_policy decisionenvelope owner path must exist after residual deletion: %v", err)
-	}
-}
-
-func TestDecisionEnvelopeOwnershipBoundary_InventoryDoesNotSuccessorDecisionEnvelopeToDistribution(t *testing.T) {
-	t.Parallel()
-
-	got, err := ownershipinventory.MapPackage("pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope")
-	if err != nil {
-		t.Fatalf("MapPackage(decisionenvelope) error = %v", err)
-	}
-	if strings.Contains(got.Successor, "internal/services/distribution") {
-		t.Fatalf(
-			"decisionenvelope successor = %q, must not fold into distribution ownership",
-			got.Successor,
-		)
 	}
 }
 

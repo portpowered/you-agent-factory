@@ -13,7 +13,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -233,14 +232,6 @@ func TestPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) {
 		} else if !os.IsNotExist(err) {
 			t.Fatalf("stat %s/ = %v", forbidden, err)
 		}
-	}
-}
-
-func TestProvidersRootContractInventorySeal(t *testing.T) {
-	t.Parallel()
-
-	if err := ownershipinventory.VerifyProvidersRootContractInventory(providersRepositoryRoot(t)); err != nil {
-		t.Fatalf("VerifyProvidersRootContractInventory() error = %v", err)
 	}
 }
 

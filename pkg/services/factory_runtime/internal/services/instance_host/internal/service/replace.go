@@ -46,6 +46,7 @@ func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.RuntimeR
 		serviceCtx,
 		replacementBundle,
 		h.clock,
+		h.scheduler,
 		adaptSidecarStarter(req.AttachSidecars),
 		req.AttachSidecarsInServiceMode,
 	)
@@ -54,12 +55,12 @@ func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.RuntimeR
 	}
 
 	if err := factoryhost.PublishFactoryChange(readinessCtx, current, replacementBundle, h.clock); err != nil {
-		_ = h.lifecycle.Stop(replacementHandle)
+		_ = h.lifecycle.StopWithClock(replacementHandle, h.clock)
 		return nil, fmt.Errorf("publish replacement factory change: %w", err)
 	}
 
 	if err := h.commitActiveHandle(current, replacementHandle); err != nil {
-		_ = h.lifecycle.Stop(replacementHandle)
+		_ = h.lifecycle.StopWithClock(replacementHandle, h.clock)
 		return nil, err
 	}
 

@@ -99,7 +99,7 @@ func TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISu
 	homeDir := writeOperatorConfigForActivation(t, activationConfigProviderAlias, activationConfigModel)
 	fixture := ensureSharedOperatorSettingsFixture(t)
 	dir := support.ScaffoldSingleStepFactory(t, "operator-config-update")
-	fixture.withOperatorSettingsRoute(
+	fixture.withOperatorSettingsDocumentRoute(
 		t,
 		"operator config document update",
 		homeDir,

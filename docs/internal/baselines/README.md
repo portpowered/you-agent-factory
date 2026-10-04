@@ -1,5 +1,10 @@
 # Repository baselines
 
+> Retired (LG-3): `ownership-inventory-check`, `package-target-manifest-check`, the
+> ownership-inventory freeze and its snapshot files (rows R-09 and S-03 through S-08
+> below, plus `ownership-inventory.json` and `package-target-test-only-baseline.json`)
+> no longer exist. See [Backend Package Structure](../../architecture/packaged-structure.md).
+
 This directory owns repository-wide quality-gate baselines, budgets, coverage
 minimums, and historical baseline snapshots.
 

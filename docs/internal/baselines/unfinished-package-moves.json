@@ -65,18 +65,6 @@
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/operator_settings/internal",
-      "destination": "operator_settings/internal",
-      "successor": "pkg/services/operator_settings/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/operator_settings/internal/construct",
-      "destination": "operator_settings/internal",
-      "successor": "pkg/services/operator_settings/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
-    },
-    {
       "packagePath": "pkg/services/operator_settings/internal/identityinputinventory",
       "destination": "operator_settings/internal",
       "successor": "pkg/services/operator_settings/internal",
@@ -84,12 +72,6 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
-      "destination": "operator_settings/internal",
-      "successor": "pkg/services/operator_settings/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/operator_settings/internal/testlink",
       "destination": "operator_settings/internal",
       "successor": "pkg/services/operator_settings/internal",
       "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"

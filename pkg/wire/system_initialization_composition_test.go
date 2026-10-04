@@ -191,7 +191,7 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenReportsC
 	}
 	decoder := provideOperatorConfigDecoder()
 	encoder := provideOperatorConfigEncoder()
-	settings, err := provideOperatorSettingsService(
+	settings, err := newOperatorSettingsTestService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
@@ -203,18 +203,15 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenReportsC
 		logging.NoopLogger{},
 	)
 	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+		t.Fatalf("newOperatorSettingsTestService() error = %v", err)
 	}
-	loadOperatorConfig := provideOperatorConfigLoader(settings)
-	ensureOperatorBackendScope := provideOperatorBackendScopeEnsurer(settings)
 
 	service, err := provideSystemInitializationService(
 		bootstrapCompositionTestPersistence(t),
 		platformfilesystem.Local{},
 		provideFactoryDefinitionPackagedInstallationDirectoryCreator(edges),
 		bootstrapCompositionGoalCatalog(t),
-		loadOperatorConfig,
-		ensureOperatorBackendScope,
+		settings,
 		provideSystemInitializationInspectPath(edges),
 		logging.NoopLogger{},
 	)

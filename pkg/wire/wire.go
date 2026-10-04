@@ -8,7 +8,6 @@ import (
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -19,6 +18,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -30,8 +30,7 @@ import (
 )
 
 var platformSet = wire.NewSet(
-	// TODO: remove this when we figure out how to appropriately inject the logging.
-	logging.NewDefaultLogger,
+	provideProcessLogger,
 )
 
 var apiSet = wire.NewSet(
@@ -53,6 +52,8 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
 	factorysessionwire.NewLiveChangeCoordinator,
+	factorysessionwire.NewIdentity,
+	factorysessionwire.NewResponseStreams,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
@@ -61,7 +62,11 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,
 	provideChatSessionsService,
-	provideOperatorSettingsService,
+	settingswire.NewDocumentService,
+	settingswire.NewResolutionService,
+	settingswire.NewService,
+	settingswire.NewCLIService,
+	provideOperatorSettingsDocumentPreserver,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
 	provideACPServerFactorySessionStartResolver,
@@ -302,6 +307,10 @@ var servicesSet = wire.NewSet(
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewAssembly,
 	provideFactoryRuntimeRoot,
+	provideRuntimeOrchestration,
+	provideRuntimeDispatchPlanning,
+	factoryruntimewire.NewLifecycle,
+	factoryruntimewire.NewInstanceHost,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.ProviderSessionsPorts), "*"),
 	wire.Struct(new(factorysessionwire.FactoryRuntimePorts), "*"),
