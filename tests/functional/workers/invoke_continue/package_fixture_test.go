@@ -24,6 +24,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -165,8 +166,8 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	unsupportedProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
-		providerswire.NewCodexEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}),
-		providerswire.NewClaudeEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}),
+		providerswire.NewCodexEffect(workerswire.NewProviderCommandRunner(route), platformclock.Real{}),
+		providerswire.NewClaudeEffect(workerswire.NewProviderCommandRunner(route), platformclock.Real{}),
 		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},

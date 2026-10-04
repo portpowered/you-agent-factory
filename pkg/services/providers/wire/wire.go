@@ -87,11 +87,6 @@ func NewAgyCommandEffect(runner CommandRunner, clock platformclock.Source, sched
 	return executionwire.NewAgyCommandEffect(runner, clock, scheduler)
 }
 
-// AdaptPlatformCommandRunner projects the process edge at composition.
-func AdaptPlatformCommandRunner(runner platformprocess.CommandRunner) CommandRunner {
-	return executionwire.AdaptPlatformCommandRunner(runner)
-}
-
 // AgyPTYPolicy contains detached native-session policy, without host effects.
 type AgyPTYPolicy = executionwire.AgyPTYPolicy
 

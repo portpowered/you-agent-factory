@@ -18,6 +18,7 @@ import (
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -276,8 +277,8 @@ func startInvokeContinuePackageProcess(
 	fallbackProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
-		providerswire.NewCodexEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}),
-		providerswire.NewClaudeEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}))
+		providerswire.NewCodexEffect(workerswire.NewProviderCommandRunner(route), platformclock.Real{}),
+		providerswire.NewClaudeEffect(workerswire.NewProviderCommandRunner(route), platformclock.Real{}))
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("build fixture provider fallback: %w", err)
 	}

@@ -27,11 +27,12 @@ import (
 
 // newConfiguredProvidersService always installs the shell-free Antigravity
 // print-mode command effect. An injected serviceedges.Edges.AgyPTYHost exists
-// for hosts that intentionally select the legacy PTY seam. Canonical command
-// construction does not allocate or construct that unused effect.
+// for hosts that intentionally select the legacy PTY seam. Composition keeps
+// command effects ahead of legacy PTY before supplying the completed effect.
 func newConfiguredProvidersService(
 	options []providerswire.Option,
 	agyRunner platformprocess.CommandRunner,
+	legacyAgy providerswire.AgyEffect,
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
 	logger logging.Logger,
@@ -40,8 +41,12 @@ func newConfiguredProvidersService(
 	stdioPipes platformprocess.StdioPipeFactory,
 ) (providers.Service, error) {
 	runner := workerswire.NewProviderCommandRunner(agyRunner)
+	antigravity := legacyAgy
+	if agyRunner != nil {
+		antigravity = providerswire.NewAgyCommandEffect(runner, clock, scheduler)
+	}
 	return providerswire.NewService(providerswire.IdentityCatalogProbe, scheduler, logger, commandFactory, locator, stdioPipes,
-		providerswire.NewAgyCommandEffect(runner, clock, scheduler),
+		antigravity,
 		providerswire.NewCodexEffect(runner, clock),
 		providerswire.NewClaudeEffect(runner, clock), options...)
 }

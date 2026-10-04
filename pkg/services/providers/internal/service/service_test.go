@@ -901,7 +901,7 @@ func (session *mockPTYSession) Close() error { return nil }
 
 func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
-	runner := providerswire.AdaptPlatformCommandRunner(testutil.NewProviderCommandRunner())
+	runner := executionwire.AdaptPlatformCommandRunner(testutil.NewProviderCommandRunner())
 	service, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{}),
