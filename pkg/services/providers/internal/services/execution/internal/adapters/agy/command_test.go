@@ -301,6 +301,68 @@ func argumentValue(args []string, flag string) string {
 	return ""
 }
 
+// Reuse one completed effect: continuation and request overrides must not
+// become defaults for the next ordinary attempt, including after rejection.
+func TestCommandEffectRequestOverridesRemainScopedAcrossReuse(t *testing.T) {
+	t.Parallel()
+	runner := testutil.NewProviderCommandRunner()
+	clock := platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond)
+	scheduler := &observedCommandScheduler{Deterministic: clock}
+	effect := agy.NewCommandEffect(fixtureCommandRunner(runner), clock, scheduler)
+	workspace := t.TempDir()
+	schema := `{"type":"object"}`
+	base := providers.ExecuteRequest{
+		Provider: providers.IDAntigravity, Model: "gemini-3.6-flash-low",
+		WorkingDirectory: workspace, UserMessage: "ordinary request",
+	}
+	override := base.Clone()
+	override.Model = "gemini-3.6-flash-high"
+	override.ReasoningEffort = " HIGH "
+	override.SkipPermissions = true
+	override.PrintTimeout = 8 * time.Minute
+	override.OutputSchema = schema
+	override.UserMessage = "continuation request"
+	ordinaryArgs := []string{"-p", base.UserMessage, "--output-format", "stream-json", "--add-dir", workspace,
+		"--disable-slash-commands", "--model", base.Model, "--print-timeout", "5m"}
+	continuedArgs := []string{"-p", override.UserMessage, "--output-format", "json", "--add-dir", workspace,
+		"--disable-slash-commands", "--json-schema", schema, "--model", override.Model,
+		"--effort", "high", "--dangerously-skip-permissions", "--print-timeout", "8m", "--session", "owned-resume"}
+	requests := []execution.ContinuationRequest{
+		{ExecuteRequest: base},
+		{ExecuteRequest: override, ResumeSession: &providers.SessionRef{Provider: providers.IDAntigravity, Kind: providers.SessionIDKind, ID: "owned-resume"}},
+		{ExecuteRequest: base},
+	}
+	for index, request := range requests {
+		runner.Queue(platformprocess.CommandResult{Stdout: []byte("scoped output")})
+		var observed []byte
+		_, err := effect.Execute(t.Context(), request, func(chunk []byte) error {
+			observed = append(observed, chunk...)
+			return nil
+		})
+		if err != nil || string(observed) != "scoped output" {
+			t.Fatalf("attempt %d: output=%q error=%v", index, observed, err)
+		}
+		wantArgs := ordinaryArgs
+		if request.ResumeSession != nil {
+			wantArgs = continuedArgs
+		}
+		command := runner.LastRequest()
+		if command.Command != "agy" || command.WorkDir != workspace || !reflect.DeepEqual(command.Args, wantArgs) {
+			t.Fatalf("attempt %d command=%#v, want agy in %q with args %#v", index, command, workspace, wantArgs)
+		}
+		assertCommandTimerStopped(t, scheduler, request.PrintTimeout)
+		if index == 1 {
+			invalid := override.Clone()
+			invalid.Model = "unsupported-model"
+			_, err = effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: invalid}, func([]byte) error { return nil })
+			var failure providers.ExecuteFailure
+			if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindInvalidRequest || runner.CallCount() != 2 {
+				t.Fatalf("rejected override: error=%v calls=%d, want invalid request without launch", err, runner.CallCount())
+			}
+		}
+	}
+}
+
 func containsArgument(args []string, want string) bool {
 	for _, arg := range args {
 		if arg == want {
