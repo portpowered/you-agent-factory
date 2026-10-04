@@ -22,6 +22,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -637,4 +638,37 @@ func bindWatchReconnectWait(scheduler platformclock.TimerSource) workcli.Reconne
 			return nil
 		}
 	}
+}
+
+// provideRuntimePreparationWorkstationLoader retains ordinary runtime default loading.
+func provideRuntimePreparationWorkstationLoader() factorydefinitions.WorkstationLoader {
+	return nil
+}
+
+func provideRuntimeRequestInvocationFiles(files factoryruntimewire.InputFileSystem) factorydefinitions.FileReader {
+	return files.ReadFile
+}
+
+func provideRuntimeRequestPrompts(service workers.Service) factoryruntimewire.RequestPromptRenderer {
+	prompts, _ := service.(factoryruntimewire.RequestPromptRenderer)
+	return prompts
+}
+
+func provideRuntimeRequestTemplateFields(service workers.Service) factoryruntimewire.RequestTemplateFieldResolver {
+	fields, _ := service.(factoryruntimewire.RequestTemplateFieldResolver)
+	return fields
+}
+
+func provideRuntimeRequestArtifactFiles(files factoryruntimewire.InputFileSystem) factoryruntimewire.ExpectedArtifactFileSystem {
+	artifacts, _ := files.(factoryruntimewire.ExpectedArtifactFileSystem)
+	return artifacts
+}
+
+// Production calls Resolve; its session Workers wrapper supplies progress on execution.
+func provideRuntimeRequestProgress() workers.ProgressPublisher {
+	return func(workers.ProgressFragment) {}
+}
+
+func provideRuntimeRequestLogger(baseLogger *zap.Logger, loggerFactory factoryruntime.RuntimeLoggerFactory) factoryruntime.Logger {
+	return loggerFactory(baseLogger, false)
 }
