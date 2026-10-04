@@ -36,6 +36,8 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 
 type constructionInvocationRuntime struct{}
 
+type nilRuntimeScopes struct{ runtimescopes.Service }
+
 func (constructionInvocationRuntime) Invoke(
 	context.Context,
 	inference.InvocationRuntimeRequest,
@@ -78,6 +80,12 @@ func inferenceDependencyCases(
 			name: "scopes", assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: constructionInvocationRuntime{},
 			registrar:         registrar, includeClock: true,
+			wantContains: "Runtime Scopes", wantInvalidDeps: true,
+		},
+		{
+			name: "typed nil scopes", scopes: (*nilRuntimeScopes)(nil), assets: assets, catalog: catalog,
+			runtimeHost: runtimeHost, invocationRuntime: constructionInvocationRuntime{},
+			registrar: registrar, includeClock: true,
 			wantContains: "Runtime Scopes", wantInvalidDeps: true,
 		},
 		{

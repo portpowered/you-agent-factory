@@ -184,9 +184,6 @@ func (s *service) ensureModelAssetsAvailable(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 ) error {
-	if s == nil || s.assets == nil {
-		return models.ErrUnavailable
-	}
 	inspection, err := s.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
 		Scope: request.Scope,
 		Name:  request.ModelName,
@@ -204,9 +201,6 @@ func (s *service) releaseInvocationLease(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 ) (models.InvocationLeaseDisposition, error) {
-	if s == nil || s.runtimeHost == nil {
-		return models.InvocationLeaseRetained, models.ErrUnavailable
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}

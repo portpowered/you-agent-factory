@@ -50,7 +50,7 @@ func NewService(
 	clock func() time.Time,
 	executionDeadline func() time.Duration,
 ) (inference.Service, error) {
-	if scopes == nil {
+	if isNilDependency(scopes) {
 		return nil, fmt.Errorf(
 			"%w: Models Runtime Scopes service is required",
 			models.ErrInvalidInferenceDependencies,

@@ -183,9 +183,6 @@ func (s *service) registerInvocationArtifacts(
 	if len(sources) == 0 {
 		return nil, nil
 	}
-	if s == nil || s.artifacts == nil {
-		return nil, models.ErrUnavailable
-	}
 	artifacts := make([]models.InferenceArtifact, 0, len(sources))
 	for _, source := range sources {
 		artifact, err := s.artifacts.Register(source)
