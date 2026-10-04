@@ -5,9 +5,15 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
@@ -179,4 +185,89 @@ func promptResultAttachmentID(t *testing.T, result json.RawMessage) string {
 		t.Fatalf("prompt result carries no attachment id: %s", result)
 	}
 	return id
+}
+
+// selectedChatWall intentionally has no timer or logical-tick capability.
+type selectedChatWall struct{ nanos atomic.Int64 }
+
+func (source *selectedChatWall) Now() time.Time { return time.Unix(0, source.nanos.Load()).UTC() }
+
+func TestSelectedProcessClockStampsChatTurnsAndRuntimeArtifacts(t *testing.T) {
+	t.Parallel()
+	for _, year := range []int{2041, 2042} {
+		t.Run(fmt.Sprint(year), func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			cwd := t.TempDir()
+			seedEveryInstalledPackagedFactory(t, home)
+			seedProjectPackagedFactory(t, cwd, controlledACPFactory)
+			support.SeedACPAgentProfile(t, home, "factory:"+controlledACPFactory, []string{"factory:" + controlledACPFactory})
+			source := &selectedChatWall{}
+			base := time.Date(year, 2, 3, 4, 5, 6, 0, time.UTC)
+			source.nanos.Store(base.UnixNano())
+			// Different selected sources require distinct immutable process graphs.
+			process, err := buildChatProcess(t, "selected wall", serviceedges.Edges{
+				Clock: source, ProviderCommandRunner: &controlledACPCommandRunner{},
+				FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			closeProcessCleanly(t, process)
+			stdin, stdout := startServeACPProcess(t, process, home, cwd)
+			sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
+			for index, instant := range []time.Time{base, base.Add(7 * time.Second)} {
+				source.nanos.Store(instant.UnixNano())
+				requestID := fmt.Sprintf("selected-time-%d", index)
+				response, notifications := driveIdentifiedSessionPrompt(t, stdin, stdout, requestID, sessionID, "pursue the first goal")
+				if response.Error != nil {
+					t.Fatalf("prompt: %+v", response.Error)
+				}
+				if !strings.Contains(agentMessageText(t, notifications), "first turn answer") {
+					t.Fatal("missing customer answer")
+				}
+				assertSelectedTranscriptFrame(t, home, base, requestID, instant)
+			}
+
+			// Re-read the first fact after advancing and executing another turn.
+			assertSelectedTranscriptFrame(t, home, base, "selected-time-0", base)
+		})
+	}
+}
+
+func assertSelectedTranscriptFrame(t *testing.T, home string, openedAt time.Time, requestID string, instant time.Time) {
+	t.Helper()
+	pattern := filepath.Join(wiretranscript.Root(home), openedAt.Format("2006"), openedAt.Format("01"), openedAt.Format("02"), openedAt.Format("150405.000000000")+"-*")
+	paths, err := filepath.Glob(pattern)
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("transcript %q = %v, %v", pattern, paths, err)
+	}
+	file, err := os.Open(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	found := false
+	for scanner.Scan() {
+		var record wiretranscript.Record
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			t.Fatal(err)
+		}
+		var frame struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(record.Frame, &frame) == nil && frame.ID == requestID {
+			if record.Timestamp != instant.Format(time.RFC3339Nano) {
+				t.Fatalf("frame %q time = %q, want %v", requestID, record.Timestamp, instant)
+			}
+			found = true
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatalf("transcript missing request %q", requestID)
+	}
 }

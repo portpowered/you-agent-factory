@@ -63,7 +63,9 @@ func provideRunInputPathInspector() platformfilesystem.PathInspector {
 type runtimeArtifactClock func() time.Time
 type runtimeArtifactIDGenerator func() string
 
-func provideRuntimeArtifactClock() runtimeArtifactClock             { return time.Now }
+func provideRuntimeArtifactClock(source platformclock.Source) runtimeArtifactClock {
+	return source.Now
+}
 func provideRuntimeArtifactIDGenerator() runtimeArtifactIDGenerator { return uuid.NewString }
 
 func provideRuntimeLoggerFactory() factoryruntime.RuntimeLoggerFactory {

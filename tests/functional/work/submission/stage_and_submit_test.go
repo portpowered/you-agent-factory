@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -249,5 +253,72 @@ func assertAPIStageAndSubmitMediaPreservesTypes(t *testing.T, server *support.Fu
 				t.Fatalf("staged %s Work content = %s, want type, URL, media type and file identity preserved", scenario.itemType, partJSON)
 			}
 		})
+	}
+}
+
+type stagingProcessWall struct{ nanos atomic.Int64 }
+
+func (source *stagingProcessWall) Now() time.Time { return time.Unix(0, source.nanos.Load()).UTC() }
+
+// These cells own the HTTP staging contract. Each immutable clock selection
+// gets one root process; successive expiry observations reuse its session.
+func TestSelectedProcessClockControlsStagedSubmissionExpiry(t *testing.T) {
+	t.Parallel()
+	for _, override := range []bool{false, true} {
+		t.Run(strconv.FormatBool(override), func(t *testing.T) {
+			t.Parallel()
+			base := time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+			selected, specialized := &stagingProcessWall{}, &stagingProcessWall{}
+			selected.nanos.Store(base.UnixNano())
+			specialized.nanos.Store(base.Add(24 * time.Hour).UnixNano())
+			effective := selected
+			edges := serviceedges.Edges{Clock: selected, ProviderCommandRunner: submissionInputPreservingProviderRunner()}
+			if override {
+				edges.WorkContentStagingClock = specialized
+				effective = specialized
+			}
+			dir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
+			configureSubmissionCodexWorkers(t, dir, "worker-a")
+			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir, Edges: edges})
+			t.Cleanup(func() { server.Stop(t) })
+			assertAPIStageAndSubmitFileCreatesExpectedWork(t, server)
+			issuedAt := effective.Now()
+			before := stageSubmitWorkFile(t, server.URL(), "image", stageAndSubmitFileName, stageAndSubmitMediaType, []byte("before expiry"))
+			expired := stageSubmitWorkFile(t, server.URL(), "image", stageAndSubmitFileName, stageAndSubmitMediaType, []byte("exact expiry"))
+			if override {
+				selected.nanos.Store(base.Add(48 * time.Hour).UnixNano())
+			}
+			effective.nanos.Store(issuedAt.Add(time.Hour - time.Nanosecond).UnixNano())
+			item := mustStageAndSubmitImageItem(t, before.StagedFileRef, string(before.Url), before.FileName, before.MediaType)
+			support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{WorkTypeName: batchInputsWorkType, Items: &[]factoryapi.SubmitWorkItem{item}})
+			prior := support.ListDefaultSessionWork(t, server.URL())
+			effective.nanos.Store(issuedAt.Add(time.Hour).UnixNano())
+			assertExpiredStagedSubmissionRejected(t, server, expired)
+			after := support.ListDefaultSessionWork(t, server.URL())
+			if len(after.Results) != len(prior.Results) {
+				t.Fatalf("expired submission admitted Work: before=%d after=%d", len(prior.Results), len(after.Results))
+			}
+		})
+	}
+}
+
+func assertExpiredStagedSubmissionRejected(t *testing.T, server *support.FunctionalAPIServer, staged factoryapi.StageSubmitWorkFileResponse) {
+	t.Helper()
+	item := mustStageAndSubmitImageItem(t, staged.StagedFileRef, string(staged.Url), staged.FileName, staged.MediaType)
+	body, err := json.Marshal(factoryapi.SubmitWorkRequest{WorkTypeName: batchInputsWorkType, Items: &[]factoryapi.SubmitWorkItem{item}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	payload, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "stagedFileRef has expired") {
+		t.Fatalf("expiry response = %d %s", response.StatusCode, payload)
 	}
 }
