@@ -261,8 +261,18 @@ func TestRootDispatchContinuationUsesCompletedCapabilities(t *testing.T) {
 					}
 					return providers.ExecuteResult{Content: "selected continuation"}, outcome.err
 				}
-				native := completedNativeContinuation{ordinaryCalls: &ordinaryCalls, run: observe}
-				peer := completedACPContinuation{run: observe, selected: route == "acp", ordinaryCalls: &ordinaryCalls}
+				native := completedNativeContinuation{ordinaryCalls: &ordinaryCalls, run: func(request providers.ExecuteRequest, reference providers.SessionRef) (providers.ExecuteResult, error) {
+					if route != "native" {
+						t.Fatal("ACP continuation reached the native peer")
+					}
+					return observe(request, reference)
+				}}
+				peer := completedACPContinuation{selected: route == "acp", ordinaryCalls: &ordinaryCalls, run: func(request providers.ExecuteRequest, reference providers.SessionRef) (providers.ExecuteResult, error) {
+					if route != "acp" {
+						t.Fatal("native continuation reached the ACP peer")
+					}
+					return observe(request, reference)
+				}}
 				root, err := NewWithACP(internalCatalogStub{}, native, peer, nil, logging.NoopLogger{}, internalDisabledACP{})
 				if err != nil {
 					t.Fatal(err)
