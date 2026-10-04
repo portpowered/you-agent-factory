@@ -386,6 +386,15 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		defer snapshotter.stopAndWait()
 	}
 	invocationResult := runCoverageInvocations(cfg, plan, failurePrefix, buildDiagnosticRun, rawCapture)
+	originalTestFailure := invocationResult.testFailureObserved
+	flake := runFlakeRetry(flakeRetrySettingsFromEnv(), plan, invocationResult, repoRoot)
+	defer flake.cleanup()
+	if flake.recovered {
+		invocationResult.stdout = flake.stdout
+		invocationResult.laneErr = nil
+		invocationResult.coverageCommandErr = nil
+		invocationResult.testFailureObserved = false
+	}
 	wallSeconds := time.Since(started).Seconds()
 	covdataErr := materializeUnitCovdataProfile(plan, profilePath, repoRoot)
 
@@ -412,10 +421,14 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		}
 	}
 
+	if flake.recovered {
+		mergeErr = errors.Join(mergeErr, mergeFlakeRetryProfiles(profilePath, flake.profiles, repoRoot, coverPackages))
+	}
+
 	partialCoverageErr := publishPartialCoverageIfNeeded(cfg, profilePath, repoRoot, coverPackages, invocationResult.laneErr, mergeErr)
 	var rawCaptureErr error
 	if rawCapture != nil {
-		rawCaptureErr = rawCapture.publish(rawHead, invocationResult.coverageCommandErr != nil)
+		rawCaptureErr = rawCapture.publish(rawHead, originalTestFailure || invocationResult.coverageCommandErr != nil)
 	}
 	runErr := errors.Join(invocationResult.laneErr, timingWriteErr, buildDiagnosticErr, mergeErr, partialCoverageErr, rawCaptureErr, plan.cleanup())
 	if !invocationResult.testFailureObserved {
@@ -435,6 +448,7 @@ type coverageInvocationResult struct {
 	coverageBuildTrace   string
 	succeeded            []bool
 	testFailureObserved  bool
+	failureStderr        string
 	failedTestCount      int
 	failedTestCountKnown bool
 }
@@ -455,6 +469,7 @@ func runCoverageInvocations(cfg config, plan coverageInvocationPlan, failurePref
 	var result coverageInvocationResult
 	var stdout strings.Builder
 	var coverageBuildTrace strings.Builder
+	var failureStderr strings.Builder
 	result.succeeded = make([]bool, len(plan.invocations))
 	result.failedTestCountKnown = true
 	for index, invocation := range plan.invocations {
@@ -475,6 +490,7 @@ func runCoverageInvocations(cfg config, plan coverageInvocationPlan, failurePref
 			result.succeeded[index] = true
 			continue
 		}
+		failureStderr.WriteString(batchStderr)
 		if count, known, observed := coverageTestFailureDetails(commandErr, batchStdout, batchStderr); observed {
 			result.testFailureObserved = true
 			result.failedTestCount += count
@@ -492,6 +508,7 @@ func runCoverageInvocations(cfg config, plan coverageInvocationPlan, failurePref
 		}
 	}
 	result.stdout = stdout.String()
+	result.failureStderr = failureStderr.String()
 	result.coverageBuildTrace = coverageBuildTrace.String()
 	return result
 }
