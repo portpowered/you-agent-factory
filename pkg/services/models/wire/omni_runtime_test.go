@@ -3,11 +3,20 @@ package wire
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
+	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	"google.golang.org/protobuf/proto"
 )
 
 type recordingInvocationProtocolClient struct {
@@ -358,7 +367,346 @@ func TestNewServiceWithInvocationProtocolConstructsRoot(t *testing.T) {
 func TestPinnedHostProtocolNegotiatorWrapperRejectsNilDialer(t *testing.T) {
 	t.Parallel()
 
-	if negotiator := NewPinnedGRPCHostProtocolNegotiator(nil); negotiator != nil {
-		t.Fatalf("NewPinnedGRPCHostProtocolNegotiator(nil) = %T, want nil", negotiator)
+	if negotiator := NewPinnedGRPCHostProtocolNegotiator(nil, filepath.EvalSymlinks); negotiator != nil {
+		t.Fatalf("NewPinnedGRPCHostProtocolNegotiator(nil, filepath.EvalSymlinks) = %T, want nil", negotiator)
+	}
+}
+
+func TestRevisionResolverAdapterSelectsOnlyFirstOverride(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"absent", "nil-first", "success", "failure"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			wantErr := errors.New("selected revision resolver error")
+			calls := 0
+			resolvers := []func(context.Context, string) (string, error){func(got context.Context, source string) (string, error) {
+				calls++
+				if got != ctx || source != "hf://selected/repository@main" {
+					t.Fatalf("revision context/source = %v/%q, want selected request", got, source)
+				}
+				if mode == "failure" {
+					return "selected-result", wantErr
+				}
+				return "selected-result", nil
+			}, func(context.Context, string) (string, error) {
+				t.Fatal("used second revision override")
+				return "", nil
+			}}
+			if mode == "absent" {
+				resolvers = nil
+			} else if mode == "nil-first" {
+				resolvers[0] = nil
+			}
+			selected := firstRevisionResolver(resolvers)
+			if mode == "absent" || mode == "nil-first" {
+				if selected != nil || calls != 0 {
+					t.Fatal("absent first override must remain absent")
+				}
+				return
+			}
+			result, err := selected(ctx, "hf://selected/repository@main")
+			if mode == "success" {
+				wantErr = nil
+			}
+			if result != "selected-result" || err != wantErr || calls != 1 {
+				t.Fatalf("selected resolver = %q, %v, calls=%d, want unchanged result/error once", result, err, calls)
+			}
+		})
+	}
+}
+
+func TestPinnedHostProtocolWrapperForwardsSelectedSymlinkResolver(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"absent", "nil-first", "identity", "escape", "failure", "missing"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			configuration := symlinkNegotiationConfiguration(t)
+			root := filepath.Dir(configuration.ModelPath)
+			calls := []string{}
+			resolver := modelseffects.HostResolveSymlinks(func(path string) (string, error) {
+				calls = append(calls, path)
+				switch mode {
+				case "escape":
+					if path != root {
+						return filepath.Join(filepath.Dir(root), "escaped.gguf"), nil
+					}
+				case "failure":
+					return "", errors.New("controlled symlink failure")
+				case "missing":
+					return "", os.ErrNotExist
+				}
+				return path, nil
+			})
+			// The composition caller supplies the characterized default explicitly
+			// when there is no selected override. The leaf has one required effect.
+			if mode == "absent" || mode == "nil-first" {
+				resolver = filepath.EvalSymlinks
+			}
+			connection := &symlinkNegotiationConnection{t: t}
+			ctx := t.Context()
+			dialer := symlinkNegotiationDialer(func(got context.Context, endpoint string) (platformgrpc.Connection, error) {
+				if got != ctx || endpoint != "selected:50051" {
+					t.Fatalf("dial context/endpoint = %v/%q, want selected values", got, endpoint)
+				}
+				return connection, nil
+			})
+			result, err := NewPinnedGRPCHostProtocolNegotiator(dialer, resolver).Negotiate(ctx, "selected:50051", modelseffects.HostProtocolNegotiationRequest{Configuration: configuration})
+			assertSymlinkNegotiationResult(t, mode, configuration, result, err, connection, calls)
+		})
+	}
+}
+
+func symlinkNegotiationConfiguration(t *testing.T) modelseffects.ResolvedHostConfiguration {
+	t.Helper()
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, ok := manifest.Model(models.BuiltInModelNameTTS)
+	if !ok {
+		t.Fatal("TTS role manifest missing")
+	}
+	root := t.TempDir()
+	files := make([]string, 0, len(definition.Artifacts))
+	for _, artifact := range definition.Artifacts {
+		path := filepath.Join(root, artifact.Path)
+		if err := os.WriteFile(path, []byte("controlled role"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, path)
+	}
+	return modelseffects.ResolvedHostConfiguration{
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		Backend:         "localai-vibevoice", ModelName: models.BuiltInModelNameTTS,
+		Revision: definition.Publication.Revision, ModelPath: files[0], ModelFiles: files,
+	}
+}
+
+func assertSymlinkNegotiationResult(t *testing.T, mode string, configuration modelseffects.ResolvedHostConfiguration, result modelseffects.HostProtocolNegotiationResult, err error, connection *symlinkNegotiationConnection, calls []string) {
+	t.Helper()
+	if connection.closed != 1 || connection.health != 1 {
+		t.Fatalf("health/close = %d/%d, want one each", connection.health, connection.closed)
+	}
+	if mode == "escape" || mode == "failure" {
+		if !errors.Is(err, models.ErrHostProtocolIncompatible) || result.Ready || connection.load != nil || len(calls) == 0 {
+			t.Fatalf("invalid resolved layout = %#v, %v, load=%v calls=%v; want incompatible before load", result, err, connection.load, calls)
+		}
+		return
+	}
+	wantResult := modelseffects.HostProtocolNegotiationResult{Ready: true, Backend: configuration.Backend, ProtocolVersion: configuration.ProtocolVersion}
+	if err != nil || result != wantResult || connection.load == nil {
+		t.Fatalf("negotiation = %#v, %v, load=%v; want selected ready backend", result, err, connection.load)
+	}
+	wantOptions := []string{"tokenizer=" + configuration.ModelFiles[1], "voice=" + configuration.ModelFiles[2]}
+	if connection.load.ModelFile != configuration.ModelPath || !reflect.DeepEqual(connection.load.Options, wantOptions) {
+		t.Fatalf("load = %#v, want selected model and role options %v", connection.load, wantOptions)
+	}
+	assertSelectedSymlinkCalls(t, mode, configuration, calls)
+}
+
+func assertSelectedSymlinkCalls(t *testing.T, mode string, configuration modelseffects.ResolvedHostConfiguration, calls []string) {
+	t.Helper()
+	wantCalls := []string{}
+	if mode == "identity" || mode == "missing" {
+		for _, path := range configuration.ModelFiles {
+			wantCalls = append(wantCalls, filepath.Dir(configuration.ModelPath))
+			if mode == "identity" {
+				wantCalls = append(wantCalls, path)
+			}
+		}
+	}
+	if !reflect.DeepEqual(calls, wantCalls) {
+		t.Fatalf("resolver calls = %v, want %v", calls, wantCalls)
+	}
+}
+
+type symlinkNegotiationConnection struct {
+	t              *testing.T
+	health, closed int
+	load           *localai.ModelOptions
+}
+
+type symlinkNegotiationDialer func(context.Context, string) (platformgrpc.Connection, error)
+
+func (dialer symlinkNegotiationDialer) Dial(ctx context.Context, endpoint string) (platformgrpc.Connection, error) {
+	return dialer(ctx, endpoint)
+}
+
+func (connection *symlinkNegotiationConnection) Invoke(_ context.Context, method string, payload []byte) ([]byte, error) {
+	if strings.HasSuffix(method, "/Health") {
+		connection.health++
+	} else if strings.HasSuffix(method, "/LoadModel") {
+		connection.load = &localai.ModelOptions{}
+		if err := proto.Unmarshal(payload, connection.load); err != nil {
+			connection.t.Fatal(err)
+		}
+	} else {
+		connection.t.Fatalf("unexpected protocol method %q", method)
+	}
+	return proto.Marshal(&localai.Result{Success: true})
+}
+
+func (connection *symlinkNegotiationConnection) Close() error {
+	connection.closed++
+	return nil
+}
+
+func TestModelsConstructionRejectsMissingFunctionEffects(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		remove func(*constructionEdges)
+	}{
+		{"asset make-directories effect", func(e *constructionEdges) { e.assetMkdirAll = nil }},
+		{"asset inspect-path effect", func(e *constructionEdges) { e.assetStat = nil }},
+		{"asset resolve-home effect", func(e *constructionEdges) { e.assetHome = nil }},
+		{"asset write-file effect", func(e *constructionEdges) { e.assetWriteFile = nil }},
+		{"asset rename-path effect", func(e *constructionEdges) { e.assetRename = nil }},
+		{"asset remove-path effect", func(e *constructionEdges) { e.assetRemove = nil }},
+		{"asset read-file effect", func(e *constructionEdges) { e.assetReadFile = nil }},
+		{"asset read-directory effect", func(e *constructionEdges) { e.assetReadDir = nil }},
+		{"asset create-file effect", func(e *constructionEdges) { e.assetCreate = nil }},
+		{"asset open-file effect", func(e *constructionEdges) { e.assetOpen = nil }},
+		{"model runtime file inspector", func(e *constructionEdges) { e.runtimeInspect = nil }},
+		{"model runtime temporary directory resolver", func(e *constructionEdges) { e.runtimeTempDir = nil }},
+		{"model runtime temporary file creator", func(e *constructionEdges) { e.runtimeTempFile = nil }},
+		{"process clock", func(e *constructionEdges) { e.now = nil }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			edges := validConstructionEdges()
+			test.remove(&edges)
+			service, err := edges.newServiceWithInvocationProtocol(nil)
+			want := "construct Models: " + test.name + " is required"
+			if service != nil || err == nil || err.Error() != want {
+				t.Fatalf("construction = (%T, %v), want nil service and %q", service, err, want)
+			}
+		})
+	}
+}
+
+func TestModelsConstructionRejectsNilAndTypedNilRequiredEffects(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		remove func(*constructionEdges, bool)
+	}{
+		{"asset HTTP client", func(e *constructionEdges, typed bool) {
+			e.assetHTTP = nil
+			if typed {
+				e.assetHTTP = (*recordingHTTPDoer)(nil)
+			}
+		}},
+		{"model host HTTP client", func(e *constructionEdges, typed bool) {
+			e.hostHTTP = nil
+			if typed {
+				e.hostHTTP = (*recordingHTTPDoer)(nil)
+			}
+		}},
+		{"model runtime HTTP client", func(e *constructionEdges, typed bool) {
+			e.runtimeHTTP = nil
+			if typed {
+				e.runtimeHTTP = (*recordingHTTPDoer)(nil)
+			}
+		}},
+		{"model host process launcher", func(e *constructionEdges, typed bool) {
+			e.processLauncher = nil
+			if typed {
+				e.processLauncher = (*recordingProcessLauncher)(nil)
+			}
+		}},
+		{"model host clock", func(e *constructionEdges, typed bool) {
+			e.hostClock = nil
+			if typed {
+				e.hostClock = (*recordingHostClock)(nil)
+			}
+		}},
+		{"model runtime command runner", func(e *constructionEdges, typed bool) {
+			e.runtimeRunner = nil
+			if typed {
+				e.runtimeRunner = (*recordingCommandRunner)(nil)
+			}
+		}},
+	}
+	for _, test := range cases {
+		for _, typed := range []bool{false, true} {
+			name := "nil/"
+			if typed {
+				name = "typed-nil/"
+			}
+			t.Run(name+test.name, func(t *testing.T) {
+				t.Parallel()
+				edges := validConstructionEdges()
+				test.remove(&edges, typed)
+				var service any
+				var err error
+				if test.name == "model host clock" {
+					service, err = NewRuntimeHost(nil, nil, nil, nil, edges.processLauncher, edges.hostHTTP,
+						edges.hostClock, nil, nil, edges.assetPlatform, nil, nil, nil, nil, 0, 0)
+				} else {
+					service, err = edges.newServiceWithInvocationProtocol(nil)
+				}
+				want := "construct Models: " + test.name + " is required"
+				if service != nil || err == nil || err.Error() != want {
+					t.Fatalf("construction = (%T, %v), want nil service and %q", service, err, want)
+				}
+			})
+		}
+	}
+}
+
+func TestModelsConstructionAllowsAbsentProtocolOverride(t *testing.T) {
+	t.Parallel()
+	service, err := validConstructionEdges().newServiceWithInvocationProtocol(nil)
+	if err != nil || service == nil {
+		t.Fatalf("construction without optional protocol = (%T, %v), want inert service", service, err)
+	}
+}
+
+func TestCatalogConstructionRejectsMissingSelectedBoundaryEffects(t *testing.T) {
+	t.Parallel()
+	scopes, err := NewRuntimeScopes(platformrandom.CryptoSource{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readiness := CatalogReadinessQuery(func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		return models.Runtime{}, nil
+	})
+	for _, test := range []struct {
+		name      string
+		scopes    RuntimeScopes
+		readiness CatalogReadinessQuery
+		want      string
+	}{
+		{"scopes", nil, readiness, "Models Catalog runtime scopes service is required"},
+		{"readiness", scopes, nil, "Models Catalog readiness query is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			catalog, err := NewCatalog(test.scopes, test.readiness)
+			if catalog != nil || err == nil || err.Error() != test.want {
+				t.Fatalf("construction = (%T, %v), want nil and %q", catalog, err, test.want)
+			}
+		})
+	}
+}
+
+func TestModelsConstructionPreservesIssuerEntropyFailure(t *testing.T) {
+	t.Parallel()
+	wantErr := errors.New("controlled issuer entropy failure")
+	edges := validConstructionEdges()
+	edges.issuerEntropy = platformrandom.SourceFunc(func(bound int64) (int64, error) {
+		if bound != 256 {
+			t.Fatalf("issuer entropy bound = %d, want byte bound 256", bound)
+		}
+		return 0, wantErr
+	})
+	service, err := edges.newServiceWithInvocationProtocol(nil)
+	if service != nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "construct Models Runtime Scopes issuer identity") {
+		t.Fatalf("construction = (%T, %v), want nil service and preserved issuer failure", service, err)
 	}
 }

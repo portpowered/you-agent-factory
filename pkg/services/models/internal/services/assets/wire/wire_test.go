@@ -1,6 +1,8 @@
-package wire
+package wire_test
 
 import (
+	"context"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"io"
 	"net/http"
 	"os"
@@ -9,7 +11,6 @@ import (
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -78,7 +79,7 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := NewService(
+			service, err := modelswire.NewAssets(
 				test.scopes,
 				test.platform,
 				test.client,
@@ -93,7 +94,7 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 				test.readDir,
 				test.create,
 				test.open,
-				assets.ConstructionOptions{Coordination: coordination},
+				func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, coordination,
 			)
 			if test.wantError {
 				if service != nil || err == nil {

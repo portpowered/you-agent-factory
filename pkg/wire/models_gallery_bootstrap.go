@@ -6,6 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"io"
 	"net/http"
 	"os"
@@ -63,9 +67,6 @@ func resolveLocalAIBinary(ctx context.Context, client localAIHTTPDoer, cacheDir 
 func downloadLocalAIBinary(ctx context.Context, client localAIHTTPDoer, cacheDir, releaseURL string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
-	}
-	if client == nil {
-		client = http.DefaultClient
 	}
 	ctx, cancel := context.WithTimeout(ctx, localAIReleaseTimeout)
 	defer cancel()
@@ -241,4 +242,115 @@ func matchesLocalAIFile(path string, size int64, digest string) bool {
 		return false
 	}
 	return strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), digest)
+}
+
+func provideModelAssetHTTP(edges serviceedges.Edges) modelswire.AssetHTTPDoer {
+	if selected := edges.ModelAssetHTTPClient; selected != nil {
+		return modelswire.AssetHTTPDoer(selected)
+	}
+	return newModelAssetHTTPClient()
+}
+
+func provideModelAssetMakeDirectories(edges serviceedges.Edges) modelswire.AssetMakeDirectories {
+	if selected := edges.ModelAssetMakeDirectories; selected != nil {
+		return modelswire.AssetMakeDirectories(selected)
+	}
+	return os.MkdirAll
+}
+
+func provideModelAssetInspectPath(edges serviceedges.Edges) modelswire.AssetInspectPath {
+	if selected := edges.ModelAssetInspectPath; selected != nil {
+		return modelswire.AssetInspectPath(selected)
+	}
+	return os.Stat
+}
+
+func provideModelAssetResolveHomeDirectory(edges serviceedges.Edges) modelswire.AssetResolveHomeDirectory {
+	if selected := edges.ModelAssetResolveHomeDirectory; selected != nil {
+		return modelswire.AssetResolveHomeDirectory(selected)
+	}
+	return os.UserHomeDir
+}
+
+func provideModelAssetWriteFile(edges serviceedges.Edges) modelswire.AssetWriteFile {
+	if selected := edges.ModelAssetWriteFile; selected != nil {
+		return modelswire.AssetWriteFile(selected)
+	}
+	return os.WriteFile
+}
+
+func provideModelAssetRenamePath(edges serviceedges.Edges) modelswire.AssetRenamePath {
+	if selected := edges.ModelAssetRenamePath; selected != nil {
+		return modelswire.AssetRenamePath(selected)
+	}
+	return os.Rename
+}
+
+func provideModelAssetRemovePath(edges serviceedges.Edges) modelswire.AssetRemovePath {
+	if selected := edges.ModelAssetRemovePath; selected != nil {
+		return modelswire.AssetRemovePath(selected)
+	}
+	return os.Remove
+}
+
+func provideModelAssetReadFile(edges serviceedges.Edges) modelswire.AssetReadFile {
+	if selected := edges.ModelAssetReadFile; selected != nil {
+		return modelswire.AssetReadFile(selected)
+	}
+	return os.ReadFile
+}
+
+func provideModelAssetReadDirectory(edges serviceedges.Edges) modelswire.AssetReadDirectory {
+	if selected := edges.ModelAssetReadDirectory; selected != nil {
+		return modelswire.AssetReadDirectory(selected)
+	}
+	return os.ReadDir
+}
+
+func provideModelAssetCreateFile(edges serviceedges.Edges) modelswire.AssetCreateFile {
+	if selected := edges.ModelAssetCreateFile; selected != nil {
+		return modelswire.AssetCreateFile(selected)
+	}
+	return func(path string) (io.WriteCloser, error) { return os.Create(path) }
+}
+
+func provideModelAssetOpenFile(edges serviceedges.Edges) modelswire.AssetOpenFile {
+	if selected := edges.ModelAssetOpenFile; selected != nil {
+		return modelswire.AssetOpenFile(selected)
+	}
+	return func(path string) (io.ReadCloser, error) { return os.Open(path) }
+}
+
+func provideModelAssetResolveEnvironment(edges serviceedges.Edges) modelswire.AssetResolveEnvironment {
+	if selected := edges.ModelAssetResolveEnvironment; selected != nil {
+		return modelswire.AssetResolveEnvironment(selected)
+	}
+	return os.Getenv
+}
+
+func provideModelAssetEndpoints(edges serviceedges.Edges) models.RuntimeAssetEndpoints {
+	return modelswire.NormalizeAssetEndpoints(edges.ModelAssetEndpoints)
+}
+
+func provideModelAssetCoordination(edges serviceedges.Edges) (modelswire.AssetStagingCoordination, error) {
+
+	var coordination modelswire.AssetStagingCoordination
+	var err error
+	if factory := edges.ModelAssetStagingCoordinationFactory; factory != nil {
+		coordination, err = factory()
+	} else {
+		coordination, err = platformlocking.New(platformlocking.LocalFileSystem{})
+	}
+	if err != nil {
+		return nil, fmt.Errorf("construct Models asset staging coordination: %w", err)
+	}
+	return coordination, nil
+}
+
+func provideModelRuntimeTempFile(edges serviceedges.Edges) modelswire.RuntimeCreateTempFile {
+
+	if selected := edges.ModelRuntimeCreateTempFile; selected != nil {
+		return adaptModelRuntimeTempFile(selected)
+	}
+	return func(dir, pattern string) (modelswire.RuntimeTempFile, error) { return os.CreateTemp(dir, pattern) }
 }
