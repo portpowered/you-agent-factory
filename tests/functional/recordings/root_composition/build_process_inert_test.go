@@ -175,7 +175,7 @@ func assertCanceledRecordingStatus(t *testing.T, service recordings.Service, id 
 	// producer error. Keep this characterization separate from the unproven
 	// joined-cancellation acceptance criterion; never manufacture that cause.
 	if failFinal {
-		if finished.Status.State != recordings.RecordingFailed || !errors.Is(terminalErr, writeErr) || !reflect.DeepEqual(status.Status.FlushedThrough, prefix.FlushedThrough) {
+		if finished.Status.State != recordings.RecordingFailed || !errors.Is(terminalErr, writeErr) || !canceledRecordingRetainsDurablePrefix(status.Status, prefix) {
 			t.Fatalf("failed final flush = (%#v, %v), want retained prefix and storage cause", status, terminalErr)
 		}
 	} else if terminalErr != nil || finished.Status.State != recordings.RecordingFinalized || status.Status.FlushedThrough == nil || status.Status.LastEvent == nil || *status.Status.FlushedThrough != *status.Status.LastEvent {
@@ -184,6 +184,16 @@ func assertCanceledRecordingStatus(t *testing.T, service recordings.Service, id 
 	if finished.Status.FinalizedAt == nil || *finished.Status.FinalizedAt != at {
 		t.Fatalf("repeated Finish changed terminal UTC: %#v", finished)
 	}
+}
+
+func canceledRecordingRetainsDurablePrefix(status, prefix recordings.RecordingStatusFacts) bool {
+	// A successful background flush may advance beyond the explicit pre-cancel
+	// flush. The failed terminal write must retain that successful prefix, while
+	// never acknowledging the terminal event that it could not publish.
+	return status.FlushedThrough != nil && prefix.FlushedThrough != nil && status.LastEvent != nil &&
+		status.FlushedThrough.StreamGenerationID == prefix.FlushedThrough.StreamGenerationID &&
+		status.FlushedThrough.Sequence >= prefix.FlushedThrough.Sequence &&
+		status.FlushedThrough.Sequence < status.LastEvent.Sequence
 }
 
 func assertCanceledRecordingHistory(t *testing.T, service recordings.Service, id recordings.RecordingID, path string, failFinal bool) {
@@ -209,6 +219,15 @@ func assertCanceledRecordingHistory(t *testing.T, service recordings.Service, id
 	}
 	if seen["RUN_RESPONSE"] == failFinal {
 		t.Fatalf("durable terminal fact present=%t, final flush failed=%t", seen["RUN_RESPONSE"], failFinal)
+	}
+	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: id})
+	if err != nil || status.Status.FlushedThrough == nil || len(history.Events) == 0 {
+		t.Fatalf("durable canceled history has no watermark: (%#v, %v)", status, err)
+	}
+	// Historical reads reconstruct their own generation; the admitted sequence
+	// must still exactly match the last successfully published runtime position.
+	if last := history.Events[len(history.Events)-1]; last.Sequence != status.Status.FlushedThrough.Sequence {
+		t.Fatalf("durable history ends at %d, acknowledged watermark is %d", last.Sequence, status.Status.FlushedThrough.Sequence)
 	}
 }
 
