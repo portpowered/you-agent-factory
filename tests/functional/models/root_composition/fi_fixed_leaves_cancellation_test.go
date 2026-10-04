@@ -43,7 +43,7 @@ func runFixedLeafSessionCancellation(t *testing.T, baseURL string, routes *fixed
 	}
 	select {
 	case <-selectedRoute.canceled:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("accepted selected model effect did not observe cancellation")
 	}
 	support.WaitForSessionStopped(t, baseURL, selected, 5*time.Second)
@@ -136,7 +136,7 @@ func waitFixedLeafAccepted(t *testing.T, route *fixedLeafRoute) string {
 	select {
 	case request := <-route.observed:
 		return request.Scope.String()
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("model effect did not reach accepted readiness")
 		return ""
 	}

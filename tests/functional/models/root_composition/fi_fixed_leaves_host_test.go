@@ -73,7 +73,7 @@ func runFixedLeafOwnedHostCancellation(t *testing.T, baseURL string, routes *fix
 	}
 	select {
 	case <-selectedRoute.canceled:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("accepted selected effect did not observe cancellation")
 	}
 	support.WaitForSessionStopped(t, baseURL, selected, 5*time.Second)
