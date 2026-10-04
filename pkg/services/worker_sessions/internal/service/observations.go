@@ -974,3 +974,14 @@ func (r *registry) LoadWorkerRecording(
 	}
 	return reader.LoadWorkerRecording(ctx, recordingID)
 }
+
+// A successfully published opening that loses scoped admission to close is
+// canceled. Publication failures retain their separate FAILED classification.
+func (r *registry) cancelInvocationBeforeAdmission(ctx context.Context, id, attemptID string) workersessions.Session {
+	final, committed := r.commitTerminal(id, workersessions.StateCanceled, workersessions.TerminalResult{})
+	if committed {
+		r.logTerminal(id, attemptID, final)
+	}
+	r.publishTerminalSnapshot(ctx, id, attemptID, final)
+	return final
+}
