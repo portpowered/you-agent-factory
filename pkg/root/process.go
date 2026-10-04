@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/wire"
@@ -30,6 +31,11 @@ func BuildProcess(
 	if err := validateConstructionOverrides(edges); err != nil {
 		return nil, fmt.Errorf("build application process: %w", err)
 	}
+	clock, scheduler, err := normalizeProcessTime(edges.Clock, edges.ProcessScheduler)
+	if err != nil {
+		return nil, fmt.Errorf("build application process: %w", err)
+	}
+	edges.Clock, edges.ProcessScheduler = clock, scheduler
 	applicationProcess, err := wire.InjectBundle(ctx, serviceedges.Merge(
 		serviceedges.Edges{ModelInvocationGRPCDialer: platformgrpc.NetworkDialer{}},
 		edges,
@@ -83,7 +89,8 @@ func invalidConstructionOverride(field string) error {
 		"ModelHostClock":                "construct Models: model host clock is required",
 		"ModelRuntimeCommandRunner":     "construct Models: model runtime command runner is required",
 		"ModelRuntimeHTTPClient":        "construct Models: model runtime HTTP client is required",
-		"Clock":                         "construct Recordings: clock is required",
+		"Clock":                         "Clock must not be typed-nil; omit it to select the default; construct Recordings: clock is required",
+		"ProcessScheduler":              "ProcessScheduler must not be typed-nil; omit it to select the default",
 	}[field]
 	if message != "" {
 		return fmt.Errorf("Edges.%s: %s", field, message)
@@ -103,4 +110,34 @@ func isNilConstructionEffect(value any) bool {
 	default:
 		return false
 	}
+}
+
+// normalizeProcessTime selects process time once at the caller boundary.
+// Legacy Now-only clocks control facts while a documented wall scheduler
+// controls deadlines. Specialized owner overrides are left to their providers.
+func normalizeProcessTime(
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+) (platformclock.Source, platformclock.TimerSource, error) {
+	if isTypedNilProcessTime(clock) {
+		return nil, nil, fmt.Errorf("Clock must not be typed-nil; omit it to select the default")
+	}
+	if isTypedNilProcessTime(scheduler) {
+		return nil, nil, fmt.Errorf("ProcessScheduler must not be typed-nil; omit it to select the default")
+	}
+	if clock == nil {
+		clock = platformclock.Real{}
+	}
+	if scheduler == nil {
+		if timerSource, ok := clock.(platformclock.TimerSource); ok {
+			scheduler = timerSource
+		} else {
+			scheduler = platformclock.Real{}
+		}
+	}
+	return clock, scheduler, nil
+}
+
+func isTypedNilProcessTime(value any) bool {
+	return value != nil && isNilConstructionEffect(value)
 }

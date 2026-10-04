@@ -30,7 +30,7 @@ func eventsWireTestAppendRequest() events.AppendRequest {
 func TestProvideEventsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
 	t.Parallel()
 
-	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}, ACPWireLogSettings{}); err != nil {
+	if _, err := InjectBundle(context.Background(), selectedTestTimeEdges(serviceedges.Edges{}), ACPWireLogSettings{}); err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
@@ -83,7 +83,7 @@ func TestProvideApplicationProcessLifecycleSharesTheExactEventsInstance(t *testi
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -125,7 +125,7 @@ func TestProvideApplicationProcessLifecycleRequiresEventsLifecycle(t *testing.T)
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}

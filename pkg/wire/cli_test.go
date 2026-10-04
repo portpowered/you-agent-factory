@@ -604,7 +604,7 @@ func TestRootBundleProducesFreshDetachedCLIObservation(t *testing.T) {
 	t.Parallel()
 
 	observations := make([]cliobservation.Result, 0, 2)
-	rootBundle, err := InjectBundle(t.Context(), serviceedges.Edges{CLIObserver: cliobservation.CaptureAppend(&observations)}, ACPWireLogSettings{})
+	rootBundle, err := InjectBundle(t.Context(), selectedTestTimeEdges(serviceedges.Edges{CLIObserver: cliobservation.CaptureAppend(&observations)}), ACPWireLogSettings{})
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
@@ -626,7 +626,7 @@ func TestInjectBundleReturnsLazyServiceComposition(t *testing.T) {
 	t.Parallel()
 
 	var observation cliobservation.Result
-	rootBundle, err := InjectBundle(t.Context(), serviceedges.Edges{CLIObserver: cliobservation.Capture(&observation)}, ACPWireLogSettings{})
+	rootBundle, err := InjectBundle(t.Context(), selectedTestTimeEdges(serviceedges.Edges{CLIObserver: cliobservation.Capture(&observation)}), ACPWireLogSettings{})
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
@@ -645,7 +645,7 @@ func TestInjectBundlePreservesOverridesInCanonicalLazyComposition(t *testing.T) 
 	runner := &processCommandRunner{}
 	var observation cliobservation.Result
 	overrideEdges := serviceedges.Edges{ProviderCommandRunner: runner, CLIObserver: cliobservation.Capture(&observation)}
-	custom, err := InjectBundle(t.Context(), overrideEdges, ACPWireLogSettings{})
+	custom, err := InjectBundle(t.Context(), selectedTestTimeEdges(overrideEdges), ACPWireLogSettings{})
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
@@ -956,7 +956,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 	t.Helper()
 
 	edges := serviceedges.Edges{}
-	providersRoot, err := provideProvidersService(edges)
+	providersRoot, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}

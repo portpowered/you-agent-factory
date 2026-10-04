@@ -632,6 +632,93 @@ func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	}
 }
 
+// The legacy fallback was characterized before cutover. Providers now receive
+// the normalized pair from BuildProcess and must preserve its exact scheduler.
+func TestFactoryRuntimeMetricsClockSelectsNormalizedScheduler(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"now-only", "timer-capable", "default", "explicit-scheduler"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			base := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
+			logical := platformclock.NewDeterministic(base, time.Second)
+			edges := serviceedges.Edges{Clock: logical, ProcessScheduler: logical}
+			switch name {
+			case "now-only":
+				edges.Clock = metricsNowOnlyClock{at: base}
+				edges.ProcessScheduler = platformclock.Real{}
+			case "default":
+				edges.Clock = platformclock.Real{}
+				edges.ProcessScheduler = platformclock.Real{}
+			case "explicit-scheduler":
+				edges.Clock = metricsNowOnlyClock{at: base.Add(time.Hour)}
+			}
+			got := provideFactoryRuntimeMetricsClock(edges)
+			if got != edges.ProcessScheduler {
+				t.Fatalf("metrics scheduler = %v, want exact selected scheduler %v", got, edges.ProcessScheduler)
+			}
+			assertSelectedTimeProjections(t, edges)
+			if name == "now-only" || name == "default" {
+				assertLegacyMetricsWallTimerDelivery(t, got, base)
+				return
+			}
+			assertLogicalMetricsTimerDelivery(t, got, logical, base)
+		})
+	}
+}
+
+func assertSelectedTimeProjections(t *testing.T, edges serviceedges.Edges) {
+	t.Helper()
+	for name, got := range map[string]platformclock.Source{
+		"runtime":              provideFactoryRuntimeClock(edges),
+		"provider observation": effectiveProviderCommandClock(edges),
+		"resolver":             provideFactoryRuntimeClockResolver(provideFactoryRuntimeClock(edges))(nil),
+	} {
+		if got != edges.Clock {
+			t.Fatalf("%s clock = %v, want selected source %v", name, got, edges.Clock)
+		}
+	}
+}
+
+func assertLogicalMetricsTimerDelivery(t *testing.T, clock platformclock.TimerSource, logical *platformclock.Deterministic, base time.Time) {
+	t.Helper()
+	timer := clock.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-timer.C():
+		t.Fatal("logical timer fired before tick advance")
+	default:
+	}
+	logical.SetTick(1)
+	select {
+	case at := <-timer.C():
+		if !at.Equal(base.Add(time.Second)) {
+			t.Fatalf("logical timer timestamp = %v", at)
+		}
+	default:
+		t.Fatal("logical timer did not fire after tick advance")
+	}
+}
+
+func assertLegacyMetricsWallTimerDelivery(t *testing.T, clock platformclock.TimerSource, base time.Time) {
+	t.Helper()
+	// A zero-duration timer proves the explicitly selected wall scheduler delivers
+	// without advancing the timestamp-only source; timeout is a failure ceiling.
+	timer := clock.NewTimer(0)
+	defer timer.Stop()
+	select {
+	case at := <-timer.C():
+		if at.IsZero() || at.Equal(base) {
+			t.Fatalf("host timer timestamp = %v", at)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("legacy host timer did not deliver")
+	}
+}
+
+type metricsNowOnlyClock struct{ at time.Time }
+
+func (clock metricsNowOnlyClock) Now() time.Time { return clock.at }
+
 func TestFactoryRuntimeEffectProvidersDefaultCommandRunnersWhenUnset(t *testing.T) {
 	t.Parallel()
 	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(serviceedges.Edges{})
@@ -891,6 +978,9 @@ type watchWaitScheduler struct {
 }
 
 func (*watchWaitScheduler) Now() time.Time { return time.Unix(0, 0) }
+func (scheduler *watchWaitScheduler) After(delay time.Duration) <-chan time.Time {
+	return scheduler.NewTimer(delay).C()
+}
 func (scheduler *watchWaitScheduler) NewTimer(delay time.Duration) platformclock.Timer {
 	scheduler.calls++
 	scheduler.delay = delay

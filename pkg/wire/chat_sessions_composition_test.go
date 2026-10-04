@@ -43,7 +43,7 @@ import (
 func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
 	t.Parallel()
 
-	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}, ACPWireLogSettings{}); err != nil {
+	if _, err := InjectBundle(context.Background(), selectedTestTimeEdges(serviceedges.Edges{}), ACPWireLogSettings{}); err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
@@ -135,7 +135,7 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 
 	edges := serviceedges.Edges{}
 	files := provideOperatorSettingsFileSystem(edges)
-	providersRoot, err := provideProvidersService(edges)
+	providersRoot, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
