@@ -192,13 +192,14 @@ immediate lint/pkg-file-count before merge.
 
 ## Dedicated lifecycle profile preparation and sample capability
 
-The profile tool supports preparation, the short guard, one inert plus one
-explicit-session sample, and a joined replacement-cycle diagnostic. Full profiling
-remains unsupported until the composed Models capacity story ships. The composed
-capability selector retains the replacement diagnostic and fails explicitly with
-complete:false because it has no public Models acquisition witness yet. These
-diagnostics produce no timing summary, capacity witness, retention verdict or
-qualified baseline.
+The prepared artifact supports narrow sample and composed capabilities, and the
+full lifecycle profile. The composed capability uses one shared process for one
+joined replacement cycle and success, failure and cancellation Models scenarios
+in distinct explicit sessions. Each Models scenario holds two real same-slot
+leases, observes public terminal outcomes, and joins cleanup. Complete capability
+reports have three attributed witnesses, one cycle, no timing samples and null
+statistics; baselineQualified remains false. Standalone Models diagnostics remain
+incomplete reports by design.
 
 Use clean committed tooling and clean source. Compilation is optional and occurs
 only in preparation, using cached Go 1.25 with GOPROXY=off. Preparation retains
@@ -292,12 +293,12 @@ go test -overlay $overlay -p 1 -count=1 -run TestInProcessObserver ./pkg/platfor
 Pop-Location
 ```
 
-The replacement diagnostic uses the same prepared artifact and owned environment:
+The complete composed capability uses the same prepared artifact and owned environment:
 
 ```powershell
 $env:OBSERVER_REPORT = Join-Path $pinOutput 'replacement.json'
 & $artifact '-test.run=^TestLifecycleProfileCapability$' '-test.short=false' '-test.count=1' '-test.timeout=5m' '-test.v'
-# Expected exit 1 until story 003: composed Models capacity unsupported.
+# Expected exit 0, complete:true, baselineQualified:false.
 ```
 
 It opens one explicitly allocated session, completes Work, cancels, replaces that
@@ -314,8 +315,8 @@ EXPIRED records. Capture, sorting and serialization occur outside sample spans.
 
 The sequential driver accepts up to 100 cycles on one compatible shared process;
 unit callbacks prove exactly 100 contiguous cycles with distinct session/runtime
-identities. The real diagnostic runs only one cycle. The full selector remains
-disabled pending composition; no 100-real-cycle retention verdict is claimed.
+identities. The real capability runs only one cycle. The full selector runs all 100; no
+100-real-cycle retention verdict is claimed by narrow capability evidence.
 Failed cycles retain their partial checkpoints, attempted/failed barriers and
 causes; no automatic retry replaces a failed cycle. Every attempted Start receives
 owned Close cleanup on failure, using a fresh bounded context, even if the main
@@ -325,11 +326,30 @@ The method hash covers the named sample, cycle and report templates in that orde
 (UTF-8 name, NUL, raw template bytes, NUL); individual backing hashes remain in the
 manifest. Match these bytes and barriers during later baseline/final validation.
 
-Full workload remains 10 inert and 10 explicit-session samples plus 100 joined
-open/replace/close cycles and composed nonzero Models capacity. Its eventual
-command is the artifact with '-test.run=^TestLifecycleProfile$', '-test.count=1',
-'-test.short=false', '-test.timeout=10m' and '-test.v', with an operator-recorded
-OBSERVER_HOST_WINDOW reference. Do not execute that workload on the shared host.
+Full workload is 10 inert and 10 explicit-session samples plus 100 joined
+open/replace/close cycles and three composed Models scenarios. It requires the
+operator's explicit no-co-tenant window authority before any construction. Only
+in that confirmed window, run the supplied prebuilt artifact (no build):
+
+```powershell
+$env:OBSERVER_HOST_WINDOW_REFERENCE = '<absolute operator authority record or approved window ID>'
+$env:OBSERVER_PROFILE_MANIFEST = Join-Path $pinOutput 'profile-manifest.json'
+$env:OBSERVER_REPORT = Join-Path $pinOutput 'profile.json'
+& $artifact '-test.run=^TestLifecycleProfile$' '-test.count=1' '-test.short=false' '-test.timeout=10m' '-test.v' *> (Join-Path $pinOutput 'profile.raw.txt')
+$LASTEXITCODE | Set-Content (Join-Path $pinOutput 'profile.exit.txt')
+```
+
+The reference is an operator assertion, never automatic host-idleness detection.
+Record actual host/window/cache conditions alongside raw output; cease the run if
+the window is breached. No window is currently supplied. Do not execute the full
+workload on the shared host. All valid timings, including noise, contribute to
+median/p95/min/max; 20 contiguous attempts and 100 complete cycles are required.
+Fault/cancellation expectations do not convert unexpected failures to success.
+Gate routes are rearmed only after all entered effects return and the previous
+scenario closes; observation never releases/rewrites Models owner state. The
+successful report retains each scenario's session/scope/leases/checkpoints.
+Even a complete full report has baselineQualified:false: independent validation
+owns qualification and comparison.
 OBS-VAL/FI-PREREQ-BASELINE-OBS independently qualifies this exact supplied
 artifact; T27-P01 owns the confirmed no-co-tenant measurement window and actual
 baseline; T22-P01 owns the matching <=10% median/p95 comparison. I01 and VAL01
@@ -344,8 +364,9 @@ count must match the witness, and each named lease must be claimed and ACTIVE.
 After joined cleanup the slot has zero holders while every named record remains
 RELEASED or EXPIRED. Existing owner policy retains the claimed flag on terminal
 records; validation does not rewrite it. Synthetic calibration cannot satisfy
-this completeness check. The public acquisition fixture and full selector remain
-unfinished; these accounting tests alone do not prove composed Models activity.
+this completeness check. The public acquisition fixture populates this witness only after real held
+acquisition and joined public terminal results; accounting fixtures alone do not
+prove composed Models activity.
 
 
 The controlled Models gate is supplied in `profile-model-gate.go.txt`. Install
@@ -359,15 +380,16 @@ faults and cancellation retain their original error causes. Join the callback's
 return **and** the public terminal Work before taking CAPACITY_RELEASED: a
 callback-return barrier alone cannot prove lease release. Gate tests run under
 the focused `TestLifecycleProfileDriver` selector and are synthetic component
-calibration, never composed public capacity evidence. This gate is not yet wired
-into the public capability; story 003 remains incomplete. The method hash also
+calibration, never composed public capacity evidence. This gate is wired
+into the public capability at the existing Models effect boundary. The method hash also
 includes the gate template after the sample, cycle and report templates.
 
 The controlled Models fixture now supplies cached inert model/backend bytes,
 loopback health, negotiated protocol, and a joinable host lifetime at the existing
 external-effect edges. Its component tests establish stop/join and refusal of
-downloads. Public session composition is still unfinished; these fixture tests
-do not establish real capacity acquisition or baseline acceptance.
+downloads. Component fixture tests alone
+do not establish real capacity acquisition or baseline acceptance; the composed
+capability supplies public session acquisition evidence.
 
 `TestLifecycleProfileModelDiagnostic` is a narrow public acquisition selector
 on the prepared artifact (`-test.short=false -test.count=1 -test.timeout=2m`).

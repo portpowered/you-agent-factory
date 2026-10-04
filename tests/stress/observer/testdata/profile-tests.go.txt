@@ -49,23 +49,28 @@ type sampleProfile struct {
  Started string
 }
 
-// Full profiling is deliberately unavailable until the same artifact also
-// implements the composed public Models capacity witness.
+// Both selectors are dedicated sequential workloads over process-wide owners.
 func TestLifecycleProfile(t *testing.T) {
  if testing.Short(){t.Skip("dedicated lifecycle profile; no construction under -short")}
- t.Fatal("full profile unsupported: composed public Models capacity remains required; use TestLifecycleProfileSamplesCapability or the incomplete replacement diagnostic")
+ if err:=profileWindowAuthority(os.Getenv("OBSERVER_HOST_WINDOW_REFERENCE"));err!=nil{t.Fatal(err)}
+ runLifecycleProfile(t,"profile")
 }
 func TestLifecycleProfileCapability(t *testing.T) {
  if testing.Short(){t.Skip("dedicated composed capability")}
- r:=newSampleProfile("capability")
- defer r.emit(t)
- r.load(t)
+ runLifecycleProfile(t,"capability")
+}
+func profileWindowAuthority(reference string)error {
+ if reference==""{return fmt.Errorf("full profile requires OBSERVER_HOST_WINDOW_REFERENCE from an explicitly confirmed no-co-tenant measurement window")}
+ return nil
+}
+func runLifecycleProfile(t *testing.T,mode string) {
+ r:=newSampleProfile(mode);defer r.emit(t);r.load(t)
  baselineobservation.Close();defer baselineobservation.Close()
  artifact:=smokeArtifact(t)
- ctx,cancel:=context.WithTimeout(t.Context(),2*time.Minute);defer cancel()
+ ceiling:=2*time.Minute;if mode=="profile"{ceiling=10*time.Minute}
+ ctx,cancel:=context.WithTimeout(t.Context(),ceiling);defer cancel()
+ if mode=="profile" {for range 10{if !r.inert(t,ctx,artifact){return}}}
  r.session(t,ctx,artifact)
- r.Errors=append(r.Errors,"composed Models capacity unsupported: replacement diagnostic retained; story 003 must supply a real public acquisition witness")
- t.Error(r.Errors[len(r.Errors)-1])
 }
 
 func newSampleProfile(mode string)*sampleProfile {
@@ -82,19 +87,22 @@ func TestLifecycleProfileSamplesCapability(t *testing.T) {
  defer baselineobservation.Close()
  artifact:=smokeArtifact(t)
  ctx,cancel:=context.WithTimeout(t.Context(),2*time.Minute);defer cancel()
- if !r.attempt(t,"inert",func(t *testing.T,a *profileAttempt){
+ if !r.inert(t,ctx,artifact){return}
+ r.session(t,ctx,artifact)
+}
+
+func (r *sampleProfile) inert(t *testing.T,ctx context.Context,artifact artifactIdentity)bool {
+ return r.attempt(t,"inert",func(t *testing.T,a *profileAttempt){
   r.LastBarrier="inert BuildProcess/Close"
   cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
   started:=time.Now()
-  process,err:=root.BuildProcess(ctx,edges.Edges{})
-  if err!=nil{t.Fatal(err)}
-  err=process.Close(cleanup)
-  duration:=time.Since(started).Nanoseconds();a.Duration=&duration
+  defer func(){if a.Duration==nil{duration:=time.Since(started).Nanoseconds();a.Duration=&duration}}()
+  process,err:=root.BuildProcess(ctx,edges.Edges{});if err!=nil{t.Fatal(err)}
+  err=process.Close(cleanup);duration:=time.Since(started).Nanoseconds();a.Duration=&duration
   if err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Fatal(err)}
   a.Barriers=append(a.Barriers,profileBarrier{Name:"BuildProcess and Process.Close returned",Joined:true})
   a.Checkpoints=append(a.Checkpoints,r.capture(t,artifact,"SAMPLE_CLOSED",nil,nil))
- }){return}
- r.session(t,ctx,artifact)
+ })
 }
 
 func (r *sampleProfile) load(t *testing.T) {
@@ -131,7 +139,9 @@ func checkProfileHash(path,expected string) error {
 }
 
 func (r *sampleProfile) attempt(t *testing.T,kind string,run func(*testing.T,*profileAttempt)) bool {
- a:=profileAttempt{ID:uuid.NewString(),Kind:kind,Ordinal:1,Generations:[]string{},Noise:[]string{"shared host diagnostic; no measurement verdict"},Errors:[]string{},Barriers:[]profileBarrier{},Checkpoints:[]profileCheckpoint{}}
+ ordinal:=1;for _,previous:=range r.Attempts{if previous.Kind==kind{ordinal++}}
+ noise:=[]string{};if r.Mode!="profile"{noise=append(noise,"shared host diagnostic; no measurement verdict")}
+ a:=profileAttempt{ID:uuid.NewString(),Kind:kind,Ordinal:ordinal,Generations:[]string{},Noise:noise,Errors:[]string{},Barriers:[]profileBarrier{},Checkpoints:[]profileCheckpoint{}}
  passed:=t.Run(kind,func(t *testing.T){
   defer func(){if t.Failed(){a.Errors=append(a.Errors,"attempt failed at "+r.LastBarrier+"; see raw test output")}}()
   run(t,&a)
@@ -155,7 +165,7 @@ func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifa
   },
  }
  var modelGate *profileModelGate
- if r.Mode=="model_diagnostic" || r.Mode=="model_fault_diagnostic" || r.Mode=="model_cancel_diagnostic" {
+ if r.Mode=="capability" || r.Mode=="profile" || r.Mode=="model_diagnostic" || r.Mode=="model_fault_diagnostic" || r.Mode=="model_cancel_diagnostic" {
   var failure error;if r.Mode=="model_fault_diagnostic"{failure=errors.New("profile controlled inference failure")};gate,err:=newProfileModelGate(map[string]error{"profile-model-work":nil,"profile-model-peer":failure});if err!=nil{t.Fatal(err)};modelGate=gate
   modelEffects:=profileModelEdges(t,home,modelGate)
   modelEffects.FactorySessionIDGenerator=effects.FactorySessionIDGenerator
@@ -188,11 +198,17 @@ func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifa
  bootstrapIDs:=[]string{};for _,s:=range bootstrap.Sessions{bootstrapIDs=append(bootstrapIDs,s.SessionID)}
  r.Final=append(r.Final,r.capture(t,artifact,"HOST_BASELINE",nil,bootstrapIDs))
  if r.Mode=="model_diagnostic" || r.Mode=="model_fault_diagnostic" || r.Mode=="model_cancel_diagnostic" {
-  r.modelDiagnostic(t,ctx,service,home,artifact,bootstrapIDs,modelGate)
+  r.modelDiagnostic(t,ctx,service,home,artifact,bootstrapIDs,modelGate,r.Mode)
   return
  }
- if r.Mode=="capability" {
-  r.runCycles(t,ctx,service,home,folder,artifact,bootstrapIDs,1)
+ if r.Mode=="capability" || r.Mode=="profile" {
+  count:=1;if r.Mode=="profile"{count=10;for range count{if !r.attempt(t,"session",func(t *testing.T,a *profileAttempt){r.sessionAttempt(t,ctx,service,home,folder,artifact,bootstrapIDs,a)}){return}};count=100}
+  r.runCycles(t,ctx,service,home,folder,artifact,bootstrapIDs,count)
+  if t.Failed(){return}
+  for _,mode:=range []string{"model_diagnostic","model_fault_diagnostic","model_cancel_diagnostic"} {
+   if err:=modelGate.reset(mode);err!=nil{t.Fatal(err)}
+   if !t.Run(mode,func(t *testing.T){r.modelDiagnostic(t,ctx,service,home,artifact,bootstrapIDs,modelGate,mode)}){return}
+  }
   return
  }
  r.attempt(t,"session",func(t *testing.T,a *profileAttempt){r.sessionAttempt(t,ctx,service,home,folder,artifact,bootstrapIDs,a)})
@@ -231,11 +247,13 @@ func (r *sampleProfile) capture(t *testing.T,artifact artifactIdentity,stage str
 }
 func (r *sampleProfile) emit(t *testing.T) {
  if t.Failed(){r.Errors=append(r.Errors,"selected workload failed; retain raw stdout/stderr")}
- complete:=!t.Failed() && r.validateSamples()==nil
+ validation:=r.validateSamples();if validation!=nil{r.Errors=append(r.Errors,validation.Error());if r.Mode=="profile" || r.Mode=="capability" || r.Mode=="samples_capability"{t.Error(validation)}}
+ complete:=!t.Failed() && validation==nil
  host,_:=os.Hostname();if host==""{host="unavailable"}
- summaries:=map[string]profileSummary{"inert":summarizeProfile(r.Attempts,"inert",false),"session":summarizeProfile(r.Attempts,"session",false)}
+ summaries:=map[string]profileSummary{"inert":summarizeProfile(r.Attempts,"inert",r.Mode=="profile"),"session":summarizeProfile(r.Attempts,"session",r.Mode=="profile")}
+ var authority *string;confirmed:=r.Mode=="profile" && profileWindowAuthority(os.Getenv("OBSERVER_HOST_WINDOW_REFERENCE"))==nil;if confirmed{value:=os.Getenv("OBSERVER_HOST_WINDOW_REFERENCE");authority=&value}
  payload:=map[string]any{"schemaVersion":1,"mode":r.Mode,"manifestPath":r.ManifestPath,"manifestSHA256":r.ManifestSHA256,
- "hostWindow":map[string]any{"confirmed":false,"authorityReference":nil,"host":host,"cpu":fmt.Sprintf("%s/%s; CPUs=%d",runtime.GOOS,runtime.GOARCH,runtime.NumCPU()),"memory":"not measured; shared host","cache":"owned runtime paths; cached preparation toolchain","startedUTC":r.Started,"endedUTC":time.Now().UTC().Format(time.RFC3339Nano),"coTenantBreach":false},
+ "hostWindow":map[string]any{"confirmed":confirmed,"authorityReference":authority,"host":host,"cpu":fmt.Sprintf("%s/%s; CPUs=%d",runtime.GOOS,runtime.GOARCH,runtime.NumCPU()),"memory":"not measured; shared host","cache":"owned runtime paths; cached preparation toolchain","startedUTC":r.Started,"endedUTC":time.Now().UTC().Format(time.RFC3339Nano),"coTenantBreach":false},
  "complete":complete,"baselineQualified":false,"lastBarrier":r.LastBarrier,"errors":r.Errors,"cleanupErrors":r.CleanupErrors,"attempts":r.Attempts,"summaries":summaries,"cycles":r.Cycles,"capacityWitnesses":r.CapacityWitnesses,"finalCheckpoints":r.Final,
  "overhead":map[string]any{"methodSHA256":r.Manifest.MethodSHA256,"registrationCallbacks":r.Callbacks,"retainedOwnerCallbacks":r.Callbacks,"snapshotCount":r.SnapshotCount,"captureOutsideSpanNs":r.CaptureNs,"serializationOutsideSpanNs":int64(0),"matchedFinalRequired":true}}
  path:=os.Getenv("OBSERVER_REPORT")
@@ -264,19 +282,32 @@ func writeProfileReport(path string,payload map[string]any,encode func(any,strin
 }
 
 func (r *sampleProfile) validateSamples() error {
- if r.Mode=="capability" || r.Mode=="profile" {
-  if len(r.CapacityWitnesses)==0{return fmt.Errorf("missing composed public Models capacity witness")}
-  for _,w:=range r.CapacityWitnesses{if err:=validateProfileCapacityWitness(w);err!=nil{return err}}
+ if len(r.Errors)>0 || len(r.CleanupErrors)>0 || r.Errors==nil || r.CleanupErrors==nil || r.Attempts==nil || r.Cycles==nil || r.CapacityWitnesses==nil {return fmt.Errorf("workload or cleanup failure")}
+ expectedSamples,expectedCycles:=1,0
+ switch r.Mode {
+ case "profile":expectedSamples=10;expectedCycles=100
+ case "capability":expectedSamples=0;expectedCycles=1
+ case "samples_capability":
+ default:return fmt.Errorf("diagnostic workload does not claim completeness")
  }
- if len(r.Errors)>0 || len(r.CleanupErrors)>0 || r.Errors==nil || r.CleanupErrors==nil {return fmt.Errorf("workload or cleanup failure")}
- if len(r.Attempts)!=2 || len(r.Final)!=2 {return fmt.Errorf("incomplete sample workload")}
- kinds:=map[string]bool{};ids:=map[string]bool{}
+ if expectedCycles>0 {
+  if err:=validateProfileCycles(r.Cycles,expectedCycles);err!=nil{return err}
+  if len(r.CapacityWitnesses)!=3{return fmt.Errorf("success/fault/cancellation composed witnesses required")}
+  sessionsSeen:=map[string]bool{}
+  for i,w:=range r.CapacityWitnesses{
+   if w.Scenario!=[]string{"model_diagnostic","model_fault_diagnostic","model_cancel_diagnostic"}[i] || sessionsSeen[w.SessionID]{return fmt.Errorf("missing/duplicate capacity scenario attribution")}
+   sessionsSeen[w.SessionID]=true
+   if err:=validateProfileCapacityWitness(w);err!=nil{return err}
+  }
+ }else if len(r.Cycles)!=0 || len(r.CapacityWitnesses)!=0{return fmt.Errorf("unexpected sample capability workload")}
+ if len(r.Attempts)!=2*expectedSamples || len(r.Final)!=2 {return fmt.Errorf("incomplete sample or final workload")}
+ counts:=map[string]int{};ids:=map[string]bool{}
  for _,a:=range r.Attempts {
-  if !a.Valid || kinds[a.Kind] || ids[a.ID] || a.Ordinal!=1 {return fmt.Errorf("failed, duplicate or missing sample")}
-  if err:=validateProfileAttempt(a);err!=nil{return err}
-  kinds[a.Kind]=true;ids[a.ID]=true
+  counts[a.Kind]++
+  if !a.Valid || ids[a.ID] || a.Ordinal!=counts[a.Kind] {return fmt.Errorf("failed, duplicate or out-of-order sample")}
+  if err:=validateProfileAttempt(a);err!=nil{return err};ids[a.ID]=true
  }
- if !kinds["inert"] || !kinds["session"] || r.Final[0].Stage!="HOST_BASELINE" || r.Final[1].Stage!="Q2" {return fmt.Errorf("missing workload or final join")}
+ if counts["inert"]!=expectedSamples || counts["session"]!=expectedSamples || r.Final[0].Stage!="HOST_BASELINE" || r.Final[1].Stage!="Q2" {return fmt.Errorf("missing workload or final join")}
  for _,c:=range r.Final {
   if err:=validateReport(c.Report);err!=nil{return err}
   if len(c.Barriers)==0{return fmt.Errorf("missing final join barrier")}
@@ -331,7 +362,7 @@ func TestLifecycleProfileDriverReportIO(t *testing.T) {
 func TestLifecycleProfileDriverFinalJoins(t *testing.T) {
  duration:=int64(1);session:="owned-session"
  attempt:=func(kind string)profileAttempt{return profileAttempt{ID:kind,Kind:kind,Ordinal:1,Duration:&duration,Valid:true,SessionID:&session,Generations:[]string{"generation"},Noise:[]string{},Errors:[]string{},Barriers:[]profileBarrier{{Name:"closed",Joined:true}},Checkpoints:[]profileCheckpoint{{Report:validObserverReport(),Stage:"SAMPLE_CLOSED",Barriers:[]profileBarrier{{Name:"closed",Joined:true}}}}}}
- fresh:=func()*sampleProfile{return &sampleProfile{Errors:[]string{},CleanupErrors:[]string{},Attempts:[]profileAttempt{attempt("inert"),attempt("session")},Final:[]profileCheckpoint{{Report:validObserverReport(),Stage:"HOST_BASELINE",Barriers:[]profileBarrier{{Name:"ready",Joined:true}}},{Report:validObserverReport(),Stage:"Q2",Barriers:[]profileBarrier{{Name:"joined",Joined:true}}}}}}
+ fresh:=func()*sampleProfile{return &sampleProfile{Mode:"samples_capability",Cycles:[]profileCycle{},CapacityWitnesses:[]profileCapacityWitness{},Errors:[]string{},CleanupErrors:[]string{},Attempts:[]profileAttempt{attempt("inert"),attempt("session")},Final:[]profileCheckpoint{{Report:validObserverReport(),Stage:"HOST_BASELINE",Barriers:[]profileBarrier{{Name:"ready",Joined:true}}},{Report:validObserverReport(),Stage:"Q2",Barriers:[]profileBarrier{{Name:"joined",Joined:true}}}}}}
  if err:=fresh().validateSamples();err!=nil{t.Fatal(err)}
  canceled:=context.Canceled.Error()
  cases:=[]func(*sampleProfile){
@@ -343,4 +374,29 @@ func TestLifecycleProfileDriverFinalJoins(t *testing.T) {
   func(r *sampleProfile){r.Attempts[1].Valid=false;r.Attempts[1].Errors=append(r.Attempts[1].Errors,canceled)},
  }
  for i,change:=range cases{r:=fresh();change(r);if r.validateSamples()==nil{t.Errorf("accepted failed final join case %d",i)}}
+}
+
+// Component fixtures prove mode-specific workload conservation without running
+// a stress workload or claiming public acquisition/timing evidence.
+func TestLifecycleProfileDriverModeCompleteness(t *testing.T) {
+ t.Parallel()
+ fresh:=func(mode string)*sampleProfile{
+  r:=newSampleProfile(mode);r.Final=[]profileCheckpoint{{Report:validObserverReport(),Stage:"HOST_BASELINE",Barriers:[]profileBarrier{{Name:"ready",Joined:true}}},{Report:validObserverReport(),Stage:"Q2",Barriers:[]profileBarrier{{Name:"joined",Joined:true}}}}
+  count:=1;if mode=="profile"{count=10};if mode=="capability"{count=0}
+  for _,kind:=range []string{"inert","session"}{for i:=1;i<=count;i++{duration:=int64(i);session:=fmt.Sprintf("session-%d",i);r.Attempts=append(r.Attempts,profileAttempt{ID:fmt.Sprintf("%s-%d",kind,i),Kind:kind,Ordinal:i,Duration:&duration,Valid:true,SessionID:&session,Generations:[]string{"generation"},Noise:[]string{},Errors:[]string{},Barriers:[]profileBarrier{{Name:"closed",Joined:true}},Checkpoints:[]profileCheckpoint{{Report:validObserverReport(),Stage:"SAMPLE_CLOSED",Barriers:[]profileBarrier{{Name:"closed",Joined:true}}}}})}}
+  if mode!="samples_capability"{
+   cycles:=1;if mode=="profile"{cycles=100};next:=0;var err error
+   r.Cycles,err=driveProfileCycles(context.Background(),cycles,func()string{next++;return fmt.Sprint(next)},fakeCycleOperations(),&r.LastBarrier,&r.CleanupErrors);if err!=nil{t.Fatal(err)}
+   for i,scenario:=range []string{"model_diagnostic","model_fault_diagnostic","model_cancel_diagnostic"}{w:=validProfileCapacityWitness();w.Scenario=scenario;w.SessionID=fmt.Sprintf("models-%d",i);for j:=range w.Checkpoints{w.Checkpoints[j].Report.FactorySessionID=&w.SessionID};r.CapacityWitnesses=append(r.CapacityWitnesses,w)}
+  }
+  return r
+ }
+ for _,mode:=range []string{"samples_capability","capability","profile"}{t.Run(mode,func(t *testing.T){
+  if err:=fresh(mode).validateSamples();err!=nil{t.Fatal(err)}
+  cases:=[]func(*sampleProfile){func(r *sampleProfile){r.Attempts=nil},func(r *sampleProfile){r.Cycles=nil},func(r *sampleProfile){r.CapacityWitnesses=nil},func(r *sampleProfile){r.Final[1].Barriers[0].Joined=false}}
+  if mode!="capability"{cases=append(cases,func(r *sampleProfile){r.Attempts[0].Ordinal=2},func(r *sampleProfile){r.Attempts=r.Attempts[:len(r.Attempts)-1]},func(r *sampleProfile){r.Attempts[1].ID=r.Attempts[0].ID})}
+  if mode!="samples_capability"{cases=append(cases,func(r *sampleProfile){r.CapacityWitnesses=r.CapacityWitnesses[:2]},func(r *sampleProfile){r.CapacityWitnesses[2].Scenario="model_diagnostic"},func(r *sampleProfile){r.Cycles[0].Complete=false})}
+  for i,change:=range cases{r:=fresh(mode);change(r);if r.validateSamples()==nil{t.Errorf("accepted incomplete %s case %d",mode,i)}}
+ })}
+ if profileWindowAuthority("")==nil || profileWindowAuthority("operator-owned window")!=nil{t.Fatal("measurement authority guard failed")}
 }

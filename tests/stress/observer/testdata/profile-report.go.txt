@@ -20,6 +20,7 @@ type profileBarrier struct {
 // public Models fixture may populate witnesses used for completeness.
 type profileCapacityWitness struct {
  Origin string `json:"origin"`
+ Scenario string `json:"scenario,omitempty"`
  SessionID string `json:"factorySessionID"`
  ScopeID string `json:"scopeID"`
  ModelName string `json:"modelName"`
@@ -81,9 +82,7 @@ func validateProfileCapacityWitness(w profileCapacityWitness) error {
  return nil
 }
 
-func TestLifecycleProfileReportCapacityAttribution(t *testing.T) {
- t.Parallel()
- fresh:=func()profileCapacityWitness {
+func validProfileCapacityWitness()profileCapacityWitness {
   session:="session"
   checkpoints:=[]profileCheckpoint{}
   for i,stage:=range []string{"CAPACITY_ACTIVE","CAPACITY_RELEASED"} {
@@ -98,6 +97,10 @@ func TestLifecycleProfileReportCapacityAttribution(t *testing.T) {
   }
   return profileCapacityWitness{Origin:"composed_public_models",SessionID:session,ScopeID:"scope",ModelName:"model",OwnerIdentity:"leases",Slot:"scope|MODEL",Holders:2,PublicCapacity:2,InvocationIDs:[]string{"work-1","work-2"},LeaseIDs:[]string{"lease-1","lease-2"},Released:true,Multiplicity:"exercised",Checkpoints:checkpoints}
  }
+
+func TestLifecycleProfileReportCapacityAttribution(t *testing.T) {
+ t.Parallel()
+ fresh:=validProfileCapacityWitness
  if err:=validateProfileCapacityWitness(fresh());err!=nil{t.Fatal(err)}
  cases:=map[string]func(*profileCapacityWitness){
   "synthetic":func(w *profileCapacityWitness){w.Origin="synthetic_calibration"},

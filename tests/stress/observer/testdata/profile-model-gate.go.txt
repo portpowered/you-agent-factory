@@ -12,6 +12,7 @@ import (
  "errors"
  "fmt"
  "sync"
+ "sort"
  "testing"
  "time"
 
@@ -69,7 +70,7 @@ func profileModelFactory(t *testing.T)string {
  return folder
 }
 
-func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service sessions.Service,home string,artifact artifactIdentity,bootstrap []string,gate *profileModelGate) {
+func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service sessions.Service,home string,artifact artifactIdentity,bootstrap []string,gate *profileModelGate,mode string) {
  folder:=profileModelFactory(t);id:=uuid.NewString();ops:=publicCycleOperations(service,home,folder)
  cycle:=&profileCycle{SessionID:id,Generations:[]string{},RuntimeIDs:[]string{}}
  defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();gate.release("profile-model-work");if err:=ops.Close(cleanup,cycle);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}()
@@ -86,7 +87,7 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
  var scope string
  for _,text:=range routes {
   started++
-  go func(){invokeCtx:=ctx;if text=="profile-model-peer"{invokeCtx=peerCtx};result,err:=service.Invoke(invokeCtx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});t.Logf("public model outcome mode=%s route=%s result=%#v error=%v",r.Mode,text,result,err);done<-checkModelDiagnosticResult(r.Mode,text,result,err)}()
+  go func(){invokeCtx:=ctx;if text=="profile-model-peer"{invokeCtx=peerCtx};result,err:=service.Invoke(invokeCtx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});t.Logf("public model outcome mode=%s route=%s result=%#v error=%v",mode,text,result,err);done<-checkModelDiagnosticResult(mode,text,result,err)}()
   // Observe terminal refusal as well as acquisition; a held peer cannot return.
   select{case request:=<-gate.routes[text].observed:
    if scope!="" && scope!=request.Scope.String(){t.Fatal("public model Work changed scope")};scope=request.Scope.String()
@@ -94,14 +95,14 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
   case <-ctx.Done():t.Fatal(ctx.Err())}
  }
  attempt:=&profileAttempt{SessionID:&id,Generations:cycle.Generations}
- active:=r.capture(t,artifact,"CAPACITY_ACTIVE",attempt,bootstrap);r.Final=append(r.Final,active)
+ active:=r.capture(t,artifact,"CAPACITY_ACTIVE",attempt,bootstrap);
  slot:=scope+"|EMBED";leaseIDs:=map[string]bool{};ownerID:=""
  for _,owner:=range active.Report.Owners{if owner.Leases!=nil && owner.Leases.CapacityHolders[slot]==2{
   if ownerID!=""{t.Fatal("duplicate Models capacity owner")};ownerID=owner.OwnerIdentity
   for _,lease:=range owner.Leases.LeaseRecords{if lease.Scope==scope && lease.ModelName=="embed" && lease.Status=="ACTIVE" && lease.Claimed{if leaseIDs[lease.Key]{t.Fatal("duplicate active lease")};leaseIDs[lease.Key]=true}}
  }}
  if len(leaseIDs)!=2 || ownerID==""{t.Fatal("missing two real same-slot Models capacity holders")}
- if r.Mode=="model_cancel_diagnostic" {
+ if mode=="model_cancel_diagnostic" {
   if err=gate.release(routes[0]);err!=nil{t.Fatal(err)}
   select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
   if err=ops.Cancel(ctx,cycle);err!=nil{t.Fatal(err)}
@@ -109,10 +110,14 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
  } else {for _,text:=range routes{if err=gate.release(text);err!=nil{t.Fatal(err)}}}
  for joined<started{select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}}
  for _,text:=range routes{if err=gate.join(ctx,text);err!=nil{t.Fatal(err)}}
- released:=r.capture(t,artifact,"CAPACITY_RELEASED",attempt,bootstrap);r.Final=append(r.Final,released)
+ released:=r.capture(t,artifact,"CAPACITY_RELEASED",attempt,bootstrap);
  found:=0
  for _,owner:=range released.Report.Owners{if owner.OwnerIdentity!=ownerID{continue};if owner.Leases.CapacityHolders[slot]!=0{t.Fatal("capacity remained held after terminal Works")};for _,lease:=range owner.Leases.LeaseRecords{if leaseIDs[lease.Key] && (lease.Status=="RELEASED" || lease.Status=="EXPIRED"){found++}}}
  if found!=2{t.Fatal("released lease records missing or active")}
+ leaseList:=[]string{};for key:=range leaseIDs{leaseList=append(leaseList,key)};sort.Strings(leaseList)
+ witness:=profileCapacityWitness{Origin:"composed_public_models",Scenario:mode,SessionID:id,ScopeID:scope,ModelName:"embed",OwnerIdentity:ownerID,Slot:slot,Holders:2,PublicCapacity:2,InvocationIDs:append([]string{},routes...),LeaseIDs:leaseList,Released:true,Multiplicity:"exercised",Checkpoints:[]profileCheckpoint{active,released}}
+ if err:=validateProfileCapacityWitness(witness);err!=nil{t.Fatal(err)}
+ r.CapacityWitnesses=append(r.CapacityWitnesses,witness)
  t.Logf("composed public acquisition session=%s scope=%s owner=%s slot=%s leases=%v; two holders, public capacity=2",id,scope,ownerID,slot,leaseIDs)
 }
 
@@ -142,6 +147,16 @@ func newProfileModelGate(failures map[string]error)(*profileModelGate,error) {
   gate.routes[text]=&profileModelRoute{observed:make(chan models.InvokeModelRequest,1),release:make(chan struct{}),returned:make(chan struct{}),failure:failure}
  }
  return gate,nil
+}
+
+// Rearm only after every entered external call returned. No owner state changes.
+func (g *profileModelGate) reset(mode string)error {
+ g.mu.Lock();defer g.mu.Unlock()
+ for _,route:=range g.routes{if route.entered{select{case <-route.returned:default:return fmt.Errorf("cannot reset an unjoined model effect")}}}
+ var failure error;if mode=="model_fault_diagnostic"{failure=errors.New("profile controlled inference failure")}
+ fresh,err:=newProfileModelGate(map[string]error{"profile-model-work":nil,"profile-model-peer":failure});if err!=nil{return err}
+ g.routes=fresh.routes;g.scope=""
+ return nil
 }
 
 func detachedModelGateRequest(request models.InvokeModelRequest) models.InvokeModelRequest {
@@ -363,4 +378,16 @@ func TestLifecycleProfileDriverModelFixtureEffects(t *testing.T){
  var decoded struct{Identity string;Artifacts []struct{Name,SHA256 string;Bytes int}}
  if err=json.Unmarshal(metadata,&decoded);err!=nil{t.Fatal(err)}
  if decoded.Identity=="" || len(decoded.Artifacts)!=1 || decoded.Artifacts[0].Bytes!=5 || decoded.Artifacts[0].SHA256!=fmt.Sprintf("%x",sha256.Sum256(data)){t.Fatal("cache lost content attribution")}
+}
+
+func TestLifecycleProfileDriverGateResetRequiresJoin(t *testing.T) {
+ t.Parallel()
+ gate,err:=newProfileModelGate(map[string]error{"profile-model-work":nil});if err!=nil{t.Fatal(err)}
+ ctx,cancel:=context.WithCancel(t.Context());defer cancel();done:=make(chan error,1)
+ go func(){_,_,err:=gate.invoke(ctx,modelGateUnitRequest(t,"profile-model-work","synthetic-scope"));done<-err}()
+ if _,err=gate.accepted(ctx,"profile-model-work");err!=nil{t.Fatal(err)}
+ if gate.reset("model_diagnostic")==nil{t.Fatal("reset accepted unjoined effect")}
+ gate.release("profile-model-work");if err=<-done;err!=nil{t.Fatal(err)}
+ if err=gate.reset("model_fault_diagnostic");err!=nil{t.Fatal(err)}
+ if gate.scope!="" || gate.routes["profile-model-peer"].failure==nil{t.Fatal("reset lost scenario isolation")}
 }

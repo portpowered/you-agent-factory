@@ -626,6 +626,13 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "scenario": {
+            "enum": [
+              "model_diagnostic",
+              "model_fault_diagnostic",
+              "model_cancel_diagnostic"
+            ]
           }
         }
       }
