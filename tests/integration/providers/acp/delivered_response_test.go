@@ -121,6 +121,8 @@ func testDeliveredACPWorkerCancelPeer(t *testing.T) {
 	client := &http.Client{Timeout: 20 * time.Second}
 	defer client.CloseIdleConnections()
 	connections := make(map[string]net.Conn)
+	readers := make(map[string]*bufio.Reader)
+	pids := make(map[string]int)
 	for _, id := range []string{"cancelled", "survivor"} {
 		request := map[string]any{
 			"requestId": id, "workerSessionId": id,
@@ -151,10 +153,18 @@ func testDeliveredACPWorkerCancelPeer(t *testing.T) {
 		}
 		reader := bufio.NewReader(connection)
 		line, err := reader.ReadString('\n')
-		if err != nil || line != id+" started\n" {
+		var observedID string
+		var pid int
+		_, parseErr := fmt.Sscanf(line, "%s started %d\n", &observedID, &pid)
+		if err != nil || parseErr != nil || observedID != id || pid <= 0 {
 			t.Fatalf("real prompt readiness = %q, error=%v", line, err)
 		}
 		connections[id] = connection
+		readers[id] = reader
+		pids[id] = pid
+	}
+	if pids["cancelled"] == pids["survivor"] {
+		t.Fatal("concurrent prompts must own distinct real processes")
 	}
 	stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
 		"--remote", "--server", baseURL, "--json", "worker-sessions", "cancel", "cancelled")
@@ -165,6 +175,13 @@ func testDeliveredACPWorkerCancelPeer(t *testing.T) {
 	var survivor factoryapi.WorkerSessionObservation
 	if err := json.Unmarshal(deliveredACPRead(t, ctx, client, baseURL+"/worker-sessions/survivor"), &survivor); err != nil || survivor.EndedAt != nil || string(survivor.State) != "RUNNING" {
 		t.Fatalf("peer after selected cancel = %#v error=%v", survivor, err)
+	}
+	if _, err := fmt.Fprintf(connections["survivor"], "observe-exit %d\n", pids["cancelled"]); err != nil {
+		t.Fatal(err)
+	}
+	line, err := readers["survivor"].ReadString('\n')
+	if err != nil || line != fmt.Sprintf("survivor exited %d\n", pids["cancelled"]) {
+		t.Fatalf("selected OS process did not exit while peer stayed active: signal=%q error=%v", line, err)
 	}
 	if _, err := io.WriteString(connections["survivor"], "release\n"); err != nil {
 		t.Fatal(err)

@@ -14,6 +14,18 @@ const result = (id, value) => JSON.stringify({ jsonrpc: "2.0", id, result: value
 const flushAndExit = (payload) => process.stdout.write(payload, () => process.exit(0));
 let control;
 let promptID;
+// Observe OS process existence from the already-running surviving peer so the
+// cancellation witness needs no extra child. Timers retry a live process only;
+// the Go control-socket deadline bounds failure, never signals success.
+const observeExit = (pid) => {
+  try {
+    process.kill(pid, 0);
+    setTimeout(() => observeExit(pid), 10);
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+    control.write(process.argv[4] + " exited " + pid + "\n");
+  }
+};
 const finish = () => {
   const notification = JSON.stringify({
     jsonrpc: "2.0", method: "session/update", params: {
@@ -41,10 +53,13 @@ input.on("line", (line) => {
       promptID = request.id;
       const [host, port] = attempts.split(":");
       control = require("node:net").connect(Number(port), host, () => {
-        control.write(process.argv[4] + " started\n");
+        control.write(process.argv[4] + " started " + process.pid + "\n");
       });
       control.on("data", (data) => {
         if (data.toString().trim() === "release") finish();
+        else if (data.toString().startsWith("observe-exit ")) {
+          observeExit(Number(data.toString().trim().split(" ")[1]));
+        }
       });
       return;
     }
