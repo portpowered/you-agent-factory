@@ -376,13 +376,23 @@ func provideAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocato
 func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
 	clock := edges.AgyPTYClock
 	if clock == nil {
+		clock = edges.Clock
+	}
+	if clock == nil {
 		clock = platformclock.Real{}
+	}
+	scheduler, ok := clock.(platformclock.TimerSource)
+	if !ok {
+		scheduler, ok = edges.Clock.(platformclock.TimerSource)
+		if !ok {
+			scheduler = platformclock.Real{}
+		}
 	}
 	host := edges.AgyPTYHost
 	if host == nil {
 		host = platformpty.NewHost()
 	}
-	return providerswire.NewAgyPTYAllocator(host, clock)
+	return providerswire.NewAgyPTYAllocator(host, clock, scheduler)
 }
 
 func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {

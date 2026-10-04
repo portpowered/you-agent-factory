@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 
 	"go.uber.org/goleak"
@@ -23,7 +24,7 @@ func (failingHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (pla
 
 func TestAllocator_PreservesUnsupportedHostFailure(t *testing.T) {
 	t.Parallel()
-	allocator, err := NewAllocator(failingHost{err: platformpty.ErrUnsupportedPlatform}, testPTYClock)
+	allocator, err := NewAllocator(failingHost{err: platformpty.ErrUnsupportedPlatform}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +36,7 @@ func TestAllocator_PreservesUnsupportedHostFailure(t *testing.T) {
 
 func TestAllocator_WrapsNativeAllocationFailure(t *testing.T) {
 	t.Parallel()
-	allocator, err := NewAllocator(failingHost{err: errors.New("native failure")}, testPTYClock)
+	allocator, err := NewAllocator(failingHost{err: errors.New("native failure")}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +48,7 @@ func TestAllocator_WrapsNativeAllocationFailure(t *testing.T) {
 
 func TestAllocator_RejectsNilNativeAllocation(t *testing.T) {
 	t.Parallel()
-	allocator, err := NewAllocator(failingHost{}, testPTYClock)
+	allocator, err := NewAllocator(failingHost{}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}

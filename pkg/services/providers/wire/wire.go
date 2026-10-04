@@ -61,8 +61,8 @@ const (
 )
 
 // NewAgyPTYAllocator constructs the Providers-owned PTY implementation.
-func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (PTYAllocator, error) {
-	return executionwire.NewAgyPTYAllocator(host, clock)
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source, scheduler platformclock.TimerSource) (PTYAllocator, error) {
+	return executionwire.NewAgyPTYAllocator(host, clock, scheduler)
 }
 
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy

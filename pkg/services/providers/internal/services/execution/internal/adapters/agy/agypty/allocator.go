@@ -11,19 +11,20 @@ import (
 // Allocator combines the injected native host effect with Workers-owned
 // validation, session limits, capture, timeout, and output-cleaning policy.
 type Allocator struct {
-	host  platformpty.Host
-	clock platformclock.Source
+	host      platformpty.Host
+	clock     platformclock.Source
+	scheduler platformclock.TimerSource
 }
 
 // NewAllocator fails closed unless both external effects are injected.
-func NewAllocator(host platformpty.Host, clock platformclock.Source) (*Allocator, error) {
+func NewAllocator(host platformpty.Host, clock platformclock.Source, scheduler platformclock.TimerSource) (*Allocator, error) {
 	if host == nil {
 		return nil, ErrHostRequired
 	}
 	if clock == nil {
 		return nil, ErrClockRequired
 	}
-	return &Allocator{host: host, clock: clock}, nil
+	return &Allocator{host: host, clock: clock, scheduler: scheduler}, nil
 }
 
 // Allocate validates owner input, obtains an opaque native PTY, and returns an
@@ -54,7 +55,7 @@ func (a *Allocator) Allocate(ctx context.Context, launch ProcessLaunch, cfg Sess
 	if native == nil {
 		return nil, wrapPTYAllocationFailure(ErrPTYAllocationFailed)
 	}
-	session, err := newPlatformSession(launch, normalizeSessionConfig(cfg), platformPTYKind(native.Kind()), native, a.host, a.clock)
+	session, err := newPlatformSession(launch, normalizeSessionConfig(cfg), platformPTYKind(native.Kind()), native, a.host, a.clock, a.scheduler)
 	if err != nil {
 		_ = native.Close()
 		return nil, err

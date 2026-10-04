@@ -22,8 +22,8 @@ import (
 
 // NewAgyPTYAllocator constructs the Providers-owned PTY implementation behind
 // the Workers root allocation port.
-func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (providerservice.PTYAllocator, error) {
-	return agypty.NewAllocator(host, clock)
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source, scheduler platformclock.TimerSource) (providerservice.PTYAllocator, error) {
+	return agypty.NewAllocator(host, clock, scheduler)
 }
 
 // NewService constructs an inert execution service over the supplied canonical

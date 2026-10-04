@@ -218,9 +218,9 @@ func TestAdaptPlatformCommandRunnerNilAndEmptyOutput(t *testing.T) {
 func TestNewAgyPTYAllocatorRequiresExplicitPlatformEffects(t *testing.T) {
 	t.Parallel()
 
-	allocator, err := NewAgyPTYAllocator(nil, nil)
+	allocator, err := NewAgyPTYAllocator(nil, nil, platformclock.Real{})
 	if !errors.Is(err, agypty.ErrHostRequired) {
-		t.Fatalf("NewAgyPTYAllocator(nil, nil) = (%v, %v), want host validation error", allocator, err)
+		t.Fatalf("NewAgyPTYAllocator(nil, nil, platformclock.Real{}) = (%v, %v), want host validation error", allocator, err)
 	}
 }
 

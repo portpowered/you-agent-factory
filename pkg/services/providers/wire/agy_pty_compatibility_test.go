@@ -119,7 +119,7 @@ func newLegacyAgyProvidersService(
 		time.Millisecond,
 	)
 	clock.SetTick(1)
-	allocator, err := NewAgyPTYAllocator(host, clock)
+	allocator, err := NewAgyPTYAllocator(host, clock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("NewAgyPTYAllocator() error = %v", err)
 	}

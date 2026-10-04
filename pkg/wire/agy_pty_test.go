@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"reflect"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -126,5 +128,48 @@ func TestProvideProvidersServicePrefersAgyCommandRunnerWithInjectedPTYHost(t *te
 	}
 	if !reflect.DeepEqual(request.Args, wantArgs) {
 		t.Fatalf("provider argv = %#v, want %#v", request.Args, wantArgs)
+	}
+}
+
+type completedPTYProcess struct{}
+
+func (completedPTYProcess) Wait() error      { return nil }
+func (completedPTYProcess) Terminate() error { return nil }
+func (completedPTYProcess) Close()           {}
+func (completedPTYProcess) PID() int         { return 0 }
+func (completedPTYProcess) ExitCode() int    { return 0 }
+
+type completedPTYHost struct{ recordingAgyPTYHost }
+
+func (*completedPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
+	return completedPTYProcess{}, io.NopCloser(strings.NewReader("PTY_OK")), nil
+}
+
+type recordingPTYNow struct{ calls atomic.Int32 }
+
+func (clock *recordingPTYNow) Now() time.Time { clock.calls.Add(1); return time.Unix(0, 0) }
+func TestProvideAgyPTYAllocatorUsesProcessSchedulerWithNowOnlyOverride(t *testing.T) {
+	t.Parallel()
+	timer := &watchWaitTimer{ticks: make(chan time.Time)}
+	scheduler := &watchWaitScheduler{timer: timer}
+	override := &recordingPTYNow{}
+	allocator, err := provideAgyPTYAllocator(serviceedges.Edges{Clock: scheduler, AgyPTYClock: override, AgyPTYHost: &completedPTYHost{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scheduler.calls != 0 || override.calls.Load() != 0 {
+		t.Fatal("construction must not start time effects")
+	}
+	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{Executable: "agy", Argv: []string{"agy"}}, providerswire.DefaultPTYSessionConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	result, err := session.Run(context.Background())
+	if err != nil || result.CleanedText != "PTY_OK" || result.TimedOut {
+		t.Fatalf("Run() = %#v, %v", result, err)
+	}
+	if override.calls.Load() == 0 || scheduler.calls != 2 || scheduler.delay != 250*time.Millisecond || !timer.stopped {
+		t.Fatalf("effects: Now calls %d; timer calls %d; drain %v; stopped %v", override.calls.Load(), scheduler.calls, scheduler.delay, timer.stopped)
 	}
 }
