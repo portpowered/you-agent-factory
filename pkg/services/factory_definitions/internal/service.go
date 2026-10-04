@@ -5,15 +5,13 @@ package internal
 
 import (
 	"context"
-	"fmt"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
-	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
 // NewWithAuthoringLayout constructs the public Factory Definitions service
@@ -25,7 +23,9 @@ func NewWithAuthoringLayout(
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factoryroot.Validator,
-	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
+	validationService validationservice.Service,
+	runtimeSnapshot runtimesnapshot.Service,
+	compilation lifecycle.CompilationOperations,
 	loadFactory factoryroot.LoadedFactoryLoader,
 	readCurrentFactoryPointer factoryroot.CurrentFactoryPointerReader,
 	prepareFactoryLayoutPayload factoryroot.FactoryLayoutPayloadPreparer,
@@ -35,16 +35,17 @@ func NewWithAuthoringLayout(
 	captureFactorySnapshot factoryroot.FactorySnapshotCapturer,
 	replaceFactoryLayout factoryroot.FactoryLayoutReplacer,
 	namedPaths factoryroot.NamedPathResolver,
-	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
+	catalogService catalog.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 	authoringLayout authoringlayout.Service,
+	listEffective factoryroot.EffectiveFactoryCatalogOperation,
 	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
-		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
+		namedPaths == nil ||
 		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
 		packagedInstaller.Install == nil {
 		return nil
@@ -78,21 +79,6 @@ func NewWithAuthoringLayout(
 	if err != nil {
 		return nil
 	}
-	// The exact ports were rejected above, which exhausts the catalog
-	// constructor's failure cases.
-	catalogService, _ := catalogwire.NewService(catalog.Dependencies{
-		Paths:      namedPaths,
-		FileSystem: namedFactoryCatalogFileSystem,
-	})
-	operations, _ := validator.(factoryroot.DefinitionValidationOperation)
-	effective, _ := validator.(factoryroot.EffectiveDefinitionValidationOperation)
-	validationService, _ := validationwire.NewService(validationservice.Dependencies{
-		Operations:            operations,
-		Effective:             effective,
-		LoadCanonical:         loadCanonical,
-		RequiredToolChecker:   requiredToolChecker,
-		OrchestratorValidator: orchestratorValidator,
-	})
 	composition := applyCompositionOptions(options)
 	distributionService := lifecycle.ComposeDistributionService(
 		packagedCatalog,
@@ -110,33 +96,9 @@ func NewWithAuthoringLayout(
 		validationService,
 		authoringLayout,
 		distributionService,
+		runtimeSnapshot,
+		compilation,
 		versionFileSystem,
+		listEffective,
 	)
-}
-
-type runtimeSnapshotService struct {
-	factoryroot.Service
-	resolve factoryroot.RuntimeSnapshotOperation
-}
-
-// AttachRuntimeSnapshot attaches the owner-composed runtime snapshot
-// operation while preserving the rest of the singular Definitions root.
-func AttachRuntimeSnapshot(
-	service factoryroot.Service,
-	resolve factoryroot.RuntimeSnapshotOperation,
-) (factoryroot.Service, error) {
-	if service == nil {
-		return nil, fmt.Errorf("Factory Definitions service is required")
-	}
-	if resolve == nil {
-		return nil, fmt.Errorf("runtime snapshot operation is required")
-	}
-	return runtimeSnapshotService{Service: service, resolve: resolve}, nil
-}
-
-func (s runtimeSnapshotService) ResolveRuntimeSnapshot(
-	ctx context.Context,
-	request factoryroot.ResolveRuntimeSnapshotRequest,
-) (factoryroot.ResolveRuntimeSnapshotResult, error) {
-	return s.resolve(ctx, request)
 }

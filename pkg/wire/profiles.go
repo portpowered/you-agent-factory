@@ -740,3 +740,11 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {
 	return factoryvisualizationwire.NewResponsePresentation()
 }
+
+// provideProcessLogger selects the process backend once, independently of CLI output policy.
+func provideProcessLogger(edges serviceedges.Edges) (*zap.Logger, error) {
+	if edges.ProcessLogger != nil {
+		return edges.ProcessLogger, nil
+	}
+	return logging.NewDefaultLogger()
+}

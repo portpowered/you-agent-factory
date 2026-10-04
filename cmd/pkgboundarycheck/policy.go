@@ -9,17 +9,7 @@ import (
 
 const defaultScanRoot = "pkg"
 const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire"
-const transportImportPrefix = "github.com/portpowered/infinite-you/pkg/transports/"
 const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
-const peerServiceImportBaselinePath = "service-cross-import-baseline.json"
-const peerServiceImportBaselineStage = "wire-injection-full-blow"
-const peerServiceImportDeletionGate = "replace the peer implementation import with the exact pkg/services/<peer> root contract and delete this exact entry"
-const testServiceImportBaselinePath = "docs/internal/baselines/test-service-import-baseline.json"
-const testServiceImportBaselineStage = "wire-injection-full-blow"
-const testServiceImportDeletionGate = "replace the concrete service subpackage import with the owning service root contract, an owner-local test, or root.BuildProcess"
-const supportServiceImportBaselinePath = "support-service-import-baseline.json"
-const supportServiceImportBaselineStage = "wire-injection-full-blow"
-const supportServiceImportDeletionGate = "replace reusable support composition with service-root contracts, typed edge fakes, package-local owner fixtures, or root.BuildProcess"
 const serviceConstructionBaselinePath = "docs/internal/baselines/service-construction-baseline.json"
 const serviceConstructionBaselineStage = "wire-injection-full-blow"
 const serviceConstructionDeletionGate = "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
@@ -60,10 +50,6 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 	"github.com/portpowered/infinite-you/pkg/services/providers/wire": {
 		"NewCapabilitySet": {},
 	},
-}
-
-var protectedTransportIndependentDomainRoots = []string{
-	"pkg/services",
 }
 
 var factoryRetiredPackageRoots = []retiredPackageRoot{
@@ -120,11 +106,6 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/workquery", canonicalOwner: "pkg/services/work"},
 }, factoryRetiredPackageRoots...)
 
-var approvedApplicationGraphImporters = []string{
-	"pkg/root",
-	"pkg/wire",
-}
-
 // pkg/services/edges is the canonical process-edge aggregator. It may name
 // only contracts owned by the leaf packages that directly perform these
 // external effects. This is deliberately not a general service-subpackage
@@ -143,17 +124,6 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                            {},
 	"pkg/services/recordings/internal/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                         {},
 	"pkg/services/recordings/internal/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                            {},
-}
-
-// publicExternalEffectContractImports are intentionally declared beside the
-// leaf adapter that crosses the process, network, filesystem, clock, or host
-// boundary. Tests may import these exact ports to supply edges.Edges values;
-// they are not permission to construct the owning service implementation.
-// Providers owns the durable public effect port; Workers consumes it through
-// its request-scoped compatibility adapter.
-var publicExternalEffectContractImports = map[string]struct{}{
-	"github.com/portpowered/infinite-you/pkg/services/providers/wire": {},
-	"github.com/portpowered/infinite-you/pkg/services/automations":    {},
 }
 
 const (

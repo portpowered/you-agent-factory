@@ -19,7 +19,6 @@ import (
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
-	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
@@ -36,19 +35,13 @@ func newRootAuthoringServiceForPeer(t *testing.T) factoryroot.Service {
 	t.Helper()
 
 	composition := newAuthoringEquivalenceComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, testCanonicalFactoryLoader)
 	fileSystem := platformfilesystem.Local{}
 	paths, err := factorynamedpaths.New(fileSystem)
 	if err != nil {
 		t.Fatalf("namedpaths.New: %v", err)
 	}
-	catalogService, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("catalogwire.NewService: %v", err)
-	}
+	catalogService := catalogwire.NewService(paths, fileSystem)
 
 	loader := composition.Loader()
 	_, _, pruneRemovedDocs := factorydefinitiontestcomposition.PortableOperations(fileSystem)
@@ -110,7 +103,7 @@ func newAuthoringEquivalenceComposition(t *testing.T) factorydefinitiontestcompo
 		SafeLayoutSegment: authoredmapping.SafeFactoryLayoutSegment,
 		SafePromptPath:    authoredmapping.SafePromptFilePath,
 		MapPersistence: func(payload []byte) (factoryroot.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,
@@ -469,19 +462,13 @@ func newRootAuthoringServiceWithCorruptingWriteForPeer(t *testing.T) factoryroot
 	t.Helper()
 
 	composition := newAuthoringEquivalenceComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, testCanonicalFactoryLoader)
 	fileSystem := platformfilesystem.Local{}
 	paths, err := factorynamedpaths.New(fileSystem)
 	if err != nil {
 		t.Fatalf("namedpaths.New: %v", err)
 	}
-	catalogService, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("catalogwire.NewService: %v", err)
-	}
+	catalogService := catalogwire.NewService(paths, fileSystem)
 
 	loader := composition.Loader()
 	persistence := composition.FactoryDefinitionPersistenceWithValidator(validator)

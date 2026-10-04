@@ -15,6 +15,9 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const machineOutputProcessCloseTimeout = 5 * time.Second
@@ -47,6 +50,7 @@ type machineOutputFixture struct {
 	factorySources map[string]string
 	sourceRoot     string
 	baseURL        string
+	diagnostics    *observer.ObservedLogs
 	daemonCancel   context.CancelFunc
 	daemonDone     chan error
 }
@@ -111,11 +115,13 @@ func sharedMachineOutputFixture(t testing.TB) *machineOutputFixture {
 	t.Helper()
 	machineOutputShared.once.Do(func() {
 		router := newMachineOutputCommandRouter()
+		core, diagnostics := observer.New(zapcore.DebugLevel)
 		api := support.NewProcessAPIServer()
 		process, err := support.BuildProcessWithContext(
 			context.Background(),
 			serviceedges.Edges{
 				ProviderCommandRunner: router,
+				ProcessLogger:         zap.New(core),
 				APIServerStarter:      api.Start,
 				BrowserOpener:         func(context.Context, string) error { return nil },
 				RuntimeHostObserver:   func(factorysessions.RuntimeHostBinding) {},
@@ -150,6 +156,7 @@ func sharedMachineOutputFixture(t testing.TB) *machineOutputFixture {
 		}
 		machineOutputShared.fixture = &machineOutputFixture{
 			process:        process,
+			diagnostics:    diagnostics,
 			router:         router,
 			factorySources: machineOutputFactorySources(sourceHome),
 			sourceRoot:     sourceRoot,

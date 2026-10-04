@@ -446,15 +446,28 @@ func provideFactoryDefinitionsRuntimeRouter() *factorysessions.DefinitionRuntime
 	return factorysessionwire.NewDefinitionRuntimeRouter()
 }
 
+func provideFactoryDefinitionCompilation(
+	loader *factorydefinitionswire.Loader,
+) factorydefinitionswire.Compilation {
+	return factorydefinitionswire.NewCompilationService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		factorydefinitionswire.FactoryConfigJSONEncoder(),
+	)
+}
+
 func provideFactoryDefinitionsRoot(
 	router *factorysessions.DefinitionRuntimeRouter,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *factorydefinitionswire.Loader,
+	compilation factorydefinitionswire.Compilation,
+	validationService factorydefinitionswire.Validation,
+	runtimeSnapshot factorydefinitionswire.RuntimeSnapshot,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	catalogService factorydefinitionswire.Catalog,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -474,10 +487,13 @@ func provideFactoryDefinitionsRoot(
 		validator,
 		persistence,
 		loader,
+		compilation,
+		validationService,
+		runtimeSnapshot,
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		namedFactoryCatalogFileSystem,
+		catalogService,
 		clock,
 		versionFileSystem,
 		listEffective,
@@ -513,5 +529,27 @@ func provideRuntimeDispatchPlanning() factoryruntimewire.DispatchPlanning {
 		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, factoryruntime.ErrNotRunning
 		},
+	)
+}
+
+func provideFactoryDefinitionValidationOwner(
+	operations factorydefinitions.ValidationOperations,
+	compilation factorydefinitionswire.Compilation,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+) factorydefinitionswire.Validation {
+	return factorydefinitionswire.NewValidationService(operations, operations, compilation.LoadCanonicalFactorySource, requiredToolChecker, orchestratorValidator)
+}
+
+// provideFactoryDefinitionRuntimeSnapshot binds the session query without executing it.
+func provideFactoryDefinitionRuntimeSnapshot(
+	loader *factorydefinitionswire.Loader,
+	router *factorysessions.DefinitionRuntimeRouter,
+) factorydefinitionswire.RuntimeSnapshot {
+	return factorydefinitionswire.NewRuntimeSnapshot(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		router.Host().WorkstationLoader,
+		factorydefinitions.FileReader(loader.ReadFile),
 	)
 }

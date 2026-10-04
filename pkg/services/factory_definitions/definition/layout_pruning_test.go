@@ -101,7 +101,7 @@ func TestPrepareFactoryLayoutPayload_PrunesStaleLayoutOnNamedFactoryPersistPath(
 
 	root := t.TempDir()
 	payload := namedFactoryPayloadWithStaleLayout(t)
-	factoryDir, err := persistNamedFactoryForTest(root, "alpha", payload, factoryvalidation.New(nil))
+	factoryDir, err := persistNamedFactoryForTest(root, "alpha", payload, factoryvalidation.New(nil, testCanonicalFactoryLoader))
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

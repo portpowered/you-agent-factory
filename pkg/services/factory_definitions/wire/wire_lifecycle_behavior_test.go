@@ -37,7 +37,7 @@ func TestWireLifecycleBehavior_ActivateNamedFactorySuccessAndIdleRejection(t *te
 
 	rootDir := t.TempDir()
 	composition := newWireLifecycleComposition()
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, composition.LoadCanonicalJSON)
 	if _, err := composition.PersistNamedFactory(
 		rootDir,
 		"named-target",
@@ -90,7 +90,7 @@ func TestWireLifecycleBehavior_GetCurrentNamedFactorySuccessAndNotFound(t *testi
 
 	rootDir := t.TempDir()
 	composition := newWireLifecycleComposition()
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, composition.LoadCanonicalJSON)
 	namedPaths := composition.NamedPaths()
 	if _, err := composition.PersistNamedFactory(
 		rootDir,
@@ -145,7 +145,7 @@ func TestWireLifecycleBehavior_GetCurrentFactoryForSessionIncludesVersion(t *tes
 
 	rootDir := t.TempDir()
 	composition := newWireLifecycleComposition()
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, composition.LoadCanonicalJSON)
 	namedPaths := composition.NamedPaths()
 	versionTime := time.Date(2026, time.June, 1, 10, 0, 0, 0, time.UTC)
 	payload := wireLifecycleNamedFactoryPayload(t, "alpha")
@@ -297,7 +297,7 @@ func TestWireLifecycleBehavior_CurrentFactoryDefinitionVersionAtRoot(t *testing.
 
 	rootDir := t.TempDir()
 	composition := newWireLifecycleComposition()
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, composition.LoadCanonicalJSON)
 	versionTime := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	payload := wireLifecycleNamedFactoryPayload(t, "alpha")
 	var decoded map[string]any
@@ -415,9 +415,9 @@ func newWireLifecycleBehaviorService(
 	}
 
 	composition := newWireLifecycleComposition()
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, composition.LoadCanonicalJSON)
 	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+		return validationentry.MapFactoryJSONForPersistence(payload)
 	}
 	persistence := composition.Persistence(validator, mapInput)
 	loader := composition.Loader()
@@ -431,10 +431,13 @@ func newWireLifecycleBehaviorService(
 		validator,
 		persistence,
 		loader,
+		compilationForLoader(loader),
+		validationForLoader(loader, stubRequiredToolChecker{}, stubOrchestratorValidator{}),
+		runtimeSnapshotForLoader(loader, cfg.sessionHost),
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		fileSystem,
+		factorydefinitionswire.NewCatalogService(namedPaths, fileSystem),
 		factorydefinitionswire.StaticClock(time.Unix(0, 0)),
 		fileSystem,
 		wireLifecycleListEffective(composition),
@@ -483,7 +486,7 @@ func newWireLifecycleComposition() factorydefinitiontestcomposition.Composition 
 		SafeLayoutSegment: authoredmapping.SafeFactoryLayoutSegment,
 		SafePromptPath:    authoredmapping.SafePromptFilePath,
 		MapPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,

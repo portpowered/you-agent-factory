@@ -537,12 +537,25 @@ type story004EmbedAssetHTTP struct {
 	backendBody []byte
 	selection   serviceedges.ModelBackendArtifactSelection
 	urls        []string
+	requests    []string
+	// failManifest answers the model manifest with 503 before any model body.
+	failManifest bool
+	// failBackend answers every backend asset request with 503.
+	failBackend bool
 }
 
 func (client *story004EmbedAssetHTTP) Do(request *http.Request) (*http.Response, error) {
 	client.mu.Lock()
 	client.urls = append(client.urls, request.URL.String())
+	client.requests = append(client.requests, request.Method+" "+request.URL.Path)
+	failManifest, failBackend := client.failManifest, client.failBackend
 	client.mu.Unlock()
+	if failBackend && strings.HasSuffix(request.URL.Path, "/"+client.selection.Name) {
+		return story004HTTPResponse(request, http.StatusServiceUnavailable, "text/plain", []byte("backend unavailable")), nil
+	}
+	if failManifest && strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B-GGUF") {
+		return story004HTTPResponse(request, http.StatusServiceUnavailable, "text/plain", []byte("controlled origin failure")), nil
+	}
 	if strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B-GGUF") {
 		digest := fmt.Sprintf("%x", sha256.Sum256(client.modelBody))
 		manifest := map[string]any{
@@ -603,4 +616,11 @@ func (client *story004EmbedAssetHTTP) SawPathSuffix(suffix string) bool {
 		}
 	}
 	return false
+}
+
+// Requests returns "METHOD path" for every asset request in arrival order.
+func (client *story004EmbedAssetHTTP) Requests() []string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return append([]string(nil), client.requests...)
 }
