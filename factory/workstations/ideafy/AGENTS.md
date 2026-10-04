@@ -220,3 +220,9 @@ owner, scope, failure behavior, verification witness, dependency fidelity,
 remaining unproven edges, and applicable cost, duration, safety, and authority
 constraints. Do not use `compiles`, `typechecks`, `tests pass`, or an inspected
 diff as the only witness.
+
+Ship product changes, not proof. Do not admit, plan, or release a lane whose
+deliverable is a characterization test, an evidence document, a witness, a
+"correction", or a plan amendment. Tests ship in the same PR as the product
+change they cover. Judge delivery by the diff against the acceptance criteria
+plus the hosted CI.

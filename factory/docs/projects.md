@@ -193,8 +193,9 @@ Its payload should state:
 
 Use a vertical slice when contract, implementation, test, and documentation must
 change together for the observable outcome. Use a horizontal enabler only when
-it is independently useful and safe, such as characterization evidence,
-reusable harness infrastructure, or a migration seam. Do not ask one planner
+it is independently useful and safe, such as reusable harness infrastructure
+or a migration seam. Characterization-only, evidence-only, and plan-amendment
+tasks are never horizontal enablers; tests ship with the product change. Do not ask one planner
 or task to solve an entire repository in one PRD.
 
 ## Validation missions
