@@ -257,11 +257,12 @@ func (r *registry) prepareInvocation(
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
-		r.logger.Info(
+		r.logger.Warn(
 			"worker session recording opening rejected",
 			"sessionID", req.ID,
 			"attemptID", attemptID,
 			"outcome", "failed",
+			"stage", "start_worker_recording",
 			"error", err.Error(),
 		)
 		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
@@ -280,6 +281,14 @@ func (r *registry) prepareInvocation(
 		providerIdentityForExecution(req.Execution.Execution),
 		workerRecording,
 	); err != nil {
+		r.logger.Warn(
+			"worker session opening publication rejected",
+			"sessionID", req.ID,
+			"attemptID", attemptID,
+			"outcome", "failed",
+			"stage", "publish_opening_record",
+			"error", err.Error(),
+		)
 		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
 		return invocationPreparation{
 			session:  final,
@@ -289,6 +298,14 @@ func (r *registry) prepareInvocation(
 	}
 	if options.verifyTopicReady {
 		if err := r.ensureOpeningTopicReady(ctx, req.ID); err != nil {
+			r.logger.Warn(
+				"worker session opening publication rejected",
+				"sessionID", req.ID,
+				"attemptID", attemptID,
+				"outcome", "failed",
+				"stage", "ensure_opening_topic_ready",
+				"error", err.Error(),
+			)
 			final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
 			return invocationPreparation{
 				session:  final,
