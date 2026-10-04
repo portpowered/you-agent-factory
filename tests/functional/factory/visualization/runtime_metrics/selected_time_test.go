@@ -3,6 +3,7 @@ package runtime_metrics_test
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -24,7 +26,7 @@ func TestSelectedProcessTimeControlsRuntimeFacts(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
 	factClock := platformclock.NewDeterministic(base, time.Hour)
-	facts := &selectedTimeSource{clock: factClock, readiness: support.NewControlledReadinessTimers(factClock)}
+	facts := &selectedTimeSource{clock: factClock, readiness: newControlledReadinessTimers(factClock)}
 	release := make(chan struct{})
 	runner := &selectedTimeRunner{started: make(chan struct{}), delegate: support.NewGatedSuccessCommandRunner("selected time COMPLETE", release)}
 	fixture := startSelectedTimeRun(t, facts, nil, runner)
@@ -47,7 +49,7 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 		Deterministic: platformclock.NewDeterministic(base.Add(24*time.Hour), time.Millisecond),
 		registered:    make(chan struct{}, 16),
 	}
-	scheduler.readiness = support.NewControlledReadinessTimers(scheduler.Deterministic)
+	scheduler.readiness = newControlledReadinessTimers(scheduler.Deterministic)
 	release := make(chan struct{})
 	runner := &selectedTimeRunner{started: make(chan struct{}), delegate: support.NewGatedSuccessCommandRunner("separate scheduler COMPLETE", release)}
 	fixture := startSelectedTimeRun(t, facts, scheduler, runner)
@@ -91,7 +93,7 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 // rather than the runtime's recorded-tick advancement protocol.
 type selectedTimeSource struct {
 	clock     *platformclock.Deterministic
-	readiness *support.ControlledReadinessTimers
+	readiness *controlledReadinessTimers
 }
 
 func (source *selectedTimeSource) Now() time.Time { return source.clock.Now() }
@@ -109,7 +111,7 @@ func (source *selectedTimeNowOnlySource) Now() time.Time { return source.clock.N
 type selectedTimeScheduler struct {
 	*platformclock.Deterministic
 	registered chan struct{}
-	readiness  *support.ControlledReadinessTimers
+	readiness  *controlledReadinessTimers
 }
 
 func (clock *selectedTimeScheduler) NewTimer(duration time.Duration) platformclock.Timer {
@@ -163,7 +165,7 @@ func startSelectedTimeHost(t *testing.T, dir string, facts platformclock.Source,
 	// First-run profile installation is a prerequisite, outside host readiness.
 	support.InitializeCustomerHomeWithProcess(t, process, inputs.Env, dir)
 	command := support.StartProcessCommand(t, process, inputs.Input)
-	var readiness *support.ControlledReadinessTimers
+	var readiness *controlledReadinessTimers
 	if scheduler != nil {
 		readiness = scheduler.(*selectedTimeScheduler).readiness
 	} else if source, ok := facts.(*selectedTimeSource); ok {
@@ -255,4 +257,106 @@ func assertSelectedEventOrder(t *testing.T, events []factoryapi.FactoryEvent) {
 		}
 	}
 	t.Fatalf("Factory Event history lacks ordered admission/dispatch/completion: next %s", expected[next])
+}
+
+// controlledReadinessTimers delivers startup polls at the injected timer edge,
+// without advancing customer fact time or the metrics sampling origin. All
+// other timers retain the selected scheduler's logical deadlines.
+type controlledReadinessTimers struct {
+	platformclock.TimerSource
+	polls chan *platformclock.Deterministic
+}
+
+func newControlledReadinessTimers(scheduler platformclock.TimerSource) *controlledReadinessTimers {
+	return &controlledReadinessTimers{TimerSource: scheduler, polls: make(chan *platformclock.Deterministic)}
+}
+
+func (scheduler *controlledReadinessTimers) NewTimer(duration time.Duration) platformclock.Timer {
+	if duration != 10*time.Millisecond {
+		return scheduler.TimerSource.NewTimer(duration)
+	}
+	poll := platformclock.NewDeterministic(scheduler.Now(), duration)
+	timer := poll.NewTimer(duration)
+	scheduler.polls <- poll
+	return timer
+}
+
+func (scheduler *controlledReadinessTimers) After(duration time.Duration) <-chan time.Time {
+	return scheduler.NewTimer(duration).C()
+}
+
+// WaitForURL drives only registered readiness polls until the real transport
+// starts. Channel registration/delivery synchronizes startup; the transport wait timeout
+// is only a deadlock ceiling. The transport waiter completes before this observation returns.
+func (scheduler *controlledReadinessTimers) WaitForURL(t testing.TB, server *support.ProcessAPIServer) string {
+	t.Helper()
+	type result struct {
+		url string
+		err error
+	}
+	ready := make(chan result, 1)
+	go func() {
+		url, err := server.WaitForBaseURL(60 * time.Second)
+		ready <- result{url: url, err: err}
+	}()
+	for {
+		select {
+		case poll := <-scheduler.polls:
+			poll.SetTick(1)
+		case observed := <-ready:
+			if observed.err != nil {
+				t.Fatal(observed.err)
+			}
+			return observed.url
+		}
+	}
+}
+
+func TestControlledReadinessPreservesSelectedSchedulerDeadlines(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
+	selected := platformclock.NewDeterministic(base, time.Millisecond)
+	scheduler := newControlledReadinessTimers(selected)
+	metrics := scheduler.NewTimer(5 * time.Millisecond)
+	defer metrics.Stop()
+	deadline := scheduler.NewTimer(time.Second)
+	defer deadline.Stop()
+	server := support.NewProcessAPIServer()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		// Exercise multiple readiness registrations, including the After seam.
+		<-scheduler.After(10 * time.Millisecond)
+		poll := scheduler.NewTimer(10 * time.Millisecond)
+		<-poll.C()
+		poll.Stop()
+		done <- server.Start(ctx, platformhttpserver.StartRequest{Handler: http.NotFoundHandler()})
+	}()
+	url := scheduler.WaitForURL(t, server)
+	if !strings.HasPrefix(url, "http://") || !scheduler.Now().Equal(base) {
+		t.Fatalf("startup URL/time = %q/%v, want HTTP URL and %v", url, scheduler.Now(), base)
+	}
+	for _, timer := range []platformclock.Timer{metrics, deadline} {
+		select {
+		case <-timer.C():
+			t.Fatal("readiness delivery fired a selected scheduler timer")
+		default:
+		}
+	}
+	selected.SetTick(5)
+	select {
+	case <-metrics.C():
+	default:
+		t.Fatal("selected scheduler did not deliver the metrics deadline")
+	}
+	select {
+	case <-deadline.C():
+		t.Fatal("startup ceiling fired before its selected logical deadline")
+	default:
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
