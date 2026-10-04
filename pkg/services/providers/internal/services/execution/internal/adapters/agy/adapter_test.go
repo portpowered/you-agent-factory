@@ -18,6 +18,8 @@ import (
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
+
+	"go.uber.org/goleak"
 )
 
 func TestAgyNewRegistrationBindsCanonicalIdentity(t *testing.T) {
@@ -383,4 +385,10 @@ func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 		t.Fatal(err)
 	}
 	return root
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

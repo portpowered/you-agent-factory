@@ -12,6 +12,8 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+
+	"go.uber.org/goleak"
 )
 
 func TestClaudeCommandEnvironmentPreventsGitMergeEditorPrompt(t *testing.T) {
@@ -145,4 +147,10 @@ var inheritedGitRepositoryEnvironment = map[string]bool{
 	"GIT_PREFIX":                       true,
 	"GIT_QUARANTINE_PATH":              true,
 	"GIT_WORK_TREE":                    true,
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"go.uber.org/goleak"
 )
 
 func validAppendRequest() AppendRequest {
@@ -203,4 +205,10 @@ func TestAppendOutcomeValues(t *testing.T) {
 	if accepted.Record.ID != duplicate.Record.ID {
 		t.Fatalf("accepted and duplicate outcomes must report the same stable Record.ID")
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

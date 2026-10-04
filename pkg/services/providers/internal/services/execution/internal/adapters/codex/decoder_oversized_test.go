@@ -3,6 +3,8 @@ package codex
 import (
 	"strings"
 	"testing"
+
+	"go.uber.org/goleak"
 )
 
 // TestDecoderSkipsOversizedRecordWithoutBuffering pins the memory-safety
@@ -70,4 +72,10 @@ func assertRecoveredAfterSkip(t *testing.T, decoder *decoder) {
 	if decoder.resourceFailure() != nil {
 		t.Fatal("resourceFailure() != nil, want no whole-execution failure for a skipped record")
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

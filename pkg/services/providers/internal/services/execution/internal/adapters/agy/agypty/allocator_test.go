@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
+
+	"go.uber.org/goleak"
 )
 
 type failingHost struct {
@@ -77,4 +79,10 @@ func TestAllocator_RejectsMissingRuntimeDependencies(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

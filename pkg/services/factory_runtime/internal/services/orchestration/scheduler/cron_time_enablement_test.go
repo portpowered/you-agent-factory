@@ -9,6 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+
+	"go.uber.org/goleak"
 )
 
 func TestEnablementEvaluator_CronTimeEnablementUsesSharedTimePlace(t *testing.T) {
@@ -176,4 +178,10 @@ func findEnabledTransition(
 		}
 	}
 	return nil
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

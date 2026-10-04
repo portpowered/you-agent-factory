@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+
+	"go.uber.org/goleak"
 )
 
 func TestManagedStartPreservesStartErrorWithoutLaunchingAProcess(t *testing.T) {
@@ -217,4 +219,10 @@ func TestManagedProcessStopHonorsWaitContextAfterCleanupBegins(t *testing.T) {
 	if err := process.Wait(); err != nil {
 		t.Fatalf("Wait() after canceled Stop() = %v, want nil", err)
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

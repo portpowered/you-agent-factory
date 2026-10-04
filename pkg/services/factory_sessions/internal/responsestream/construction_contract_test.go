@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+
+	"go.uber.org/goleak"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
@@ -74,4 +76,10 @@ func TestResponseStreamConstructionRequiresExplicitClockAndFactories(t *testing.
 	if registry := responsestream.NewRegistry(newResponseStream, nil); registry != nil {
 		t.Fatalf("NewRegistry without clock = %#v, want nil", registry)
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

@@ -12,6 +12,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+
+	"go.uber.org/goleak"
 )
 
 func TestRuntimeMetricsObserverSamplesMemoryAtExistingCadence(t *testing.T) {
@@ -327,3 +329,9 @@ func (*lateMetricEmissionSink) Artifact() factoryruntime.RuntimeMetricsArtifact 
 }
 
 var _ factoryruntime.RuntimeMetricsSink = (*lateMetricEmissionSink)(nil)
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
