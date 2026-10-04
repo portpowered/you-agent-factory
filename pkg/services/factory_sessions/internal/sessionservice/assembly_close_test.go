@@ -106,7 +106,7 @@ func TestRetireOwnedSessionUsesScopedStopAndRetainsFailedCleanup(t *testing.T) {
 		}
 		return stopErr
 	})
-	owner := &SessionRuntime{sessionState: state, scopeControl: control}
+	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state)}
 	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
 		t.Fatalf("failed retirement = %v", err)
 	}
@@ -119,6 +119,51 @@ func TestRetireOwnedSessionUsesScopedStopAndRetainsFailedCleanup(t *testing.T) {
 	}
 	if state.Resolve("a") != nil || state.Resolve("b") == nil {
 		t.Fatal("successful retirement did not remove only A")
+	}
+}
+
+func TestRetireOwnedSessionRetainsPartiallyActivatedScopeForCleanupRetry(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	activation := NewScopeActivation(state)
+	registerScopeControlRuntime(state, "a", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	registerScopeControlRuntime(state, "b", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	session := state.Resolve("a")
+	bound := runtimebinding.SessionStateFrom(session)
+	bound.Clock = state.Clock()
+	failure := errors.New("partial activation cleanup failed")
+	cleanupErr := failure
+	stopped := false
+	binding := factoryruntime.RuntimeBinding{}.New("a-runtime", session.Runtime.Factory,
+		func(context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
+			if !stopped {
+				t.Fatal("deactivation ran before owned runtime stop returned")
+			}
+			return factoryruntime.RuntimeDeactivationResult{}, cleanupErr
+		})
+	if err := activation.Activate(context.Background(), SessionScope{Session: session, Binding: binding}); err != nil {
+		t.Fatal(err)
+	}
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
+		if run != bound.Handle || clock != bound.Clock {
+			t.Fatal("partial activation cleanup stopped a foreign run")
+		}
+		stopped = true
+		return nil
+	})
+	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: activation}
+	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
+		t.Fatalf("partial activation cleanup = %v, want original cause", err)
+	}
+	if state.Resolve("a") != session || state.Resolve("b") == nil {
+		t.Fatal("failed activation cleanup lost its retryable scope or peer")
+	}
+	cleanupErr = nil
+	if err := owner.RetireOwnedSession(context.Background(), session); err != nil {
+		t.Fatalf("cleanup retry = %v", err)
+	}
+	if state.Resolve("a") != nil || state.Resolve("b") == nil {
+		t.Fatal("cleanup retry did not retire only A")
 	}
 }
 
@@ -162,7 +207,7 @@ func TestAssemblyCloseKeepsCapturedGenerationAcrossActivationReplacement(t *test
 		stopped = true
 		return nil
 	})
-	owner := &SessionRuntime{sessionState: state, scopeControl: control,
+	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state),
 		retireWorkAdmissionProjection: func(id string, runtime *factorysessions.LiveRuntime, record factoryruntime.RuntimeRecord) {
 			if id != "a" || runtime != oldSession.Runtime || record != oldRecord {
 				t.Fatal("close retired a foreign Work projection generation")

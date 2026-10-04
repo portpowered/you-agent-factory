@@ -675,11 +675,25 @@ func StopSessionGeneration(
 	session *livesession.LiveSession,
 	stop func(RuntimeHandle) error,
 ) error {
+	if err := CleanupSessionGeneration(session, stop); err != nil {
+		return err
+	}
+	state.UnregisterGeneration(session)
+	successor := state.Resolve(session.ID)
+	if successor == nil {
+		successor = NextLiveSession(state, session.ID)
+	}
+	runtimeState.RetireActive(session.ID, HandleFromSession(session), successor)
+	return nil
+}
+
+// CleanupSessionGeneration stops and deactivates a captured runtime without
+// retiring its registration. Failed cleanup retains the record for retry.
+func CleanupSessionGeneration(session *livesession.LiveSession, stop func(RuntimeHandle) error) error {
 	handle := HandleFromSession(session)
 	if handle == nil {
 		return fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
-	sessionID := session.ID
 	binding := BindingForSession(session)
 	var cleanupErrs []error
 	if stop != nil {
@@ -693,16 +707,7 @@ func StopSessionGeneration(
 	if err := deactivateRuntimeBinding(binding); err != nil {
 		cleanupErrs = append(cleanupErrs, fmt.Errorf("deactivate Factory Runtime binding: %w", err))
 	}
-	if err := errors.Join(cleanupErrs...); err != nil {
-		return err
-	}
-	state.UnregisterGeneration(session)
-	successor := state.Resolve(sessionID)
-	if successor == nil {
-		successor = NextLiveSession(state, sessionID)
-	}
-	runtimeState.retireActive(sessionID, handle, successor)
-	return nil
+	return errors.Join(cleanupErrs...)
 }
 
 // FailStartup stops the failed runtime and closes its activation before
@@ -725,7 +730,7 @@ func FailStartup(
 			session = nil
 		}
 	}
-	runtimeState.retireActive(sessionID, handle, nil)
+	runtimeState.RetireActive(sessionID, handle, nil)
 	if handle != nil && stop != nil {
 		if stopErr := stop(handle); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
 			return errors.Join(startupErr, stopErr)
@@ -779,7 +784,7 @@ func HandleStartFailure(
 		}
 	}
 	if active := runtimeState.Active(); active != nil && active.Handle == handle {
-		runtimeState.retireActive(active.SessionID, handle, nil)
+		runtimeState.RetireActive(active.SessionID, handle, nil)
 	}
 	retireFailed := func() {
 		if failed != nil {

@@ -218,6 +218,44 @@ func TestSessionScopeActivationPreservesReplacementAndRetriesFailedPublication(t
 	assertStatus(peer, "PAUSED")
 }
 
+func TestSessionScopeActivationRetiresOnlyAddressedGeneration(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	activation := NewScopeActivation(state)
+	registerScopeControlRuntime(state, "a", &scopedControlRuntime{status: "RUNNING"}, nil)
+	old := state.Resolve("a")
+	registerScopeControlRuntime(state, "b", &scopedControlRuntime{status: "PAUSED"}, nil)
+	peer := state.Resolve("b")
+	registerScopeControlRuntime(state, "a", &scopedControlRuntime{status: "RUNNING"}, nil)
+	current := state.Resolve("a")
+	if err := activation.Retire(context.Background(), SessionScope{Session: old}); err != nil {
+		t.Fatal(err)
+	}
+	if state.Resolve("a") != current || state.Resolve("b") != peer {
+		t.Fatal("stale retirement removed replacement or peer")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := activation.Retire(ctx, SessionScope{Session: current}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled retirement = %v", err)
+	}
+	if state.Resolve("a") != current {
+		t.Fatal("canceled retirement lost retryable registration")
+	}
+	for range 2 {
+		if err := activation.Retire(context.Background(), SessionScope{Session: current}); err != nil {
+			t.Fatalf("retry retirement: %v", err)
+		}
+	}
+	if state.Resolve("a") != nil || state.Resolve("b") != peer {
+		t.Fatal("retirement did not remove only its addressed generation")
+	}
+	result, err := peer.Runtime.Factory.Observe(context.Background(), factory.ObserveRequest{Scope: factory.ObservationScopeHealth})
+	if err != nil || string(result.Observation.Health.FactoryState) != "PAUSED" {
+		t.Fatalf("peer query after retirement = %+v, %v", result, err)
+	}
+}
+
 func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	assembly := &Assembly{
 		state: newWorkResolverSessionState(),

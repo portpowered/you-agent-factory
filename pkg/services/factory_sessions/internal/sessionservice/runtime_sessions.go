@@ -51,6 +51,7 @@ type SessionScope struct {
 // Runtime activation and artifact cleanup remain owned by their existing bridge.
 type SessionScopeActivation interface {
 	Activate(context.Context, SessionScope) error
+	Retire(context.Context, SessionScope) error
 }
 
 type scopeActivation struct {
@@ -59,6 +60,16 @@ type scopeActivation struct {
 
 func NewScopeActivation(state *sessionruntime.Service) SessionScopeActivation {
 	return &scopeActivation{state: state}
+}
+
+// Retire removes only the captured generation after its effects have joined.
+// A missing or replaced registration is already retired; retries are harmless.
+func (a *scopeActivation) Retire(ctx context.Context, scope SessionScope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	a.state.UnregisterGeneration(scope.Session)
+	return nil
 }
 
 func (a *scopeActivation) Activate(ctx context.Context, scope SessionScope) error {

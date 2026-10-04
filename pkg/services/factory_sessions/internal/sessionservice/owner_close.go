@@ -44,11 +44,22 @@ func (fs *SessionRuntime) RetireOwnedSession(ctx context.Context, session *lives
 	if fs == nil {
 		return fmt.Errorf("Factory Session runtime is required")
 	}
-	err := runtimebinding.StopSessionGeneration(fs.sessionState, &fs.runtimeState, session, func(runtimebinding.RuntimeHandle) error {
+	err := runtimebinding.CleanupSessionGeneration(session, func(runtimebinding.RuntimeHandle) error {
 		return fs.scopeControl.StopLiveGeneration(ctx, session)
 	})
-	if err == nil && fs.retireWorkAdmissionProjection != nil {
+	if err != nil {
+		return err
+	}
+	if err := fs.scopeActivation.Retire(ctx, SessionScope{Session: session}); err != nil {
+		return err
+	}
+	successor := fs.sessionState.Resolve(session.ID)
+	if successor == nil {
+		successor = runtimebinding.NextLiveSession(fs.sessionState, session.ID)
+	}
+	fs.runtimeState.RetireActive(session.ID, runtimebinding.HandleFromSession(session), successor)
+	if fs.retireWorkAdmissionProjection != nil {
 		fs.retireWorkAdmissionProjection(session.ID, session.Runtime, runtimebinding.BundleFromSession(session))
 	}
-	return err
+	return nil
 }
