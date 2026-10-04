@@ -9,8 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
-// ApplyLiveControl routes one lifecycle control through the owner retained on
-// the canonical live-session record and fences repeated control IDs there.
+// ApplyLiveControl routes cancellation through the independent scope authority.
+// Other controls retain their opening-owner bridge and shared record fence.
 func (a *Assembly) ApplyLiveControl(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
 	if a == nil {
 		return factorysessions.SessionControlResult{}, factorysessions.ErrRuntimeNotAvailable
@@ -22,6 +22,24 @@ func (a *Assembly) ApplyLiveControl(ctx context.Context, request factorysessions
 	session := a.Resolve(id)
 	if session == nil {
 		return factorysessions.SessionControlResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, id)
+	}
+
+	if request.Operation == factorysessions.SessionControlCancel {
+		control := request.Control
+		if control.RequestID == "" {
+			control.RequestID = strings.TrimSpace(request.Correlation.RequestID)
+		}
+		if control.TurnID == "" {
+			control.TurnID = strings.TrimSpace(request.Correlation.TurnID)
+		}
+		applied, err := a.scopeControl.CancelLiveFactorySession(ctx, id, control)
+		if err != nil {
+			return factorysessions.SessionControlResult{}, err
+		}
+		return factorysessions.SessionControlResult{
+			SessionID: id, Mode: factorysessions.SessionOperationModeLive, Operation: request.Operation,
+			Outcome: applied.Outcome, Status: applied.Status, Links: applied.Links,
+		}, nil
 	}
 	bound := runtimebinding.SessionStateFrom(session)
 	if bound == nil || bound.Owner == nil {

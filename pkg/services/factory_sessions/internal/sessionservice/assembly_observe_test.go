@@ -14,6 +14,8 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type observeStubRuntime struct {
@@ -239,5 +241,130 @@ func TestInvocationAuthorityWaiterUsesSelectedScheduler(t *testing.T) {
 	cancel()
 	if err := waiter(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled: %v", err)
+	}
+}
+
+// The control double implements runtime outcomes, not opening-owner callbacks.
+type scopedControlRuntime struct {
+	invocationQueryRuntime
+	status          string
+	failure         error
+	observedFailure error
+	last            factoryruntime.TerminateRequest
+	controls        int
+}
+
+func (r *scopedControlRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{Observation: factoryruntime.Observation{Health: factoryruntime.ObservationHealth{FactoryState: r.status}}}, r.observedFailure
+}
+func (r *scopedControlRuntime) ControlTerminate(ctx context.Context, req factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryruntime.TerminateResult{}, err
+	}
+	r.last = req
+	r.controls++
+	if r.failure != nil {
+		return factoryruntime.TerminateResult{}, r.failure
+	}
+	r.status = string(interfaces.FactoryStateCompleted)
+	return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
+}
+
+type scopeControlMetrics struct {
+	factoryruntime.NoopEmitter
+	outcomes []factoryruntime.Fields
+}
+
+func (m *scopeControlMetrics) Counter(_ context.Context, name string, _ float64, fields factoryruntime.Fields) error {
+	if name == factoryruntime.RuntimeLifecycleControl {
+		m.outcomes = append(m.outcomes, fields)
+	}
+	return nil
+}
+
+type scopeControlRecord struct {
+	factoryruntime.RuntimeRecord
+	metrics *scopeControlMetrics
+}
+
+func (r scopeControlRecord) RuntimeMetrics() factoryruntime.MetricsEmitter { return r.metrics }
+
+func registerScopeControlRuntime(state *sessionruntime.Service, id string, runtime *scopedControlRuntime, logger *zap.Logger) *scopeControlMetrics {
+	metrics := &scopeControlMetrics{}
+	state.Register(sessionruntime.Registration{
+		SessionID: id,
+		Handle:    &runtimebinding.SessionState{Handle: invocationQueryRun{record: scopeControlRecord{metrics: metrics}}, Logger: logger},
+		Runtime:   &factorysessions.LiveRuntime{Factory: runtime, WorkAndEventIngress: runtime},
+	})
+	return metrics
+}
+
+func TestSessionScopeControlPreservesLifecycleAndPeerIsolation(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	core, logs := observer.New(zap.InfoLevel)
+	a := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
+	b := &scopedControlRuntime{invocationQueryRuntime: invocationQueryRuntime{name: "b"}, status: string(interfaces.FactoryStateRunning)}
+	metrics := registerScopeControlRuntime(state, "a", a, zap.New(core))
+	registerScopeControlRuntime(state, "b", b, zap.NewNop())
+	control := NewScopeControl(state)
+	assembly := &Assembly{state: state, scopeControl: control}
+	request := factorysessions.SessionControlRequest{SessionID: "a", Operation: factorysessions.SessionControlCancel,
+		Control:     factorysessions.ControlRequest{Reason: "owned cancellation"},
+		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "original-request", TurnID: "original-turn"}}
+	result, err := assembly.ApplyLiveControl(context.Background(), request)
+	if err != nil || result.SessionID != "a" || result.Status != factorysessions.LifecycleStatusSucceeded || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+		t.Fatalf("cancel = %#v, %v", result, err)
+	}
+	if a.last.ControlID != "original-request" || a.last.TurnID != "original-turn" || a.last.WorkerSessionAction != factoryruntime.WorkerSessionControlActionCancel || a.last.Reason != "owned cancellation" {
+		t.Fatalf("runtime control correlation = %#v", a.last)
+	}
+	replay, err := assembly.ApplyLiveControl(context.Background(), request)
+	if err != nil || replay.Status != result.Status || a.controls != 1 || len(metrics.outcomes) != 1 || logs.Len() != 1 {
+		t.Fatalf("dedup = %#v, %v; controls=%d metrics=%v logs=%v", replay, err, a.controls, metrics.outcomes, logs.All())
+	}
+	fields := logs.All()[0].ContextMap()
+	if fields["session_id"] != "a" || fields["request_id"] != "original-request" {
+		t.Fatalf("log correlation = %#v", fields)
+	}
+	peer, err := NewInvocationAuthority(state, platformclock.Real{}, nil).SubmitWork(context.Background(), "b", work.SubmitRequest{RequestID: "peer-next", WorkID: "peer-work"})
+	if err != nil || peer.RequestID != "b" || b.controls != 0 || b.status != string(interfaces.FactoryStateRunning) {
+		t.Fatalf("peer next admission = %#v, %v; controls=%d status=%s", peer, err, b.controls, b.status)
+	}
+}
+
+func TestSessionScopeControlPreservesErrorsAndAllowsRetry(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	failure := errors.New("owned runtime control failed")
+	runtime := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning), failure: failure}
+	registerScopeControlRuntime(state, "a", runtime, zap.NewNop())
+	control := NewScopeControl(state)
+	request := factorysessions.ControlRequest{RequestID: "retryable"}
+	if _, err := control.CancelLiveFactorySession(context.Background(), "missing", request); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := control.CancelLiveFactorySession(ctx, "a", request); !errors.Is(err, context.Canceled) || runtime.controls != 0 {
+		t.Fatalf("canceled: %v", err)
+	}
+	runtime.observedFailure = failure
+	if _, err := control.CancelLiveFactorySession(context.Background(), "a", request); !errors.Is(err, failure) || runtime.controls != 0 {
+		t.Fatalf("observe: %v", err)
+	}
+	runtime.observedFailure = nil
+	if _, err := control.CancelLiveFactorySession(context.Background(), "a", request); !errors.Is(err, failure) {
+		t.Fatalf("control: %v", err)
+	}
+	runtime.failure = nil
+	if result, err := control.CancelLiveFactorySession(context.Background(), "a", request); err != nil || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted || runtime.controls != 2 {
+		t.Fatalf("retry: %#v, %v", result, err)
+	}
+	if _, err := control.CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "new-control"}); err == nil {
+		t.Fatal("terminal generation accepted a new cancel")
+	}
+	if state.Resolve("a") == nil {
+		t.Fatal("cancel removed inspection history")
 	}
 }

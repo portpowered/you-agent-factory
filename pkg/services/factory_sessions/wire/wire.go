@@ -95,6 +95,14 @@ func NewInvocationAuthority(state *SessionState, scheduler platformclock.TimerSo
 	return sessionservice.NewInvocationAuthority(state, scheduler, projector)
 }
 
+// SessionScopeControl owns addressed cancellation independently of the gateway.
+type SessionScopeControl = sessionservice.SessionScopeControl
+
+// NewScopeControl constructs cancellation over the canonical session authority.
+func NewScopeControl(state *SessionState) SessionScopeControl {
+	return sessionservice.NewScopeControl(state)
+}
+
 // StreamManager supplies provider progress and dispatch completion factories.
 type StreamManager = sessionservice.StreamManager
 
@@ -134,6 +142,7 @@ func NewRuntimeAssembly(
 	state *SessionState,
 	streams StreamManager,
 	authority InvocationAuthority,
+	control SessionScopeControl,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -153,7 +162,7 @@ func NewRuntimeAssembly(
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
-		registry, state, streams, authority,
+		registry, state, streams, authority, control,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,

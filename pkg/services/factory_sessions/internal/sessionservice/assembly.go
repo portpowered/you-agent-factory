@@ -37,6 +37,7 @@ type Assembly struct {
 	state                        *sessionruntime.Service
 	streams                      StreamManager
 	invocationAuthority          InvocationAuthority
+	scopeControl                 SessionScopeControl
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
@@ -74,6 +75,7 @@ func NewAssembly(
 	state *sessionruntime.Service,
 	streams StreamManager,
 	authority InvocationAuthority,
+	control SessionScopeControl,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -98,6 +100,7 @@ func NewAssembly(
 		state:                        state,
 		streams:                      streams,
 		invocationAuthority:          authority,
+		scopeControl:                 control,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
@@ -458,6 +461,7 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Session runtime state is required")
 	}
 	bound.Owner = runtime
+	bound.Logger = logger
 	runtime.startupSessionID = identity.id
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
