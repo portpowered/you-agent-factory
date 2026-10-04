@@ -1260,8 +1260,8 @@ func TestKeyedRuntime_ProgressCommitsScopedAssociationBeforeForwarding(t *testin
 			t.Fatal("downstream fragment changed")
 		}
 	}
-	publisher := workersessions.RuntimeProgress(first.request.Key.RuntimeID, first.service, next)
-	peerPublisher := workersessions.RuntimeProgress(peer.request.Key.RuntimeID, peer.service, next)
+	publisher := workersessions.RuntimeProgressPublisher(first.service.PublishRuntimeProgress).ForRuntime(first.request.Key.RuntimeID, next)
+	peerPublisher := workersessions.RuntimeProgressPublisher(peer.service.PublishRuntimeProgress).ForRuntime(peer.request.Key.RuntimeID, next)
 	for _, fixture := range []*perRuntimeAttemptFixture{first, peer, first, peer} {
 		if fixture == first {
 			publisher(keyedRuntimeProgressFragment(fixture))
@@ -1380,7 +1380,7 @@ func assertProgressFallbackIsolation(t *testing.T, target, peer *perRuntimeAttem
 	next := func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, fragment)
 	}
-	publisher := workersessions.RuntimeProgress(target.request.Key.RuntimeID, target.service, next)
+	publisher := workersessions.RuntimeProgressPublisher(target.service.PublishRuntimeProgress).ForRuntime(target.request.Key.RuntimeID, next)
 	publisher(fragment)
 	handoff := fragment
 	handoff.Kind = workers.ProviderSessionObservedFragmentKind
@@ -1389,7 +1389,7 @@ func assertProgressFallbackIsolation(t *testing.T, target, peer *perRuntimeAttem
 	if err != nil || len(forwarded) != 0 || !reflect.DeepEqual(before, sink.requestsFor("")) || !reflect.DeepEqual(retained, after) {
 		t.Fatalf("rejected scoped progress: forwarded=%d, historyChanged=%t, sessionsChanged=%t, err=%v", len(forwarded), !reflect.DeepEqual(before, sink.requestsFor("")), !reflect.DeepEqual(retained, after), err)
 	}
-	workersessions.RuntimeProgress(peer.request.Key.RuntimeID, peer.service, next)(keyedRuntimeProgressFragment(peer))
+	workersessions.RuntimeProgressPublisher(peer.service.PublishRuntimeProgress).ForRuntime(peer.request.Key.RuntimeID, next)(keyedRuntimeProgressFragment(peer))
 	if len(forwarded) != 1 || forwarded[0].Correlation.RuntimeID != peer.request.Key.RuntimeID {
 		t.Fatalf("live peer progress = %#v", forwarded)
 	}
@@ -1399,7 +1399,7 @@ func assertProgressFallbackIsolation(t *testing.T, target, peer *perRuntimeAttem
 	bypass := fragment
 	bypass.Correlation.RuntimeID = "standalone-runtime"
 	before = sink.requestsFor("")
-	publisher = workersessions.RuntimeProgress(bypass.Correlation.RuntimeID, peer.service, next)
+	publisher = workersessions.RuntimeProgressPublisher(peer.service.PublishRuntimeProgress).ForRuntime(bypass.Correlation.RuntimeID, next)
 	publisher(bypass)
 	handoff.Correlation.RuntimeID = bypass.Correlation.RuntimeID
 	publisher(handoff)
@@ -1541,7 +1541,7 @@ func TestKeyedRuntime_CanonicalProgressPreservesDraftBeforeForwarding(t *testing
 			fragment := keyedRuntimeProgressFragment(first)
 			fragment.CanonicalDraft = draft
 			forwarded := 0
-			publisher := workersessions.RuntimeProgress(first.request.Key.RuntimeID, first.service, func(got workers.ProgressFragment) {
+			publisher := workersessions.RuntimeProgressPublisher(first.service.PublishRuntimeProgress).ForRuntime(first.request.Key.RuntimeID, func(got workers.ProgressFragment) {
 				forwarded++
 				records := sink.requestsFor(workersessions.Topic(first.request.ID))
 				if len(records) != 3 || !reflect.DeepEqual(decodePerRuntimeDraft(t, records[2]), draft) || !reflect.DeepEqual(got, fragment) {

@@ -819,6 +819,64 @@ func intPointer(value int) *int { return &value }
 
 func stringPointer(value string) *string { return &value }
 
+func TestRuntimeProgressPublisher_CapturesScopeAndPreservesForwardingDecision(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name          string
+		err           error
+		kind          string
+		wantForwarded int
+	}{
+		{name: "accepted", wantForwarded: 1},
+		{name: "rejected", err: ErrProviderBindingAttemptMismatch},
+		{name: "standalone", err: ErrRuntimeProgressUnsupervised, wantForwarded: 1},
+		{name: "internal standalone", err: ErrRuntimeProgressUnsupervised, kind: workers.ProviderSessionObservedFragmentKind},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			forwarded := 0
+			calls := 0
+			operation := RuntimeProgressPublisher(func(_ context.Context, key RuntimeAttemptKey, fragment workers.ProgressFragment, next workers.ProgressPublisher) error {
+				calls++
+				if key != (RuntimeAttemptKey{RuntimeID: "owned-runtime", DispatchID: "logical-dispatch"}) {
+					t.Errorf("publication key = %#v, want captured runtime and logical dispatch", key)
+				}
+				if fragment.Correlation.RuntimeID != "foreign-runtime" || fragment.DispatchID != "physical-attempt" {
+					t.Errorf("fragment correlation was rewritten: %#v", fragment)
+				}
+				if test.err == nil {
+					next(fragment)
+				}
+				return test.err
+			})
+			publish := operation.ForRuntime(" owned-runtime ", func(workers.ProgressFragment) { forwarded++ })
+			operation = func(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error {
+				t.Error("replacement operation used after scope capture")
+				return nil
+			}
+			publish(workers.ProgressFragment{
+				DispatchID: "physical-attempt", Kind: test.kind,
+				Correlation: workers.ExecutionCorrelation{RuntimeID: "foreign-runtime", DispatchID: " logical-dispatch "},
+			})
+			if calls != 1 || forwarded != test.wantForwarded {
+				t.Fatalf("calls=%d forwarded=%d, want 1/%d", calls, forwarded, test.wantForwarded)
+			}
+		})
+	}
+}
+
+func TestRuntimeProgressPublisher_RejectsProviderConflictBeforePublication(t *testing.T) {
+	t.Parallel()
+	operation := RuntimeProgressPublisher(func(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error {
+		t.Error("conflicting provider reached publication")
+		return nil
+	})
+	operation.ForRuntime("runtime", func(workers.ProgressFragment) { t.Error("conflicting provider forwarded") })(workers.ProgressFragment{
+		Provider:     "claude",
+		Continuation: &providers.ContinuationRef{Provider: "codex"},
+	})
+}
+
 // TestProgressPublisher supplies the legacy bridge only to package contract tests.
 func ProgressPublisherForTest(next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
 	return newProgressPublisherForTest(next)

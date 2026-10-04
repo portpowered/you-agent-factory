@@ -1809,11 +1809,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/worker_sessions/publish.go",
-      "target": "NewProviderSessionObservationPublisher"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/worker_sessions/terminal.go",
       "target": "SanitizeProviderFailureClassification"
     },

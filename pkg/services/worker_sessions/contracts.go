@@ -10,22 +10,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// RuntimeProgressOperation commits progress through an explicitly keyed owner.
-type RuntimeProgressOperation interface {
-	PublishRuntimeProgress(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error
-}
+// RuntimeProgressPublisher is the already-bound keyed publication operation.
+type RuntimeProgressPublisher func(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error
 
-// RuntimeProgress captures the runtime and supervisor before Workers
+// ForRuntime captures the runtime and publication operation before Workers
 // execution is assembled. Only an explicit standalone bypass may forward output
 // without supervision; rejected or terminal attempts stay suppressed.
-func RuntimeProgress(runtimeID string, publisher RuntimeProgressOperation, next workers.ProgressPublisher) workers.ProgressPublisher {
+func (publish RuntimeProgressPublisher) ForRuntime(runtimeID string, next workers.ProgressPublisher) workers.ProgressPublisher {
 	runtimeID = strings.TrimSpace(runtimeID)
 	return func(fragment workers.ProgressFragment) {
 		if !providerFragmentAgrees(fragment) {
 			return
 		}
 		key := RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: strings.TrimSpace(fragment.Correlation.DispatchID)}
-		err := publisher.PublishRuntimeProgress(context.Background(), key, fragment, next)
+		err := publish(context.Background(), key, fragment, next)
 		if errors.Is(err, ErrRuntimeProgressUnsupervised) && fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
 			next(fragment)
 		}

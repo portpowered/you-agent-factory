@@ -307,7 +307,7 @@ func NewRuntimeBuild(
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
-			providerSessionProgress := workersessions.RuntimeProgress(spec.RuntimeInstanceID, workerAttempts, progressPublisher)
+			providerSessionProgress := workersessions.RuntimeProgressPublisher(workerAttempts.PublishRuntimeProgress).ForRuntime(spec.RuntimeInstanceID, progressPublisher)
 			if workerService == nil {
 				return nil, fmt.Errorf("Workers service is required")
 			}
