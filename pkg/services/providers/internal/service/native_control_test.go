@@ -54,7 +54,7 @@ func mustControlCapableRootService(t *testing.T, attempt execution.Attempt) *pro
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

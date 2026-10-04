@@ -104,7 +104,7 @@ func mustControlRootService(t *testing.T, logger *recordingControlLogger) *provi
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logger)
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logger, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -209,7 +209,7 @@ func TestControlAttempt_InvokesNoExecutionAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -268,17 +268,13 @@ func TestControlAttempt_InjectedLoggersStayIsolated(t *testing.T) {
 		t.Run(attemptID, func(t *testing.T) {
 			t.Parallel()
 			logger := &recordingControlLogger{}
-			root, err := providerservice.NewWithACP(
-				struct{ catalog.Service }{}, struct{ execution.Service }{},
-				&stubACPService{}, nil, logger,
-			)
+			root, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.Service }{},
+				&stubACPService{}, nil, logger, &stubACPService{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			quietPeer, err := providerservice.NewWithACP(
-				struct{ catalog.Service }{}, struct{ execution.Service }{},
-				&stubACPService{}, nil, logging.NoopLogger{},
-			)
+			quietPeer, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.Service }{},
+				&stubACPService{}, nil, logging.NoopLogger{}, &stubACPService{})
 			if err != nil {
 				t.Fatal(err)
 			}

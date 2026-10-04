@@ -185,7 +185,7 @@ func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) *provi
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -392,7 +392,7 @@ func TestControlAttempt_ACPBlocksUntilSignaledAttemptReturns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{}, fake)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -457,7 +457,7 @@ func TestControlAttempt_ACPCrossProviderIdentityIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, multi, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, multi, nil, logging.NoopLogger{}, multi)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -550,7 +550,7 @@ func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClear
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	logger := &recordingControlLogger{}
-	root, err := providerservice.NewWithACP(catalogService, executionService, failing, nil, logger)
+	root, err := providerservice.NewWithACP(catalogService, executionService, failing, nil, logger, failing)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -647,7 +647,7 @@ func TestControlAttempt_ACPClaimedControlLosingRaceToNaturalCompletionReturnsUns
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, racing, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, racing, nil, logging.NoopLogger{}, racing)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -873,7 +873,7 @@ func TestControlAttempt_ACPDelayedControlCannotRedirectToReplacementGenerationAf
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{}, fake)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}

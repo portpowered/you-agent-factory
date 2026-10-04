@@ -3,6 +3,7 @@ package claude_test
 import (
 	"context"
 	"encoding/json"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"reflect"
 	"testing"
 
@@ -535,9 +536,17 @@ func newClaudeRoot(t *testing.T, effect claude.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return root
 }
+
+// disabledACP is an inert native-only fixture. Root routing cannot dispatch
+// into its unused ACP operations; Close is an explicit completed capability.
+type disabledACP struct{ acp.Service }
+
+func (disabledACP) Resolve(providers.ID) (providers.ID, bool) { return "", false }
+func (disabledACP) Integrations() []providers.ACPIntegration  { return nil }
+func (disabledACP) Close(context.Context) error               { return nil }

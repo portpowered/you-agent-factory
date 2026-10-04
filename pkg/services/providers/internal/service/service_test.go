@@ -25,7 +25,7 @@ import (
 func TestNew_RejectsNilCatalog(t *testing.T) {
 	t.Parallel()
 
-	service, err := providerservice.New(nil, &stubExecution{}, logging.NoopLogger{})
+	service, err := providerservice.NewWithACP(nil, &stubExecution{}, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err == nil || service != nil {
 		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
 	}
@@ -39,7 +39,7 @@ func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
 	var nilExecution execution.Service
-	service, constructionErr := providerservice.New(catalogService, nilExecution, logging.NoopLogger{})
+	service, constructionErr := providerservice.NewWithACP(catalogService, nilExecution, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if constructionErr == nil || service != nil {
 		t.Fatalf(
 			"New() = (%v, %v), want invalid execution composition error",
@@ -60,7 +60,7 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -123,7 +123,7 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -168,7 +168,7 @@ func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -219,7 +219,7 @@ func TestRootACPRejectsSeparateReasoningEffortAndAcceptsExactModelID(t *testing.
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "cursor-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -287,7 +287,7 @@ func TestCatalogAdvertisedAgyEffortsAreNotRejectedByExecutionPolicy(t *testing.T
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -407,7 +407,7 @@ func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "cursor-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -441,7 +441,7 @@ func TestRootCustomACPIgnoresSkipPermissions(t *testing.T) {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "custom-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -490,7 +490,7 @@ func TestRootOpenCodeACPAllowsSkipPermissions(t *testing.T) {
 			ImplementationProfile: "opencode-acp",
 		}},
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -522,7 +522,7 @@ func TestRootCustomReplacementForOpenCodeACPIgnoresSkipPermissions(t *testing.T)
 			ImplementationProfile: "custom-opencode-acp",
 		}},
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -569,7 +569,7 @@ func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -720,7 +720,7 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

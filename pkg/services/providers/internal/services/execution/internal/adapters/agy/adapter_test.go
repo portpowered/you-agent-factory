@@ -3,6 +3,7 @@ package agy_test
 import (
 	"context"
 	"errors"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -60,9 +61,9 @@ func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBuiltInService() = %v", err)
 	}
-	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 	if err != nil {
-		t.Fatalf("providerservice.New() = %v", err)
+		t.Fatalf("providerservice.NewWithACP() = %v", err)
 	}
 
 	result, err := root.Execute(
@@ -373,7 +374,7 @@ func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,3 +386,11 @@ func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
+
+// disabledACP is an inert native-only fixture. Root routing cannot dispatch
+// into its unused ACP operations; Close is an explicit completed capability.
+type disabledACP struct{ acp.Service }
+
+func (disabledACP) Resolve(providers.ID) (providers.ID, bool) { return "", false }
+func (disabledACP) Integrations() []providers.ACPIntegration  { return nil }
+func (disabledACP) Close(context.Context) error               { return nil }

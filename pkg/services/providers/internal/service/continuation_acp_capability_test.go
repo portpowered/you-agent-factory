@@ -88,7 +88,7 @@ func mustNegotiatedCapabilityRootService(
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}

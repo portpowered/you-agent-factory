@@ -40,7 +40,7 @@ func newAgyConformanceRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalog, executionService, logging.NoopLogger{})
+	return providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 }
 
 type agyConformanceState struct {

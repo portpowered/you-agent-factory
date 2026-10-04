@@ -51,7 +51,7 @@ func newConformanceRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	return providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 }
 
 type streamingAdapter struct {
@@ -219,7 +219,7 @@ func mustCorrelationRootService(t *testing.T, attempt execution.Attempt) provide
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

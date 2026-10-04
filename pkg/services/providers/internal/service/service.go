@@ -23,26 +23,20 @@ type Service struct {
 	execution   execution.Service
 	acp         acp.Service
 	packagedACP []providers.ACPIntegration
-	lifecycles  []providerLifecycle
+	lifecycle   Lifecycle
 	logger      logging.Logger
 	attempts    *liveAttemptRegistry
 }
 
-type providerLifecycle interface {
+// Lifecycle is the completed close capability supplied by composition.
+type Lifecycle interface {
 	Close(context.Context) error
 }
 
 var _ providers.Service = (*Service)(nil)
 
-// New constructs an inert Providers root facade over its two private sibling
-// capabilities. logger is the direct, required operation-logging
-// abstraction; callers with no operation logging pass logging.NoopLogger{}.
-func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (*Service, error) {
-	return newService(catalogService, executionService, nil, nil, logger, nil)
-}
-
 // NewWithACP constructs the production Providers root with its persistent ACP
-// subservice and exact lifecycle roles. logger is the direct, required
+// subservice and exact lifecycle role. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
 // logging.NoopLogger{}.
 func NewWithACP(
@@ -51,18 +45,7 @@ func NewWithACP(
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
-	lifecycles ...providerLifecycle,
-) (*Service, error) {
-	return newService(catalogService, executionService, acpService, packagedACP, logger, lifecycles)
-}
-
-func newService(
-	catalogService catalog.Service,
-	executionService execution.Service,
-	acpService acp.Service,
-	packagedACP []providers.ACPIntegration,
-	logger logging.Logger,
-	lifecycles []providerLifecycle,
+	lifecycle Lifecycle,
 ) (*Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
@@ -70,17 +53,12 @@ func newService(
 	if executionService == nil {
 		return nil, fmt.Errorf("construct Providers: execution is required")
 	}
-	for index, lifecycle := range lifecycles {
-		if lifecycle == nil {
-			return nil, fmt.Errorf("construct Providers: lifecycle %d is required", index)
-		}
-	}
 	return &Service{
 		catalog:     catalogService,
 		execution:   executionService,
 		acp:         acpService,
 		packagedACP: cloneACPIntegrations(packagedACP),
-		lifecycles:  append([]providerLifecycle(nil), lifecycles...),
+		lifecycle:   lifecycle,
 		logger:      logger,
 		attempts:    newLiveAttemptRegistry(),
 	}, nil
@@ -743,13 +721,7 @@ func (s *Service) ConfigureACPIntegrations(ctx context.Context, configured []pro
 }
 
 func (s *Service) Close(ctx context.Context) error {
-	var first error
-	for _, lifecycle := range s.lifecycles {
-		if err := lifecycle.Close(ctx); err != nil && first == nil {
-			first = err
-		}
-	}
-	return first
+	return s.lifecycle.Close(ctx)
 }
 
 func cloneACPIntegrations(values []providers.ACPIntegration) []providers.ACPIntegration {

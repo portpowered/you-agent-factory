@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -12,9 +14,9 @@ import (
 func TestServiceInternalDelegationCoverage(t *testing.T) {
 	catalog := internalCatalogStub{}
 	execution := internalExecutionStub{}
-	root, err := New(catalog, execution, logging.NoopLogger{})
+	root, err := NewWithACP(catalog, execution, internalDisabledACP{}, nil, logging.NoopLogger{}, internalDisabledACP{})
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewWithACP() error = %v", err)
 	}
 	if _, err := root.ListProviders(t.Context(), providers.ListProvidersRequest{}); err != nil {
 		t.Fatalf("ListProviders() error = %v", err)
@@ -31,10 +33,10 @@ func TestServiceInternalDelegationCoverage(t *testing.T) {
 	); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if root, err := New(nil, execution, logging.NoopLogger{}); err == nil || root != nil {
+	if root, err := NewWithACP(nil, execution, internalDisabledACP{}, nil, logging.NoopLogger{}, internalDisabledACP{}); err == nil || root != nil {
 		t.Fatalf("New(nil, execution) = (%v, %v), want error", root, err)
 	}
-	if root, err := New(catalog, nil, logging.NoopLogger{}); err == nil || root != nil {
+	if root, err := NewWithACP(catalog, nil, internalDisabledACP{}, nil, logging.NoopLogger{}, internalDisabledACP{}); err == nil || root != nil {
 		t.Fatalf("New(catalog, nil) = (%v, %v), want error", root, err)
 	}
 }
@@ -93,4 +95,65 @@ func (internalExecutionStub) Execute(
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{Content: "ok"}, nil
+}
+
+type internalDisabledACP struct{ acp.Service }
+
+func (internalDisabledACP) Resolve(providers.ID) (providers.ID, bool) { return "", false }
+func (internalDisabledACP) Integrations() []providers.ACPIntegration  { return nil }
+func (internalDisabledACP) Close(context.Context) error               { return nil }
+
+type closeOperation func(context.Context) error
+
+func (operation closeOperation) Close(ctx context.Context) error { return operation(ctx) }
+
+func TestRootCloseUsesSuppliedLifecycleAndKeepsPeerIsolated(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("owned cleanup failed")
+	for _, outcome := range []struct {
+		name string
+		err  error
+	}{
+		{"success", nil}, {"failure", failure}, {"canceled", context.Canceled},
+	} {
+		t.Run(outcome.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if outcome.name == "canceled" {
+				cancel()
+			}
+			calls, peerCalls := 0, 0
+			owned := closeOperation(func(received context.Context) error {
+				calls++
+				if received != ctx {
+					t.Fatal("Close replaced the supplied context")
+				}
+				return outcome.err
+			})
+			peer := closeOperation(func(context.Context) error { peerCalls++; return nil })
+			first, err := NewWithACP(internalCatalogStub{}, internalExecutionStub{},
+				internalDisabledACP{}, nil, logging.NoopLogger{}, owned)
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := NewWithACP(internalCatalogStub{}, internalExecutionStub{},
+				internalDisabledACP{}, nil, logging.NoopLogger{}, peer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 0 || peerCalls != 0 {
+				t.Fatal("construction closed a lifecycle")
+			}
+			if err := first.Close(ctx); err != outcome.err {
+				t.Fatalf("Close() = %v, want exact supplied error %v", err, outcome.err)
+			}
+			if calls != 1 || peerCalls != 0 {
+				t.Fatalf("owned/peer close calls = %d/%d, want 1/0", calls, peerCalls)
+			}
+			if err := second.Close(t.Context()); err != nil || peerCalls != 1 || calls != 1 {
+				t.Fatalf("peer Close() = %v, owned/peer calls = %d/%d", err, calls, peerCalls)
+			}
+		})
+	}
 }
