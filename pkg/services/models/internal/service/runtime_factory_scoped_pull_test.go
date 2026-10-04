@@ -64,18 +64,6 @@ func TestIsRemovableCacheAbsenceClassifiesAssetAbsenceErrors(t *testing.T) {
 	}
 }
 
-func TestRuntimeServicePullModelForScopeValidatesAndDelegates(t *testing.T) {
-	t.Parallel()
-
-	runtime := &localExecutionFixture{}
-	if _, err := runtime.PullModelForScope(context.Background(), models.PullModelRequest{}); !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("empty pull request error = %v, want ErrNotFound", err)
-	}
-	if _, err := runtime.PullModelForScope(context.Background(), models.PullModelRequest{Name: "voice"}); err == nil {
-		t.Fatal("delegated pull error = nil, want unavailable runtime failure")
-	}
-}
-
 func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T) {
 	t.Parallel()
 

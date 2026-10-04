@@ -49,10 +49,7 @@ type GetModelRequest struct {
 // Validate checks request fields whose validity does not depend on private
 // scope ownership or catalog state.
 func (request GetModelRequest) Validate() error {
-	if strings.TrimSpace(request.Name) == "" {
-		return fmt.Errorf("%w: empty model name", ErrNotFound)
-	}
-	return nil
+	return ValidateGetModelRequest(request)
 }
 
 // ValidateGetModelRequest checks the plain get-model request. Empty names fail
@@ -60,7 +57,10 @@ func (request GetModelRequest) Validate() error {
 //
 // Deprecated: call GetModelRequest.Validate.
 func ValidateGetModelRequest(request GetModelRequest) error {
-	return request.Validate()
+	if strings.TrimSpace(request.Name) == "" {
+		return fmt.Errorf("%w: empty model name", ErrNotFound)
+	}
+	return nil
 }
 
 // GetModelReadinessRequest identifies the scoped model whose current readiness
