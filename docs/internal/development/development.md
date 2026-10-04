@@ -246,7 +246,9 @@ catalog/execution ownership. Compiler-resolved types preserve the exact Workers
 request bridge and direct leaf aggregation allowances, rejecting redeclarations,
 wrappers and competing provider families. Generated production declarations are
 checked; test declarations are excluded.
-The `TestBoundary` analyzer owns zero-debt cross-owner test Work normalization.
+The `TestBoundary` analyzer owns zero-debt cross-owner test Work normalization
+and functional-test transport composition (with exact generated HTTP client
+and contract allowances).
 Compiler-resolved function references cover aliases, dot imports and captured
 values in test files and reusable test support. Work-owned tests remain allowed;
 generated files and ordinary production consumers are excluded.

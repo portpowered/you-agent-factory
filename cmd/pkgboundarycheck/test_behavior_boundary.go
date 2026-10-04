@@ -52,11 +52,6 @@ const (
 	transportMappingImportPath                    = repositoryImportPrefix + "pkg/transports/mapping"
 	rootImportPath                                = repositoryImportPrefix + "pkg/root"
 	builtCLIHarnessImportPath                     = repositoryImportPrefix + "internal/builtcliacceptance"
-	cliHTTPImportPath                             = repositoryImportPrefix + "pkg/transports/cli/clihttp"
-	cliSubmitImportPath                           = repositoryImportPrefix + "pkg/services/work/transports/cli/submit"
-	transportImportRoot                           = repositoryImportPrefix + "pkg/transports/"
-	generatedHTTPImportPath                       = repositoryImportPrefix + "pkg/transports/http/generated"
-	generatedHTTPClientPath                       = repositoryImportPrefix + "pkg/transports/http/client"
 )
 
 type testBehaviorOperation struct {
@@ -151,19 +146,6 @@ var prohibitedHTTPTransportTestEngineTypes = map[string]string{
 	"RuntimeTokenColor":    "factory_runtime",
 }
 
-// A functional scenario is a customer-scale test. It may use generated public
-// clients after starting the root-built process, but it must not construct a
-// handwritten transport operation as a substitute for Process.Execute. Keep
-// this inventory exact so owner-local protocol tests remain permitted.
-var prohibitedFunctionalTransportCompositionOperations = map[string]map[string]struct{}{
-	cliHTTPImportPath: {
-		"NewProtocol": {},
-	},
-	cliSubmitImportPath: {
-		"NewSubmit": {},
-	},
-}
-
 type testBehaviorFinding struct {
 	Kind       string `json:"kind"`
 	Owner      string `json:"owner,omitempty"`
@@ -228,7 +210,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 		}
 
 		callerOwner, callerIsService := servicePackageOwner(rel)
-		insideFunctionalTest := strings.HasPrefix(rel, "tests/functional/")
 		insideHTTPTransportTest := strings.HasPrefix(rel, "pkg/transports/http/")
 		insideTransportTest := strings.HasPrefix(rel, "pkg/transports/")
 		importsByName := map[string]string{}
@@ -240,12 +221,7 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 			}
 			_, crossOwnerPolicyImport := prohibitedCrossOwnerTestOperations[importPath]
 			_, transportPolicyImport := prohibitedTransportTestPolicyOperations[importPath]
-			_, functionalTransportImport := prohibitedFunctionalTransportCompositionOperations[importPath]
-			functionalHandwrittenTransportImport := insideFunctionalTest &&
-				strings.HasPrefix(importPath, transportImportRoot) &&
-				!isGeneratedFunctionalTransportPackage(importPath)
 			if !crossOwnerPolicyImport && !transportPolicyImport &&
-				!functionalTransportImport && !functionalHandwrittenTransportImport &&
 				importPath != rootImportPath && importPath != builtCLIHarnessImportPath {
 				continue
 			}
@@ -296,16 +272,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 			insideServiceTest := strings.HasPrefix(rel, "pkg/services/")
 			insidePkgTest := strings.HasPrefix(rel, "pkg/")
 			insideTransportTest := strings.HasPrefix(rel, "pkg/transports/")
-			if insideFunctionalTest {
-				if isFunctionalTransportConstructor(importPath, symbol) {
-					return testBehaviorOperation{testBehaviorCompositionKind, "", importPath, symbol}, true
-				}
-				if symbols := prohibitedFunctionalTransportCompositionOperations[importPath]; symbols != nil {
-					if _, prohibited := symbols[symbol]; prohibited {
-						return testBehaviorOperation{testBehaviorCompositionKind, "", importPath, symbol}, true
-					}
-				}
-			}
 			if insideTransportTest {
 				if symbols := prohibitedTransportTestPolicyOperations[importPath]; symbols != nil {
 					if owner, prohibited := symbols[symbol]; prohibited {
@@ -539,10 +505,6 @@ func validateTestBehaviorBaselineEntry(entry testBehaviorBaselineEntry) error {
 		if entry.Owner != "" || !isKnownCompositionOperation(entry.ImportPath, entry.Symbol) {
 			return fmt.Errorf("test behavior baseline entry names unknown composition operation: %#v", entry)
 		}
-		if isFunctionalTransportCompositionOperation(entry.ImportPath, entry.Symbol) &&
-			!strings.HasPrefix(entry.FilePath, "tests/functional/") {
-			return fmt.Errorf("test behavior baseline entry names functional transport composition outside tests/functional: %#v", entry)
-		}
 	case testBehaviorTransportProcessKind:
 		if entry.Owner != "" || entry.ImportPath != rootImportPath || entry.Symbol != "BuildProcess" ||
 			!strings.HasPrefix(entry.FilePath, "pkg/transports/") {
@@ -573,27 +535,8 @@ func isTransportOnlyTestPolicy(importPath, symbol string) bool {
 }
 
 func isKnownCompositionOperation(importPath, symbol string) bool {
-	if (importPath == rootImportPath && symbol == "BuildProcess") ||
-		(importPath == builtCLIHarnessImportPath && symbol == "NewHarness") {
-		return true
-	}
-	return isFunctionalTransportCompositionOperation(importPath, symbol)
-}
-
-func isFunctionalTransportCompositionOperation(importPath, symbol string) bool {
-	_, known := prohibitedFunctionalTransportCompositionOperations[importPath][symbol]
-	return known || isFunctionalTransportConstructor(importPath, symbol)
-}
-
-func isFunctionalTransportConstructor(importPath, symbol string) bool {
-	if !strings.HasPrefix(importPath, transportImportRoot) || isGeneratedFunctionalTransportPackage(importPath) {
-		return false
-	}
-	return strings.HasPrefix(symbol, "New") || strings.HasPrefix(symbol, "Build") || strings.HasPrefix(symbol, "Create")
-}
-
-func isGeneratedFunctionalTransportPackage(importPath string) bool {
-	return importPath == generatedHTTPImportPath || importPath == generatedHTTPClientPath
+	return (importPath == rootImportPath && symbol == "BuildProcess") ||
+		(importPath == builtCLIHarnessImportPath && symbol == "NewHarness")
 }
 
 func createTestBehaviorBaseline(cfg config) error {
