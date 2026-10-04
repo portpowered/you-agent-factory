@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
@@ -162,7 +161,7 @@ func newSelectionRoot(t *testing.T, entries ...providers.Descriptor) providers.S
 	t.Helper()
 
 	root, err := providerswire.NewService(
-		providerswire.CatalogOption(catalogwire.WithDescriptors(entries...)),
+		providerswire.WithCatalogDescriptors(entries...),
 	)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() = %v", err)

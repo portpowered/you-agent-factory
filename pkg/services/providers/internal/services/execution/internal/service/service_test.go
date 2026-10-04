@@ -1110,7 +1110,7 @@ func TestExecuteRejectsInvalidOrCrossProviderSuccessSession(t *testing.T) {
 func mustCatalog(t *testing.T) catalog.Service {
 	t.Helper()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}

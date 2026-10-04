@@ -392,7 +392,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 
 	service, err := NewService(
-		CatalogOption(catalogwire.WithProbeQuery(func(
+		WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
 			_ context.Context,
 			descriptor providers.Descriptor,
 		) (catalog.ProbeFacts, error) {
@@ -537,7 +537,7 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := NewService(CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := NewService(WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -630,7 +630,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := NewService(CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := NewService(WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {

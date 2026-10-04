@@ -21,7 +21,7 @@ func TestRootContinueResumesExactSessionThroughNativeAdapter(t *testing.T) {
 	t.Parallel()
 
 	var received execution.ContinuationRequest
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestRootContinueResumesExactSessionThroughNativeAdapter(t *testing.T) {
 func TestRootContinueRejectsUnknownProvider(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestRootContinueRejectsUnsupportedSessionKindBeforeAdapterDispatch(t *testi
 	t.Parallel()
 
 	adapterCalls := 0
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -252,7 +252,7 @@ func TestRootContinueStaleWhenProviderReportsSessionNotFound(t *testing.T) {
 	t.Parallel()
 
 	adapterCalls := 0
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -309,7 +309,7 @@ func TestRootContinueStaleWhenProviderReportsSessionNotFound(t *testing.T) {
 func TestRootContinueConcurrentAttemptsAreIndependent(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -373,7 +373,7 @@ func TestRootContinueConcurrentAttemptsAreIndependent(t *testing.T) {
 func TestRootContinueConcurrentStaleAndResumedAttemptsStayIndependent(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -452,7 +452,7 @@ func TestContinueReferenceRoutesExactOpaqueIdentity(t *testing.T) {
 	t.Parallel()
 
 	var received execution.ContinuationRequest
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -574,7 +574,7 @@ func TestContinueReferenceUnsupportedNeverExecutes(t *testing.T) {
 func TestContinueReferenceClassifiesForeignAttempt(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}

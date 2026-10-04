@@ -43,3 +43,7 @@ type CapabilityOverride struct {
 // honor context cancellation and must not expose Workers types through the
 // catalog boundary.
 type ProbeQuery func(context.Context, providers.Descriptor) (ProbeFacts, error)
+
+// ProbeOperation supplies the completed request-time descriptor projection.
+// Composition selects identity or readiness probing before constructing Service.
+type ProbeOperation func(context.Context, providers.Descriptor) (providers.Descriptor, error)

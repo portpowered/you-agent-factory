@@ -177,7 +177,7 @@ func (m *multiACPService) TryCancel(ctx context.Context, generation acp.Generati
 
 func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) *providerservice.Service {
 	t.Helper()
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -384,7 +384,7 @@ func TestControlAttempt_ACPBlocksUntilSignaledAttemptReturns(t *testing.T) {
 	t.Parallel()
 
 	fake := newBlockingACPAttempt()
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -449,7 +449,7 @@ func TestControlAttempt_ACPCrossProviderIdentityIsolation(t *testing.T) {
 		"cursor-acp": target,
 		"claude-acp": bystander,
 	}}
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -541,7 +541,7 @@ func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClear
 	fake := newACPAwareAttempt("cursor-acp")
 	failing := &failingCancelACPService{acpAwareAttempt: fake, cancelErr: errors.New("broken acp connection")}
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -639,7 +639,7 @@ func TestControlAttempt_ACPClaimedControlLosingRaceToNaturalCompletionReturnsUns
 	fake := newACPAwareAttempt("cursor-acp")
 	racing := &raceLostACPService{acpAwareAttempt: fake}
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -865,7 +865,7 @@ func TestControlAttempt_ACPDelayedControlCannotRedirectToReplacementGenerationAf
 	const identity = "acp-identity-reused"
 	fake := newSequentialACPService("cursor-acp")
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}

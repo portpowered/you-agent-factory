@@ -391,7 +391,7 @@ func countPhase(progress []providers.ExecuteProgress, phase string) int {
 
 func newCodexRoot(t *testing.T, effect codex.Effect) providers.Service {
 	t.Helper()
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

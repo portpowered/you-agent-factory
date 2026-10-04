@@ -37,7 +37,7 @@ func TestFinalOnlyAdapterConformance(t *testing.T) {
 func newConformanceRoot(
 	attempt execution.Attempt,
 ) (providers.Service, error) {
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (g *gatedAttempt) callCount() int {
 func mustCorrelationRootService(t *testing.T, attempt execution.Attempt) providers.Service {
 	t.Helper()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}

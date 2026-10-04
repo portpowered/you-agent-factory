@@ -34,7 +34,7 @@ func TestNew_RejectsNilCatalog(t *testing.T) {
 func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -52,7 +52,7 @@ func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
 func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -93,7 +93,7 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -145,12 +145,12 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, []providers.Descriptor{providers.Descriptor{
 		ID:           providers.IDCodex,
 		DisplayName:  "Codex",
 		Availability: providers.AvailabilitySelectable,
 		Readiness:    providers.ReadinessReady,
-	}))
+	}}, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T
 func TestRootACPRejectsSeparateReasoningEffortAndAcceptsExactModelID(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -268,7 +268,7 @@ func TestRootRejectsSeparateReasoningEffortForAgy(t *testing.T) {
 func TestCatalogAdvertisedAgyEffortsAreNotRejectedByExecutionPolicy(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -389,7 +389,7 @@ func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool,
 func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, []providers.Descriptor{providers.Descriptor{
 		ID:           "cursor-acp",
 		DisplayName:  "Cursor ACP",
 		Availability: providers.AvailabilitySelectable,
@@ -398,7 +398,7 @@ func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 			providers.CapabilityPromptSubmission,
 			providers.CapabilityPermissionBypass,
 		},
-	}))
+	}}, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -432,7 +432,7 @@ func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 func TestRootCustomACPIgnoresSkipPermissions(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -474,7 +474,7 @@ func TestRootCustomACPIgnoresSkipPermissions(t *testing.T) {
 func TestRootOpenCodeACPAllowsSkipPermissions(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -506,7 +506,7 @@ func TestRootOpenCodeACPAllowsSkipPermissions(t *testing.T) {
 func TestRootCustomReplacementForOpenCodeACPIgnoresSkipPermissions(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -548,7 +548,7 @@ func TestRootCustomReplacementForOpenCodeACPIgnoresSkipPermissions(t *testing.T)
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -610,7 +610,7 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService(providerswire.CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := providerswire.NewService(providerswire.WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -670,7 +670,7 @@ func TestRootConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := providerswire.NewService(providerswire.CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := providerswire.NewService(providerswire.WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -694,13 +694,13 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 
 	probeCalls := 0
 	adapterCalls := 0
-	catalogService, err := catalogwire.NewService(catalogwire.WithProbeQuery(func(
+	catalogService, err := catalogwire.NewService(catalogwire.NewProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
 		probeCalls++
 		return catalog.ProbeFacts{}, nil
-	}))
+	}), nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}

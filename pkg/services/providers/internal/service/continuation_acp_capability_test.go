@@ -80,7 +80,7 @@ func mustNegotiatedCapabilityRootService(
 	acpService *negotiatedCapabilityACPService,
 ) *providerservice.Service {
 	t.Helper()
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}

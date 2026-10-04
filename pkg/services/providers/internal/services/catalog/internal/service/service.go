@@ -10,30 +10,26 @@ import (
 )
 
 type service struct {
-	providers           []providers.Descriptor
-	byID                map[providers.ID]providers.Descriptor
-	aliases             map[string]providers.ID
-	probe               catalog.ProbeQuery
-	extraDescriptors    []providers.Descriptor
-	capabilityOverrides []catalog.CapabilityOverride
+	providers []providers.Descriptor
+	byID      map[providers.ID]providers.Descriptor
+	aliases   map[string]providers.ID
+	probe     catalog.ProbeOperation
 }
 
 var _ catalog.Service = (*service)(nil)
 
 // New constructs an inert catalog over the accepted standardized provider
 // catalog publication.
-func New(options ...Option) (catalog.Service, error) {
+func New(probe catalog.ProbeOperation, extraDescriptors []providers.Descriptor, overrides []catalog.CapabilityOverride) (catalog.Service, error) {
 	descriptors, err := projectPublishedCatalog()
 	if err != nil {
 		return nil, err
 	}
 	s := &service{
 		providers: descriptors,
+		probe:     probe,
 	}
-	for _, option := range options {
-		option(s)
-	}
-	for _, descriptor := range s.extraDescriptors {
+	for _, descriptor := range extraDescriptors {
 		replaced := false
 		for index := range s.providers {
 			if s.providers[index].ID == descriptor.ID {
@@ -46,7 +42,7 @@ func New(options ...Option) (catalog.Service, error) {
 			s.providers = append(s.providers, descriptor.Clone())
 		}
 	}
-	if err := applyCapabilityOverrides(s.providers, s.capabilityOverrides); err != nil {
+	if err := applyCapabilityOverrides(s.providers, overrides); err != nil {
 		return nil, err
 	}
 	s.byID, s.aliases = indexDescriptors(s.providers)
@@ -175,20 +171,7 @@ func (s *service) applyProbe(
 	ctx context.Context,
 	descriptor providers.Descriptor,
 ) (providers.Descriptor, error) {
-	if s.probe == nil {
-		return descriptor.Clone(), nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providers.Descriptor{}, err
-	}
-	facts, err := s.probe(ctx, descriptor.Clone())
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return providers.Descriptor{}, ctxErr
-		}
-		facts = probeFailureFacts(descriptor)
-	}
-	return mergeProbeFacts(descriptor, facts), nil
+	return s.probe(ctx, descriptor.Clone())
 }
 
 func mergeProbeFacts(

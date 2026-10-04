@@ -96,17 +96,19 @@ type Option interface {
 }
 
 type wireOptions struct {
-	catalog           []catalogwire.Option
-	commandRunner     providerservice.CommandRunner
-	agyCommandRunner  providerservice.CommandRunner
-	agyCommandClock   platformclock.Source
-	agyPTYPlatform    AgyPTYPlatformDependencies
-	acpIntegrations   []providers.ACPIntegration
-	commandFactory    platformprocess.CommandFactory
-	executableLocator platformprocess.ExecutableLocator
-	stdioPipes        platformprocess.StdioPipeFactory
-	registrations     ProviderRegistrations
-	logger            logging.Logger
+	catalogProbe       catalog.ProbeOperation
+	catalogDescriptors []providers.Descriptor
+	catalogOverrides   []catalog.CapabilityOverride
+	commandRunner      providerservice.CommandRunner
+	agyCommandRunner   providerservice.CommandRunner
+	agyCommandClock    platformclock.Source
+	agyPTYPlatform     AgyPTYPlatformDependencies
+	acpIntegrations    []providers.ACPIntegration
+	commandFactory     platformprocess.CommandFactory
+	executableLocator  platformprocess.ExecutableLocator
+	stdioPipes         platformprocess.StdioPipeFactory
+	registrations      ProviderRegistrations
+	logger             logging.Logger
 }
 
 type registrationsOption struct {
@@ -170,17 +172,30 @@ func WithStdioPipeFactory(factory platformprocess.StdioPipeFactory) Option {
 	return stdioPipesOption{factory: factory}
 }
 
-type catalogOption struct {
-	value catalogwire.Option
+type catalogProbeOption struct {
+	probe catalog.ProbeOperation
 }
 
-func (o catalogOption) apply(opts *wireOptions) {
-	opts.catalog = append(opts.catalog, o.value)
+func (o catalogProbeOption) apply(opts *wireOptions) { opts.catalogProbe = o.probe }
+
+// WithCatalogProbeOperation supplies a completed catalog readiness projection.
+func WithCatalogProbeOperation(probe catalog.ProbeOperation) Option {
+	return catalogProbeOption{probe: probe}
 }
 
-// CatalogOption adapts a catalog subservice option for root construction.
-func CatalogOption(option catalogwire.Option) Option {
-	return catalogOption{value: option}
+type catalogDescriptorsOption struct{ descriptors []providers.Descriptor }
+
+func (o catalogDescriptorsOption) apply(opts *wireOptions) {
+	opts.catalogDescriptors = append(opts.catalogDescriptors, o.descriptors...)
+}
+
+// WithCatalogDescriptors contributes detached catalog facts.
+func WithCatalogDescriptors(descriptors ...providers.Descriptor) Option {
+	cloned := make([]providers.Descriptor, len(descriptors))
+	for index, descriptor := range descriptors {
+		cloned[index] = descriptor.Clone()
+	}
+	return catalogDescriptorsOption{descriptors: cloned}
 }
 
 type catalogCapabilityOverridesOption struct {
@@ -195,7 +210,7 @@ func (option catalogCapabilityOverridesOption) apply(config *wireOptions) {
 			Capabilities: append([]providers.Capability(nil), override.Capabilities...),
 		})
 	}
-	config.catalog = append(config.catalog, catalogwire.WithCapabilityOverrides(overrides...))
+	config.catalogOverrides = append(config.catalogOverrides, overrides...)
 }
 
 // WithCatalogCapabilityOverrides supplies route-specific static capability
@@ -314,8 +329,12 @@ func NewService(options ...Option) (providers.Service, error) {
 	for _, registration := range config.registrations {
 		descriptors = append(descriptors, registrationDescriptor(registration.Manifest))
 	}
-	config.catalog = append(config.catalog, catalogwire.WithDescriptors(descriptors...))
-	catalogService, err := catalogwire.NewService(config.catalog...)
+	config.catalogDescriptors = append(config.catalogDescriptors, descriptors...)
+	probe := config.catalogProbe
+	if probe == nil {
+		probe = catalogwire.IdentityProbe
+	}
+	catalogService, err := catalogwire.NewService(probe, config.catalogDescriptors, config.catalogOverrides)
 	if err != nil {
 		return nil, err
 	}

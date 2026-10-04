@@ -26,7 +26,7 @@ func TestAgyAdapterConformance(t *testing.T) {
 func newAgyConformanceRoot(
 	attempt execution.Attempt,
 ) (providers.Service, error) {
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		return nil, err
 	}

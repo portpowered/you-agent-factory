@@ -86,7 +86,7 @@ func assertNoUnsafeControlLogFields(t *testing.T, fields map[string]any) {
 func mustControlRootService(t *testing.T, logger *recordingControlLogger) *providerservice.Service {
 	t.Helper()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -191,7 +191,7 @@ func TestControlAttempt_ValidationFailsBeforeOutcome(t *testing.T) {
 func TestControlAttempt_InvokesNoExecutionAdapter(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}

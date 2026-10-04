@@ -52,7 +52,7 @@ func TestAgyRootFailsClosedWhenEffectAbsent(t *testing.T) {
 func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -362,7 +362,7 @@ func assertAgyDependencyFailure(
 
 func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 	t.Helper()
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

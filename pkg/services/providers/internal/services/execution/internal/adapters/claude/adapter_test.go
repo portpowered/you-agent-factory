@@ -524,7 +524,7 @@ func countPhase(progress []providers.ExecuteProgress, phase string) int {
 
 func newClaudeRoot(t *testing.T, effect claude.Effect) providers.Service {
 	t.Helper()
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
