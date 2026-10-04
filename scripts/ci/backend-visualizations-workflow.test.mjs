@@ -46,6 +46,7 @@ test("successful main CI proposes measured pages through a bot pull request", ()
 	assert.match(publish, /gh auth setup-git --hostname github\.com/);
 	assert.match(publish, /git push origin "HEAD:\$bot_branch"/);
 	assert.match(publish, /gh pr create --base main --head "\$bot_branch"/);
-	assert.match(publish, /gh pr merge "\$pr_url" --auto --merge --delete-branch/);
+	assert.match(publish, /gh pr merge "\$pr_url" --auto\s*$/m);
+	assert.doesNotMatch(publish, /--delete-branch/);
 	assert.doesNotMatch(publish, /git push origin HEAD:main/);
 });
