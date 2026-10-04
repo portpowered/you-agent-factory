@@ -759,7 +759,7 @@ func awaitPTYTimer(t *testing.T, clock *observedPTYClock) *observedPTYTimer {
 	select {
 	case timer := <-clock.created:
 		return timer
-	case <-time.After(5 * time.Second):
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for observed timer creation or resource join; injected ticks drive the outcome
 		t.Fatal("PTY timer was not created")
 		return nil
 	}
@@ -815,7 +815,7 @@ func TestExecuteSessionRunUsesSuppliedTimers(t *testing.T) {
 			select {
 			case got := <-done:
 				assertPTYTerminalTimers(t, outcome, got.result, got.err, replacement, drain)
-			case <-time.After(5 * time.Second):
+			case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for observed timer creation or resource join; injected ticks drive the outcome
 				t.Fatal("PTY run did not join")
 			}
 		})
@@ -857,7 +857,7 @@ func TestDrainPTYCaptureUsesSuppliedBound(t *testing.T) {
 		if !timer.stopped.Load() {
 			t.Fatal("drain timer was not stopped")
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for observed timer creation or resource join; injected ticks drive the outcome
 		t.Fatal("drain did not close reader and join capture")
 	}
 }

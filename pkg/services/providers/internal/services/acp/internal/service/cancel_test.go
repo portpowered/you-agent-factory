@@ -123,7 +123,7 @@ func awaitTeardownTimer(t *testing.T, scheduler *teardownScheduler, duration tim
 			t.Fatalf("timer duration = %v, want %v", timer.duration, duration)
 		}
 		return timer
-	case <-time.After(5 * time.Second):
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for an observed injected-timer creation; never drives the tested outcome
 		t.Fatal("teardown did not reach its scheduler wait")
 		return nil
 	}
