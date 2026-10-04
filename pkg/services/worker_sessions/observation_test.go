@@ -423,10 +423,11 @@ func assertProgressProvenance(t *testing.T) {
 }
 
 func TestPublisher_CanonicalPublicationErrorPolicy(t *testing.T) {
+	t.Parallel()
 	draft := publisherTestDraft()
 	draft.DispatchID = "dispatch-1"
 	fragment := workers.ProgressFragment{DispatchID: "dispatch-1"}
-	publisher := newProgressPublisherForTest(nil)
+	publisher := newProgressPublisherForTest(nil, nil)
 
 	if publisher.publishCanonicalWorkerRecord(nil, fragment, draft) {
 		t.Fatal("nil observer should reject canonical publication")
@@ -492,7 +493,8 @@ func TestPublisher_CanonicalPublicationErrorPolicy(t *testing.T) {
 }
 
 func TestPublisher_WorkerPublicationErrorPolicy(t *testing.T) {
-	publisher := newProgressPublisherForTest(nil)
+	t.Parallel()
+	publisher := newProgressPublisherForTest(nil, nil)
 	if !publisher.publishWorkerRecord(nil, workers.ProgressFragment{DispatchID: "dispatch-1"}) {
 		t.Fatal("nil observer should not fail a worker publication")
 	}
@@ -572,8 +574,9 @@ func TestPublisher_WorkerPublicationErrorPolicy(t *testing.T) {
 }
 
 func TestPublisher_DoesNotForwardInternalProviderObservation(t *testing.T) {
+	t.Parallel()
 	forwarded := 0
-	publisher := newProgressPublisherForTest(func(workers.ProgressFragment) { forwarded++ })
+	publisher := newProgressPublisherForTest(nil, func(workers.ProgressFragment) { forwarded++ })
 	publisher.Publish(workers.ProgressFragment{Kind: workers.ProviderSessionObservedFragmentKind})
 	if forwarded != 0 {
 		t.Fatalf("forwarded internal provider observation count = %d, want 0", forwarded)
@@ -581,12 +584,12 @@ func TestPublisher_DoesNotForwardInternalProviderObservation(t *testing.T) {
 }
 
 func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
+	t.Parallel()
 	var forwarded []workers.ProgressFragment
-	publisher := newProgressPublisherForTest(func(fragment workers.ProgressFragment) {
+	observer := &publisherServiceSpy{}
+	publisher := newProgressPublisherForTest(observer, func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, fragment)
 	}).WithUnassociatedProgressFallback()
-	observer := &publisherServiceSpy{}
-	publisher.Bind(observer)
 	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-runtime"}
 	progress := workers.ProgressFragment{
 		DispatchID:   "runtime-dispatch",
@@ -627,9 +630,9 @@ func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
 }
 
 func TestPublisher_SuppressesConflictingCanonicalOutput(t *testing.T) {
+	t.Parallel()
 	forwarded := 0
-	publisher := newProgressPublisherForTest(func(workers.ProgressFragment) { forwarded++ })
-	publisher.Bind(&publisherServiceSpy{ensureErr: ErrProviderBindingConflict})
+	publisher := newProgressPublisherForTest(&publisherServiceSpy{ensureErr: ErrProviderBindingConflict}, func(workers.ProgressFragment) { forwarded++ })
 	draft := publisherTestDraft()
 	draft.DispatchID = "dispatch-1"
 	draft.Provenance.Provider = "codex"
@@ -878,10 +881,10 @@ func TestRuntimeProgressPublisher_RejectsProviderConflictBeforePublication(t *te
 }
 
 // TestProgressPublisher supplies the legacy bridge only to package contract tests.
-func ProgressPublisherForTest(next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
-	return newProgressPublisherForTest(next)
+func ProgressPublisherForTest(observer Service, next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
+	return newProgressPublisherForTest(observer, next)
 }
 
-func newProgressPublisherForTest(next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
-	return &ProviderSessionObservationPublisher{next: next}
+func newProgressPublisherForTest(observer Service, next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
+	return &ProviderSessionObservationPublisher{observer: observer, next: next}
 }

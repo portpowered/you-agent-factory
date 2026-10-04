@@ -15,12 +15,9 @@ import (
 )
 
 // ProviderSessionObservationPublisher serializes the required Worker
-// Sessions association ahead of the existing downstream progress publisher.
-// Factory Runtime constructs it before Workers execution is assembled and
-// binds the session-owned Service once its pool is available. A reference that
-// cannot be committed is deliberately not forwarded, so no response output
-// can present an unassociated, malformed, or foreign Provider Session as a
-// resumable Worker Session.
+// Sessions association and Worker record publication. Runtime and direct
+// supervision supply the resolved Worker identity explicitly to
+// PublishWorkerSessionProgress; the publisher retains source sequence state.
 type ProviderSessionObservationPublisher struct {
 	mu       sync.RWMutex
 	observer Service
@@ -66,21 +63,6 @@ func (p *ProviderSessionObservationPublisher) WithUnassociatedProgressFallback()
 	p.forwardUnassociated = true
 	p.mu.Unlock()
 	return p
-}
-
-// Bind attaches the one Worker Sessions service that owns the runtime's
-// supervision registry. Binding is intentionally a construction-time action;
-// replacing an existing observer would risk routing a live dispatch to a
-// different Factory Runtime session, so only the first non-nil observer wins.
-func (p *ProviderSessionObservationPublisher) Bind(observer Service) {
-	if p == nil || observer == nil {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.observer == nil {
-		p.observer = observer
-	}
 }
 
 // Publish commits a detached exact Provider Session observation before it

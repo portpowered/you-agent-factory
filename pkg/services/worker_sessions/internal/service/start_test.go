@@ -917,6 +917,7 @@ func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing
 // so it is no longer observable at this seam.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t *testing.T) {
+	t.Parallel()
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
 	reference := providers.SessionRef{
@@ -926,7 +927,7 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 	}
 
 	var forwarded []workers.ProgressFragment
-	publisher := newTestSessionPublisher(func(fragment workers.ProgressFragment) {
+	publisher := newTestSessionPublisher(registry, "worker-1", func(fragment workers.ProgressFragment) {
 		current, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
 		if err != nil || current.ProviderSessionAssociation == nil {
 			t.Fatalf("Get() before forwarding provider output = %#v, %v, want committed association", current, err)
@@ -940,7 +941,6 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 			Continuation: (fragment.Continuation).ClonePtr(),
 		})
 	})
-	publisher.Bind(registry)
 
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
 	publisher.Publish(workers.ProgressFragment{
@@ -2578,12 +2578,14 @@ func TestStart_OpeningRecordCarriesExactContinuationAndResumeReason(t *testing.T
 // proves a final-only provider output establishes provenance without inventing
 // a Provider Session reference and remains bracketed by lifecycle records.
 func TestStart_NoProviderSessionReferenceStillRetainsProviderIndependentHistory(t *testing.T) {
+	t.Parallel()
 	eventsSvc := newEventsAppender()
 	var svc workersessions.Service
 	var forwarded []workers.ProgressFragment
-	publisher := newTestSessionPublisher(func(fragment workers.ProgressFragment) {
+	var publisher *testSessionPublisher
+	next := func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, fragment)
-	})
+	}
 	execution := &fakeExecution{dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 		publisher.Publish(workers.ProgressFragment{
 			DispatchID: req.Execution.Dispatch.DispatchID, Kind: workers.ProgressFragmentKind,
@@ -2597,7 +2599,7 @@ func TestStart_NoProviderSessionReferenceStillRetainsProviderIndependentHistory(
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
-	publisher.Bind(svc)
+	publisher = newTestSessionPublisher(svc, "worker-no-session", next)
 	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-no-session", "dispatch-no-session")); err != nil {
 		t.Fatalf("InvokeSession() error = %v, want nil", err)
 	}
@@ -2644,10 +2646,11 @@ func assertLifecycleDraft(t *testing.T, draft workers.Draft, phase workers.Phase
 // TestStart_CanonicalProviderOutputBindsBeforePublication proves a canonical
 // provider draft cannot overtake the synthesized provider binding or terminal.
 func TestStart_CanonicalProviderOutputBindsBeforePublication(t *testing.T) {
+	t.Parallel()
 	eventsSvc := newEventsAppender()
 	var svc workersessions.Service
 	forwarded := 0
-	publisher := newTestSessionPublisher(func(workers.ProgressFragment) { forwarded++ })
+	var publisher *testSessionPublisher
 	execution := &fakeExecution{dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 		publisher.Publish(workers.CanonicalDraftFragment(req.Execution.Dispatch.DispatchID, canonicalMessageDraft(t, req.Execution.Dispatch.DispatchID)))
 		return completedDispatchResult(req.Execution.Dispatch.DispatchID), nil
@@ -2657,7 +2660,7 @@ func TestStart_CanonicalProviderOutputBindsBeforePublication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
-	publisher.Bind(svc)
+	publisher = newTestSessionPublisher(svc, "worker-canonical", func(workers.ProgressFragment) { forwarded++ })
 	publisher.Publish(workers.CanonicalDraftFragment("dispatch-canonical", workers.Draft{
 		Kind: workers.KindProgress, Phase: workers.PhaseUpdated, DispatchID: "dispatch-canonical",
 		Provenance: workers.Provenance{Provider: "codex", NativeEventType: "progress.updated", Delivery: workers.DeliveryNativeStream, Representation: workers.RepresentationNotification, Fidelity: workers.FidelityNormalized},
@@ -4426,17 +4429,17 @@ func TestListWorkerSessionObservations_CanceledContextIsTyped(t *testing.T) {
 }
 
 // testSessionPublisher supplies an explicit session to the retained progress
-// operation; late binding exists only in this legacy test fixture.
+// operation with its immutable observer and Worker identity.
 type testSessionPublisher struct {
 	progress workersessions.ProviderSessionObservationPublisher
 	observer workersessions.Service
+	workerID string
 	next     workers.ProgressPublisher
 }
 
-func newTestSessionPublisher(next workers.ProgressPublisher) *testSessionPublisher {
-	return &testSessionPublisher{next: next}
+func newTestSessionPublisher(observer workersessions.Service, workerID string, next workers.ProgressPublisher) *testSessionPublisher {
+	return &testSessionPublisher{observer: observer, workerID: workerID, next: next}
 }
-func (p *testSessionPublisher) Bind(observer workersessions.Service) { p.observer = observer }
 func (p *testSessionPublisher) Publish(fragment workers.ProgressFragment) {
 	if fragment.Correlation.DispatchID == "" {
 		fragment.Correlation.DispatchID = fragment.DispatchID
@@ -4444,11 +4447,7 @@ func (p *testSessionPublisher) Publish(fragment workers.ProgressFragment) {
 	if fragment.Correlation.AttemptID == "" {
 		fragment.Correlation.AttemptID = fragment.DispatchID
 	}
-	id, err := p.observer.WorkerSessionIDForDispatch(context.Background(), fragment.DispatchID)
-	if err != nil {
-		return
-	}
-	if err := p.progress.PublishWorkerSessionProgress(context.Background(), p.observer, id, fragment); err != nil {
+	if err := p.progress.PublishWorkerSessionProgress(context.Background(), p.observer, p.workerID, fragment); err != nil {
 		return
 	}
 	if p.next != nil {
