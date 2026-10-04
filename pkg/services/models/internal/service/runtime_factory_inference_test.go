@@ -204,41 +204,6 @@ func TestRootDelegatesInferenceThroughInjectedOwner(t *testing.T) {
 	}
 }
 
-func TestBoundServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	svc := &Service{}
-	_, err := svc.ListCatalog(ctx, models.ListModelsRequest{})
-	assertContractOnlyUnsupported(t, "ListCatalog", err)
-	_, err = svc.GetCatalogModel(ctx, models.GetModelRequest{})
-	assertContractOnlyUnsupported(t, "GetCatalogModel", err)
-	_, err = svc.GetModelReadiness(ctx, models.GetModelReadinessRequest{})
-	assertContractOnlyUnsupported(t, "GetModelReadiness", err)
-	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
-	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
-	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
-	_, err = svc.EnsureModelHost(ctx, models.EnsureModelHostRequest{})
-	assertContractOnlyUnsupported(t, "EnsureModelHost", err)
-	_, err = svc.InspectModelHost(ctx, models.InspectModelHostRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelHost", err)
-	_, err = svc.StopModelHost(ctx, models.StopModelHostRequest{})
-	assertContractOnlyUnsupported(t, "StopModelHost", err)
-	_, err = svc.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "AcquireModelLease", err)
-	_, err = svc.GetModelLease(ctx, models.GetModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "GetModelLease", err)
-	_, err = svc.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "ReleaseModelLease", err)
-	_, err = svc.InvokeModelWithLease(ctx, models.InvokeModelRequest{})
-	assertContractOnlyUnsupported(t, "InvokeModelWithLease", err)
-	_, err = svc.CancelInvocation(ctx, models.CancelInvocationRequest{})
-	assertContractOnlyUnsupported(t, "CancelInvocation", err)
-}
-
 func TestRootCloseShutsDownRuntimeHost(t *testing.T) {
 	t.Parallel()
 

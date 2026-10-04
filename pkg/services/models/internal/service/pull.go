@@ -24,36 +24,6 @@ const (
 	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
 )
 
-// Scoped asset lifecycle is contract-only until the Models implementation
-// packet owns runtime-scope registration, asset inspection, and removal.
-func (s *Service) PreflightModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
-) (models.PreflightModelAssetsResult, error) {
-	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *Service) PrepareModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
-) (models.PrepareModelAssetsResult, error) {
-	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *Service) InspectModelAssets(
-	context.Context,
-	models.InspectModelAssetsRequest,
-) (models.InspectModelAssetsResult, error) {
-	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *Service) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
-) (models.RemoveModelAssetsResult, error) {
-	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
 // PullModel starts or reports managed-runtime pull materialization for one model.
 func (s *Service) PullModel(ctx context.Context, modelName string) (models.PullResult, error) {
 	if s == nil {
