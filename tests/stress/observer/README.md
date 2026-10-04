@@ -189,3 +189,92 @@ repair code during independent validation. Composed zero Models activity
 keeps RQ-2-COMPOSED-CAPACITY BLOCKED; P01/I01/VAL01 remain later gates.
 Review owns terminal CI, current-main reconciliation and
 immediate lint/pkg-file-count before merge.
+
+## Dedicated lifecycle profile preparation and sample capability
+
+The first profile increment supports preparation, the short guard and one inert
+plus one explicit-session sample. Full profiling and composed capability fail
+with an actionable unsupported-workload error until the joined cycle and Models
+capacity stories ship. This capability produces no timing summary, capacity
+witness, retention verdict or qualified baseline.
+
+Use clean committed tooling and clean source. Compilation is optional and occurs
+only in preparation, using cached Go 1.25 with GOPROXY=off. Preparation retains
+build stdout, stderr and exit status and writes an absolute artifact path and
+SHA256, source/tree/tool identities, all overlay/backing hashes, toolchain/build
+information and owned runtime environment paths in profile-manifest.json.
+Wrong pins, dirty sources/tooling, unsupported transforms and failed builds
+remove any previous profile handoff and exit nonzero. Existing preparation
+without --build-profile remains available for provisional development checks.
+Preparation copies the checkpoint and profile schemas beside the manifests so
+read-only validators can resolve local references without compiling.
+
+```powershell
+$env:GOPROXY = 'off'
+$pinWorkspace = Join-Path (Split-Path (Get-Location).Path -Parent) 'fi-t27-profiler-pin-source-20261004'
+# Allocate this lane-owned source once, from existing local Git objects.
+git worktree add --detach $pinWorkspace 95e213cfb35b50236fd7a34ad66c797d2ee7b5b6
+$pinOutput = Join-Path (Get-Location).Path '.artifacts/profile-pin'
+python tests/stress/observer/prepare.py --source-workspace $pinWorkspace --output $pinOutput --mode pin --build-profile
+$env:OBSERVER_PROFILE_MANIFEST = Join-Path $pinOutput 'profile-manifest.json'
+$env:OBSERVER_REPORT = Join-Path $pinOutput 'samples.json'
+$artifact = Join-Path $pinOutput 'observer.test.exe'
+& $artifact '-test.run=^TestLifecycleProfile$' '-test.short=true' '-test.count=1' '-test.timeout=1m' '-test.v'
+& $artifact '-test.run=^TestLifecycleProfileSamplesCapability$' '-test.short=false' '-test.count=1' '-test.timeout=5m' '-test.v'
+```
+
+Repeat preparation with --mode candidate and the lane worktree as source for
+candidate compatibility. Tests do not build artifacts. The running artifact
+verifies its own hash and the supplied preparation/overlay/backing hashes before
+construction. It applies the manifest's owned home, profile, AppData, config,
+cache and temporary directories. Preparation uses existing cached build inputs;
+runtime uses fresh owned cache paths and never invokes Go or downloads assets.
+
+Inert timing starts immediately before BuildProcess and ends when Process.Close
+returns. Session timing starts immediately before explicit Start and ends after
+terminal Work and public Close return. Fixture creation, idle host readiness,
+owner snapshots, sorting and serialization occur outside those spans. Go
+ time.Now/time.Since uses monotonic elapsed integer nanoseconds; UTC timestamps
+only identify the run. Failure stops completeness without retry or replacement.
+Every attempted sample, failure, cleanup error and noisy valid duration remains
+in the raw report and test output. Preserve full stdout/stderr and exit status.
+
+The statistics helper uses all valid values, sorted ascending, arithmetic mean
+of the middle pair for even N and nearest-rank p95 ceil(0.95*N), one-based.
+At N=10 p95 equals max. Capability summaries contain counts with null timing
+statistics; cycles and capacityWitnesses are empty arrays. No ordinary test has
+a wall-clock performance threshold. Report tests also reject failed barriers,
+missing owners, null known-empty attempt arrays and mismatched artifact bytes.
+
+SAMPLE_CLOSED follows public close acknowledgment. HOST_BASELINE follows joined
+readiness and bootstrap inventory. Q2 follows canceled/joined Execute and server
+and successful Process.Close. Cleanup uses fresh bounded contexts; failures
+remain incomplete. Owners, retained lease records and per-slot integer holders
+are observed under their existing locks without expiration or state mutation.
+The report records retained constructor callbacks, snapshot count and elapsed
+capture outside spans. Serialization overhead currently records the first
+encoding pass; final encoding and file I/O are additional outside-span costs.
+Match this method, instrumented bytes, fixture, cache/environment and barriers
+between later baseline/final runs; do not subtract guessed instrumentation cost.
+
+Focused checks (from the isolated source workspace, with absolute overlay):
+
+```powershell
+python -m unittest discover -s tests/stress/observer -p test_profile_prepare.py
+$overlay = Join-Path $pinOutput 'overlay.json'
+Push-Location $pinWorkspace
+go test -overlay $overlay -p 1 -count=1 -short=true -run '^Test(ObserverReport|LifecycleProfileReport|LifecycleProfileDriver)' ./tests/stress/observer
+go test -overlay $overlay -p 1 -count=1 -run TestInProcessObserver ./pkg/platform/baselineobservation ./pkg/services/factory_runtime/internal/services/instance_host/internal/service ./pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service
+Pop-Location
+```
+
+Full workload remains 10 inert and 10 explicit-session samples plus 100 joined
+open/replace/close cycles and composed nonzero Models capacity. Its eventual
+command is the artifact with '-test.run=^TestLifecycleProfile$', '-test.count=1',
+'-test.short=false', '-test.timeout=10m' and '-test.v', with an operator-recorded
+OBSERVER_HOST_WINDOW reference. Do not execute that workload on the shared host.
+OBS-VAL/FI-PREREQ-BASELINE-OBS independently qualifies this exact supplied
+artifact; T27-P01 owns the confirmed no-co-tenant measurement window and actual
+baseline; T22-P01 owns the matching <=10% median/p95 comparison. I01 and VAL01
+remain separate. Author delivery stops at pushed head, non-draft PR, CI started
+and addressed blocking feedback; review owns hosted race, terminal CI and merge.

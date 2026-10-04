@@ -1,0 +1,104 @@
+package observer_test
+
+import (
+ "encoding/json"
+ "fmt"
+ "sort"
+ "testing"
+)
+
+type profileBarrier struct {
+ Name string `json:"name"`
+ Joined bool `json:"joined"`
+ Error *string `json:"error"`
+}
+type profileCheckpoint struct {
+ Report checkpointReport
+ Stage string
+ Barriers []profileBarrier
+}
+func (c profileCheckpoint) MarshalJSON() ([]byte,error) {
+ data,err:=json.Marshal(c.Report); if err!=nil{return nil,err}
+ var fields map[string]json.RawMessage
+ if err=json.Unmarshal(data,&fields); err!=nil{return nil,err}
+ delete(fields,"checkpoint")
+ fields["stage"],err=json.Marshal(c.Stage); if err!=nil{return nil,err}
+ fields["barriers"],err=json.Marshal(c.Barriers); if err!=nil{return nil,err}
+ return json.Marshal(fields)
+}
+type profileAttempt struct {
+ ID string `json:"attemptID"`
+ Kind string `json:"kind"`
+ Ordinal int `json:"ordinal"`
+ SessionID *string `json:"factorySessionID"`
+ Generations []string `json:"runtimeGenerationIDs"`
+ Duration *int64 `json:"durationNs"`
+ Valid bool `json:"valid"`
+ Noise []string `json:"noise"`
+ Errors []string `json:"errors"`
+ Barriers []profileBarrier `json:"barriers"`
+ Checkpoints []profileCheckpoint `json:"checkpoints"`
+}
+type profileSummary struct {
+ ValidCount int `json:"validCount"`
+ AttemptCount int `json:"attemptCount"`
+ Median *float64 `json:"medianNs"`
+ P95 *int64 `json:"p95Ns"`
+ Min *int64 `json:"minNs"`
+ Max *int64 `json:"maxNs"`
+}
+func summarizeProfile(attempts []profileAttempt, kind string, measured bool) profileSummary {
+ s:=profileSummary{}; values:=[]int64{}
+ for _,a:=range attempts {
+  if a.Kind!=kind {continue}; s.AttemptCount++
+  if a.Valid && a.Duration!=nil {s.ValidCount++; values=append(values,*a.Duration)}
+ }
+ if !measured || len(values)==0 {return s}
+ sort.Slice(values,func(i,j int)bool{return values[i]<values[j]})
+ n:=len(values); median:=float64(values[n/2])
+ if n%2==0 {median=float64(values[n/2-1])/2+float64(values[n/2])/2}
+ p95:=values[(95*n+99)/100-1]; lo,hi:=values[0],values[n-1]
+ s.Median=&median;s.P95=&p95;s.Min=&lo;s.Max=&hi
+ return s
+}
+func validateProfileAttempt(a profileAttempt) error {
+ if a.ID=="" || a.Ordinal<1 || (a.Kind!="inert" && a.Kind!="session") {return fmt.Errorf("invalid attempt identity")}
+ if a.Generations==nil || a.Noise==nil || a.Errors==nil || a.Barriers==nil || a.Checkpoints==nil {return fmt.Errorf("known empty collections must be arrays")}
+ if !a.Valid {return nil} // Failed raw attempts remain reportable, never count as valid.
+ if a.Duration==nil || *a.Duration<0 || len(a.Errors)>0 || len(a.Barriers)==0 || len(a.Checkpoints)==0 {return fmt.Errorf("invalid successful attempt")}
+ for _,b:=range a.Barriers {if b.Name=="" || !b.Joined || b.Error!=nil{return fmt.Errorf("unjoined barrier")}}
+ for _,c:=range a.Checkpoints {
+  if err:=validateReport(c.Report);err!=nil{return err}
+  if c.Stage!="Q0" && c.Stage!="HOST_BASELINE" && c.Stage!="SAMPLE_CLOSED" && c.Stage!="Q2" {return fmt.Errorf("unsupported sample checkpoint")}
+  if len(c.Barriers)==0 {return fmt.Errorf("missing checkpoint barrier")}
+  for _,b:=range c.Barriers {if b.Name=="" || !b.Joined || b.Error!=nil{return fmt.Errorf("failed checkpoint barrier")}}
+ }
+ if a.Kind=="session" && (a.SessionID==nil || *a.SessionID=="" || len(a.Generations)==0) {return fmt.Errorf("missing explicit session attribution")}
+ return nil
+}
+func TestLifecycleProfileReportStatistics(t *testing.T) {
+ attempts:=[]profileAttempt{}
+ for i:=int64(10);i>=1;i-- {v:=i;attempts=append(attempts,profileAttempt{Kind:"inert",Duration:&v,Valid:true})}
+ failed:=int64(900);attempts=append(attempts,profileAttempt{Kind:"inert",Duration:&failed})
+ s:=summarizeProfile(attempts,"inert",true)
+ if s.ValidCount!=10 || s.AttemptCount!=11 || *s.Median!=5.5 || *s.P95!=10 || *s.Min!=1 || *s.Max!=10 {t.Fatalf("statistics: %#v",s)}
+ if summarizeProfile(attempts,"inert",false).Median!=nil {t.Fatal("capability must not publish timing statistics")}
+ // A noisy valid outlier remains part of the full observed range.
+ attempts[0].Duration=&failed;attempts[0].Noise=[]string{"shared host saturation"}
+ s=summarizeProfile(attempts,"inert",true)
+ if *s.Max!=900 || *s.P95!=900 {t.Fatal("noisy valid sample was removed")}
+}
+func TestLifecycleProfileReportRejectsInvalidSuccess(t *testing.T) {
+ duration:=int64(1)
+ valid:=func()profileAttempt{return profileAttempt{ID:"inert-1",Kind:"inert",Ordinal:1,Duration:&duration,Valid:true,
+ Generations:[]string{},Noise:[]string{},Errors:[]string{},Barriers:[]profileBarrier{{Name:"Close",Joined:true}},
+ Checkpoints:[]profileCheckpoint{{Report:validObserverReport(),Stage:"SAMPLE_CLOSED",Barriers:[]profileBarrier{{Name:"closed",Joined:true}}}}}}
+ if err:=validateProfileAttempt(valid());err!=nil{t.Fatal(err)}
+ cases:=[]func(*profileAttempt){
+  func(a *profileAttempt){a.Noise=nil},func(a *profileAttempt){a.Barriers[0].Joined=false},
+  func(a *profileAttempt){a.Checkpoints[0].Report.OwnerInventoryComplete=false},
+  func(a *profileAttempt){a.Errors=append(a.Errors,"cleanup failed")},
+  func(a *profileAttempt){a.Kind="session"},func(a *profileAttempt){a.Duration=nil},
+ }
+ for i,change:=range cases {a:=valid();change(&a);if validateProfileAttempt(a)==nil{t.Errorf("accepted invalid case %d",i)}}
+}

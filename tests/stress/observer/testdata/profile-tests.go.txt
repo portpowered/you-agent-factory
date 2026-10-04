@@ -1,0 +1,245 @@
+package observer_test
+
+import (
+ "context"
+ "crypto/sha256"
+ "encoding/hex"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "io"
+ "net/http/httptest"
+ "os"
+ "path/filepath"
+ "runtime"
+ "testing"
+ "time"
+
+ "github.com/google/uuid"
+ "github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+ platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+ "github.com/portpowered/infinite-you/pkg/root"
+ "github.com/portpowered/infinite-you/pkg/services/edges"
+ sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+)
+
+type profileManifest struct {
+ SchemaVersion int `json:"schemaVersion"`
+ Identity struct {
+  SourceCommit,SourceStatus,ToolCommit,ToolStatus string
+  ArtifactPath,ArtifactSHA256,PreparationManifestPath,PreparationManifestSHA256 string
+  OverlayPath,OverlaySHA256,GoVersion,BuildCommand,Mode string
+  BackingFiles []struct{Path,SHA256 string}
+ }
+ ChildPaths map[string]string
+ MethodSHA256 string
+}
+type sampleProfile struct {
+ Manifest profileManifest
+ ManifestPath,ManifestSHA256 string
+ Attempts []profileAttempt
+ Final []profileCheckpoint
+ Errors,CleanupErrors []string
+ LastBarrier string
+ CaptureNs int64
+ SnapshotCount,Callbacks int
+ Started string
+}
+
+// Full profiling is deliberately unavailable until the same artifact also
+// implements joined cycles and the composed public Models capacity witness.
+func TestLifecycleProfile(t *testing.T) {
+ if testing.Short(){t.Skip("dedicated lifecycle profile; no construction under -short")}
+ t.Fatal("full profile unsupported: joined 100-cycle retention and composed Models capacity remain required; use TestLifecycleProfileSamplesCapability")
+}
+func TestLifecycleProfileCapability(t *testing.T) {
+ if testing.Short(){t.Skip("dedicated composed capability")}
+ t.Fatal("composed capability unsupported until replacement cycles and public Models capacity are implemented")
+}
+
+// This dedicated tool is sequential because it observes all process owners.
+func TestLifecycleProfileSamplesCapability(t *testing.T) {
+ if testing.Short(){t.Skip("dedicated sample capability")}
+ r:=&sampleProfile{ManifestPath:os.Getenv("OBSERVER_PROFILE_MANIFEST"),Attempts:[]profileAttempt{},Final:[]profileCheckpoint{},Errors:[]string{},CleanupErrors:[]string{},LastBarrier:"manifest identity",Started:time.Now().UTC().Format(time.RFC3339Nano)}
+ defer r.emit(t)
+ r.load(t)
+ baselineobservation.Close()
+ defer baselineobservation.Close()
+ artifact:=smokeArtifact(t)
+ ctx,cancel:=context.WithTimeout(t.Context(),2*time.Minute);defer cancel()
+ if !r.attempt(t,"inert",func(t *testing.T,a *profileAttempt){
+  r.LastBarrier="inert BuildProcess/Close"
+  cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
+  started:=time.Now()
+  process,err:=root.BuildProcess(ctx,edges.Edges{})
+  if err!=nil{t.Fatal(err)}
+  err=process.Close(cleanup)
+  duration:=time.Since(started).Nanoseconds();a.Duration=&duration
+  if err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Fatal(err)}
+  a.Barriers=append(a.Barriers,profileBarrier{Name:"BuildProcess and Process.Close returned",Joined:true})
+  a.Checkpoints=append(a.Checkpoints,r.capture(t,artifact,"SAMPLE_CLOSED",nil,nil))
+ }){return}
+ r.session(t,ctx,artifact)
+}
+
+func (r *sampleProfile) load(t *testing.T) {
+ if !filepath.IsAbs(r.ManifestPath){t.Fatal("absolute OBSERVER_PROFILE_MANIFEST required")}
+ data,err:=os.ReadFile(r.ManifestPath);if err!=nil{t.Fatal(err)}
+ sum:=sha256.Sum256(data);r.ManifestSHA256=hex.EncodeToString(sum[:])
+ if err=json.Unmarshal(data,&r.Manifest);err!=nil{t.Fatal(err)}
+ m:=r.Manifest;id:=m.Identity
+ if m.SchemaVersion!=1 || id.SourceStatus!="" || id.ToolStatus!="" || len(id.SourceCommit)!=40 || len(id.ToolCommit)!=40 || len(m.MethodSHA256)!=64 {t.Fatal("unqualified profile identity")}
+ if id.Mode=="pin" && id.SourceCommit!="95e213cfb35b50236fd7a34ad66c797d2ee7b5b6"{t.Fatal("wrong original source pin")}
+ if id.Mode!="pin" && id.Mode!="candidate"{t.Fatal("unknown preparation mode")}
+ for _,item:=range []struct{Path,Hash string}{{id.ArtifactPath,id.ArtifactSHA256},{id.PreparationManifestPath,id.PreparationManifestSHA256},{id.OverlayPath,id.OverlaySHA256}} {
+  if err:=checkProfileHash(item.Path,item.Hash);err!=nil{t.Fatal(err)}
+ }
+ if len(id.BackingFiles)==0{t.Fatal("missing overlay backing identity")}
+ for _,backing:=range id.BackingFiles{if err:=checkProfileHash(backing.Path,backing.SHA256);err!=nil{t.Fatal(err)}}
+ for _,key:=range []string{"HOME","USERPROFILE","HOMEDRIVE","HOMEPATH","APPDATA","LOCALAPPDATA","XDG_CONFIG_HOME","XDG_CACHE_HOME","GOCACHE","GOPATH","GOMODCACHE","GOTMPDIR","TEMP","TMP"} {
+  value:=m.ChildPaths[key];if value==""{t.Fatalf("missing owned environment: %s",key)}
+  if key!="HOMEDRIVE" && key!="HOMEPATH" {
+   relative,err:=filepath.Rel(filepath.Dir(r.ManifestPath),value)
+   if err!=nil || !filepath.IsAbs(value) || relative==".." || len(relative)>3 && relative[:3]==".."+string(os.PathSeparator){t.Fatalf("environment path outside handoff: %s",key)}
+  }
+  t.Setenv(key,value)
+ }
+ t.Setenv("OBSERVER_MANIFEST",id.PreparationManifestPath)
+ t.Setenv("OBSERVER_ARTIFACT_SHA256",id.ArtifactSHA256)
+}
+func checkProfileHash(path,expected string) error {
+ if !filepath.IsAbs(path) || len(expected)!=64{return fmt.Errorf("missing absolute hashed identity: %s",path)}
+ data,err:=os.ReadFile(path);if err!=nil{return err}
+ sum:=sha256.Sum256(data)
+ if hex.EncodeToString(sum[:])!=expected{return fmt.Errorf("profile identity mismatch: %s",path)}
+ return nil
+}
+
+func (r *sampleProfile) attempt(t *testing.T,kind string,run func(*testing.T,*profileAttempt)) bool {
+ a:=profileAttempt{ID:uuid.NewString(),Kind:kind,Ordinal:1,Generations:[]string{},Noise:[]string{"shared host diagnostic; no measurement verdict"},Errors:[]string{},Barriers:[]profileBarrier{},Checkpoints:[]profileCheckpoint{}}
+ passed:=t.Run(kind,func(t *testing.T){
+  defer func(){if t.Failed(){a.Errors=append(a.Errors,"attempt failed at "+r.LastBarrier+"; see raw test output")}}()
+  run(t,&a)
+ })
+ r.LastBarrier=kind+" attempt returned"
+ a.Valid=passed && len(a.Errors)==0
+ if err:=validateProfileAttempt(a);err!=nil {a.Valid=false;a.Errors=append(a.Errors,err.Error());t.Error(err)}
+ r.Attempts=append(r.Attempts,a)
+ return a.Valid
+}
+
+func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifactIdentity) {
+ folder:=smokeFactory(t);home:=r.Manifest.ChildPaths["HOME"]
+ ready:=make(chan struct{})
+ process,err:=root.BuildProcess(ctx,edges.Edges{
+  FactorySessionIDGenerator:uuid.NewString,BrowserOpener:func(context.Context,string)error{return nil},ProviderCommandRunner:smokeCommandRunner{},
+  APIServerStarter:func(ctx context.Context,req platformhttpserver.StartRequest)error{
+   server:=httptest.NewServer(req.Handler)
+   if req.OnBound!=nil{req.OnBound(platformhttpserver.Binding{Port:req.Port})};close(ready)
+   <-ctx.Done();server.CloseClientConnections();server.Close();return nil
+  },
+ })
+ if err!=nil{t.Fatal(err)}
+ defer func(){
+  cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
+  r.LastBarrier="Process.Close"
+  if err:=process.Close(cleanup);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err);return}
+  if len(r.CleanupErrors)==0{r.Final=append(r.Final,r.capture(t,artifact,"Q2",nil,nil))}
+ }()
+ service,ok:=process.FactorySessions().FactorySessions().(sessions.Service)
+ if !ok{t.Fatal("public Factory Sessions capability unavailable")}
+ hostCtx,stopHost:=context.WithCancel(ctx)
+ done:=make(chan error,1)
+ go func(){done<-process.Execute(root.Input{Args:[]string{"you","run","--factory",filepath.Join(folder,"factory.json"),"--continuously","--with-server","--quiet","--no-record"},Env:[]string{"HOME="+home,"USERPROFILE="+home},Context:hostCtx,WorkingDirectory:folder,Stdout:io.Discard,Stderr:io.Discard})}()
+ defer func(){
+  stopHost();r.LastBarrier="Execute/server join"
+  select{case err:=<-done:if err!=nil && !errors.Is(err,context.Canceled){r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}
+  case <-time.After(30*time.Second):r.CleanupErrors=append(r.CleanupErrors,"Execute/server join ceiling reached");t.Error("Execute/server not joined")}
+ }()
+ r.LastBarrier="host readiness"
+ select{case <-ready:case err:=<-done:done<-err;t.Fatalf("host exited before readiness: %v",err);case <-ctx.Done():t.Fatal(ctx.Err())}
+ bootstrap,err:=service.List(ctx,sessions.SessionListRequest{Mode:sessions.SessionOperationModeLive});if err!=nil{t.Fatal(err)}
+ bootstrapIDs:=[]string{};for _,s:=range bootstrap.Sessions{bootstrapIDs=append(bootstrapIDs,s.SessionID)}
+ r.Final=append(r.Final,r.capture(t,artifact,"HOST_BASELINE",nil,bootstrapIDs))
+ r.attempt(t,"session",func(t *testing.T,a *profileAttempt){r.sessionAttempt(t,ctx,service,home,folder,artifact,bootstrapIDs,a)})
+}
+func (r *sampleProfile) sessionAttempt(t *testing.T,ctx context.Context,service sessions.Service,home,folder string,artifact artifactIdentity,bootstrap []string,a *profileAttempt) {
+ id,runtimeID:=uuid.NewString(),uuid.NewString();a.SessionID=&id
+ closed:=false
+ defer func(){if !closed{
+  cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
+  result,err:=service.Control(cleanup,sessions.SessionControlRequest{SessionID:id,Mode:sessions.SessionOperationModeLive,Operation:sessions.SessionControlClose})
+  if err!=nil && !errors.Is(err,sessions.ErrSessionNotFound){r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)} else if err==nil && !result.Closed{r.CleanupErrors=append(r.CleanupErrors,"session cleanup not acknowledged");t.Error("session cleanup not acknowledged")}
+ }}()
+ r.LastBarrier="Start/Work/Close"
+ started:=time.Now()
+ defer func(){if a.Duration==nil{duration:=time.Since(started).Nanoseconds();a.Duration=&duration}}()
+ opened,err:=service.Start(ctx,sessions.SessionStartRequest{SessionID:id,Mode:sessions.SessionOperationModeLive,FolderPath:folder,ActivationOnly:true,Correlation:sessions.SessionOperationCorrelation{RequestID:a.ID+"-open"},RuntimeSelection:&sessions.SessionRuntimeSelection{Mode:sessions.SessionRuntimeModeService,SystemConfigHome:home,RuntimeInstanceID:runtimeID}})
+ if err!=nil || opened.SessionID!=id{t.Fatalf("Start: %#v %v",opened,err)}
+ observer:=&smokeObserver{sessionID:id}
+ a.Generations=[]string{observer.generation(t,ctx,service)}
+ r.LastBarrier="terminal Work acknowledgment"
+ observer.invoke(t,ctx,service,a.ID+"-work")
+ r.LastBarrier="explicit Close acknowledgment"
+ result,err:=service.Control(ctx,sessions.SessionControlRequest{SessionID:id,Mode:sessions.SessionOperationModeLive,Operation:sessions.SessionControlClose})
+ duration:=time.Since(started).Nanoseconds();a.Duration=&duration
+ if err!=nil || !result.Closed{t.Fatalf("Close: %#v %v",result,err)};closed=true
+ a.Barriers=append(a.Barriers,profileBarrier{Name:"explicit Start/terminal Work/Close acknowledged",Joined:true})
+ a.Checkpoints=append(a.Checkpoints,r.capture(t,artifact,"SAMPLE_CLOSED",a,bootstrap))
+}
+func (r *sampleProfile) capture(t *testing.T,artifact artifactIdentity,stage string,a *profileAttempt,bootstrap []string) profileCheckpoint {
+ started:=time.Now();defer func(){r.CaptureNs+=time.Since(started).Nanoseconds()}()
+ observer:=&smokeObserver{artifact:artifact,bootstrap:append([]string{},bootstrap...)}
+ if a!=nil{observer.sessionID=*a.SessionID;observer.generations=a.Generations}
+ observer.capture(t,"Q2","joined quiescent "+stage)
+ report:=observer.reports[0];r.SnapshotCount++;r.Callbacks=len(report.Owners)
+ return profileCheckpoint{Report:report,Stage:stage,Barriers:[]profileBarrier{{Name:"joined quiescent "+stage,Joined:true}}}
+}
+func (r *sampleProfile) emit(t *testing.T) {
+ if t.Failed(){r.Errors=append(r.Errors,"selected workload failed; retain raw stdout/stderr")}
+ complete:=!t.Failed() && r.validateSamples()==nil
+ host,_:=os.Hostname();if host==""{host="unavailable"}
+ summaries:=map[string]profileSummary{"inert":summarizeProfile(r.Attempts,"inert",false),"session":summarizeProfile(r.Attempts,"session",false)}
+ payload:=map[string]any{"schemaVersion":1,"mode":"samples_capability","manifestPath":r.ManifestPath,"manifestSHA256":r.ManifestSHA256,
+ "hostWindow":map[string]any{"confirmed":false,"authorityReference":nil,"host":host,"cpu":fmt.Sprintf("%s/%s; CPUs=%d",runtime.GOOS,runtime.GOARCH,runtime.NumCPU()),"memory":"not measured; shared host","cache":"owned runtime paths; cached preparation toolchain","startedUTC":r.Started,"endedUTC":time.Now().UTC().Format(time.RFC3339Nano),"coTenantBreach":false},
+ "complete":complete,"baselineQualified":false,"lastBarrier":r.LastBarrier,"errors":r.Errors,"cleanupErrors":r.CleanupErrors,"attempts":r.Attempts,"summaries":summaries,"cycles":[]any{},"capacityWitnesses":[]any{},"finalCheckpoints":r.Final,
+ "overhead":map[string]any{"methodSHA256":r.Manifest.MethodSHA256,"registrationCallbacks":r.Callbacks,"retainedOwnerCallbacks":r.Callbacks,"snapshotCount":r.SnapshotCount,"captureOutsideSpanNs":r.CaptureNs,"serializationOutsideSpanNs":int64(0),"matchedFinalRequired":true}}
+ started:=time.Now();_,err:=json.MarshalIndent(payload,"","  ")
+ payload["overhead"].(map[string]any)["serializationOutsideSpanNs"]=time.Since(started).Nanoseconds()
+ data,encodeErr:=json.MarshalIndent(payload,"","  ")
+ if err!=nil || encodeErr!=nil{t.Errorf("report serialization: %v %v",err,encodeErr);return}
+ path:=os.Getenv("OBSERVER_REPORT")
+ if !filepath.IsAbs(path){err=fmt.Errorf("absolute OBSERVER_REPORT required")}else{err=os.WriteFile(path,data,0600)}
+ if err!=nil{t.Error(err);payload["complete"]=false;r.Errors=append(r.Errors,err.Error());payload["errors"]=r.Errors;data,_=json.MarshalIndent(payload,"","  ")}
+ t.Log(string(data))
+}
+
+func (r *sampleProfile) validateSamples() error {
+ if len(r.Errors)>0 || len(r.CleanupErrors)>0 || r.Errors==nil || r.CleanupErrors==nil {return fmt.Errorf("workload or cleanup failure")}
+ if len(r.Attempts)!=2 || len(r.Final)!=2 {return fmt.Errorf("incomplete sample workload")}
+ kinds:=map[string]bool{};ids:=map[string]bool{}
+ for _,a:=range r.Attempts {
+  if !a.Valid || kinds[a.Kind] || ids[a.ID] || a.Ordinal!=1 {return fmt.Errorf("failed, duplicate or missing sample")}
+  if err:=validateProfileAttempt(a);err!=nil{return err}
+  kinds[a.Kind]=true;ids[a.ID]=true
+ }
+ if !kinds["inert"] || !kinds["session"] || r.Final[0].Stage!="HOST_BASELINE" || r.Final[1].Stage!="Q2" {return fmt.Errorf("missing workload or final join")}
+ for _,c:=range r.Final {if err:=validateReport(c.Report);err!=nil{return err}}
+ return nil
+}
+func TestLifecycleProfileDriverMissingAttemptsAndCleanup(t *testing.T) {
+ r:=&sampleProfile{Errors:[]string{},CleanupErrors:[]string{},Attempts:[]profileAttempt{},Final:[]profileCheckpoint{}}
+ if r.validateSamples()==nil{t.Fatal("empty workload reported complete")}
+ r.CleanupErrors=append(r.CleanupErrors,"stop join canceled")
+ if r.validateSamples()==nil{t.Fatal("cleanup failure reported complete")}
+}
+
+func TestLifecycleProfileDriverArtifactIdentity(t *testing.T) {
+ path:=filepath.Join(t.TempDir(),"artifact")
+ if err:=os.WriteFile(path,[]byte("attested"),0600);err!=nil{t.Fatal(err)}
+ hash:=sha256.Sum256([]byte("attested"));expected:=hex.EncodeToString(hash[:])
+ if err:=checkProfileHash(path,expected);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(path,[]byte("changed"),0600);err!=nil{t.Fatal(err)}
+ if checkProfileHash(path,expected)==nil{t.Fatal("changed artifact accepted")}
+ if checkProfileHash("relative",expected)==nil{t.Fatal("relative artifact accepted")}
+}

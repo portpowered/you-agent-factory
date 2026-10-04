@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+from profile_prepare import build_profile
 
 PIN = "95e213cfb35b50236fd7a34ad66c797d2ee7b5b6"
 HOST = "pkg/services/factory_runtime/internal/services/instance_host/internal/service"
@@ -46,10 +47,16 @@ def prepare(args):
     tool = Path(__file__).resolve().parent
     if output == source or source in output.parents and not output.is_relative_to(source / ".artifacts"):
         raise ValueError("output must be outside source or under its ignored .artifacts directory")
+    if args.build_profile:
+        (output / "profile-manifest.json").unlink(missing_ok=True)
     head = git(source, "rev-parse", "HEAD")
     if args.mode == "pin" and head != PIN:
         raise ValueError("pin mode requires original pin " + PIN)
     templates = tool / "testdata"
+    if args.build_profile:
+        # Never leave an old qualified handoff after a failed new preparation.
+        if git(source, "status", "--porcelain") or git(tool, "status", "--porcelain"):
+            raise ValueError("--build-profile requires clean source and committed clean tooling")
     replacements = {}
     files = []
 
@@ -93,12 +100,14 @@ def prepare(args):
                     "internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2})\n\tleaseswire.BindCoordinator(owner, &recordingSlotCapacityCoordinator{})",
                 )
         add(path + "/" + existing, original.replace("import (", "import (" + imports, 1) + calibration)
-    for template, virtual in [("collector-tests.go.txt", "pkg/platform/baselineobservation/hook_test.go"), ("q0-tests.go.txt", "tests/stress/observer/observer_test.go"), ("lifecycle-tests.go.txt", "tests/stress/observer/lifecycle_test.go"), ("report.go.txt", "tests/stress/observer/report_test.go"), ("report-tests.go.txt", "tests/stress/observer/report_validation_test.go")]:
+    for template, virtual in [("collector-tests.go.txt", "pkg/platform/baselineobservation/hook_test.go"), ("q0-tests.go.txt", "tests/stress/observer/observer_test.go"), ("lifecycle-tests.go.txt", "tests/stress/observer/lifecycle_test.go"), ("report.go.txt", "tests/stress/observer/report_test.go"), ("report-tests.go.txt", "tests/stress/observer/report_validation_test.go"), ("profile-tests.go.txt", "tests/stress/observer/profile_test.go"), ("profile-report.go.txt", "tests/stress/observer/profile_report_test.go")]:
         add(virtual, (templates / template).read_text())
     overlay = output / "overlay.json"
     overlay.write_text(json.dumps({"Replace": replacements}, indent=2) + "\n")
     manifest = {"sourceCommit": head, "sourceStatus": git(source, "status", "--porcelain"), "toolSourceCommit": git(tool, "rev-parse", "HEAD"), "mode": args.mode, "files": files, "overlaySHA256": hashlib.sha256(overlay.read_bytes()).hexdigest(), "goVersion": subprocess.check_output(["go", "version"], text=True).strip(), "protocol": "owner-unit-and-Q0/Q1/Q2; terminal-session replacement", "buildCommand": f'go test -c -overlay "{overlay}" -p 1 -o "{output / "observer.test.exe"}" ./tests/stress/observer', "fixture": "one root process; controlled Codex command edge; idle bootstrap; explicit session Work/terminal replacement/close; no model or remote calls"}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    if args.build_profile:
+        build_profile(source, output, tool, manifest, files, args.mode)
     print(overlay)
 
 
@@ -107,6 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--source-workspace", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--mode", choices=["pin", "candidate"], required=True)
+    parser.add_argument("--build-profile", action="store_true", help="compile and attest a prebuilt profile artifact; requires clean committed tooling")
     try:
         prepare(parser.parse_args())
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
