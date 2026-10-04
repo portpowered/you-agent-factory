@@ -25,6 +25,21 @@ merged code, name it briefly in the envelope feedback
 so the operator can file a NEW work item — it is never a reason to reject or
 loop this lane.
 
+### Step 0.1 — Recover an open draft before ordinary CI holds
+After the merged-PR short-circuit, read
+`gh pr view <pr> --json state,isDraft,headRefOid`.
+For an OPEN draft, run `gh pr ready <pr>`, then run
+`gh pr merge <pr> --squash` to arm merge or enqueue it.
+Confirm each command outcome and refresh the PR state and head without waiting
+for terminal checks. If it merged, follow Step 0. Otherwise return `CONTINUE`
+so the configured route hands this task back to ci-wait.
+This draft-ready action explicitly overrides Step 6's in-visit queue wait,
+Step 2.1's ordinary hold, and Step 4.2's convergence guidance.
+Do not reject or return an unchanged hold while readiness is still actionable.
+If ready or merge arming fails, report the bounded error and actual recovery
+owner. Never claim a failed command made the PR ready, armed, or merged.
+A changed head requires fresh evidence; never infer merge from arming success.
+
 ### Step 1 — Gather context
 1. Read prd.json to understand what was implemented
 2. Use PR conversation comments as the single feedback channel for this workflow:
@@ -66,7 +81,8 @@ handled by Step 2.1 recovery and never requires speculative author changes.
 If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md. This worker starts without the Playwright MCP, so run the browser check in a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. The nested session loads the full browser tooling for that step only. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 
 ### Step 2.1 — Reconcile CI state before commenting
-After merge has been armed or enqueued, Step 6 owns the bounded in-visit wait.
+Except for Step 0.1 draft recovery, after merge has been armed or enqueued,
+Step 6 owns the bounded in-visit wait.
 Queue progress must not take the ordinary pending-CI CONTINUE route below.
 
 - For a never-queued PR, CI is normally terminal on arrival: this work item reached you through the
@@ -248,8 +264,9 @@ operator to file separately. From the third review pass onward the decision
 bar is: MERGE unless an unfixed previously-flagged blocker or red required CI
 remains.
 
-After enqueue or auto-merge arming, follow Step 6 inside this visit; do not
-route queue waiting through another review visit.
+Except for Step 0.1 draft recovery, after enqueue or auto-merge arming,
+follow Step 6 inside this visit; do not route queue waiting through another
+review visit. Draft recovery returns CONTINUE to ci-wait immediately.
 
 Route a converged repeat review as a HOLD only after applying Step 2.1:
 a qualifying terminal untouched-red result must perform that recovery, even
@@ -293,7 +310,8 @@ For `MERGEABLE`, run `gh pr merge <n> --squash`, even when the head is behind ma
 Do not rebase or require checks to rerun merely because the head is behind main.
 The merge command can enqueue the PR or arm auto-merge instead of merging immediately.
 
-After enqueue or auto-merge arming, hand waiting to ci-wait inside this review visit.
+Except for Step 0.1 draft recovery, after enqueue or auto-merge arming,
+hand waiting to ci-wait inside this review visit.
 Run `python factory/scripts/ci-wait.py <lane-name> "PR #<n>"` from this lane's checkout.
 Keep that script invocation running and collect its final JSON and exit status.
 The script owns polling. Do not repeat review or emit CONTINUE solely to await the queue.
@@ -330,7 +348,9 @@ review summary and acceptance-criteria checklist in the envelope's `feedback`
 field. Set `decision` to:
 
 - `ACCEPTED` only when the PR is complete, approved, and merged;
-- `CONTINUE` = waiting on genuinely pending CI or external state with no
+- `CONTINUE` = Step 0.1 draft recovery hands back to ci-wait immediately,
+  including after successful arming; this is the explicit draft-only exception
+  to the queue-wait rule. Otherwise, waiting on genuinely pending CI or external state with no
   available recovery action. After enqueue/arming, keep Step 6's bounded wait
   inside this visit; queue waiting alone never emits CONTINUE.
   A terminal untouched-red result invokes Step 2.1 recovery, including on an
