@@ -356,24 +356,24 @@ test("structured finding growth exceeds an allowance even on one diagnostic line
 	assert.match(grown.failures.join("\n"), /packaged-factory-consumption-check reported 2 violation\(s\), exceeding its baseline allowance of 1/);
 });
 
-test("ownership-inventory-check has no allowance left to absorb a regression", () => {
-	assert.equal(BACKEND_LINT_ALLOWANCES["ownership-inventory-check"], undefined);
+test("retired-surface-check has no allowance left to absorb a regression", () => {
+	assert.equal(BACKEND_LINT_ALLOWANCES["retired-surface-check"], undefined);
 
 	const summary = summarizeBackendLintReport(report({
 		targets: [
 			...baselineTargets(),
-			unallowlistedTarget("ownership-inventory-check", "inventory drift\nLINT_VIOLATION_COUNT: 1"),
+			unallowlistedTarget("retired-surface-check", "inventory drift\nLINT_VIOLATION_COUNT: 1"),
 		],
 	}));
 
 	assert.equal(summary.ok, false);
 	assert.match(
 		summary.failures.join("\n"),
-		/ownership-inventory-check failed with 1 reported violation\(s\); no baseline allowance exists/,
+		/retired-surface-check failed with 1 reported violation\(s\); no baseline allowance exists/,
 	);
 	assert.match(
 		renderBackendLintVerdict(summary),
-		/ownership-inventory-check: baseline 0 -> current 1 \(delta \+1; new failure\)/,
+		/retired-surface-check: baseline 0 -> current 1 \(delta \+1; new failure\)/,
 	);
 });
 
