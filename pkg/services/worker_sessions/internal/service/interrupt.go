@@ -672,10 +672,24 @@ func interruptSuccessorMatches(
 	reference providers.SessionRef,
 	sourceDispatchID string,
 ) bool {
-	return session.ID != "" && session.State == workersessions.StateRunning &&
+	return session.ID != "" && interruptSuccessorAdmittedState(session.State) &&
 		session.ProviderSessionAssociation != nil &&
 		session.ProviderSessionAssociation.Reference == reference &&
 		session.ProviderSessionAssociation.DispatchID == continuationDispatchID(sourceDispatchID, session.ID)
+}
+
+// interruptSuccessorAdmittedState reports whether a successor snapshot taken
+// after Workers admission is consistent with a successful admission. The
+// snapshot is read after the admission barrier opens, so a fast successor may
+// already have progressed past RUNNING to COMPLETED; that is still an accepted
+// admission, not a mismatch.
+func interruptSuccessorAdmittedState(state workersessions.State) bool {
+	switch state {
+	case workersessions.StateStarting, workersessions.StateRunning, workersessions.StateCompleted:
+		return true
+	default:
+		return false
+	}
 }
 
 func finishInterruptExecution(supervision *supervision, canceled bool) {
