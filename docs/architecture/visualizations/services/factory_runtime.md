@@ -168,5 +168,4 @@ flowchart LR
 | [`pkg/services/factory_runtime/transports/http/internal/common`](../../../../pkg/services/factory_runtime/transports/http/internal/common) | 167 | 2 | 98.3% | XX% |
 | [`pkg/services/factory_runtime/transports/http/internal/errors`](../../../../pkg/services/factory_runtime/transports/http/internal/errors) | 140 | 1 | 97.9% | XX% |
 | [`pkg/services/factory_runtime/transports/http/observation`](../../../../pkg/services/factory_runtime/transports/http/observation) | 97 | 2 | 100.0% | XX% |
-| [`pkg/services/factory_runtime/transports/mcp`](../../../../pkg/services/factory_runtime/transports/mcp) | 825 | 9 | 81.9% | XX% |
 | [`pkg/services/factory_runtime/wire`](../../../../pkg/services/factory_runtime/wire) | 207 | 5 | XX% | 77.3% |

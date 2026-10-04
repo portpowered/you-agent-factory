@@ -11,13 +11,13 @@ import (
 )
 
 // Behavior keeps behavior out of the packages that must stay thin: the
-// initializer must not construct product dependencies, and transport mappers
-// must not touch the filesystem, processes, timers or goroutines. It replaces
-// the call-site rules of the retired ownershipboundarycheck. Calls are
-// resolved through go/types, so import aliases cannot hide a call.
+// initializer must not construct product dependencies, and transports must
+// not own service policy, external effects or asynchronous lifecycle. Mapping
+// keeps its existing rule IDs for overlapping findings. Objects are resolved
+// through go/types, so import aliases cannot hide an operation.
 var Behavior = &analysis.Analyzer{
 	Name: "behavior",
-	Doc:  "forbid construction in pkg/initializer and I/O, timers and goroutines in pkg/transports/mapping",
+	Doc:  "keep initializer construction and transport behavior behind their owning service boundaries",
 	Run:  runBehavior,
 }
 
@@ -39,6 +39,10 @@ var behaviorRuleNames = func() map[string]bool {
 	} {
 		names[rule] = true
 		names[rule+"-test"] = true
+	}
+	for _, kind := range transportBehaviorKinds {
+		names["transport-"+kind] = true
+		names["transport-"+kind+"-test"] = true
 	}
 	return names
 }()
@@ -68,7 +72,8 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 	importer := strings.TrimSuffix(unit, "_test")
 	initializer := under(importer, "pkg/initializer")
 	mapping := under(importer, "pkg/transports/mapping")
-	if !initializer && !mapping {
+	transport := under(importer, "pkg/transports")
+	if !initializer && !transport {
 		return nil, nil
 	}
 	var found []violation
@@ -90,6 +95,9 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 		}
 		if mapping {
 			mappingFindings(pass, file, add)
+		}
+		if transport {
+			transportFindings(pass, file, importer, test, add)
 		}
 	}
 	reportAgainstBaseline(pass, unit, behaviorRuleNames, found, hasTests)
