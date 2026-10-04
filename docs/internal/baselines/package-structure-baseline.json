@@ -514,31 +514,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/cron_root_composition_test.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/doc.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/filesystem_watcher_root_composition_test.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/hosted_sources_root_composition_test.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/script_poller_root_composition_test.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "target": "bootstrap_portability"
     },

@@ -23,6 +23,7 @@ type Response struct { ID string }
 	writeTestFile(t, repoRoot, "pkg/services/orders/internal/services/history/internal/service.go", "package internal\nfunc run() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/workers/script/execution_test.go", "package script_test\nfunc TestExecution() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/models/model_invoke/ready_test.go", "package model_invoke_test\nfunc TestReady() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/automations/scheduling/selected_time_test.go", "package automations\nfunc TestSelectedTime() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/internal/support/process.go", "package support\n")
 
 	findings, err := scan(repoRoot)
@@ -38,7 +39,7 @@ func TestAllowedFunctionalDomainsMatchExpansionPlan(t *testing.T) {
 	t.Parallel()
 	want := []string{
 		"transport", "workers", "orchestration", "workstations", "work", "sessions",
-		"factory", "providers", "provider_sessions", "events", "recordings", "models", "guards", "resources",
+		"factory", "factory_definitions", "operator_settings", "automations", "providers", "provider_sessions", "events", "recordings", "models", "guards", "resources",
 		"observability", "product", "resilience",
 	}
 	if len(allowedFunctionalDomains) != len(want) {

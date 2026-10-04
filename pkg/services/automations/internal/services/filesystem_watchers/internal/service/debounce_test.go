@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -104,17 +105,29 @@ func TestFileWatcher_DebounceSingleEventSettlesOnce(t *testing.T) {
 	dir := setupWatchDir(t)
 	path := filepath.Join(dir, "request", "default", "single.md")
 	content := []byte("single event")
-	if err := writeLocalFile(path, content); err != nil {
-		t.Fatal(err)
-	}
 
 	clock := clockwork.NewFakeClock()
 	submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	eventWatcher := newScriptedEventWatcher()
 	fw := newDebouncedTestWatcher(dir, submitter, clock, eventWatcher)
+	discovered := make(chan struct{})
+	fw.walkDirectory = func(root string, fn fs.WalkDirFunc) error {
+		err := filepath.WalkDir(root, fn)
+		close(discovered)
+		return err
+	}
 	cancel, done := startDebouncedWatch(t, fw, eventWatcher)
 	defer cancel()
 
+	// Complete empty-directory discovery before publishing the single event.
+	select {
+	case <-discovered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("initial directory discovery did not complete")
+	}
+	if err := writeLocalFile(path, content); err != nil {
+		t.Fatal(err)
+	}
 	eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
 	advanceDebounce(t, clock)
 

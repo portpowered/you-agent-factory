@@ -58,6 +58,7 @@ var allowedServiceRootDirectories = map[string]struct{}{
 // and provider-specific scenarios share providers/<subsection>/..., while
 // root-level providers/*.go remains deletion-only aggregate debt.
 var allowedFunctionalDomains = map[string]struct{}{
+	"automations":         {},
 	"transport":           {},
 	"workers":             {},
 	"orchestration":       {},
