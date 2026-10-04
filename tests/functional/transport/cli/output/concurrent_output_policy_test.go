@@ -380,6 +380,8 @@ func TestInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
 			normal.runner.release()
 			quiet.join(t)
 			normal.join(t)
+			assertInjectedOutputDiagnostics(t, quiet)
+			assertInjectedOutputDiagnostics(t, normal)
 			assertConcurrentOutputSuccess(t, 0, quiet, []*concurrentOutputCall{quiet, normal})
 			if !tty {
 				assertConcurrentOutputSuccess(t, 3, normal, []*concurrentOutputCall{quiet, normal})
@@ -398,5 +400,38 @@ func TestInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
 				assertConcurrentOutputHuman(t, normal, plain)
 			}
 		})
+	}
+}
+
+func assertInjectedOutputDiagnostics(t *testing.T, call *concurrentOutputCall) {
+	t.Helper()
+	requestID, traceID := "", ""
+	submitted, completed := 0, 0
+	for _, entry := range call.fixture.diagnostics.All() {
+		fields := entry.ContextMap()
+		if fields["session_id"] != call.sessionID || !strings.HasPrefix(entry.Message, "factory session invocation ") {
+			continue
+		}
+		encoded, err := json.Marshal(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "owned input "+call.marker) {
+			t.Fatal("invocation diagnostic leaked caller input")
+		}
+		switch entry.Message {
+		case "factory session invocation submitted":
+			submitted++
+			requestID, _ = fields["request_id"].(string)
+			traceID, _ = fields["trace_id"].(string)
+		case "factory session invocation completed":
+			completed++
+			if fields["request_id"] != requestID || fields["trace_id"] != traceID || fields["status"] != "COMPLETED" || fields["resolved_work_id"] == "" {
+				t.Fatalf("CLI invocation diagnostic correlation=%#v", fields)
+			}
+		}
+	}
+	if submitted != 1 || completed != 1 || requestID == "" || traceID == "" {
+		t.Fatalf("CLI session %s submitted/completed=%d/%d request=%s trace=%s", call.sessionID, submitted, completed, requestID, traceID)
 	}
 }
