@@ -40,6 +40,62 @@ func cancelEqualPhysicalAttempt(t *testing.T, a *perRuntimeAttemptFixture, contr
 	}
 }
 
+// A different runtime or dispatch does not authorize reusing a Worker identity
+// within the same Factory Session, including after its history is retained.
+func TestKeyedRuntimeWorkerIdentityDuplicateWithinFactorySession(t *testing.T) {
+	t.Parallel()
+	for _, terminal := range []bool{false, true} {
+		t.Run(fmt.Sprintf("terminal=%t", terminal), func(t *testing.T) {
+			t.Parallel()
+			eventStore := newEventsAppender()
+			sink := &perRuntimeAppendCapture{EventsAppender: eventStore}
+			owner := newPerRuntimeAttemptFixture(t, "identity-owner", sink)
+			peer := newPerRuntimeAttemptFixture(t, "identity-peer", sink, owner)
+			state := workersessions.StateRunning
+			if terminal {
+				if err := owner.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+					t.Fatal(err)
+				}
+				state = workersessions.StateCompleted
+			}
+			before := assertPerRuntimeAttemptState(t, owner, state)
+			observation := assertPerRuntimeObservation(t, owner, state)
+			appends := sink.requestsFor("")
+			topic := workersessions.Topic(owner.request.ID)
+			records := readPerRuntimeTopic(t, eventStore, topic)
+			duplicate := owner.request
+			duplicate.Key = workersessions.RuntimeAttemptKey{RuntimeID: "duplicate-runtime", DispatchID: "duplicate-dispatch"}
+			duplicate.Execution = cloneWorkstationDispatchRequest(owner.request.Execution)
+			duplicate.Execution.Execution.RuntimeID = duplicate.Key.RuntimeID
+			duplicate.Execution.Execution.Dispatch.DispatchID = duplicate.Key.DispatchID
+			duplicate.AttemptID = "duplicate-physical"
+			attempt, err := owner.service.BeginRuntimeAttempt(context.Background(), duplicate, owner.service.execution, coverageClock{now: owner.clock}, owner.service.scheduler, owner.control.cancel)
+			if attempt != nil || !errors.Is(err, workersessions.ErrSessionNotStartable) {
+				t.Fatalf("same-session duplicate = %v, %v; want nil/ErrSessionNotStartable", attempt, err)
+			}
+			assertDuplicateWorkerHistoryUnchanged(t, owner, sink, eventStore, before, observation, appends, records)
+			publishPerRuntimeProgress(t, peer, sink)
+			if err := peer.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeFirstTerminal(t, peer, sink, workersessions.StateCompleted)
+		})
+	}
+}
+
+func assertDuplicateWorkerHistoryUnchanged(t *testing.T, owner *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, eventStore events.Service, before workersessions.Session, observation workersessions.Observation, appends []events.AppendRequest, records events.ReadResult) {
+	t.Helper()
+	if after := assertPerRuntimeAttemptState(t, owner, before.State); !reflect.DeepEqual(before, after) {
+		t.Fatalf("duplicate changed retained owner: %#v", after)
+	}
+	if after := assertPerRuntimeObservation(t, owner, before.State); !reflect.DeepEqual(observation, after) {
+		t.Fatalf("duplicate changed retained observation: %#v", after)
+	}
+	if !reflect.DeepEqual(appends, sink.requestsFor("")) || !reflect.DeepEqual(records, readPerRuntimeTopic(t, eventStore, workersessions.Topic(owner.request.ID))) {
+		t.Fatal("duplicate changed source-native publications or retained owner topic")
+	}
+}
+
 func TestKeyedRuntimeAsyncAdmissionSelectsEffectsAndKeepsDirectScope(t *testing.T) {
 	t.Parallel()
 	r := newTestRegistry(t)
