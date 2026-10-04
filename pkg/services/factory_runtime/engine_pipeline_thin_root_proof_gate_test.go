@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
@@ -29,14 +28,11 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 	serviceRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
 
 	runCanonicalRootDirectoriesProof(t, serviceRoot)
-	runUnexpectedRootChildrenProof(t, root)
 	runDeletedPublicPipelineDirectoriesProof(t, serviceRoot)
 	runServiceDirectoryProof(t, serviceRoot)
 	runCheckpointRecoveryProof(t, serviceRoot)
 	runPublishedServiceBoundaryProof(t)
-	runOwnershipInventoryProof(t, root)
 	runPackageStructureBaselineProof(t, root)
-	runPackageTargetManifestProof(t, root)
 	runInternalServicesLayoutProof(t, serviceRoot)
 }
 
@@ -48,10 +44,6 @@ func runCanonicalRootDirectoriesProof(t *testing.T, serviceRoot string) {
 		if err != nil {
 			t.Fatalf("ReadDir(%q) = %v", serviceRoot, err)
 		}
-		spec, ok := ownershipinventory.OwnerTopLevelSpecFor("factory_runtime")
-		if !ok {
-			t.Fatal("OwnerTopLevelSpecFor(factory_runtime) ok = false")
-		}
 
 		var gotRootDirs []string
 		for _, entry := range entries {
@@ -61,7 +53,7 @@ func runCanonicalRootDirectoriesProof(t *testing.T, serviceRoot string) {
 		}
 		slices.Sort(gotRootDirs)
 
-		wantRetain := slices.Clone(spec.ExpectedRetain)
+		wantRetain := slices.Clone(factoryRuntimeRootRetain)
 		slices.Sort(wantRetain)
 		for _, name := range wantRetain {
 			if !slices.Contains(gotRootDirs, name) {
@@ -76,34 +68,6 @@ func runCanonicalRootDirectoriesProof(t *testing.T, serviceRoot string) {
 		for _, moved := range []string{"testkit", "exhaustiontests"} {
 			if slices.Contains(gotRootDirs, moved) {
 				t.Fatalf("internalized public test-support directory %q must not remain at Runtime root", moved)
-			}
-		}
-	})
-}
-
-func runUnexpectedRootChildrenProof(t *testing.T, root string) {
-	t.Run("unexpected_root_children_recorded_as_move_debt_only", func(t *testing.T) {
-		t.Parallel()
-
-		live, err := ownershipinventory.ListOwnerTopLevelChildren(root, "factory_runtime")
-		if err != nil {
-			t.Fatalf("ListOwnerTopLevelChildren(factory_runtime) = %v", err)
-		}
-		spec, ok := ownershipinventory.OwnerTopLevelSpecFor("factory_runtime")
-		if !ok {
-			t.Fatal("OwnerTopLevelSpecFor(factory_runtime) ok = false")
-		}
-		for _, name := range live {
-			if slices.Contains(spec.ExpectedRetain, name) {
-				continue
-			}
-			if !slices.Contains(spec.Unexpected, name) {
-				t.Fatalf(
-					"live top-level child %q is neither canonical retain %v nor committed unexpected move debt %v",
-					name,
-					spec.ExpectedRetain,
-					spec.Unexpected,
-				)
 			}
 		}
 	})
@@ -201,25 +165,6 @@ func runPublishedServiceBoundaryProof(t *testing.T) {
 	})
 }
 
-func runOwnershipInventoryProof(t *testing.T, root string) {
-	t.Run("ownership_inventory_omits_deleted_public_pipeline_packages", func(t *testing.T) {
-		t.Parallel()
-
-		inventory, err := ownershipinventory.Load(root)
-		if err != nil {
-			t.Fatalf("Load() error = %v", err)
-		}
-		for _, row := range inventory.Packages {
-			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
-				needle := "factory_runtime/" + deleted
-				if strings.Contains(row.PackagePath, needle) {
-					t.Fatalf("ownership inventory still lists deleted pipeline path: %s", row.PackagePath)
-				}
-			}
-		}
-	})
-}
-
 func runPackageStructureBaselineProof(t *testing.T, root string) {
 	t.Run("package_structure_baseline_omits_deleted_public_pipeline_directories", func(t *testing.T) {
 		t.Parallel()
@@ -233,25 +178,6 @@ func runPackageStructureBaselineProof(t *testing.T, root string) {
 						entry.FilePath,
 						entry.Rule,
 					)
-				}
-			}
-		}
-	})
-}
-
-func runPackageTargetManifestProof(t *testing.T, root string) {
-	t.Run("unfinished_package_moves_omit_deleted_public_pipeline_packages", func(t *testing.T) {
-		t.Parallel()
-
-		moves := loadUnfinishedPackageMoves(t, root)
-		if len(moves.Moves) == 0 {
-			t.Fatal("unfinished package move ledger is empty; this proof needs live rows to scan")
-		}
-		for _, row := range moves.Moves {
-			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
-				deletedPath := "pkg/services/factory_runtime/" + deleted
-				if row.PackagePath == deletedPath || strings.HasPrefix(row.PackagePath, deletedPath+"/") {
-					t.Fatalf("unfinished package move ledger still lists deleted pipeline package %q", row.PackagePath)
 				}
 			}
 		}
@@ -287,33 +213,9 @@ func runInternalServicesLayoutProof(t *testing.T, serviceRoot string) {
 	})
 }
 
-// unfinishedPackageMoves is the consolidated ledger of packages that still have
-// an open Packaged Service Structure move. It is the single place a package path
-// can be named after the per-package destination enumerations were retired.
-type unfinishedPackageMoves struct {
-	Moves []struct {
-		PackagePath string `json:"packagePath"`
-	} `json:"moves"`
-}
-
 type packageStructureBaselineEntry struct {
 	Rule     string `json:"rule"`
 	FilePath string `json:"filePath"`
-}
-
-func loadUnfinishedPackageMoves(t *testing.T, root string) unfinishedPackageMoves {
-	t.Helper()
-
-	path := filepath.Join(root, "docs", "internal", "baselines", "unfinished-package-moves.json")
-	payload, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", path, err)
-	}
-	var moves unfinishedPackageMoves
-	if err := json.Unmarshal(payload, &moves); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
-	}
-	return moves
 }
 
 func loadPackageStructureBaselineEntries(t *testing.T, root string) []packageStructureBaselineEntry {

@@ -189,7 +189,7 @@
     },
     {
       "packagePath": "pkg/services/operator_settings",
-      "fileCount": 19,
+      "fileCount": 18,
       "owner": "operator-settings-maintainers",
       "removalReason": "Separate settings persistence from effective configuration behavior."
     },
