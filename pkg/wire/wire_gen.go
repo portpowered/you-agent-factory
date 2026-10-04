@@ -699,7 +699,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v169 := provideWatchReconnectWait()
+	v169 := provideWatchReconnectWait(timerSource)
 	watchWorkOperation := provideWatchWorkOperation(wireWatchCLIHTTPProtocol, v169)
 	showWorkOperation := provideShowWorkOperation(wireStandardCLIHTTPProtocol)
 	moveWorkOperation := provideMoveWorkOperation(wireExtendedCLIHTTPProtocol)

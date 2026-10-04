@@ -1,87 +1,163 @@
 package watch_test
 
 import (
-	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const (
-	workWatchAttachmentTimeout = 5 * time.Second
-	workWatchEventPath         = "/factory-sessions/~default/events"
-)
+// Only the loopback connection is substituted. All responses and retained
+// cursors are emitted by the real Factory Session handlers and recording ledger.
+const workWatchAttachmentTimeout = 30 * time.Second
+const workWatchEventPath = "/factory-sessions/~default/events"
 
-// workWatchStreamGate observes the successful response boundary of the exact
-// public Factory Event SSE request. ReverseProxy keeps the production server,
-// handler, subscription, and response body on the executable spine while the
-// package-local server exposes a deterministic test signal.
-type workWatchStreamGate struct {
-	server   *httptest.Server
-	attached chan struct{}
-	once     sync.Once
-
-	mu            sync.Mutex
-	lastStatus    int
-	lastMediaType string
+type selectedWatchDisconnectGate struct {
+	server      *httptest.Server
+	command     *support.ProcessCommand
+	diagnostics *ledgerOutput
+	requests    chan url.Values
+	attached    chan struct{}
+	count       atomic.Int64
+	mu          sync.Mutex
+	body        *selectedWatchBody
 }
 
-func newWorkWatchStreamGate(t *testing.T, targetURL string) *workWatchStreamGate {
+func newSelectedWatchDisconnectGate(t *testing.T, endpoint, session string) *selectedWatchDisconnectGate {
 	t.Helper()
-	target, err := url.Parse(targetURL)
+	target, err := url.Parse(endpoint)
 	if err != nil {
-		t.Fatalf("parse functional API server URL for Work watch gate: %v", err)
+		t.Fatal(err)
 	}
-
-	gate := &workWatchStreamGate{attached: make(chan struct{})}
+	gate := &selectedWatchDisconnectGate{requests: make(chan url.Values, 8), attached: make(chan struct{}, 8)}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ModifyResponse = func(response *http.Response) error {
-		gate.mu.Lock()
-		gate.lastStatus = response.StatusCode
-		gate.lastMediaType = response.Header.Get("Content-Type")
-		gate.mu.Unlock()
-		if response.Request == nil || response.Request.Method != http.MethodGet ||
-			response.Request.URL.Path != workWatchEventPath ||
-			response.StatusCode != http.StatusOK ||
-			!strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") ||
-			strings.TrimSpace(response.Header.Get(factorysessions.SessionEventStreamRetainedCountHeader)) == "" {
-			return nil
+		if response.Request.URL.Path == "/factory-sessions/"+session+"/events" && response.StatusCode == http.StatusOK {
+			body := &selectedWatchBody{ReadCloser: response.Body}
+			gate.mu.Lock()
+			gate.body = body
+			gate.mu.Unlock()
+			response.Body = body
+			gate.attached <- struct{}{}
 		}
-		gate.once.Do(func() { close(gate.attached) })
 		return nil
 	}
-	gate.server = httptest.NewServer(proxy)
-	t.Cleanup(func() { gate.server.Close() })
+	gate.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/factory-sessions/"+session+"/events" {
+			gate.count.Add(1)
+			gate.requests <- r.URL.Query()
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(gate.server.Close)
 	return gate
 }
 
-func (gate *workWatchStreamGate) URL() string {
-	if gate == nil || gate.server == nil {
-		return ""
-	}
-	return gate.server.URL
+type selectedWatchBody struct {
+	io.ReadCloser
+	disconnected atomic.Bool
 }
 
-func (gate *workWatchStreamGate) wait(t *testing.T) {
+func (b *selectedWatchBody) Read(data []byte) (int, error) {
+	n, err := b.ReadCloser.Read(data)
+	if b.disconnected.Load() {
+		return n, io.EOF
+	}
+	return n, err
+}
+
+func (g *selectedWatchDisconnectGate) disconnect() {
+	g.mu.Lock()
+	body := g.body
+	g.mu.Unlock()
+	body.disconnected.Store(true)
+	_ = body.Close()
+}
+
+func (g *selectedWatchDisconnectGate) next(t *testing.T) url.Values {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), workWatchAttachmentTimeout)
-	defer cancel()
 	select {
-	case <-gate.attached:
-	case <-ctx.Done():
-		gate.mu.Lock()
-		status, mediaType := gate.lastStatus, gate.lastMediaType
-		gate.mu.Unlock()
-		t.Fatalf(
-			"timed out waiting for exact public Work watch SSE attachment: %v (last response status=%d content-type=%q)",
-			ctx.Err(), status, mediaType,
-		)
+	case <-g.command.Done():
+		t.Fatalf("watch ended before attachment: %v: %s", g.command.Err(), g.diagnostics.String())
+		return nil
+	case query := <-g.requests:
+		return query
+	case <-time.After(selectedWatchCeiling):
+		t.Fatal("public event stream did not attach")
+		return nil
+	}
+}
+
+func (g *selectedWatchDisconnectGate) assertCount(t *testing.T, want int64) {
+	t.Helper()
+	if got := g.count.Load(); got != want {
+		t.Fatalf("event stream requests=%d want=%d", got, want)
+	}
+}
+
+func runSelectedDurationIsolation(t *testing.T, selected, legacy *selectedWatchHost) {
+	t.Helper()
+	arrived, release := make(chan struct{}, 2), make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		arrived <- struct{}{}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"works":[]}`)
+	}))
+	t.Cleanup(server.Close)
+	commands := make([]*support.ProcessCommand, 0, 2)
+	outputs := make([]*ledgerOutput, 0, 2)
+	for _, host := range []*selectedWatchHost{selected, legacy} {
+		stdout, stderr := newLedgerOutput(), newLedgerOutput()
+		input := controlledWatchInput(t, t.Context(), server.URL, false, stdout, stderr)
+		input.Args = []string{"you", "--server", server.URL, "--verbose", "--json", "work", "list", "--session", "duration-observation"}
+		support.InitializeCustomerHomeWithProcess(t, host.process, input.Env, input.WorkingDirectory)
+		commands = append(commands, support.StartProcessCommand(t, host.process, input))
+		outputs = append(outputs, stderr)
+	}
+	for range commands {
+		select {
+		case <-arrived:
+		case <-time.After(selectedWatchCeiling):
+			t.Fatal("duration request did not arrive")
+		}
+	}
+	selectedWatchSource.millis.Add(37)
+	close(release)
+	for index, command := range commands {
+		select {
+		case <-command.Done():
+		case <-time.After(selectedWatchCeiling):
+			t.Fatal("duration command did not finish")
+		}
+		if err := command.Err(); err != nil {
+			t.Fatalf("duration command: %v\n%s", err, outputs[index].String())
+		}
+		want := "durationMillis=37"
+		if index == 1 {
+			want = "durationMillis=0"
+		}
+		if !strings.Contains(outputs[index].String(), want) {
+			t.Fatalf("selected process duration want %s: %s", want, outputs[index].String())
+		}
 	}
 }

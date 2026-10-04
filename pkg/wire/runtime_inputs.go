@@ -618,9 +618,8 @@ func (resolver workerSessionsFactorySessionScopeResolver) WorkerSessionsObservat
 }
 
 // provideWatchReconnectWait selects the scheduler once without starting timers.
-// T21 adopts the normalized process scheduler at this composition boundary.
-func provideWatchReconnectWait() workcli.ReconnectWait {
-	return bindWatchReconnectWait(platformclock.Real{})
+func provideWatchReconnectWait(scheduler platformclock.TimerSource) workcli.ReconnectWait {
+	return bindWatchReconnectWait(scheduler)
 }
 
 func bindWatchReconnectWait(scheduler platformclock.TimerSource) workcli.ReconnectWait {
