@@ -178,6 +178,7 @@ func runJavaScriptRuntimeChildren(t *testing.T, fixture *javascriptSharedProcess
 	defer cancel()
 	var runners [2]*runtimeJavaScriptCommandRunner
 	var results [2]chan concurrentJavaScriptResult
+	var requestIDs, workflows [2]string
 	for i := range runners {
 		marker := fmt.Sprintf("runtime javascript child %d", i)
 		runner := &runtimeJavaScriptCommandRunner{
@@ -195,6 +196,7 @@ func runJavaScriptRuntimeChildren(t *testing.T, fixture *javascriptSharedProcess
 		})
 		workflow := strings.ReplaceAll(liveProviderChildWorkflow, "use the live provider command edge", marker)
 		requestID := fmt.Sprintf("runtime-javascript-%d", fixture.requestSequence.Add(1))
+		requestIDs[i], workflows[i] = requestID, workflow
 		result := make(chan concurrentJavaScriptResult, 1)
 		results[i] = result
 		go func() {
@@ -216,6 +218,20 @@ func runJavaScriptRuntimeChildren(t *testing.T, fixture *javascriptSharedProcess
 		t.Fatal(err)
 	}
 	firstWorker := assertRuntimeJavaScriptChild(t, fixture, first, runners[0].marker, runners[1].marker)
+	// A customer retry of the same normalized public request returns its
+	// retained session/result while the other child's command is still live.
+	// This proves request replay, separately from workflow child resume.
+	replayed, replayErr := postOverridesWorkflow(ctx, fixture.baseURL, requestIDs[0], workflows[0])
+	if replayErr != nil {
+		t.Fatal(replayErr)
+	}
+	if replayed.SessionId != first.response.SessionId || replayed.Status != first.response.Status {
+		t.Fatalf("request replay changed session/outcome: first=%+v replay=%+v", first.response, replayed)
+	}
+	assertSucceededPrimaryContains(t, replayed, runners[0].marker+" output")
+	if runners[0].calls.Load() != 1 {
+		t.Fatalf("request replay started another child command: calls=%d", runners[0].calls.Load())
+	}
 	select {
 	case peer := <-results[1]:
 		t.Fatalf("peer completed before its own command release: %#v", peer)
