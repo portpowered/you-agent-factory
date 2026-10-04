@@ -207,9 +207,6 @@ FUNCTIONAL_TEST_GO ?= $(GO)
 # can be reported by its compact terminal verdict step. An unset path preserves
 # the historical fail-fast target behavior.
 FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
-BACKEND_SIZE_ROOT ?= .
-PACKAGE_MAINT_ROOT ?= .
-PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
 PACKAGE_BOUNDARY_ALL ?= 0
 PACKAGE_BOUNDARY_BASE_REF ?=
@@ -217,7 +214,6 @@ PACKAGE_STRUCTURE_ROOT ?= .
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
 # "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
 # Entries are keyed by source content, never by checkout path, so a fresh worktree
@@ -242,7 +238,16 @@ endif
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint test-sleep-check compatibility-alias-check retired-surface-check deadcode fmt-check contracts-check
+# Local `make lint` runs LINT_TARGETS_BASE, adds the UI gates only when ui/
+# differs from the merge-base with origin/main (or has untracked files), and
+# leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
+# complete inventory. Override LINT_TARGETS to select targets explicitly.
+LINT_TARGETS_BASE := vet pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint lint-migration-smoke test-sleep-check retired-surface-check fmt-check contracts-check
+LINT_TARGETS_UI := ui-lint ui-deadcode
+LINT_TARGETS_CI_ONLY := deadcode
+LINT_FULL ?=
+LINT_UI_CHANGED = $(shell base=$$(git merge-base HEAD origin/main 2>/dev/null) && { git diff --quiet $$base -- ui && test -z "$$(git ls-files --others --exclude-standard ui)" || echo 1; } || echo 1)
+LINT_TARGETS ?= $(if $(or $(strip $(CI)),$(strip $(LINT_FULL)),$(strip $(LINT_UI_CHANGED))),$(LINT_TARGETS_UI) )$(LINT_TARGETS_BASE)$(if $(or $(strip $(CI)),$(strip $(LINT_FULL))), $(LINT_TARGETS_CI_ONLY))
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -282,7 +287,7 @@ define run_timed_step
 endef
 
 
-.PHONY: golangci golangci-lint-run repolint lint-baseline-growth
+.PHONY: golangci golangci-lint-run repolint lint-baseline-growth lint-migration-smoke
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
@@ -314,9 +319,9 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check test-functional-resumed-successor-artifact
+.PHONY: lint-full test-sleep-check pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
-.PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
+.PHONY: retired-surface-check readme-check deadcode dashboard-verify
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
@@ -990,8 +995,8 @@ artifact-contract-closeout:
 lint:
 	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
-backend-size:
-	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
+lint-full:
+	$(MAKE) lint LINT_FULL=1
 
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
@@ -1000,12 +1005,6 @@ backend-dependency-graph:
 # locally and required by the CI publisher after both measured lanes pass.
 architecture:
 	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
-
-pkg-maint:
-	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")
-
-pkg-file-count:
-	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
 
 pkg-boundary:
 	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
@@ -1050,7 +1049,7 @@ durable-runtime-construction-check:
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 # Tag union under which the repolint analyzers see every Go file once.
-REPOLINT_TAGS ?= functionallong,backendconformance,factoryartifact,managed_process_integration
+REPOLINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 REPOLINT_DIR ?= .artifacts/repolint
 REPOLINT_BASELINE := internal/lint/analyzers/baseline.txt
 ifeq ($(OS),Windows_NT)
@@ -1063,25 +1062,35 @@ endif
 # repository's go/analysis analyzers (cmd/repolint) through go vet -vettool.
 golangci: golangci-lint-run repolint
 
+LINT_MIGRATION_COHORT ?= all
+
+lint-migration-smoke:
+	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(GOLANGCI_LINT)"
+
 golangci-lint-run:
+	@git merge-base HEAD origin/main
 	$(GOLANGCI_LINT) run ./...
 
-repolint:
+.PHONY: repolint-build
+repolint-build:
 	@mkdir -p $(REPOLINT_DIR)
 	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
+
+repolint: repolint-build
+	$(GO) vet -vettool=$(abspath $(REPOLINT_BIN)) -layering.check-stale=false -behavior.check-stale=false -construction.check-stale=false -petripublic.check-stale=false ./...
 	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
 	$(MAKE) lint-baseline-growth
 
-# lint-baseline-growth compares the one baseline object with its merge-base
-# copy: every current entry must already exist there, so the list only shrinks.
-lint-baseline-growth:
-	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; 	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then 		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; 	git show "$$base:$(REPOLINT_BASELINE)" | grep -v '^#' | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.base"; 	grep -v '^#' "$(REPOLINT_BASELINE)" | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.head"; 	added=$$(comm -13 "$(REPOLINT_DIR)/baseline.base" "$(REPOLINT_DIR)/baseline.head"); 	if [ -n "$$added" ]; then echo "lint-baseline-growth: $(REPOLINT_BASELINE) gained entries versus merge-base; fix the violation instead:"; echo "$$added"; exit 1; fi; 	echo "lint-baseline-growth: $(REPOLINT_BASELINE) did not grow"
+# New rule IDs seed once; established rule IDs never admit new keys.
+lint-baseline-growth: repolint-build
+	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; \
+	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
+		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; \
+	git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base" || exit 1; \
+	"$(REPOLINT_BIN)" -baseline-growth="$(REPOLINT_DIR)/baseline.base"
 
 test-sleep-check:
 	$(call run_lint_checker,./cmd/testsleepcheck,-root ".")
-
-compatibility-alias-check:
-	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")
 
 retired-surface-check:
 	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")

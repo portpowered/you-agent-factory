@@ -586,6 +586,9 @@ func provideFactorySessionResponseEventRetentionLimits(
 }
 
 func provideFactorySessionsAssembly(
+	registry factorysessionwire.SessionRegistry,
+	state *factorysessionwire.SessionState,
+	streams factorysessionwire.StreamManager,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
@@ -603,7 +606,7 @@ func provideFactorySessionsAssembly(
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.NewRuntimeAssembly(func() factoryruntime.JavaScriptCheckpointStore {
+	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
 }

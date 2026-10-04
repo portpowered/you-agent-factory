@@ -35,7 +35,7 @@ type Assembly struct {
 	roles.SessionGateway
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
-	streams                      streamManager
+	streams                      StreamManager
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
@@ -61,13 +61,17 @@ type Assembly struct {
 	beforeWorkAdmissionProjectionRegistration func()
 }
 
-type streamManager interface {
+// StreamManager supplies reusable provider progress and completion behavior.
+type StreamManager interface {
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 	DispatchCompletionObserverFactory() func(string) func(string)
 }
 
 // NewAssembly constructs an empty live-session directory.
 func NewAssembly(
+	registry sessionregistry.Service,
+	state *sessionruntime.Service,
+	streams StreamManager,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -86,20 +90,11 @@ func NewAssembly(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) roles.RuntimeAssembly {
-	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil || liveChangeCoordinator == nil {
-		return nil
-	}
-	registry := sessionregistry.New()
-	responses, err := responseStreamService.NewStreamRegistry(clock)
-	if err != nil {
-		return nil
-	}
-	state := sessionruntime.NewWithResponseService(registry, responses, nil, clock, eventIDs, sessionIDs, responseStreamService)
 	return &Assembly{
 		SessionGateway:               &Service{},
 		registry:                     registry,
 		state:                        state,
-		streams:                      runtimebinding.NewStreamManager(state),
+		streams:                      streams,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,

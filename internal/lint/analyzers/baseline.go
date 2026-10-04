@@ -57,7 +57,12 @@ func (v violation) key() string { return v.rule + "|" + v.importer + "|" + v.imp
 // hasTests says whether this unit contains test files, which decides whether
 // test-class entries can be judged stale here.
 func reportAgainstBaseline(pass *analysis.Pass, unit string, rules map[string]bool, found []violation, hasTests bool) {
-	listed := baseline()
+	reportWithBaseline(pass, unit, rules, found, hasTests, baseline())
+}
+
+// reportWithBaseline permits declaration rules to exclude debt tied to sources
+// the compiler omitted in this configuration, without changing shared state.
+func reportWithBaseline(pass *analysis.Pass, unit string, rules map[string]bool, found []violation, hasTests bool, listed map[string]struct{}) {
 	seen := map[string]struct{}{}
 	sort.Slice(found, func(i, j int) bool { return found[i].key() < found[j].key() })
 	for _, v := range found {
@@ -70,8 +75,11 @@ func reportAgainstBaseline(pass *analysis.Pass, unit string, rules map[string]bo
 		}
 		pass.Report(analysis.Diagnostic{
 			Pos:     v.pos,
-			Message: fmt.Sprintf("%s: %s -> %s; %s (to accept as debt add `%s` to internal/lint/analyzers/baseline.txt)", v.rule, v.importer, v.importee, v.hint, v.key()),
+			Message: fmt.Sprintf("%s: %s -> %s; %s (exact key `%s`; only newly migrated rule IDs may seed authorized debt)", v.rule, v.importer, v.importee, v.hint, v.key()),
 		})
+	}
+	if flag := pass.Analyzer.Flags.Lookup("check-stale"); flag != nil && flag.Value.String() == "false" {
+		return
 	}
 	var stale []string
 	for key := range listed {

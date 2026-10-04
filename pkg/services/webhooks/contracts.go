@@ -45,7 +45,6 @@ type Subscription func(context.Context) error
 // prevents delivery of pre-activation history.
 type StartRequest struct {
 	Definitions      []factorydefinitions.FactoryWebhookConfig
-	Events           recordings.Service
 	Scope            recordings.CanonicalEventScope
 	ActivationCursor *recordings.CanonicalEventCursor
 	RuntimeSource    factorydefinitions.LoadedFactorySource
