@@ -4,16 +4,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -590,4 +593,252 @@ func (r *promptKeyedCodexRunner) callCount() int {
 	defer r.mu.Unlock()
 
 	return r.calls
+}
+
+// TestFourExplicitSessionsIsolateOneCancellation overlaps four provider attempts
+// on one root-built host. Only the canceled scope loses its command context;
+// completed and canceled response histories remain independently reconnectable.
+func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
+	t.Parallel()
+	gates := make(map[string]*isolatedCommandGate)
+	for i := range 4 {
+		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
+		gates[prompt] = &isolatedCommandGate{entered: make(chan context.Context, 1), release: make(chan struct{}), returned: make(chan error, 1), output: fmt.Sprintf("four-scope-result-%d COMPLETE", i)}
+	}
+	runner := &fourScopeCodexRunner{gates: gates}
+	host := support.ScaffoldFactory(t, concurrentIsolationFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: host, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
+			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	baseURL := server.URL()
+	sessionIDs := make([]string, 4)
+	streams := make([]*support.FactoryResponseEventStream, 4)
+	acknowledged := make([][]support.FactoryResponseEventFrame, 4)
+	prompts := make(map[string]string)
+	for i := range 4 {
+		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
+		opened := support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt))
+		sessionIDs[i] = opened.Session.Id
+		if sessionIDs[i] == factorysessions.DefaultSessionID {
+			t.Fatal("scope is not explicit")
+		}
+		for j := range i {
+			if sessionIDs[j] == sessionIDs[i] {
+				t.Fatal("explicit session identity reused")
+			}
+		}
+		// Establish acknowledged history before the four held dispatches, so the
+		// canceled scope also has a real nonzero reconnect cursor.
+		warmup, err := postConcurrentIsolationInvocation(t.Context(), baseURL, sessionIDs[i], prompt+"-warmup")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertConcurrentIsolationInvocationCompleted(t, concurrentIsolationInvocation{response: warmup}, "warmup "+prompt)
+		id := sessionIDs[i]
+		t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, id) })
+		streams[i] = support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, id))
+		t.Cleanup(streams[i].Close)
+		acknowledged[i] = collectResponseEventStreamUntilCount(t, streams[i], 2, concurrentIsolationTimeout)
+		for _, frame := range acknowledged[i] {
+			if frame.Event.FactorySessionId != id {
+				t.Fatalf("scope %q acknowledged foreign event %#v", id, frame.Event)
+			}
+		}
+		prompts[id] = prompt
+	}
+	invocations := make(map[string]chan concurrentIsolationInvocation)
+	cancels := make(map[string]context.CancelFunc)
+	for id, prompt := range prompts {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancels[id] = cancel
+		t.Cleanup(cancel)
+		done := make(chan concurrentIsolationInvocation, 1)
+		invocations[id] = done
+		go func() {
+			response, err := postConcurrentIsolationInvocation(ctx, baseURL, id, prompt)
+			done <- concurrentIsolationInvocation{response: response, err: err}
+		}()
+	}
+	contexts := make([]context.Context, 4)
+	for i := range 4 {
+		gate := gates[fmt.Sprintf("four-scope-prompt-%d", i)]
+		select {
+		case contexts[i] = <-gate.entered:
+		case <-time.After(concurrentIsolationTimeout):
+			t.Fatalf("scope %d never entered provider", i)
+		}
+	}
+	canceledID := sessionIDs[3]
+	control := cancelExplicitIsolationSession(t, baseURL, canceledID)
+	select {
+	case err := <-gates["four-scope-prompt-3"].returned:
+		if err != context.Canceled {
+			t.Fatalf("selected command returned %v", err)
+		}
+	case <-time.After(concurrentIsolationTimeout):
+		t.Fatal("selected command was not canceled/joined")
+	}
+	for i := range 3 {
+		if err := contexts[i].Err(); err != nil {
+			t.Fatalf("peer %d canceled: %v", i, err)
+		}
+		close(gates[fmt.Sprintf("four-scope-prompt-%d", i)].release)
+	}
+	// Live cancel currently returns SUCCEEDED for its stopped runtime (durable
+	// cancel uses CANCELED). Preserve that typed control outcome.
+	// Session control's typed terminal outcome is independent of the HTTP
+	// invocation wait. Observe the public session status, then release that
+	// caller-owned wait rather than inventing a session-to-request guarantee.
+	support.WaitForSessionStopped(t, baseURL, canceledID, concurrentIsolationTimeout)
+	read := support.GetJSON[factoryapi.FactorySessionGetResponse](t, baseURL+"/factory-sessions/"+url.PathEscape(canceledID))
+	session, err := read.AsFactorySession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Id != canceledID || session.Runtime.LifecycleControlStatus == nil || *session.Runtime.LifecycleControlStatus != control.Status {
+		t.Fatalf("canceled public session = %#v, lifecycle=%v", session, *session.Runtime.LifecycleControlStatus)
+	}
+	cancels[canceledID]()
+	canceled := awaitConcurrentIsolationInvocation(t, invocations[canceledID])
+	if !errors.Is(canceled.err, context.Canceled) {
+		t.Fatalf("canceled caller wait = %#v", canceled)
+	}
+	for i := range 3 {
+		gate := gates[fmt.Sprintf("four-scope-prompt-%d", i)]
+		assertConcurrentIsolationInvocationCompleted(t, awaitConcurrentIsolationInvocation(t, invocations[sessionIDs[i]]), gate.output)
+		frames := collectConcurrentIsolationFrames(t, streams[i], gate.output, concurrentIsolationTimeout)
+		for j := range 4 {
+			if i != j {
+				assertSessionScopedOrderedTypedPayloads(t, sessionIDs[i], responseEventsFromFrames(frames), gate.output, gates[fmt.Sprintf("four-scope-prompt-%d", j)].output)
+			}
+		}
+		assertResponseEventStreamResumesFromCursor(t, baseURL, sessionIDs[i], frames)
+	}
+	assertCanceledIsolationHistory(t, baseURL, canceledID, gates, acknowledged[3])
+}
+
+type isolatedCommandGate struct {
+	attempts atomic.Uint32
+	entered  chan context.Context
+	release  chan struct{}
+	returned chan error
+	output   string
+}
+
+type fourScopeCodexRunner struct {
+	gates map[string]*isolatedCommandGate
+}
+
+func (r *fourScopeCodexRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return r.RunStreaming(ctx, request, nil)
+}
+
+func (r *fourScopeCodexRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	observed := string(request.Stdin) + "\n" + strings.Join(request.Args, "\n")
+	for prompt, gate := range r.gates {
+		if !strings.Contains(observed, prompt) {
+			continue
+		}
+		if gate.attempts.Add(1) == 1 {
+			stdout := support.CodexSuccessStdout("warmup " + prompt + " COMPLETE")
+			if observer != nil {
+				observer(platformprocess.OutputStreamStdout, stdout)
+			}
+			return platformprocess.CommandResult{Stdout: stdout}, nil
+		}
+		prefix := []byte("{\"type\":\"turn.started\"}\n")
+		if observer != nil {
+			observer(platformprocess.OutputStreamStdout, prefix)
+		}
+		select {
+		case gate.entered <- ctx:
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+		select {
+		case <-ctx.Done():
+			gate.returned <- ctx.Err()
+			return platformprocess.CommandResult{}, ctx.Err()
+		case <-gate.release:
+			gate.returned <- nil
+			stdout := support.CodexSuccessStdout(gate.output)
+			if observer != nil {
+				observer(platformprocess.OutputStreamStdout, bytes.TrimPrefix(stdout, prefix))
+			}
+			return platformprocess.CommandResult{Stdout: stdout}, nil
+		}
+	}
+	return platformprocess.CommandResult{}, fmt.Errorf("provider received no owned prompt")
+}
+
+func cancelExplicitIsolationSession(t *testing.T, baseURL, canceledID string) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+	requestID := "four-scope-cancel"
+	payload, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{RequestId: &requestID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/factory-sessions/"+url.PathEscape(canceledID)+"/cancel", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("cancel status=%d: %s", response.StatusCode, body)
+	}
+	var control factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(response.Body).Decode(&control); err != nil {
+		t.Fatal(err)
+	}
+	if control.SessionId != canceledID || control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted || control.Operation != factoryapi.FactorySessionLifecycleControlKindCancel || control.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("cancel acknowledgment = %#v", control)
+	}
+
+	return control
+}
+
+func assertCanceledIsolationHistory(t *testing.T, baseURL, canceledID string, gates map[string]*isolatedCommandGate, acknowledged []support.FactoryResponseEventFrame) {
+	t.Helper()
+	retained := retainedFactoryResponseEventsWithoutGaps(support.GetFactoryResponseEventsAt(t, baseURL, canceledID))
+	assertResponseEventsAscendingSequence(t, retained)
+	if len(retained) < 2 {
+		t.Fatalf("canceled retained history = %#v", retained)
+	}
+	// Cancellation is a lifecycle outcome, not deletion. Retained reads must
+	// preserve the owning identity and cannot contain any successful peer text.
+	var canceledEvent bool
+	for _, event := range retained {
+		if event.FactorySessionId != canceledID {
+			t.Fatalf("canceled history leaked identity: %#v", event)
+		}
+		for j := range 3 {
+			if strings.Contains(concurrentIsolationMessageText(event), gates[fmt.Sprintf("four-scope-prompt-%d", j)].output) {
+				t.Fatalf("canceled history leaked peer output: %#v", event)
+			}
+		}
+		if event.Kind == factoryapi.FactoryResponseEventKindError {
+			payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if payload.Code == "stream_canceled" && event.Phase == factoryapi.FactoryResponseEventPhaseFailed {
+				canceledEvent = true
+			}
+		}
+	}
+	if !canceledEvent {
+		t.Fatal("canceled history has no typed stream_canceled terminal error")
+	}
+	assertResponseEventStreamResumesFromCursor(t, baseURL, canceledID, acknowledged)
 }

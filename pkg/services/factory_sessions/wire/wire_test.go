@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	identitycontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsecontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"io/fs"
@@ -414,18 +415,18 @@ func TestResponseStreamsRetainIndependentStoresAtSelectedClocks(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { service.Close(store) })
-		if store.RetentionLimits().MaxEvents != 2 || store.RetentionLimits().MaxBytes != 1<<20 || store.RetentionLimits().CompletedRetentionWindow != time.Minute {
-			t.Fatalf("retention = %#v", store.RetentionLimits())
+		gotLimits := store.RetentionLimits()
+		wantLimits := responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20, CompletedRetentionWindow: time.Minute}
+		if gotLimits != wantLimits {
+			t.Fatalf("retention = %#v, want %#v", gotLimits, wantLimits)
 		}
 		var last responseevents.FactoryResponseEvent
-		for range 3 {
+		for n := range 3 {
 			last, err = service.Publish(store, responseevents.FactoryResponseEvent{Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta, RunID: "run-" + name, Provenance: responseevents.Provenance{Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationDelta, Fidelity: responseevents.FidelityLossless}, Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"` + name + `"}`)})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if last.FactorySessionID != name || !last.RecordedAt.Equal(now) || last.EventID != fmt.Sprintf("selected-%d", ids.Load()) {
-				t.Fatalf("published = %#v", last)
-			}
+			assertSelectedResponseEvent(t, last, name, now, fmt.Sprintf("selected-%d", ids.Load()), int64(n+1))
 		}
 		service.Complete(store)
 		cursor, err := service.Subscribe(t.Context(), store, responsecontract.SubscriptionRequest{AfterSequence: last.Sequence - 1})
@@ -439,5 +440,12 @@ func TestResponseStreamsRetainIndependentStoresAtSelectedClocks(t *testing.T) {
 		if err != nil || len(got) != 1 || got[0].EventID != last.EventID || got[0].FactorySessionID != name {
 			t.Fatalf("retained suffix = %#v, %v", got, err)
 		}
+	}
+}
+
+func assertSelectedResponseEvent(t *testing.T, event responseevents.FactoryResponseEvent, sessionID string, now time.Time, eventID string, sequence int64) {
+	t.Helper()
+	if event.FactorySessionID != sessionID || !event.RecordedAt.Equal(now) || event.EventID != eventID || event.Sequence != sequence {
+		t.Fatalf("published = %#v, want session %s time %s ID %s sequence %d", event, sessionID, now, eventID, sequence)
 	}
 }
