@@ -12,7 +12,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -28,6 +27,7 @@ type Assembly struct {
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory
 	workerService         workers.Service
 	metricsClock          platformclock.TimerSource
+	instanceHost          instancehost.Service
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected
@@ -40,6 +40,7 @@ func NewAssembly(
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
 	workerService workers.Service,
 	metricsClock platformclock.TimerSource,
+	instanceHost instancehost.Service,
 ) (*Assembly, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
@@ -52,7 +53,7 @@ func NewAssembly(
 	}
 	return &Assembly{
 		runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory,
-		workerService: workerService, metricsClock: metricsClock,
+		workerService: workerService, metricsClock: metricsClock, instanceHost: instanceHost,
 	}, nil
 }
 
@@ -242,10 +243,7 @@ func (a *Assembly) Assemble(
 		)
 	}
 	attachInvocationScheduleFactory(ctx, automationService, instance)
-	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
-	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
-	}
+	lifecycle := a.instanceHost.Scope(clock)
 	return builder,
 		instance,
 		spec,
