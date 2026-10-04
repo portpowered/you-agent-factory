@@ -1,8 +1,7 @@
-# Exact violation list for the layering and behavior analyzers (cmd/repolint).
-# Format: rule|importer|importee, one per line; importer and importee are module-relative.
-# A violation not listed here fails. A listed entry that no longer reproduces also fails,
-# so this file only shrinks. CI refuses growth versus the merge-base copy
-# (make lint-baseline-growth). Rules ending in -test are test-file violations.
+# Exact violation list for the shared cmd/repolint analyzers.
+# Format: rule|importer|importee; paths are module-relative.
+# Unlisted findings and stale entries fail. Absent merge-base rule IDs seed once.
+# Established rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
 application-graph-test|tests/integration/models_test|pkg/wire
 domain-transport-test|pkg/services/costs/internal/service|pkg/transports/http/client
@@ -118,3 +117,7 @@ service-subpackage|tests/functional/internal/support|pkg/services/factory_sessio
 service-subpackage|tests/functional/internal/support|pkg/services/operator_settings/transports/globalconfig
 service-subpackage|tests/functional/internal/support|pkg/services/operator_settings/wire
 service-subpackage|tests/functional/internal/support|pkg/services/providers/wire
+
+service-construction-test|pkg/services/operator_settings/transports/cli/initsetup_test|pkg/services/providers/wire.NewService
+service-construction-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire.NewService
+service-construction-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire.NewService

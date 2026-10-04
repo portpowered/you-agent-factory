@@ -1057,7 +1057,7 @@ durable-runtime-construction-check:
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 # Tag union under which the repolint analyzers see every Go file once.
-REPOLINT_TAGS ?= functionallong,backendconformance,factoryartifact,managed_process_integration
+REPOLINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 REPOLINT_DIR ?= .artifacts/repolint
 REPOLINT_BASELINE := internal/lint/analyzers/baseline.txt
 ifeq ($(OS),Windows_NT)
@@ -1073,16 +1073,23 @@ golangci: golangci-lint-run repolint
 golangci-lint-run:
 	$(GOLANGCI_LINT) run ./...
 
-repolint:
+.PHONY: repolint-build
+repolint-build:
 	@mkdir -p $(REPOLINT_DIR)
 	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
+
+repolint: repolint-build
+	$(GO) vet -vettool=$(abspath $(REPOLINT_BIN)) -layering.check-stale=false -behavior.check-stale=false -construction.check-stale=false ./...
 	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
 	$(MAKE) lint-baseline-growth
 
-# lint-baseline-growth compares the one baseline object with its merge-base
-# copy: every current entry must already exist there, so the list only shrinks.
-lint-baseline-growth:
-	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; 	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then 		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; 	git show "$$base:$(REPOLINT_BASELINE)" | grep -v '^#' | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.base"; 	grep -v '^#' "$(REPOLINT_BASELINE)" | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.head"; 	added=$$(comm -13 "$(REPOLINT_DIR)/baseline.base" "$(REPOLINT_DIR)/baseline.head"); 	if [ -n "$$added" ]; then echo "lint-baseline-growth: $(REPOLINT_BASELINE) gained entries versus merge-base; fix the violation instead:"; echo "$$added"; exit 1; fi; 	echo "lint-baseline-growth: $(REPOLINT_BASELINE) did not grow"
+# New rule IDs seed once; established rule IDs never admit new keys.
+lint-baseline-growth: repolint-build
+	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; \
+	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
+		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; \
+	git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base" || exit 1; \
+	"$(REPOLINT_BIN)" -baseline-growth="$(REPOLINT_DIR)/baseline.base"
 
 test-sleep-check:
 	$(call run_lint_checker,./cmd/testsleepcheck,-root ".")
