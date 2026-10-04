@@ -59,7 +59,7 @@ Run the bounded matrix with:
 go test ./tests/integration/models/tts_clean_install -count=10
 go test -race ./tests/integration/models/tts_clean_install -count=3 -timeout 20m
 go vet ./tests/integration/models/tts_clean_install
-make pkg-file-count
+make golangci-lint-run
 git diff --check
 ```
 
