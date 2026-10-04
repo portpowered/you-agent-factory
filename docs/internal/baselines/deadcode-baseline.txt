@@ -1859,11 +1859,8 @@ pkg/services/work/transports/cli/work/show.go: unreachable func: Show
 pkg/services/work/transports/cli/work/show.go: unreachable func: ShowHumanApproval
 pkg/services/work/transports/cli/work/visualize.go: unreachable func: Visualize
 pkg/services/work/transports/cli/work/watch.go: unreachable func: RenderWatchTransition
-pkg/services/work/transports/http/adapter.go: unreachable func: NewAdapterFromRoles
 pkg/services/work/transports/http/admission_mapping.go: unreachable func: SubmitWorkResponseFromResult
 pkg/services/work/transports/http/read_mapping.go: unreachable func: WorkReadModelToGenerated
-pkg/services/work/wire/wire.go: unreachable func: NewService
-pkg/services/work/wire/wire.go: unreachable func: validateNewServiceInputs
 pkg/services/worker_sessions/internal/service/classify.go: unreachable func: safeDetailWithDiagnostics
 pkg/services/worker_sessions/internal/service/execution_handoff.go: unreachable func: registry.registerServerOwnedSupervision
 pkg/services/worker_sessions/internal/service/execution_handoff.go: unreachable func: registry.registerSupervision

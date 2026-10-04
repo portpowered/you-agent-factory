@@ -134,60 +134,6 @@ func (factoryRequestBatchPreparationAdapter) PrepareFactoryRequestBatch(
 	}, nil
 }
 
-// NewContentPreparation constructs canonical Work-content admission.
-func NewContentPreparation() ContentPreparation {
-	return contentPreparationAdapter{}
-}
-
-type contentPreparationAdapter struct{}
-
-func (contentPreparationAdapter) PrepareWorkContent(
-	ctx context.Context,
-	content []WorkContentPart,
-) ([]WorkContentPart, error) {
-	prepared, err := requestadmission.NewContentPreparation().PrepareWorkContent(
-		ctx,
-		workContentPartsToAdmission(content),
-	)
-	if err != nil {
-		return nil, mapRequestPreparationError(err)
-	}
-	return workContentPartsFromAdmission(prepared), nil
-}
-
-// NewRequestPreparationService constructs the pure Work Request admission
-// service.
-func NewRequestPreparationService(content ContentPreparation) (RequestPreparationService, error) {
-	innerContent, err := requestPreparationContentAdapter(content)
-	if err != nil {
-		return nil, err
-	}
-	inner, err := requestadmission.NewRequestPreparationService(innerContent)
-	if err != nil {
-		return nil, err
-	}
-	return requestPreparationServiceAdapter{inner: inner}, nil
-}
-
-type requestPreparationServiceAdapter struct {
-	inner requestadmission.RequestPreparationService
-}
-
-func (a requestPreparationServiceAdapter) PrepareWorkRequest(
-	ctx context.Context,
-	input WorkRequestPreparation,
-) (WorkRequest, error) {
-	prepared, err := a.inner.PrepareWorkRequest(ctx, requestadmission.WorkRequestPreparation{
-		Request:           workRequestToAdmission(input.Request),
-		CanonicalJSON:     input.CanonicalJSON,
-		DefaultWorkTypeID: input.DefaultWorkTypeID,
-	})
-	if err != nil {
-		return WorkRequest{}, mapRequestPreparationError(err)
-	}
-	return workRequestFromAdmission(prepared), nil
-}
-
 // NewRequestFileLoader constructs a path-backed Work Request file loader.
 func NewRequestFileLoader(source FileSource) RequestFileLoader {
 	loader := requestadmission.NewRequestFileLoader(fileSourceAdapter{source: source})
@@ -313,39 +259,6 @@ func (a fileSourceAdapter) ReadFile(path string) ([]byte, error) {
 		return nil, nil
 	}
 	return a.source.ReadFile(path)
-}
-
-func requestPreparationContentAdapter(content ContentPreparation) (requestadmission.ContentPreparation, error) {
-	if content == nil {
-		return nil, errors.New("Work content preparation is required")
-	}
-	return requestPreparationContentBridge{content: content}, nil
-}
-
-type requestPreparationContentBridge struct {
-	content ContentPreparation
-}
-
-func (b requestPreparationContentBridge) PrepareWorkContent(
-	ctx context.Context,
-	content []requestadmission.ContentPart,
-) ([]requestadmission.ContentPart, error) {
-	prepared, err := b.content.PrepareWorkContent(ctx, workContentPartsFromAdmission(content))
-	if err != nil {
-		return nil, err
-	}
-	return workContentPartsToAdmission(prepared), nil
-}
-
-func mapRequestPreparationError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var inner *requestadmission.RequestPreparationError
-	if errors.As(err, &inner) {
-		return &RequestPreparationError{Message: inner.Message, Cause: inner.Cause}
-	}
-	return err
 }
 
 func workRequestToAdmission(req WorkRequest) requestadmission.Request {

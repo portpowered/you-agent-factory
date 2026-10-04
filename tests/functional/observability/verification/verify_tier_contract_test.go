@@ -47,7 +47,7 @@ func TestFunctionalLongCompileGate_UsesRealTaggedFixtureOutcome(t *testing.T) {
 }
 
 // TestFunctionalLaneTargetsSeparateCachedAndFreshModes proves the two public
-// Make targets keep the same boundary and runner settings while selecting
+// Make targets keep the same runner settings while selecting
 // Go's cache mode versus explicit execution.
 func TestFunctionalLaneTargetsSeparateCachedAndFreshModes(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
@@ -71,9 +71,7 @@ fi
 		t.Run(tc.wantMode+" success", func(t *testing.T) {
 			argsPath := filepath.Join(t.TempDir(), "go-args.txt")
 			t.Setenv("FUNCTIONAL_LANE_ARGS", argsPath)
-			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-				"functional-boundary-check": "@printf '%s\\n' 'stub:functional-boundary'\n",
-			})
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, nil)
 
 			output, err := runMakefileTargetWithArgs(
 				repoRoot,
@@ -85,9 +83,6 @@ fi
 			)
 			if err != nil {
 				t.Fatalf("run %s: %v\\n%s", tc.target, err, output)
-			}
-			if count := strings.Count(output, "stub:functional-boundary"); count != 1 {
-				t.Fatalf("%s ran boundary check %d times, want once:\\n%s", tc.target, count, output)
 			}
 
 			args, err := os.ReadFile(argsPath)
@@ -108,9 +103,7 @@ fi
 			argsPath := filepath.Join(t.TempDir(), "go-args.txt")
 			t.Setenv("FUNCTIONAL_LANE_ARGS", argsPath)
 			t.Setenv("FUNCTIONAL_LANE_FAIL", "1")
-			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-				"functional-boundary-check": "@printf '%s\\n' 'stub:functional-boundary'\n",
-			})
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, nil)
 
 			output, err := runMakefileTargetWithArgs(
 				repoRoot,

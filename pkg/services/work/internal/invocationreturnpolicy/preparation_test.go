@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -420,4 +422,24 @@ func signatureWithTo() *InvocationSignatureConfig {
 		Required:     true,
 		Bindings:     []InvocationParameterBindingConfig{{Kind: bindingKindPositional, Position: 1}, {Kind: bindingKindNamed}},
 	}}}
+}
+
+func TestInvocationInputPreparationReadsRegularFileWithoutChangingText(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "long prompt.txt")
+	want := "  line one\r\nline two — 東京\r\n"
+	if err := os.WriteFile(path, []byte(want), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	prepared, err := NewInvocationInputPreparation(os.ReadFile, os.Stat).PrepareInvocationInput(
+		context.Background(),
+		InvocationInputPreparationRequest{FilePath: &path},
+	)
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.Source != InputSourceFileText || prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != want {
+		t.Fatalf("prepared = %#v, want exact file-backed text", prepared)
+	}
 }
