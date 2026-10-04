@@ -59,29 +59,20 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 			}},
 		},
 	}
-	builder, err := runtimebuild.New(
-		"CODEX",
-		"gpt-5",
-		true,
-		"",
-		"",
-		nil,
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return loaded, nil
-		},
+	builder, err := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return loaded, nil
+	}, testRuntimeID, zap.NewNop()).BindCompatibility(runtimebuild.BuildDefaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5", ApplyOperatorDefaults: true, RecordPath: "", WorkflowID: ""},
 		nil,
 		nil,
 		nil,
 		nil,
 		nil,
 		platformclock.Real{},
-		testRuntimeID,
 		zap.NewNop(),
 		func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
 			return &factoryhost.Bundle{}, nil
 		},
-		nil,
-	)
+		nil)
 	if err != nil {
 		t.Fatalf("runtimebuild.New: %v", err)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestService_BuildSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *testing.T) {
@@ -46,7 +47,7 @@ func TestService_BuildSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *test
 }
 
 type selectedBuildFixture struct {
-	service            *runtimebuild.Service
+	service            *runtimebuild.CompatibilityBuild
 	loaded             *runtimeBuildLoadedSource
 	configuredProvider *testutil.NativeProvider
 	replayProvider     *testutil.NativeProvider
@@ -370,7 +371,7 @@ func TestService_BuildSpecReportsOperatorDefaultMutationFailure(t *testing.T) {
 	}
 }
 
-func newBuildSpecFailureService(t *testing.T, loader factorydefinitions.LoadedFactoryLoader) *runtimebuild.Service {
+func newBuildSpecFailureService(t *testing.T, loader factorydefinitions.LoadedFactoryLoader) *runtimebuild.CompatibilityBuild {
 	t.Helper()
 	return mustNewBehaviorService(
 		t,
@@ -388,7 +389,7 @@ func newBuildSpecFailureService(t *testing.T, loader factorydefinitions.LoadedFa
 	)
 }
 
-func newDefaultOperatorFailureService(t *testing.T, provider string, model string) *runtimebuild.Service {
+func newDefaultOperatorFailureService(t *testing.T, provider string, model string) *runtimebuild.CompatibilityBuild {
 	t.Helper()
 	return mustNewBehaviorService(
 		t,
@@ -426,25 +427,16 @@ func TestNewRejectsMissingFactoryLoader(t *testing.T) {
 	build := func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
 		return &factoryhost.Bundle{}, nil
 	}
-	service, err := runtimebuild.New(
-		"",
-		"",
-		false,
-		"",
-		"",
-		nil,
-		nil,
+	service, err := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()).BindCompatibility(runtimebuild.BuildDefaults{},
 		nil,
 		nil,
 		nil,
 		nil,
 		nil,
 		platformclock.Real{},
-		testRuntimeID,
 		zap.NewNop(),
 		build,
-		nil,
-	)
+		nil)
 	if service != nil || err == nil || !strings.Contains(err.Error(), "Factory Definition loader is required") {
 		t.Fatalf("New() = (%v, %v), want missing-loader error", service, err)
 	}
@@ -463,27 +455,18 @@ func mustNewBehaviorService(
 	scriptRunner platformprocess.CommandRunner,
 	build runtimebuild.BundleBuilder,
 	recorder factory.PetriMutationRecorder,
-) *runtimebuild.Service {
+) *runtimebuild.CompatibilityBuild {
 	t.Helper()
-	service, err := runtimebuild.New(
-		defaultProvider,
-		defaultModel,
-		applyDefaults,
-		recordPath,
-		workflowID,
-		nil,
-		loadFactory,
+	service, err := runtimebuild.New(nil, loadFactory, testRuntimeID, zap.NewNop()).BindCompatibility(runtimebuild.BuildDefaults{WorkerModelProvider: defaultProvider, WorkerModel: defaultModel, ApplyOperatorDefaults: applyDefaults, RecordPath: recordPath, WorkflowID: workflowID},
 		provider,
 		providerRunner,
 		scriptRunner,
 		nil,
 		nil,
 		platformclock.Real{},
-		testRuntimeID,
 		zap.NewNop(),
 		build,
-		recorder,
-	)
+		recorder)
 	if err != nil {
 		t.Fatalf("runtimebuild.New: %v", err)
 	}
@@ -495,6 +478,7 @@ type runtimeBuildLoadedSource struct {
 	runtimeBaseDir string
 	config         *factorydefinitions.FactoryConfig
 	mutateErr      error
+	replacements   []factorydefinitions.PortableBundledFileReplacement
 }
 
 type behaviorCommandRunner struct{}
@@ -545,8 +529,8 @@ func (source *runtimeBuildLoadedSource) Workstation(name string) (*factorydefini
 	return nil, false
 }
 
-func (*runtimeBuildLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
-	return nil
+func (source *runtimeBuildLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
+	return source.replacements
 }
 
 func (source *runtimeBuildLoadedSource) MutateWorkers(mutate func(*factorydefinitions.FactoryWorkerConfig) error) error {
@@ -591,3 +575,153 @@ func (buildSubmissionHook) OnTick(
 
 var _ factory.SubmissionHook = buildSubmissionHook{}
 var _ factory.CompletionDeliveryPlanner = (*buildCompletionPlanner)(nil)
+
+func TestPrepareSuppliedCandidateKeepsPriorGenerationAndDetachedValues(t *testing.T) {
+	t.Parallel()
+	prior := newSelectedBuildFixture(t).loaded
+	prior.SetRuntimeBaseDir("/active")
+	candidate := newSelectedBuildFixture(t).loaded
+	preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		t.Fatal("supplied candidate must skip loading")
+		return nil, nil
+	}, testRuntimeID, zap.NewNop())
+	defaults := runtimebuild.BuildDefaults{WorkerModelProvider: " CODEX ", WorkerModel: " gpt-5 ", ApplyOperatorDefaults: true,
+		RecordPath: "/recordings/factory-__factory_session_id__.json", WorkflowID: "workflow-selected"}
+	values := runtimebuild.SessionBuildValues{Dir: "/factories/selected", FolderPath: "/workspace/project", SessionID: "session-selected",
+		ExecutionBaseDir: "/runtime/session-selected", LoadedFactoryCfg: candidate, PreserveCompatibilityDefaultRecordPath: true}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	prepared, err := preparation.Prepare(ctx, defaults, values)
+	if err != nil {
+		t.Fatalf("Prepare canceled context: %v", err)
+	}
+	assertSelectedBuildIdentity(t, runtimebuild.SessionBuildSpec{Dir: prepared.Dir, FolderPath: prepared.FolderPath, SessionID: prepared.SessionID,
+		ExecutionBaseDir: prepared.ExecutionBaseDir, RuntimeInstanceID: prepared.RuntimeInstanceID, RecordPath: prepared.RecordPath,
+		WorkflowID: prepared.WorkflowID, LoadedFactoryCfg: prepared.LoadedFactoryCfg}, selectedBuildFixture{loaded: candidate})
+	assertSelectedWorkerDefaults(t, candidate)
+	if prior.RuntimeBaseDir() != "/active" || prior.config.Workers[0].Model != "" {
+		t.Fatalf("prior generation mutated: %#v", prior)
+	}
+	if values.RuntimeInstanceID != "" || values.ExecutionBaseDir != "/runtime/session-selected" || defaults.WorkerModel != " gpt-5 " {
+		t.Fatal("caller values changed")
+	}
+	defaults.RecordPath = "/changed"
+	values.SessionID = "changed"
+	if prepared.SessionID != "session-selected" || prepared.RecordPath != "/recordings/factory-~default.json" {
+		t.Fatal("prepared values alias caller data")
+	}
+}
+
+func TestPrepareLoadsSelectedCandidateAndSelectsIdentityAndRecordingPath(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, runtimeID, sessionID, wantID, wantPath string
+		compatibility                                bool
+	}{
+		{"generated default", "  ", "session-a", "generated", "/recording.json", true},
+		{"trimmed explicit", " runtime-b ", "session-b", "runtime-b", "/recording.session-b.json", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := newSelectedBuildFixture(t).loaded
+			selectedLoader := &preparationWorkstationLoader{}
+			calls, ids := 0, 0
+			preparation := runtimebuild.New(selectedLoader, func(dir string, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				calls++
+				if dir != "/selected" || loader != selectedLoader {
+					t.Fatalf("load selection = %q, %T", dir, loader)
+				}
+				return candidate, nil
+			}, func() string { ids++; return "generated" }, zap.NewNop())
+			prepared, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{RecordPath: "/recording.json"},
+				runtimebuild.SessionBuildValues{Dir: "/selected", SessionID: test.sessionID, RuntimeInstanceID: test.runtimeID,
+					ExecutionBaseDir: "/runtime", PreserveCompatibilityDefaultRecordPath: test.compatibility})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 1 || prepared.LoadedFactoryCfg != candidate || prepared.RuntimeInstanceID != test.wantID || prepared.RecordPath != test.wantPath || candidate.RuntimeBaseDir() != "/runtime" {
+				t.Fatalf("prepared = %#v, loads = %d", prepared, calls)
+			}
+			wantIDs := 0
+			if test.wantID == "generated" {
+				wantIDs = 1
+			}
+			if ids != wantIDs {
+				t.Fatalf("generated IDs = %d, want %d", ids, wantIDs)
+			}
+		})
+	}
+}
+
+type preparationWorkstationLoader struct{}
+
+func (*preparationWorkstationLoader) Load(string) (*factorydefinitions.FactoryWorkstationConfig, error) {
+	return nil, nil
+}
+
+func TestPreparePreservesFailureIdentityAndContext(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.New("selected failure")
+	for _, test := range []struct {
+		name, provider, context    string
+		loadFailure, mutateFailure bool
+	}{
+		{name: "load", context: "load factory config", loadFailure: true},
+		{name: "unsupported provider", provider: "unsupported provider", context: "unsupported"},
+		{name: "mutation", provider: "codex", context: "apply operator defaults", mutateFailure: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := newSelectedBuildFixture(t).loaded
+			if test.mutateFailure {
+				candidate.mutateErr = sentinel
+			}
+			preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				if test.loadFailure {
+					return nil, sentinel
+				}
+				return candidate, nil
+			}, testRuntimeID, zap.NewNop())
+			result, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{ApplyOperatorDefaults: true, WorkerModelProvider: test.provider, WorkerModel: "model"}, runtimebuild.SessionBuildValues{})
+			if err == nil || !strings.Contains(err.Error(), test.context) {
+				t.Fatalf("Prepare error = %v", err)
+			}
+			if (test.loadFailure || test.mutateFailure) && !errors.Is(err, sentinel) {
+				t.Fatalf("lost sentinel: %v", err)
+			}
+			if result.LoadedFactoryCfg != nil {
+				t.Fatal("failed preparation returned candidate")
+			}
+		})
+	}
+}
+
+func TestPrepareWarningsPreserveSessionFieldsAndTargetOrder(t *testing.T) {
+	t.Parallel()
+	core, observed := observer.New(zap.WarnLevel)
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(core))
+	for _, id := range []string{"session-a", "session-b"} {
+		candidate := newSelectedBuildFixture(t).loaded
+		candidate.replacements = []factorydefinitions.PortableBundledFileReplacement{{TargetPath: "first"}, {TargetPath: "second"}}
+		_, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{}, runtimebuild.SessionBuildValues{
+			SessionID: id, FolderPath: "/folder/" + id, LoadedFactoryCfg: candidate})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries := observed.All()
+	if len(entries) != 2 {
+		t.Fatalf("warning count = %d", len(entries))
+	}
+	for i, id := range []string{"session-a", "session-b"} {
+		entry := entries[i]
+		fields := entry.ContextMap()
+		if entry.Message != "named factory activation replaced portable bundled files" || fields["session_id"] != id || fields["folder_path"] != "/folder/"+id || fields["factory_dir"] != "/factories/selected" {
+			t.Fatalf("warning = %#v", entry)
+		}
+		paths, ok := fields["target_paths"].([]interface{})
+		if !ok || len(paths) != 2 || paths[0] != "first" || paths[1] != "second" {
+			t.Fatalf("ordered targets = %#v", paths)
+		}
+	}
+}

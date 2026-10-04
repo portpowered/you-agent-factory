@@ -7,6 +7,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -77,8 +78,9 @@ func NewAssembly(
 	workerService workers.Service,
 	metricsClock platformclock.TimerSource,
 	instanceHost InstanceHost,
+	preparation *RuntimePreparation,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService, metricsClock, instanceHost)
+	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService, metricsClock, instanceHost, preparation)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator
@@ -87,4 +89,14 @@ func NewOrchestratorDefinitionValidator(
 	workflows factoryruntime.JavaScriptWorkflowDefinitions,
 ) factorydefinitions.OrchestratorDefinitionValidator {
 	return factoryruntimeinternal.NewOrchestratorDefinitionValidator(workflows)
+}
+
+// RuntimePreparation is the inert preparation owner passed through the T15 bridge.
+type RuntimePreparation = runtimebuild.Service
+
+// NewRuntimePreparation constructs fixed preparation once in canonical Wire.
+func NewRuntimePreparation(workstationLoader factorydefinitions.WorkstationLoader,
+	loadFactory factoryruntime.LoadedFactoryLoader, newID factoryruntime.IDGenerator,
+	baseLogger *zap.Logger) *RuntimePreparation {
+	return runtimebuild.New(workstationLoader, loadFactory, newID, baseLogger)
 }

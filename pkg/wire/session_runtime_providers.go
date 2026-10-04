@@ -1167,3 +1167,8 @@ func provideProviderFromCommandRunnerFactory(
 		)
 	}
 }
+
+// provideRuntimePreparationWorkstationLoader retains ordinary runtime default loading.
+func provideRuntimePreparationWorkstationLoader() factorydefinitions.WorkstationLoader {
+	return nil
+}

@@ -264,18 +264,15 @@ func NewRuntimeBuild(
 	recordingsRuntime recordings.RuntimeScopeService,
 	loadFactory factory.LoadedFactoryLoader,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
-) (*runtimebuild.Service, error) {
+	preparation *runtimebuild.Service,
+) (*runtimebuild.CompatibilityBuild, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
 	}
-	return runtimebuild.New(
-		defaultWorkerModelProvider,
-		defaultWorkerModel,
-		applyOperatorDefaults,
-		recordPath,
-		workflowID,
-		workstationLoader,
-		loadFactory,
+	return preparation.BindCompatibility(runtimebuild.BuildDefaults{
+		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+		ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+	},
 		providerOverride,
 		providerCommandRunner,
 		scriptCommandRunner,
@@ -291,7 +288,6 @@ func NewRuntimeBuild(
 			return mockCommandRunnerFactory(config, runtimeConfig, next)
 		},
 		clock,
-		runtimeFactory.newID,
 		baseLogger,
 		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
 			var progressPublisher workers.ProgressPublisher

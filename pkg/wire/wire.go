@@ -300,6 +300,8 @@ var servicesSet = wire.NewSet(
 	provideEditableFactoryValidator,
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewRuntimeFactory,
+	provideRuntimePreparationWorkstationLoader,
+	factoryruntimewire.NewRuntimePreparation,
 	factoryruntimewire.NewAssembly,
 	provideFactoryRuntimeRoot,
 	provideRuntimeOrchestration,

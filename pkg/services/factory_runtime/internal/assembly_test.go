@@ -299,7 +299,7 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 }
 
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil, nil, nil)
+	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
 		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
 	}
@@ -310,7 +310,7 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{}, nil, nil)
+	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Worker Sessions factory is required") {
 		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
 	}
@@ -321,7 +321,7 @@ func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil, nil, nil)
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
 		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
 	}
@@ -333,7 +333,7 @@ func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	workerService := stubWorkersService{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService, platformclock.Real{}, nil)
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService, platformclock.Real{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}
