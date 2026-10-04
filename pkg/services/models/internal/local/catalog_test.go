@@ -20,18 +20,15 @@ func TestCanonicalModelName_NormalizesCaseAndWhitespace(t *testing.T) {
 	}
 }
 
-func TestListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {
+func TestCatalog_SummarizesConfiguredModelCapabilities(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 
-	list, err := ListModelsWithRuntime(loaded, nil, nil)
-	if err != nil {
-		t.Fatalf("ListModels: %v", err)
+	catalog := BuildCatalogWithRuntime(loaded, nil, nil)
+	if len(catalog) != 1 {
+		t.Fatalf("models count = %d, want 1", len(catalog))
 	}
-	if len(list.Results) != 1 {
-		t.Fatalf("models count = %d, want 1", len(list.Results))
-	}
-	model := list.Results[0]
+	model := catalog["OMNIVOICE_Q4_K_M"].Summary
 	if model.Name != "OMNIVOICE_Q4_K_M" || model.ProviderLocality != managedruntime.LocalityLocal {
 		t.Fatalf("model summary = %#v, want OMNIVOICE local model", model)
 	}

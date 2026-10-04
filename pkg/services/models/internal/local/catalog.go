@@ -671,24 +671,6 @@ func mergeInspectDiagnostics(base map[string]string, managed managedruntime.Runt
 	return merged
 }
 
-// ListModelsWithRuntime returns runtime-aware model-owned discovery projections.
-func ListModelsWithRuntime(
-	runtimeCfg *models.RuntimeConfig,
-	runtimeCacheInspector RuntimeCacheInspector,
-	sourceResolver ManagedRuntimeSourceResolver,
-) (modelcatalog.List, error) {
-	if runtimeCfg == nil {
-		return modelcatalog.List{}, fmt.Errorf("factory service runtime is not available")
-	}
-	catalog := BuildCatalogWithRuntime(runtimeCfg, runtimeCacheInspector, sourceResolver)
-	results := make([]modelcatalog.Summary, 0, len(catalog))
-	for _, entry := range catalog {
-		results = append(results, entry.Summary)
-	}
-	sort.Slice(results, func(i, j int) bool { return results[i].Name < results[j].Name })
-	return modelcatalog.List{Results: results}, nil
-}
-
 // GetModelWithRuntime returns runtime-aware model-owned detail.
 func GetModelWithRuntime(
 	runtimeCfg *models.RuntimeConfig,

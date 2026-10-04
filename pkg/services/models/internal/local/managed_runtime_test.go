@@ -57,18 +57,15 @@ func TestBuildManagedRuntimeProjection_RejectsReadyNotInstalledForManagedLocal(t
 	}
 }
 
-func TestListModels_PopulatesManagedRuntimeContract(t *testing.T) {
+func TestCatalog_PopulatesManagedRuntimeContract(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 
-	models, err := ListModelsWithRuntime(loaded, nil, nil)
-	if err != nil {
-		t.Fatalf("ListModels: %v", err)
+	catalog := BuildCatalogWithRuntime(loaded, nil, nil)
+	if len(catalog) != 1 {
+		t.Fatalf("models count = %d, want 1", len(catalog))
 	}
-	if len(models.Results) != 1 {
-		t.Fatalf("models count = %d, want 1", len(models.Results))
-	}
-	model := models.Results[0]
+	model := catalog["OMNIVOICE_Q4_K_M"].Summary
 	if model.ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("managed runtime identity = %q, want OMNIVOICE_Q4_K_M", model.ManagedRuntime.Identity)
 	}

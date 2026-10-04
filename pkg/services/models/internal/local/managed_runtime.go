@@ -304,27 +304,6 @@ func (inspector fixedRuntimeCacheInspector) InspectRuntimeCache(
 	return inspector.inspection, nil
 }
 
-// EnsureManagedRuntimeReadyForInvocation classifies one managed runtime using
-// the same catalog readiness projection as discovery and inspect before
-// invocation proceeds.
-func EnsureManagedRuntimeReadyForInvocation(
-	runtimeCfg *models.RuntimeConfig,
-	modelName string,
-	runtimeCacheInspector RuntimeCacheInspector,
-	sourceResolver ManagedRuntimeSourceResolver,
-) (managedruntime.Runtime, error) {
-	managed, err := ManagedRuntimeReadinessForFactory(
-		runtimeCfg, modelName, runtimeCacheInspector, sourceResolver,
-	)
-	if err != nil {
-		return managedruntime.Runtime{}, err
-	}
-	if invocationErr := managed.InvocationError(); invocationErr != nil {
-		return managed, invocationErr
-	}
-	return managed, nil
-}
-
 const (
 	// EffectiveOperationsDiagnostic identifies a runtime-backed operation
 	// projection. It is intentionally diagnostic-only; the public model shape
