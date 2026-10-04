@@ -40,7 +40,7 @@ func TestComposedRecordReplayUsesRootBuildProcessAndExecute(t *testing.T) {
 	recordAPI := support.NewProcessAPIServer()
 	recordProcess := buildComposedProcess(t, effects, recordAPI, support.NewStaticSuccessCommandRunner(`{"verdict":"pass"}`))
 	assertComposedBuildIsInert(t, effects, artifactPath)
-	recordCommand, recordURL := startComposedRun(t, recordProcess, recordAPI, factoryDir, "--record", artifactPath)
+	recordCommand, recordURL := startComposedRun(t, recordProcess, recordAPI, factoryDir, nil, "--record", artifactPath)
 	support.WaitForTerminalStatus(t, recordURL, 15*time.Second)
 	assertComposedRecordedState(t, recordURL, artifactPath)
 	recordCommand.Stop(t)
@@ -61,7 +61,7 @@ func TestComposedRecordReplayUsesRootBuildProcessAndExecute(t *testing.T) {
 	replayAPI := support.NewProcessAPIServer()
 	replayRunner := &composedReplayCommandRunner{}
 	replayProcess := buildComposedProcess(t, effects, replayAPI, replayRunner)
-	replayCommand, replayURL := startComposedRun(t, replayProcess, replayAPI, t.TempDir(), "--replay", artifactPath, "--no-record")
+	replayCommand, replayURL := startComposedRun(t, replayProcess, replayAPI, t.TempDir(), nil, "--replay", artifactPath, "--no-record")
 	support.WaitForTerminalStatus(t, replayURL, 15*time.Second)
 	assertComposedReplayedState(t, replayURL)
 	replayCommand.Stop(t)
@@ -109,6 +109,7 @@ func startComposedRun(
 	process support.Process,
 	api *support.ProcessAPIServer,
 	workingDirectory string,
+	readiness *support.ControlledReadinessTimers,
 	recordingArgs ...string,
 ) (*support.ProcessCommand, string) {
 	t.Helper()
@@ -118,6 +119,9 @@ func startComposedRun(
 	inputs.Input.Env = isolatedReplayEnvironmentFor(t)
 	inputs.Input.WorkingDirectory = workingDirectory
 	command := support.StartProcessCommand(t, process, inputs.Input)
+	if readiness != nil {
+		return command, readiness.WaitForURL(t, api)
+	}
 	return command, api.WaitForURL(t)
 }
 
@@ -293,9 +297,11 @@ func characterizeComposedReplayClock(t *testing.T, explicit bool) {
 	edges := effects.edges(api, runner)
 	processTime := time.Date(2040, time.January, 1, 0, 0, 0, 0, time.UTC)
 	scheduler := platformclock.NewDeterministic(processTime.Add(24*time.Hour), time.Second)
+	var readiness *support.ControlledReadinessTimers
 	if explicit {
+		readiness = support.NewControlledReadinessTimers(scheduler)
 		edges.Clock = replayOriginClock{at: processTime}
-		edges.ProcessScheduler = scheduler
+		edges.ProcessScheduler = readiness
 	}
 	process, err := root.BuildProcess(t.Context(), edges)
 	if err != nil {
@@ -303,7 +309,7 @@ func characterizeComposedReplayClock(t *testing.T, explicit bool) {
 	}
 	support.CleanupProcess(t, process)
 	before := time.Now()
-	command, url := startComposedRun(t, process, api, t.TempDir(), "--replay", artifactPath, "--no-record")
+	command, url := startComposedRun(t, process, api, t.TempDir(), readiness, "--replay", artifactPath, "--no-record")
 	support.WaitForTerminalStatus(t, url, 15*time.Second)
 	listed := support.ListDefaultSessionWork(t, url)
 	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {

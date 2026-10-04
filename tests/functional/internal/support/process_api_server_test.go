@@ -7,8 +7,58 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 )
+
+func TestControlledReadinessPreservesSelectedSchedulerDeadlines(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
+	selected := platformclock.NewDeterministic(base, time.Millisecond)
+	scheduler := NewControlledReadinessTimers(selected)
+	metrics := scheduler.NewTimer(5 * time.Millisecond)
+	defer metrics.Stop()
+	deadline := scheduler.NewTimer(time.Second)
+	defer deadline.Stop()
+	server := NewProcessAPIServer()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		// Exercise multiple readiness registrations, including the After seam.
+		<-scheduler.After(10 * time.Millisecond)
+		poll := scheduler.NewTimer(10 * time.Millisecond)
+		<-poll.C()
+		poll.Stop()
+		done <- server.Start(ctx, platformhttpserver.StartRequest{Handler: http.NotFoundHandler()})
+	}()
+	url := scheduler.WaitForURL(t, server)
+	if !strings.HasPrefix(url, "http://") || !scheduler.Now().Equal(base) {
+		t.Fatalf("startup URL/time = %q/%v, want HTTP URL and %v", url, scheduler.Now(), base)
+	}
+	for _, timer := range []platformclock.Timer{metrics, deadline} {
+		select {
+		case <-timer.C():
+			t.Fatal("readiness delivery fired a selected scheduler timer")
+		default:
+		}
+	}
+	selected.SetTick(5)
+	select {
+	case <-metrics.C():
+	default:
+		t.Fatal("selected scheduler did not deliver the metrics deadline")
+	}
+	select {
+	case <-deadline.C():
+		t.Fatal("startup ceiling fired before its selected logical deadline")
+	default:
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestProcessAPIServerWaitForURLReportsNeverInvokedStarter(t *testing.T) {
 	server := NewProcessAPIServer()

@@ -23,7 +23,8 @@ import (
 func TestSelectedProcessTimeControlsRuntimeFacts(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
-	facts := &selectedTimeSource{clock: platformclock.NewDeterministic(base, time.Hour)}
+	factClock := platformclock.NewDeterministic(base, time.Hour)
+	facts := &selectedTimeSource{clock: factClock, readiness: support.NewControlledReadinessTimers(factClock)}
 	release := make(chan struct{})
 	runner := &selectedTimeRunner{started: make(chan struct{}), delegate: support.NewGatedSuccessCommandRunner("selected time COMPLETE", release)}
 	fixture := startSelectedTimeRun(t, facts, nil, runner)
@@ -46,17 +47,24 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 		Deterministic: platformclock.NewDeterministic(base.Add(24*time.Hour), time.Millisecond),
 		registered:    make(chan struct{}, 16),
 	}
+	scheduler.readiness = support.NewControlledReadinessTimers(scheduler.Deterministic)
 	release := make(chan struct{})
 	runner := &selectedTimeRunner{started: make(chan struct{}), delegate: support.NewGatedSuccessCommandRunner("separate scheduler COMPLETE", release)}
 	fixture := startSelectedTimeRun(t, facts, scheduler, runner)
 	awaitSelectedTimeSignal(t, runner.started)
 	awaitSelectedTimeSignal(t, scheduler.registered)
+	// Readiness delivery leaves the sampling scheduler at a known origin.
+	origin := scheduler.Now()
+	if !origin.Equal(base.Add(24 * time.Hour)) {
+		t.Fatalf("post-start sampling origin = %v, want %v", origin, base.Add(24*time.Hour))
+	}
+	originTick := int(origin.Sub(base.Add(24*time.Hour)) / time.Millisecond)
 	assertSelectedMemorySamples(t, fixture.metrics, 1)
 	// Advancing facts does not progress B's timer; the registered timer has not fired.
 	facts.clock.SetTick(1)
 	assertSelectedMemorySamples(t, fixture.metrics, 1)
 	// Before the registered 5ms poll deadline, no new poll is registered.
-	scheduler.SetTick(4)
+	scheduler.SetTick(originTick + 4)
 	select {
 	case <-scheduler.registered:
 		t.Fatal("metrics poll fired before its logical deadline")
@@ -64,10 +72,10 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 	}
 	assertSelectedMemorySamples(t, fixture.metrics, 1)
 	// A completed poll before the 10s memory deadline still has one sample.
-	scheduler.SetTick(9000)
+	scheduler.SetTick(originTick + 9000)
 	awaitSelectedTimeSignal(t, scheduler.registered)
 	assertSelectedMemorySamples(t, fixture.metrics, 1)
-	scheduler.SetTick(10000)
+	scheduler.SetTick(originTick + 10000)
 	awaitSelectedTimeSignal(t, scheduler.registered)
 	assertSelectedMemorySamples(t, fixture.metrics, 2)
 	close(release)
@@ -81,14 +89,17 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 
 // Hide replay TickSetter: this source is controlled by the operator fixture,
 // rather than the runtime's recorded-tick advancement protocol.
-type selectedTimeSource struct{ clock *platformclock.Deterministic }
+type selectedTimeSource struct {
+	clock     *platformclock.Deterministic
+	readiness *support.ControlledReadinessTimers
+}
 
 func (source *selectedTimeSource) Now() time.Time { return source.clock.Now() }
 func (source *selectedTimeSource) NewTimer(d time.Duration) platformclock.Timer {
-	return source.clock.NewTimer(d)
+	return source.readiness.NewTimer(d)
 }
 func (source *selectedTimeSource) After(d time.Duration) <-chan time.Time {
-	return source.clock.After(d)
+	return source.readiness.After(d)
 }
 
 type selectedTimeNowOnlySource struct{ clock *platformclock.Deterministic }
@@ -98,11 +109,16 @@ func (source *selectedTimeNowOnlySource) Now() time.Time { return source.clock.N
 type selectedTimeScheduler struct {
 	*platformclock.Deterministic
 	registered chan struct{}
+	readiness  *support.ControlledReadinessTimers
 }
 
 func (clock *selectedTimeScheduler) NewTimer(duration time.Duration) platformclock.Timer {
-	timer := clock.Deterministic.NewTimer(duration)
-	clock.registered <- struct{}{}
+	timer := clock.readiness.NewTimer(duration)
+	// Only a metrics rearm proves the preceding metrics observation completed.
+	// Startup polls and its failure ceiling cannot satisfy this barrier.
+	if duration == 5*time.Millisecond {
+		clock.registered <- struct{}{}
+	}
 	return timer
 }
 
@@ -147,7 +163,16 @@ func startSelectedTimeHost(t *testing.T, dir string, facts platformclock.Source,
 	// First-run profile installation is a prerequisite, outside host readiness.
 	support.InitializeCustomerHomeWithProcess(t, process, inputs.Env, dir)
 	command := support.StartProcessCommand(t, process, inputs.Input)
-	return selectedTimeFixture{url: api.WaitForURL(t), session: session, metrics: metrics, command: command}
+	var readiness *support.ControlledReadinessTimers
+	if scheduler != nil {
+		readiness = scheduler.(*selectedTimeScheduler).readiness
+	} else if source, ok := facts.(*selectedTimeSource); ok {
+		readiness = source.readiness
+	}
+	if readiness == nil {
+		return selectedTimeFixture{url: api.WaitForURL(t), session: session, metrics: metrics, command: command}
+	}
+	return selectedTimeFixture{url: readiness.WaitForURL(t, api), session: session, metrics: metrics, command: command}
 }
 
 func awaitSelectedTimeSignal(t *testing.T, signal <-chan struct{}) {

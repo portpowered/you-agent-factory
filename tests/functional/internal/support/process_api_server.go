@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 )
@@ -123,6 +124,51 @@ func (server *ProcessAPIServer) WaitForURL(t testing.TB) string {
 		t.Fatal(err)
 	}
 	return baseURL
+}
+
+// ControlledReadinessTimers delivers startup polls at the injected timer edge,
+// without advancing customer fact time or the metrics sampling origin. All
+// other timers retain the selected scheduler's logical deadlines.
+type ControlledReadinessTimers struct {
+	platformclock.TimerSource
+	polls chan *platformclock.Deterministic
+}
+
+func NewControlledReadinessTimers(scheduler platformclock.TimerSource) *ControlledReadinessTimers {
+	return &ControlledReadinessTimers{TimerSource: scheduler, polls: make(chan *platformclock.Deterministic)}
+}
+
+func (scheduler *ControlledReadinessTimers) NewTimer(duration time.Duration) platformclock.Timer {
+	if duration != 10*time.Millisecond {
+		return scheduler.TimerSource.NewTimer(duration)
+	}
+	poll := platformclock.NewDeterministic(scheduler.Now(), duration)
+	timer := poll.NewTimer(duration)
+	scheduler.polls <- poll
+	return timer
+}
+
+func (scheduler *ControlledReadinessTimers) After(duration time.Duration) <-chan time.Time {
+	return scheduler.NewTimer(duration).C()
+}
+
+// WaitForURL drives only registered readiness polls until the real transport
+// starts. Channel registration/delivery synchronizes startup; the wall timer
+// is only a deadlock ceiling. No background driver survives this observation.
+func (scheduler *ControlledReadinessTimers) WaitForURL(t testing.TB, server *ProcessAPIServer) string {
+	t.Helper()
+	ceiling := time.NewTimer(ScaledTimeout(processAPIServerReadyTimeout))
+	defer ceiling.Stop()
+	for {
+		select {
+		case poll := <-scheduler.polls:
+			poll.SetTick(1)
+		case <-server.ready:
+			return server.WaitForURL(t)
+		case <-ceiling.C:
+			t.Fatal("controlled readiness polls did not reach API startup")
+		}
+	}
 }
 
 // WaitForBaseURL waits for the injected transport to start and returns its URL
