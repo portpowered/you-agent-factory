@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,51 @@ import (
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 )
+
+func TestReaderDetailsConcurrentIdentitiesReturnOrderedDetachedEntries(t *testing.T) {
+	root := t.TempDir()
+	for _, id := range []string{"first", "second"} {
+		content := `{"type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":"` + id + `"}}` + "\n" +
+			`{"type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok"}}` + "\n" +
+			`{"type":"event_msg","payload":{"type":"agent_message","message":"` + id + `"}}`
+		if err := os.WriteFile(filepath.Join(root, "rollout-"+id+".jsonl"), []byte(content), 0o600); err != nil {
+			t.Fatalf("write fixture: %v", err)
+		}
+	}
+	reader := newTestReader(t, testFiles, testWalkDirectory, testResolveSymlinks, filepath.Join(root, "unused", ".."))
+	for _, id := range []string{"first", "second"} {
+		t.Run(id, func(t *testing.T) {
+			// These children join before the next serial limit-override test runs.
+			t.Parallel()
+			first, err := reader.Details(context.Background(), codexSessionRef(id))
+			if err != nil {
+				t.Fatalf("Details: %v", err)
+			}
+			second, err := reader.Details(context.Background(), codexSessionRef(id))
+			if err != nil || !reflect.DeepEqual(first, second) {
+				t.Fatalf("repeated Details = %#v, %v; want %#v", second, err, first)
+			}
+			if first.ProviderSession.ID != id || first.ProviderSession.Provider != providersessions.ProviderCodex || first.ProviderSession.Kind != providersessions.SessionIDKind || len(first.Transcript) != 3 {
+				t.Fatalf("unexpected identity or transcript: %#v", first)
+			}
+			wantTypes := []providersessions.TranscriptEntryType{providersessions.TranscriptToolCall, providersessions.TranscriptToolOutput, providersessions.TranscriptAssistantMessage}
+			for index, want := range wantTypes {
+				if first.Transcript[index].Type != want {
+					t.Fatalf("transcript[%d] = %#v, want %s", index, first.Transcript[index], want)
+				}
+			}
+			if stringValue(first.Transcript[0].Arguments) != id || stringValue(first.Transcript[1].Output) != "ok" || stringValue(first.Transcript[2].Text) != id {
+				t.Fatalf("unexpected transcript content: %#v", first.Transcript)
+			}
+			*first.Transcript[0].Arguments = "mutated"
+			*first.Transcript[2].Text = "mutated"
+			third, err := reader.Details(context.Background(), codexSessionRef(id))
+			if err != nil || !reflect.DeepEqual(second, third) || stringValue(second.Parse.FunctionCalls[0].Arguments) != id {
+				t.Fatalf("mutation escaped inspection: second=%#v third=%#v error=%v", second, third, err)
+			}
+		})
+	}
+}
 
 func representativeCodexJSONL() string {
 	return strings.Join([]string{
