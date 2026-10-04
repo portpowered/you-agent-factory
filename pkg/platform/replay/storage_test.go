@@ -62,6 +62,48 @@ func TestAppendReplaySuffixRollsBackPartialWriteForRetry(t *testing.T) {
 	}
 }
 
+func TestAppendFileRecreatesMissingParent(t *testing.T) {
+	t.Parallel()
+	storage := NewLocal(runtime.GOOS)
+	parent := filepath.Join(t.TempDir(), "nested")
+	path := filepath.Join(parent, "run.replay.jsonl")
+	if err := storage.AppendFile(path, []byte("first\n")); err != nil {
+		t.Fatal(err)
+	}
+	// External cleanup of this test-owned directory must not leave a cached
+	// directory-ready assumption that prevents a subsequent append.
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.AppendFile(path, []byte("second\n")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := storage.ReadFile(path)
+	if err != nil || string(got) != "second\n" {
+		t.Fatalf("ReadFile() = %q, %v, want second suffix", got, err)
+	}
+}
+
+func TestAppendFileRejectsOccupiedPath(t *testing.T) {
+	t.Parallel()
+	storage := NewLocal(runtime.GOOS)
+	path := filepath.Join(t.TempDir(), "occupied")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := storage.AppendFile(path, []byte("event\n"))
+	if err == nil || !strings.Contains(err.Error(), "open replay artifact for append") {
+		t.Fatalf("AppendFile() error = %v, want open failure", err)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("occupied directory changed: %v, %v", entries, err)
+	}
+}
+
 func TestAppendReplaySuffixRollsBackAfterSyncFailureForRetry(t *testing.T) {
 	file := &replayAppendTestFile{data: []byte("prefix"), syncFailures: 1}
 	if err := appendReplaySuffix(file, []byte("-suffix")); err == nil || !strings.Contains(err.Error(), "sync replay artifact append") {

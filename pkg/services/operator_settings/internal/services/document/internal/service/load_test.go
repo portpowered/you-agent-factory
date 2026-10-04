@@ -160,7 +160,7 @@ func TestLoadDocument_ValidDocumentIncludesBackendScopeAndPresets(t *testing.T) 
 func newDocumentLoadService(t *testing.T, files map[string][]byte) *internalservice.Service {
 	t.Helper()
 
-	return internalservice.New(
+	return internalservice.NewWithPreserver(
 		&mapFileSystem{files: files},
 		func(string, string) (operatorsettings.TemporaryFile, error) {
 			t.Fatal("temp-file creation is unexpected during load")
@@ -172,6 +172,7 @@ func newDocumentLoadService(t *testing.T, files map[string][]byte) *internalserv
 			t.Fatal("provider catalog is unexpected during load")
 			return "", false
 		},
+		nil,
 		globalconfigmapping.DecodeWithDiagnostics,
 	)
 }
