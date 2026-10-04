@@ -35,6 +35,9 @@ type readinessTimer struct {
 }
 
 func (*readinessTimers) Now() time.Time { panic("readiness must not read fact time") }
+func (s *readinessTimers) After(duration time.Duration) <-chan time.Time {
+	return s.NewTimer(duration).C()
+}
 func (s *readinessTimers) NewTimer(duration time.Duration) platformclock.Timer {
 	timer := &readinessTimer{duration: duration, fired: make(chan time.Time, 1)}
 	s.created <- timer
