@@ -24,13 +24,40 @@ import (
  models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-// A narrow two-holder acquisition check, not the complete fault/cancel capability.
-func TestLifecycleProfileModelDiagnostic(t *testing.T) {
+// Narrow public acquisition/fault/cancellation checks; full capability is separate.
+func TestLifecycleProfileModelDiagnostic(t *testing.T) { runModelDiagnostic(t,"model_diagnostic") }
+func TestLifecycleProfileModelFaultDiagnostic(t *testing.T) { runModelDiagnostic(t,"model_fault_diagnostic") }
+func TestLifecycleProfileModelCancelDiagnostic(t *testing.T) { runModelDiagnostic(t,"model_cancel_diagnostic") }
+func runModelDiagnostic(t *testing.T,mode string) {
  if testing.Short(){t.Skip("dedicated public Models acquisition diagnostic")}
- r:=newSampleProfile("model_diagnostic");defer r.emit(t);r.load(t)
+ r:=newSampleProfile(mode);defer r.emit(t);r.load(t)
  baselineobservation.Close();defer baselineobservation.Close()
  ctx,cancel:=context.WithTimeout(t.Context(),time.Minute);defer cancel()
  r.session(t,ctx,smokeArtifact(t))
+}
+
+func checkModelDiagnosticResult(mode,text string,result sessions.InvocationResult,err error)error {
+ if err!=nil{return err}
+ expected:=sessions.InvocationTerminalStatusCompleted;code:=""
+ if text=="profile-model-peer" {
+  if mode=="model_fault_diagnostic"{expected=sessions.InvocationTerminalStatusFailed;code=string(sessions.InvocationErrorCodeRuntimeFailure)}
+  if mode=="model_cancel_diagnostic"{expected=sessions.InvocationTerminalStatusCanceled;code=string(sessions.InvocationErrorCodeCanceled)}
+ }
+ if result.Status!=expected || result.ErrorCode!=code || result.RequestID!=text || result.SessionID=="" || result.WorkID==""{return fmt.Errorf("unexpected public model outcome: %#v",result)}
+ return nil
+}
+func TestLifecycleProfileDriverModelDiagnosticOutcomes(t *testing.T) {
+ t.Parallel()
+ for _,mode:=range []string{"model_diagnostic","model_fault_diagnostic","model_cancel_diagnostic"}{
+  result:=sessions.InvocationResult{RequestID:"profile-model-peer",SessionID:"session",WorkID:"work",Status:sessions.InvocationTerminalStatusCompleted}
+  if mode=="model_fault_diagnostic"{result.Status=sessions.InvocationTerminalStatusFailed;result.ErrorCode=string(sessions.InvocationErrorCodeRuntimeFailure)}
+  if mode=="model_cancel_diagnostic"{result.Status=sessions.InvocationTerminalStatusCanceled;result.ErrorCode=string(sessions.InvocationErrorCodeCanceled)}
+  if err:=checkModelDiagnosticResult(mode,result.RequestID,result,nil);err!=nil{t.Fatal(err)}
+  wrong:=result;wrong.Status=sessions.InvocationTerminalStatusTimedOut
+  if checkModelDiagnosticResult(mode,result.RequestID,wrong,nil)==nil{t.Fatal("timeout accepted as declared outcome")}
+  wrong=result;wrong.WorkID="";if checkModelDiagnosticResult(mode,result.RequestID,wrong,nil)==nil{t.Fatal("unattributed outcome accepted")}
+  cause:=errors.New("transport failed");if !errors.Is(checkModelDiagnosticResult(mode,result.RequestID,result,cause),cause){t.Fatal("original transport failure lost")}
+ }
 }
 
 func profileModelFactory(t *testing.T)string {
@@ -58,7 +85,7 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
  var scope string
  for _,text:=range routes {
   started++
-  go func(){result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});if err==nil && result.Status!=sessions.InvocationTerminalStatusCompleted{err=fmt.Errorf("public model Work %s failed: %#v",text,result)};done<-err}()
+  go func(){result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});t.Logf("public model outcome mode=%s route=%s result=%#v error=%v",r.Mode,text,result,err);done<-checkModelDiagnosticResult(r.Mode,text,result,err)}()
   // Observe terminal refusal as well as acquisition; a held peer cannot return.
   select{case request:=<-gate.routes[text].observed:
    if scope!="" && scope!=request.Scope.String(){t.Fatal("public model Work changed scope")};scope=request.Scope.String()
@@ -73,7 +100,11 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
   for _,lease:=range owner.Leases.LeaseRecords{if lease.Scope==scope && lease.ModelName=="embed" && lease.Status=="ACTIVE" && lease.Claimed{if leaseIDs[lease.Key]{t.Fatal("duplicate active lease")};leaseIDs[lease.Key]=true}}
  }}
  if len(leaseIDs)!=2 || ownerID==""{t.Fatal("missing two real same-slot Models capacity holders")}
- for _,text:=range routes{if err=gate.release(text);err!=nil{t.Fatal(err)}}
+ if r.Mode=="model_cancel_diagnostic" {
+  if err=gate.release(routes[0]);err!=nil{t.Fatal(err)}
+  select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
+  if err=ops.Cancel(ctx,cycle);err!=nil{t.Fatal(err)}
+ } else {for _,text:=range routes{if err=gate.release(text);err!=nil{t.Fatal(err)}}}
  for joined<started{select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}}
  for _,text:=range routes{if err=gate.join(ctx,text);err!=nil{t.Fatal(err)}}
  released:=r.capture(t,artifact,"CAPACITY_RELEASED",attempt,bootstrap);r.Final=append(r.Final,released)

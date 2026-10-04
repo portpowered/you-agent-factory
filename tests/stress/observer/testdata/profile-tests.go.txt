@@ -155,8 +155,8 @@ func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifa
   },
  }
  var modelGate *profileModelGate
- if r.Mode=="model_diagnostic" {
-  gate,err:=newProfileModelGate(map[string]error{"profile-model-work":nil,"profile-model-peer":nil});if err!=nil{t.Fatal(err)};modelGate=gate
+ if r.Mode=="model_diagnostic" || r.Mode=="model_fault_diagnostic" || r.Mode=="model_cancel_diagnostic" {
+  var failure error;if r.Mode=="model_fault_diagnostic"{failure=errors.New("profile controlled inference failure")};gate,err:=newProfileModelGate(map[string]error{"profile-model-work":nil,"profile-model-peer":failure});if err!=nil{t.Fatal(err)};modelGate=gate
   modelEffects:=profileModelEdges(t,home,modelGate)
   modelEffects.FactorySessionIDGenerator=effects.FactorySessionIDGenerator
   modelEffects.BrowserOpener=effects.BrowserOpener
@@ -187,7 +187,7 @@ func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifa
  bootstrap,err:=service.List(ctx,sessions.SessionListRequest{Mode:sessions.SessionOperationModeLive});if err!=nil{t.Fatal(err)}
  bootstrapIDs:=[]string{};for _,s:=range bootstrap.Sessions{bootstrapIDs=append(bootstrapIDs,s.SessionID)}
  r.Final=append(r.Final,r.capture(t,artifact,"HOST_BASELINE",nil,bootstrapIDs))
- if r.Mode=="model_diagnostic" {
+ if r.Mode=="model_diagnostic" || r.Mode=="model_fault_diagnostic" || r.Mode=="model_cancel_diagnostic" {
   r.modelDiagnostic(t,ctx,service,home,artifact,bootstrapIDs,modelGate)
   return
  }

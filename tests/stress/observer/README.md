@@ -382,3 +382,16 @@ selector proves same-slot multiplicity but does not prove fault/cancellation com
 or the complete capability. Its report uses mode `model_diagnostic` and stays
 `complete:false`, with empty samples and capacityWitnesses; raw checkpoints and
 attribution remain available. It skips before construction under `-short`.
+
+`TestLifecycleProfileModelFaultDiagnostic` uses the same two-holder public
+scenario and returns a controlled inference error for the held peer. It requires
+FAILED/INVOCATION_RUNTIME_FAILURE while the other Work completes.
+`TestLifecycleProfileModelCancelDiagnostic` completes one Work, then cancels the
+explicit session while its peer remains held. It requires the peer's public
+CANCELED/INVOCATION_CANCELED outcome and joins its callback before observation.
+Both selectors require zero holders and retained terminal leases, followed by
+session, Execute/server and Process.Close joins. Run each on the prepared
+artifact with `-test.short=false -test.count=1 -test.timeout=2m -test.v` and its
+own absolute `OBSERVER_REPORT`. Raw output preserves the public result, Work and
+session IDs, and error classification. Their diagnostic reports stay incomplete;
+these narrow selectors do not establish the full profile or timing acceptance.

@@ -148,7 +148,9 @@
         "profile",
         "capability",
         "samples_capability",
-        "model_diagnostic"
+        "model_diagnostic",
+        "model_fault_diagnostic",
+        "model_cancel_diagnostic"
       ]
     },
     "manifestPath": {
