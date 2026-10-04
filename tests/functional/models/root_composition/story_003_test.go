@@ -661,16 +661,7 @@ func assertStory003ControlledSourceHTTPFailure(t *testing.T, serverURL string) {
 		httpFailureResponse.Outcome == factoryapi.ModelPullOutcomeALREADYPRESENT {
 		t.Fatalf("POST /models/%s/pull retained a success compatibility outcome: %#v", story003ModelName, httpFailureResponse)
 	}
-	for _, path := range []string{"/status", "/models"} {
-		survival, err := http.Get(serverURL + path)
-		if err != nil {
-			t.Fatalf("GET %s after failed pull: %v", path, err)
-		}
-		_ = survival.Body.Close()
-		if survival.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s after failed pull status = %d, want 200 (server must survive a failed pull)", path, survival.StatusCode)
-		}
-	}
+	assertStory003ServerSurvivesFailedPull(t, serverURL)
 	t.Logf("controlled source failure HTTP status=%d body=%s", httpFailure.StatusCode, strings.TrimSpace(string(httpFailureBody)))
 }
 
