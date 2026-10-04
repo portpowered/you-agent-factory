@@ -25,7 +25,7 @@ func TestInvocationLeaseReleaseIsExactlyOnce(t *testing.T) {
 	t.Run("context cancellation", runReleaseContextCancellation)
 	t.Run("explicit cancellation has no late completion", runReleaseExplicitCancellation)
 	t.Run("cancellation release failure stays retained", runCancellationReleaseFailure)
-	t.Run("missing runtime releases acquired lease", runReleaseMissingRuntime)
+	t.Run("unavailable runtime releases acquired lease", runReleaseUnavailableRuntime)
 	t.Run("release failure cannot publish success", runReleaseFailureCannotPublishSuccess)
 	t.Run("cancellation during generation retains capacity until exit", runRunningCancellation)
 }
@@ -180,29 +180,29 @@ func runReleaseFailureCannotPublishSuccess(t *testing.T) {
 	}
 }
 
-func runReleaseMissingRuntime(t *testing.T) {
+func runReleaseUnavailableRuntime(t *testing.T) {
 	t.Parallel()
 	t.Helper()
 
-	scopes, scope, lease, host := releaseFixture(t, "release-missing-runtime", models.OperationOMNI)
+	scopes, scope, lease, host := releaseFixture(t, "release-unavailable-runtime", models.OperationOMNI)
 	service := newInferenceServiceWithHost(
-		t, scopes, mustCatalog(t, scopes), host, nil, fixedClock(), nil,
+		t, scopes, mustCatalog(t, scopes), host, &recordingInvocationRuntime{invokeErr: models.ErrUnavailable}, fixedClock(), nil,
 	)
 	ctx := modelseffects.WithRuntimeLeaseReleaseTracker(context.Background())
 	result, err := service.InvokeModelWithLease(ctx, releaseRequest(scope, lease, models.OperationOMNI))
-	if !errors.Is(err, models.ErrUnavailable) {
-		t.Fatalf("missing runtime error = %v, want ErrUnavailable", err)
+	if !errors.Is(err, models.ErrInferenceFailed) {
+		t.Fatalf("unavailable runtime error = %v, want ErrInferenceFailed", err)
 	}
-	if !result.Invocation.IsZero() || result.Status != models.ModelInvocationStatusFailed ||
+	if result.Invocation.IsZero() || result.Status != models.ModelInvocationStatusFailed ||
 		result.Lease != lease || result.LeaseDisposition != models.InvocationLeaseReleased {
-		t.Fatalf("missing runtime result = %#v, want failed/no invocation/released lease", result)
+		t.Fatalf("unavailable runtime result = %#v, want failed/recorded invocation/released lease", result)
 	}
 	if !modelseffects.RuntimeLeaseReleaseAttempted(ctx) {
-		t.Fatal("missing runtime did not record its release attempt")
+		t.Fatal("unavailable runtime did not record its release attempt")
 	}
 	assertOneLeaseRelease(t, host)
 	if got := host.leases[lease.String()].Status; got != models.ModelLeaseStatusReleased {
-		t.Fatalf("lease status after missing runtime = %q, want RELEASED", got)
+		t.Fatalf("lease status after unavailable runtime = %q, want RELEASED", got)
 	}
 }
 
@@ -487,4 +487,103 @@ type scopedRequestRuntime struct {
 func (runtime *scopedRequestRuntime) Invoke(ctx context.Context, request inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
 	runtime.requests = append(runtime.requests, request)
 	return runtime.recordingInvocationRuntime.Invoke(ctx, request)
+}
+
+func TestInvokeModelWithLeaseSelectedDeadlineAndParentPolicy(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name           string
+		duration       time.Duration
+		parentDuration time.Duration
+		wantParent     bool
+		wantDeadline   bool
+	}{
+		{name: "selected", duration: time.Minute, wantDeadline: true},
+		{name: "earlier parent", duration: time.Hour, parentDuration: time.Minute, wantParent: true, wantDeadline: true},
+		{name: "zero disables", wantParent: true},
+		{name: "negative disables", duration: -time.Minute, wantParent: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			scopes, scope, lease, host := releaseFixture(t, "selected-deadline-"+test.name, models.OperationOMNI)
+			parent := context.Background()
+			now := time.Now()
+			if test.parentDuration > 0 {
+				var cancel context.CancelFunc
+				parent, cancel = context.WithDeadline(parent, now.Add(test.parentDuration))
+				defer cancel()
+			}
+			calls := 0
+			runtime := deadlinePolicyRuntime{observe: func(ctx context.Context) {
+				_, hasDeadline := ctx.Deadline()
+				if hasDeadline != test.wantDeadline || (ctx == parent) != test.wantParent {
+					t.Fatalf("runtime context deadline/parent = %t/%t, want %t/%t", hasDeadline, ctx == parent, test.wantDeadline, test.wantParent)
+				}
+			}}
+			service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, runtime,
+				func() time.Time { return now }, nil, func() time.Duration { calls++; return test.duration })
+			result, err := service.InvokeModelWithLease(parent, releaseRequest(scope, lease, models.OperationOMNI))
+			if err != nil || result.Status != models.ModelInvocationStatusCompleted || result.LeaseDisposition != models.InvocationLeaseReleased {
+				t.Fatalf("invoke = (%#v, %v), want completed/released", result, err)
+			}
+			if calls != 1 {
+				t.Fatalf("selected deadline calls = %d, want 1", calls)
+			}
+			assertOneLeaseRelease(t, host)
+		})
+	}
+}
+
+type deadlinePolicyRuntime struct {
+	observe func(context.Context)
+}
+
+func TestInvocationCancellationReleasePreservesContextAndAllowsRetry(t *testing.T) {
+	t.Parallel()
+	scopes, scope, lease, host := releaseFixture(t, "cancel-observation", models.OperationOMNI)
+	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), releaseObservationKey{}, "selected"))
+	defer cancel()
+	observedHost := &releaseContextHost{recordingInferenceHost: host}
+	calls := 0
+	runtime := deadlinePolicyRuntime{observe: func(context.Context) {
+		calls++
+		if calls == 1 {
+			cancel()
+		}
+	}}
+	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), observedHost, runtime, fixedClock(), nil)
+	result, err := service.InvokeModelWithLease(ctx, releaseRequest(scope, lease, models.OperationOMNI))
+	assertReleaseOutcome(t, result, err, models.ModelInvocationStatusCancelled, models.ErrInferenceCancelled)
+	assertOneLeaseRelease(t, host)
+	if observedHost.releaseContext.Err() != nil || observedHost.releaseContext.Value(releaseObservationKey{}) != "selected" {
+		t.Fatalf("cleanup context error/value = %v/%v", observedHost.releaseContext.Err(), observedHost.releaseContext.Value(releaseObservationKey{}))
+	}
+	retryLease := mustLeaseRef(t, "cancel-observation-retry")
+	host.leases[retryLease.String()] = activeLease(scope, retryLease, "scoped-model", "worker-1")
+	retry, err := service.InvokeModelWithLease(t.Context(), releaseRequest(scope, retryLease, models.OperationOMNI))
+	assertReleaseOutcome(t, retry, err, models.ModelInvocationStatusCompleted, nil)
+	if retry.Invocation == result.Invocation || calls != 2 || host.releaseCalls != 2 ||
+		host.leases[retryLease.String()].Status != models.ModelLeaseStatusReleased {
+		t.Fatalf("retry = %#v, effects=%d releases=%d", retry, calls, host.releaseCalls)
+	}
+}
+
+type releaseObservationKey struct{}
+
+type releaseContextHost struct {
+	*recordingInferenceHost
+	releaseContext context.Context
+}
+
+func (host *releaseContextHost) ReleaseInvocationLease(ctx context.Context, request models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	host.releaseContext = ctx
+	if err := ctx.Err(); err != nil {
+		return models.ReleaseModelLeaseResult{}, err
+	}
+	return host.recordingInferenceHost.ReleaseInvocationLease(ctx, request)
+}
+
+func (runtime deadlinePolicyRuntime) Invoke(ctx context.Context, request inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
+	runtime.observe(ctx)
+	return (&recordingInvocationRuntime{}).Invoke(ctx, request)
 }

@@ -169,24 +169,8 @@ func assertInvocationQueryGeneration(t *testing.T, authority InvocationAuthority
 	if _, err := authority.Observe(context.Background(), id, sessioninvocation.SessionInvocationWaitInput{}); err != nil {
 		t.Fatalf("observe(%s): %v", id, err)
 	}
-	waiter, release := authority.WaitSession(context.Background(), id)
-	if waiter == nil || release == nil {
-		t.Fatalf("wait(%s) unavailable", id)
-	}
-	defer func() { release(); <-runtime.stopped }()
-	if runtime.scope.SessionID != id || runtime.scope.HistoryLimit != 1 {
-		t.Fatalf("subscription scope = %#v", runtime.scope)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	select {
-	case runtime.events <- interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeWorkRequest}:
-	case <-ctx.Done():
-		t.Fatal("event relay did not consume event")
-	}
-	if err := waiter(ctx); err != nil {
-		t.Fatalf("wait(%s): %v", id, err)
-	}
+	assertInvocationQueryWait(t, authority, id, runtime)
+
 }
 
 func TestInvocationAuthorityPreservesObservationFailure(t *testing.T) {
@@ -278,7 +262,7 @@ func TestSessionScopeControlStopPreservesSelectedClockErrorsAndRetry(t *testing.
 			t.Fatal("stop selected a foreign run or fact time")
 		}
 		return failure
-	})
+	}, zap.New(core))
 	if err := control.StopLiveSession(context.Background(), " a "); !errors.Is(err, wantError) {
 		t.Fatalf("failed stop = %v", err)
 	}
@@ -371,7 +355,7 @@ func TestSessionScopeControlPreservesLifecycleAndPeerIsolation(t *testing.T) {
 	b := &scopedControlRuntime{invocationQueryRuntime: invocationQueryRuntime{name: "b"}, status: string(interfaces.FactoryStateRunning)}
 	metrics := registerScopeControlRuntime(state, "a", a, zap.New(core))
 	registerScopeControlRuntime(state, "b", b, zap.NewNop())
-	control := NewScopeControl(state, nil)
+	control := NewScopeControl(state, nil, zap.NewNop())
 	assembly := &Assembly{state: state, scopeControl: control}
 	request := factorysessions.SessionControlRequest{SessionID: "a", Operation: factorysessions.SessionControlCancel,
 		Control:     factorysessions.ControlRequest{Reason: "owned cancellation"},
@@ -383,18 +367,8 @@ func TestSessionScopeControlPreservesLifecycleAndPeerIsolation(t *testing.T) {
 	if a.last.ControlID != "original-request" || a.last.TurnID != "original-turn" || a.last.WorkerSessionAction != factoryruntime.WorkerSessionControlActionCancel || a.last.Reason != "owned cancellation" {
 		t.Fatalf("runtime control correlation = %#v", a.last)
 	}
-	replay, err := assembly.ApplyLiveControl(context.Background(), request)
-	if err != nil || replay.Status != result.Status || a.controls != 1 || len(metrics.outcomes) != 1 || logs.Len() != 1 {
-		t.Fatalf("dedup = %#v, %v; controls=%d metrics=%v logs=%v", replay, err, a.controls, metrics.outcomes, logs.All())
-	}
-	fields := logs.All()[0].ContextMap()
-	if fields["session_id"] != "a" || fields["request_id"] != "original-request" {
-		t.Fatalf("log correlation = %#v", fields)
-	}
-	peer, err := NewInvocationAuthority(state, platformclock.Real{}, nil).SubmitWork(context.Background(), "b", work.SubmitRequest{RequestID: "peer-next", WorkID: "peer-work"})
-	if err != nil || peer.RequestID != "b" || b.controls != 0 || b.status != string(interfaces.FactoryStateRunning) {
-		t.Fatalf("peer next admission = %#v, %v; controls=%d status=%s", peer, err, b.controls, b.status)
-	}
+	assertScopedControlDedupAndPeer(t, assembly, request, result, a, b, metrics, logs, state)
+
 }
 
 func TestSessionScopeControlPreservesErrorsAndAllowsRetry(t *testing.T) {
@@ -403,7 +377,7 @@ func TestSessionScopeControlPreservesErrorsAndAllowsRetry(t *testing.T) {
 	failure := errors.New("owned runtime control failed")
 	runtime := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning), failure: failure}
 	registerScopeControlRuntime(state, "a", runtime, zap.NewNop())
-	control := NewScopeControl(state, nil)
+	control := NewScopeControl(state, nil, zap.NewNop())
 	request := factorysessions.ControlRequest{RequestID: "retryable"}
 	if _, err := control.CancelLiveFactorySession(context.Background(), "missing", request); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing: %v", err)
@@ -441,7 +415,7 @@ func TestSessionScopeControlKeepsSelectedGenerationDuringReplacement(t *testing.
 	firstMetrics := registerScopeControlRuntime(state, "a", first, zap.NewNop())
 	var replacementMetrics *scopeControlMetrics
 	first.onObserve = func() { replacementMetrics = registerScopeControlRuntime(state, "a", replacement, zap.NewNop()) }
-	result, err := NewScopeControl(state, nil).CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "first-cancel"})
+	result, err := NewScopeControl(state, nil, zap.NewNop()).CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "first-cancel"})
 	if err != nil || result.Status != factorysessions.LifecycleStatusSucceeded || first.controls != 1 || replacement.controls != 0 || replacement.status != string(interfaces.FactoryStateRunning) {
 		t.Fatalf("generation control = %#v, %v; first=%d replacement=%d", result, err, first.controls, replacement.controls)
 	}
@@ -471,25 +445,18 @@ func TestSessionScopeControlPeerProgressWhileCancellationIsBlocked(t *testing.T)
 	b := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
 	aMetrics := registerScopeControlRuntime(state, "a", a, zap.NewNop())
 	bMetrics := registerScopeControlRuntime(state, "b", b, zap.NewNop())
-	control := NewScopeControl(state, nil)
+	control := NewScopeControl(state, nil, zap.NewNop())
 	request := factorysessions.ControlRequest{RequestID: "same-request", TurnID: "same-turn"}
-	type completion struct {
-		result factorysessions.LifecycleControlResult
-		err    error
-	}
-	aCompleted := make(chan completion, 1)
+
+	aCompleted := make(chan scopedControlCompletion, 1)
 	go func() {
 		defer close(aDone)
 		result, err := control.CancelLiveFactorySession(ctx, "a", request)
-		aCompleted <- completion{result: result, err: err}
+		aCompleted <- scopedControlCompletion{result: result, err: err}
 	}()
 	t.Cleanup(func() {
 		unblock()
-		select {
-		case <-aDone:
-		case <-ctx.Done():
-			t.Error("addressed cancellation did not join")
-		}
+		assertScopedCancellationJoined(t, ctx, aDone, "addressed")
 	})
 	select {
 	case <-aStarted:
@@ -497,25 +464,19 @@ func TestSessionScopeControlPeerProgressWhileCancellationIsBlocked(t *testing.T)
 		t.Fatal("A did not reach its owned Runtime effect")
 	}
 	bDone := make(chan struct{})
-	bCompleted := make(chan completion, 1)
+	bCompleted := make(chan scopedControlCompletion, 1)
 	go func() {
 		defer close(bDone)
 		result, err := control.CancelLiveFactorySession(ctx, "b", request)
-		bCompleted <- completion{result: result, err: err}
+		bCompleted <- scopedControlCompletion{result: result, err: err}
 	}()
 	t.Cleanup(func() {
 		unblock()
-		select {
-		case <-bDone:
-		case <-ctx.Done():
-			t.Error("peer cancellation did not join")
-		}
+		assertScopedCancellationJoined(t, ctx, bDone, "peer")
 	})
 	select {
 	case peer := <-bCompleted:
-		if peer.err != nil || peer.result.SessionID != "b" || peer.result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
-			t.Fatalf("peer cancel = %#v, %v", peer.result, peer.err)
-		}
+		assertScopedControlCompletion(t, peer, "b")
 	case <-ctx.Done():
 		t.Fatal("blocked A prevented B from completing its own cancellation")
 	}
@@ -527,15 +488,12 @@ func TestSessionScopeControlPeerProgressWhileCancellationIsBlocked(t *testing.T)
 	unblock()
 	select {
 	case own := <-aCompleted:
-		if own.err != nil || own.result.SessionID != "a" || own.result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
-			t.Fatalf("addressed cancel = %#v, %v", own.result, own.err)
-		}
+		assertScopedControlCompletion(t, own, "a")
 	case <-ctx.Done():
 		t.Fatal("A did not complete after its owned effect was released")
 	}
-	if a.controls != 1 || b.controls != 1 || a.last.ControlID != request.RequestID || b.last.ControlID != request.RequestID || len(aMetrics.outcomes) != 1 || len(bMetrics.outcomes) != 1 {
-		t.Fatalf("independent correlation/effects: A=%#v B=%#v metrics=%v/%v", a.last, b.last, aMetrics.outcomes, bMetrics.outcomes)
-	}
+	assertIndependentScopedControlEffects(t, a, b, aMetrics, bMetrics, request)
+
 }
 
 func TestInvocationAuthorityMissingSubscriptionUsesSelectedFallbackTimer(t *testing.T) {
@@ -561,5 +519,71 @@ func TestInvocationAuthorityMissingSubscriptionUsesSelectedFallbackTimer(t *test
 		}
 	case <-t.Context().Done():
 		t.Fatal("selected timer did not wake fallback")
+	}
+}
+
+func assertInvocationQueryWait(t *testing.T, authority InvocationAuthority, id string, runtime *invocationQueryRuntime) {
+	t.Helper()
+	waiter, release := authority.WaitSession(context.Background(), id)
+	if waiter == nil || release == nil {
+		t.Fatalf("wait(%s) unavailable", id)
+	}
+	defer func() { release(); <-runtime.stopped }()
+	if runtime.scope.SessionID != id || runtime.scope.HistoryLimit != 1 {
+		t.Fatalf("subscription scope = %#v", runtime.scope)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	select {
+	case runtime.events <- interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeWorkRequest}:
+	case <-ctx.Done():
+		t.Fatal("event relay did not consume event")
+	}
+	if err := waiter(ctx); err != nil {
+		t.Fatalf("wait(%s): %v", id, err)
+	}
+}
+
+func assertScopedControlDedupAndPeer(t *testing.T, assembly *Assembly, request factorysessions.SessionControlRequest, result factorysessions.SessionControlResult, a, b *scopedControlRuntime, metrics *scopeControlMetrics, logs *observer.ObservedLogs, state *sessionruntime.Service) {
+	t.Helper()
+	replay, err := assembly.ApplyLiveControl(context.Background(), request)
+	if err != nil || replay.Status != result.Status || a.controls != 1 || len(metrics.outcomes) != 1 || logs.Len() != 1 {
+		t.Fatalf("dedup = %#v, %v; controls=%d metrics=%v logs=%v", replay, err, a.controls, metrics.outcomes, logs.All())
+	}
+	fields := logs.All()[0].ContextMap()
+	if fields["session_id"] != "a" || fields["request_id"] != "original-request" {
+		t.Fatalf("log correlation = %#v", fields)
+	}
+	peer, err := NewInvocationAuthority(state, platformclock.Real{}, nil).SubmitWork(context.Background(), "b", work.SubmitRequest{RequestID: "peer-next", WorkID: "peer-work"})
+	if err != nil || peer.RequestID != "b" || b.controls != 0 || b.status != string(interfaces.FactoryStateRunning) {
+		t.Fatalf("peer next admission = %#v, %v; controls=%d status=%s", peer, err, b.controls, b.status)
+	}
+}
+
+func assertScopedCancellationJoined(t *testing.T, ctx context.Context, done <-chan struct{}, label string) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Errorf("%s cancellation did not join", label)
+	}
+}
+
+func assertIndependentScopedControlEffects(t *testing.T, a, b *scopedControlRuntime, aMetrics, bMetrics *scopeControlMetrics, request factorysessions.ControlRequest) {
+	t.Helper()
+	if a.controls != 1 || b.controls != 1 || a.last.ControlID != request.RequestID || b.last.ControlID != request.RequestID || len(aMetrics.outcomes) != 1 || len(bMetrics.outcomes) != 1 {
+		t.Fatalf("independent correlation/effects: A=%#v B=%#v metrics=%v/%v", a.last, b.last, aMetrics.outcomes, bMetrics.outcomes)
+	}
+}
+
+type scopedControlCompletion struct {
+	result factorysessions.LifecycleControlResult
+	err    error
+}
+
+func assertScopedControlCompletion(t *testing.T, completed scopedControlCompletion, id string) {
+	t.Helper()
+	if completed.err != nil || completed.result.SessionID != id || completed.result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+		t.Fatalf("session %s cancel = %#v, %v", id, completed.result, completed.err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,82 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// F09a uses two authored host commands/endpoints on one process. Interleaving
+// operations observes reuse and selected configuration before closing either
+// owner; the surviving session then proves cleanup isolation publicly.
+func TestModelsFixedLeavesInterleaveDistinctHostConfigsAndCloseOnlySelected(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	body := []byte("fixed-leaf-configured-embedding-backend")
+	selection := story004EmbedBackendSelection(body)
+	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
+	writeGenericBackendCache(t, home, "localai-llamacpp", selection, body)
+	hosts := newFixedLeafConfiguredHosts(t)
+	routes := newFixedLeafRoutes()
+	network := &rejectingModelAssetHTTP{}
+	edges := story004EmbedEdges(home, network, hosts.client,
+		&recordingModelHostLauncher{}, &joinedProtocolNegotiator{},
+		&joinedCompatibilityChecker{}, selection, nil)
+	edges.ModelHostProcessLauncher = hosts
+	edges.ModelHostProtocolNegotiator = hosts
+	edges.ModelEmbeddingBackend = nil
+	edges.ModelInvocationBackend = routes.invoke
+	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig()),
+		Env:        functionalHomeEnvironment(home), Edges: edges, BeforeStart: bootstrapFixedLeafProfile,
+	})
+	sessions, closers := map[string]string{}, map[string]func(){}
+	for _, name := range []string{"selected", "peer"} {
+		config := fixedLeafFactoryConfig()
+		config["name"] = "fixed-leaf-" + name
+		worker := config["workers"].([]map[string]any)[0]
+		worker["command"] = name + "-embed"
+		worker["args"] = []string{"--grpc-endpoint", hosts.launchers[name].endpoint, "--scope-marker", name}
+		sessions[name], closers[name] = openFixedLeafConfiguredSession(t, server.URL(), config)
+	}
+	for round := range 2 {
+		for _, name := range []string{"selected", "peer"} {
+			text := fmt.Sprintf("config-%s-%d", name, round)
+			assertFixedLeafSessionSuccess(t, server.URL(), sessions[name], routes, name, text)
+			assertFixedLeafAuthoredHost(t, hosts.launchers[name], name, home)
+		}
+	}
+	closers["selected"]()
+	assertLocalAIDirectHostReleased(t, hosts.launchers["selected"])
+	if !hosts.launchers["peer"].Active() || hosts.launchers["peer"].Stops() != 0 {
+		t.Fatal("closing selected stopped the peer host")
+	}
+	assertFixedLeafSessionSuccess(t, server.URL(), sessions["peer"], routes, "peer", "config-peer-after-close")
+	assertFixedLeafAuthoredHost(t, hosts.launchers["peer"], "peer", home)
+	closers["peer"]()
+	assertLocalAIDirectHostReleased(t, hosts.launchers["peer"])
+	if network.Calls() != 0 {
+		t.Fatalf("cached interleaved sessions attempted %d downloads", network.Calls())
+	}
+}
+
+func assertFixedLeafSessionSuccess(t *testing.T, baseURL, session string, routes *fixedLeafRoutes, name, text string) {
+	t.Helper()
+	route := routes.register(text, false)
+	response := invokeFixedLeafSession(t, baseURL, session, text, text)
+	assertFixedLeafSuccess(t, response, route.output)
+	if response.RequestId != text || (response.SessionId != nil && *response.SessionId != session) {
+		t.Fatalf("selected response identity = %#v", response)
+	}
+	routes.recordScope(t, name, waitFixedLeafAccepted(t, route))
+	assertFixedLeafModelEvent(t, baseURL, session, text, false)
+}
+
+func assertFixedLeafAuthoredHost(t *testing.T, launcher *localAIHostLauncher, name, home string) {
+	t.Helper()
+	assertFixedLeafConfiguredHost(t, launcher, home)
+	spec, _ := launcher.LastSpec()
+	if spec.Command != name+"-embed" || spec.HealthEndpoint != launcher.endpoint ||
+		!slices.Contains(spec.Args, name) || launcher.Starts() != 1 {
+		t.Fatalf("%s selected host configuration = %#v, starts=%d", name, spec, launcher.Starts())
+	}
+}
 
 // Admission is sequenced only until each owned effect is accepted, so the first
 // launched host belongs to selected and the second to peer. Both then remain
@@ -95,7 +172,12 @@ func runFixedLeafOwnedHostCancellation(t *testing.T, baseURL string, routes *fix
 
 func openFixedLeafOwnedHostSession(t *testing.T, baseURL string) (string, func()) {
 	t.Helper()
-	dir := functionalScaffoldFactory(t, fixedLeafFactoryConfig())
+	return openFixedLeafConfiguredSession(t, baseURL, fixedLeafFactoryConfig())
+}
+
+func openFixedLeafConfiguredSession(t *testing.T, baseURL string, config map[string]any) (string, func()) {
+	t.Helper()
+	dir := functionalScaffoldFactory(t, config)
 	support.WriteWorkstationConfig(t, dir, "embed", "---\ntype: MODEL_INVOKE\n---\nEmbed the selected text.\n")
 	session := support.OpenFactorySessionAt(t, baseURL, dir).Session.Id
 	var once sync.Once

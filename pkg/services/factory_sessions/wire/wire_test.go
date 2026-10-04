@@ -330,7 +330,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 	state := NewSessionState(registry, responseRegistry, in.clock, in.eventIDs, in.sessionIDs, responses)
 	streams := NewStreamManager(state, NewStreamObserver(), responseRegistry, responses)
 	return NewRuntimeAssembly(
-		registry, state, streams, sessioninvocation.NewSessionOwner(NewInvocationAuthority(state, platformclock.Real{}, nil), NewScopeControl(state, nil), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), NewScopeControl(state, nil), NewScopeActivation(state),
+		registry, state, streams, sessioninvocation.NewSessionOwner(NewInvocationAuthority(state, platformclock.Real{}, nil), NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), NewScopeControl(state, nil, zap.NewNop()), NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.eventIDs,

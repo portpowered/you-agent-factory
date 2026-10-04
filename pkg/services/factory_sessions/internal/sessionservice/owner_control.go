@@ -104,13 +104,15 @@ type SessionScopeControl interface {
 }
 
 type scopeControl struct {
-	state *sessionruntime.Service
-	stop  factoryruntime.RuntimeStopOperation
+	state  *sessionruntime.Service
+	stop   factoryruntime.RuntimeStopOperation
+	logger *zap.Logger
 }
 
-// NewScopeControl retains the canonical paired session authority.
-func NewScopeControl(state *sessionruntime.Service, stop factoryruntime.RuntimeStopOperation) SessionScopeControl {
-	return &scopeControl{state: state, stop: stop}
+// NewScopeControl retains the canonical paired session authority and process
+// logger. Stop diagnostics outlive the runtime sink closed by activation/stop.
+func NewScopeControl(state *sessionruntime.Service, stop factoryruntime.RuntimeStopOperation, logger *zap.Logger) SessionScopeControl {
+	return &scopeControl{state: state, stop: stop, logger: logger}
 }
 
 // StopLiveSession stops the selected generation without unregistering its
@@ -140,16 +142,16 @@ func (c *scopeControl) StopLiveGeneration(ctx context.Context, session *livesess
 		return factorysessions.ErrRuntimeNotAvailable
 	}
 	id := session.ID
-	bound.Logger.Info("stopping live Factory Session runtime", zap.String("session_id", id))
+	c.logger.Info("stopping live Factory Session runtime", zap.String("session_id", id))
 	err := c.stop(bound.Handle, bound.Clock)
 	if errors.Is(err, context.Canceled) || errors.Is(err, factoryruntime.ErrAlreadyStopped) || errors.Is(err, factoryruntime.ErrNotRunning) {
 		err = nil
 	}
 	if err != nil {
-		bound.Logger.Error("stop live Factory Session runtime failed", zap.String("session_id", id), zap.Error(err))
+		c.logger.Error("stop live Factory Session runtime failed", zap.String("session_id", id), zap.Error(err))
 		return fmt.Errorf("stop live Factory Session runtime: %w", err)
 	}
-	bound.Logger.Info("live Factory Session runtime stopped", zap.String("session_id", id))
+	c.logger.Info("live Factory Session runtime stopped", zap.String("session_id", id))
 	return nil
 }
 

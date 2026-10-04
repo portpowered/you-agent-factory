@@ -33,6 +33,7 @@ import (
 
 var platformSet = wire.NewSet(
 	provideProcessLogger,
+	wire.FieldsOf(new(edges.Edges), "Clock"),
 )
 
 var apiSet = wire.NewSet(
@@ -169,8 +170,14 @@ var servicesSet = wire.NewSet(
 	provideModelSlotCoordinator,
 	provideModelRuntimeHost,
 	provideModelInvocationRuntime,
+	provideModelLocalRuntime,
+	provideModelResourceLimiter,
+	modelswire.NewInertInvocationArtifactFileSystem,
+	modelswire.NewInvocationArtifactRegistrar,
+	modelswire.NewExecutionDeadline,
 	provideModelInference,
 	provideModelsService,
+	provideModelScopedLocalExecution,
 	modelswire.NewCatalogReadinessQuery,
 	modelswire.NewCatalog,
 	modelswire.NewSlotState,

@@ -34,7 +34,7 @@ func (s stubRuntimeCacheInspector) InspectRuntimeCache(_ context.Context, _ *mod
 	return inspection, nil
 }
 
-func TestListAndInspect_ShareStableManagedRuntimeContract(t *testing.T) {
+func TestCatalogAndInspect_ShareStableManagedRuntimeContract(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	inspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
@@ -48,36 +48,33 @@ func TestListAndInspect_ShareStableManagedRuntimeContract(t *testing.T) {
 		},
 	}}
 	resolver := DefaultManagedRuntimeSourceResolver()
-	listRuntime := assertStableManagedRuntimeList(t, loaded, inspector, resolver)
-	assertStableManagedRuntimeInspect(t, loaded, inspector, resolver, listRuntime)
+	catalogRuntime := assertStableManagedRuntimeCatalog(t, loaded, inspector, resolver)
+	assertStableManagedRuntimeInspect(t, loaded, inspector, resolver, catalogRuntime)
 }
 
-func assertStableManagedRuntimeList(
+func assertStableManagedRuntimeCatalog(
 	t *testing.T,
 	loaded *modelRuntimeConfig,
 	inspector stubRuntimeCacheInspector,
 	resolver ManagedRuntimeSourceResolver,
 ) models.Runtime {
-	listed, err := ListModelsWithRuntime(loaded, inspector, resolver)
-	if err != nil {
-		t.Fatalf("ListModelsWithOptions: %v", err)
+	catalog := BuildCatalogWithRuntime(loaded, inspector, resolver)
+	if len(catalog) != 1 {
+		t.Fatalf("models count = %d, want 1", len(catalog))
 	}
-	if len(listed.Results) != 1 {
-		t.Fatalf("models count = %d, want 1", len(listed.Results))
+	catalogRuntime := catalog["OMNIVOICE_Q4_K_M"].Summary.ManagedRuntime
+	if catalogRuntime.ReadinessState != managedruntime.ReadinessStateReady {
+		t.Fatalf("catalog readiness = %s, want READY", catalogRuntime.ReadinessState)
 	}
-	listRuntime := listed.Results[0].ManagedRuntime
-	if listRuntime.ReadinessState != managedruntime.ReadinessStateReady {
-		t.Fatalf("list readiness = %s, want READY", listRuntime.ReadinessState)
+	if catalogRuntime.LifecycleState != managedruntime.LifecycleStateInstalled {
+		t.Fatalf("catalog lifecycle = %s, want INSTALLED", catalogRuntime.LifecycleState)
 	}
-	if listRuntime.LifecycleState != managedruntime.LifecycleStateInstalled {
-		t.Fatalf("list lifecycle = %s, want INSTALLED", listRuntime.LifecycleState)
+	if catalogRuntime.Revision == nil || *catalogRuntime.Revision != "rev-installed" ||
+		catalogRuntime.CachePath == nil || *catalogRuntime.CachePath != "/tmp/models/OMNIVOICE_Q4_K_M/rev-installed" ||
+		catalogRuntime.CacheBytes == nil || *catalogRuntime.CacheBytes != 1234 {
+		t.Fatalf("catalog cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", catalogRuntime.Revision, catalogRuntime.CachePath, catalogRuntime.CacheBytes)
 	}
-	if listRuntime.Revision == nil || *listRuntime.Revision != "rev-installed" ||
-		listRuntime.CachePath == nil || *listRuntime.CachePath != "/tmp/models/OMNIVOICE_Q4_K_M/rev-installed" ||
-		listRuntime.CacheBytes == nil || *listRuntime.CacheBytes != 1234 {
-		t.Fatalf("list cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", listRuntime.Revision, listRuntime.CachePath, listRuntime.CacheBytes)
-	}
-	return listRuntime
+	return catalogRuntime
 }
 
 func assertStableManagedRuntimeInspect(
@@ -85,21 +82,21 @@ func assertStableManagedRuntimeInspect(
 	loaded *modelRuntimeConfig,
 	inspector stubRuntimeCacheInspector,
 	resolver ManagedRuntimeSourceResolver,
-	listRuntime models.Runtime,
+	catalogRuntime models.Runtime,
 ) {
 	detail, err := GetModelWithRuntime(loaded, "OMNIVOICE_Q4_K_M", inspector, resolver)
 	if err != nil {
 		t.Fatalf("GetModelWithOptions: %v", err)
 	}
 	inspectRuntime := detail.ManagedRuntime
-	if inspectRuntime.Identity != listRuntime.Identity ||
-		inspectRuntime.ReadinessState != listRuntime.ReadinessState ||
-		inspectRuntime.LifecycleState != listRuntime.LifecycleState ||
-		inspectRuntime.Locality != listRuntime.Locality ||
+	if inspectRuntime.Identity != catalogRuntime.Identity ||
+		inspectRuntime.ReadinessState != catalogRuntime.ReadinessState ||
+		inspectRuntime.LifecycleState != catalogRuntime.LifecycleState ||
+		inspectRuntime.Locality != catalogRuntime.Locality ||
 		inspectRuntime.Revision == nil || *inspectRuntime.Revision != "rev-installed" ||
 		inspectRuntime.CachePath == nil || *inspectRuntime.CachePath != "/tmp/models/OMNIVOICE_Q4_K_M/rev-installed" ||
 		inspectRuntime.CacheBytes == nil || *inspectRuntime.CacheBytes != 1234 {
-		t.Fatalf("inspect runtime = %#v, want list parity %#v", inspectRuntime, listRuntime)
+		t.Fatalf("inspect runtime = %#v, want catalog parity %#v", inspectRuntime, catalogRuntime)
 	}
 	if detail.Diagnostics["revision"] != "rev-installed" {
 		t.Fatalf("inspect diagnostics revision = %q, want rev-installed", detail.Diagnostics["revision"])
@@ -109,7 +106,7 @@ func assertStableManagedRuntimeInspect(
 	}
 }
 
-func TestListModels_MultipleRuntimesReportIndependentReadiness(t *testing.T) {
+func TestCatalog_MultipleRuntimesReportIndependentReadiness(t *testing.T) {
 	t.Parallel()
 	cfg := multiRuntimeCatalogFactoryConfig()
 	loaded := mustLoadedCatalogConfig(t, cfg)
@@ -119,16 +116,13 @@ func TestListModels_MultipleRuntimesReportIndependentReadiness(t *testing.T) {
 	}}
 	resolver := DefaultManagedRuntimeSourceResolver()
 
-	models, err := ListModelsWithRuntime(loaded, inspector, resolver)
-	if err != nil {
-		t.Fatalf("ListModelsWithOptions: %v", err)
-	}
-	if len(models.Results) != 2 {
-		t.Fatalf("models count = %d, want 2", len(models.Results))
+	catalog := BuildCatalogWithRuntime(loaded, inspector, resolver)
+	if len(catalog) != 2 {
+		t.Fatalf("models count = %d, want 2", len(catalog))
 	}
 	byName := map[string]modelcatalog.Summary{}
-	for _, model := range models.Results {
-		byName[model.Name] = model
+	for name, entry := range catalog {
+		byName[name] = entry.Summary
 	}
 	ready := byName["OMNIVOICE_Q4_K_M"].ManagedRuntime
 	missing := byName["SECOND_RUNTIME"].ManagedRuntime

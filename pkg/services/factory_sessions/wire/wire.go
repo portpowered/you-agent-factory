@@ -11,7 +11,7 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
 	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
-	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 
@@ -97,7 +97,7 @@ type SessionState = sessionruntime.Service
 type InvocationAuthority = sessionservice.InvocationAuthority
 
 // InvocationService is the completed owner-private engine supplied to Assembly.
-type InvocationService = invocationservice.Service
+type InvocationService = roles.InvocationService
 type InvocationTelemetry = sessioninvocation.SessionInvocationTelemetry
 type InvocationSpecialCase = sessioninvocation.SessionInvocationSpecialCase
 
@@ -156,8 +156,8 @@ func NewScopeActivation(state *SessionState) SessionScopeActivation {
 type SessionScopeControl = sessionservice.SessionScopeControl
 
 // NewScopeControl constructs control over the canonical session authority.
-func NewScopeControl(state *SessionState, stop factoryruntime.RuntimeStopOperation) SessionScopeControl {
-	return sessionservice.NewScopeControl(state, stop)
+func NewScopeControl(state *SessionState, stop factoryruntime.RuntimeStopOperation, logger *zap.Logger) SessionScopeControl {
+	return sessionservice.NewScopeControl(state, stop, logger)
 }
 
 // StreamManager supplies provider progress and dispatch completion factories.
@@ -198,7 +198,7 @@ func NewRuntimeAssembly(
 	registry SessionRegistry,
 	state *SessionState,
 	streams StreamManager,
-	invoker invocationservice.Service,
+	invoker roles.InvocationService,
 	control SessionScopeControl,
 	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,

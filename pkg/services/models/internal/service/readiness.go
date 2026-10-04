@@ -13,7 +13,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	"go.uber.org/zap"
@@ -31,36 +30,6 @@ const (
 	joinedLifecycleOutcomeFailed          = "FAILED"
 )
 
-// InspectRuntime returns invocation readiness for one model through the Models
-// service boundary.
-func (s *Service) InspectRuntime(ctx context.Context, modelName string) (models.Runtime, error) {
-	if err := models.ValidateInspectRuntimeRequest(models.InspectRuntimeRequest{Name: modelName}); err != nil {
-		return models.Runtime{}, err
-	}
-	runtimeCfg := s.runtimeConfig()
-	if runtimeCfg == nil {
-		return models.Runtime{}, fmt.Errorf("factory service runtime is not available")
-	}
-	host := s.modelHost()
-	if host == nil {
-		return localmodels.EnsureManagedRuntimeReadyForInvocation(
-			runtimeCfg,
-			modelName,
-			nil,
-			localmodels.DefaultManagedRuntimeSourceResolver(),
-		)
-	}
-	snapshot, err := host.InspectReadiness(ctx, runtimeCfg, modelName)
-	if err != nil {
-		return models.Runtime{}, err
-	}
-	runtime := modelhost.ManagedRuntimeFromSnapshot(snapshot)
-	if err := runtime.InvocationError(); err != nil {
-		return runtime, err
-	}
-	return runtime, nil
-}
-
 func joinedInvocationContextError(ctx context.Context, err error) error {
 	if err == nil || ctx == nil || ctx.Err() == nil || errors.Is(err, models.ErrInferenceCancelled) {
 		return err
@@ -69,17 +38,17 @@ func joinedInvocationContextError(ctx context.Context, err error) error {
 }
 
 func joinedInvocationStart(o *Root) time.Time {
-	if o != nil && o.process.Clock != nil {
-		return o.process.Clock()
+	if o != nil && o.now != nil {
+		return o.now()
 	}
 	return time.Time{}
 }
 
 func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
-	if o == nil || o.process.Clock == nil || started.IsZero() {
+	if o == nil || o.now == nil || started.IsZero() {
 		return 0
 	}
-	ended := o.process.Clock()
+	ended := o.now()
 	if ended.Before(started) {
 		return 0
 	}
@@ -115,7 +84,7 @@ func joinedInvocationLifecycleRecord(
 	elapsed time.Duration,
 	err error,
 ) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
 	fields := []zap.Field{
@@ -143,10 +112,10 @@ func joinedInvocationLifecycleRecord(
 		if diagnostic.Subcause != "" {
 			fields = append(fields, zap.String("failure_subcause", string(diagnostic.Subcause)))
 		}
-		o.process.Logger.Warn("models invocation stage", fields...)
+		o.logger.Warn("models invocation stage", fields...)
 		return
 	}
-	o.process.Logger.Info("models invocation stage", fields...)
+	o.logger.Info("models invocation stage", fields...)
 }
 
 func appendLifecycleIdentityField(fields *[]zap.Field, key string, value string) {
@@ -187,7 +156,7 @@ func joinedInvocationRecord(
 	err error,
 	elapsed time.Duration,
 ) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
 	fields := []zap.Field{
@@ -216,11 +185,11 @@ func joinedInvocationRecord(
 		if diagnostic.Subcause != "" {
 			fields = append(fields, zap.String("failure_subcause", string(diagnostic.Subcause)))
 		}
-		o.process.Logger.Warn("models invocation completed", fields...)
+		o.logger.Warn("models invocation completed", fields...)
 		return
 	}
 	fields = append(fields, zap.String("outcome", "COMPLETED"))
-	o.process.Logger.Info("models invocation completed", fields...)
+	o.logger.Info("models invocation completed", fields...)
 }
 
 func joinedAssetReference(

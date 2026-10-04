@@ -1,10 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -105,7 +113,7 @@ func TestRetireOwnedSessionUsesScopedStopAndRetainsFailedCleanup(t *testing.T) {
 			t.Fatal("retirement stopped a foreign runtime or selected clock")
 		}
 		return stopErr
-	})
+	}, zap.NewNop())
 	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state)}
 	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
 		t.Fatalf("failed retirement = %v", err)
@@ -150,7 +158,7 @@ func TestRetireOwnedSessionRetainsPartiallyActivatedScopeForCleanupRetry(t *test
 		}
 		stopped = true
 		return nil
-	})
+	}, zap.NewNop())
 	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: activation}
 	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
 		t.Fatalf("partial activation cleanup = %v, want original cause", err)
@@ -206,7 +214,7 @@ func TestAssemblyCloseKeepsCapturedGenerationAcrossActivationReplacement(t *test
 		}
 		stopped = true
 		return nil
-	})
+	}, zap.NewNop())
 	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state),
 		retireWorkAdmissionProjection: func(id string, runtime *factorysessions.LiveRuntime, record factoryruntime.RuntimeRecord) {
 			if id != "a" || runtime != oldSession.Runtime || record != oldRecord {
@@ -228,10 +236,8 @@ func TestAssemblyCloseKeepsCapturedGenerationAcrossActivationReplacement(t *test
 	if !stopped || !retired || oldRuntime.controls != 1 || state.Resolve("a") != replacement || state.Resolve("b") == nil {
 		t.Fatal("close lost captured effects, replacement or peer")
 	}
-	result, err := control.CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "replacement-cancel"})
-	if err != nil || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted || replacementRuntime.controls != 1 || oldRuntime.controls != 1 {
-		t.Fatalf("replacement control after close = %+v, %v", result, err)
-	}
+	assertReplacementControlAfterClose(t, control, replacementRuntime, oldRuntime)
+
 }
 
 func (s *stubRuntimeSidecars) Preseed(context.Context, factoryruntime.RuntimeRecord) error {
@@ -340,5 +346,88 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state.Unregister("supplied")
 	if assembly.Resolve("supplied") != nil {
 		t.Fatal("assembly retained retired authority entry")
+	}
+}
+
+func assertReplacementControlAfterClose(t *testing.T, control SessionScopeControl, replacementRuntime, oldRuntime *scopedControlRuntime) {
+	t.Helper()
+	result, err := control.CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "replacement-cancel"})
+	if err != nil || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted || replacementRuntime.controls != 1 || oldRuntime.controls != 1 {
+		t.Fatalf("replacement control after close = %+v, %v", result, err)
+	}
+}
+
+// The real rolling sink rejects writes after close. Capturing zap's error
+// destination exposes the quiet-stderr regression that an observer alone misses.
+type stopLogPath struct {
+	platformartifact.Reserver
+	path string
+}
+
+func (p stopLogPath) Reserve(string, time.Time, string, string) (string, error) { return p.path, nil }
+
+func TestScopeStopDiagnosticsOutliveRuntimeLogSink(t *testing.T) {
+	t.Parallel()
+	for _, closeBefore := range []bool{false, true} {
+		t.Run(fmt.Sprintf("closedBeforeStop=%t", closeBefore), func(t *testing.T) {
+			t.Parallel()
+			for _, failure := range []error{nil, errors.New("owned stop failed after sink close")} {
+				assertStopLogSinkLifetime(t, closeBefore, failure)
+			}
+		})
+	}
+}
+func assertStopLogSinkLifetime(t *testing.T, closeBefore bool, failure error) {
+	t.Helper()
+	state := newWorkResolverSessionState()
+	core, diagnostics := observer.New(zap.InfoLevel)
+	var writeErrors bytes.Buffer
+	processLogger := zap.New(core, zap.ErrorOutput(zapcore.AddSync(&writeErrors)))
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	opener, err := platformlogging.NewRuntimeLogOpener(stopLogPath{path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink, err := opener.Open(platformlogging.RuntimeLogOpeningRequest{BaseLogger: processLogger, RuntimeInstanceID: "owned-runtime", RootDirectory: filepath.Dir(path), StartTimeUTC: time.Unix(1, 0), CollisionID: "owned-log"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sink.Close() })
+	sink.Logger().Info("runtime log opened")
+	registerScopeControlRuntime(state, "owned", &scopedControlRuntime{status: "RUNNING"}, sink.Logger())
+	if closeBefore {
+		if err := sink.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	control := NewScopeControl(state, func(factoryruntime.RuntimeRun, factoryruntime.Clock) error {
+		if err := sink.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return failure
+	}, processLogger)
+	err = control.StopLiveSession(t.Context(), "owned")
+	if !errors.Is(err, failure) {
+		t.Fatalf("stop error = %v, want %v", err, failure)
+	}
+	if writeErrors.Len() != 0 {
+		t.Fatalf("write through closed runtime sink: %s", writeErrors.String())
+	}
+	terminal := "live Factory Session runtime stopped"
+	if failure != nil {
+		terminal = "stop live Factory Session runtime failed"
+	}
+	entries := diagnostics.FilterMessage(terminal).All()
+	if len(entries) != 1 {
+		t.Fatalf("terminal diagnostics = %#v", entries)
+	}
+	if failure != nil && entries[0].ContextMap()["error"] != failure.Error() {
+		t.Fatalf("lost stop failure diagnostic: %#v", entries[0])
+	}
+	if entries[0].ContextMap()["session_id"] != "owned" {
+		t.Fatalf("missing shutdown correlation: %#v", entries[0])
+	}
+	if diagnostics.FilterMessage("stopping live Factory Session runtime").Len() != 1 {
+		t.Fatal("missing stop intent")
 	}
 }

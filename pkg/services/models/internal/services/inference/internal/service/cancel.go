@@ -84,9 +84,6 @@ func (s *service) resolveScopeError(scope models.RuntimeScopeRef) error {
 	if scope.IsZero() {
 		return models.ErrRuntimeScopeInvalid
 	}
-	if s == nil || s.scopes == nil {
-		return models.ErrUnavailable
-	}
 	_, err := s.scopes.Resolve(runtimescopes.Reference(scope.String()))
 	if err != nil {
 		return inferenceScopeError(err)

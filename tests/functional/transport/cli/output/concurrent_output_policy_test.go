@@ -6,13 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -426,12 +436,148 @@ func assertInjectedOutputDiagnostics(t *testing.T, call *concurrentOutputCall) {
 			traceID, _ = fields["trace_id"].(string)
 		case "factory session invocation completed":
 			completed++
-			if fields["request_id"] != requestID || fields["trace_id"] != traceID || fields["status"] != "COMPLETED" || fields["resolved_work_id"] == "" {
-				t.Fatalf("CLI invocation diagnostic correlation=%#v", fields)
-			}
+			assertInjectedCompletedDiagnostic(t, fields, requestID, traceID)
 		}
 	}
 	if submitted != 1 || completed != 1 || requestID == "" || traceID == "" {
 		t.Fatalf("CLI session %s submitted/completed=%d/%d request=%s trace=%s", call.sessionID, submitted, completed, requestID, traceID)
+	}
+}
+
+type selectedRunWall struct{ nanos atomic.Int64 }
+
+func (source *selectedRunWall) Now() time.Time { return time.Unix(0, source.nanos.Load()).UTC() }
+
+type selectedRunTimeRunner struct {
+	source      *selectedRunWall
+	completedAt time.Time
+}
+
+func (runner selectedRunTimeRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.source.nanos.Store(runner.completedAt.UnixNano())
+	return support.NewStaticSuccessCommandRunner("selected time COMPLETE").Run(ctx, request)
+}
+
+func TestSelectedProcessClockDatesRecordingAndCLIRunFacts(t *testing.T) {
+	t.Parallel()
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("explicit=%t", explicit), func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			dir := support.ScaffoldFactory(t, textStreamPromptRunFactoryConfig())
+			support.WriteAgentConfig(t, dir, "mock-worker", support.BuildModelWorkerConfig("codex", "gpt-5-codex"))
+			base := time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+			source := &selectedRunWall{}
+			source.nanos.Store(base.UnixNano())
+			var recordingService recordings.Service
+			recordingID := recordings.RecordingID("019a07c0-5000-7000-8000-000000000001")
+			process := support.BuildProcess(t, serviceedges.Edges{Clock: source,
+				ProviderCommandRunner:                    selectedRunTimeRunner{source: source, completedAt: base.Add(7 * time.Second)},
+				FactorySessionRuntimeInstanceIDGenerator: func() string { return string(recordingID) },
+				RecordingsRootObserver:                   func(service recordings.Service) { recordingService = service },
+			})
+			args := []string{"you", "run", "--factory", dir, "--verbose", "--debug"}
+			destination := filepath.Join(home, "explicit.recording.json")
+			if explicit {
+				args = append(args, "--record", destination)
+			}
+			requestPath := filepath.Join(home, "work.json")
+			request, err := json.Marshal(work.WorkRequest{RequestID: "selected-time-request", Type: work.WorkRequestTypeFactoryRequestBatch, Works: []work.Work{{WorkID: "selected-time-work", Name: "selected-time", WorkTypeID: textStreamPromptRunWorkType, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "selected time input"}}}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(requestPath, request, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			args = append(args, "--work", requestPath)
+			input := support.FakeInputs(t.Context(), args)
+			input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			input.WorkingDirectory = dir
+			if err := process.Execute(input.Input); err != nil {
+				t.Fatalf("run: %v; stderr=%s", err, input.Stderr())
+			}
+			if input.Stdout() != "selected time COMPLETE" {
+				t.Fatalf("clean output = %q", input.Stdout())
+			}
+			if !explicit {
+				paths, err := filepath.Glob(filepath.Join(home, ".you-agent-factory", "recordings", "2041", "02", "03", "*.json"))
+				if err != nil || len(paths) != 1 {
+					t.Fatalf("selected dated recording = %v, %v", paths, err)
+				}
+				destination = paths[0]
+				if _, err := uuid.Parse(strings.TrimSuffix(filepath.Base(destination), ".json")); err != nil {
+					t.Fatalf("recording UUID: %v", err)
+				}
+			}
+			if _, err := os.Stat(destination); err != nil {
+				t.Fatalf("recording destination: %v", err)
+			}
+			assertSelectedRunArtifacts(t, home, base)
+			assertSelectedRunRecordingFacts(t, recordingService, recordingID, source, base)
+		})
+	}
+}
+
+func assertSelectedRunArtifacts(t *testing.T, home string, openedAt time.Time) {
+	t.Helper()
+	for _, root := range []string{platformlogging.RuntimeLogsRoot(home), platformmetrics.RuntimeMetricsRoot(home)} {
+		pattern := filepath.Join(root, openedAt.Format("2006"), openedAt.Format("01"), openedAt.Format("02"), openedAt.Format("150405.000000000")+"-*")
+		paths, err := filepath.Glob(pattern)
+		if err != nil || len(paths) == 0 {
+			t.Fatalf("selected-time artifact %q: %v, %v", pattern, paths, err)
+		}
+	}
+}
+
+func assertSelectedRunRecordingFacts(t *testing.T, service recordings.Service, id recordings.RecordingID, source *selectedRunWall, base time.Time) {
+	t.Helper()
+	facts, err := service.LoadReplayRecording(recordings.LoadReplayRecordingRequest{RecordingID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts.Recording.Events) == 0 || !facts.Recording.Events[0].RecordedAt.Equal(base) {
+		t.Fatalf("initial recorded facts = %#v", facts.Recording)
+	}
+	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: id})
+	if err != nil || status.Status.FinalizedAt == nil || !status.Status.FinalizedAt.Equal(base.Add(7*time.Second)) {
+		t.Fatalf("finalized facts = %#v, %v", status, err)
+	}
+	source.nanos.Store(base.Add(time.Hour).UnixNano())
+	replay, err := service.LoadReplayRecording(recordings.LoadReplayRecordingRequest{RecordingID: id})
+	if err != nil || !reflect.DeepEqual(replay.Recording.Events, facts.Recording.Events) {
+		t.Fatalf("selected source advance changed recorded facts: %v", err)
+	}
+}
+
+func TestSelectedTimeArtifactFailurePreservesCLIError(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	blocked := filepath.Join(home, "blocked-logs")
+	if err := os.WriteFile(blocked, []byte("existing destination"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := support.ScaffoldFactory(t, textStreamPromptRunFactoryConfig())
+	support.WriteAgentConfig(t, dir, "mock-worker", support.BuildModelWorkerConfig("codex", "gpt-5-codex"))
+	source := &selectedRunWall{}
+	source.nanos.Store(time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC).UnixNano())
+	process := support.BuildProcess(t, serviceedges.Edges{Clock: source, ProviderCommandRunner: support.NewStaticSuccessCommandRunner("unexpected success")})
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", dir, "--runtime-log-dir", blocked, "--no-record", "artifact failure"})
+	inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	err := process.Execute(inputs.Input)
+	var coded clidiag.CodedError
+	if !errors.As(err, &coded) || coded.CLIErrorCode() == "" || strings.Contains(inputs.Stdout(), "unexpected success") {
+		t.Fatalf("artifact failure = %v stdout=%q", err, inputs.Stdout())
+	}
+	preserved, readErr := os.ReadFile(blocked)
+	if readErr != nil || string(preserved) != "existing destination" {
+		t.Fatalf("artifact destination changed: %q, %v", preserved, readErr)
+	}
+	t.Logf("artifact error code=%s message=%s", coded.CLIErrorCode(), coded.CLIErrorMessage())
+}
+
+func assertInjectedCompletedDiagnostic(t *testing.T, fields map[string]any, requestID, traceID string) {
+	t.Helper()
+	if fields["request_id"] != requestID || fields["trace_id"] != traceID || fields["status"] != "COMPLETED" || fields["resolved_work_id"] == "" {
+		t.Fatalf("CLI invocation diagnostic correlation=%#v", fields)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -27,14 +28,29 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, body)
 	routes := newFixedLeafRoutes()
 	network := &rejectingModelAssetHTTP{}
+	launcher := &recordingModelHostLauncher{endpoint: host.URL}
 	edges := story004EmbedEdges(home, network, host.Client(),
-		&recordingModelHostLauncher{endpoint: host.URL}, &joinedProtocolNegotiator{},
+		launcher, &joinedProtocolNegotiator{},
 		&joinedCompatibilityChecker{}, selection, nil)
 	edges.ModelEmbeddingBackend = nil
-	edges.ModelInvocationBackend = routes.invoke
+	commands := support.NewRecordingCommandRunner("unexpected model command")
+	edges.ModelRuntimeCommandRunner = commands
+	var invocations atomic.Int64
+	edges.ModelInvocationBackend = func(ctx context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		invocations.Add(1)
+		return routes.invoke(ctx, request)
+	}
 	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig()),
-		Env:        functionalHomeEnvironment(home), Edges: edges, BeforeStart: bootstrapFixedLeafProfile,
+		Env:        functionalHomeEnvironment(home), Edges: edges,
+		BeforeStart: func(t testing.TB, process support.Process, input root.Input) {
+			// BuildProcess has returned, but no customer operation has activated it.
+			if launcher.Calls() != 0 || network.Calls() != 0 || commands.CallCount() != 0 || invocations.Load() != 0 {
+				t.Fatalf("construction activated model effects: hosts=%d assets=%d commands=%d invocations=%d",
+					launcher.Calls(), network.Calls(), commands.CallCount(), invocations.Load())
+			}
+			bootstrapFixedLeafProfile(t, process, input)
+		},
 	})
 	for _, name := range []string{"selected", "peer"} {
 		t.Run(name, func(t *testing.T) {
@@ -49,6 +65,10 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 	t.Run("fault and retry while peer is accepted", func(t *testing.T) {
 		t.Parallel()
 		runFixedLeafSessionFaultWithHeldPeer(t, server.URL(), routes)
+	})
+	t.Run("capacity refusal and recovery while peer is accepted", func(t *testing.T) {
+		t.Parallel()
+		runFixedLeafSessionCapacityWithHeldPeer(t, server.URL(), routes, launcher)
 	})
 }
 

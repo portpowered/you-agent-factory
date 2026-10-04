@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -37,7 +36,7 @@ type Assembly struct {
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
-	invoker                      invocationservice.Service
+	invoker                      roles.InvocationService
 	scopeControl                 SessionScopeControl
 	scopeActivation              SessionScopeActivation
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
@@ -72,7 +71,7 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams StreamManager,
-	invoker invocationservice.Service,
+	invoker roles.InvocationService,
 	control SessionScopeControl,
 	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,

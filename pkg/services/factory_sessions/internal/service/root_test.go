@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
-	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"net/http"
 	"path/filepath"
 	"testing"
 	"time"
+
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
+	"go.uber.org/zap"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -286,7 +288,7 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 	state := sessionruntime.NewWithResponseService(registry, responses, nil, in.clock, in.eventIDs, in.sessionIDs, in.responseStreams)
 	streams := stream.NewManagerWithResponseService(state, sessionruntime.NewResponseStreamObserver(nil), responses, in.responseStreams)
 	return NewAssembly(
-		registry, state, streams, sessioninvocation.NewSessionOwner(legacyservice.NewInvocationAuthority(state, platformclock.Real{}, nil), legacyservice.NewScopeControl(state, nil), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), legacyservice.NewScopeControl(state, nil), legacyservice.NewScopeActivation(state),
+		registry, state, streams, sessioninvocation.NewSessionOwner(legacyservice.NewInvocationAuthority(state, platformclock.Real{}, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), legacyservice.NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.eventIDs,

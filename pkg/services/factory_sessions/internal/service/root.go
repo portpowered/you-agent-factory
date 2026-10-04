@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -30,7 +29,7 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams legacyservice.StreamManager,
-	invoker invocationservice.Service,
+	invoker roles.InvocationService,
 	control legacyservice.SessionScopeControl,
 	activation legacyservice.SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,

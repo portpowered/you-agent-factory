@@ -26,19 +26,31 @@ func NewInvocationArtifactExporter(
 	return inferenceartifacts.NewExporter(fileSystem)
 }
 
-// NewService constructs an inert Inference owner over accepted runtime-scope,
-// catalog, and runtime-host contracts. Construction validates injected effects
-// and allocates inference state only; it does not launch subprocesses.
+// InvocationArtifactRegistrar is the completed artifact registration resource.
+type InvocationArtifactRegistrar = inferenceartifacts.Registrar
+
+// NewInvocationArtifactRegistrar constructs the completed artifact resource.
+func NewInvocationArtifactRegistrar(fileSystem modelseffects.InvocationArtifactFileSystem) (*InvocationArtifactRegistrar, error) {
+	return inferenceartifacts.NewRegistrar(fileSystem)
+}
+
+// NewExecutionDeadline selects the existing execution policy at composition.
+func NewExecutionDeadline() func() time.Duration {
+	return func() time.Duration { return 30 * time.Minute }
+}
+
+// NewService constructs an inert Inference owner over completed collaborators.
 func NewService(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
 	invocationRuntime internalservice.InvocationRuntime,
-	fileSystem modelseffects.InvocationArtifactFileSystem,
+	artifactRegistrar *InvocationArtifactRegistrar,
 	clock func() time.Time,
+	executionDeadline func() time.Duration,
 ) (inference.Service, error) {
-	if scopes == nil {
+	if isNilDependency(scopes) {
 		return nil, fmt.Errorf(
 			"%w: Models Runtime Scopes service is required",
 			models.ErrInvalidInferenceDependencies,
@@ -74,9 +86,11 @@ func NewService(
 			models.ErrInvalidInferenceDependencies,
 		)
 	}
-	artifactRegistrar, err := inferenceartifacts.NewRegistrar(fileSystem)
-	if err != nil {
-		return nil, err
+	if artifactRegistrar == nil {
+		return nil, fmt.Errorf("%w: Models Inference artifact registrar is required", models.ErrInvalidInferenceDependencies)
+	}
+	if executionDeadline == nil {
+		return nil, fmt.Errorf("%w: Models Inference execution deadline is required", models.ErrInvalidInferenceDependencies)
 	}
 	return internalservice.New(
 		scopes,
@@ -86,7 +100,7 @@ func NewService(
 		invocationRuntime,
 		artifactRegistrar,
 		clock,
-		nil,
+		executionDeadline,
 	), nil
 }
 
