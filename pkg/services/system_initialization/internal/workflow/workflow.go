@@ -45,18 +45,6 @@ func New(
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
 	inspectPath InspectPath,
 ) (*Initializer, error) {
-	if operatorSettings == nil {
-		return nil, fmt.Errorf("construct system initialization: Operator Settings service is required")
-	}
-	if packagedInstaller == nil {
-		return nil, fmt.Errorf("construct system initialization: Factory Definitions packaged installer is required")
-	}
-	if packagedCatalog.List == nil || packagedCatalog.Resolve == nil {
-		return nil, fmt.Errorf("construct system initialization: Factory Definitions packaged catalog is required")
-	}
-	if inspectPath == nil {
-		return nil, fmt.Errorf("construct system initialization: inspect path edge is required")
-	}
 	return &Initializer{
 		operatorSettings:  operatorSettings,
 		packagedCatalog:   packagedCatalog,
@@ -85,21 +73,6 @@ func (initializer *Initializer) Initialize(
 	homeDir := strings.TrimSpace(request.HomeDir)
 	if homeDir == "" {
 		return systeminitialization.Result{}, fmt.Errorf("%w", systeminitialization.ErrMissingHomeDir)
-	}
-	if initializer == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: service is required")
-	}
-	if initializer.operatorSettings == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: Operator Settings service is required")
-	}
-	if initializer.packagedInstaller == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: Factory Definitions packaged installer is required")
-	}
-	if initializer.packagedCatalog.List == nil || initializer.packagedCatalog.Resolve == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: Factory Definitions packaged catalog is required")
-	}
-	if initializer.inspectPath == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: inspect path edge is required")
 	}
 	releaseHome, err := initializer.acquireHome(ctx, filepath.Clean(homeDir))
 	if err != nil {

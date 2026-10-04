@@ -225,6 +225,7 @@ func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing
 	if _, err := os.Stat(filepath.Join(fixture.homeDir, ".you-agent-factory", "factories")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("construction activated packaged Factory installation: %v", err)
 	}
+	assertReusableHelpCommands(t, fixture, process)
 	var stdout bytes.Buffer
 	missingFactory := filepath.Join(fixture.workingDir, "missing-initialization-factory.json")
 	args := []string{
@@ -256,6 +257,20 @@ func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing
 	}
 	if got := fixture.readConfig(); got != firstConfig {
 		t.Fatalf("repeat initialization rewrote operator config:\nfirst:\n%s\nsecond:\n%s", firstConfig, got)
+	}
+}
+
+func assertReusableHelpCommands(t *testing.T, fixture initFixture, process support.Process) {
+	t.Helper()
+	var initHelp, runHelp bytes.Buffer
+	if err := fixture.executeOn(process, &initHelp, "you", "init", "--help"); err != nil {
+		t.Fatalf("Execute(init help): %v", err)
+	}
+	if err := fixture.executeOn(process, &runHelp, "you", "run", "--help"); err != nil {
+		t.Fatalf("Execute(run help): %v", err)
+	}
+	if !strings.Contains(initHelp.String(), "you init") || !strings.Contains(runHelp.String(), "you run") || initHelp.String() == runHelp.String() {
+		t.Fatalf("invocation help output was not isolated: init=%q, run=%q", initHelp.String(), runHelp.String())
 	}
 }
 

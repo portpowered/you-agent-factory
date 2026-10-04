@@ -3,7 +3,9 @@ package root
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
+	"strings"
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -31,11 +33,18 @@ func BuildProcess(
 	applicationProcess, err := wire.InjectBundle(ctx, serviceedges.Merge(
 		serviceedges.Edges{ModelInvocationGRPCDialer: platformgrpc.NetworkDialer{}},
 		edges,
-	))
+	), resolveACPWireLogSettings(os.Getenv))
 	if err != nil {
 		return nil, fmt.Errorf("build application process: %w", err)
 	}
 	return applicationProcess, nil
+}
+
+func resolveACPWireLogSettings(lookup func(string) string) wire.ACPWireLogSettings {
+	return wire.ACPWireLogSettings{
+		Disabled:  strings.EqualFold(strings.TrimSpace(lookup("YOU_ACP_WIRE_LOG")), "off"),
+		Directory: strings.TrimSpace(lookup("YOU_ACP_WIRE_LOG_DIR")),
+	}
 }
 
 // Validate raw overrides before selecting defaults or running any constructor.

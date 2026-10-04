@@ -487,6 +487,7 @@ var BundleSet = wire.NewSet(
 func InjectBundle(
 	ctx context.Context,
 	edges edges.Edges,
+	acpWireLogSettings ACPWireLogSettings,
 ) (*initializerapplication.Process, error) {
 	wire.Build(
 		BundleSet,

@@ -3,6 +3,7 @@ package root
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -58,6 +59,47 @@ type uncalledClock struct{ platformclock.Source }
 type uncalledProcessClock struct{ platformprocess.Clock }
 type uncalledDirectory struct {
 	platformfilesystem.WorkingDirectory
+}
+
+func TestBuildProcessRejectsMissingRegistrationIntegration(t *testing.T) {
+	t.Parallel()
+	edges := serviceedges.Edges{
+		RecordingsRootObserver: func(recordings.Service) { panic("constructor ran") },
+	}
+	// Allocate a zero registration through the caller's Edges contract without
+	// importing the Providers-private construction package. Its omitted
+	// Integration is invalid even though top-level optional effects may be nil.
+	registrations := reflect.ValueOf(&edges.ProviderRegistrations).Elem()
+	registrations.Set(reflect.MakeSlice(registrations.Type(), 1, 1))
+	process, err := BuildProcess(context.Background(), edges)
+	if process != nil || err == nil || !strings.Contains(err.Error(), "integration is required") {
+		t.Fatalf("BuildProcess = (%v, %v), want integration required", process, err)
+	}
+}
+
+func TestACPWireLogSettingsCaptureNormalizedConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, disabled := range []string{"off", " OFF ", "on", ""} {
+		t.Run(disabled, func(t *testing.T) {
+			calls := 0
+			settings := resolveACPWireLogSettings(func(key string) string {
+				calls++
+				switch key {
+				case "YOU_ACP_WIRE_LOG":
+					return disabled
+				case "YOU_ACP_WIRE_LOG_DIR":
+					return " /owned/transcripts "
+				default:
+					t.Fatalf("unexpected lookup %q", key)
+					return ""
+				}
+			})
+			if settings.Disabled != strings.EqualFold(strings.TrimSpace(disabled), "off") ||
+				settings.Directory != "/owned/transcripts" || calls != 2 {
+				t.Fatalf("settings = %+v, lookups = %d", settings, calls)
+			}
+		})
+	}
 }
 
 func TestBuildProcessRejectsInvalidOverridesBeforeEffects(t *testing.T) {

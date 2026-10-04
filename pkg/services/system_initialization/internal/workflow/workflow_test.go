@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -603,18 +604,16 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 	}
 }
 
-func TestNewRequiresInjectedServices(t *testing.T) {
-	catalog := newTestPackagedCatalog(nil)
-	if initializer, err := New(nil, catalog, &fakePackagedInstaller{}, os.Stat); err == nil || initializer != nil {
-		t.Fatalf("New(nil Operator Settings) = (%#v, %v), want nil and error", initializer, err)
+func TestNewConstructsWithoutEffects(t *testing.T) {
+	t.Parallel()
+	settings := &fakeOperatorSettings{}
+	installer := &fakePackagedInstaller{}
+	initializer, err := New(settings, newTestPackagedCatalog(nil), installer,
+		func(string) (fs.FileInfo, error) { panic("construction inspected filesystem") })
+	if err != nil || initializer == nil {
+		t.Fatalf("New = (%v, %v)", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, nil, os.Stat); err == nil || initializer != nil {
-		t.Fatalf("New(nil packaged installer) = (%#v, %v), want nil and error", initializer, err)
-	}
-	if initializer, err := New(&fakeOperatorSettings{}, factorydefinitions.PackagedFactoryCatalogOperations{}, &fakePackagedInstaller{}, os.Stat); err == nil || initializer != nil {
-		t.Fatalf("New(nil packaged catalog) = (%#v, %v), want nil and error", initializer, err)
-	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, nil); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
-		t.Fatalf("New(nil inspect path) = (%#v, %v), want nil and inspect-path error", initializer, err)
+	if len(settings.ensureCalls) != 0 || len(settings.loadCalls) != 0 || len(installer.calls) != 0 {
+		t.Fatal("construction executed bootstrap effects")
 	}
 }

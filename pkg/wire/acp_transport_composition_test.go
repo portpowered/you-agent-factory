@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -18,6 +21,72 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
+
+func TestACPWireRecorderExplicitSelectionPrecedesDefaults(t *testing.T) {
+	t.Parallel()
+	settings := ACPWireLogSettings{Disabled: true, Directory: "/ignored"}
+	disabled, err := provideACPWireRecorder(serviceedges.Edges{}, settings, nil, nil, nil)
+	if err != nil || disabled == nil {
+		t.Fatalf("disabled recorder = (%v, %v)", disabled, err)
+	}
+	if transcript, err := disabled("connection"); transcript != nil || !errors.Is(err, acp.ErrWireRecordingDisabled) {
+		t.Fatalf("disabled open = (%v, %v)", transcript, err)
+	}
+	var observed string
+	supplied := func(id string) (acp.WireTranscript, error) { observed = id; return nil, nil }
+	recorder, err := provideACPWireRecorder(serviceedges.Edges{ACPWireRecorder: supplied}, settings, nil, nil, nil)
+	if err != nil || observed != "" {
+		t.Fatalf("supplied construction = %v, observed = %q", err, observed)
+	}
+	if _, err := recorder("owned-connection"); err != nil || observed != "owned-connection" {
+		t.Fatalf("supplied open = %v, observed = %q", err, observed)
+	}
+}
+
+func TestACPWireRecorderUsesCapturedDirectoryAndClock(t *testing.T) {
+	t.Parallel()
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprint(explicit), func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			root := wiretranscript.Root(home)
+			settings := ACPWireLogSettings{}
+			if explicit {
+				settings.Directory = filepath.Join(home, "selected")
+				root = settings.Directory
+			}
+			paths, err := provideRuntimeArtifactPathReserver()
+			if err != nil {
+				t.Fatal(err)
+			}
+			at := time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)
+			homeCalls := 0
+			recorder, err := provideACPWireRecorder(serviceedges.Edges{}, settings, paths,
+				func() time.Time { return at }, func() (string, error) { homeCalls++; return home, nil })
+			if err != nil || recorder == nil {
+				t.Fatalf("construct recorder = (%v, %v)", recorder, err)
+			}
+			if homeCalls != 0 {
+				t.Fatal("construction resolved home")
+			}
+			if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("construction activated transcript directory: %v", err)
+			}
+			transcript, err := recorder("owned-connection")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = transcript.Close() })
+			if !strings.HasPrefix(transcript.Path(), root+string(os.PathSeparator)) {
+				t.Fatalf("transcript path = %q, want root %q", transcript.Path(), root)
+			}
+			if (homeCalls == 0) != explicit {
+				t.Fatalf("home resolutions = %d, explicit directory = %v", homeCalls, explicit)
+			}
+			assertACPRecordedClock(t, transcript, at)
+		})
+	}
+}
 
 // rpcTestMessage is the minimal JSON-RPC 2.0 response shape this test reads
 // off the real ACP stdio Server's Serve output.
@@ -63,7 +132,7 @@ func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t
 	seedInstalledPackagedFactories(t, home, "@you/goal", "@you/review")
 	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal", "factory:@you/review"})
 
-	process, err := InjectBundle(context.Background(), serviceedges.Edges{})
+	process, err := InjectBundle(context.Background(), serviceedges.Edges{}, ACPWireLogSettings{})
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
@@ -245,5 +314,26 @@ func decodeRPCTestMessage(t *testing.T, out *bytes.Buffer) rpcTestMessage {
 			t.Fatalf("unmarshal response line %q: %v", line, err)
 		}
 		return msg
+	}
+}
+
+func assertACPRecordedClock(t *testing.T, transcript acp.WireTranscript, at time.Time) {
+	t.Helper()
+	if err := transcript.Record("owned-connection", wiretranscript.PeerClient, wiretranscript.DirectionIn, wiretranscript.StreamStdin, []byte(`{"id":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := transcript.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(transcript.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record wiretranscript.Record
+	if err := json.Unmarshal(bytes.TrimSpace(data), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.Timestamp != at.Format(time.RFC3339Nano) || record.Conn != "owned-connection" {
+		t.Fatalf("record = %+v", record)
 	}
 }

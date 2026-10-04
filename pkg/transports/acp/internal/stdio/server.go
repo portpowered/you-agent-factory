@@ -98,9 +98,6 @@ type Server struct {
 }
 
 func (s *Server) scopedInvocation(ctx context.Context) (context.Context, func()) {
-	if s.invocationScope == nil {
-		return ctx, func() {}
-	}
 	scope := s.invocationScope(ctx)
 	return scope.Context(), scope.Stop
 }
@@ -368,10 +365,10 @@ func New(
 	responseBridge acp.ResponseBridge,
 	wireRecorder acp.WireRecorder,
 	startResolver acp.FactorySessionStartResolver,
-	invocationScope ...acp.InvocationScopeFactory,
+	invocationScope acp.InvocationScopeFactory,
 ) *Server {
-	server := &Server{
-		logger:          logging.EnsureLogger(logger),
+	return &Server{
+		logger:          logger,
 		chatSessions:    chatSessions,
 		catalog:         catalog,
 		factorySessions: factorySessions,
@@ -380,12 +377,9 @@ func New(
 		responseBridge:  responseBridge,
 		wireRecorder:    wireRecorder,
 		startResolver:   startResolver,
+		invocationScope: invocationScope,
 		controlFlights:  &promptFlightRegistry{},
 	}
-	if len(invocationScope) != 0 {
-		server.invocationScope = invocationScope[0]
-	}
-	return server
 }
 
 // Serve begins one connection-scoped serving invocation over caller-owned
@@ -407,7 +401,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	}
 
 	connectionID := identity.NewConnectionID()
-	logger := logging.EnsureLogger(s.logger)
+	logger := s.logger
 	logger.Info("acp stdio connection started", "connectionId", string(connectionID))
 
 	err := s.serveConnection(ctx, connectionID, in, out)
@@ -879,6 +873,9 @@ func (s *Server) openWireTranscript(connectionID identity.ConnectionID) acp.Wire
 		return nil
 	}
 	transcript, err := s.wireRecorder(string(connectionID))
+	if errors.Is(err, acp.ErrWireRecordingDisabled) {
+		return nil
+	}
 	if err != nil || transcript == nil {
 		s.logger.Warn("acp wire transcript unavailable", "connectionId", string(connectionID))
 		return nil

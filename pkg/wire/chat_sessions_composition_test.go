@@ -43,7 +43,7 @@ import (
 func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
 	t.Parallel()
 
-	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}); err != nil {
+	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}, ACPWireLogSettings{}); err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
