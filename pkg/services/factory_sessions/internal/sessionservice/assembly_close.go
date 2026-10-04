@@ -30,7 +30,7 @@ func (a *Assembly) CloseSession(ctx context.Context, sessionID string) error {
 	}
 	owner, ok := bound.Owner.(interface {
 		PrepareOwnedSessionClose(context.Context, string) error
-		RetireOwnedSession(string) error
+		RetireOwnedSession(context.Context, string) error
 	})
 	if !ok {
 		return fmt.Errorf("%w: session close is unavailable", factorysessions.ErrRuntimeNotAvailable)
@@ -43,5 +43,5 @@ func (a *Assembly) CloseSession(ctx context.Context, sessionID string) error {
 			return err
 		}
 	}
-	return owner.RetireOwnedSession(id)
+	return owner.RetireOwnedSession(ctx, id)
 }

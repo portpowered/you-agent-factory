@@ -324,6 +324,7 @@ var servicesSet = wire.NewSet(
 	provideRuntimeDispatchPlanning,
 	factoryruntimewire.NewLifecycle,
 	factoryruntimewire.NewInstanceHost,
+	factoryruntimewire.NewRuntimeStopOperation,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.ProviderSessionsPorts), "*"),
 	wire.Struct(new(factorysessionwire.FactoryRuntimePorts), "*"),

@@ -8,6 +8,12 @@ import (
 )
 
 func (h *Host) Stop(handle factoryruntime.RuntimeRun) error {
+	return h.StopWithClock(handle, h.clock)
+}
+
+// StopWithClock retains keyed handle selection while preserving the addressed
+// session's fact time independently of this host view's clock.
+func (h *Host) StopWithClock(handle factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
 	concrete, err := h.classifyStopHandle(handle)
 	if err != nil {
 		return err
@@ -18,7 +24,7 @@ func (h *Host) Stop(handle factoryruntime.RuntimeRun) error {
 		}
 		return factoryruntime.ErrNotRunning
 	}
-	return h.lifecycle.StopWithClock(concrete, h.clock)
+	return h.lifecycle.StopWithClock(concrete, clock)
 }
 
 func (h *Host) classifyStopHandle(handle factoryruntime.RuntimeRun) (*factoryhost.Handle, error) {

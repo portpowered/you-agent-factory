@@ -45,6 +45,7 @@ func NewSessionRuntime(
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factory.SessionResultProjectionOperation,
 	sessionState *sessionruntime.Service,
+	scopeControl SessionScopeControl,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
@@ -57,7 +58,8 @@ func NewSessionRuntime(
 	}
 	host := &SessionRuntime{
 		factoryRootDir: factoryRootDir, sessionState: sessionState,
-		dir: dir, executionBaseDir: executionBaseDir,
+		scopeControl: scopeControl,
+		dir:          dir, executionBaseDir: executionBaseDir,
 		runtimeMode: runtimeMode, backendScopeID: backendScopeID,
 		workFile: workFile, workflowID: workflowID,
 		workstationLoader:          workstationLoader,

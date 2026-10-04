@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -256,6 +257,60 @@ type scopedControlRuntime struct {
 	controls        int
 }
 
+func TestSessionScopeControlStopPreservesSelectedClockErrorsAndRetry(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	a := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
+	b := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
+	core, logs := observer.New(zap.InfoLevel)
+	registerScopeControlRuntime(state, "a", a, zap.New(core))
+	registerScopeControlRuntime(state, "b", b, zap.NewNop())
+	bound := runtimebinding.SessionStateFrom(state.Resolve("a"))
+	bound.Clock = clockwork.NewFakeClockAt(time.Date(2004, 5, 6, 0, 0, 0, 0, time.UTC))
+	wantError := errors.New("injected artifact failure")
+	failure := wantError
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
+		if run != bound.Handle || !clock.Now().Equal(bound.Clock.Now()) {
+			t.Fatal("stop selected a foreign run or fact time")
+		}
+		return failure
+	})
+	if err := control.StopLiveSession(context.Background(), " a "); !errors.Is(err, wantError) {
+		t.Fatalf("failed stop = %v", err)
+	}
+	if state.Resolve("a") == nil || state.Resolve("b") == nil {
+		t.Fatal("failed stop retired a session")
+	}
+	failure = nil
+	if err := control.StopLiveSession(context.Background(), "a"); err != nil {
+		t.Fatalf("retry stop = %v", err)
+	}
+	for _, terminal := range []error{context.Canceled, factoryruntime.ErrAlreadyStopped, factoryruntime.ErrNotRunning} {
+		failure = terminal
+		if err := control.StopLiveSession(context.Background(), "a"); err != nil {
+			t.Fatalf("terminal stop %v = %v", terminal, err)
+		}
+	}
+	if state.Resolve("a") == nil || b.controls != 0 {
+		t.Fatal("stop changed retirement ownership or controlled peer")
+	}
+	if logs.FilterMessage("stop live Factory Session runtime failed").Len() != 1 {
+		t.Fatal("missing structured stop failure")
+	}
+	if err := control.StopLiveSession(context.Background(), "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing stop = %v", err)
+	}
+	var detached *factorysessions.DetachedRequestError
+	if err := control.StopLiveSession(context.Background(), " "); !errors.As(err, &detached) {
+		t.Fatalf("empty selector = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := control.StopLiveSession(ctx, "a"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled stop = %v", err)
+	}
+}
+
 func (r *scopedControlRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	if r.onObserve != nil {
 		r.onObserve()
@@ -312,7 +367,7 @@ func TestSessionScopeControlPreservesLifecycleAndPeerIsolation(t *testing.T) {
 	b := &scopedControlRuntime{invocationQueryRuntime: invocationQueryRuntime{name: "b"}, status: string(interfaces.FactoryStateRunning)}
 	metrics := registerScopeControlRuntime(state, "a", a, zap.New(core))
 	registerScopeControlRuntime(state, "b", b, zap.NewNop())
-	control := NewScopeControl(state)
+	control := NewScopeControl(state, nil)
 	assembly := &Assembly{state: state, scopeControl: control}
 	request := factorysessions.SessionControlRequest{SessionID: "a", Operation: factorysessions.SessionControlCancel,
 		Control:     factorysessions.ControlRequest{Reason: "owned cancellation"},
@@ -344,7 +399,7 @@ func TestSessionScopeControlPreservesErrorsAndAllowsRetry(t *testing.T) {
 	failure := errors.New("owned runtime control failed")
 	runtime := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning), failure: failure}
 	registerScopeControlRuntime(state, "a", runtime, zap.NewNop())
-	control := NewScopeControl(state)
+	control := NewScopeControl(state, nil)
 	request := factorysessions.ControlRequest{RequestID: "retryable"}
 	if _, err := control.CancelLiveFactorySession(context.Background(), "missing", request); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing: %v", err)
@@ -382,7 +437,7 @@ func TestSessionScopeControlKeepsSelectedGenerationDuringReplacement(t *testing.
 	firstMetrics := registerScopeControlRuntime(state, "a", first, zap.NewNop())
 	var replacementMetrics *scopeControlMetrics
 	first.onObserve = func() { replacementMetrics = registerScopeControlRuntime(state, "a", replacement, zap.NewNop()) }
-	result, err := NewScopeControl(state).CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "first-cancel"})
+	result, err := NewScopeControl(state, nil).CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "first-cancel"})
 	if err != nil || result.Status != factorysessions.LifecycleStatusSucceeded || first.controls != 1 || replacement.controls != 0 || replacement.status != string(interfaces.FactoryStateRunning) {
 		t.Fatalf("generation control = %#v, %v; first=%d replacement=%d", result, err, first.controls, replacement.controls)
 	}
@@ -412,7 +467,7 @@ func TestSessionScopeControlPeerProgressWhileCancellationIsBlocked(t *testing.T)
 	b := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
 	aMetrics := registerScopeControlRuntime(state, "a", a, zap.NewNop())
 	bMetrics := registerScopeControlRuntime(state, "b", b, zap.NewNop())
-	control := NewScopeControl(state)
+	control := NewScopeControl(state, nil)
 	request := factorysessions.ControlRequest{RequestID: "same-request", TurnID: "same-turn"}
 	type completion struct {
 		result factorysessions.LifecycleControlResult

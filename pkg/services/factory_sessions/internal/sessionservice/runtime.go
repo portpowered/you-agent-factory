@@ -61,6 +61,7 @@ type SessionRuntime struct {
 	runtimeMu        sync.RWMutex
 	runtimeState     runtimebinding.State
 	sessionState     *sessionruntime.Service
+	scopeControl     SessionScopeControl
 	sessionGateway   sessionGateway
 	runtimeBuild     runtimeports.RuntimeReplacementBuilder
 	modelsScope      models.RuntimeScopeRef

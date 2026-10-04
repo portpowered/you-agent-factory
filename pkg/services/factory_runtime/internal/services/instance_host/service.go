@@ -23,6 +23,7 @@ type ReplaceRequest struct {
 // implementation consumes this parent-private contract.
 type Service interface {
 	factoryruntime.RuntimeLifecycle
+	StopWithClock(factoryruntime.RuntimeRun, factoryruntime.Clock) error
 	Pause(context.Context, factoryruntime.RuntimeRun) (factoryruntime.PauseResult, error)
 	Resume(context.Context, factoryruntime.RuntimeRun) (factoryruntime.ResumeResult, error)
 	Replace(ReplaceRequest) (factoryruntime.RuntimeRun, error)

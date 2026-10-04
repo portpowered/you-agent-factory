@@ -59,7 +59,7 @@ func (owner *closeRegistryOwnerFake) PrepareOwnedSessionClose(_ context.Context,
 	return nil
 }
 
-func (owner *closeRegistryOwnerFake) RetireOwnedSession(sessionID string) error {
+func (owner *closeRegistryOwnerFake) RetireOwnedSession(_ context.Context, sessionID string) error {
 	owner.registry.Remove(sessionID)
 	return nil
 }
@@ -86,6 +86,37 @@ func TestAssemblyCloseDrainsCanonicalRegistryAndRetainsFailedSession(t *testing.
 	owner.failID = ""
 	if err := assembly.Close(context.Background()); err != nil || registry.Count() != 0 {
 		t.Fatalf("retry close error = %v, remaining sessions = %v", err, registry.IDs())
+	}
+}
+
+func TestRetireOwnedSessionUsesScopedStopAndRetainsFailedCleanup(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	registerScopeControlRuntime(state, "a", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	registerScopeControlRuntime(state, "b", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	selected := runtimebinding.SessionStateFrom(state.Resolve("a"))
+	selected.Clock = state.Clock()
+	failure := errors.New("injected stop failure")
+	stopErr := failure
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
+		if run != selected.Handle || clock != selected.Clock {
+			t.Fatal("retirement stopped a foreign runtime or selected clock")
+		}
+		return stopErr
+	})
+	owner := &SessionRuntime{sessionState: state, scopeControl: control}
+	if err := owner.RetireOwnedSession(context.Background(), "a"); !errors.Is(err, failure) {
+		t.Fatalf("failed retirement = %v", err)
+	}
+	if state.Resolve("a") == nil || state.Resolve("b") == nil {
+		t.Fatal("failed cleanup lost the retryable session or its peer")
+	}
+	stopErr = nil
+	if err := owner.RetireOwnedSession(context.Background(), "a"); err != nil {
+		t.Fatalf("retry retirement = %v", err)
+	}
+	if state.Resolve("a") != nil || state.Resolve("b") == nil {
+		t.Fatal("successful retirement did not remove only A")
 	}
 }
 

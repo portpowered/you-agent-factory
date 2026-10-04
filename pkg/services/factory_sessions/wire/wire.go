@@ -95,12 +95,12 @@ func NewInvocationAuthority(state *SessionState, scheduler platformclock.TimerSo
 	return sessionservice.NewInvocationAuthority(state, scheduler, projector)
 }
 
-// SessionScopeControl owns addressed cancellation independently of the gateway.
+// SessionScopeControl owns addressed cancellation and stop independently of the gateway.
 type SessionScopeControl = sessionservice.SessionScopeControl
 
-// NewScopeControl constructs cancellation over the canonical session authority.
-func NewScopeControl(state *SessionState) SessionScopeControl {
-	return sessionservice.NewScopeControl(state)
+// NewScopeControl constructs control over the canonical session authority.
+func NewScopeControl(state *SessionState, stop factoryruntime.RuntimeStopOperation) SessionScopeControl {
+	return sessionservice.NewScopeControl(state, stop)
 }
 
 // StreamManager supplies provider progress and dispatch completion factories.

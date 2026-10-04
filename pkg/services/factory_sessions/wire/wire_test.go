@@ -325,7 +325,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 	state := NewSessionState(registry, responseRegistry, in.clock, in.eventIDs, in.sessionIDs, responses)
 	streams := NewStreamManager(state, NewStreamObserver(), responseRegistry, responses)
 	return NewRuntimeAssembly(
-		registry, state, streams, NewInvocationAuthority(state, platformclock.Real{}, nil), NewScopeControl(state),
+		registry, state, streams, NewInvocationAuthority(state, platformclock.Real{}, nil), NewScopeControl(state, nil),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.interpolation,

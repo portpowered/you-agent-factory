@@ -43,9 +43,15 @@ func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, sessionI
 
 // RetireOwnedSession removes the canonical record only after all other
 // shutdown effects have succeeded.
-func (fs *SessionRuntime) RetireOwnedSession(sessionID string) error {
+func (fs *SessionRuntime) RetireOwnedSession(ctx context.Context, sessionID string) error {
 	if fs == nil {
 		return fmt.Errorf("Factory Session runtime is required")
 	}
-	return fs.stopFactorySession(sessionID)
+	err := runtimebinding.StopSession(fs.sessionState, &fs.runtimeState, sessionID, func(runtimebinding.RuntimeHandle) error {
+		return fs.scopeControl.StopLiveSession(ctx, sessionID)
+	})
+	if err == nil && fs.releaseWorkAdmissionProjection != nil {
+		fs.releaseWorkAdmissionProjection(sessionID)
+	}
+	return err
 }

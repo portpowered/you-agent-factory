@@ -95,17 +95,52 @@ func applyOwnedControl(ctx context.Context, runtime factoryruntime.Service, oper
 	}
 }
 
-// SessionScopeControl cancels an addressed live generation without a Root,
+// SessionScopeControl controls an addressed live generation without a Root,
 // gateway, invocation engine, or opening-owner dependency.
 type SessionScopeControl interface {
 	CancelLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	StopLiveSession(context.Context, string) error
 }
 
-type scopeControl struct{ state *sessionruntime.Service }
+type scopeControl struct {
+	state *sessionruntime.Service
+	stop  factoryruntime.RuntimeStopOperation
+}
 
 // NewScopeControl retains the canonical paired session authority.
-func NewScopeControl(state *sessionruntime.Service) SessionScopeControl {
-	return &scopeControl{state: state}
+func NewScopeControl(state *sessionruntime.Service, stop factoryruntime.RuntimeStopOperation) SessionScopeControl {
+	return &scopeControl{state: state, stop: stop}
+}
+
+// StopLiveSession stops the selected generation without unregistering its
+// record. Retirement and activation cleanup remain separately retryable.
+func (c *scopeControl) StopLiveSession(ctx context.Context, sessionID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return &factorysessions.DetachedRequestError{Field: "sessionId", Message: "session id is required"}
+	}
+	session, err := runtimebinding.RequireLiveSession(c.state, id)
+	if err != nil {
+		return err
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	bound.Logger.Info("stopping live Factory Session runtime", zap.String("session_id", id))
+	err = c.stop(bound.Handle, bound.Clock)
+	if errors.Is(err, context.Canceled) || errors.Is(err, factoryruntime.ErrAlreadyStopped) || errors.Is(err, factoryruntime.ErrNotRunning) {
+		err = nil
+	}
+	if err != nil {
+		bound.Logger.Error("stop live Factory Session runtime failed", zap.String("session_id", id), zap.Error(err))
+		return fmt.Errorf("stop live Factory Session runtime: %w", err)
+	}
+	bound.Logger.Info("live Factory Session runtime stopped", zap.String("session_id", id))
+	return nil
 }
 
 func (c *scopeControl) CancelLiveFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

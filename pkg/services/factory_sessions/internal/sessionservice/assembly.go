@@ -446,6 +446,7 @@ func (a *Assembly) Complete(
 		a.newJavaScriptCheckpointStore,
 		a.sessionResultProjection,
 		a.state,
+		a.scopeControl,
 		a.sessionIDs,
 		a.resolveHome,
 		a.directoryInspection,
