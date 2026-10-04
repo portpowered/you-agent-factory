@@ -35,8 +35,8 @@ func assertWatcherSessionIngress(t *testing.T, baseURL, dir, preseedChannel, liv
 	assertWatcherIngressCorrelation(t, seeded, map[string]string{"preseed": preseedChannel})
 
 	// Public completion acknowledges the preseed before introducing live input.
-	// Event completion is the synchronization signal, with no fixed delay or
-	// inspection of the private handled-file ledger.
+	// Dispatch completion plus the public Work state are the synchronization
+	// signals, with no fixed delay or private handled-file ledger inspection.
 	writeWatcherIngressFile(t, dir, liveChannel, "live", "live item")
 	completed := readAutomationCompletedWork(t, baseURL, sessionID, "complete", "live")
 	assertWatcherIngressWork(t, completed, map[string]string{
@@ -120,6 +120,10 @@ func assertWatcherDuplicateRestart(t *testing.T, baseURL, dir string) {
 	// barrier for the watcher, rather than a sleep waiting for absent Work.
 	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, sessionID, "complete", "live"),
 		map[string]string{"preseed": "preseed item", "live": "live item"})
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	for _, id := range []string{"preseed", "live"} {
+		support.AssertSingleWorkRequestEvent(t, events, "watcher-"+id, id, "task")
+	}
 
 	support.CloseFactorySessionAt(t, baseURL, sessionID)
 	priorSessionID := sessionID
@@ -136,6 +140,10 @@ func assertWatcherDuplicateRestart(t *testing.T, baseURL, dir string) {
 	// must occur exactly once alongside the fresh Work proving live activation.
 	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, sessionID, "complete", "preseed", "live", "restart"),
 		map[string]string{"preseed": "preseed item", "live": "live item", "restart": "restart item"})
+	events = support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	for _, id := range []string{"preseed", "live", "restart"} {
+		support.AssertSingleWorkRequestEvent(t, events, "watcher-"+id, id, "task")
+	}
 }
 
 func assertWatcherIndependentStop(t *testing.T, baseURL, sourceDir, peerDir string, stoppedAdmissions *atomic.Int32) {

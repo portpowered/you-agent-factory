@@ -376,7 +376,11 @@ func readAutomationCompletedWork(t *testing.T, baseURL, sessionID, state string,
 			}
 		}
 	}
-	return support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sessionID, "/work"))
+	listed, err := support.ReadWorkAtState(ctx, support.SessionWorkURL(baseURL, sessionID, "/work"), state, workIDs...)
+	if err != nil {
+		t.Fatalf("read completed automation Work: %v", err)
+	}
+	return listed
 }
 
 func assertScriptIngressWork(t *testing.T, listed factoryapi.ListWorkResponse) {
