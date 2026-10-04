@@ -3958,15 +3958,23 @@ func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T)
 	pendingClosed := make(chan struct{})
 	pendingReceived := make(chan struct{})
 	pendingRelease := make(chan struct{})
+	senderStop := make(chan struct{})
+	senderDone := make(chan struct{})
 	go func() {
 		pendingGate.close()
 		close(pendingClosed)
 	}()
 	go func() {
+		defer close(senderDone)
 		pendingGate.done <- struct{}{}
 		close(pendingReceived)
 		<-pendingRelease
-		pendingGate.done <- struct{}{}
+		// close() may return without consuming this second send, so the
+		// sender must be able to exit on its own once the test is done.
+		select {
+		case pendingGate.done <- struct{}{}:
+		case <-senderStop:
+		}
 	}()
 	select {
 	case <-pendingReceived:
@@ -3982,6 +3990,8 @@ func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T)
 	case <-time.After(time.Second):
 		t.Fatal("controlHistoryGate.close() did not finish after the pending reservation drained")
 	}
+	close(senderStop)
+	<-senderDone
 
 	gate := &controlHistoryGate{}
 	if !gate.acquire() {
