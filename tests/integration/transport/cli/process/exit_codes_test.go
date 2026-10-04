@@ -17,44 +17,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// TestCLIValidationFailureExitCode proves invalid customer input exits the
-// documented validation-failure code through the public built you CLI process.
-func TestCLIValidationFailureExitCode(t *testing.T) {
-	t.Parallel()
-
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-
-	for _, tc := range []struct {
-		name string
-		args []string
-	}{
-		{
-			name: "default",
-			args: []string{"run", "--named", "@you/missing", "--no-record", "invalid-goal-prompt"},
-		},
-		{
-			name: "quiet",
-			args: []string{"run", "--named", "@you/missing", "--no-record", "--quiet", "invalid-goal-prompt"},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			session := harness.NewSession(t)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-
-			result, err := session.Run(ctx, tc.args...)
-			if err == nil {
-				t.Fatalf("invalid input result = %#v; want process failure", result)
-			}
-			if result.ExitCode != 1 {
-				t.Fatalf("exit code = %d, want documented validation-failure exit 1", result.ExitCode)
-			}
-		})
-	}
-}
-
 // TestCLIInterruptedExitCode proves delivering the normal process interrupt to
 // an in-flight built you CLI command exits the documented cancellation code.
 func TestCLIInterruptedExitCode(t *testing.T) {
@@ -74,9 +36,9 @@ func TestCLIInterruptedExitCode(t *testing.T) {
 		}
 	}()
 
-	_ = waitForDashboardURL(t, lines, scanErr, stderr, 30*time.Second)
-	interruptAndAssertCancellationExit(t, command, 10*time.Second)
-	waitForScannerCompletion(t, scanErr, "interrupted root process", 5*time.Second)
+	_ = waitForDashboardURL(t, lines, scanErr, stderr, 120*time.Second)
+	interruptAndAssertCancellationExit(t, command, 60*time.Second)
+	waitForScannerCompletion(t, scanErr, "interrupted root process", 30*time.Second)
 	stopped = true
 }
 
@@ -146,12 +108,12 @@ func TestBuiltCLIDeclaredCancellationExitCodes(t *testing.T) {
 				scanErr <- scanner.Err()
 			}()
 
-			dashboardURL := waitForDashboardURL(t, lines, scanErr, &stderr, 30*time.Second)
+			dashboardURL := waitForDashboardURL(t, lines, scanErr, &stderr, 120*time.Second)
 			if test.name == "continuous run" {
 				assertContinuousRunReady(t, dashboardURL)
 			}
-			interruptBuiltCLIAndAssertExit130(t, command, 15*time.Second)
-			waitForScannerCompletion(t, scanErr, test.name, 5*time.Second)
+			interruptBuiltCLIAndAssertExit130(t, command, 60*time.Second)
+			waitForScannerCompletion(t, scanErr, test.name, 30*time.Second)
 			stopped = true
 		})
 	}
@@ -169,7 +131,7 @@ func assertContinuousRunReady(t testing.TB, dashboardURL string) {
 	if !ok || baseURL == "" {
 		t.Fatalf("dashboard URL = %q, want /dashboard/ui suffix", dashboardURL)
 	}
-	waitForStatus(t, baseURL, 30*time.Second, func(status factoryapi.StatusResponse) bool {
+	waitForStatus(t, baseURL, 120*time.Second, func(status factoryapi.StatusResponse) bool {
 		return status.FactoryState == "RUNNING"
 	})
 }

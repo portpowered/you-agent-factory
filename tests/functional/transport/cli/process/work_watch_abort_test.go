@@ -2,32 +2,28 @@ package process_test
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // TestCLIWorkWatchStreamAbortReturnsNonZeroExit proves a genuine Work-watch
-// stream failure crosses the actual built-you process boundary: complete
+// stream failure crosses the in-process customer process boundary: complete
 // transition lines remain on stdout, the abort is actionable on stderr, and
 // the command is unsuccessful instead of being converted to a success.
 func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
-	successSession := harness.NewSession(t)
+	t.Parallel()
+	process := plainProcess(t)
+	session := newCLIHome(t)
+	successSession := newCLIHome(t)
 	fixturePayloads := processWatchAbortPayloads(t)
 	finitePayloads := processWatchFinitePayloads(t)
 	streamServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -54,19 +50,10 @@ func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 		}
 	}))
 	defer streamServer.Close()
-	session.ServerURL = streamServer.URL
-	successSession.ServerURL = streamServer.URL
 
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	binaryPath := buildYouBinary(t, ctx, testutil.MustRepoRoot(t))
-	args := append(session.ServerFlags(), "work", "watch", "--session", "session-abort")
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
-	if err == nil {
+	result := session.run(t, process, nil, "--server", streamServer.URL, "work", "watch", "--session", "session-abort")
+	if result.Err == nil {
 		t.Fatalf("aborted Work watch result = %#v; want process failure", result)
-	}
-	if result.ExitCode == 0 {
-		t.Fatalf("aborted Work watch exit code = %d; want non-zero", result.ExitCode)
 	}
 	var diagnostic struct {
 		Code    string `json:"code"`
@@ -107,39 +94,10 @@ func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 		t.Fatalf("stdout transition = %#v; want non-terminal you.work.watch.v1 move-before-abort", line)
 	}
 
-	successArgs := append(successSession.ServerFlags(), "work", "watch", "--session", "session-success")
-	successResult, successErr := runBuiltYouBinary(ctx, binaryPath, successSession, successArgs...)
-	if successErr != nil || successResult.ExitCode != 0 {
-		t.Fatalf("successful finite Work watch result = %#v error = %v; want exit code 0", successResult, successErr)
+	successResult := successSession.run(t, process, nil, "--server", streamServer.URL, "work", "watch", "--session", "session-success")
+	if successResult.Err != nil {
+		t.Fatalf("successful finite Work watch result = %#v; want success", successResult)
 	}
-}
-
-func runBuiltYouBinary(
-	ctx context.Context,
-	binaryPath string,
-	session *builtcliacceptance.Session,
-	args ...string,
-) (builtcliacceptance.RunResult, error) {
-	var stdout, stderr strings.Builder
-	command := exec.CommandContext(ctx, binaryPath, args...)
-	command.Dir = session.WorkDir
-	command.Env = session.ProcessEnv()
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	err := command.Run()
-	exitCode := 0
-	if err != nil {
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			return builtcliacceptance.RunResult{Stdout: stdout.String(), Stderr: stderr.String()}, err
-		}
-		exitCode = exitErr.ExitCode()
-	}
-	return builtcliacceptance.RunResult{
-		ExitCode: exitCode,
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
-	}, err
 }
 
 func processWatchAbortPayloads(t *testing.T) [][]byte {

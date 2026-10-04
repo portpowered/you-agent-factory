@@ -32,6 +32,12 @@ func TestMain(m *testing.M) {
 	sharedWorkerOutcome.mu.Lock()
 	sharedProcess := sharedWorkerOutcome.process
 	sharedWorkerOutcome.mu.Unlock()
+	plainCloseContext, plainCancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
+	if err := closePlainProcess(plainCloseContext); err != nil && exitCode == 0 {
+		fmt.Fprintf(os.Stderr, "close shared plain CLI process: %v\n", err)
+		exitCode = 1
+	}
+	plainCancel()
 	if sharedProcess != nil {
 		closeContext, cancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
 		if err := sharedProcess.Close(closeContext); err != nil && exitCode == 0 {

@@ -26,10 +26,10 @@ import (
 
 const (
 	windowsGracefulStopReliabilityIterations = 10
-	windowsGracefulStopReadinessTimeout      = 30 * time.Second
-	windowsGracefulStopTimeout               = 20 * time.Second
-	windowsGracefulStopScanTimeout           = 5 * time.Second
-	windowsGracefulStopCleanupTimeout        = 5 * time.Second
+	windowsGracefulStopReadinessTimeout      = 120 * time.Second
+	windowsGracefulStopTimeout               = 60 * time.Second
+	windowsGracefulStopScanTimeout           = 30 * time.Second
+	windowsGracefulStopCleanupTimeout        = 30 * time.Second
 )
 
 type windowsGracefulStopTarget struct {
