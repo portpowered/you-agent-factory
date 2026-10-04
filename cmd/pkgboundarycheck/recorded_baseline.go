@@ -61,7 +61,7 @@ func loadRecordedBoundaryBaseline(cfg config, policy boundaryPolicy) (recordedBo
 	}
 	defer os.RemoveAll(baseRoot)
 
-	baseResult, err := scanRepo(config{root: baseRoot, packageRoot: cfg.packageRoot}, policy)
+	baseResult, err := scanBoundaryRepo(config{root: baseRoot, packageRoot: cfg.packageRoot}, policy)
 	if err != nil {
 		return recordedBoundaryBaseline{}, nil
 	}

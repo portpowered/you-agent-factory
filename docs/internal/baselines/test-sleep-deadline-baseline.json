@@ -2115,12 +2115,6 @@
       "count": 2
     },
     {
-      "file": "pkg/services/recordings/internal/canonical_recording_lifecycle_test.go",
-      "function": "TestRecordingScopeCancellationAfterTargetPlanningRemovesBinding",
-      "kind": "deadline",
-      "count": 1
-    },
-    {
       "file": "pkg/services/recordings/internal/events/event_history_session_lifecycle_test.go",
       "function": "TestFactoryEventHistory_EventRecorderFollowsCanonicalAppendOrder",
       "kind": "deadline",

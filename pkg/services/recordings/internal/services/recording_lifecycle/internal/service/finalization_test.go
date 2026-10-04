@@ -7,6 +7,7 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/internal/service"
 )
 
 func TestFinishRecordingStopsAppliesMetadataThenFinalFlush(t *testing.T) {
@@ -55,6 +56,43 @@ func TestFinishRecordingStopsAppliesMetadataThenFinalFlush(t *testing.T) {
 	}
 	if ticker.stopCalls.Load() != 1 {
 		t.Fatalf("ticker stop calls = %d, want 1", ticker.stopCalls.Load())
+	}
+}
+
+func TestFinishRecordingRejectsZeroTerminalMetadataWithoutInventingTime(t *testing.T) {
+	t.Parallel()
+	var snapshots []recordings.RecordingSnapshot
+	root := lifecycleservice.New(nil, func(_ string, snapshot recordings.RecordingSnapshot) error {
+		snapshots = append(snapshots, snapshot)
+		return nil
+	}, nil, fixedRecordingClock{now: time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)})
+	id := recordings.RecordingID("recording-zero-terminal-time")
+	if _, err := root.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: id, Artifact: "artifact:zero-terminal", Scope: recordings.CanonicalEventScope{FactorySessionID: "session-active"},
+	}); err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	event := activeFlushEvent(1)
+	if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{RecordingID: id, Event: event}); err != nil {
+		t.Fatalf("RecordRecordingEvent: %v", err)
+	}
+	finished, err := root.FinishRecording(recordings.FinishRecordingRequest{RecordingID: id})
+	if !errors.Is(err, recordings.ErrInvalidRecordingTerminalMetadata) {
+		t.Fatalf("FinishRecording error = %v, want invalid terminal metadata", err)
+	}
+	if finished.Status.State != recordings.RecordingFailed || finished.Status.FinalizedAt != nil {
+		t.Fatalf("terminal status = %#v, want failed without invented timestamp", finished.Status)
+	}
+	if len(snapshots) != 1 || snapshots[0].Status.FinalizedAt != nil ||
+		finished.Status.FlushedThrough == nil || *finished.Status.FlushedThrough != event.Cursor {
+		t.Fatalf("final flush = (%#v, %#v), want durable event without terminal timestamp", snapshots, finished.Status)
+	}
+	repeated, repeatedErr := root.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: id, FinishedAt: time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC),
+	})
+	if !errors.Is(repeatedErr, recordings.ErrInvalidRecordingTerminalMetadata) ||
+		repeated.Status.FinalizedAt != nil || len(snapshots) != 1 {
+		t.Fatalf("repeated finish = (%#v, %v), want original failure without another write", repeated, repeatedErr)
 	}
 }
 

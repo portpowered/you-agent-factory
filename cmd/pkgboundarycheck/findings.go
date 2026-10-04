@@ -1,6 +1,9 @@
 package main
 
+import "github.com/portpowered/infinite-you/internal/contractguard"
+
 type scanResult struct {
+	constructionFindings                 []contractguard.ConstructionFinding
 	rootPackageFindings                  []rootPackageFinding
 	retiredPackageRootFindings           []retiredPackageRootFinding
 	retiredPackageImportFindings         []retiredPackageImportFinding

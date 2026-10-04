@@ -807,3 +807,68 @@ func assertPortableArtifactRoundTrip(
 		}
 	}
 }
+
+// Validation and framing policies belong to the artifact owner, with detached
+// snapshot facts rather than a composed lifecycle/replay graph.
+func artifactValidationFixture(t *testing.T) (*artifactsexportservice.Service, recordings.PortableArtifact) {
+	t.Helper()
+	at := time.Unix(1700000000, 0).UTC()
+	event := recordings.CanonicalEvent{ID: "event", Scope: recordings.CanonicalEventScope{FactorySessionID: "session"}, Cursor: recordings.CanonicalEventCursor{StreamGenerationID: "generation"}, RecordedAt: at, Kind: "WORK_REQUEST", Payload: "{}"}
+	owner := artifactsexportservice.New(snapshotSourceFake{snapshot: recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{RecordingID: "recording", Scope: event.Scope, State: recordings.RecordingFinalized, FinalizedAt: &at}, Events: []recordings.CanonicalEvent{event},
+	}}, nil)
+	built, err := owner.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: "recording"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return owner, built.Artifact
+}
+
+func TestArtifactValidationKeepsTypedFailures(t *testing.T) {
+	t.Parallel()
+	owner, original := artifactValidationFixture(t)
+	cases := []struct {
+		name   string
+		cause  error
+		mutate func(*recordings.PortableArtifact)
+	}{
+		{"unsupported schema", recordings.ErrUnsupportedPortableArtifactSchema, func(a *recordings.PortableArtifact) { a.SchemaVersion = "future" }},
+		{"invalid integrity", recordings.ErrInvalidPortableArtifactIntegrity, func(a *recordings.PortableArtifact) { a.Integrity.Digest = "sha256:invalid" }},
+		{"invalid order", recordings.ErrInvalidPortableArtifactOrder, func(a *recordings.PortableArtifact) {
+			a.Events = append([]recordings.CanonicalEvent(nil), a.Events...)
+			a.Events[0].Sequence = 4
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			artifact := original
+			tc.mutate(&artifact)
+			_, err := owner.ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest{Artifact: artifact})
+			if !errors.Is(err, tc.cause) {
+				t.Fatalf("validation = %v, want %v", err, tc.cause)
+			}
+		})
+	}
+}
+
+func TestArtifactDecodeRejectsMalformedDocumentsWithoutPartialResult(t *testing.T) {
+	t.Parallel()
+	owner, artifact := artifactValidationFixture(t)
+	encoded, err := owner.EncodePortableArtifact(recordings.EncodePortableArtifactRequest{Artifact: artifact})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, payload := range map[string][]byte{"empty": nil, "truncated": []byte(`{"schemaVersion":"recordings.portable-artifact.v1"`), "trailing document": append(encoded.Payload, []byte(`{}`)...)} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			result, err := owner.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{Payload: payload})
+			if !errors.Is(err, recordings.ErrInvalidPortableArtifact) {
+				t.Fatalf("decode = %v, want invalid artifact", err)
+			}
+			if result.Artifact.SchemaVersion != "" || len(result.Artifact.Events) != 0 {
+				t.Fatalf("partial artifact: %#v", result)
+			}
+		})
+	}
+}

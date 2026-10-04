@@ -69,16 +69,29 @@ func main() {
 }
 
 func run(cfg config, stdout, stderr io.Writer) error {
+	construction, err := contractguard.ScanRepositoryConstruction(cfg.root)
+	if err != nil {
+		return err
+	}
+	constructionCount := contractguard.CountBlockingConstructionFindings(construction)
 	findings, err := scan(cfg.root)
 	if err != nil {
 		return err
 	}
-	if len(findings) == 0 {
+	if constructionCount == 0 {
+		contractguard.WriteConstructionFindings(stdout, construction)
+	} else {
+		contractguard.WriteConstructionFindings(stderr, construction)
+	}
+	if len(findings) == 0 && constructionCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:logging-boundary] production logging uses injected loggers")
 		return nil
 	}
 	for _, finding := range findings {
 		fmt.Fprintln(stderr, finding)
+	}
+	if constructionCount > 0 {
+		return fmt.Errorf("[agent-factory:construction] found %d prohibited construction(s) and %d existing violation(s)", constructionCount, len(findings))
 	}
 	return fmt.Errorf("[agent-factory:logging-boundary] found %d prohibited logger acquisition(s)", len(findings))
 }
