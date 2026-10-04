@@ -221,10 +221,11 @@ state, start/finish, per-work terminal state, and output text. Retirement is the
 a feature deletion; it is removing the second, weaker implementation of an artifact we
 already write.
 
-The order matters. `runtimepersist` is imported by 16 files, 11 of them tests, plus
-`internal/lint/analyzers/construction_durable.go`, `pkg/services/factory_sessions/wire/application_graph.go`
-and `cmd/pkgboundarycheck/converged_boundaries_test.go`. The read surfaces move first, the
-writes go quiet second, the package dies last.
+The order matters. The audited snapshot identified 16 `runtimepersist` imports,
+11 of them tests, plus the former durable scanner, the Wire application graph,
+and package-boundary checks. Durable construction policy now lives in
+`internal/lint/analyzers/construction_durable.go`. The read surfaces move first,
+the writes go quiet second, the package dies last.
 
 **One behavior change must be decided, not absorbed.** Durable sessions are
 **cwd-relative**; recordings are **global**. Retiring one into the other moves a
@@ -289,8 +290,10 @@ recording. Durable writes go behind a flag defaulting to off. No package is dele
 so this step is revertible.
 
 **REC-7. Delete.** Remove `runtimepersist`, `DirForProjectRoot`, `durableSessionIDPattern`,
-`internal/lint/analyzers/construction_durable.go`, and the wire and boundary-check entries. Add the
-oversized-artifact diagnostic. `make lint` and `cmd/pkgboundarycheck` are the gates here.
+and the obsolete Wire and boundary-check entries. Reconcile runtime-persistence-specific
+rules in `internal/lint/analyzers/construction_durable.go` while retaining unrelated
+durable enforcement. The former durable scanner is already removed. Add the
+oversized-artifact diagnostic. `make lint` and `make repolint` are the gates here.
 
 ## Non-goals
 
