@@ -36,8 +36,7 @@ var _ operatorsettings.Service = (*Service)(nil)
 
 // New constructs an inert Operator Settings root facade over the private
 // document and resolution capabilities. logger is the repository-injected
-// operation-logging abstraction; a nil logger resolves to a safe no-op so
-// construction never fails or discovers its own logger.
+// operation-logging abstraction selected at the supported wire boundary.
 func New(
 	documentService settingsdocument.Service,
 	resolutionService resolution.Service,
@@ -47,18 +46,8 @@ func New(
 	encoder operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
 	logger logging.Logger,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
-	if documentService == nil {
-		return nil, fmt.Errorf("construct Operator Settings: document is required")
-	}
-	if resolutionService == nil {
-		return nil, fmt.Errorf("construct Operator Settings: resolution is required")
-	}
-	var diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
-	if len(diagnosticDecoders) > 0 {
-		diagnosticDecoder = diagnosticDecoders[0]
-	}
 	return &Service{
 		document:          documentService,
 		resolution:        resolutionService,
@@ -68,14 +57,14 @@ func New(
 		diagnosticDecoder: diagnosticDecoder,
 		encoder:           encoder,
 		idGenerator:       idGenerator,
-		logger:            logging.EnsureLogger(logger),
+		logger:            logger,
 	}, nil
 }
 
 func (s *Service) LoadDocument(
 	request operatorsettings.LoadDocumentRequest,
 ) (operatorsettings.LoadDocumentResult, error) {
-	if s == nil || s.document == nil {
+	if s == nil {
 		return operatorsettings.LoadDocumentResult{}, fmt.Errorf("operator settings document service is required")
 	}
 	result, err := s.document.LoadDocument(request)
@@ -89,7 +78,7 @@ func (s *Service) LoadDocument(
 func (s *Service) ApplyDocumentUpdate(
 	request operatorsettings.ApplyDocumentUpdateRequest,
 ) (operatorsettings.ApplyDocumentUpdateResult, error) {
-	if s == nil || s.document == nil {
+	if s == nil {
 		return operatorsettings.ApplyDocumentUpdateResult{}, fmt.Errorf("operator settings document service is required")
 	}
 	s.writeMu.Lock()
@@ -100,7 +89,7 @@ func (s *Service) ApplyDocumentUpdate(
 func (s *Service) ResolveEffective(
 	request operatorsettings.ResolveEffectiveRequest,
 ) (operatorsettings.ResolveEffectiveResult, error) {
-	if s == nil || s.resolution == nil {
+	if s == nil {
 		return operatorsettings.ResolveEffectiveResult{}, fmt.Errorf("operator settings resolution service is required")
 	}
 	return s.resolution.ResolveEffective(request)
@@ -142,9 +131,6 @@ func (s *Service) ResolveFromHomeWithEnvironment(
 	config, err := s.LoadFileConfig(configPath)
 	if err != nil {
 		return operatorsettings.ResolvedDefaults{}, err
-	}
-	if s.resolution == nil {
-		return operatorsettings.ResolvedDefaults{}, fmt.Errorf("operator settings resolution service is required")
 	}
 	resolved, err := s.resolution.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
@@ -279,7 +265,7 @@ func (s *Service) EnsurePackagedACPIntegrations(
 // resolves to the safe Factory Builder default; a malformed stored profile
 // fails explicitly instead of falling back silently.
 func (s *Service) ResolveACPAgentProfile(path string) (operatorsettings.ACPAgentProfile, error) {
-	if s == nil || s.document == nil {
+	if s == nil {
 		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings document service is required")
 	}
 	s.logger.Info("operator_settings.resolve_acp_agent_profile.started")
@@ -319,7 +305,7 @@ func (s *Service) UpdateACPAgentProfile(
 	path string,
 	profile operatorsettings.ACPAgentProfile,
 ) (operatorsettings.ACPAgentProfile, error) {
-	if s == nil || s.document == nil {
+	if s == nil {
 		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings document service is required")
 	}
 	s.logger.Info("operator_settings.update_acp_agent_profile.started")
@@ -370,7 +356,7 @@ func (s *Service) UpdatePriceTable(
 	path string,
 	table operatorsettings.PriceTable,
 ) (operatorsettings.PriceTable, error) {
-	if s == nil || s.document == nil {
+	if s == nil {
 		return operatorsettings.PriceTable{}, fmt.Errorf("operator settings document service is required")
 	}
 	s.logger.Info("operator_settings.update_price_table.started")
@@ -443,7 +429,7 @@ func (s *Service) mutateDocument(
 	if err := ctx.Err(); err != nil {
 		return operatorsettings.Document{}, err
 	}
-	if s == nil || s.document == nil {
+	if s == nil {
 		return operatorsettings.Document{}, fmt.Errorf("operator settings document service is required")
 	}
 	s.writeMu.Lock()

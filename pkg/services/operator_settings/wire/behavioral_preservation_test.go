@@ -4,15 +4,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 // Fold-preservation proofs for pss-cln-set-legacy-packages-004 (and the earlier
@@ -41,15 +35,7 @@ func TestWireFoldPreservesDocumentIdentityResolutionAndConfigBehavior(t *testing
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	root, err := settingswire.NewServiceFromConfigDocument(
-		testConfigDocumentService(),
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
+	root := newPreservationWireService(t)
 
 	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{
 		Path:            configPath,
@@ -140,16 +126,7 @@ func TestWireFoldPreservesDefaultsResolutionFromHomeOwnershipPath(t *testing.T) 
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	root, err := settingswire.NewServiceFromHomePorts(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
+	root := newPreservationWireService(t)
 	resolved, err := root.ResolveFromHomeWithEnvironment(
 		homeDir,
 		operatorsettings.Defaults{},
@@ -166,20 +143,5 @@ func TestWireFoldPreservesDefaultsResolutionFromHomeOwnershipPath(t *testing.T) 
 	}
 	if resolved.ConfigPath != configPath {
 		t.Fatalf("config path = %q, want %q", resolved.ConfigPath, configPath)
-	}
-}
-
-func TestWireFoldDefaultsResolutionFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
-	t.Parallel()
-
-	_, err := settingswire.NewServiceFromHomePorts(
-		nil,
-		globalconfigmapping.Decode,
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
-		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
 	}
 }
