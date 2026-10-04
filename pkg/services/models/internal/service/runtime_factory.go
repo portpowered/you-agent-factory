@@ -202,6 +202,11 @@ func (o *Root) Close(ctx context.Context) error {
 	}
 	o.resources.Close()
 	o.runtimeMu.Lock()
+	for _, runtime := range o.runtimeByScope {
+		if runtime, ok := runtime.(*runtimeService); ok {
+			runtime.local.Close()
+		}
+	}
 	o.runtimeByScope = make(map[models.RuntimeScopeRef]models.Service)
 	o.runtimeMu.Unlock()
 	return nil

@@ -24,8 +24,15 @@ type localExecutor struct {
 	hooks         modelseffects.LocalRuntimeHooks
 	now           func() time.Time
 
-	mu      sync.Mutex
-	entries map[string]*localExecutionEntry
+	mu           sync.Mutex
+	entries      map[localExecutionKey]*localExecutionEntry
+	closedScopes map[models.RuntimeScopeRef]bool
+	closed       bool
+}
+
+type localExecutionKey struct {
+	scope                                   models.RuntimeScopeRef
+	resource, endpoint, cachePath, revision string
 }
 
 type localExecutionEntry struct {
@@ -68,7 +75,8 @@ func newLocalExecutor(
 		resources:     resources,
 		hooks:         hooks,
 		now:           now,
-		entries:       make(map[string]*localExecutionEntry),
+		entries:       make(map[localExecutionKey]*localExecutionEntry),
+		closedScopes:  make(map[models.RuntimeScopeRef]bool),
 	}, nil
 }
 
@@ -78,6 +86,9 @@ func (e *localExecutor) InvokeLocal(
 ) (models.LocalInvocationResult, error) {
 	if e == nil || !request.Worker.UsesManagedRuntime() {
 		return models.LocalInvocationResult{}, nil
+	}
+	if err := e.admitInvocation(ctx, request.Scope); err != nil {
+		return models.LocalInvocationResult{Handled: true}, err
 	}
 	runtimeConfig := e.runtimeConfig()
 	if runtimeConfig == nil {
@@ -99,11 +110,12 @@ func (e *localExecutor) InvokeLocal(
 		ModelBindings:    append([]models.ResolvedModelOperationBinding(nil), request.ModelBindings...),
 		WorkingDirectory: request.WorkingDirectory,
 	}
-	return e.invokeWithLease(ctx, runtimeConfig, factoryConfig, worker, request.Holder, invocation)
+	return e.invokeWithLease(ctx, request.Scope, runtimeConfig, factoryConfig, worker, request.Holder, invocation)
 }
 
 func (e *localExecutor) invokeWithLease(
 	ctx context.Context,
+	scope models.RuntimeScopeRef,
 	runtimeConfig *models.RuntimeConfig,
 	factoryConfig *models.RuntimeConfig,
 	worker *models.RuntimeWorker,
@@ -129,7 +141,9 @@ func (e *localExecutor) invokeWithLease(
 		return models.LocalInvocationResult{Handled: true}, err
 	}
 	loadWorker := worker.Clone()
-	handle, err := e.loadHandle(ctx, localExecutionCacheKey(resourceKey, lease.Endpoint), localmodels.LoadRequest{
+	key := localExecutionKey{scope: scope, resource: resourceKey,
+		endpoint: strings.TrimSpace(lease.Endpoint), cachePath: cacheLayout.CachePath, revision: cacheLayout.Revision}
+	handle, err := e.loadHandle(ctx, key, localmodels.LoadRequest{
 		Resource:        resource,
 		Worker:          &loadWorker,
 		ModelName:       cacheLayout.ModelName,
@@ -139,6 +153,9 @@ func (e *localExecutor) invokeWithLease(
 		ServingEndpoint: strings.TrimSpace(lease.Endpoint),
 	})
 	if err != nil {
+		return models.LocalInvocationResult{Handled: true}, err
+	}
+	if err := e.admitInvocation(ctx, scope); err != nil {
 		return models.LocalInvocationResult{Handled: true}, err
 	}
 	invokeWorker := worker.Clone()
@@ -152,10 +169,13 @@ func (e *localExecutor) invokeWithLease(
 
 func (e *localExecutor) loadHandle(
 	ctx context.Context,
-	key string,
+	key localExecutionKey,
 	request localmodels.LoadRequest,
 ) (localmodels.Handle, error) {
-	entry := e.entry(key)
+	entry, err := e.entry(key)
+	if err != nil {
+		return nil, err
+	}
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
@@ -175,19 +195,58 @@ func (e *localExecutor) loadHandle(
 	if err != nil {
 		return nil, err
 	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed || e.closedScopes[key.scope] {
+		return nil, models.ErrRuntimeScopeClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	entry.handle = handle
 	return handle, nil
 }
 
-func (e *localExecutor) entry(key string) *localExecutionEntry {
+func (e *localExecutor) entry(key localExecutionKey) (*localExecutionEntry, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed || e.closedScopes[key.scope] {
+		return nil, models.ErrRuntimeScopeClosed
+	}
 	if entry, ok := e.entries[key]; ok {
-		return entry
+		return entry, nil
 	}
 	entry := &localExecutionEntry{}
 	e.entries[key] = entry
-	return entry
+	return entry, nil
+}
+
+func (e *localExecutor) admitInvocation(ctx context.Context, scope models.RuntimeScopeRef) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed || e.closedScopes[scope] {
+		return models.ErrRuntimeScopeClosed
+	}
+	return ctx.Err()
+}
+
+func (e *localExecutor) CloseScope(scope models.RuntimeScopeRef) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.closedScopes[scope] = true
+	for key := range e.entries {
+		if key.scope == scope {
+			delete(e.entries, key)
+		}
+	}
+}
+
+func (e *localExecutor) Close() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.closed = true
+	clear(e.entries)
+	clear(e.closedScopes)
 }
 
 func localExecutionConfiguration(
@@ -220,12 +279,4 @@ func localResourceConfigs(resources []models.LocalResource) []models.RuntimeReso
 		}
 	}
 	return result
-}
-
-func localExecutionCacheKey(resourceKey, endpoint string) string {
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint == "" {
-		return resourceKey
-	}
-	return resourceKey + "|" + endpoint
 }

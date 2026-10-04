@@ -106,6 +106,9 @@ func (o *Root) CloseRuntimeScope(
 	}
 	o.resources.CloseScope(request.Scope)
 	o.runtimeMu.Lock()
+	if runtime, ok := o.runtimeByScope[request.Scope].(*runtimeService); ok {
+		runtime.local.CloseScope(request.Scope)
+	}
 	delete(o.runtimeByScope, request.Scope)
 	o.runtimeMu.Unlock()
 	if closer, ok := o.runtimeHost.(interface {
