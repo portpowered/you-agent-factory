@@ -9,7 +9,6 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 )
 
 type deadLetterRecord struct {
@@ -30,7 +29,7 @@ type deadLetterRecord struct {
 }
 
 func (service *Service) appendDeadLetter(
-	request webhooks.StartRequest,
+	request *activation,
 	definition factorydefinitions.FactoryWebhookConfig,
 	event recordings.CanonicalEvent,
 	body []byte,
@@ -40,7 +39,7 @@ func (service *Service) appendDeadLetter(
 	statusCode int,
 	terminalReason string,
 ) {
-	if service.deadLetters == nil || strings.TrimSpace(request.DeadLetterPath) == "" {
+	if strings.TrimSpace(request.DeadLetterPath) == "" {
 		service.logger.Error(
 			"factory webhook dead-letter storage unavailable",
 			"endpoint", definition.Name,
@@ -87,9 +86,9 @@ func (service *Service) appendDeadLetter(
 		return
 	}
 	line = append(line, '\n')
-	service.deadLetterMu.Lock()
+	request.deadLetterMu.Lock()
 	err = service.deadLetters(request.DeadLetterPath, line)
-	service.deadLetterMu.Unlock()
+	request.deadLetterMu.Unlock()
 	if err != nil {
 		service.logger.Error(
 			"factory webhook dead-letter append failed",

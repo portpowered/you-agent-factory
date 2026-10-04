@@ -94,10 +94,10 @@ func TestConfigDocumentServicePersist_PreCommitFailuresPreserveDestination(t *te
 func TestConfigDocumentServiceConfigureProviderModel_SerializationFailurePreservesDestination(t *testing.T) {
 	t.Parallel()
 	path, original, _ := persistedConfigFixture(t)
-	service := persistedConfigService(testFiles, testCreateTemp)
-	service.Encoder = func(operatorsettings.Config) ([]byte, error) {
+	encoder := func(operatorsettings.Config) ([]byte, error) {
 		return nil, errors.New("injected serialization failure")
 	}
+	service := persistedConfigServiceWithEncoder(testFiles, testCreateTemp, encoder)
 	model := "replacement"
 	_, err := service.ConfigureProviderModel(
 		context.Background(),
@@ -322,15 +322,15 @@ func TestConfigDocumentServiceConfigureProviderModel_SerializesReadMergeReplaceT
 	encoderEntered := make(chan struct{})
 	releaseEncoder := make(chan struct{})
 	var encodeCalls atomic.Int32
-	service := persistedConfigService(files, testCreateTemp)
-	service.PersistenceLock = lock
-	service.Encoder = func(config operatorsettings.Config) ([]byte, error) {
+	encoder := func(config operatorsettings.Config) ([]byte, error) {
 		if encodeCalls.Add(1) == 1 {
 			close(encoderEntered)
 			<-releaseEncoder
 		}
 		return encodeTestConfig(config)
 	}
+	service := persistedConfigServiceWithEncoder(files, testCreateTemp, encoder)
+	service.PersistenceLock = lock
 
 	provider := "claude"
 	providerResult := make(chan error, 1)
@@ -473,6 +473,7 @@ func TestConfigDocumentServiceConfigureProviderModel_PreCanceledContextHasNoFile
 
 func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
 	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.json")
 	valid := persistedConfigService(testFiles, testCreateTemp)
 	document, err := valid.Parse([]byte(`{}`))
 	if err != nil {
@@ -502,15 +503,19 @@ func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
 			return valid.Persist(nil, "config.json", document)
 		}, wantErr: "context is required"},
 		{name: "filesystem", invoke: func() error {
-			return (operatorsettings.ConfigDocumentService{}).Persist(context.Background(), "config.json", document)
+			return (operatorsettings.ConfigDocumentService{}).Persist(context.Background(), path, document)
 		}, wantErr: "filesystem is required"},
+		{name: "completed owner filesystem", invoke: func() error {
+			return persistedConfigService(nil, testCreateTemp).Persist(context.Background(), path, document)
+		}, wantErr: "operator document filesystem is required"},
 		{name: "temporary file creator", invoke: func() error {
-			service := operatorsettings.ConfigDocumentService{Files: testFiles}
-			return service.Persist(context.Background(), "config.json", document)
+			service := persistedConfigService(testFiles, nil)
+			return service.Persist(context.Background(), path, document)
 		}, wantErr: "temporary-file creator is required"},
 		{name: "persistence lock", invoke: func() error {
-			service := operatorsettings.ConfigDocumentService{Files: testFiles, CreateTemp: testCreateTemp}
-			return service.Persist(context.Background(), "config.json", document)
+			service := valid
+			service.PersistenceLock = nil
+			return service.Persist(context.Background(), path, document)
 		}, wantErr: "persistence lock is required"},
 		{name: "path", invoke: func() error {
 			return valid.Persist(context.Background(), "  ", document)
@@ -519,6 +524,9 @@ func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if err := test.invoke(); err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("operation error = %v, want %q", err, test.wantErr)
+			}
+			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("failed operation created destination: stat error = %v", err)
 			}
 		})
 	}
@@ -641,19 +649,26 @@ func faultTemporaryFileCreator(failPhase string, shortWrite bool) operatorsettin
 }
 
 func persistedConfigService(files operatorsettings.FileSystem, create operatorsettings.CreateTemporaryFile) operatorsettings.ConfigDocumentService {
+	return persistedConfigServiceWithEncoder(files, create, encodeTestConfig)
+}
+
+func persistedConfigServiceWithEncoder(
+	files operatorsettings.FileSystem,
+	create operatorsettings.CreateTemporaryFile,
+	encoder operatorsettings.ConfigEncoder,
+) operatorsettings.ConfigDocumentService {
 	return operatorsettings.ConfigDocumentService{
-		Files:           files,
-		CreateTemp:      create,
-		Providers:       controlledProviderCatalog,
 		Decoder:         decodeTestConfig,
-		Encoder:         encodeTestConfig,
+		Encoder:         encoder,
 		PersistenceLock: &sync.Mutex{},
-		DocumentOwner: settingswire.NewDocumentOwner(
+		DocumentOwner: settingswire.NewDocumentService(
 			files,
 			create,
 			decodeTestConfig,
-			encodeTestConfig,
+			encoder,
 			controlledProviderCatalog,
+			nil,
+			nil,
 		),
 	}
 }

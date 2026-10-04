@@ -1,0 +1,3 @@
+package transportfixture
+
+func BuildLogger() {}
