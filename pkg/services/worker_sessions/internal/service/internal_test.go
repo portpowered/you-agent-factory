@@ -1317,6 +1317,92 @@ func TestKeyedRuntime_ProgressRejectsForeignIdentityBeforeEffects(t *testing.T) 
 	}
 }
 
+func TestKeyedRuntime_ProgressFallbackRejectsSupervisedScopes(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"completed", "failed", "canceled", "completed-closed", "unknown-dispatch", "closed-unopened"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			peer := newPerRuntimeAttemptFixture(t, "peer", sink)
+			var target *perRuntimeAttemptFixture
+			if scenario == "closed-unopened" {
+				target = preparePerRuntimeAttemptFixture(t, "target", sink, peer)
+				if err := peer.service.CloseRuntimeAttempts(context.Background(), target.request.Key.RuntimeID); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				target = newPerRuntimeAttemptFixture(t, "target", sink, peer)
+				completeProgressFallbackTarget(t, target, scenario)
+			}
+			fragment := keyedRuntimeProgressFragment(target)
+			if scenario == "unknown-dispatch" {
+				fragment.Correlation.DispatchID = "unadmitted-dispatch"
+			}
+			assertProgressFallbackIsolation(t, target, peer, sink, fragment)
+		})
+	}
+}
+
+func completeProgressFallbackTarget(t *testing.T, target *perRuntimeAttemptFixture, scenario string) {
+	t.Helper()
+	result := runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID)
+	switch scenario {
+	case "unknown-dispatch":
+		return
+	case "failed":
+		result = runtimeAttemptFailedDispatch(perRuntimeLogicalDispatchID)
+	case "canceled":
+		result = runtimeAttemptCanceledDispatch(perRuntimeLogicalDispatchID)
+	}
+	if err := target.attempt.Complete(context.Background(), result, nil); err != nil {
+		t.Fatal(err)
+	}
+	if scenario == "completed-closed" {
+		if err := target.service.CloseRuntimeAttempts(context.Background(), target.request.Key.RuntimeID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertProgressFallbackIsolation(t *testing.T, target, peer *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, fragment workers.ProgressFragment) {
+	t.Helper()
+	before := sink.requestsFor("")
+	retained, err := target.service.List(context.Background(), workersessions.ListRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var forwarded []workers.ProgressFragment
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		forwarded = append(forwarded, fragment)
+	}).WithUnassociatedProgressFallback()
+	publisher.Bind(peer.service)
+	publisher.Publish(fragment)
+	handoff := fragment
+	handoff.Kind = workers.ProviderSessionObservedFragmentKind
+	publisher.Publish(handoff)
+	after, err := target.service.List(context.Background(), workersessions.ListRequest{})
+	if err != nil || len(forwarded) != 0 || !reflect.DeepEqual(before, sink.requestsFor("")) || !reflect.DeepEqual(retained, after) {
+		t.Fatalf("rejected scoped progress: forwarded=%d, historyChanged=%t, sessionsChanged=%t, err=%v", len(forwarded), !reflect.DeepEqual(before, sink.requestsFor("")), !reflect.DeepEqual(retained, after), err)
+	}
+	publisher.Publish(keyedRuntimeProgressFragment(peer))
+	if len(forwarded) != 1 || forwarded[0].Correlation.RuntimeID != peer.request.Key.RuntimeID {
+		t.Fatalf("live peer progress = %#v", forwarded)
+	}
+	assertKeyedRuntimeProgressCommitted(t, peer, sink, 1)
+	// A standalone route that has never admitted keyed attempts keeps its
+	// actual bypass semantics, without inventing a Worker Session association.
+	bypass := fragment
+	bypass.Correlation.RuntimeID = "standalone-runtime"
+	before = sink.requestsFor("")
+	publisher.Publish(bypass)
+	handoff.Correlation.RuntimeID = bypass.Correlation.RuntimeID
+	publisher.Publish(handoff)
+	if len(forwarded) != 2 || !reflect.DeepEqual(forwarded[1], bypass) || !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatalf("standalone bypass progress = %#v", forwarded)
+	}
+	assertKeyedRuntimeProgressCommitted(t, peer, sink, 1)
+}
+
 func mutateKeyedRuntimeProgress(mutation string, key *workersessions.RuntimeAttemptKey, fragment *workers.ProgressFragment) {
 	switch mutation {
 	case "key":

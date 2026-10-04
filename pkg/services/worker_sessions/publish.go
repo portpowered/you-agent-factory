@@ -47,6 +47,11 @@ type ProviderSessionObservationPublisher struct {
 // opener. Its source sequence remains owned by the original progress bridge.
 var ErrRuntimeProgressDirectSupervision = errors.New("worker sessions: progress belongs to direct supervision")
 
+// ErrRuntimeProgressUnsupervised identifies a runtime outside keyed admission
+// and close. Only this bypass permits unassociated downstream output;
+// a missing or completed attempt in a supervised runtime remains rejected.
+var ErrRuntimeProgressUnsupervised = errors.New("worker sessions: runtime progress bypasses supervision")
+
 // NewProviderSessionObservationPublisher creates an unbound progress bridge.
 // Fragments without an exact typed reference remain non-resumable and continue
 // to the supplied publisher, while reference-bearing fragments wait for Bind
@@ -136,7 +141,7 @@ func (p *ProviderSessionObservationPublisher) publishRuntimeProgress(observer Se
 	if errors.Is(err, ErrRuntimeProgressDirectSupervision) {
 		return false
 	}
-	if forwardUnassociated && errors.Is(err, ErrProviderSessionAssociationAttemptMismatch) &&
+	if forwardUnassociated && errors.Is(err, ErrRuntimeProgressUnsupervised) &&
 		fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
 		next(fragment)
 	}

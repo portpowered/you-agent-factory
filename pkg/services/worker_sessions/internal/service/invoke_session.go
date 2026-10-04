@@ -151,6 +151,7 @@ func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*
 	// before allowing the historical dispatch index to resolve that route.
 	ownerID = r.dispatchOwners[key.DispatchID]
 	supervision := r.supervisions[ownerID]
+	_, supervisedRuntime := r.runtimeAdmissions[key.RuntimeID]
 	r.mu.RUnlock()
 	if supervision != nil {
 		supervision.mu.Lock()
@@ -161,6 +162,9 @@ func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*
 		if err == nil && resolved.Correlation.RuntimeID == key.RuntimeID && attemptID == key.DispatchID {
 			return nil, "", workers.ExecutionCorrelation{}, workersessions.ErrRuntimeProgressDirectSupervision
 		}
+	}
+	if !supervisedRuntime {
+		return nil, "", workers.ExecutionCorrelation{}, errors.Join(workersessions.ErrProviderSessionAssociationAttemptMismatch, workersessions.ErrRuntimeProgressUnsupervised)
 	}
 	return nil, "", workers.ExecutionCorrelation{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 }
