@@ -737,16 +737,21 @@ func (r *registry) runtimeAttemptDispatchConflictLocked(key workersessions.Runti
 // window, then returns control to Factory Runtime. It intentionally stops
 // before registerInvocationSupervision or any Workers boundary call: Runtime
 // has already admitted the detached attempt and remains responsible for its
-// execution, cancellation, and terminal race.
+// execution, cancellation, and terminal race. The exact cancellation resource
+// is required before opening effects and installed with the RUNNING state.
 func (r *registry) BeginRuntimeAttempt(
 	ctx context.Context,
 	req workersessions.RuntimeAttemptRequest,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	if r == nil {
 		return nil, workersessions.ErrStartAdmissionFailed
 	}
 	if err := req.Validate(); err != nil {
 		return nil, err
+	}
+	if cancel == nil {
+		return nil, errRuntimeAttemptControlUnavailable
 	}
 	ctx = runtimeAttemptContext(ctx)
 	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
@@ -785,9 +790,6 @@ func (r *registry) BeginRuntimeAttempt(
 	if preparationErr := runtimeAttemptPreparationError(prepared); preparationErr != nil {
 		return nil, preparationErr
 	}
-	if !r.transitionToRunning(req.ID) {
-		return nil, workersessions.ErrStartAdmissionFailed
-	}
 	handle := &runtimeAttempt{
 		registry:   r,
 		key:        key,
@@ -795,6 +797,7 @@ func (r *registry) BeginRuntimeAttempt(
 		dispatchID: logicalDispatchID,
 		attemptID:  attemptID,
 		completed:  make(chan struct{}),
+		cancel:     cancel,
 	}
 	if err := r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle); err != nil {
 		if errors.Is(err, workersessions.ErrStartAdmissionFailed) {
@@ -835,6 +838,10 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 	if admission := r.runtimeAdmissions[handle.key.RuntimeID]; admission != nil && admission.closed {
 		return workersessions.ErrStartAdmissionFailed
 	}
+	session, exists := r.sessions[workerID]
+	if !exists || session.State != workersessions.StateStarting {
+		return workersessions.ErrStartAdmissionFailed
+	}
 	if r.runtimeAttempts == nil {
 		r.runtimeAttempts = make(map[string]struct{})
 	}
@@ -854,5 +861,7 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 		r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
 	}
 	r.runtimeAttemptControls[workerID] = handle
+	session.State = workersessions.StateRunning
+	r.sessions[workerID] = session
 	return nil
 }

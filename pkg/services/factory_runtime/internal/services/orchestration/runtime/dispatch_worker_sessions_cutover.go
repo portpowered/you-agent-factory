@@ -85,11 +85,13 @@ func runtimeAttemptPreparation(
 		return nil
 	}
 	recorder, ok := cfg.workerSessions.(interface {
-		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
+		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 	})
 	if !ok || recorder == nil {
 		return nil
 	}
+	lifecycle := cfg.attempts
+	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
 	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
 		admissionRequest := request
@@ -107,47 +109,15 @@ func runtimeAttemptPreparation(
 				AttemptID: executeRequest.Correlation.AttemptID,
 				Execution: admissionRequest,
 			},
+			func(cancelCtx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+				if lifecycle == nil {
+					return "", ErrAttemptLifecycleUnavailable
+				}
+				return lifecycle.cancel(cancelCtx, dispatchID)
+			},
 		)
 		if err != nil {
 			return nil, err
-		}
-		if binder, ok := cfg.workerSessions.(interface {
-			BindRuntimeAttemptCancellation(
-				string,
-				string,
-				func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
-			) error
-		}); ok {
-			dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
-			bindErr := binder.BindRuntimeAttemptCancellation(
-				sessionID,
-				dispatchID,
-				func(cancelCtx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
-					if cfg.attempts == nil {
-						return "", ErrAttemptLifecycleUnavailable
-					}
-					return cfg.attempts.cancel(cancelCtx, dispatchID)
-				},
-			)
-			if bindErr != nil {
-				bindErr = fmt.Errorf("bind Factory Runtime Worker Session cancellation: %w", bindErr)
-				_ = attempt.Complete(
-					context.Background(),
-					workers.WorkstationDispatchResult{
-						DispatchID:      dispatchID,
-						WorkstationName: request.WorkstationName,
-						TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
-						Result: workers.WorkResult{
-							DispatchID:   dispatchID,
-							TransitionID: request.Execution.Dispatch.TransitionID,
-							Outcome:      workers.OutcomeFailed,
-							Error:        bindErr.Error(),
-						},
-					},
-					bindErr,
-				)
-				return nil, bindErr
-			}
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
 			result = normalizeAttemptResult(

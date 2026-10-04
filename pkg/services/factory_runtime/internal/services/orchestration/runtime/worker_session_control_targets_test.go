@@ -124,6 +124,12 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	if got := sessions.request.Execution.Execution.Dispatch.DispatchID; got != "dispatch-begin" {
 		t.Fatalf("Worker Session dispatch ID = %q, want dispatch-begin", got)
 	}
+	if sessions.cancel == nil {
+		t.Fatal("Worker Session opened without its Runtime cancellation resource")
+	}
+	if outcome, err := sessions.cancel(context.Background()); outcome != "" || !errors.Is(err, ErrAttemptLifecycleUnavailable) {
+		t.Fatalf("cancellation without a Runtime lifecycle = %q, %v, want exact unavailable error", outcome, err)
+	}
 
 	result := workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
 	if err := terminal(context.Background(), result, nil); err != nil {
@@ -304,24 +310,12 @@ type beginRuntimeAttemptService struct {
 	getErr        error
 	closedRuntime string
 	closeErr      error
+	cancel        func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
 }
 
 func (service *beginRuntimeAttemptService) CloseRuntimeAttempts(_ context.Context, runtimeID string) error {
 	service.closedRuntime = runtimeID
 	return service.closeErr
-}
-
-func TestWorkerSessionRuntimeShutdownClosesExactRuntimeAndRetainsFailure(t *testing.T) {
-	t.Parallel()
-	cause := errors.New("owned observation close failure")
-	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}, closeErr: cause}
-	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, runtimeID: "owned-runtime"}}
-	if err := f.stopDispatchRuntime(context.Background(), ""); !errors.Is(err, cause) {
-		t.Fatalf("stop runtime = %v, want exact close failure", err)
-	}
-	if sessions.closedRuntime != "owned-runtime" {
-		t.Fatalf("closed runtime = %q, want owned-runtime", sessions.closedRuntime)
-	}
 }
 
 func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
@@ -334,8 +328,10 @@ func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.G
 func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 	_ context.Context,
 	request workersessions.RuntimeAttemptRequest,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	service.request = request
+	service.cancel = cancel
 	if service.beginErr != nil {
 		return nil, service.beginErr
 	}

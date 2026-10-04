@@ -165,6 +165,7 @@ type perRuntimeAttemptFixture struct {
 	attempt workersessions.RuntimeAttempt
 	clock   time.Time
 	capture *perRuntimeRecordingCapture
+	control *perRuntimeCancellation
 }
 
 // These captures inspect detached collaborator requests, not durable replay.
@@ -402,7 +403,7 @@ func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppende
 	t.Helper()
 	fixture := preparePerRuntimeAttemptFixture(t, suffix, sink, peers...)
 	var err error
-	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.control.cancel)
 	if err != nil || fixture.attempt == nil {
 		t.Fatalf("BeginRuntimeAttempt(%s) = %v, %v", suffix, fixture.attempt, err)
 	}
@@ -435,6 +436,7 @@ func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsApp
 	}
 	fixture := &perRuntimeAttemptFixture{
 		clock: now, capture: capture,
+		control: &perRuntimeCancellation{invoked: make(chan struct{}, 1)},
 		service: service.(*registry),
 		request: workersessions.RuntimeAttemptRequest{
 			Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: perRuntimeLogicalDispatchID},
@@ -468,24 +470,28 @@ type perRuntimeCancellation struct {
 	err     error
 }
 
-func bindPerRuntimeCancellation(t *testing.T, fixture *perRuntimeAttemptFixture, cause error) *perRuntimeCancellation {
+func configurePerRuntimeCancellation(t *testing.T, fixture *perRuntimeAttemptFixture, cause error) *perRuntimeCancellation {
 	t.Helper()
-	control := &perRuntimeCancellation{invoked: make(chan struct{}, 1), err: cause}
-	if err := fixture.service.BindRuntimeAttemptCancellation(fixture.request.ID, perRuntimeLogicalDispatchID, control.cancel); err != nil {
-		t.Fatalf("BindRuntimeAttemptCancellation(%s): %v", fixture.request.ID, err)
-	}
-	return control
+	fixture.control.mu.Lock()
+	fixture.control.err = cause
+	fixture.control.mu.Unlock()
+	return fixture.control
+}
+
+func runtimeAttemptNoopCancellation(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+	return workers.WorkstationDispatchCancelOutcomeAlreadyTerminal, nil
 }
 
 func (control *perRuntimeCancellation) cancel(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
 	control.mu.Lock()
 	control.calls++
+	cause := control.err
 	control.mu.Unlock()
 	select {
 	case control.invoked <- struct{}{}:
 	default:
 	}
-	return workers.WorkstationDispatchCancelOutcomeCanceled, control.err
+	return workers.WorkstationDispatchCancelOutcomeCanceled, cause
 }
 
 func assertPerRuntimeCancellationCalls(t *testing.T, control *perRuntimeCancellation, want int) {
@@ -502,8 +508,8 @@ func TestKeyedRuntimeCloseJoinsOwnedCaptureAndPreservesPeer(t *testing.T) {
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
 	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
-	controlA := bindPerRuntimeCancellation(t, a, nil)
-	controlB := bindPerRuntimeCancellation(t, b, nil)
+	controlA := configurePerRuntimeCancellation(t, a, nil)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
 	publishPerRuntimeProgress(t, a, sink)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -554,8 +560,8 @@ func TestKeyedRuntimeCloseFailureAndInvalidScopePreserveLiveAttempts(t *testing.
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
 	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
 	cause := errors.New("owned close cancellation failure")
-	controlA := bindPerRuntimeCancellation(t, a, cause)
-	controlB := bindPerRuntimeCancellation(t, b, nil)
+	controlA := configurePerRuntimeCancellation(t, a, cause)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
 	if err := a.service.CloseRuntimeAttempts(context.Background(), " "); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
 		t.Fatalf("blank scope: %v", err)
 	}
@@ -589,7 +595,7 @@ func assertClosedRuntimeRejectsOpening(t *testing.T, fixture *perRuntimeAttemptF
 	request.Key.DispatchID = "new-dispatch"
 	request.Execution.Execution.Dispatch.DispatchID = request.Key.DispatchID
 	before := sink.requestsFor("")
-	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.control.cancel)
 	if attempt != nil || !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
 		t.Fatalf("closed runtime admission = %v, %v", attempt, err)
 	}
@@ -615,7 +621,7 @@ func verifyRuntimeCloseDuringOpening(t *testing.T, failOpening bool) {
 	t.Helper()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 	b := newPerRuntimeAttemptFixture(t, "b", sink)
-	controlB := bindPerRuntimeCancellation(t, b, nil)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
 	a := preparePerRuntimeAttemptFixture(t, "a", sink, b)
 	boundary := EventsAppender(sink)
 	if failOpening {
@@ -634,7 +640,7 @@ func verifyRuntimeCloseDuringOpening(t *testing.T, failOpening bool) {
 	openingDone := make(chan struct{})
 	go func() {
 		defer close(openingDone)
-		attempt, err := a.service.BeginRuntimeAttempt(ctx, a.request)
+		attempt, err := a.service.BeginRuntimeAttempt(ctx, a.request, a.control.cancel)
 		if attempt != nil {
 			_ = attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
 		}
@@ -709,7 +715,7 @@ func TestKeyedRuntimeCloseBeforeOpeningAndCanceledCaller(t *testing.T) {
 	if err := fixture.service.CloseRuntimeAttempts(canceled, fixture.request.Key.RuntimeID); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled caller = %v", err)
 	}
-	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.control.cancel)
 	if err != nil {
 		t.Fatalf("canceled close prevented admission: %v", err)
 	}
@@ -767,8 +773,8 @@ func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
 	assertPerRuntimeOpeningAttribution(t, a, sink)
 	assertPerRuntimeOpeningAttribution(t, b, sink)
 	publishPerRuntimeProgress(t, a, sink)
-	controlA := bindPerRuntimeCancellation(t, a, nil)
-	controlB := bindPerRuntimeCancellation(t, b, nil)
+	controlA := configurePerRuntimeCancellation(t, a, nil)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	completed := make(chan error, 1)
@@ -817,8 +823,8 @@ func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
 	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
 	cause := errors.New("injected A-only cancellation failure")
-	controlA := bindPerRuntimeCancellation(t, a, cause)
-	controlB := bindPerRuntimeCancellation(t, b, nil)
+	controlA := configurePerRuntimeCancellation(t, a, cause)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
 	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
 	beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
 	result, err := a.service.Cancel(context.Background(), workersessions.ControlRequest{ID: a.request.ID})
@@ -921,7 +927,7 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 			boundary := &perRuntimeRejectOpeningAppender{EventsAppender: eventStore}
 			sink := &perRuntimeAppendCapture{EventsAppender: boundary}
 			b := newPerRuntimeAttemptFixture(t, "b", sink)
-			controlB := bindPerRuntimeCancellation(t, b, nil)
+			controlB := configurePerRuntimeCancellation(t, b, nil)
 			beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
 			observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
 			before := sink.requestsFor(workersessions.Topic(b.request.ID))
@@ -990,16 +996,13 @@ func assertPerRuntimeCaptureNotAborted(t *testing.T, fixture *perRuntimeAttemptF
 
 func assertPerRuntimeRejectedOpening(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, failure string) {
 	t.Helper()
-	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.control.cancel)
 	if attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
 		t.Fatalf("BeginRuntimeAttempt(A) = %v, %v, want nil/ErrStartOpeningPublication", attempt, err)
 	}
 	assertPerRuntimeAttemptState(t, fixture, workersessions.StateFailed)
 	assertPerRuntimeObservation(t, fixture, workersessions.StateFailed)
-	controlA := &perRuntimeCancellation{invoked: make(chan struct{}, 1)}
-	if err := fixture.service.BindRuntimeAttemptCancellation(fixture.request.ID, perRuntimeLogicalDispatchID, controlA.cancel); err == nil {
-		t.Fatal("rejected opening accepted a cancellation binding")
-	}
+	controlA := fixture.control
 	if _, err := fixture.service.PublishRecord(context.Background(), perRuntimeProgressRequest(fixture)); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
 		t.Fatalf("PublishRecord(A) = %v, want ErrPublicationNotOpen", err)
 	}
@@ -1044,7 +1047,7 @@ func TestKeyedRuntime_RejectsContradictoryAdmissionBeforeOpening(t *testing.T) {
 				Execution: dispatchHandoff("candidate-dispatch"),
 			}
 			request.Execution.Execution.RuntimeID = "candidate-runtime"
-			attempt, err := peer.service.BeginRuntimeAttempt(context.Background(), request)
+			attempt, err := peer.service.BeginRuntimeAttempt(context.Background(), request, peer.control.cancel)
 			if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
 				t.Fatalf("BeginRuntimeAttempt = %v, %v; want nil/attempt mismatch", attempt, err)
 			}
@@ -1096,7 +1099,7 @@ func assertKeyedRuntimeCollisionNoEffects(t *testing.T, fixture *perRuntimeAttem
 	request.ID = "competing-worker"
 	request.AttemptID = "different-physical-attempt"
 	request.Key.RuntimeID = " " + request.Key.RuntimeID + " "
-	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.control.cancel)
 	if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
 		t.Fatalf("collision Begin = %v, %v; want nil/attempt mismatch", attempt, err)
 	}
@@ -1131,7 +1134,7 @@ func TestKeyedRuntime_RejectsKeyCollisionBeforeOpeningEffects(t *testing.T) {
 			var openingErr error
 			go func() {
 				defer close(done)
-				fixture.attempt, openingErr = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+				fixture.attempt, openingErr = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.control.cancel)
 			}()
 			t.Cleanup(func() {
 				unblock()
@@ -1168,7 +1171,7 @@ func TestKeyedRuntime_RejectsKeyCollisionBeforeOpeningEffects(t *testing.T) {
 			}
 			// Terminal completion releases only this key; a later physical attempt
 			// can open a distinct stable Worker while the old topic remains retained.
-			next, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+			next, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.control.cancel)
 			if err != nil {
 				t.Fatalf("Begin after completion: %v", err)
 			}
@@ -1184,14 +1187,14 @@ func TestKeyedRuntime_OpeningFailureReleasesScopedReservation(t *testing.T) {
 	t.Parallel()
 	fixture := preparePerRuntimeAttemptFixture(t, "failed-opening", newEventsAppender())
 	fixture.service.events = &runtimeAttemptBrokenAppender{err: errors.New("opening failed")}
-	if attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request); attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
+	if attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.control.cancel); attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
 		t.Fatalf("failed Begin = %v, %v", attempt, err)
 	}
 	fixture.service.events = newEventsAppender()
 	request := fixture.request
 	request.ID = "replacement-worker"
 	request.AttemptID = "replacement-physical"
-	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.control.cancel)
 	if err != nil {
 		t.Fatalf("Begin after opening failure: %v", err)
 	}
@@ -1419,7 +1422,7 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 		ID:        "worker-1",
 		AttemptID: "attempt-1",
 		Execution: runtimeAttemptHandoff("dispatch-1"),
-	})
+	}, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
@@ -1464,27 +1467,20 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 }
 
 func TestCancel_RuntimeAttemptBoundaryFailureDoesNotClaimApplied(t *testing.T) {
+	boundaryErr := errors.New("injected runtime cancellation failure")
+	cancelCalls := 0
 	registry := newTestRegistry(t)
 	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
 		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-cancel-failure"},
 		ID:        "worker-cancel-failure",
 		AttemptID: "attempt-cancel-failure",
 		Execution: runtimeAttemptHandoff("dispatch-cancel-failure"),
+	}, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+		cancelCalls++
+		return workers.WorkstationDispatchCancelOutcomeCanceled, boundaryErr
 	})
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
-	}
-	boundaryErr := errors.New("injected runtime cancellation failure")
-	cancelCalls := 0
-	if err := registry.BindRuntimeAttemptCancellation(
-		"worker-cancel-failure",
-		"dispatch-cancel-failure",
-		func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
-			cancelCalls++
-			return workers.WorkstationDispatchCancelOutcomeCanceled, boundaryErr
-		},
-	); err != nil {
-		t.Fatalf("BindRuntimeAttemptCancellation() error = %v, want nil", err)
 	}
 
 	result, cancelErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-cancel-failure"})
@@ -1502,26 +1498,25 @@ func TestCancel_RuntimeAttemptRepeatNoopRetainsAdmittedDispatchID(t *testing.T) 
 		workerID   = "worker-terminal-cancel"
 		dispatchID = "dispatch-terminal-cancel"
 	)
+	completeErr := make(chan error, 1)
+	var attempt workersessions.RuntimeAttempt
 	registry := newTestRegistry(t)
-	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+	opened, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
 		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: dispatchID},
 		ID:        workerID,
 		AttemptID: "attempt-terminal-cancel",
 		Execution: runtimeAttemptHandoff(dispatchID),
-	})
-	if err != nil {
-		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
-	}
-	completeErr := make(chan error, 1)
-	if err := registry.BindRuntimeAttemptCancellation(workerID, dispatchID, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+	}, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
 		go func() {
 			completeErr <- attempt.Complete(context.Background(), runtimeAttemptCanceledDispatch(dispatchID), nil)
 		}()
 		return workers.WorkstationDispatchCancelOutcomeCanceled, nil
-	}); err != nil {
-		t.Fatalf("BindRuntimeAttemptCancellation() error = %v, want nil", err)
+	})
+	if err != nil {
+		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
 
+	attempt = opened
 	first, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: workerID})
 	if err != nil || first.Outcome != workersessions.ControlOutcomeApplied ||
 		first.Session.State != workersessions.StateCanceled || first.DispatchID != dispatchID {
@@ -1549,7 +1544,7 @@ func TestRuntimeAttempt_ProviderAssociationRetainsPhysicalIdentity(t *testing.T)
 				Execution: runtimeAttemptHandoff("logical-dispatch"),
 			}
 			request.Execution.Execution.Dispatch.Execution.RequestID = "turn-physical"
-			attempt, err := r.BeginRuntimeAttempt(context.Background(), request)
+			attempt, err := r.BeginRuntimeAttempt(context.Background(), request, runtimeAttemptNoopCancellation)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1688,13 +1683,62 @@ func assertRuntimePhysicalAssociation(t *testing.T, r *registry, workerID string
 	}
 }
 
-func TestRuntimeAttempt_CancellationBindingCannotReplaceOwnedResource(t *testing.T) {
+func TestKeyedRuntime_MissingCancellationRejectsBeforeOpeningEffects(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	peer := newPerRuntimeAttemptFixture(t, "b", sink)
+	target := preparePerRuntimeAttemptFixture(t, "a", sink, peer)
+	before := sink.requestsFor("")
+	attempt, err := target.service.BeginRuntimeAttempt(context.Background(), target.request, nil)
+	if attempt != nil || !errors.Is(err, errRuntimeAttemptControlUnavailable) {
+		t.Fatalf("missing cancellation = %v, %v, want rejected", attempt, err)
+	}
+	if _, err := target.service.Get(context.Background(), workersessions.GetRequest{ID: target.request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("rejected opening created a Worker Session: %v", err)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("rejected opening appended observations")
+	}
+	peer.capture.mu.Lock()
+	requests := append([]recordings.WorkerSessionRecordingRequest(nil), peer.capture.requests...)
+	peer.capture.mu.Unlock()
+	if len(requests) != 1 || requests[0].WorkerSessionID != peer.request.ID {
+		t.Fatalf("rejected opening created a recording: %#v", requests)
+	}
+	assertPerRuntimeAttemptState(t, peer, workersessions.StateRunning)
+	// The rejection must not reserve the scoped key or stable identity.
+	attempt, err = target.service.BeginRuntimeAttempt(context.Background(), target.request, target.control.cancel)
+	if err != nil || attempt == nil {
+		t.Fatalf("valid admission after rejection = %v, %v", attempt, err)
+	}
+	t.Cleanup(func() {
+		_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+	})
+	cause := errors.New("admitted cancellation resource")
+	configurePerRuntimeCancellation(t, target, cause)
+	result, err := target.service.Cancel(context.Background(), workersessions.ControlRequest{ID: target.request.ID})
+	if !errors.Is(err, cause) || result.Outcome != workersessions.ControlOutcomeFailed {
+		t.Fatalf("immediate control = %#v, %v, want supplied resource", result, err)
+	}
+	assertPerRuntimeCancellationCalls(t, target.control, 1)
+	assertPerRuntimeAttemptState(t, peer, workersessions.StateRunning)
+}
+
+func TestRuntimeAttempt_AdmissionCannotReplaceOwnedCancellationResource(t *testing.T) {
 	t.Parallel()
 	r := newRuntimeIdentityRegistry(t)
+	cause := errors.New("owned target cancellation failed")
+	ownedCalls, replacementCalls := 0, 0
 	for _, id := range []string{"target", "peer"} {
 		attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
 			Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-" + id},
 			ID:  id, AttemptID: "physical-" + id, Execution: runtimeAttemptHandoff("dispatch-" + id),
+		}, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+			if id == "target" {
+				ownedCalls++
+				return "", cause
+			}
+			return workers.WorkstationDispatchCancelOutcomeAlreadyTerminal, nil
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -1707,20 +1751,16 @@ func TestRuntimeAttempt_CancellationBindingCannotReplaceOwnedResource(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	cause := errors.New("owned target cancellation failed")
-	ownedCalls, replacementCalls := 0, 0
-	if err := r.BindRuntimeAttemptCancellation("target", "dispatch-target", func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
-		ownedCalls++
-		return "", cause
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.BindRuntimeAttemptCancellation("target", "dispatch-target", func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+	if replacement, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-target"},
+		ID:  "target", AttemptID: "physical-target", Execution: runtimeAttemptHandoff("dispatch-target"),
+	}, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
 		replacementCalls++
 		return "", errors.New("replacement must not run")
-	}); !errors.Is(err, errRuntimeAttemptControlUnavailable) {
-		t.Fatalf("replacement binding = %v, want control unavailable", err)
+	}); replacement != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("replacement admission = %v, %v, want rejected", replacement, err)
 	}
+
 	result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "target"})
 	if !errors.Is(err, cause) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning || ownedCalls != 1 || replacementCalls != 0 {
 		t.Fatalf("Cancel = %#v, %v; calls = %d/%d", result, err, ownedCalls, replacementCalls)
@@ -1742,7 +1782,7 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 			Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-opening-failure"},
 			ID:        "worker-opening-failure",
 			Execution: runtimeAttemptHandoff("dispatch-opening-failure"),
-		})
+		}, runtimeAttemptNoopCancellation)
 		if !errors.Is(err, workersessions.ErrStartOpeningPublication) {
 			t.Fatalf("BeginRuntimeAttempt() error = %v, want ErrStartOpeningPublication", err)
 		}
@@ -1772,7 +1812,7 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 			Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-shared"},
 			ID:        "worker-owner",
 			Execution: runtimeAttemptHandoff("dispatch-shared"),
-		})
+		}, runtimeAttemptNoopCancellation)
 		if err != nil {
 			t.Fatalf("first BeginRuntimeAttempt() error = %v, want nil", err)
 		}
@@ -1780,7 +1820,7 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 			Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-shared"},
 			ID:        "worker-other",
 			Execution: runtimeAttemptHandoff("dispatch-shared"),
-		}); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		}, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
 			t.Fatalf("conflicting BeginRuntimeAttempt() error = %v, want attempt mismatch", err)
 		}
 		if err := first.Complete(context.Background(), runtimeAttemptCompletedDispatch("dispatch-shared"), nil); err != nil {
@@ -1798,7 +1838,7 @@ func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *tes
 		ID:        sessionID,
 		AttemptID: dispatchID,
 		Execution: runtimeAttemptHandoff(dispatchID),
-	})
+	}, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
@@ -1830,7 +1870,7 @@ func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *tes
 
 func TestBeginRuntimeAttempt_NilRegistryAndHandleAreUnavailable(t *testing.T) {
 	var r *registry
-	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
+	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
 		t.Fatalf("nil registry BeginRuntimeAttempt() error = %v, want ErrStartAdmissionFailed", err)
 	}
 	var attempt *runtimeAttempt
@@ -1855,7 +1895,7 @@ func TestBeginRuntimeAttempt_InitializesOwnershipMapsWithNilContext(t *testing.T
 		ID:        "worker-map-init",
 		AttemptID: "attempt-map-init",
 		Execution: runtimeAttemptHandoff("dispatch-map-init"),
-	})
+	}, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
@@ -1876,7 +1916,7 @@ func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
 		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-invalid"},
 		Execution: runtimeAttemptHandoff("dispatch-invalid"),
-	}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+	}, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Fatalf("invalid BeginRuntimeAttempt() error = %v, want ErrInvalidSessionID", err)
 	}
 
@@ -1888,7 +1928,7 @@ func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing
 		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-already-starting"},
 		ID:        "worker-already-starting",
 		Execution: runtimeAttemptHandoff("dispatch-already-starting"),
-	}); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+	}, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrSessionNotStartable) {
 		t.Fatalf("already-starting BeginRuntimeAttempt() error = %v, want ErrSessionNotStartable", err)
 	}
 }
@@ -1904,7 +1944,7 @@ func TestKeyedRuntime_EqualPhysicalDefaultsKeepOwnedTopicsAndCompletion(t *testi
 			for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
 				fixture.request.AttemptID = physicalID
 				var err error
-				fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+				fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.control.cancel)
 				if err != nil || fixture.attempt == nil {
 					t.Fatalf("BeginRuntimeAttempt(%s): %v", fixture.request.ID, err)
 				}
@@ -1918,8 +1958,8 @@ func TestKeyedRuntime_EqualPhysicalDefaultsKeepOwnedTopicsAndCompletion(t *testi
 				fixture.request.AttemptID = perRuntimeLogicalDispatchID
 				assertPerRuntimeOpeningAttribution(t, fixture, sink)
 			}
-			controlA := bindPerRuntimeCancellation(t, a, nil)
-			controlB := bindPerRuntimeCancellation(t, b, nil)
+			controlA := configurePerRuntimeCancellation(t, a, nil)
+			controlB := configurePerRuntimeCancellation(t, b, nil)
 			publishPerRuntimeProgress(t, a, sink)
 			cancelEqualPhysicalAttempt(t, a, controlA)
 			assertPerRuntimeCancellationCalls(t, controlA, 1)
@@ -1946,7 +1986,7 @@ func TestBeginRuntimeAttempt_FinalClaimRaceTerminalizesTheAttempt(t *testing.T) 
 		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-final-race"},
 		ID:        "worker-final-race",
 		Execution: runtimeAttemptHandoff("dispatch-final-race"),
-	})
+	}, runtimeAttemptNoopCancellation)
 	if !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
 		t.Fatalf("final-claim race error = %v, want attempt mismatch", err)
 	}
@@ -7204,7 +7244,7 @@ func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapt
 		ID:        "worker-adapter-error",
 		AttemptID: "attempt-adapter-error",
 		Execution: runtimeAttemptHandoff("dispatch-adapter-error"),
-	})
+	}, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}

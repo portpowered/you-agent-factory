@@ -2027,6 +2027,7 @@ func (service *runtimeWorkerSessionsService) Get(
 func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
 	ctx context.Context,
 	request workersessions.RuntimeAttemptRequest,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

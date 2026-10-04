@@ -15,7 +15,7 @@ import (
 // InvokeSession and its attempt loop live beside the controls they race with.
 
 var _ interface {
-	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
+	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 } = (*registry)(nil)
 
 // transitionToStarting atomically moves id from StateReserved to
@@ -167,36 +167,6 @@ func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string
 		attemptID = logicalDispatchID
 	}
 	return logicalDispatchID, attemptID
-}
-
-// BindRuntimeAttemptCancellation connects the Worker Session identity to the
-// exact Runtime dispatch cancellation boundary. Runtime calls this after
-// opening the observation and before invoking Workers; the root Service
-// contract remains unchanged.
-func (r *registry) BindRuntimeAttemptCancellation(
-	workerSessionID string,
-	dispatchID string,
-	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
-) error {
-	workerSessionID = strings.TrimSpace(workerSessionID)
-	dispatchID = strings.TrimSpace(dispatchID)
-	if workerSessionID == "" || dispatchID == "" || cancel == nil {
-		return errRuntimeAttemptControlUnavailable
-	}
-	r.mu.RLock()
-	attempt := r.runtimeAttemptControls[workerSessionID]
-	owned := attempt != nil && r.runtimeAttemptOwners[attempt.key] == workerSessionID
-	r.mu.RUnlock()
-	if !owned || attempt.dispatchID != dispatchID {
-		return errRuntimeAttemptControlUnavailable
-	}
-	attempt.mu.Lock()
-	defer attempt.mu.Unlock()
-	if attempt.completing || attempt.completed == nil || attempt.cancel != nil {
-		return errRuntimeAttemptControlUnavailable
-	}
-	attempt.cancel = cancel
-	return nil
 }
 
 func (r *registry) runtimeAttemptFor(id string) *runtimeAttempt {
