@@ -101,10 +101,11 @@ func runAgyQuietPeerScenario(t *testing.T, mode, outcome string) {
 	peer.wait(t, ctx)
 	assertAgyPrimaryOutput(t, peer, agyMarkedColdWatchTrace(t, prefix+"-peer"))
 	assertAgyQuietPeerOutcome(t, host, quiet, prefix, outcome)
-	assertAgyStreamsExclude(t, quiet, "["+prefix+"-peer]")
-	assertAgyStreamsExclude(t, peer, "quiet-secret-peer-token", "quiet-secret-peer-diagnostic", "["+prefix+"]")
-	// This remote primary-output route emits no diagnostics for either mode.
-	// Preserve that policy without claiming coverage of nonempty verbose logs.
+	assertAgyStreamsExclude(t, quiet, "["+prefix+"-peer]", prefix+"-private-command-diagnostic", "peer-secret-token")
+	assertAgyStreamsExclude(t, peer, "quiet-secret-peer-token", "quiet-secret-peer-diagnostic", "["+prefix+"]",
+		prefix+"-private-command-diagnostic", "peer-secret-token")
+	// AGY print mode consumes stdout only. Even nonempty native stderr must
+	// stay absent from both invocation streams, including the verbose peer.
 	if got := peer.inputs.Stderr(); got != "" {
 		t.Fatalf("%s primary-output peer stderr = %q, want empty", mode, got)
 	}
@@ -118,7 +119,8 @@ func runAgyQuietPeerScenario(t *testing.T, mode, outcome string) {
 	if got := reuse.inputs.Stderr(); got != "" {
 		t.Fatalf("subsequent quiet stderr = %q, want empty", got)
 	}
-	assertAgyStreamsExclude(t, reuse, prefix+"-peer", "quiet-secret-peer-token", "quiet-secret-peer-diagnostic")
+	assertAgyStreamsExclude(t, reuse, prefix+"-peer", "quiet-secret-peer-token", "quiet-secret-peer-diagnostic",
+		prefix+"-private-command-diagnostic", "peer-secret-token")
 	assertAgyQuietInvocationEvents(t, host, reuse, factoryapi.WorkOutcomeAccepted)
 }
 
@@ -141,6 +143,15 @@ func assertAgyQuietInvocationEvents(t *testing.T, host *agySharedRoleHost, invoc
 	events := support.GetFactoryEventsForSessionAt(t, host.baseURL, invocation.sessionID)
 	assertAgySingleDispatch(t, events, outcome)
 	assertAgyFactoryEventOrderForSession(t, invocation.sessionID, events)
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{"quiet-secret-peer-token", "quiet-secret-peer-diagnostic", "private-command-diagnostic", "peer-secret-token"} {
+		if strings.Contains(string(encoded), marker) {
+			t.Fatalf("session %s Factory Events leaked native diagnostic %q", invocation.sessionID, marker)
+		}
+	}
 }
 
 func assertAgyStreamsExclude(t *testing.T, invocation *agyQuietInvocation, markers ...string) {

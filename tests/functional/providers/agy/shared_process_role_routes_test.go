@@ -32,8 +32,11 @@ func (fixture *agySharedProcessFixture) registerQuietPeerRoutes(t *testing.T) {
 	for _, mode := range []string{"normal", "verbose"} {
 		for _, outcome := range []string{"success", "failure"} {
 			prefix := "quiet-" + mode + "-" + outcome
-			fixture.addRoleRoute(t, prefix+"-peer", agyColdWatchFactoryName,
-				"clip-fixture.mp4", agyMarkedColdWatchTrace(t, prefix+"-peer"))
+			fixture.addRoleRouteWithOutcomes(t, prefix+"-peer", agyColdWatchFactoryName,
+				"clip-fixture.mp4", agySharedCommandOutcome{result: platformprocess.CommandResult{
+					Stdout: agyMarkedColdWatchTrace(t, prefix+"-peer"),
+					Stderr: []byte(prefix + "-private-command-diagnostic /tmp/peer-secret-token"),
+				}})
 			fixture.addRoleRoute(t, prefix+"-reuse", agyColdWatchFactoryName,
 				"clip-fixture.mp4", agyMarkedColdWatchTrace(t, prefix+"-reuse"))
 			if outcome == "success" {
