@@ -24,6 +24,63 @@ type runtimeRoot interface {
 	recordings.RuntimeScopeService
 }
 
+// Live scope units supply detached lifecycle facts and completed subscription
+// outcomes; the canonical owner tests retain ordering and reconnect policy.
+type liveSubscriptionOwner struct {
+	canonicalledger.Service
+	request  recordings.SubscribeRequest
+	outcomes []recordings.CanonicalEvent
+	err      error
+	calls    int
+}
+
+func (owner *liveSubscriptionOwner) SubscribeFrom(_ context.Context, request recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+	owner.request = request
+	owner.calls++
+	remaining := append([]recordings.CanonicalEvent(nil), owner.outcomes...)
+	return recordings.SubscribeResult{Subscription: func(context.Context) recordings.SubscriptionOutcome {
+		if len(remaining) == 0 {
+			return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+		}
+		event := remaining[0]
+		remaining = remaining[1:]
+		return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event}
+	}}, owner.err
+}
+
+func newLiveSubscriptionAdapter(scope recordings.CanonicalEventScope, events []recordings.CanonicalEvent) (*combinedService, recordings.RecordingScopeRef, *liveSubscriptionOwner) {
+	status := recordings.RecordingStatusFacts{RecordingID: "live-recording", Scope: scope, State: recordings.RecordingActive}
+	lifecycle := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{
+		status.RecordingID: {Status: status, Events: events},
+	}}
+	canonical := &liveSubscriptionOwner{}
+	root := NewCombinedService(nil, nil, lifecycle, nil, nil, canonical, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	ref := root.newRecordingScope()
+	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: status.RecordingID, eventScope: scope}
+	return root, ref, canonical
+}
+
+func assertLiveSubscriptionRequest(t *testing.T, owner *liveSubscriptionOwner, scope recordings.CanonicalEventScope, cursor *recordings.CanonicalEventCursor) {
+	t.Helper()
+	if owner.request.Scope != scope || !reflect.DeepEqual(owner.request.Cursor, cursor) {
+		t.Fatalf("subscription request = %#v, want selected scope %#v and cursor %#v", owner.request, scope, cursor)
+	}
+}
+
+func newActiveScopeAdapter(scope recordings.CanonicalEventScope) (*combinedService, recordings.RecordingScopeRef, *activeRuntimeLifecycle, *liveSubscriptionOwner) {
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "active-recording", Scope: scope, State: recordings.RecordingActive,
+	}}
+	canonical := &liveSubscriptionOwner{}
+	root := NewCombinedService(&stubLedger{}, nil, owner,
+		injectedArtifactsOwner{err: recordings.ErrPortableArtifactUnavailable}, nil, canonical, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	ref := root.newRecordingScope()
+	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: owner.status.RecordingID, eventScope: scope}
+	return root, ref, owner, canonical
+}
+
 // TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent proves the
 // recorder accepts Factory event vocabulary from a runtime producer and
 // preserves identity, kind, and payload fields in the lifecycle append
@@ -491,6 +548,10 @@ func (owner *activeRuntimeLifecycle) FinishRecording(request recordings.FinishRe
 	return recordings.FinishRecordingResult{Status: owner.status}, nil
 }
 
+func (owner *activeRuntimeLifecycle) Snapshot(recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
+	return recordinglifecycle.Snapshot{Status: owner.status}, nil
+}
+
 type activeRuntimeCanonical struct {
 	canonicalledger.Service
 	event recordings.CanonicalEvent
@@ -604,3 +665,34 @@ func (runtimeOpeningTopology) RecordingInitialStructure(
 }
 
 var _ recordings.InitialStructureSource = runtimeOpeningTopology{}
+
+func assertActiveScopeCloseAndQuery(t *testing.T, root recordings.Service, scope recordings.RecordingScopeRef, owner *activeRuntimeLifecycle) {
+	t.Helper()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	closed, err := root.CloseRecordingScope(canceled, recordings.CloseRecordingScopeRequest{
+		Scope: scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
+	})
+	if !errors.Is(err, context.Canceled) || closed.Closed {
+		t.Fatalf("CloseRecordingScope canceled = (%#v, %v), want unfinished canceled scope", closed, err)
+	}
+	if len(owner.finishes) != 0 {
+		t.Fatal("canceled CloseRecordingScope delegated finalization")
+	}
+	finished := time.Unix(1_700_000_400, 0).UTC()
+	owner.status.State, owner.status.FinalizedAt = recordings.RecordingFinalized, &finished
+	closed, err = root.CloseRecordingScope(context.Background(), recordings.CloseRecordingScopeRequest{
+		Scope: scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
+	})
+	if err != nil || !closed.Closed || closed.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("CloseRecordingScope retry = (%#v, %v), want finalized closed scope", closed, err)
+	}
+	if len(owner.finishes) != 1 || owner.finishes[0].RecordingID != owner.status.RecordingID || !owner.finishes[0].FinishedAt.Equal(finished) {
+		t.Fatalf("finish requests = %#v, want one selected recording and timestamp", owner.finishes)
+	}
+	if _, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
+		Scope: scope,
+	}); !errors.Is(err, recordings.ErrRecordingScopeClosed) {
+		t.Fatalf("QueryRecordingScope after close = %v, want ErrRecordingScopeClosed", err)
+	}
+}

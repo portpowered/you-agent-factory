@@ -533,58 +533,48 @@ func assertScopeOpenError(
 func TestRecordingScopeLiveSubscriptionAndCursorValidation(t *testing.T) {
 	t.Parallel()
 
-	ledger := &stubLedger{}
-	root := NewService(ledger, projectionquerywire.NewService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "live-scope"}
-	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-		Enabled: true, Scope: scope, Target: recordings.RecordingTargetRequest{Artifact: "recording://live"},
-	})
-	if err != nil {
-		t.Fatalf("BeginRecordingScope: %v", err)
-	}
-	first := appendScopedQueryEvent(t, root, started.Scope, "live-event-1", 0, scope)
-	second := appendScopedQueryEvent(t, root, started.Scope, "live-event-2", 1, scope)
-	ledger.subscribeStream = factorydefinitions.FactoryEventStream{
-		StreamGenerationID: "gen-1", History: ledger.events,
-	}
+	first := scopedScopeEvent("live-event-1", 0, scope)
+	second := scopedScopeEvent("live-event-2", 1, scope)
+	root, ref, canonical := newLiveSubscriptionAdapter(scope, []recordings.CanonicalEvent{first, second})
+	canonical.outcomes = []recordings.CanonicalEvent{first, second}
 	all, err := root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{
-		Scope: started.Scope,
+		Scope: ref,
 	})
 	if err != nil {
 		t.Fatalf("SubscribeRecordingScope live: %v", err)
 	}
-	assertSubscriptionEvent(t, all.Subscription, first.Event.ID)
-	assertSubscriptionEvent(t, all.Subscription, second.Event.ID)
+	assertSubscriptionEvent(t, all.Subscription, first.ID)
+	assertSubscriptionEvent(t, all.Subscription, second.ID)
+	assertLiveSubscriptionRequest(t, canonical, scope, nil)
+	canonical.outcomes = []recordings.CanonicalEvent{second}
 	fromFirst, err := root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{
-		Scope: started.Scope, Cursor: &first.Event.Cursor,
+		Scope: ref, Cursor: &first.Cursor,
 	})
 	if err != nil {
 		t.Fatalf("SubscribeRecordingScope from cursor: %v", err)
 	}
-	assertSubscriptionEvent(t, fromFirst.Subscription, second.Event.ID)
-	assertLiveCursorErrors(t, root, started.Scope, first.Event.Cursor)
+	assertSubscriptionEvent(t, fromFirst.Subscription, second.ID)
+	assertLiveSubscriptionRequest(t, canonical, scope, &first.Cursor)
+	assertLiveCursorErrors(t, root, ref, first.Cursor)
+	if canonical.calls != 2 {
+		t.Fatalf("SubscribeFrom calls = %d, want no delegation for invalid cursors", canonical.calls)
+	}
+	canonical.err = errors.New("live subscription failed")
+	if _, err := root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{Scope: ref}); !errors.Is(err, canonical.err) {
+		t.Fatalf("SubscribeRecordingScope error = %v, want supplied owner cause", err)
+	}
 }
 
 func TestRecordingScopeActiveBoundariesPreserveCancellationAndReadFailures(t *testing.T) {
 	t.Parallel()
-
-	ledger := &stubLedger{}
-	root := NewService(ledger, projectionquerywire.NewService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "active-boundaries"}
-	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-		Enabled: true,
-		Scope:   scope,
-		Target:  recordings.RecordingTargetRequest{Artifact: "recording://active-boundaries"},
-	})
-	if err != nil {
-		t.Fatalf("BeginRecordingScope: %v", err)
-	}
-	assertActiveScopeReplayAndArtifactFailures(t, root, started.Scope)
+	root, ref, owner, canonical := newActiveScopeAdapter(scope)
+	assertActiveScopeReplayAndArtifactFailures(t, root, ref)
 	assertActiveScopeInvalidRequests(t, root)
-	assertActiveScopeSubscriptionFailure(t, root, ledger, started.Scope)
-	ledger.subscribeErr = nil
-	assertActiveScopeCancellation(t, root, started.Scope)
-	assertActiveScopeCloseAndQuery(t, root, started.Scope)
+	assertActiveScopeSubscriptionFailure(t, root, canonical, ref)
+	assertActiveScopeCancellation(t, root, ref)
+	assertActiveScopeCloseAndQuery(t, root, ref, owner)
 }
 
 func assertActiveScopeReplayAndArtifactFailures(t *testing.T, root recordings.Service, scope recordings.RecordingScopeRef) {
@@ -625,20 +615,23 @@ func assertActiveScopeInvalidRequests(t *testing.T, root recordings.Service) {
 	}
 }
 
-func assertActiveScopeSubscriptionFailure(t *testing.T, root recordings.Service, ledger *stubLedger, scope recordings.RecordingScopeRef) {
+func assertActiveScopeSubscriptionFailure(t *testing.T, root recordings.Service, canonical *liveSubscriptionOwner, scope recordings.RecordingScopeRef) {
 	t.Helper()
 	validGeneration := recordings.CanonicalEventCursor{
-		StreamGenerationID: ledger.StreamGenerationID(), Sequence: 0,
+		StreamGenerationID: "gen-1", Sequence: 0,
 	}
 	assertScopeSubscribeError(t, root, scope, validGeneration, recordings.ErrReconnectCursorExpired)
 	foreignGeneration := validGeneration
 	foreignGeneration.StreamGenerationID = "other-generation"
 	assertScopeSubscribeError(t, root, scope, foreignGeneration, recordings.ErrReconnectCursorUnavailable)
-	ledger.subscribeErr = errors.New("scope subscription unavailable")
+	canonical.err = errors.New("scope subscription unavailable")
 	if _, err := root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{
 		Scope: scope,
-	}); !errors.Is(err, ledger.subscribeErr) {
-		t.Fatalf("SubscribeRecordingScope ledger failure = %v, want %v", err, ledger.subscribeErr)
+	}); !errors.Is(err, canonical.err) {
+		t.Fatalf("SubscribeRecordingScope owner failure = %v, want %v", err, canonical.err)
+	}
+	if canonical.calls != 1 || canonical.request.Scope != (recordings.CanonicalEventScope{FactorySessionID: "active-boundaries"}) {
+		t.Fatalf("subscription delegation = %#v, want one selected-scope call", canonical)
 	}
 }
 
@@ -655,29 +648,6 @@ func assertActiveScopeCancellation(t *testing.T, root recordings.Service, scope 
 		Scope: scope, Plan: "missing-plan",
 	}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("ObserveReplayScope canceled = %v, want context.Canceled", err)
-	}
-}
-
-func assertActiveScopeCloseAndQuery(t *testing.T, root recordings.Service, scope recordings.RecordingScopeRef) {
-	t.Helper()
-	canceled, cancel := context.WithCancel(context.Background())
-	cancel()
-	closed, err := root.CloseRecordingScope(canceled, recordings.CloseRecordingScopeRequest{
-		Scope: scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
-	})
-	if !errors.Is(err, context.Canceled) || closed.Closed {
-		t.Fatalf("CloseRecordingScope canceled = (%#v, %v), want unfinished canceled scope", closed, err)
-	}
-	closed, err = root.CloseRecordingScope(context.Background(), recordings.CloseRecordingScopeRequest{
-		Scope: scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
-	})
-	if err != nil || !closed.Closed || closed.Status.State != recordings.RecordingFinalized {
-		t.Fatalf("CloseRecordingScope retry = (%#v, %v), want finalized closed scope", closed, err)
-	}
-	if _, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
-		Scope: scope,
-	}); !errors.Is(err, recordings.ErrRecordingScopeClosed) {
-		t.Fatalf("QueryRecordingScope after close = %v, want ErrRecordingScopeClosed", err)
 	}
 }
 
