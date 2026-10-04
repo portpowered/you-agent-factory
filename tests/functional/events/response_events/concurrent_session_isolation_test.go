@@ -742,6 +742,7 @@ type isolatedCommandGate struct {
 	release  chan struct{}
 	returned chan error
 	output   string
+	failure  error
 }
 
 type fourScopeCodexRunner struct {
@@ -780,6 +781,9 @@ func (r *fourScopeCodexRunner) RunStreaming(ctx context.Context, request platfor
 			return platformprocess.CommandResult{}, ctx.Err()
 		case <-gate.release:
 			gate.returned <- nil
+			if gate.failure != nil {
+				return platformprocess.CommandResult{}, gate.failure
+			}
 			stdout := support.CodexSuccessStdout(gate.output)
 			if observer != nil {
 				observer(platformprocess.OutputStreamStdout, bytes.TrimPrefix(stdout, prefix))
@@ -862,25 +866,10 @@ func assertCanceledIsolationHistory(t *testing.T, baseURL, canceledID string, ga
 func TestInjectedInvocationScopedTimeoutAndCancellationKeepPeerUsable(t *testing.T) {
 	t.Parallel()
 	gates := map[string]*isolatedCommandGate{}
-	for _, prompt := range []string{"injected-timeout-a", "injected-timeout-b"} {
+	for _, prompt := range []string{"injected-timeout-a", "injected-timeout-b", "timeout-disabled", "caller-cancellation", "provider-failure"} {
 		gates[prompt] = &isolatedCommandGate{entered: make(chan context.Context, 4), release: make(chan struct{}), returned: make(chan error, 4), output: prompt + " COMPLETE"}
 	}
-	api := support.NewProcessAPIServer()
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{ProviderCommandRunner: &fourScopeCodexRunner{gates: gates}, APIServerStarter: api.Start})
-	if err != nil {
-		t.Fatal(err)
-	}
-	support.CleanupProcess(t, process)
-	host := scaffoldConcurrentIsolationFactory(t, "injected-host")
-	home := t.TempDir()
-	inputs := support.FakeInputs(context.Background(), []string{"you", "run", "--factory", filepath.Join(host, "factory.json"), "--continuously", "--with-server", "--quiet", "--no-record"})
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = host
-	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, host)
-	command := support.StartProcessCommand(t, process, inputs.Input)
-	t.Cleanup(func() { command.Stop(t) })
-	baseURL := api.WaitForURL(t)
-	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	baseURL, sessions := startInjectedInvocationHost(t, gates)
 	var ids [2]string
 	for i, prompt := range []string{"injected-timeout-a", "injected-timeout-b"} {
 		ids[i] = support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt)).Session.Id
@@ -939,6 +928,22 @@ func TestInjectedInvocationScopedTimeoutAndCancellationKeepPeerUsable(t *testing
 		t.Fatal(err)
 	}
 	assertConcurrentIsolationInvocationCompleted(t, concurrentIsolationInvocation{response: next}, "injected-timeout-b")
+
+	for _, test := range []struct {
+		name         string
+		timeout      int64
+		cancelCaller bool
+		failure      error
+		status       factorysessions.InvocationTerminalStatus
+	}{
+		{name: "timeout-disabled", timeout: 2000, status: factorysessions.InvocationTerminalStatusTimedOut},
+		{name: "caller-cancellation", cancelCaller: true, status: factorysessions.InvocationTerminalStatusCanceled},
+		{name: "provider-failure", failure: errors.New("owned provider failure"), status: factorysessions.InvocationTerminalStatusFailed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assertInjectedInvocationWaitOutcome(t, baseURL, sessions, gates[test.name], test.name, test.timeout, test.cancelCaller, test.failure, test.status)
+		})
+	}
 }
 
 type injectedInvocationOutcome struct {
@@ -957,5 +962,69 @@ func awaitInjectedProviderEntry(t *testing.T, gate *isolatedCommandGate) context
 	case <-time.After(concurrentIsolationTimeout):
 		t.Fatal("provider did not enter owned invocation")
 		return nil
+	}
+}
+
+func startInjectedInvocationHost(t *testing.T, gates map[string]*isolatedCommandGate) (string, factorysessions.Service) {
+	t.Helper()
+	api := support.NewProcessAPIServer()
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{ProviderCommandRunner: &fourScopeCodexRunner{gates: gates}, APIServerStarter: api.Start})
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.CleanupProcess(t, process)
+	host := scaffoldConcurrentIsolationFactory(t, "injected-host")
+	home := t.TempDir()
+	inputs := support.FakeInputs(context.Background(), []string{"you", "run", "--factory", filepath.Join(host, "factory.json"), "--continuously", "--with-server", "--quiet", "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = host
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, host)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	t.Cleanup(func() { command.Stop(t) })
+	return api.WaitForURL(t), process.FactorySessions().FactorySessions().(factorysessions.Service)
+}
+
+func assertInjectedInvocationWaitOutcome(t *testing.T, baseURL string, sessions factorysessions.Service, gate *isolatedCommandGate, prompt string, timeout int64, cancelCaller bool, failure error, status factorysessions.InvocationTerminalStatus) {
+	t.Helper()
+	gate.failure = failure
+	id := support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt)).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, id) })
+	warmup, err := postConcurrentIsolationInvocation(t.Context(), baseURL, id, prompt+"-warmup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConcurrentIsolationInvocationCompleted(t, concurrentIsolationInvocation{response: warmup}, "warmup "+prompt)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan injectedInvocationOutcome, 1)
+	go func() {
+		value, err := sessions.Invoke(ctx, injectedInvocationRequest(id, timeout, false))
+		done <- injectedInvocationOutcome{value, err}
+	}()
+	providerCtx := awaitInjectedProviderEntry(t, gate)
+	if cancelCaller {
+		cancel()
+	}
+	if failure != nil {
+		close(gate.release)
+	}
+	select {
+	case result := <-done:
+		if result.err != nil || result.value.Status != status || result.value.WorkID == "" {
+			t.Fatalf("outcome=%#v error=%v want=%s", result.value, result.err, status)
+		}
+	case <-time.After(concurrentIsolationTimeout):
+		t.Fatal("invocation wait did not return")
+	}
+	if failure == nil && providerCtx.Err() != nil {
+		t.Fatalf("caller wait canceled provider without timeout control policy: %v", providerCtx.Err())
+	}
+	if failure == nil {
+		close(gate.release)
+	}
+	select {
+	case <-gate.returned:
+	case <-time.After(concurrentIsolationTimeout):
+		t.Fatal("owned provider did not return")
 	}
 }
