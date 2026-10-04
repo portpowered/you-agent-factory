@@ -84,8 +84,10 @@ func runJavaScriptResumeBesideLivePeer(t *testing.T, fixture *javascriptSharedPr
 		t.Fatalf("interrupted public checkpoint: %+v", prior)
 	}
 	assertJavaScriptResumePeerLive(t, peerResults)
+	priorWorkers := javascriptResumeWorkers(t, fixture, started.SessionId)
 	resumeJavaScriptAndAwaitDurableResult(t, fixture, started.SessionId)
 	assertJavaScriptResumeResult(t, fixture, prior)
+	assertJavaScriptResumeWorkerContinuity(t, priorWorkers, javascriptResumeWorkers(t, fixture, started.SessionId))
 	awaitJavaScriptResumeSignal(t, ctx, remaining.resumed)
 	after := javascriptResumeDispatches(t, fixture, started.SessionId)
 	assertJavaScriptResumedChildren(t, before, after, first.CallCount(), remaining.calls.Load())
@@ -96,6 +98,43 @@ func runJavaScriptResumeBesideLivePeer(t *testing.T, fixture *javascriptSharedPr
 		t.Fatal(err)
 	}
 	assertRuntimeJavaScriptChild(t, fixture, result, peer.marker, "resume unfinished child")
+}
+
+func javascriptResumeWorkers(t *testing.T, fixture *javascriptSharedProcessFixture, sessionID string) []factoryapi.WorkerSessionObservation {
+	t.Helper()
+	response := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, fixture.baseURL+"/worker-sessions")
+	var owned []factoryapi.WorkerSessionObservation
+	for _, worker := range response.Sessions {
+		if worker.FactorySessionId != nil && *worker.FactorySessionId == sessionID {
+			owned = append(owned, worker)
+		}
+	}
+	return owned
+}
+
+func assertJavaScriptResumeWorkerContinuity(t *testing.T, before, after []factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if len(before) != 2 {
+		t.Fatalf("interrupted workflow Workers = %+v, want cached and canceled child", before)
+	}
+	for _, prior := range before {
+		if prior.State != "COMPLETED" && prior.State != "CANCELED" {
+			t.Fatalf("interrupted child is not terminal: %+v", prior)
+		}
+		var retained *factoryapi.WorkerSessionObservation
+		for i := range after {
+			if after[i].WorkerSessionId == prior.WorkerSessionId && after[i].AttemptId == prior.AttemptId {
+				retained = &after[i]
+			}
+		}
+		if retained == nil || !reflect.DeepEqual(*retained, prior) {
+			t.Fatalf("resume lost prior terminal child: before=%+v after=%+v", prior, after)
+		}
+	}
+	if len(after) != 3 {
+		t.Fatalf("resumed workflow Workers = %+v, want two retained children and one resumed attempt", after)
+	}
+	t.Log("F16-12/13 public continuity: cached and canceled Worker observations retained unchanged beside the resumed Worker and live peer; recording lineage remains a separate proof")
 }
 
 type resumingJavaScriptRunner struct {
