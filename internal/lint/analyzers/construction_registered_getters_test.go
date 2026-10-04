@@ -63,7 +63,7 @@ func TestConstructionRegisteredGetters(t *testing.T) {
 		}
 		return findings, nil
 	}
-	analysistest.Run(t, analysistest.TestData(), analyzer, "m/pkg/registeredgetters", "m/pkg/registeredgetterconsumer", "m/pkg/registeredgetterparity")
+	analysistest.Run(t, analysistest.TestData(), analyzer, "m/pkg/registeredgetters", "m/pkg/registeredgetterconsumer", "m/pkg/registeredgetterparity", "m/pkg/registeredgetterpointers")
 }
 
 func TestConstructionRegisteredGetterBaseline(t *testing.T) {

@@ -90,7 +90,8 @@ func (h *registeredGuardHelpers) providerCallableDebt(expr ast.Expr) bool {
 		}
 		// An immutable alias to an imported declaration is a known call even
 		// though its body is outside this package's bounded return summaries.
-		return h.values.resolve(h.pass, expr, map[types.Object]bool{}) == (ConstructionSymbol{}) ||
+		fn := h.values.resolveFunction(h.pass, expr, map[types.Object]bool{})
+		return fn == nil || registeredInterfaceDispatch(fn) ||
 			h.providerValueEscaped(obj, map[types.Object]bool{})
 	case *ast.SelectorExpr:
 		selection := h.pass.TypesInfo.Selections[expr]
@@ -103,9 +104,16 @@ func (h *registeredGuardHelpers) providerCallableDebt(expr ast.Expr) bool {
 		}
 		// A struct can promote an interface method. Its selected declaration's
 		// receiver, rather than the outer struct receiver, owns dispatch.
-		fn := selection.Obj().(*types.Func)
-		_, iface := fn.Type().(*types.Signature).Recv().Type().Underlying().(*types.Interface)
-		return iface
+		return registeredInterfaceDispatch(selection.Obj().(*types.Func))
 	}
 	return false
+}
+
+func registeredInterfaceDispatch(fn *types.Func) bool {
+	receiver := fn.Type().(*types.Signature).Recv()
+	if receiver == nil {
+		return false
+	}
+	_, iface := receiver.Type().Underlying().(*types.Interface)
+	return iface
 }

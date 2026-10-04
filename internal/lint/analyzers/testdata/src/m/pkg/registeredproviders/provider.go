@@ -77,3 +77,24 @@ func ConstructorAlias(p owner.Dependency) {
 	alias := (construct)
 	alias(p)
 }
+
+func InterfaceAlias(p owner.Dependency) {
+	var contract Contract
+	next := contract.Run
+	alias := next
+	alias()
+	owner.New(p) // want "unresolved-focused-provider-dispatch.*InterfaceAlias.*New"
+}
+
+func PromotedInterfaceAlias(p owner.Dependency) {
+	contract := ContractWrapper{}
+	next := contract.Run
+	defer next()
+	owner.New(p) // want "unresolved-focused-provider-dispatch.*PromotedInterfaceAlias.*New"
+}
+
+func ConcreteMethodAlias(p owner.Dependency) {
+	next := helper{}.step
+	next(p)
+	owner.New(p)
+}

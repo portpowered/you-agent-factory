@@ -102,30 +102,37 @@ func (v registeredValues) recordTuple(pass *analysis.Pass, id *ast.Ident, right 
 }
 
 func (v registeredValues) resolve(pass *analysis.Pass, expr ast.Expr, visited map[types.Object]bool) ConstructionSymbol {
+	if fn := v.resolveFunction(pass, expr, visited); fn != nil {
+		return registeredConstructionSymbol(fn)
+	}
+	return ConstructionSymbol{}
+}
+
+func (v registeredValues) resolveFunction(pass *analysis.Pass, expr ast.Expr, visited map[types.Object]bool) *types.Func {
 	switch expr := expr.(type) {
 	case *ast.Ident:
 		obj := pass.TypesInfo.ObjectOf(expr)
-		if _, ok := obj.(*types.Func); ok {
-			return registeredConstructionSymbol(obj)
+		if fn, ok := obj.(*types.Func); ok {
+			return fn.Origin()
 		}
 		if obj != nil && !visited[obj] && !v.mutated[obj] {
 			visited[obj] = true
-			return v.resolve(pass, v.initial[obj], visited)
+			return v.resolveFunction(pass, v.initial[obj], visited)
 		}
 	case *ast.SelectorExpr:
 		if selection := pass.TypesInfo.Selections[expr]; selection != nil {
-			if _, ok := selection.Obj().(*types.Func); ok {
-				return registeredConstructionSymbol(selection.Obj())
+			if fn, ok := selection.Obj().(*types.Func); ok {
+				return fn.Origin()
 			}
 		} else if fn, ok := pass.TypesInfo.ObjectOf(expr.Sel).(*types.Func); ok {
-			return registeredConstructionSymbol(fn)
+			return fn.Origin()
 		}
 	case *ast.ParenExpr:
-		return v.resolve(pass, expr.X, visited)
+		return v.resolveFunction(pass, expr.X, visited)
 	case *ast.IndexExpr:
-		return v.resolve(pass, expr.X, visited)
+		return v.resolveFunction(pass, expr.X, visited)
 	case *ast.IndexListExpr:
-		return v.resolve(pass, expr.X, visited)
+		return v.resolveFunction(pass, expr.X, visited)
 	}
-	return ConstructionSymbol{}
+	return nil
 }
