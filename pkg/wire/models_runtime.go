@@ -579,10 +579,24 @@ type modelHostCompatibilityEdge interface {
 	Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error
 }
 
+// subprocessTime projects the normalized process roles onto the subprocess
+// effect contract. Wall observations and cleanup scheduling remain independent;
+// explicit subprocess clocks still own both methods when supplied.
+type subprocessTime struct {
+	wall      platformclock.Source
+	scheduler platformclock.TimerSource
+}
+
+func (clock subprocessTime) Now() time.Time { return clock.wall.Now() }
+
+func (clock subprocessTime) After(duration time.Duration) <-chan time.Time {
+	return clock.scheduler.After(duration)
+}
+
 func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {
 	clock := edges.PlatformProcessClock
 	if clock == nil {
-		clock = platformclock.Real{}
+		clock = subprocessTime{wall: edges.Clock, scheduler: edges.ProcessScheduler}
 	}
 	newCommand := edges.PlatformProcessCommandFactory
 	if newCommand == nil {

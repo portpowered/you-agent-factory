@@ -729,11 +729,11 @@ func (clock metricsNowOnlyClock) Now() time.Time { return clock.at }
 
 func TestFactoryRuntimeEffectProvidersDefaultCommandRunnersWhenUnset(t *testing.T) {
 	t.Parallel()
-	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(serviceedges.Edges{})
+	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provider command runner: %v", err)
 	}
-	scriptRunner, err := provideFactoryRuntimeScriptCommandRunner(serviceedges.Edges{})
+	scriptRunner, err := provideFactoryRuntimeScriptCommandRunner(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("script command runner: %v", err)
 	}
