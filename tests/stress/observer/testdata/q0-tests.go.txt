@@ -1,11 +1,13 @@
 package observer_test
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
 	"testing"
+	"time"
 )
 
 // Q0 only constructs the inert public process. Lifecycle checkpoints belong to
@@ -21,7 +23,9 @@ func TestInProcessObserverQ0(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := process.Close(t.Context()); err != nil {
+		cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := process.Close(cleanup); err != nil {
 			t.Error(err)
 		}
 	})
