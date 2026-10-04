@@ -295,10 +295,8 @@ func TestRootRemoveModelAssetsLogsStartAndTerminalOutcome(t *testing.T) {
 			},
 		},
 		runtimeHost: &removeGuardHost{},
-		process: modelseffects.ProcessDependencies{
-			Logger: zap.New(core),
-			Clock:  func() time.Time { return time.Unix(123, 0) },
-		},
+		logger:      zap.New(core),
+		now:         func() time.Time { return time.Unix(123, 0) },
 	}
 	if _, err := root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
 		Scope: scope,
@@ -336,10 +334,8 @@ func TestRootRemoveModelAssetsOmitsUnverifiedBytesFromFailureLog(t *testing.T) {
 			removeErr: errors.New("injected cache reclamation failure"),
 		},
 		runtimeHost: &removeGuardHost{},
-		process: modelseffects.ProcessDependencies{
-			Logger: zap.New(core),
-			Clock:  func() time.Time { return time.Unix(123, 0) },
-		},
+		logger:      zap.New(core),
+		now:         func() time.Time { return time.Unix(123, 0) },
 	}
 	result, err := root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
 		Scope: scope, Name: "managed-model", ReclaimUnusedCache: true,
@@ -470,7 +466,7 @@ func TestRootInvokeModelRecordsOneTerminalForInvocationFailure(t *testing.T) {
 	}
 	root, scope, _ := newJoinedInvocationRoot(t, &events, inference)
 	sink := &rootRuntimeEvidenceRecords{}
-	root.process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
+	root.runtimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
 
 	_, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
 	if !errors.Is(err, models.ErrInferenceTimeout) {

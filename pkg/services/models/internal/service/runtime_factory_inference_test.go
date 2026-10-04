@@ -65,7 +65,9 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 		{name: "assets", mutate: func(args *rootConstructionArgs) { args.assets = nil }, message: "Models Assets service"},
 		{name: "runtime host", mutate: func(args *rootConstructionArgs) { args.runtimeHost = nil }, message: "Models Runtime Host service"},
 		{name: "inference", mutate: func(args *rootConstructionArgs) { args.inference = nil }, message: "Models Inference service"},
-		{name: "process clock", mutate: func(args *rootConstructionArgs) { args.process.Clock = nil }, message: "Models process clock"},
+		{name: "logger", mutate: func(args *rootConstructionArgs) { args.logger = nil }, message: "Models logger"},
+		{name: "revision resolver", mutate: func(args *rootConstructionArgs) { args.revisionResolver = nil }, message: "Models revision resolver"},
+		{name: "process clock", mutate: func(args *rootConstructionArgs) { args.now = nil }, message: "Models process clock"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -80,20 +82,22 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 }
 
 type rootConstructionArgs struct {
-	processLauncher modelhost.ProcessLauncher
-	hostHTTP        modelhost.HTTPDoer
-	hostClock       modelhost.Clock
-	runtimeRunner   platformprocess.CommandRunner
-	runtimeHTTP     localmodels.HTTPDoer
-	runtimeInspect  localmodels.InspectFile
-	runtimeTempDir  localmodels.TempDirectory
-	runtimeTempFile localmodels.CreateTempFile
-	runtimeScopes   runtimescopes.Service
-	catalog         modelcatalog.Service
-	assets          scopedassets.Service
-	runtimeHost     runtimehost.Service
-	inference       inference.Service
-	process         modelseffects.ProcessDependencies
+	processLauncher  modelhost.ProcessLauncher
+	hostHTTP         modelhost.HTTPDoer
+	hostClock        modelhost.Clock
+	runtimeRunner    platformprocess.CommandRunner
+	runtimeHTTP      localmodels.HTTPDoer
+	runtimeInspect   localmodels.InspectFile
+	runtimeTempDir   localmodels.TempDirectory
+	runtimeTempFile  localmodels.CreateTempFile
+	runtimeScopes    runtimescopes.Service
+	catalog          modelcatalog.Service
+	assets           scopedassets.Service
+	runtimeHost      runtimehost.Service
+	inference        inference.Service
+	logger           *zap.Logger
+	now              func() time.Time
+	revisionResolver func(context.Context, string) (string, error)
 }
 
 func (args rootConstructionArgs) build() (*Root, error) {
@@ -111,7 +115,8 @@ func (args rootConstructionArgs) build() (*Root, error) {
 		args.assets,
 		args.runtimeHost,
 		args.inference,
-		args.process,
+		args.logger, args.now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
+		args.revisionResolver, nil, models.AssetHostPlatform{},
 	)
 }
 
@@ -148,9 +153,40 @@ func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
 		assets:        inferenceRecordingAssetsService{},
 		runtimeHost:   &joinedHostService{events: &events},
 		inference:     &joinedInferenceService{events: &events},
-		process: modelseffects.ProcessDependencies{
-			Logger: zap.NewNop(), Clock: time.Now,
-		},
+		logger:        zap.NewNop(), now: time.Now,
+		revisionResolver: func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved },
+	}
+}
+
+func TestNewRootResolvesScopedReferenceWithSelectedEffect(t *testing.T) {
+	t.Parallel()
+	args := newRootConstructionArgs(t)
+	const revision = "0123456789abcdef0123456789abcdef01234567"
+	calls := 0
+	args.revisionResolver = func(ctx context.Context, source string) (string, error) {
+		calls++
+		if ctx != t.Context() || source != "hf://selected/repository@main" {
+			t.Fatalf("resolver input = %v, %q, want selected context and source", ctx, source)
+		}
+		return revision, nil
+	}
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatal("construction invoked revision effect")
+	}
+	opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := root.ResolveModelReference(t.Context(), models.ResolveModelReferenceRequest{
+		Scope: opened.Scope, Reference: models.ModelReference{NameOrURI: "hf://selected/repository@main"},
+	})
+	if err != nil || calls != 1 || result.Resolved.Provenance.ImmutableRevision != revision ||
+		result.Resolved.Definition.Source != "hf://selected/repository@"+revision {
+		t.Fatalf("resolution = %#v, %v, calls=%d, want selected immutable revision once", result, err, calls)
 	}
 }
 
@@ -324,7 +360,7 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 	}
 }
 
-func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
+func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 	t.Parallel()
 
 	scopes, err := runtimescopeswire.NewService(func() string { return "root-construction-test" })
@@ -359,12 +395,13 @@ func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
 		http.DefaultClient, os.Stat, os.TempDir,
 		func(string, string) (localmodels.TempFile, error) { return rootConstructionTempFile{}, nil },
 		scopes, catalog, assets, runtimeHost, inferenceService,
-		modelseffects.ProcessDependencies{Clock: time.Now},
+		zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
+		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	if root == nil || root.resolveHuggingFaceRevision == nil || root.process.Logger == nil {
+	if root == nil || root.resolveHuggingFaceRevision == nil || root.logger == nil {
 		t.Fatal("NewRoot did not retain a usable root with default logger/revision resolver")
 	}
 }
@@ -392,7 +429,8 @@ func TestNewRootRejectsMissingRequiredComposedDependencies(t *testing.T) {
 		_, err := NewRoot(
 			processLauncher, hostHTTP, hostClock, runtimeRunner, runtimeHTTP, runtimeInspect,
 			runtimeTempDir, runtimeTempFile, nil, nil, nil, nil, nil,
-			modelseffects.ProcessDependencies{Clock: time.Now},
+			zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
+			func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
 		)
 		return err
 	}
@@ -568,10 +606,8 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	}
 	root, scope, host := newJoinedInvocationRoot(t, &events, inference)
 	core, observed := observer.New(zap.InfoLevel)
-	root.process = modelseffects.ProcessDependencies{
-		Logger: zap.New(core),
-		Clock:  func() time.Time { return time.Unix(123, 0) },
-	}
+	root.logger = zap.New(core)
+	root.now = func() time.Time { return time.Unix(123, 0) }
 
 	result, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
 	if err != nil {
@@ -689,9 +725,7 @@ func TestRootInvokeModelScopesTerminalEvidencePerInvocation(t *testing.T) {
 	}
 	root, scope, _ := newJoinedInvocationRoot(t, &events, inference)
 	sink := &rootRuntimeEvidenceRecords{}
-	root.process = modelseffects.ProcessDependencies{
-		RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
-	}
+	root.runtimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
 
 	for attempt := 0; attempt < 2; attempt++ {
 		if _, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope)); err != nil {

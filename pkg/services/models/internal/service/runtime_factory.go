@@ -45,7 +45,14 @@ type Root struct {
 	correlationSequence        uint64
 	runtimeByScope             map[models.RuntimeScopeRef]models.Service
 	catalog                    modelcatalog.Service
-	process                    modelseffects.ProcessDependencies
+	logger                     *zap.Logger
+	now                        func() time.Time
+	pullMetrics                modelseffects.PullMetricsRecorder
+	runtimeEvidence            modelseffects.RuntimeEvidenceRecorder
+	hostLogger                 modelseffects.HostDiagnosticLogger
+	hostMetrics                modelseffects.HostMetricsRecorder
+	localHooks                 modelseffects.LocalRuntimeHooks
+	backendArtifactPlatform    models.AssetHostPlatform
 }
 
 var _ models.Service = (*Root)(nil)
@@ -65,7 +72,16 @@ func NewRoot(
 	assetService scopedassets.Service,
 	runtimeHostService runtimehost.Service,
 	inferenceService modelinference.Service,
-	processDependencies ...modelseffects.ProcessDependencies,
+	logger *zap.Logger,
+	now func() time.Time,
+	pullMetrics modelseffects.PullMetricsRecorder,
+	runtimeEvidence modelseffects.RuntimeEvidenceRecorder,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
+	localHooks modelseffects.LocalRuntimeHooks,
+	resolveRevision func(context.Context, string) (string, error),
+	resolveBackend modelseffects.BackendArtifactResolver,
+	platform models.AssetHostPlatform,
 ) (*Root, error) {
 	if processLauncher == nil {
 		return nil, missingDependencyError("model host process launcher")
@@ -106,22 +122,14 @@ func NewRoot(
 	if inferenceService == nil {
 		return nil, missingDependencyError("Models Inference service")
 	}
-	process := modelseffects.ProcessDependencies{}
-	if len(processDependencies) > 0 {
-		process = processDependencies[0]
+	if logger == nil {
+		return nil, missingDependencyError("Models logger")
 	}
-	if process.Logger == nil {
-		process.Logger = zap.NewNop()
-	}
-	process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(
-		process.RuntimeEvidence,
-	)
-	if process.Clock == nil {
+	if now == nil {
 		return nil, missingDependencyError("Models process clock")
 	}
-	resolveRevision := process.ResolveHuggingFaceRevision
 	if resolveRevision == nil {
-		resolveRevision = defaultHuggingFaceRevision
+		return nil, missingDependencyError("Models revision resolver")
 	}
 	return &Root{
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
@@ -130,9 +138,11 @@ func NewRoot(
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
-		resolveBackendArtifact:     process.ResolveBackendArtifact,
+		resolveBackendArtifact:     resolveBackend,
 		runtimeByScope:             make(map[models.RuntimeScopeRef]models.Service),
-		process:                    process,
+		logger:                     logger, now: now, pullMetrics: pullMetrics, runtimeEvidence: runtimeEvidence,
+		hostLogger: hostLogger, hostMetrics: hostMetrics, localHooks: localHooks,
+		backendArtifactPlatform: platform,
 	}, nil
 }
 
@@ -150,12 +160,12 @@ func (o *Root) runtimeForBindingWithAssets(
 	return newRuntimeWithHostEdges(
 		scope,
 		binding.RuntimeConfig,
-		o.process.Logger,
-		o.process.Clock,
-		o.process.PullMetrics,
-		o.process.HostLogger,
-		o.process.HostMetrics,
-		o.process.LocalHooks,
+		o.logger,
+		o.now,
+		o.pullMetrics,
+		o.hostLogger,
+		o.hostMetrics,
+		o.localHooks,
 		assets,
 		localRuntime,
 		o.runtimeHost,
@@ -531,7 +541,7 @@ func (o *Root) InvokeModel(
 	var invocationEvidence modelseffects.RuntimeEvidenceRecorder
 	if o != nil {
 		invocationEvidence = modelseffects.NewRuntimeEvidenceInvocation(
-			o.process.RuntimeEvidence,
+			o.runtimeEvidence,
 		)
 	}
 	stage := modelseffects.RuntimeStageArtifactResolve
@@ -615,7 +625,7 @@ func (o *Root) prepareJoinedInvocation(
 	}
 	resolved := resolution.Resolved
 	plan.configuration = joinedHostConfiguration(
-		request, resolved, o.process.BackendArtifactPlatform,
+		request, resolved, o.backendArtifactPlatform,
 	)
 	plan.modelName = plan.configuration.ModelName
 	plan.backend = plan.configuration.Backend

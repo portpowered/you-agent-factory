@@ -119,8 +119,7 @@ type invocationRuntime interface {
 	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
 }
 
-// NewService constructs the temporary T11 compatibility Root from completed
-// fixed leaves. ProcessDependencies forwarding remains owned by T11.
+// NewService supplies completed leaves and individually selected effects to Root.
 func NewService(
 	runtimeScopes RuntimeScopes, assets Assets, catalog Catalog, runtimeHost RuntimeHost, inference Inference,
 	processLauncher HostProcessLauncher, hostHTTP HostHTTPDoer, hostClock HostClock,
@@ -134,17 +133,16 @@ func NewService(
 	if err := validateCompatibilityRuntimeEffects(runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, now); err != nil {
 		return nil, err
 	}
+	if legacyRevisionOverride == nil {
+		legacyRevisionOverride = NewUnresolvedAssetRevisionResolver()
+	}
 	launcher, clock, createTempFile := adaptConstructionPorts(processLauncher, hostClock, runtimeTempFile)
 	return modelsservice.NewRoot(
 		launcher, hostHTTP, clock, runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
-		modelseffects.ProcessDependencies{
-			Logger: logger, Clock: now, PullMetrics: pullMetrics, RuntimeEvidence: runtimeEvidence,
-			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
-			ResolveHuggingFaceRevision: legacyRevisionOverride, ResolveBackendArtifact: backendResolver,
-			BackendArtifactPlatform: assetPlatform,
-		},
+		logger, now, pullMetrics, runtimeEvidence, hostLogger, hostMetrics, localHooks,
+		legacyRevisionOverride, backendResolver, assetPlatform,
 	)
 }
 

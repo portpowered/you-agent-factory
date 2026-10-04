@@ -220,7 +220,7 @@ func (o *Root) normalizeAssetPreflightRequest(
 			Offline: request.Offline,
 		},
 		resolution.Resolved,
-		o.process.BackendArtifactPlatform,
+		o.backendArtifactPlatform,
 	)
 	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, configuration, request.Offline)
 	if err != nil {
@@ -502,17 +502,6 @@ func resolveImmutableRevision(
 		return "", revisionFailure()
 	}
 	return strings.TrimSpace(resolved), nil
-}
-
-func defaultHuggingFaceRevision(ctx context.Context, source string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	parsed, err := parseConfiguredSource(source)
-	if err != nil || !isImmutableRevision(parsed.Revision) {
-		return "", models.ErrModelRevisionUnresolved
-	}
-	return parsed.Revision, nil
 }
 
 func parseConfiguredSource(value string) (modelSourceReference, error) {

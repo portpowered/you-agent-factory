@@ -362,7 +362,7 @@ func TestRootInvokeUsesConfigurationForArtifactAndOfflineAssetProjection(t *test
 	platform := models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"}
 	var observed modelseffects.ResolvedHostConfiguration
 	var observedOffline bool
-	root.process = modelseffects.ProcessDependencies{BackendArtifactPlatform: platform}
+	root.backendArtifactPlatform = platform
 	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration, offline bool) (modelseffects.BackendArtifactSelection, error) {
 		observed = configuration.Clone()
 		observedOffline = offline
@@ -545,7 +545,7 @@ func TestCustomAudioCPPFileTTSReachesAssetPreparation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse custom TTS scope: %v", err)
 	}
-	root.process = modelseffects.ProcessDependencies{BackendArtifactPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true}}
+	root.backendArtifactPlatform = models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true}
 	installedBackend := t.TempDir()
 	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration, _ bool) (modelseffects.BackendArtifactSelection, error) {
 		if configuration.Backend != backend {

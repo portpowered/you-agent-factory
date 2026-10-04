@@ -132,7 +132,7 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 					Model: models.ModelReference{NameOrURI: modelName},
 				},
 				resolved,
-				o.process.BackendArtifactPlatform,
+				o.backendArtifactPlatform,
 			)
 			if o.resolveBackendArtifact != nil && isJoinedManagedBackend(resolved.Definition.Backend) {
 				var resolveErr error
@@ -433,10 +433,10 @@ func cloneMetricLabels(labels map[string]string) map[string]string {
 }
 
 func removeModelCacheStartLog(o *Root, request models.RemoveModelAssetsRequest) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
-	o.process.Logger.Info(
+	o.logger.Info(
 		"models cache removal started",
 		zap.String("model_name", strings.TrimSpace(request.Name)),
 		zap.String("scope", request.Scope.String()),
@@ -451,7 +451,7 @@ func removeModelCacheTerminalLog(
 	err error,
 	elapsed time.Duration,
 ) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
 	outcome := string(result.Outcome)
@@ -469,7 +469,7 @@ func removeModelCacheTerminalLog(
 			zap.String("failure_class", removeModelCacheFailureClass(err)),
 			zap.Error(err),
 		)
-		o.process.Logger.Warn("models cache removal completed", fields...)
+		o.logger.Warn("models cache removal completed", fields...)
 		return
 	}
 	fields = append(fields,
@@ -479,7 +479,7 @@ func removeModelCacheTerminalLog(
 		zap.Int64("reclaimed_cache_bytes", result.ReclaimedCacheBytes),
 		zap.Int64("retained_shared_cache_bytes", result.RetainedSharedCacheBytes),
 	)
-	o.process.Logger.Info("models cache removal completed", fields...)
+	o.logger.Info("models cache removal completed", fields...)
 }
 
 func removeModelCacheFailureClass(err error) string {

@@ -69,17 +69,17 @@ func joinedInvocationContextError(ctx context.Context, err error) error {
 }
 
 func joinedInvocationStart(o *Root) time.Time {
-	if o != nil && o.process.Clock != nil {
-		return o.process.Clock()
+	if o != nil && o.now != nil {
+		return o.now()
 	}
 	return time.Time{}
 }
 
 func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
-	if o == nil || o.process.Clock == nil || started.IsZero() {
+	if o == nil || o.now == nil || started.IsZero() {
 		return 0
 	}
-	ended := o.process.Clock()
+	ended := o.now()
 	if ended.Before(started) {
 		return 0
 	}
@@ -115,7 +115,7 @@ func joinedInvocationLifecycleRecord(
 	elapsed time.Duration,
 	err error,
 ) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
 	fields := []zap.Field{
@@ -143,10 +143,10 @@ func joinedInvocationLifecycleRecord(
 		if diagnostic.Subcause != "" {
 			fields = append(fields, zap.String("failure_subcause", string(diagnostic.Subcause)))
 		}
-		o.process.Logger.Warn("models invocation stage", fields...)
+		o.logger.Warn("models invocation stage", fields...)
 		return
 	}
-	o.process.Logger.Info("models invocation stage", fields...)
+	o.logger.Info("models invocation stage", fields...)
 }
 
 func appendLifecycleIdentityField(fields *[]zap.Field, key string, value string) {
@@ -187,7 +187,7 @@ func joinedInvocationRecord(
 	err error,
 	elapsed time.Duration,
 ) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
 	fields := []zap.Field{
@@ -216,11 +216,11 @@ func joinedInvocationRecord(
 		if diagnostic.Subcause != "" {
 			fields = append(fields, zap.String("failure_subcause", string(diagnostic.Subcause)))
 		}
-		o.process.Logger.Warn("models invocation completed", fields...)
+		o.logger.Warn("models invocation completed", fields...)
 		return
 	}
 	fields = append(fields, zap.String("outcome", "COMPLETED"))
-	o.process.Logger.Info("models invocation completed", fields...)
+	o.logger.Info("models invocation completed", fields...)
 }
 
 func joinedAssetReference(
