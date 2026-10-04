@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -79,11 +80,9 @@ func TestAgyRootPTYExecutionEndToEnd(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "Hello from Agy"}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  "agy",
 	})
 	root := newAgyRoot(t, effect)
 
@@ -123,11 +122,9 @@ func TestAgyRootRejectsUnusableFinalOutput(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: ""}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  "agy",
 	})
 	root := newAgyRoot(t, effect)
 
@@ -256,13 +253,11 @@ func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
 	t.Parallel()
 
 	factoryRoot := t.TempDir()
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+	effect := agy.NewPTYEffect(&failureStubAllocator{result: agypty.SessionResult{
+		ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
+	}, runErr: agypty.ErrSessionTimedOut}, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
 		FactoryRoot: factoryRoot,
-		Allocator: &failureStubAllocator{result: agypty.SessionResult{
-			ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
-		}, runErr: agypty.ErrSessionTimedOut},
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+		Executable:  "agy",
 	})
 	root := newAgyRoot(t, effect)
 
@@ -308,11 +303,9 @@ func TestAgyRootMissingExecutablePreservesResumeSessionOnFailure(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	missingExecutable := filepath.Join(factoryRoot, "missing-agy")
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              &stubAllocator{},
-		Executable:             missingExecutable,
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(&stubAllocator{}, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  missingExecutable,
 	})
 	root := newAgyRoot(t, effect)
 

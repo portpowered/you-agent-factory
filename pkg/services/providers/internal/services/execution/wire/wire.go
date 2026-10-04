@@ -114,18 +114,18 @@ func BuiltInDependenciesFromCommandRunner(
 	if len(platform) > 0 {
 		deps = platform[0]
 	}
-	antigravity := agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
-		Allocator: deps.AgyPTY.Allocator,
-		ExecutableDependencies: agyadapter.ExecutableDependencies{
-			Locator:   deps.AgyPTY.Locator,
-			Inspector: deps.AgyPTY.Inspector,
-		},
-	})
+	clock := deps.AgyCommandClock
+	if clock == nil {
+		clock = platformclock.Real{}
+	}
+	var antigravity agyadapter.Effect
+	if deps.AgyPTY.Allocator != nil {
+		antigravity = agyadapter.NewPTYEffect(
+			deps.AgyPTY.Allocator, deps.AgyPTY.Locator, deps.AgyPTY.Inspector,
+			clock, agyadapter.PTYPolicy{},
+		)
+	}
 	if deps.AgyCommandRunner != nil {
-		clock := deps.AgyCommandClock
-		if clock == nil {
-			clock = platformclock.Real{}
-		}
 		scheduler, ok := clock.(platformclock.TimerSource)
 		if !ok {
 			scheduler = platformclock.Real{}
