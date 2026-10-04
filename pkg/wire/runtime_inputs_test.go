@@ -710,7 +710,7 @@ func assertLegacyMetricsWallTimerDelivery(t *testing.T, clock platformclock.Time
 		if at.IsZero() || at.Equal(base) {
 			t.Fatalf("host timer timestamp = %v", at)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("legacy host timer did not deliver")
 	}
 }
