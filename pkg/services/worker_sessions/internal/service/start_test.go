@@ -4427,30 +4427,3 @@ func TestListWorkerSessionObservations_CanceledContextIsTyped(t *testing.T) {
 		t.Fatalf("ListWorkerSessionObservations() error = %v, want ErrObservationCanceled", err)
 	}
 }
-
-// testSessionPublisher supplies an explicit session to the retained progress
-// operation with its immutable observer and Worker identity.
-type testSessionPublisher struct {
-	progress workersessions.ProviderSessionObservationPublisher
-	observer workersessions.Service
-	workerID string
-	next     workers.ProgressPublisher
-}
-
-func newTestSessionPublisher(observer workersessions.Service, workerID string, next workers.ProgressPublisher) *testSessionPublisher {
-	return &testSessionPublisher{observer: observer, workerID: workerID, next: next}
-}
-func (p *testSessionPublisher) Publish(fragment workers.ProgressFragment) {
-	if fragment.Correlation.DispatchID == "" {
-		fragment.Correlation.DispatchID = fragment.DispatchID
-	}
-	if fragment.Correlation.AttemptID == "" {
-		fragment.Correlation.AttemptID = fragment.DispatchID
-	}
-	if err := p.progress.PublishWorkerSessionProgress(context.Background(), p.observer, p.workerID, fragment); err != nil {
-		return
-	}
-	if p.next != nil {
-		p.next(fragment)
-	}
-}

@@ -2712,7 +2712,3 @@ func countRestoredInterruptions(ledger *recordingfixtures.ScriptedRuntimeLedger)
 	}
 	return count
 }
-
-func (service *runtimeWorkerSessionsService) CloseRuntimeAttempts(context.Context, string) error {
-	return nil
-}
