@@ -2,6 +2,9 @@ package root_composition_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -65,6 +68,7 @@ func TestConcurrencySharedProcess(t *testing.T) {
 	})
 	t.Run("Cancel", func(t *testing.T) {
 		t.Parallel()
+		t.Run("AdmittedWorkCancellation", func(t *testing.T) { t.Parallel(); fixture.runAdmittedWorkCancellation(t) })
 		t.Run("CC-04", func(t *testing.T) { t.Parallel(); fixture.runSessionCancellationIsolation(t) })
 		t.Run("CC-05", func(t *testing.T) { t.Parallel(); fixture.runWorkerSessionCancellation(t) })
 		t.Run("CC-13", func(t *testing.T) { t.Parallel(); fixture.runRecovery(t) })
@@ -155,6 +159,10 @@ func (fixture *concurrencySharedProcessFixture) start(t *testing.T) {
 	if fixture.command != nil {
 		t.Fatal("shared concurrency process started more than once")
 	}
+	env := append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
+	// First-run profile installation is fixture setup, not server readiness.
+	// Complete it through the same public process before starting the host.
+	support.InitializeCustomerHomeWithProcess(t, fixture.process, env, fixture.hostDir)
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",
 		"--dir", fixture.hostDir,
@@ -164,9 +172,15 @@ func (fixture *concurrencySharedProcessFixture) start(t *testing.T) {
 		"--quiet",
 		"--no-record",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = fixture.hostDir
 	fixture.command = support.StartProcessCommand(t, fixture.process, inputs.Input)
+	t.Cleanup(func() {
+		fixture.command.Stop(t)
+		if fixture.apiStarts.Load() == 0 {
+			t.Logf("concurrency host returned without API startup: error=%v stdout=%q stderr=%q", fixture.command.Err(), inputs.Stdout(), inputs.Stderr())
+		}
+	})
 	fixture.baseURL = fixture.api.WaitForURL(t)
 	defaultSession := support.GetDefaultSession(t, fixture.baseURL)
 	if !defaultSession.IsDefault || strings.TrimSpace(defaultSession.Id) == "" {
@@ -250,4 +264,179 @@ func (session *concurrencySession) closeAndAssertGone(t *testing.T) {
 	t.Helper()
 	session.close(t)
 	assertConcurrencySessionDeleted(t, session.fixture.baseURL, session.id)
+}
+
+func awaitAdmittedWorkEvent(t *testing.T, stream *support.FactoryEventStream, matches func(factoryapi.FactoryEvent) bool) factoryapi.FactoryEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), concurrencySharedProcessTimeout)
+	defer cancel()
+	for {
+		event := stream.NextEventContext(ctx)
+		if matches(event) {
+			return event
+		}
+	}
+}
+
+func admittedWorkDispatch(t *testing.T, session *concurrencySession, response factoryapi.SubmitWorkResponse) string {
+	t.Helper()
+	events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+	hasRequest := false
+	dispatchID := ""
+	for _, event := range events {
+		if event.Context.SessionId == nil || *event.Context.SessionId != session.id ||
+			event.Context.RequestId == nil || *event.Context.RequestId != response.RequestId || !concurrencyEventHasWork(event, stringPointerValue(response.WorkId)) {
+			continue
+		}
+		if event.Type == factoryapi.FactoryEventTypeWorkRequest {
+			hasRequest = true
+		}
+		if event.Type == factoryapi.FactoryEventTypeDispatchRequest {
+			if dispatchID != "" {
+				t.Fatal("AWC Work has more than one dispatch request")
+			}
+			dispatchID = stringPointerValue(event.Context.DispatchId)
+		}
+	}
+	if !hasRequest || dispatchID == "" {
+		t.Fatalf("AWC session=%s request=%s work=%s missing admission/dispatch correlation: %s", session.id, response.RequestId, stringPointerValue(response.WorkId), concurrencyEventSummary(events))
+	}
+	return dispatchID
+}
+
+func assertAdmittedWorkCanceled(t *testing.T, session *concurrencySession, response factoryapi.SubmitWorkResponse, dispatchID string) {
+	t.Helper()
+	publicSession := getConcurrencyFactorySession(t, session.fixture.baseURL, session.id)
+	if publicSession.Runtime.LifecycleControlStatus == nil || *publicSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("AWC selected session lifecycle = %#v, want existing SUCCEEDED mapping", publicSession.Runtime.LifecycleControlStatus)
+	}
+	work := concurrencyWorkByID(t, session, response.WorkId)
+	if work.State == nil || work.State.Type == factoryapi.WorkStateTypeTERMINAL || work.State.Type == factoryapi.WorkStateTypeFAILED || strings.Contains(workContentText(t, work), session.marker+" output") {
+		t.Fatalf("AWC canceled Work became a business success/failure: %#v", work)
+	}
+	if got := admittedWorkDispatch(t, session, response); got != dispatchID || session.runner.callCount() != 1 || session.runner.activeCallCount() != 0 || session.runner.canceledCount() != 1 {
+		t.Fatalf("AWC selected dispatch/command changed: dispatch=%s calls=%d active=%d canceled=%d", got, session.runner.callCount(), session.runner.activeCallCount(), session.runner.canceledCount())
+	}
+	// Session control stops the runtime; it must not synthesize an ACCEPTED
+	// business completion for the held admitted Work.
+	for _, dispatch := range support.ObserveDispatchEvents(t, concurrencySessionEvents(t, session.fixture.baseURL, session.id)) {
+		if dispatch.DispatchID == dispatchID && dispatch.Response != nil && dispatch.Response.Outcome == factoryapi.WorkOutcomeAccepted {
+			t.Fatalf("AWC canceled dispatch has accepted success: %#v", dispatch)
+		}
+	}
+	t.Logf("AWC selected-session mapping: session=%s SUCCEEDED after CANCEL; work=%s state=%s; no accepted Work success/output", session.id, stringPointerValue(response.WorkId), work.State.Name)
+}
+
+func awaitAdmittedWorkTerminalPublication(t *testing.T, stream *support.FactoryResponseEventStream) {
+	t.Helper()
+	// The public response stream completes only after canonical SESSION_COMPLETED
+	// publication. Command return and the CANCEL acknowledgement do not join it;
+	// the Factory Event live stream can stop earlier. Drain buffered response
+	// frames before requiring natural EOF, then inspect the retained ledger.
+	deadline := time.Now().Add(concurrencySharedProcessTimeout)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatal("AWC timed out waiting for terminal publication")
+		}
+		result := stream.TryNextFrameResult(remaining)
+		switch result.Outcome {
+		case support.FactoryResponseEventStreamOutcomeFrame:
+			continue
+		case support.FactoryResponseEventStreamOutcomeEOF:
+			return
+		default:
+			t.Fatalf("AWC terminal publication: %s", result.Diagnostic())
+		}
+	}
+}
+
+func admittedWorkCancellationEvent(t *testing.T, session *concurrencySession) factoryapi.FactoryEvent {
+	t.Helper()
+	// Selected-session cancellation currently maps to a SUCCEEDED session
+	// bracket and leaves admitted Work incomplete. Keep that terminal mapping;
+	// the typed public CANCEL acknowledgement and command cancellation establish
+	// causality separately. The stopped live SSE stream is not the ledger.
+	events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeSessionCompleted {
+			continue
+		}
+		payload, err := event.Payload.AsSessionCompletedEventPayload()
+		if err == nil && payload.FinalStatus == factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+			if event.Context.SessionId == nil || *event.Context.SessionId != session.id {
+				t.Fatalf("AWC cancel terminal context = %#v, want selected session", event.Context)
+			}
+			return event
+		}
+	}
+	t.Fatalf("AWC session %s has no attributable canonical cancellation fact: %s", session.id, concurrencyEventSummary(events))
+	return factoryapi.FactoryEvent{}
+}
+
+func cancelAdmittedWorkSession(t *testing.T, session *concurrencySession) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+	endpoint := strings.TrimSuffix(session.fixture.baseURL, "/") + "/factory-sessions/" + url.PathEscape(session.id) + "/cancel"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("AWC build cancellation request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("AWC public session cancellation: %v", err)
+	}
+	defer response.Body.Close()
+	var control factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(response.Body).Decode(&control); err != nil {
+		t.Fatalf("AWC decode cancellation response: %v", err)
+	}
+	if (response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted) || control.SessionId != session.id ||
+		control.Operation != factoryapi.FactorySessionLifecycleControlKindCancel || control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+		control.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("AWC cancel status=%d response=%#v, want exact target ACCEPTED CANCEL with existing SUCCEEDED mapping", response.StatusCode, control)
+	}
+	return control
+}
+
+func completeAdmittedWork(t *testing.T, session *concurrencySession, stream *support.FactoryEventStream, response factoryapi.SubmitWorkResponse, call concurrencyStartedCall, marker string) {
+	t.Helper()
+	dispatchID := admittedWorkDispatch(t, session, response)
+	session.runner.releaseCall(call.index)
+	// Ordinary dispatch completion carries terminal Work in DISPATCH_RESPONSE;
+	// WORK_STATE_CHANGE is the separate operator-move contract.
+	awaitAdmittedWorkEvent(t, stream, func(event factoryapi.FactoryEvent) bool {
+		return event.Type == factoryapi.FactoryEventTypeDispatchResponse && stringPointerValue(event.Context.DispatchId) == dispatchID
+	})
+	session.runner.joinCalls(t)
+	work := concurrencyWorkByID(t, session, response.WorkId)
+	want := marker + " output COMPLETE"
+	if work.State == nil || work.State.Type != factoryapi.WorkStateTypeTERMINAL || work.State.Name != "complete" || workContentText(t, work) != want || session.runner.canceledCount() != 0 {
+		t.Fatalf("AWC surviving Work = %#v content=%q canceled=%d, want complete with exact %q", work, workContentText(t, work), session.runner.canceledCount(), want)
+	}
+	events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+	assertConcurrencyRequestDispatchTerminalCorrelation(t, session, events, response)
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		if dispatch.DispatchID == dispatchID && (dispatch.Response == nil || support.StringPointerValue(dispatch.Response.Output) != want) {
+			t.Fatalf("AWC surviving dispatch output = %#v, want exact %q", dispatch, want)
+		}
+	}
+	t.Logf("AWC completion session=%s request=%s work=%s dispatch=%s output=%q command-returned", session.id, response.RequestId, stringPointerValue(response.WorkId), dispatchID, want)
+}
+
+func assertAdmittedWorkEventIsolation(t *testing.T, first, second *concurrencySession) {
+	t.Helper()
+	for _, pair := range [][2]*concurrencySession{{first, second}, {second, first}} {
+		own, peer := pair[0], pair[1]
+		events := concurrencySessionEvents(t, own.fixture.baseURL, own.id)
+		for _, event := range events {
+			if event.Context.SessionId != nil && *event.Context.SessionId != own.id {
+				t.Fatalf("AWC event escaped session %s: %#v", own.id, event.Context)
+			}
+		}
+		encoded, err := json.Marshal(events)
+		if err != nil || strings.Contains(string(encoded), peer.marker) {
+			t.Fatalf("AWC session %s events contain peer marker %q (marshal error %v)", own.id, peer.marker, err)
+		}
+	}
 }
