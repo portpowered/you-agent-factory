@@ -219,8 +219,12 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 	if r.recording == nil || recordingID == "" {
 		return nil, nil
 	}
+	factorySessionID := req.Execution.Execution.FactorySessionID
+	if _, metadata, ok := r.loadObservationState(req.ID); ok && !metadata.direct {
+		factorySessionID = firstNonEmpty(metadata.sourceFactorySessionID, factorySessionID)
+	}
 	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
-		RecordingID: recordingID, FactorySessionID: req.Execution.Execution.FactorySessionID,
+		RecordingID: recordingID, FactorySessionID: factorySessionID,
 		WorkerSessionID: publicWorkerID(req.ID), Topic: r.observationTopic(req.ID),
 	})
 }

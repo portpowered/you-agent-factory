@@ -285,6 +285,8 @@ type Observation struct {
 	Model           *string
 	ReasoningEffort *string
 	Direct          bool
+	// RuntimeID retains the admitting source owner for internal read routing.
+	RuntimeID string `json:"-"`
 	// FactorySessionID is the Factory Session that admitted this observation,
 	// when the runtime supplied one. Worker Sessions records the correlation but
 	// does not authorize or resolve a caller-selected scope here.

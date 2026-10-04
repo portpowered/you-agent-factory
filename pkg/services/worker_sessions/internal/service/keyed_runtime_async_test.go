@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -421,5 +422,71 @@ func assertScopedWorkerList(t *testing.T, fixture *perRuntimeAttemptFixture, sco
 	listed, listErr := fixture.service.ListWorkerSessionObservations(ctx, workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: scope, RuntimeID: fixture.request.ObservationRuntimeID})
 	if (listErr != nil && !errors.Is(listErr, workersessions.ErrObservationProjectionUnavailable)) || len(listed.Observations) != 1 || listed.Observations[0].WorkerSessionID != fixture.request.ID || listed.Observations[0].FactorySessionID != scope {
 		t.Fatalf("scoped list = %#v, %v", listed, listErr)
+	}
+}
+
+func TestKeyedRuntimeBufferedOutputUsesSourceOwnerAndDoesNotDuplicateStream(t *testing.T) {
+	t.Parallel()
+	for _, streamed := range []bool{false, true} {
+		t.Run(fmt.Sprint(streamed), func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			fixture := preparePerRuntimeAttemptFixture(t, "buffered", sink)
+			fixture.request.ObservationFactorySessionID = "source-owner"
+			attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if streamed {
+				request := perRuntimeProgressRequest(fixture)
+				request.Draft.Kind = workers.KindMessage
+				request.Draft.Phase = workers.PhaseCompleted
+				request.Draft.Payload = json.RawMessage(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"streamed"}]}`)
+				if _, err := fixture.service.PublishRecord(context.Background(), request); err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID)
+			result.Result.Output = "buffered"
+			if err := attempt.Complete(context.Background(), result, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := attempt.Complete(context.Background(), result, nil); err != nil {
+				t.Fatal(err)
+			}
+			records := sink.requestsFor(workersessions.Topic(fixture.request.ID, "source-owner"))
+			want := "buffered"
+			if streamed {
+				want = "streamed"
+			}
+			assertOneBufferedWorkerMessage(t, records, want)
+			if len(sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))) != 0 {
+				t.Fatal("routed correlation leaked to a second source topic")
+			}
+		})
+	}
+}
+
+func assertOneBufferedWorkerMessage(t *testing.T, records []events.AppendRequest, want string) {
+	t.Helper()
+	messages := 0
+	for index, record := range records {
+		draft := decodePerRuntimeDraft(t, record)
+		if draft.Kind == workers.KindMessage {
+			messages++
+			if index == 0 || index == len(records)-1 {
+				t.Fatalf("output is not bracketed by lifecycle records: %#v", records)
+			}
+			var payload workers.MessagePayload
+			if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != want {
+				t.Fatalf("message payload=%#v", payload)
+			}
+		}
+	}
+	if messages != 1 || decodePerRuntimeDraft(t, records[len(records)-1]).Phase != workers.PhaseCompleted {
+		t.Fatalf("retained output/terminal=%#v", records)
 	}
 }

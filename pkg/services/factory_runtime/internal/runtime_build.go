@@ -74,6 +74,10 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 		request = resolved
 		if progress != nil {
 			request.Correlation = correlation
+			request.Input.WorkflowContext = request.Input.WorkflowContext.Clone()
+			if request.Input.WorkflowContext != nil {
+				request.Input.WorkflowContext.SessionID = correlation.FactorySessionID
+			}
 			request.Input.ProgressPublisher = progress
 		}
 		request.Input.ProcessLifecycleObserver = observer
@@ -564,9 +568,6 @@ func (boundary runtimeWorkerSessionBoundary) Start(ctx context.Context, request 
 		return workersessions.StartResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 	request.Execution.Execution.RuntimeID = boundary.runtimeID
-	if strings.TrimSpace(request.Execution.Execution.FactorySessionID) == "" {
-		request.Execution.Execution.FactorySessionID = boundary.execution.factorySessionID
-	}
 	if strings.TrimSpace(request.Execution.Execution.GenerationID) == "" {
 		request.Execution.Execution.GenerationID = boundary.runtimeID
 	}

@@ -559,6 +559,9 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	if r.completeRetryableSupervision(id, supervision, snapshot, result, dispatchErr, priorState) {
 		return
 	}
+	if supervision.runtimeKey.RuntimeID != "" && dispatchErr == nil && snapshot.action == "" && result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCompleted {
+		r.publishBufferedWorkerOutput(id, snapshot.dispatchID, result.Result)
+	}
 	r.completeTerminalSupervision(id, supervision, snapshot, result, dispatchErr, priorState)
 }
 
@@ -814,7 +817,7 @@ func (r *registry) BeginRuntimeAttempt(
 	prepared, err := r.prepareInvocation(
 		context.WithoutCancel(ctx),
 		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
-		invocationPreparationOptions{runtimeOwned: true, observationRuntimeID: req.ObservationRuntimeID},
+		invocationPreparationOptions{runtimeOwned: true, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID},
 		executor,
 		clock,
 		scheduler,
@@ -977,7 +980,7 @@ func (r *registry) prepareRuntimeInvocation(
 	execution.Execution.Dispatch.DispatchID = attemptID
 	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry}
 	prepared, err := r.prepareInvocation(context.WithoutCancel(ctx), invoke,
-		invocationPreparationOptions{runtimeKey: key, observationRuntimeID: req.ObservationRuntimeID}, executor, clock, scheduler)
+		invocationPreparationOptions{runtimeKey: key, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID}, executor, clock, scheduler)
 	if err != nil {
 		r.releaseRuntimeAttemptKey(key, req.ID)
 	}

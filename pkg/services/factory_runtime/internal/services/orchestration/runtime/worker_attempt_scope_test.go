@@ -116,7 +116,7 @@ func TestWorkerSessionReadFallbackCarriesOwningFactoryScope(t *testing.T) {
 			_, streamErr := reader.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
 				WorkerSessionID: "recorded-worker", FactorySessionID: requested,
 			})
-			wantErr, wantCalls := probe.err, 3
+			wantErr, wantCalls := probe.err, 6
 			if requested == "replay-session" {
 				wantErr, wantCalls = workersessions.ErrObservationSessionNotFound, 0
 			}
@@ -128,7 +128,13 @@ func TestWorkerSessionReadFallbackCarriesOwningFactoryScope(t *testing.T) {
 			if len(probe.scopes) != wantCalls {
 				t.Fatalf("read calls = %d, want %d", len(probe.scopes), wantCalls)
 			}
-			for _, scope := range probe.scopes {
+			for index, scope := range probe.scopes {
+				if index%2 == 0 {
+					if scope != "" {
+						t.Fatalf("classification read must use bare identity, got %q", scope)
+					}
+					continue
+				}
 				if scope != "recording-session" {
 					t.Errorf("selected read scope = %q, want recording-session", scope)
 				}
@@ -299,7 +305,7 @@ func TestWorkerSessionReadTranslatesPublicScopeToImmutableExecutionOwner(t *test
 			_, transcriptErr := reader.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{
 				WorkerSessionID: "recorded-worker", FactorySessionID: requested,
 			})
-			wantErr, wantCalls := probe.err, 3
+			wantErr, wantCalls := probe.err, 6
 			if requested == "foreign-session" {
 				wantErr, wantCalls = workersessions.ErrObservationSessionNotFound, 0
 			}
@@ -311,7 +317,13 @@ func TestWorkerSessionReadTranslatesPublicScopeToImmutableExecutionOwner(t *test
 			if len(probe.scopes) != wantCalls {
 				t.Fatalf("read calls = %d, want %d", len(probe.scopes), wantCalls)
 			}
-			for _, scope := range probe.scopes {
+			for index, scope := range probe.scopes {
+				if index%2 == 0 {
+					if scope != "" {
+						t.Fatalf("classification read must use bare identity, got %q", scope)
+					}
+					continue
+				}
 				if scope != "~default" {
 					t.Fatalf("execution scope = %q, want ~default", scope)
 				}

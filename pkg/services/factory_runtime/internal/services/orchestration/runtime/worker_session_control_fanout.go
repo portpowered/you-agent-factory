@@ -243,7 +243,7 @@ func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
 	if err := req.Validate(); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	scope, err := s.observationReadScope(req.FactorySessionID)
+	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}

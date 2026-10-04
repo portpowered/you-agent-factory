@@ -46,10 +46,12 @@ type RuntimeAttemptRequest struct {
 	// ObservationRuntimeID identifies the runtime owning this attempt's fleet source.
 	// Routed child correlation may name a distinct execution runtime.
 	ObservationRuntimeID string
-	Key                  RuntimeAttemptKey
-	ID                   string
-	AttemptID            string
-	Execution            workers.WorkstationDispatchRequest
+	// ObservationFactorySessionID owns the source topic independently of routed execution correlation.
+	ObservationFactorySessionID string
+	Key                         RuntimeAttemptKey
+	ID                          string
+	AttemptID                   string
+	Execution                   workers.WorkstationDispatchRequest
 }
 
 // Validate rejects contradictory routing before opening a topic or capture.

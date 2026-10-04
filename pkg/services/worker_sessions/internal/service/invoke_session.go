@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -727,17 +728,18 @@ func retryableDispatchResult(result workers.WorkstationDispatchResult) bool {
 // its own exact resumability fact; resolved provider identity is carried by
 // the lifecycle record's provenance instead.
 type observation struct {
-	clock            platformclock.Source
-	workIDs          []string
-	turnID           string
-	attemptID        string
-	direct           bool
-	factorySessionID string
-	runtimeID        string
-	startedAt        time.Time
-	endedAt          *time.Time
-	tokenUsage       *workersessions.TokenUsage
-	usageModel       string
+	clock                  platformclock.Source
+	workIDs                []string
+	turnID                 string
+	attemptID              string
+	direct                 bool
+	factorySessionID       string
+	sourceFactorySessionID string
+	runtimeID              string
+	startedAt              time.Time
+	endedAt                *time.Time
+	tokenUsage             *workersessions.TokenUsage
+	usageModel             string
 }
 
 func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string, direct ...bool) time.Time {
@@ -771,8 +773,48 @@ func (r *registry) ensureObservationWithClock(
 	if len(runtimeIDs) > 0 {
 		r.observations[id].runtimeID = strings.TrimSpace(runtimeIDs[0])
 	}
+	if len(runtimeIDs) > 1 {
+		r.observations[id].sourceFactorySessionID = strings.TrimSpace(runtimeIDs[1])
+	}
 	r.indexObservationBySessionWorkLocked(id, r.observations[id])
 	return startedAt
+}
+
+// publishBufferedWorkerOutput retains successful buffered provider output before
+// the Worker terminal record. Streaming Workers already own their message
+// records; their returned result must not introduce a second copy.
+func (r *registry) publishBufferedWorkerOutput(id, attemptID string, result workers.WorkResult) {
+	output := result.Output
+	if output == "" && result.StructuredResult != nil {
+		raw, err := json.Marshal(result.StructuredResult)
+		if err != nil {
+			return
+		}
+		output = string(raw)
+	}
+	if output == "" {
+		return
+	}
+	pub := r.publicationFor(id)
+	if pub == nil {
+		return
+	}
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+	if pub.hasMessage || !pub.open {
+		return
+	}
+	payload, _ := json.Marshal(workers.MessagePayload{Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: output}}})
+	draft := workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseCompleted, Payload: payload, DispatchID: attemptID, Provenance: lifecycleProvenance(pub.provider)}
+	identity := events.AppendIdentity{SourceType: workersessions.WorkerObservationSourceType, SourceID: events.SourceID(publicWorkerID(id) + "/result"), SourceSequence: 1, SourceEventID: "result"}
+	_, err := r.appendDraft(context.Background(), r.observationTopic(id), identity, workersessions.WorkerObservationSchemaID, draft)
+	if err == nil {
+		pub.hasMessage = true
+	}
+
+	if err != nil {
+		r.logger.Warn("buffered Worker output publication failed", "workerSessionID", publicWorkerID(id), "attemptID", attemptID, "outcome", "publication_rejected")
+	}
 }
 
 func openingSessionPayload(

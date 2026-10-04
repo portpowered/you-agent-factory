@@ -789,3 +789,54 @@ func assertRecordedFactoryWorkerFrames(t *testing.T, response *http.Response, se
 		t.Fatalf("retained Factory Worker through %s: complete=%t terminal=%t", selector, complete, terminal)
 	}
 }
+
+// The direct API and remote CLI must agree when callers supply correlation;
+// runtime read addressing must neither replace that identity nor lose the Worker.
+func TestWorkerSessionHTTPCorrelatedDirectReadPreservesCallerIdentity(t *testing.T) {
+	t.Parallel()
+	gate := make(chan struct{})
+	runner := newFunctionalWorkerGate(gate)
+	server := startDirectWorkerSessionServer(t, runner)
+	payload := directWorkerSessionPayload("correlated-request", "correlated-worker", "correlated-dispatch")
+	payload.Execution.FactorySessionId = functionalStringPtr("~default")
+	workIDs := []string{"caller-work"}
+	payload.Execution.Dispatch.Execution = &factoryapi.WorkerSessionExecutionMetadata{WorkIds: &workIDs}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL()+"/worker-sessions", strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	admitted, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admitted.Body.Close()
+	if admitted.StatusCode != http.StatusAccepted {
+		t.Fatalf("admission status = %d", admitted.StatusCode)
+	}
+	runner.waitStarted(t)
+	stream, cancel := openWorkerSessionEventStream(t, server.URL(), "correlated-worker")
+	defer cancel()
+	defer stream.Body.Close()
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", server.URL(), "--json", "worker-sessions", "show", "--worker-session-id", "correlated-worker"})
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("remote show: %v; %s", err, inputs.Stderr())
+	}
+	if !strings.Contains(inputs.Stdout(), "caller-work") || !strings.Contains(inputs.Stdout(), "correlated-worker") {
+		t.Fatalf("show lost supplied identity: %s", inputs.Stdout())
+	}
+	close(gate)
+	runner.waitCompleted(t)
+	frames, err := readWorkerSessionEventStream(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCompletedWorkerSessionEvents(t, frames, "correlated-worker")
+	assertTerminalWorkerSessionScopeCompatibility(t, server.URL(), "correlated-worker", "COMPLETED")
+}

@@ -179,3 +179,29 @@ type selectedWorkerRecordingReader struct {
 func (reader *selectedWorkerRecordingReader) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
 	return reader.load(ctx, id)
 }
+
+func TestRuntimeWorkerResolutionRetainsDirectExecutionContext(t *testing.T) {
+	t.Parallel()
+	original := &workers.Context{SessionID: "resolved-owner"}
+	resolver := directSelectionResolver{context: original}
+	correlation := workers.ExecutionCorrelation{FactorySessionID: "worker-session", RuntimeID: "selected-runtime", GenerationID: "selected-runtime", DispatchID: "dispatch", AttemptID: "dispatch", RequestID: "request"}
+	progress := func(workers.ProgressFragment) {}
+	selected := runtimeWorkersServiceWithProgress{factorySessionID: "resolved-owner", workstationResolver: resolver, Service: selectionWorkers{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		if request.Correlation != correlation || request.Input.WorkflowContext.SessionID != correlation.FactorySessionID || request.Input.ProgressPublisher == nil {
+			t.Errorf("resolved execution lost admitted correlation: %#v", request)
+		}
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+	}}}
+	if _, err := selected.Execute(context.Background(), workers.ExecuteRequest{Correlation: correlation, Input: workers.ExecutionInput{ProgressPublisher: progress}}); err != nil {
+		t.Fatal(err)
+	}
+	if original.SessionID != "resolved-owner" {
+		t.Fatal("resolution mutated the retained workflow context")
+	}
+}
+
+type directSelectionResolver struct{ context *workers.Context }
+
+func (resolver directSelectionResolver) ResolveExecutionRequest(workers.WorkstationExecutionRequest) (workers.ExecuteRequest, error) {
+	return workers.ExecuteRequest{Input: workers.ExecutionInput{WorkflowContext: resolver.context}}, nil
+}

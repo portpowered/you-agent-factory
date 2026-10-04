@@ -77,6 +77,9 @@ func (a *runtimeAttempt) Complete(
 			r.finishControlHistory(controlHistory, controlOutcome, a.dispatchID, final.State)
 		}
 		if committed {
+			if state == workersessions.StateCompleted {
+				r.publishBufferedWorkerOutput(a.workerID, a.attemptID, result.Result)
+			}
 			r.logTerminal(a.workerID, a.attemptID, final)
 			r.publishTerminalRecordOrLog(
 				context.WithoutCancel(ctx),
@@ -996,7 +999,7 @@ func (r *registry) observationTopic(id string) events.Topic {
 	metadata := r.observations[id]
 	factorySessionID := ""
 	if metadata != nil && !metadata.direct {
-		factorySessionID = metadata.factorySessionID
+		factorySessionID = firstNonEmpty(metadata.sourceFactorySessionID, metadata.factorySessionID)
 	}
 	r.mu.RUnlock()
 	return workersessions.Topic(publicWorkerID(id), factorySessionID)

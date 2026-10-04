@@ -188,15 +188,16 @@ func (r *registry) waitForSupervisionDriver(ctx context.Context, id string) erro
 // readiness barrier and server-owned lifecycle admission around this same
 // preparation and supervision state machine.
 type invocationPreparationOptions struct {
-	serverOwned          bool
-	direct               bool
-	continuation         bool
-	runtimeOwned         bool
-	runtimeKey           workersessions.RuntimeAttemptKey
-	observationRuntimeID string
-	requestID            string
-	verifyTopicReady     bool
-	lineage              *workers.SessionLineage
+	serverOwned                 bool
+	direct                      bool
+	continuation                bool
+	runtimeOwned                bool
+	runtimeKey                  workersessions.RuntimeAttemptKey
+	observationRuntimeID        string
+	observationFactorySessionID string
+	requestID                   string
+	verifyTopicReady            bool
+	lineage                     *workers.SessionLineage
 }
 
 type invocationPreparation struct {
@@ -273,6 +274,7 @@ func (r *registry) prepareInvocation(
 		req.Execution.Execution.FactorySessionID,
 		clock,
 		firstNonEmpty(options.observationRuntimeID, req.Execution.Execution.RuntimeID),
+		options.observationFactorySessionID,
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
@@ -495,7 +497,8 @@ type publication struct {
 	// every call observed while open is false, whether that is because the
 	// session was only ever Reserved, its opening record has not yet
 	// committed, or its terminal record has already started committing.
-	open bool
+	open       bool
+	hasMessage bool
 	// lastSequence is the highest SourceSequence already accepted for each
 	// (SourceType, SourceID) this session has published, used to reject a
 	// record whose SourceSequence regresses behind one already committed.
@@ -593,6 +596,9 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 		return workersessions.PublishRecordResult{}, err
 	}
 	r.updateUsageProjection(req.SessionID, req.Draft)
+	if req.Draft.Kind == workers.KindMessage {
+		pub.hasMessage = true
+	}
 	pub.accepted[identity] = struct{}{}
 	if req.SourceSequence > pub.lastSequence[key] {
 		pub.lastSequence[key] = req.SourceSequence

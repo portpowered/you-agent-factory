@@ -47,11 +47,12 @@ func runtimeAttemptPreparation(
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
-				Key:                  workersessions.RuntimeAttemptKey{RuntimeID: executeRequest.Correlation.RuntimeID, DispatchID: executeRequest.Correlation.DispatchID},
-				ObservationRuntimeID: cfg.runtimeID,
-				ID:                   sessionID,
-				AttemptID:            executeRequest.Correlation.AttemptID,
-				Execution:            admissionRequest,
+				Key:                         workersessions.RuntimeAttemptKey{RuntimeID: executeRequest.Correlation.RuntimeID, DispatchID: executeRequest.Correlation.DispatchID},
+				ObservationRuntimeID:        cfg.runtimeID,
+				ObservationFactorySessionID: sessionIDFromFactoryConfig(cfg),
+				ID:                          sessionID,
+				AttemptID:                   executeRequest.Correlation.AttemptID,
+				Execution:                   admissionRequest,
 			},
 			execution,
 			clock,
@@ -680,7 +681,7 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if err := req.Validate(); err != nil {
 		return workersessions.Observation{}, err
 	}
-	scope, err := s.observationReadScope(req.FactorySessionID)
+	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
@@ -773,7 +774,7 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if err := req.Validate(); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
-	scope, err := s.observationReadScope(req.FactorySessionID)
+	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
@@ -927,4 +928,33 @@ func historicalTranscriptResult(
 		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate historical Worker Session transcript: %w", err)
 	}
 	return result, nil
+}
+
+// observationReadScopeForWorker preserves caller-supplied direct correlation.
+// Runtime aliases translate Factory Workers only; a direct Worker remains at
+// its process-owned address, with explicit foreign selectors rejected first.
+func (s *recordedWorkerSessionObservation) observationReadScopeForWorker(ctx context.Context, workerSessionID, requested string) (string, error) {
+	scope, err := s.observationReadScope(requested)
+	if err != nil || s == nil || s.Service == nil || strings.TrimSpace(workerSessionID) == "" {
+		return scope, err
+	}
+	observation, lookupErr := s.Service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
+	if lookupErr != nil || !observation.Direct {
+		return scope, nil
+	}
+	actual := strings.TrimSpace(observation.FactorySessionID)
+	requested = strings.TrimSpace(requested)
+	if !s.directObservationScopeMatches(observation, requested, scope) {
+		return "", workersessions.ErrObservationSessionNotFound
+	}
+	return actual, nil
+}
+
+func (s *recordedWorkerSessionObservation) directObservationScopeMatches(observation workersessions.Observation, requested, scope string) bool {
+	actual := strings.TrimSpace(observation.FactorySessionID)
+	if actual != "" {
+		return requested == "" || actual == requested || actual == scope || actual == strings.TrimSpace(s.factorySessionID)
+	}
+	return requested == "" || requested == "~default" || scope == "~default" ||
+		(s.runtimeID != "" && observation.RuntimeID == s.runtimeID)
 }

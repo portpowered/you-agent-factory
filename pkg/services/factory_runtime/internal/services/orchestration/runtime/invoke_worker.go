@@ -660,11 +660,12 @@ func (f *factoryImpl) InvokeWorker(
 	result, err := opener.InvokeRuntimeSession(
 		context.WithoutCancel(ctx),
 		workersessions.RuntimeAttemptRequest{
-			Key:                  workersessions.RuntimeAttemptKey{RuntimeID: execution.Execution.RuntimeID, DispatchID: dispatchID},
-			ObservationRuntimeID: f.cfg.runtimeID,
-			ID:                   sessionID,
-			AttemptID:            sessionID,
-			Execution:            execution,
+			Key:                         workersessions.RuntimeAttemptKey{RuntimeID: execution.Execution.RuntimeID, DispatchID: dispatchID},
+			ObservationRuntimeID:        f.cfg.runtimeID,
+			ObservationFactorySessionID: sessionIDFromFactoryConfig(f.cfg),
+			ID:                          sessionID,
+			AttemptID:                   sessionID,
+			Execution:                   execution,
 		},
 		workersessions.RetryPolicy{MaxAttempts: req.MaxAttempts},
 		f.cfg.workerExecution,
