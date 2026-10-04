@@ -33,7 +33,7 @@ func registeredConstructionValues(pass *analysis.Pass) registeredValues {
 				}
 			case *ast.AssignStmt:
 				for i, left := range n.Lhs {
-					if id, ok := left.(*ast.Ident); ok {
+					if id, ok := ast.Unparen(left).(*ast.Ident); ok {
 						v.recordTuple(pass, id, n.Rhs)
 						if obj := pass.TypesInfo.Defs[id]; obj != nil && n.Tok.String() == ":=" && len(n.Lhs) == len(n.Rhs) {
 							v.initial[obj] = n.Rhs[i]
@@ -43,12 +43,12 @@ func registeredConstructionValues(pass *analysis.Pass) registeredValues {
 					}
 				}
 			case *ast.UnaryExpr:
-				if id, ok := n.X.(*ast.Ident); ok && n.Op.String() == "&" {
+				if id, ok := ast.Unparen(n.X).(*ast.Ident); ok && n.Op.String() == "&" {
 					v.mutated[pass.TypesInfo.ObjectOf(id)] = true
 				}
 			case *ast.RangeStmt:
 				for _, expr := range []ast.Expr{n.Key, n.Value} {
-					if id, ok := expr.(*ast.Ident); ok {
+					if id, ok := ast.Unparen(expr).(*ast.Ident); ok {
 						v.mutated[pass.TypesInfo.ObjectOf(id)] = true
 					}
 				}
@@ -62,7 +62,7 @@ func registeredConstructionValues(pass *analysis.Pass) registeredValues {
 	}
 	owners := map[ast.Expr]types.Object{}
 	for obj, expr := range v.initial {
-		owners[expr] = obj
+		owners[ast.Unparen(expr)] = obj
 	}
 	var safeObject func(types.Object, map[types.Object]bool) bool
 	safeObject = func(obj types.Object, visited map[types.Object]bool) bool {

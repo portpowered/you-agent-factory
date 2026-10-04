@@ -1066,6 +1066,7 @@ golangci-lint-run:
 
 repolint:
 	@mkdir -p $(REPOLINT_DIR)
+	$(GO) test ./internal/lint/analyzers
 	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
 	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
 	$(MAKE) lint-baseline-growth

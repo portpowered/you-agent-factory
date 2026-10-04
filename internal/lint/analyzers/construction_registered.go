@@ -14,8 +14,7 @@ import (
 )
 
 // RegisteredConstruction migrates qualified construction calls and references.
-// The legacy scanner still owns provider provenance
-// until their typed replacements are complete. Report mode never enables an owner.
+// Report mode never enables an owner.
 var RegisteredConstruction = registeredConstructionAnalyzer(RepositoryConstructionRegistry())
 
 type ConstructionFinding struct {
@@ -83,6 +82,16 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 			if fn, ok := decl.(*ast.FuncDecl); ok {
 				caller = registeredConstructionSymbol(pass.TypesInfo.Defs[fn.Name])
 			}
+			filename := unit + "/" + filepath.Base(pass.Fset.Position(file.Pos()).Filename)
+			approved := slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
+				return a.Caller == caller && a.FilePath == filename && a.Kind == "focused-provider"
+			})
+			recursive, debt := false, false
+			var indirect map[*ast.CallExpr]bool
+			if approved {
+				recursive, debt = helpers.providerPath(caller)
+				indirect = registeredIndirectProviderCalls(decl)
+			}
 			called := map[ast.Expr]bool{}
 			ast.Inspect(decl, func(node ast.Node) bool {
 				call, ok := node.(*ast.CallExpr)
@@ -98,13 +107,17 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 					if constructor.Symbol != callee || !registeredProhibitedKind(constructor, registry.Types) {
 						continue
 					}
-					filename := unit + "/" + filepath.Base(pass.Fset.Position(file.Pos()).Filename)
-					if slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
+					allowed := slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
 						return a.Caller == caller && a.Callee == callee && a.FilePath == filename
-					}) {
+					})
+					if allowed && !indirect[call] && !recursive && !debt {
 						continue
-					} // Provider dispatch analysis remains owned by the legacy scanner.
-					add(caller, callee, constructor, "registered-construction", call.Pos())
+					}
+					rule := "registered-construction"
+					if allowed && debt && !recursive && !indirect[call] {
+						rule = "unresolved-focused-provider-dispatch"
+					}
+					add(caller, callee, constructor, rule, call.Pos())
 				}
 				return true
 			})
@@ -138,7 +151,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 			})
 		}
 	}
-	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference", "required-dependency-bag",
+	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference", "unresolved-focused-provider-dispatch", "required-dependency-bag",
 		"required-dependency-guard", "required-receiver-guard", "required-dependency-assertion-guard", "unresolved-required-dependency-guard",
 		"service-getter-locator", "unresolved-service-getter-locator", "unresolved-service-getter-reference"), blocking, false)
 	return findings, nil
