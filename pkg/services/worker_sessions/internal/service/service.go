@@ -35,6 +35,9 @@ var ErrMissingEventsAppender = errors.New("worker sessions: events appender is r
 // runtime time source used for observation timing.
 var ErrMissingClock = errors.New("worker sessions: clock is required")
 
+// ErrMissingScheduler reports that deadline supervision has no supplied timer source.
+var ErrMissingScheduler = errors.New("worker sessions: scheduler is required")
+
 // ErrMissingProviderSessions reports that New was constructed without the
 // Provider Sessions read-side contract used to enrich worker observations.
 var ErrMissingProviderSessions = errors.New("worker sessions: provider sessions service is required")
@@ -103,6 +106,7 @@ type registry struct {
 	providerSessions         providersessions.Service
 	recording                recordings.WorkerSessionRecordingService
 	clock                    platformclock.Source
+	scheduler                platformclock.TimerSource
 	logger                   logging.Logger
 
 	// lifecycleCtx is owned by the process composition boundary. Request
@@ -129,12 +133,14 @@ var _ workersessions.Service = (*registry)(nil)
 // lifecycle, time, and Provider Sessions collaborators. A nil logger falls
 // back to logging.NoopLogger. A nil execution, Events appender, clock, or
 // Provider Sessions service is rejected: the registry cannot truthfully
-// supervise, time, or enrich an observation without each of them.
+// supervise, time, or enrich an observation without each of them. The supplied
+// scheduler owns safety deadlines independently of the fact clock.
 func New(
 	execution workers.Service,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
@@ -146,6 +152,9 @@ func New(
 	}
 	if clock == nil {
 		return nil, ErrMissingClock
+	}
+	if scheduler == nil {
+		return nil, ErrMissingScheduler
 	}
 	if providerSessions == nil {
 		return nil, ErrMissingProviderSessions
@@ -170,6 +179,7 @@ func New(
 		execution:                   execution,
 		events:                      eventsAppender,
 		clock:                       clock,
+		scheduler:                   scheduler,
 		providerSessions:            providerSessions,
 		recording:                   recording,
 		logger:                      logging.EnsureLogger(logger),
@@ -885,13 +895,6 @@ func cloneTranscriptTime(value *time.Time) *time.Time {
 	return &clone
 }
 
-func newSupervisionDeadlineTimer(clock platformclock.Source, timeout time.Duration) platformclock.Timer {
-	if timerSource, ok := clock.(platformclock.TimerSource); ok {
-		return timerSource.NewTimer(timeout)
-	}
-	return hostSupervisionDeadlineTimer{timer: time.NewTimer(timeout)}
-}
-
 func (r *registry) startDeadlineWatcher(id string, supervision *supervision, acceptedAt time.Time) {
 	timeout := resolvedHardExecutionTimeout(supervision.execution.Execution)
 	if timeout <= 0 {
@@ -912,7 +915,7 @@ func (r *registry) startDeadlineWatcher(id string, supervision *supervision, acc
 	if remaining < 0 {
 		remaining = 0
 	}
-	timer := newSupervisionDeadlineTimer(r.clock, remaining)
+	timer := r.scheduler.NewTimer(remaining)
 	go func() {
 		defer timer.Stop()
 		select {

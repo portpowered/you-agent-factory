@@ -63,8 +63,9 @@ func provideWorkerSessionsFactory(
 	providerSessions providersessions.Service,
 	logger logging.Logger,
 	recorder recordings.WorkerSessionRecordingService,
+	scheduler platformclock.TimerSource,
 ) factoryruntime.WorkerSessionsFactory {
-	return provideWorkerSessionsFactoryWithRecorder(eventsService, providerSessions, logger, recorder)
+	return provideWorkerSessionsFactoryWithRecorder(eventsService, providerSessions, logger, recorder, scheduler)
 }
 
 func provideWorkerSessionRecorder(
@@ -97,8 +98,9 @@ func provideWorkerSessionsFactoryWithRecorder(
 	providerSessions providersessions.Service,
 	logger logging.Logger,
 	recorder recordings.WorkerSessionRecordingService,
+	scheduler platformclock.TimerSource,
 ) factoryruntime.WorkerSessionsFactory {
 	return func(execution workers.Service, clock platformclock.Source) (workersessions.Service, error) {
-		return workersessionswire.NewService(execution, eventsService, logger, clock, providerSessions, recorder)
+		return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder)
 	}
 }

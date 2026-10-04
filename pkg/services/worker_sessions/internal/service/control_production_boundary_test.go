@@ -94,7 +94,7 @@ func newObservationService(
 	if projection == nil {
 		projection = unavailableProviderSessions{}
 	}
-	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, projection, nil)
+	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), projection, nil)
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}
@@ -831,4 +831,12 @@ func TestObservation_LiveSessionReportsNoTerminalReason(t *testing.T) {
 	if failure != nil {
 		t.Fatalf("observed reason for a RUNNING session = %#v, want none", failure)
 	}
+}
+
+// Existing clock-driven fixtures explicitly select their timer source here.
+func testSchedulerForClock(clock platformclock.Source) platformclock.TimerSource {
+	if scheduler, ok := clock.(platformclock.TimerSource); ok {
+		return scheduler
+	}
+	return platformclock.Real{}
 }

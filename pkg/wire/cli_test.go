@@ -14,6 +14,7 @@ import (
 	"time"
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -401,6 +402,7 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 		logging.NoopLogger{},
 		workerService,
 		nil,
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("provideLocalWorkerSessionsBoundary() error = %v", err)
@@ -457,6 +459,7 @@ func TestProvideLocalWorkerSessionsBoundaryRequiresWorkersService(t *testing.T) 
 		logging.NoopLogger{},
 		nil,
 		nil,
+		platformclock.Real{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
 		t.Fatalf("provideLocalWorkerSessionsBoundary(nil Workers service) error = %v, want required-service diagnostic", err)

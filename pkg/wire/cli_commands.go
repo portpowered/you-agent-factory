@@ -375,6 +375,7 @@ func provideLocalWorkerSessionsBoundary(
 	logger logging.Logger,
 	workerService workers.Service,
 	recording recordings.WorkerSessionRecordingService,
+	scheduler platformclock.TimerSource,
 ) (*localWorkerSessionsBoundary, error) {
 	if workerService == nil {
 		return nil, fmt.Errorf("construct local Worker Sessions boundary: Workers service is required")
@@ -390,6 +391,7 @@ func provideLocalWorkerSessionsBoundary(
 		eventsService,
 		logger,
 		platformclock.Real{},
+		scheduler,
 		providerSessions,
 		recording,
 	)

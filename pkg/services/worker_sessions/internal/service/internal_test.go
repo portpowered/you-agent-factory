@@ -94,7 +94,7 @@ func (l *controlClaimLogger) Info(message string, _ ...any) {
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), nil, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -429,7 +429,7 @@ func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsApp
 	} else {
 		var err error
 		service, err = New(unusedExecution{t: t}, sink, logging.NoopLogger{},
-			coverageClock{now: now}, unavailableProviderSessions{}, capture)
+			coverageClock{now: now}, platformclock.Real{}, unavailableProviderSessions{}, capture)
 		if err != nil {
 			t.Fatalf("New(%s): %v", suffix, err)
 		}
@@ -1394,7 +1394,7 @@ func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string) {
 		})
 		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 	}}
-	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, unavailableProviderSessions{}, nil)
+	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1664,7 +1664,7 @@ func assertRuntimeProviderBindingBeforeOutput(t *testing.T, fixture *perRuntimeA
 func newRuntimeIdentityRegistry(t *testing.T) *registry {
 	t.Helper()
 	service, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{},
-		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}, unavailableProviderSessions{}, nil)
+		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4355,10 +4355,10 @@ func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
 		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
 	}
 
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}, nil); !errors.Is(err, ErrMissingClock) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, platformclock.Real{}, unavailableProviderSessions{}, nil); !errors.Is(err, ErrMissingClock) {
 		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
 	}
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil, nil); !errors.Is(err, ErrMissingProviderSessions) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, platformclock.Real{}, nil, nil); !errors.Is(err, ErrMissingProviderSessions) {
 		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
 	}
 
@@ -6269,30 +6269,76 @@ func TestStreamObservationsByWorkerSessionIDRejectsDurableCursorOnLiveFallback(t
 	}
 }
 
-type sourceOnlyClock struct{}
-
-func (sourceOnlyClock) Now() time.Time { return time.Now() }
-
-func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
-	clock := sourceOnlyClock{}
-	deadlineTimer := newSupervisionDeadlineTimer(clock, time.Hour)
-	if deadlineTimer.C() == nil {
-		t.Fatal("host deadline timer channel is nil")
+func TestKeyedRuntimeSupervisorUsesSuppliedDeadlineScheduler(t *testing.T) {
+	t.Parallel()
+	facts := platformclock.NewDeterministic(time.Date(2035, 3, 4, 5, 6, 7, 0, time.UTC), time.Second)
+	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	started := make(chan struct{})
+	execution := coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		close(started)
+		<-ctx.Done()
+		return workers.ExecuteResult{Correlation: request.Correlation}, ctx.Err()
+	}}
+	svc, err := New(execution, newInternalTestEventsService(), logging.NoopLogger{}, facts, scheduler, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !deadlineTimer.Stop() {
-		t.Fatal("host deadline timer Stop() = false, want true")
+	r := svc.(*registry)
+	t.Cleanup(func() { _ = r.Stop(context.Background()) })
+	request := validStartRequest("selected-timer-worker", "selected-timer-dispatch")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	results := make(chan workersessions.InvokeSessionResult, 1)
+	go func() {
+		result, invokeErr := svc.InvokeSession(context.Background(), request)
+		if invokeErr != nil {
+			t.Errorf("InvokeSession: %v", invokeErr)
+		}
+		results <- result
+	}()
+	if err := waitControlledSignal(started, 30*time.Second); err != nil {
+		t.Fatal(err)
 	}
+	facts.SetTick(100)
+	session, err := svc.Get(context.Background(), workersessions.GetRequest{ID: request.ID})
+	if err != nil || session.State != workersessions.StateRunning {
+		t.Fatalf("fact-clock advance: session=%#v err=%v, want RUNNING", session, err)
+	}
+	scheduler.SetTick(5)
+	select {
+	case result := <-results:
+		if result.Session.State != workersessions.StateFailed || result.Session.Result == nil || result.Session.Result.Cause == nil || result.Session.Result.Cause.Kind != workersessions.FailureCauseTimeout {
+			t.Fatalf("selected scheduler expiry: %#v, want FAILED/TIMEOUT", result)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected scheduler did not terminalize the attempt")
+	}
+	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+	if err != nil || observation.EndedAt == nil || !observation.EndedAt.Equal(facts.Now()) {
+		t.Fatalf("retained terminal facts=%#v err=%v, want supplied fact time", observation, err)
+	}
+}
 
-	serviceRegistry := &registry{clock: clock}
+func TestKeyedRuntimeSupervisorRequiresDeadlineScheduler(t *testing.T) {
+	t.Parallel()
+	_, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, coverageClock{}, nil, unavailableProviderSessions{}, nil)
+	if !errors.Is(err, ErrMissingScheduler) {
+		t.Fatalf("missing scheduler: %v, want ErrMissingScheduler", err)
+	}
+}
+
+func TestDeadlineSupervisionCoversInactiveAndExpiredAttempts(t *testing.T) {
+	t.Parallel()
+	clock := coverageClock{now: time.Unix(1000, 0)}
+	serviceRegistry := &registry{clock: clock, scheduler: platformclock.NewDeterministic(time.Unix(0, 0), time.Second)}
 	noTimeout := newSupervision("session", "turn")
-	serviceRegistry.startDeadlineWatcher("session", noTimeout, time.Now())
+	serviceRegistry.startDeadlineWatcher("session", noTimeout, clock.Now())
 	inactive := newSupervision("session", "turn", workers.WorkstationDispatchRequest{
 		Execution: workers.WorkstationExecutionRequest{
 			WorkerType: "worker",
 			Timeout:    time.Second,
 		},
 	})
-	serviceRegistry.startDeadlineWatcher("session", inactive, time.Now())
+	serviceRegistry.startDeadlineWatcher("session", inactive, clock.Now())
 	acceptedWithoutAttempt := newSupervision("session", "turn", workers.WorkstationDispatchRequest{
 		Execution: workers.WorkstationExecutionRequest{
 			WorkerType: "worker",
@@ -6300,7 +6346,7 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 		},
 	})
 	acceptedWithoutAttempt.accepted = true
-	serviceRegistry.startDeadlineWatcher("session", acceptedWithoutAttempt, time.Now())
+	serviceRegistry.startDeadlineWatcher("session", acceptedWithoutAttempt, clock.Now())
 	expiredCancellation := make(chan struct{})
 	expired := newSupervision("expired", "turn", workers.WorkstationDispatchRequest{
 		Execution: workers.WorkstationExecutionRequest{
@@ -6313,8 +6359,8 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 	expired.installCancel(func() {
 		close(expiredCancellation)
 	})
-	serviceRegistry.startDeadlineWatcher("session", expired, time.Now().Add(-time.Hour))
-	expiredWait := time.NewTimer(time.Second)
+	serviceRegistry.startDeadlineWatcher("session", expired, clock.Now().Add(-time.Hour))
+	expiredWait := time.NewTimer(30 * time.Second)
 	defer expiredWait.Stop()
 	select {
 	case <-expiredCancellation:
@@ -6351,10 +6397,10 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 	} {
 		reconciliationSupervision.installCancelFailure(func() error { return cancelErr })
 		serviceRegistry.logger = logging.NoopLogger{}
-		serviceRegistry.reconcileOverdueAttempt("session", reconciliationSupervision, "dispatch", reconciliationAttemptDone, time.Now())
+		serviceRegistry.reconcileOverdueAttempt("session", reconciliationSupervision, "dispatch", reconciliationAttemptDone, clock.Now())
 	}
 	inactiveAttempt := newSupervision("inactive", "turn")
-	serviceRegistry.reconcileOverdueAttempt("session", inactiveAttempt, "inactive", make(chan struct{}), time.Now())
+	serviceRegistry.reconcileOverdueAttempt("session", inactiveAttempt, "inactive", make(chan struct{}), clock.Now())
 }
 
 func TestOpeningSessionContinuationPreservesExactResumeIdentity(t *testing.T) {
@@ -7385,7 +7431,7 @@ func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapt
 
 func newService(execution any, eventsAppender EventsAppender, logger logging.Logger) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -7403,7 +7449,7 @@ func newServiceWithRecording(
 	recording recordings.WorkerSessionRecordingService,
 ) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{}, recording)
+	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, recording)
 	if err != nil {
 		return nil, err
 	}
