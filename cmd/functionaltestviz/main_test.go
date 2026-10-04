@@ -61,20 +61,25 @@ func TestRunFunctionalSuiteCoverageAndFailureHandoff(t *testing.T) {
 			}
 			var stdout bytes.Buffer
 			err := runFunctionalSuite(cfg, &stdout, io.Discard, runner)
-			if tc.wantCode == 0 && err != nil {
-				t.Fatalf("run suite: %v", err)
-			}
-			if tc.wantCode != 0 {
-				var exitErr suiteExitError
-				if !errors.As(err, &exitErr) || exitErr.code != tc.wantCode {
-					t.Fatalf("error = %v, want suite exit %d", err, tc.wantCode)
-				}
-			}
+			assertSuiteTestExit(t, err, tc.wantCode)
 			if len(commands) != tc.wantCommands {
 				t.Fatalf("commands = %v, want %d", commands, tc.wantCommands)
 			}
 			assertSuiteTestArtifacts(t, cfg, stdout.String(), tc.coverageCode, tc.wantCode)
 		})
+	}
+}
+
+func assertSuiteTestExit(t *testing.T, err error, wantCode int) {
+	t.Helper()
+	if wantCode == 0 && err != nil {
+		t.Fatalf("run suite: %v", err)
+	}
+	if wantCode != 0 {
+		var exitErr suiteExitError
+		if !errors.As(err, &exitErr) || exitErr.code != wantCode {
+			t.Fatalf("error = %v, want suite exit %d", err, wantCode)
+		}
 	}
 }
 

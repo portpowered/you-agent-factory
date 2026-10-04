@@ -2232,9 +2232,6 @@ testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/servic
 testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::awaitDirectControlStart::deadline::2
 testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestContinue_ReturnsAtTheAdmissionBarrierBeforeCompletion::deadline::1
 testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestContinue_ReturnsAtTheAdmissionBarrierBeforeCompletion::deadline::2
-testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths::deadline::1
-testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths::deadline::2
-testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths::deadline::3
 testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestDeadlineSupervisionCoversInactiveAndHostTimerPaths::deadline::1
 testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestPublishRegisteredAttempt_CanceledBeforeAdmissionRetainsExactTerminal::deadline::1
 testsleep-deadline-test|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/internal_test.go::TestPublishRegisteredAttempt_CanceledBeforeAdmissionRetainsExactTerminal::deadline::2

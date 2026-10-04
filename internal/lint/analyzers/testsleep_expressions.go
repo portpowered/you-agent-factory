@@ -13,25 +13,7 @@ import (
 func timingKind(pass *analysis.Pass, node ast.Node) string {
 	switch node := node.(type) {
 	case *ast.CallExpr:
-		pkg, name := timingSymbol(pass, node.Fun)
-		if pkg == "time" {
-			switch name {
-			case "Sleep":
-				return "sleep"
-			case "After", "NewTimer", "AfterFunc":
-				if len(node.Args) > 0 && shortTimingDuration(pass, node.Args[0]) {
-					return "deadline"
-				}
-			}
-		}
-		if pkg == "context" && len(node.Args) == 2 {
-			if name == "WithTimeout" && shortTimingDuration(pass, node.Args[1]) {
-				return "deadline"
-			}
-			if name == "WithDeadline" && shortTimingDeadline(pass, node.Args[1]) {
-				return "deadline"
-			}
-		}
+		return timingCallKind(pass, node)
 	case *ast.BinaryExpr:
 		switch node.Op {
 		case token.LSS, token.LEQ, token.GTR, token.GEQ:
@@ -39,6 +21,29 @@ func timingKind(pass *analysis.Pass, node ast.Node) string {
 				(timingElapsed(pass, node.Y) && literalTimingDuration(pass, node.X)) {
 				return "elapsed"
 			}
+		}
+	}
+	return ""
+}
+
+func timingCallKind(pass *analysis.Pass, call *ast.CallExpr) string {
+	pkg, name := timingSymbol(pass, call.Fun)
+	if pkg == "time" {
+		switch name {
+		case "Sleep":
+			return "sleep"
+		case "After", "NewTimer", "AfterFunc":
+			if len(call.Args) > 0 && shortTimingDuration(pass, call.Args[0]) {
+				return "deadline"
+			}
+		}
+	}
+	if pkg == "context" && len(call.Args) == 2 {
+		if name == "WithTimeout" && shortTimingDuration(pass, call.Args[1]) {
+			return "deadline"
+		}
+		if name == "WithDeadline" && shortTimingDeadline(pass, call.Args[1]) {
+			return "deadline"
 		}
 	}
 	return ""
