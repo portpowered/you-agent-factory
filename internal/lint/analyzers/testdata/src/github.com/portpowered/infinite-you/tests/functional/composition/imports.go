@@ -10,4 +10,5 @@ import (
 	_ "github.com/portpowered/infinite-you/pkg/services/recordings/replay" // want `not allowed from list`
 	_ "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection" // want `not allowed from list`
 	_ "github.com/portpowered/infinite-you/pkg/wire" // want `not allowed from list`
- )
+	_ "github.com/portpowered/infinite-you/pkg/initializerlookalike"
+)

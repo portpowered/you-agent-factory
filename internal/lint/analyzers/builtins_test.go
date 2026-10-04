@@ -168,6 +168,7 @@ func builtinFixtures(t *testing.T) string {
 		"m/pkg/osboundary/allowed_test.go",
 		"m/pkg/osboundary/localexec/local.go",
 		"m/pkg/wire/profiles.go",
+		"github.com/portpowered/infinite-you/pkg/initializerlookalike/stub.go",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl/stub.go",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/tests/functional/composition/imports.go",
 
