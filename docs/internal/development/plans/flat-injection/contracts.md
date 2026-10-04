@@ -2174,7 +2174,7 @@ Boundary unit evidence covers nil pointer/function/interface, typed nil, explici
 This pair is the documentation prerequisite required by the operator decision
 of 2026-10-02. It proposes internal contracts only: no production export or
 runtime behavior changes in this PR. The native Current blocks below are
-verbatim excerpts at source pin `1f161491a902838853d99b4fd6f2706fd8d61d80`; Go import aliases retain their source
+verbatim excerpts at source pin `96b6986e720dc85c6187cfb2b376b009cac0f7a1`; Go import aliases retain their source
 meaning. Proposed operation declarations specify signatures, not compiling
 implementations or execution evidence.
 
