@@ -417,3 +417,7 @@ type disabledACP struct{ acp.Service }
 func (disabledACP) Resolve(providers.ID) (providers.ID, bool) { return "", false }
 func (disabledACP) Integrations() []providers.ACPIntegration  { return nil }
 func (disabledACP) Close(context.Context) error               { return nil }
+
+func (disabledACP) Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP provider continuation is unavailable"}
+}

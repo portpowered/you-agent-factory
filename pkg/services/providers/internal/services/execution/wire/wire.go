@@ -31,7 +31,7 @@ func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source, sched
 func NewService(
 	catalogService catalog.Service,
 	registrations ...execution.Registration,
-) (execution.Service, error) {
+) (execution.ContinuationService, error) {
 	return executionservice.New(catalogService, registrations...)
 }
 

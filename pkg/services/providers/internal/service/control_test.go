@@ -270,12 +270,12 @@ func TestControlAttempt_InjectedLoggersStayIsolated(t *testing.T) {
 		t.Run(attemptID, func(t *testing.T) {
 			t.Parallel()
 			logger := &recordingControlLogger{}
-			root, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.Service }{},
+			root, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.ContinuationService }{},
 				&stubACPService{}, nil, logger, &stubACPService{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			quietPeer, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.Service }{},
+			quietPeer, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.ContinuationService }{},
 				&stubACPService{}, nil, logging.NoopLogger{}, &stubACPService{})
 			if err != nil {
 				t.Fatal(err)

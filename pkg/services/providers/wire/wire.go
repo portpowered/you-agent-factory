@@ -162,7 +162,7 @@ func PrepareConfiguration(config Configuration) (Configuration, error) {
 
 // These aliases expose completed private roles to canonical composition.
 type CatalogService = catalog.Service
-type ExecutionService = execution.Service
+type ExecutionService = execution.ContinuationService
 type ACPService = acp.ContinuationService
 type Lifecycle = providerservice.Lifecycle
 type ExecutionRegistration = execution.Registration

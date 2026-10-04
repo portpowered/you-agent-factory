@@ -20,8 +20,8 @@ import (
 // Service fulfills the published Providers root contract.
 type Service struct {
 	catalog     catalog.Service
-	execution   execution.Service
-	acp         acp.Service
+	execution   execution.ContinuationService
+	acp         acp.ContinuationService
 	packagedACP []providers.ACPIntegration
 	lifecycle   Lifecycle
 	logger      logging.Logger
@@ -39,11 +39,13 @@ var _ providers.Service = (*Service)(nil)
 // subservice and exact lifecycle role. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
 // logging.NoopLogger{}. acpService is completed even for native-only hosts,
-// which supply an explicit disabled ACP implementation.
+// which supply an explicit disabled ACP implementation. Both execution roles
+// include continuation; unsupported operations are supplied explicitly rather
+// than discovered or substituted while dispatching an attempt.
 func NewWithACP(
 	catalogService catalog.Service,
-	executionService execution.Service,
-	acpService acp.Service,
+	executionService execution.ContinuationService,
+	acpService acp.ContinuationService,
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
 	lifecycle Lifecycle,
@@ -224,14 +226,7 @@ func (s *Service) dispatchContinuation(
 			return providers.ExecuteResult{}, bindErr
 		}
 		defer release()
-		continuation, ok := s.acp.(acp.ContinuationService)
-		if !ok {
-			return providers.ExecuteResult{}, providers.ExecuteFailure{
-				Kind:    providers.ExecuteFailureKindDependency,
-				Message: "ACP provider continuation is unavailable",
-			}
-		}
-		return continuation.Continue(ctx, canonical, request, reference)
+		return s.acp.Continue(ctx, canonical, request, reference)
 	}
 	canonicalProvider, err := s.catalog.ResolveProviderID(request.Provider)
 	if err != nil {
@@ -297,14 +292,7 @@ func (s *Service) executeNativeContinuation(
 	defer func() {
 		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
 	}()
-	continuation, ok := s.execution.(execution.ContinuationService)
-	if !ok {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindDependency,
-			Message: "provider continuation adapter is unavailable",
-		}
-	}
-	return continuation.Continue(attemptCtx, execution.ContinuationRequest{
+	return s.execution.Continue(attemptCtx, execution.ContinuationRequest{
 		ExecuteRequest: request,
 		ResumeSession:  &reference,
 	})

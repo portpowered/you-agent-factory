@@ -183,7 +183,7 @@ func missingSelectionPrerequisite(prerequisites []providers.Prerequisite) bool {
 	return false
 }
 
-type selectionExecutionStub struct{}
+type selectionExecutionStub struct{ internalExecutionStub }
 
 func (selectionExecutionStub) Execute(
 	context.Context,

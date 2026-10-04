@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	_ "github.com/portpowered/infinite-you/pkg/services/providers/internal/testutil/execution"
 )
 
@@ -227,4 +228,98 @@ func TestRootCloseUsesSuppliedLifecycleAndKeepsPeerIsolated(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (internalExecutionStub) Continue(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "provider continuation adapter is unavailable"}
+}
+
+func (internalDisabledACP) Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP provider continuation is unavailable"}
+}
+
+func TestRootDispatchContinuationUsesCompletedCapabilities(t *testing.T) {
+	t.Parallel()
+	for _, route := range []string{"native", "acp"} {
+		for _, outcome := range []struct {
+			name string
+			err  error
+		}{
+			{"success", nil},
+			{"dependency", providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "selected continuation unavailable"}},
+			{"canceled", context.Canceled},
+		} {
+			t.Run(route+"/"+outcome.name, func(t *testing.T) {
+				t.Parallel()
+				calls, ordinaryCalls := 0, 0
+				reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "exact-session"}
+				request := providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "continued-attempt", UserMessage: "next turn"}
+				observe := func(got providers.ExecuteRequest, ref providers.SessionRef) (providers.ExecuteResult, error) {
+					calls++
+					if got.Provider != request.Provider || got.AttemptID != request.AttemptID || got.UserMessage != request.UserMessage || ref != reference {
+						t.Fatalf("continuation input = (%#v, %#v), want (%#v, %#v)", got, ref, request, reference)
+					}
+					return providers.ExecuteResult{Content: "selected continuation"}, outcome.err
+				}
+				native := completedNativeContinuation{ordinaryCalls: &ordinaryCalls, run: observe}
+				peer := completedACPContinuation{run: observe, selected: route == "acp", ordinaryCalls: &ordinaryCalls}
+				root, err := NewWithACP(internalCatalogStub{}, native, peer, nil, logging.NoopLogger{}, internalDisabledACP{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if calls != 0 || ordinaryCalls != 0 {
+					t.Fatal("construction invoked an execution capability")
+				}
+				// Reusing the exact attempt after each return proves dispatch released its
+				// live binding, including when the supplied continuation failed.
+				for i := 0; i < 2; i++ {
+					result, err := root.dispatchContinuation(t.Context(), request, reference)
+					if result.Content != "selected continuation" || err != outcome.err {
+						t.Fatalf("dispatchContinuation() = (%#v, %v), want selected result and exact error %v", result, err, outcome.err)
+					}
+				}
+				if calls != 2 || ordinaryCalls != 0 {
+					t.Fatalf("continuation/ordinary calls = %d/%d, want 2/0", calls, ordinaryCalls)
+				}
+			})
+		}
+	}
+}
+
+type completedNativeContinuation struct {
+	internalExecutionStub
+	ordinaryCalls *int
+	run           func(providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error)
+}
+
+func (fixture completedNativeContinuation) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	*fixture.ordinaryCalls++
+	return providers.ExecuteResult{}, errors.New("ordinary execution must not be selected")
+}
+
+func (fixture completedNativeContinuation) Continue(_ context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
+	return fixture.run(request.ExecuteRequest, *request.ResumeSession)
+}
+
+type completedACPContinuation struct {
+	internalDisabledACP
+	selected      bool
+	ordinaryCalls *int
+	run           func(providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error)
+}
+
+func (fixture completedACPContinuation) Resolve(id providers.ID) (providers.ID, bool) {
+	return id, fixture.selected
+}
+
+func (fixture completedACPContinuation) Execute(context.Context, providers.ID, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	*fixture.ordinaryCalls++
+	return providers.ExecuteResult{}, errors.New("ordinary execution must not be selected")
+}
+
+func (fixture completedACPContinuation) Continue(_ context.Context, id providers.ID, request providers.ExecuteRequest, reference providers.SessionRef) (providers.ExecuteResult, error) {
+	if id != reference.Provider {
+		return providers.ExecuteResult{}, errors.New("ACP identity differs from exact reference")
+	}
+	return fixture.run(request, reference)
 }

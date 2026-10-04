@@ -34,6 +34,7 @@ type acpAwareGeneration struct {
 // outcome the real ACP session/cancel path normalizes StopReasonCancelled to
 // once Cancel names its exact attempt while cancelable.
 type acpAwareAttempt struct {
+	unavailableACPContinuation
 	provider providers.ID
 
 	started          chan struct{}
@@ -135,6 +136,7 @@ func (a *acpAwareAttempt) TryCancel(_ context.Context, generation acp.Generation
 // identity, so cross-provider isolation can be exercised through one root
 // Service the way two configured ACP integrations would be in production.
 type multiACPService struct {
+	unavailableACPContinuation
 	byProvider map[providers.ID]*acpAwareAttempt
 }
 
@@ -315,6 +317,7 @@ func TestControlAttempt_ACPTerminateAndPauseAreNeverSupportedAndLeaveAttemptRunn
 // TestControlAttempt_BlocksUntilSignaledNativeAttemptReturns proves it for
 // the native control path.
 type blockingACPAttempt struct {
+	unavailableACPContinuation
 	started        chan struct{}
 	cancelledSeen  chan struct{}
 	releaseAttempt chan struct{}
@@ -710,6 +713,7 @@ type sequentialGeneration struct {
 // releases", "generation B opens with the same identity", and "A's delayed
 // signal resumes" without any sleep-based timing.
 type sequentialACPService struct {
+	unavailableACPContinuation
 	provider providers.ID
 
 	mu         sync.Mutex

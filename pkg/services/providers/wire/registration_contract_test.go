@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 )
 
 func TestNewServiceUsesCompletedOwnersAndSelectedLifecycle(t *testing.T) {
@@ -73,6 +74,10 @@ type completedExecutionFixture struct {
 
 func (fixture completedExecutionFixture) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	return fixture.execute(ctx, request)
+}
+
+func (completedExecutionFixture) Continue(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "provider continuation adapter is unavailable"}
 }
 
 type completedACPFixture struct{ ACPService }

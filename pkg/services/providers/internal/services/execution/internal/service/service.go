@@ -24,11 +24,12 @@ type service struct {
 var _ execution.ContinuationService = (*service)(nil)
 
 // New constructs an inert execution service over one canonical catalog
-// authority and an immutable set of private adapter attempts.
+// authority and an immutable set of private adapter attempts. The returned
+// role includes exact-session continuation for direct injection into the root.
 func New(
 	catalogService catalog.Service,
 	registrations ...execution.Registration,
-) (execution.Service, error) {
+) (execution.ContinuationService, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers Execution: catalog is required")
 	}

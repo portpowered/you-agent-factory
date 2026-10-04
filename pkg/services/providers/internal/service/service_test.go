@@ -39,7 +39,7 @@ func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
-	var nilExecution execution.Service
+	var nilExecution execution.ContinuationService
 	service, constructionErr := providerservice.NewWithACP(catalogService, nilExecution, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if constructionErr == nil || service != nil {
 		t.Fatalf(
@@ -340,6 +340,7 @@ func TestRootRejectsMinimalReasoningEffortForClaude(t *testing.T) {
 var _ acp.Service = (*stubACPService)(nil)
 
 type stubACPService struct {
+	unavailableACPContinuation
 	provider        providers.ID
 	integrations    []providers.ACPIntegration
 	executeCalls    int
@@ -964,4 +965,16 @@ func (*stubExecution) Execute(
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, nil
+}
+
+// unavailableACPContinuation explicitly preserves the dependency outcome for
+// component fixtures whose ACP peer cannot resume a session.
+type unavailableACPContinuation struct{}
+
+func (unavailableACPContinuation) Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP provider continuation is unavailable"}
+}
+
+func (*stubExecution) Continue(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "provider continuation adapter is unavailable"}
 }
