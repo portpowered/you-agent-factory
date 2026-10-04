@@ -1,6 +1,14 @@
 // Real external ACP peer for the compiled-deliverable EOF boundary tests.
 const readline = require("node:readline");
 const mode = process.argv[2];
+const fs = require("node:fs");
+const attempts = process.argv[3];
+let disconnect = mode === "prompt-disconnect";
+if (mode === "disconnect-once") {
+  // Observe real launches, including an accidental retry of the failed request.
+  disconnect = !fs.existsSync(attempts);
+  fs.appendFileSync(attempts, disconnect ? "disconnect\n" : "success\n");
+}
 const input = readline.createInterface({ input: process.stdin });
 const result = (id, value) => JSON.stringify({ jsonrpc: "2.0", id, result: value }) + "\n";
 const flushAndExit = (payload) => process.stdout.write(payload, () => process.exit(0));
@@ -16,7 +24,7 @@ input.on("line", (line) => {
   } else if (request.method === "session/new") {
     process.stdout.write(result(request.id, { sessionId: "eof-fixture-session", configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "fixture", options: [{ value: "fixture", name: "Fixture" }] }] }));
   } else if (request.method === "session/prompt") {
-    if (mode === "prompt-disconnect") {
+    if (disconnect) {
       // A real pipe EOF before any result must remain a failed attempt.
       process.exit(0);
       return;
