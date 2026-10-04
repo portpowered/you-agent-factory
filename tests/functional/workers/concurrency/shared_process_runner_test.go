@@ -56,13 +56,15 @@ func concurrencyWorkstationConfig(maxRetries int) string {
 }
 
 type concurrencyStartedCall struct {
-	index   int
-	request platformprocess.CommandRequest
+	index    int
+	request  platformprocess.CommandRequest
+	returned chan struct{}
 }
 
 type concurrencyRunnerGate struct {
-	channel chan struct{}
-	once    sync.Once
+	channel  chan struct{}
+	returned chan struct{}
+	once     sync.Once
 }
 
 type concurrencyScenarioRunner struct {
@@ -102,6 +104,7 @@ func (runner *concurrencyScenarioRunner) Run(ctx context.Context, request platfo
 	defer func() {
 		runner.active.Add(-1)
 		runner.finished.Add(1)
+		close(call.returned)
 	}()
 
 	switch runner.behavior {
@@ -133,9 +136,9 @@ func (runner *concurrencyScenarioRunner) Run(ctx context.Context, request platfo
 func (runner *concurrencyScenarioRunner) record(request platformprocess.CommandRequest) concurrencyStartedCall {
 	runner.mu.Lock()
 	runner.next++
-	call := concurrencyStartedCall{index: runner.next, request: cloneConcurrencyCommandRequest(request)}
+	call := concurrencyStartedCall{index: runner.next, request: cloneConcurrencyCommandRequest(request), returned: make(chan struct{})}
 	runner.calls = append(runner.calls, call.request)
-	runner.gates[call.index] = &concurrencyRunnerGate{channel: make(chan struct{})}
+	runner.gates[call.index] = &concurrencyRunnerGate{channel: make(chan struct{}), returned: call.returned}
 	released := runner.releasedAll
 	runner.mu.Unlock()
 	runner.started <- call
@@ -234,6 +237,23 @@ func (runner *concurrencyScenarioRunner) waitCanceled(t testing.TB, timeout time
 	case <-time.After(timeout):
 		t.Fatalf("timed out waiting for canceled concurrency command")
 		return concurrencyStartedCall{}
+	}
+}
+
+func (runner *concurrencyScenarioRunner) joinCalls(t testing.TB) {
+	t.Helper()
+	runner.mu.Lock()
+	returned := make([]<-chan struct{}, 0, len(runner.gates))
+	for _, gate := range runner.gates {
+		returned = append(returned, gate.returned)
+	}
+	runner.mu.Unlock()
+	for _, done := range returned {
+		select {
+		case <-done:
+		case <-time.After(concurrencySharedProcessTimeout):
+			t.Errorf("owned concurrency command did not return")
+		}
 	}
 }
 

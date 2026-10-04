@@ -180,6 +180,91 @@ func (fixture *concurrencySharedProcessFixture) runSessionCancellationIsolation(
 	survivor.closeAndAssertGone(t)
 }
 
+// AWC-01–03 orders cancellation and recovery within this journey while other
+// explicit-session scenarios run in parallel on the same public process.
+func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *testing.T) {
+	t.Helper()
+	canceled := fixture.openCase(t, "AWC-A", 1, concurrencyRunnerHold, "cc09-canceled", "", 0)
+	ownAdmittedWorkSession(t, canceled, false)
+	canceledResponses := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(fixture.baseURL, canceled.id))
+	t.Cleanup(func() {
+		canceledResponses.Close()
+		canceledResponses.WaitClosed(concurrencySharedProcessTimeout)
+	})
+	survivor := fixture.openCase(t, "AWC-B", 1, concurrencyRunnerHold, "cc09-survivor", "", 0)
+	survivorEvents := ownAdmittedWorkSession(t, survivor, true)
+	first := submitConcurrencyWork(t, canceled, canceled.marker)
+	second := submitConcurrencyWork(t, survivor, survivor.marker)
+	canceledCall := canceled.runner.waitStarted(t, concurrencySharedProcessTimeout)
+	survivorCall := survivor.runner.waitStarted(t, concurrencySharedProcessTimeout)
+	if !commandRequestContains(canceledCall.request, canceled.marker) || !commandRequestContains(survivorCall.request, survivor.marker) ||
+		canceled.runner.activeCallCount() != 1 || survivor.runner.activeCallCount() != 1 ||
+		stringPointerValue(first.WorkId) == stringPointerValue(second.WorkId) {
+		t.Fatal("AWC readiness requires distinct admitted Works and both original commands held")
+	}
+	firstDispatch := admittedWorkDispatch(t, canceled, first)
+	secondDispatch := admittedWorkDispatch(t, survivor, second)
+	if firstDispatch == secondDispatch {
+		t.Fatal("AWC original dispatch identities are equal")
+	}
+	peerBefore := concurrencyWorkByID(t, survivor, second.WorkId)
+	peerEventsBefore := concurrencySessionEvents(t, fixture.baseURL, survivor.id)
+	control := cancelAdmittedWorkSession(t, canceled)
+	observedCancel := canceled.runner.waitCanceled(t, concurrencySharedProcessTimeout)
+	if observedCancel.index != canceledCall.index {
+		t.Fatalf("AWC canceled call = %d, want original %d", observedCancel.index, canceledCall.index)
+	}
+	canceled.runner.joinCalls(t)
+	awaitAdmittedWorkTerminalPublication(t, canceledResponses)
+	terminal := admittedWorkCancellationEvent(t, canceled)
+	t.Logf("AWC public control operation=%s outcome=%s status=%s", control.Operation, control.Outcome, control.Status)
+	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
+	if survivor.runner.activeCallCount() != 1 || survivor.runner.callCount() != 1 || survivor.runner.canceledCount() != 0 || channelClosed(survivorCall.returned) ||
+		!reflect.DeepEqual(peerBefore, concurrencyWorkByID(t, survivor, second.WorkId)) {
+		t.Fatal("AWC peer original command/Work changed during selected-session cancellation")
+	}
+	assertConcurrencyEventIDsUnchanged(t, peerEventsBefore, concurrencySessionEvents(t, fixture.baseURL, survivor.id), "peer session cancellation")
+	t.Logf("AWC-01 session=%s request=%s work=%s dispatch=%s cancel-event=%s command-canceled-and-returned; peer session=%s request=%s work=%s dispatch=%s held/uncanceled", canceled.id, first.RequestId, *first.WorkId, firstDispatch, terminal.Id, survivor.id, second.RequestId, *second.WorkId, secondDispatch)
+	completeAdmittedWork(t, survivor, survivorEvents, second, survivorCall, survivor.marker)
+	later := submitConcurrencyWork(t, survivor, "cc09-later")
+	laterCall := survivor.runner.waitStarted(t, concurrencySharedProcessTimeout)
+	if !commandRequestContains(laterCall.request, "cc09-later") || stringPointerValue(later.WorkId) == stringPointerValue(second.WorkId) || later.RequestId == second.RequestId {
+		t.Fatal("AWC recovery requires a distinct later admitted Work and command")
+	}
+	completeAdmittedWork(t, survivor, survivorEvents, later, laterCall, "cc09-later")
+	assertAdmittedWorkEventIsolation(t, canceled, survivor)
+	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
+}
+
+func ownAdmittedWorkSession(t *testing.T, session *concurrencySession, liveEvents bool) *support.FactoryEventStream {
+	t.Helper()
+	// Register before opening the stream or admitting Work, including failure
+	// paths. Close the owned session before joining commands, then drain the
+	// stream and remove its route; the parent process outlives all children.
+	var stream *support.FactoryEventStream
+	cleaned := false
+	cleanup := func() {
+		if cleaned {
+			return
+		}
+		cleaned = true
+		session.close(t)
+		session.runner.joinCalls(t)
+		if stream != nil {
+			stream.Close()
+			stream.WaitClosed(concurrencySharedProcessTimeout)
+		}
+		session.fixture.router.unregister(session.dir)
+	}
+	t.Cleanup(cleanup)
+	if liveEvents {
+		stream = support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(session.fixture.baseURL, session.id))
+		// Run our ordered cleanup before the stream helper's automatic Close.
+		t.Cleanup(cleanup)
+	}
+	return stream
+}
+
 type workerSessionCancellationScenario struct {
 	session          *concurrencySession
 	first            factoryapi.SubmitWorkResponse
