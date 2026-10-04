@@ -33,6 +33,7 @@ func registeredConstructionAnalyzer(registry ConstructionRegistry) *analysis.Ana
 		Name:       "registeredconstruction",
 		Doc:        "resolve classified construction calls and unresolved references with go/types",
 		ResultType: reflect.TypeOf([]ConstructionFinding{}),
+		FactTypes:  []analysis.Fact{new(registeredConstructionKindFact)},
 		Run:        func(pass *analysis.Pass) (any, error) { return runRegisteredConstruction(pass, registry) },
 	}
 }
@@ -68,6 +69,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 				hint: fmt.Sprintf("set=%s mode=%s; inject the classified collaborator through its focused provider", constructor.CapabilitySet, mode)})
 		}
 	}
+	scanRegisteredConstructionBags(pass, registry, add)
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
 			continue
@@ -125,7 +127,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 			})
 		}
 	}
-	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference"), blocking, false)
+	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference", "required-dependency-bag"), blocking, false)
 	return findings, nil
 }
 
