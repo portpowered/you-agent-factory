@@ -35,7 +35,7 @@ func TestResolveFromHomeFallbackPreservesAcceptedSemantics(t *testing.T) {
 	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
 	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
 
-	providersRoot, err := providerswire.NewService()
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

@@ -26,7 +26,7 @@ import (
 func SeedACPAgentProfile(t testing.TB, home, defaultTarget string, allowedTargets []string) {
 	t.Helper()
 
-	providersRoot, err := providerswire.NewService()
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

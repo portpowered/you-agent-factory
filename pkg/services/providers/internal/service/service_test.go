@@ -611,7 +611,7 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService(providerswire.WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
+	root, err := providerswire.NewService(catalogwire.NewProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -622,7 +622,7 @@ func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 			Readiness:     descriptor.Readiness,
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
-	})))
+	}))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -671,13 +671,13 @@ func TestRootConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := providerswire.NewService(providerswire.WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
+	root, err := providerswire.NewService(catalogwire.NewProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
 		probeCalls++
 		return catalog.ProbeFacts{}, nil
-	})))
+	}))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -893,7 +893,7 @@ func (session *mockPTYSession) Close() error { return nil }
 
 func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
-	service, err := providerswire.NewService(
+	service, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
 		providerswire.WithAgyPTYEffect(providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{})),
 	)
@@ -906,7 +906,7 @@ func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) pr
 func mustRootService(t *testing.T) *providerservice.Service {
 	t.Helper()
 
-	root, err := providerswire.NewService()
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}

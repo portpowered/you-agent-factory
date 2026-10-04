@@ -26,7 +26,7 @@ import (
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := NewService()
+	service, err := NewService(IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewService()
+	root, err := NewService(IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *test
 func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewService()
+	root, err := NewService(IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -157,7 +157,7 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 }
 
 func TestNewServiceBuildsUsableRoot(t *testing.T) {
-	root, err := NewService()
+	root, err := NewService(IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -216,7 +216,7 @@ launch: {posture: installed_executable, transport: stdio, command: 'agent''\tool
 		gotArguments = append([]string(nil), arguments...)
 		return exec.Command(os.Args[0], "-test.run=^TestGeneratedRuntimeExecutableReachesCommandFactoryLosslessly$")
 	}
-	root, err := NewService(
+	root, err := NewService(IdentityCatalogProbe,
 		WithACPIntegrations(integrations...),
 		WithCommandFactory(commandFactory),
 		WithExecutableLocator(fakeExecutableLocator{wantExecutable: wantExecutable}),
@@ -248,7 +248,7 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 	t.Parallel()
 
 	integration := providers.ACPIntegration{ID: "custom-acp", Name: "custom-acp", Transport: "stdio", Command: "custom-agent --acp"}
-	root, err := NewService(
+	root, err := NewService(IdentityCatalogProbe,
 		WithACPIntegrations(integration),
 		WithCommandFactory(nil),
 		WithExecutableLocator(nil),
@@ -282,7 +282,7 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 		t.Fatalf("effectiveACPIntegrations(legacy package command) = %#v, want package runtime metadata preserved", legacySaved)
 	}
 
-	if _, err := NewService(WithACPIntegrations(providers.ACPIntegration{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"})); err == nil {
+	if _, err := NewService(IdentityCatalogProbe, WithACPIntegrations(providers.ACPIntegration{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"})); err == nil {
 		t.Fatal("NewService(invalid command) error = nil")
 	}
 }
@@ -291,7 +291,7 @@ func TestACPConfigurationReusesInertRootAndPreservesCatalogAfterRejection(t *tes
 	t.Parallel()
 
 	commands := 0
-	root, err := NewService(WithCommandFactory(func(name string, args ...string) *exec.Cmd {
+	root, err := NewService(IdentityCatalogProbe, WithCommandFactory(func(name string, args ...string) *exec.Cmd {
 		commands++
 		return exec.Command(name, args...)
 	}))
@@ -352,7 +352,7 @@ func TestACPExecutionUsesTheInjectedStdioPipeFactory(t *testing.T) {
 	const id = providers.ID("acp-injected-channel")
 	sentinel := errors.New("injected stdio channel unavailable")
 	calls := 0
-	root, err := NewService(
+	root, err := NewService(IdentityCatalogProbe,
 		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-channel-agent acp"}),
 		WithCommandFactory(exec.Command),
 		WithExecutableLocator(fakeExecutableLocator{"acp-channel-agent": "/injected/acp-channel-agent"}),
@@ -391,7 +391,7 @@ func TestACPExecutionWithoutStdioPipeFactoryFailsClosed(t *testing.T) {
 
 	const id = providers.ID("acp-missing-channel")
 	commands := 0
-	root, err := NewService(
+	root, err := NewService(IdentityCatalogProbe,
 		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-missing-channel-agent acp"}),
 		WithCommandFactory(func(name string, arguments ...string) *exec.Cmd {
 			commands++
@@ -435,7 +435,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 
 	service, err := NewService(
-		WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
+		catalogwire.NewProbeOperation(func(
 			_ context.Context,
 			descriptor providers.Descriptor,
 		) (catalog.ProbeFacts, error) {
@@ -444,7 +444,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 				Readiness:     descriptor.Readiness,
 				Prerequisites: descriptor.Prerequisites,
 			}, nil
-		})),
+		}),
 		WithCommandRunner(platformRunner),
 		WithWorkersCommandRunner(workersRunner),
 		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{})),
@@ -501,7 +501,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewService()
+	root, err := NewService(IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -539,7 +539,7 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	agyLocator := fakeExecutableLocator{"agy": agyPath}
 	agyInspector := fakeExecutableInspector{agyPath: fakeExecutableInfo{directory: false}}
 
-	root, err := NewService(
+	root, err := NewService(IdentityCatalogProbe,
 		WithWorkersCommandRunner(workersRunner),
 		WithAgyCommandClock(platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
 		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy})),
@@ -586,7 +586,7 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := NewService(WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
+	root, err := NewService(catalogwire.NewProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -595,7 +595,7 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 			Readiness:     descriptor.Readiness,
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
-	})))
+	}))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -679,7 +679,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := NewService(WithCatalogProbeOperation(catalogwire.NewProbeOperation(func(
+	root, err := NewService(catalogwire.NewProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -688,7 +688,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 			Readiness:     descriptor.Readiness,
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
-	})))
+	}))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -756,7 +756,7 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 		})
 	}
 
-	service, err := NewService()
+	service, err := NewService(IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() error = %v, want successful construction with required ports", err)
 	}

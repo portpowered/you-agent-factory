@@ -195,7 +195,7 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 }
 
 func testConfigService() operatorsettings.Service {
-	providersRoot, err := providerswire.NewService()
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		panic(err)
 	}

@@ -36,7 +36,7 @@ func newConfiguredProvidersService(
 	options = append(options, providerswire.WithAgyCommandRunner(
 		workerswire.NewProviderCommandRunner(agyRunner),
 	))
-	return providerswire.NewService(options...)
+	return providerswire.NewService(providerswire.IdentityCatalogProbe, options...)
 }
 
 type modelsProcessLauncher struct {

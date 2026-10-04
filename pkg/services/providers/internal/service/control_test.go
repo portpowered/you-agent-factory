@@ -304,7 +304,7 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 	t.Parallel()
 
 	logger := &recordingControlLogger{}
-	root, err := providerswire.NewService(providerswire.WithLogger(logger))
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe, providerswire.WithLogger(logger))
 	if err != nil {
 		t.Fatalf("providerswire.NewService() = %v", err)
 	}

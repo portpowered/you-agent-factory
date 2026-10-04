@@ -120,7 +120,7 @@ func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *t
 
 func newRoutedOperatorSettingsRoot(t *testing.T, fixture *sharedOperatorSettingsFixture) operatorsettings.Service {
 	t.Helper()
-	providersRoot, err := providerswire.NewService()
+	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

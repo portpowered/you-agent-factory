@@ -160,7 +160,7 @@ func TestSelectionContract_ValidatePrerequisitesUsesCatalogAuthority(t *testing.
 func newSelectionRoot(t *testing.T, entries ...providers.Descriptor) providers.Service {
 	t.Helper()
 
-	root, err := providerswire.NewService(
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		providerswire.WithCatalogDescriptors(entries...),
 	)
 	if err != nil {

@@ -37,7 +37,7 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *testing.T) {
 	command := newLiveSessionCommandRunner()
-	providerService, err := providerswire.NewService(
+	providerService, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		providerswire.WithWorkersCommandRunner(command),
 		providerswire.WithLogger(logging.NoopLogger{}),
 	)

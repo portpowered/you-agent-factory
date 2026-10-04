@@ -14,7 +14,7 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 	t.Parallel()
 
 	var root providers.Service
-	root, err := providerswire.NewService()
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -49,7 +49,7 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 func TestRootCatalogDelegation_RegistersCodexAdapter(t *testing.T) {
 	t.Parallel()
 
-	service, err := providerswire.NewService()
+	service, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -74,7 +74,7 @@ func TestProvidersRootWireBoundaryPublishesExternalRegistrationThroughService(t 
 	t.Parallel()
 
 	integration := providerswire.ProgressingExternalIntegration("sealed-external", "sealed output")
-	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe, providerswire.WithRegistrations(providerswire.Registration{
 		Manifest: providerswire.Manifest{
 			ID:                           "sealed-external",
 			DisplayName:                  providerswire.LocalizedValue{Value: "Sealed External"},
@@ -131,7 +131,7 @@ func TestProvidersRootWireBoundaryRejectsExternalBypassBeforeInvocation(t *testi
 	t.Parallel()
 
 	integration := providerswire.ProgressingExternalIntegration("sealed-incapable", "must not execute")
-	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe, providerswire.WithRegistrations(providerswire.Registration{
 		Manifest: providerswire.Manifest{
 			ID:                         "sealed-incapable",
 			ImplementationAvailability: providerswire.ImplementationExternallySupplied,
@@ -172,7 +172,7 @@ func TestProvidersRootWireBoundaryRejectsNegotiatedExternalBypassBeforeInvocatio
 		negotiated: providerswire.NewCapabilitySet(providerswire.CapabilityPromptSubmission),
 		content:    "must not execute",
 	}
-	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe, providerswire.WithRegistrations(providerswire.Registration{
 		Manifest: providerswire.Manifest{
 			ID:                         string(integration.identity),
 			ImplementationAvailability: providerswire.ImplementationExternallySupplied,
@@ -207,7 +207,7 @@ func TestProvidersRootWireBoundaryRejectsNegotiatedExternalBypassBeforeInvocatio
 func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidation(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService()
+	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe)
 	if err != nil {
 		t.Fatalf("providers/wire.NewService() error = %v", err)
 	}
@@ -241,7 +241,7 @@ func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidatio
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			service, constructErr := providerswire.NewService(providerswire.WithRegistrations(test.registration))
+			service, constructErr := providerswire.NewService(providerswire.IdentityCatalogProbe, providerswire.WithRegistrations(test.registration))
 			if constructErr == nil || service != nil || !strings.Contains(constructErr.Error(), test.want) {
 				t.Fatalf("NewService(%s) = (%#v, %v), want nil service and error containing %q", test.name, service, constructErr, test.want)
 			}

@@ -160,7 +160,7 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		return nil, err
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
-	unsupportedProvider, err := providerswire.NewService(
+	unsupportedProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		providerswire.WithCommandRunner(route),
 		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,

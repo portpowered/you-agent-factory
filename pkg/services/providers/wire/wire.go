@@ -99,7 +99,6 @@ type Option interface {
 }
 
 type wireOptions struct {
-	catalogProbe       catalog.ProbeOperation
 	catalogDescriptors []providers.Descriptor
 	catalogOverrides   []catalog.CapabilityOverride
 	commandRunner      providerservice.CommandRunner
@@ -175,15 +174,12 @@ func WithStdioPipeFactory(factory platformprocess.StdioPipeFactory) Option {
 	return stdioPipesOption{factory: factory}
 }
 
-type catalogProbeOption struct {
-	probe catalog.ProbeOperation
-}
+// CatalogProbeOperation is the completed catalog readiness projection.
+type CatalogProbeOperation = catalog.ProbeOperation
 
-func (o catalogProbeOption) apply(opts *wireOptions) { opts.catalogProbe = o.probe }
-
-// WithCatalogProbeOperation supplies a completed catalog readiness projection.
-func WithCatalogProbeOperation(probe catalog.ProbeOperation) Option {
-	return catalogProbeOption{probe: probe}
+// IdentityCatalogProbe preserves detached catalog facts without readiness I/O.
+func IdentityCatalogProbe(ctx context.Context, descriptor providers.Descriptor) (providers.Descriptor, error) {
+	return catalogwire.IdentityProbe(ctx, descriptor)
 }
 
 type catalogDescriptorsOption struct{ descriptors []providers.Descriptor }
@@ -311,9 +307,9 @@ func WithLogger(logger logging.Logger) Option {
 
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
-// Missing required composition inputs fail with a deterministic construction
-// error and a nil service.
-func NewService(options ...Option) (providers.Service, error) {
+// The caller supplies the completed readiness projection; this boundary never
+// substitutes an identity projection for a missing effect.
+func NewService(probe CatalogProbeOperation, options ...Option) (providers.Service, error) {
 	var config wireOptions
 	for _, option := range options {
 		if option != nil {
@@ -332,12 +328,7 @@ func NewService(options ...Option) (providers.Service, error) {
 	for _, registration := range config.registrations {
 		descriptors = append(descriptors, registrationDescriptor(registration.Manifest))
 	}
-	config.catalogDescriptors = append(config.catalogDescriptors, descriptors...)
-	probe := config.catalogProbe
-	if probe == nil {
-		probe = catalogwire.IdentityProbe
-	}
-	catalogService, err := catalogwire.NewService(probe, config.catalogDescriptors, config.catalogOverrides)
+	catalogService, err := catalogwire.NewService(probe, append(config.catalogDescriptors, descriptors...), config.catalogOverrides)
 	if err != nil {
 		return nil, err
 	}
