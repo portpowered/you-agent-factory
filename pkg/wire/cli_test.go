@@ -14,6 +14,7 @@ import (
 	"time"
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -372,7 +373,7 @@ func TestModelsCLIInputFileReaderDefaultBoundsContent(t *testing.T) {
 func TestProvideSessionsCLIServiceReturnsConstructedAdapter(t *testing.T) {
 	t.Parallel()
 
-	standard, err := provideStandardCLIHTTPProtocol()
+	standard, err := provideStandardCLIHTTPProtocol(platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}
