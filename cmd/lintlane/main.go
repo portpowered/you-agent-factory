@@ -156,7 +156,7 @@ func parseLintJobs(raw string) (int, error) {
 }
 
 func prepareCheckerDriver(cfg config, stderr io.Writer) (string, func(), error) {
-	cacheDir, err := filepath.Abs(cfg.checkerCacheDir)
+	cacheDir, err := filepath.Abs(resolveCacheDir(cfg.checkerCacheDir))
 	if err != nil {
 		return "", func() {}, fmt.Errorf("resolve lint lane cache directory: %w", err)
 	}
@@ -392,4 +392,20 @@ func (b *lockedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// autoCacheDir selects a per-user cache directory shared by every worktree of
+// the same user. Cache entries are keyed by source content, never by checkout
+// path, so a fresh worktree reuses checkers compiled by another one.
+const autoCacheDir = "auto"
+
+func resolveCacheDir(dir string) string {
+	if strings.TrimSpace(dir) != autoCacheDir {
+		return dir
+	}
+	base, err := os.UserCacheDir()
+	if err != nil || base == "" {
+		return ".cache/lint-checkers"
+	}
+	return filepath.Join(base, "you-lint", "lint-checkers")
 }

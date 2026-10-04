@@ -219,7 +219,13 @@ BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependen
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
-LINT_CHECKER_CACHE_DIR ?= .cache/lint-checkers
+# "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
+# Entries are keyed by source content, never by checkout path, so a fresh worktree
+# reuses checkers another worktree compiled. Set a path to opt out.
+LINT_CHECKER_CACHE_DIR ?= auto
+# Memoizes the package-boundary base-tree scan per base commit and checker build.
+# Empty disables it.
+PACKAGE_BOUNDARY_BASELINE_CACHE_DIR ?= auto
 # Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
 LINT_CHECKER_FALLBACK ?= 0
 LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
@@ -1002,7 +1008,7 @@ pkg-file-count:
 	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
 
 pkg-boundary:
-	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
+	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
 	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 pkg-structure:
@@ -1176,7 +1182,7 @@ fmt-check:
 	fi
 
 vet:
-	$(GO) vet ./cmd/... ./contracts/... ./docs/... ./internal/... ./packages/... ./pkg/... ./scripts/... ./tests/... ./ui/...
+	$(GO) vet -trimpath ./cmd/... ./contracts/... ./docs/... ./internal/... ./packages/... ./pkg/... ./scripts/... ./tests/... ./ui/...
 
 deps:
 	$(GO) mod download
