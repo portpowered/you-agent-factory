@@ -43,19 +43,19 @@ func checkModelDiagnosticResult(mode,text string,result sessions.InvocationResul
   if mode=="model_fault_diagnostic"{expected=sessions.InvocationTerminalStatusFailed;code=string(sessions.InvocationErrorCodeRuntimeFailure)}
   if mode=="model_cancel_diagnostic"{expected=sessions.InvocationTerminalStatusCanceled;code=string(sessions.InvocationErrorCodeCanceled)}
  }
- if result.Status!=expected || result.ErrorCode!=code || result.RequestID!=text || result.SessionID=="" || result.WorkID==""{return fmt.Errorf("unexpected public model outcome: %#v",result)}
+ if result.Status!=expected || result.ErrorCode!=code || result.RequestID!=text || result.TraceID==""{return fmt.Errorf("unexpected public model outcome: %#v",result)}
  return nil
 }
 func TestLifecycleProfileDriverModelDiagnosticOutcomes(t *testing.T) {
  t.Parallel()
  for _,mode:=range []string{"model_diagnostic","model_fault_diagnostic","model_cancel_diagnostic"}{
-  result:=sessions.InvocationResult{RequestID:"profile-model-peer",SessionID:"session",WorkID:"work",Status:sessions.InvocationTerminalStatusCompleted}
+  result:=sessions.InvocationResult{RequestID:"profile-model-peer",TraceID:"trace",Status:sessions.InvocationTerminalStatusCompleted}
   if mode=="model_fault_diagnostic"{result.Status=sessions.InvocationTerminalStatusFailed;result.ErrorCode=string(sessions.InvocationErrorCodeRuntimeFailure)}
   if mode=="model_cancel_diagnostic"{result.Status=sessions.InvocationTerminalStatusCanceled;result.ErrorCode=string(sessions.InvocationErrorCodeCanceled)}
   if err:=checkModelDiagnosticResult(mode,result.RequestID,result,nil);err!=nil{t.Fatal(err)}
   wrong:=result;wrong.Status=sessions.InvocationTerminalStatusTimedOut
   if checkModelDiagnosticResult(mode,result.RequestID,wrong,nil)==nil{t.Fatal("timeout accepted as declared outcome")}
-  wrong=result;wrong.WorkID="";if checkModelDiagnosticResult(mode,result.RequestID,wrong,nil)==nil{t.Fatal("unattributed outcome accepted")}
+  wrong=result;wrong.TraceID="";if checkModelDiagnosticResult(mode,result.RequestID,wrong,nil)==nil{t.Fatal("unattributed outcome accepted")}
   cause:=errors.New("transport failed");if !errors.Is(checkModelDiagnosticResult(mode,result.RequestID,result,cause),cause){t.Fatal("original transport failure lost")}
  }
 }
