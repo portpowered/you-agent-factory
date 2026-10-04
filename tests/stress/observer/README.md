@@ -111,6 +111,12 @@ observation. Controlled zero Models activity leaves RQ-2-COMPOSED-CAPACITY
 unproven. Provider progress warnings and goroutine noise belong in the evidence,
 with no claim that this scenario proves real provider delivery or leak absence.
 
+At the original pin, leases calibration uses the existing two-argument
+constructor and coordinator binder; candidate calibration uses its existing
+three-argument constructor. Preparation adapts only test setup for that exact
+pin. The synchronized owner snapshots and lifecycle fixture are identical in
+meaning; neither constructor nor binding policy is changed in production.
+
 ## Observation semantics and limits
 
 Each real owner constructor registers its pointer identity and source. The

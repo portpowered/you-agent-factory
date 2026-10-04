@@ -64,9 +64,20 @@ def prepare(args):
     for path, existing, template in [(HOST, "execute_test.go", "host-tests.go.txt"), (LEASES, "service_test.go", "leases-tests.go.txt")]:
         original = (source / path / existing).read_text()
         imports = '\n "fmt"\n ' + IMPORT
+        calibration = (templates / template).read_text()
         if path == LEASES:
             imports += '\n "sync"'
-        add(path + "/" + existing, original.replace("import (", "import (" + imports, 1) + (templates / template).read_text())
+            if head == PIN:
+                # The original owner binds its coordinator after construction.
+                # Adapt only calibration setup; production overlay still just reads.
+                calibration = calibration.replace(
+                    "internalservice.New(clock, readySlotFacts{capacity: 2}, coordinator)",
+                    "internalservice.New(clock, readySlotFacts{capacity: 2})\n\tleaseswire.BindCoordinator(owner, coordinator)",
+                ).replace(
+                    "internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2}, noopCoordinator{})",
+                    "internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2})\n\tleaseswire.BindCoordinator(owner, &recordingSlotCapacityCoordinator{})",
+                )
+        add(path + "/" + existing, original.replace("import (", "import (" + imports, 1) + calibration)
     for template, virtual in [("collector-tests.go.txt", "pkg/platform/baselineobservation/hook_test.go"), ("q0-tests.go.txt", "tests/stress/observer/observer_test.go"), ("lifecycle-tests.go.txt", "tests/stress/observer/lifecycle_test.go"), ("report.go.txt", "tests/stress/observer/report_test.go"), ("report-tests.go.txt", "tests/stress/observer/report_validation_test.go")]:
         add(virtual, (templates / template).read_text())
     overlay = output / "overlay.json"
