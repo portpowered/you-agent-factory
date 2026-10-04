@@ -1,7 +1,10 @@
 package inference_test
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -20,6 +24,74 @@ const (
 )
 
 const providerExitNormalizationSessionID = "provider-exit-normalization-session"
+
+// A direct Worker Session retains its Provider Session on continuation. An
+// unsupported provider must fail the successor without starting fresh work.
+// Both commands use the package's reusable root process and an explicit session.
+func TestProviderUnsupportedContinuationDoesNotFreshStart(t *testing.T) {
+	t.Parallel()
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	group := sharedInferenceGroup
+	group.ensure(t)
+	const providerSessionID = "unsupported-continuation-session"
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{
+		Content:      "initial provider answer",
+		Continuation: (&providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: providerSessionID}).ContinuationRef(),
+	})
+	release, err := group.override.bind(dir, provider)
+	if err != nil {
+		t.Fatalf("bind provider: %v", err)
+	}
+	defer release()
+	sessionID := openSharedInferenceSession(t, group, dir)
+	defer closeSharedInferenceSession(t, group, sessionID)
+	document := map[string]any{
+		"requestId": sessionID + "-invoke", "workerSessionId": sessionID + "-source",
+		"execution": map[string]any{
+			"factorySessionId": sessionID, "workingDirectory": dir,
+			"workstationName": "direct", "workerType": "direct-worker", "runnerId": "codex",
+			"modelProvider": "codex", "model": "functional-model", "userMessage": "initial provider answer",
+			"dispatch": map[string]any{"dispatchId": sessionID + "-dispatch", "workstationName": "direct", "workerType": "direct-worker"},
+		},
+	}
+	raw, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal execution: %v", err)
+	}
+	path := filepath.Join(dir, "direct-execution.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write execution: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), sharedInferenceScenarioTimeout)
+	defer cancel()
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", path})
+	invoke.Input.Env = sharedInferenceProcessEnvironment(group.homeDir)
+	invoke.Input.WorkingDirectory = dir
+	if err := group.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("invoke: %v stdout=%s stderr=%s", err, invoke.Stdout(), invoke.Stderr())
+	}
+	var source factoryapi.WorkerSessionStartResponse
+	if err := json.Unmarshal([]byte(invoke.Stdout()), &source); err != nil {
+		t.Fatalf("decode source outcome: %v", err)
+	}
+	if !source.Accepted || source.State != "COMPLETED" || source.RequestId != sessionID+"-invoke" || source.WorkerSessionId != sessionID+"-source" {
+		t.Fatalf("source outcome = %#v", source)
+	}
+	continuation := support.FakeInputs(ctx, []string{
+		"you", "--json", "worker-sessions", "continue", sessionID + "-source",
+		"--request-id", sessionID + "-continue", "--successor-worker-session-id", sessionID + "-successor",
+		"--user-message", "must not start fresh",
+	})
+	continuation.Input.Env = sharedInferenceProcessEnvironment(group.homeDir)
+	continuation.Input.WorkingDirectory = dir
+	if err := group.process.Execute(continuation.Input); err == nil || !strings.Contains(continuation.Stderr(), "WORKER_SESSION_FAILED") ||
+		!strings.Contains(continuation.Stderr(), "family=terminal type=permanent_bad_request") {
+		t.Fatalf("unsupported successor: err=%v stdout=%s stderr=%s", err, continuation.Stdout(), continuation.Stderr())
+	}
+	if got := provider.CallCount(); got != 1 {
+		t.Fatalf("fresh attempts = %d, want only the initial attempt", got)
+	}
+}
 
 const (
 	failureRedactionPromptNeedle     = "probe-prompt-redaction-9f3a7c"
