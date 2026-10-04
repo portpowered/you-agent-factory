@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 const (
@@ -136,6 +134,28 @@ func AssertDocsPrerequisite(repoRoot string) error {
 // AssertNoPrivateNDJSONInProductionSurfaces scans supported CLI/API transport
 // production code for literals that would emit or accept private NDJSON records.
 func AssertNoPrivateNDJSONInProductionSurfaces(repoRoot string) error {
+	shouldSkipDir := func(scanRoot, path string, explicitSkips ...string) bool {
+		rel, err := filepath.Rel(scanRoot, path)
+		if err != nil {
+			return false
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "." {
+			return false
+		}
+		for _, part := range strings.Split(rel, "/") {
+			if strings.HasPrefix(part, ".") {
+				return true
+			}
+		}
+		for _, skip := range explicitSkips {
+			if rel == filepath.ToSlash(filepath.Clean(skip)) {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, relRoot := range productionSurfaceRoots {
 		absRoot := filepath.Join(repoRoot, filepath.FromSlash(relRoot))
 		err := filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
@@ -143,7 +163,7 @@ func AssertNoPrivateNDJSONInProductionSurfaces(repoRoot string) error {
 				return walkErr
 			}
 			if entry.IsDir() {
-				if contractguard.ShouldSkipDir(
+				if shouldSkipDir(
 					absRoot,
 					path,
 					"generated",
@@ -179,6 +199,28 @@ func AssertNoPrivateNDJSONInProductionSurfaces(repoRoot string) error {
 // AssertPublicTransportLayersDoNotImportLegacyCompat proves supported public
 // transport emitters do not depend on the legacy fragment compatibility mapper.
 func AssertPublicTransportLayersDoNotImportLegacyCompat(repoRoot string) error {
+	shouldSkipDir := func(scanRoot, path string, explicitSkips ...string) bool {
+		rel, err := filepath.Rel(scanRoot, path)
+		if err != nil {
+			return false
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "." {
+			return false
+		}
+		for _, part := range strings.Split(rel, "/") {
+			if strings.HasPrefix(part, ".") {
+				return true
+			}
+		}
+		for _, skip := range explicitSkips {
+			if rel == filepath.ToSlash(filepath.Clean(skip)) {
+				return true
+			}
+		}
+		return false
+	}
+
 	const legacyCompatImport = "responsestream/compat"
 	for _, relRoot := range productionSurfaceRoots {
 		absRoot := filepath.Join(repoRoot, filepath.FromSlash(relRoot))
@@ -187,7 +229,7 @@ func AssertPublicTransportLayersDoNotImportLegacyCompat(repoRoot string) error {
 				return walkErr
 			}
 			if entry.IsDir() {
-				if contractguard.ShouldSkipDir(absRoot, path, "generated", "contracttests", "servertests") {
+				if shouldSkipDir(absRoot, path, "generated", "contracttests", "servertests") {
 					return filepath.SkipDir
 				}
 				return nil

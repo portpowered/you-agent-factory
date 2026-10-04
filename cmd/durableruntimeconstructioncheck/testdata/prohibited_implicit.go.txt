@@ -1,7 +1,0 @@
-package runtime
-
-func build(root string) {
-	NewJavaScriptRuntimeService(Config{PersistSessions: true})
-	NewLazyProjectStore(DirForProjectRoot(root))
-	_ = DirectoryStore{Dir: root}
-}

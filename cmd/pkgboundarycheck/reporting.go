@@ -5,12 +5,9 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-
-	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 func writeBoundaryFindings(writer io.Writer, findings scanResult) {
-	contractguard.WriteConstructionFindings(writer, findings.constructionFindings)
 	for _, finding := range findings.rootPackageFindings {
 		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] unapproved root package family: %s\n", finding.packagePath)
 		fmt.Fprintf(writer, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
