@@ -342,7 +342,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	modelsService, err := provideModelsService(edges2, v36, v50, v52, v66, v74, v75, wireModelNow, v78, v65, v79, assetHostPlatform, logger)
+	modelsService, err := provideModelsService(edges2, v36, v50, v52, v66, v74, v75, wireModelNow, v78, v65, v79, wireModelAssetRevisionResolver, assetHostPlatform, logger)
 	if err != nil {
 		return nil, err
 	}

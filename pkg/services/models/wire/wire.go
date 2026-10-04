@@ -124,21 +124,18 @@ func NewService(
 	resources *ResourceLimiter,
 	localExecution ScopedLocalExecution,
 	logger *zap.Logger, now func() time.Time, pullMetrics PullMetricsRecorder,
-	runtimeEvidence RuntimeEvidenceRecorder, legacyRevisionOverride func(context.Context, string) (string, error),
+	runtimeEvidence RuntimeEvidenceRecorder, resolveRevision func(context.Context, string) (string, error),
 	backendResolver BackendArtifactResolver, assetPlatform models.AssetHostPlatform,
 ) (models.Service, error) {
 	if isNilDependency(localExecution) {
 		return nil, fmt.Errorf("construct Models: scoped local execution is required")
-	}
-	if legacyRevisionOverride == nil {
-		legacyRevisionOverride = NewUnresolvedAssetRevisionResolver()
 	}
 	return modelsservice.NewRoot(
 		resources, localExecution.PullModelForScope, localExecution.InvokeLocal,
 		localExecution.CloseScope, localExecution.Close,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
 		logger, now, pullMetrics, runtimeEvidence,
-		legacyRevisionOverride, backendResolver, assetPlatform,
+		resolveRevision, backendResolver, assetPlatform,
 	)
 }
 

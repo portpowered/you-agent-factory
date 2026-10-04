@@ -353,11 +353,12 @@ func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeSco
 	resources *modelswire.ResourceLimiter, now modelNow,
 	localExecution modelswire.ScopedLocalExecution,
 	evidence modelswire.RuntimeEvidenceRecorder,
-	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform, backend *zap.Logger) (models.Service, error) {
+	resolver modelswire.BackendArtifactResolver, revision modelAssetRevisionResolver,
+	platform models.AssetHostPlatform, backend *zap.Logger) (models.Service, error) {
 	return modelswire.NewService(scopes, assets, catalog, host, inference, resources, localExecution,
 		backend, now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		evidence,
-		edges.ModelResolveHuggingFaceRevision, resolver, platform)
+		revision, resolver, platform)
 }
 func provideModelHostCompatibilityChecker(
 	edges serviceedges.Edges,
