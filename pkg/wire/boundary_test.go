@@ -124,19 +124,21 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	streams := factorysessionwire.NewStreamManager(state, factorysessionwire.NewStreamObserver(), responseRegistry, responses)
 	assembly, err := provideFactorySessionsAssembly(
 		registry, state, streams,
-		factorysessionwire.NewInvocationAuthority(state, platformclock.Real{}, nil),
+		func() factorysessionwire.InvocationService {
+			invoker, err := factorysessionwire.NewInvocationOwner(factorysessionwire.NewInvocationAuthority(state, platformclock.Real{}, nil), factorysessionwire.NewScopeControl(state, nil), nil, nil, nil, nil, factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }), provideInvocationWorkPolicy())
+			if err != nil {
+				t.Fatal(err)
+			}
+			return invoker
+		}(),
 		factorysessionwire.NewScopeControl(state, func(factoryruntime.RuntimeRun, factoryruntime.Clock) error { return nil }),
 		factorysessionwire.NewScopeActivation(state),
 		factoryruntime.NewSessionResultProjectionOperation(),
-		nil,
-		nil,
-		nil,
 		func() string { return "response-event-test-id" },
 		func() string { return "session-test-id" },
 		func() (string, error) { return t.TempDir(), nil },
 		platformfilesystem.Local{},
 		namedPathResolver,
-		factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		identity,
 		responses,

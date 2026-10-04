@@ -8,6 +8,12 @@ package wire
 
 import (
 	"fmt"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
+	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
+	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -90,6 +96,51 @@ type SessionState = sessionruntime.Service
 // InvocationAuthority selects the addressed generation for invocation queries.
 type InvocationAuthority = sessionservice.InvocationAuthority
 
+// InvocationService is the completed owner-private engine supplied to Assembly.
+type InvocationService = invocationservice.Service
+type InvocationTelemetry = sessioninvocation.SessionInvocationTelemetry
+type InvocationSpecialCase = sessioninvocation.SessionInvocationSpecialCase
+
+// NewInvocationOwner constructs the single reusable invocation engine.
+func NewInvocationOwner(authority InvocationAuthority, control SessionScopeControl, telemetry InvocationTelemetry, specialCase InvocationSpecialCase, interpolation factorydefinitions.InvocationInterpolationService, workTypes factorydefinitions.InvocationWorkTypeService, inputFiles fileeffects.InvocationInputReader, workPolicy InvocationWorkPolicy) (InvocationService, error) {
+	if inputFiles == nil {
+		return nil, fmt.Errorf("construct invocation: invocation input reader is required")
+	}
+	return sessioninvocation.NewSessionOwner(authority, control, telemetry, specialCase, interpolation, workTypes, inputFiles, workPolicy), nil
+}
+
+// NewInvocationTelemetry preserves selected metrics and addressed runtime logging.
+func NewInvocationTelemetry(state *SessionState, observability factorydefinitions.TTSObservabilityService, metrics InvocationMetricsRecorder, logger *zap.Logger) InvocationTelemetry {
+	return packagedtts.NewTelemetry(observability,
+		func(metric sessioninvocation.SessionInvocationMetric) {
+			metrics.RecordInvocationMetric(factorysessions.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
+		},
+		func(record sessioninvocation.SessionInvocationLogRecord) {
+			selectedLogger := logger
+			if sessionID, ok := record.Fields["session_id"].(string); ok {
+				if session := state.Resolve(sessionID); session != nil {
+					if bound := runtimebinding.SessionStateFrom(session); bound != nil && bound.Logger != nil {
+						selectedLogger = bound.Logger
+					}
+				}
+			}
+			invocationruntime.WriteLogRecord(selectedLogger, record)
+		},
+	)
+}
+
+func NewInvocationSpecialCase(observability factorydefinitions.TTSObservabilityService) InvocationSpecialCase {
+	return packagedtts.NewSpecialCase(observability)
+}
+
+// NewInvocationWorkPolicy supplies pure return policy without the Work root cycle.
+type InvocationWorkPolicy interface{ work.Service }
+
+// DisabledInvocationMetricsRecorder is the explicit optional-edge policy.
+type DisabledInvocationMetricsRecorder struct{}
+
+func (DisabledInvocationMetricsRecorder) RecordInvocationMetric(factorysessions.InvocationMetric) {}
+
 // NewInvocationAuthority constructs the independent invocation query adapter.
 func NewInvocationAuthority(state *SessionState, scheduler platformclock.TimerSource, projector factoryruntime.WorldStateProjector) InvocationAuthority {
 	return sessionservice.NewInvocationAuthority(state, scheduler, projector)
@@ -147,20 +198,16 @@ func NewRuntimeAssembly(
 	registry SessionRegistry,
 	state *SessionState,
 	streams StreamManager,
-	authority InvocationAuthority,
+	invoker invocationservice.Service,
 	control SessionScopeControl,
 	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService Identity,
 	responseStreams ResponseStreams,
@@ -169,18 +216,14 @@ func NewRuntimeAssembly(
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
-		registry, state, streams, authority, control, activation,
+		registry, state, streams, invoker, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
-		interpolation,
-		invocationWorkTypes,
-		ttsObservability,
 		eventIDs,
 		sessionIDs,
 		resolveHome,
 		directoryInspection,
 		namedPaths,
-		invocationInputFiles,
 		initialWorkFiles,
 		identityService,
 		responseStreams,

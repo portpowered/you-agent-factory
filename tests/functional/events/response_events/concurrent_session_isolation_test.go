@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -852,4 +855,107 @@ func assertCanceledIsolationHistory(t *testing.T, baseURL, canceledID string, ga
 		t.Fatal("canceled history has no typed stream_canceled terminal error")
 	}
 	assertResponseEventStreamResumesFromCursor(t, baseURL, canceledID, acknowledged)
+}
+
+// One immutable root graph serves independent explicit sessions. Only the
+// timeout/cancellation sequence is ordered, because peer health is its observer.
+func TestInjectedInvocationScopedTimeoutAndCancellationKeepPeerUsable(t *testing.T) {
+	t.Parallel()
+	gates := map[string]*isolatedCommandGate{}
+	for _, prompt := range []string{"injected-timeout-a", "injected-timeout-b"} {
+		gates[prompt] = &isolatedCommandGate{entered: make(chan context.Context, 4), release: make(chan struct{}), returned: make(chan error, 4), output: prompt + " COMPLETE"}
+	}
+	api := support.NewProcessAPIServer()
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{ProviderCommandRunner: &fourScopeCodexRunner{gates: gates}, APIServerStarter: api.Start})
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.CleanupProcess(t, process)
+	host := scaffoldConcurrentIsolationFactory(t, "injected-host")
+	home := t.TempDir()
+	inputs := support.FakeInputs(context.Background(), []string{"you", "run", "--factory", filepath.Join(host, "factory.json"), "--continuously", "--with-server", "--quiet", "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = host
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, host)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	t.Cleanup(func() { command.Stop(t) })
+	baseURL := api.WaitForURL(t)
+	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	var ids [2]string
+	for i, prompt := range []string{"injected-timeout-a", "injected-timeout-b"} {
+		ids[i] = support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt)).Session.Id
+		id := ids[i]
+		t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, id) })
+		warmup, err := postConcurrentIsolationInvocation(t.Context(), baseURL, id, prompt+"-warmup")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertConcurrentIsolationInvocationCompleted(t, concurrentIsolationInvocation{response: warmup}, "warmup "+prompt)
+	}
+	if _, err := sessions.Invoke(t.Context(), injectedInvocationRequest("missing", 0, false)); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing-session error=%v", err)
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := sessions.Invoke(canceled, injectedInvocationRequest(ids[0], 0, false)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("pre-admission cancellation=%v", err)
+	}
+	peer := make(chan concurrentIsolationInvocation, 1)
+	go func() {
+		response, err := postConcurrentIsolationInvocation(t.Context(), baseURL, ids[1], "injected-timeout-b")
+		peer <- concurrentIsolationInvocation{response: response, err: err}
+	}()
+	peerCtx := awaitInjectedProviderEntry(t, gates["injected-timeout-b"])
+	result := make(chan injectedInvocationOutcome, 1)
+	go func() {
+		value, err := sessions.Invoke(t.Context(), injectedInvocationRequest(ids[0], 2000, true))
+		result <- injectedInvocationOutcome{value, err}
+	}()
+	awaitInjectedProviderEntry(t, gates["injected-timeout-a"])
+	select {
+	case outcome := <-result:
+		if outcome.err != nil || outcome.value.Status != factorysessions.InvocationTerminalStatusTimedOut || outcome.value.WorkID == "" {
+			t.Fatalf("timeout outcome=%#v error=%v", outcome.value, outcome.err)
+		}
+	case <-time.After(concurrentIsolationTimeout):
+		t.Fatal("public invocation did not time out")
+	}
+	select {
+	case err := <-gates["injected-timeout-a"].returned:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("selected provider stop=%v", err)
+		}
+	case <-time.After(concurrentIsolationTimeout):
+		t.Fatal("timeout did not join selected provider")
+	}
+	support.WaitForSessionStopped(t, baseURL, ids[0], concurrentIsolationTimeout)
+	if peerCtx.Err() != nil {
+		t.Fatalf("peer canceled=%v", peerCtx.Err())
+	}
+	close(gates["injected-timeout-b"].release)
+	assertConcurrentIsolationInvocationCompleted(t, awaitConcurrentIsolationInvocation(t, peer), "injected-timeout-b")
+	next, err := postConcurrentIsolationInvocation(t.Context(), baseURL, ids[1], "injected-timeout-b-next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConcurrentIsolationInvocationCompleted(t, concurrentIsolationInvocation{response: next}, "injected-timeout-b")
+}
+
+type injectedInvocationOutcome struct {
+	value factorysessions.InvocationResult
+	err   error
+}
+
+func injectedInvocationRequest(id string, timeout int64, cancel bool) factorysessions.SessionInvokeRequest {
+	return factorysessions.SessionInvokeRequest{SessionID: id, ContentProvided: true, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "owned invocation"}}, Wait: factorysessions.SessionOperationWait{TimeoutMillis: timeout, CancelOnTimeout: cancel}}
+}
+func awaitInjectedProviderEntry(t *testing.T, gate *isolatedCommandGate) context.Context {
+	t.Helper()
+	select {
+	case ctx := <-gate.entered:
+		return ctx
+	case <-time.After(concurrentIsolationTimeout):
+		t.Fatal("provider did not enter owned invocation")
+		return nil
+	}
 }

@@ -9,56 +9,12 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
 	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-// NewInvocationOwner constructs the canonical invocation owner from the
-// injected query authority and remaining session-owned effects.
-func NewInvocationOwner(
-	fs *SessionRuntime,
-	authority InvocationAuthority,
-	interpolation interfaces.InvocationInterpolationService,
-	invocationWorkTypes interfaces.InvocationWorkTypeService,
-	ttsObservability interfaces.TTSObservabilityService,
-	inputFiles fileeffects.InvocationInputReader,
-) (invocationservice.Service, error) {
-	if fs == nil {
-		return nil, fmt.Errorf("session runtime is required")
-	}
-	return sessioninvocation.NewSessionOwner(
-		authority,
-		fs.scopeControl,
-		packagedtts.NewTelemetry(
-			ttsObservability,
-			func(metric sessioninvocation.SessionInvocationMetric) {
-				fs.recordInvocationMetric(metric.Name, metric.Labels)
-			},
-			func(record sessioninvocation.SessionInvocationLogRecord) {
-				invocationruntime.WriteLogRecord(fs.logger, record)
-			},
-		),
-		packagedtts.NewSpecialCase(ttsObservability),
-		interpolation,
-		invocationWorkTypes,
-		inputFiles,
-		work.NewInvocationPolicyService(),
-	), nil
-}
-
-func (fs *SessionRuntime) recordInvocationMetric(name string, labels map[string]string) {
-	if fs == nil || fs.invocationMetricsRecorder == nil {
-		return
-	}
-	fs.invocationMetricsRecorder.RecordInvocationMetric(factorysessions.InvocationMetric{Name: name, Labels: labels})
-}
 
 // invocationWaiterFallbackInterval bounds one event-driven wait iteration. The
 // canonical event subscription wakes the wait loop as soon as an

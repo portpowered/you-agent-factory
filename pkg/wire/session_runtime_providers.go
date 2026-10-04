@@ -599,19 +599,15 @@ func provideFactorySessionsAssembly(
 	registry factorysessionwire.SessionRegistry,
 	state *factorysessionwire.SessionState,
 	streams factorysessionwire.StreamManager,
-	authority factorysessionwire.InvocationAuthority,
+	invoker factorysessionwire.InvocationService,
 	control factorysessionwire.SessionScopeControl,
 	activation factorysessionwire.SessionScopeActivation,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directories factorysessionwire.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	identity factorysessionwire.Identity,
 	responseStreams factorysessionwire.ResponseStreams,
@@ -619,9 +615,9 @@ func provideFactorySessionsAssembly(
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, authority, control, activation, func() factoryruntime.JavaScriptCheckpointStore {
+	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, invoker, control, activation, func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
+	}, sessionResultProjection, eventIDs, sessionIDs, resolveHome, directories, namedPaths, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
 }
 
 func provideFactorySessionsService(
@@ -1177,4 +1173,10 @@ func provideProviderFromCommandRunnerFactory(
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
 	}
+}
+
+// provideInvocationWorkPolicy constructs only pure Work return policy, avoiding
+// the Work runtime resolver's dependency on the Sessions assembly.
+func provideInvocationWorkPolicy() factorysessionwire.InvocationWorkPolicy {
+	return work.NewInvocationPolicyService()
 }

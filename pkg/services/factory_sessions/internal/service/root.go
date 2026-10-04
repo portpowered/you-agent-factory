@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -29,20 +30,16 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams legacyservice.StreamManager,
-	authority legacyservice.InvocationAuthority,
+	invoker invocationservice.Service,
 	control legacyservice.SessionScopeControl,
 	activation legacyservice.SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
@@ -56,8 +53,8 @@ func NewAssembly(
 	if control == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scoped control is required")
 	}
-	if authority == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: invocation query authority is required")
+	if invoker == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: invocation owner is required")
 	}
 	if err := validateRootDependencies(
 		sessionResultProjection,
@@ -66,7 +63,6 @@ func NewAssembly(
 		resolveHome,
 		directoryInspection,
 		namedPaths,
-		invocationInputFiles,
 		initialWorkFiles,
 		identityService,
 		responseStreams,
@@ -77,19 +73,15 @@ func NewAssembly(
 		return nil, err
 	}
 	assemblyRole := legacyservice.NewAssembly(
-		registry, state, streams, authority, control, activation,
+		registry, state, streams, invoker, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
-		interpolation,
-		invocationWorkTypes,
-		ttsObservability,
 		clock,
 		eventIDs,
 		sessionIDs,
 		resolveHome,
 		directoryInspection,
 		namedPaths,
-		invocationInputFiles,
 		initialWorkFiles,
 		identityService,
 		responseStreams,
@@ -148,7 +140,6 @@ func validateRootDependencies(
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
@@ -170,9 +161,6 @@ func validateRootDependencies(
 	}
 	if namedPaths == nil {
 		return fmt.Errorf("construct Factory Sessions: named path resolver is required")
-	}
-	if invocationInputFiles == nil {
-		return fmt.Errorf("construct Factory Sessions: invocation input reader is required")
 	}
 	if initialWorkFiles == nil {
 		return fmt.Errorf("construct Factory Sessions: initial Work reader is required")
