@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 type config struct {
-	constructionRegistry            *contractguard.ConstructionRegistry
 	root                            string
 	packageRoot                     string
 	all                             bool
@@ -70,7 +67,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		return err
 	}
 
-	findings, err := scanRepo(cfg, policy)
+	findings, err := scanBoundaryRepo(cfg, policy)
 	if err != nil {
 		return err
 	}
@@ -87,7 +84,6 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 			writeBoundaryFindings(stdout, findings)
 			writeBaselineSummaries(stdout, findings)
 		} else {
-			contractguard.WriteConstructionFindings(stdout, findings.constructionFindings)
 			writeBoundaryFindings(stdout, testOnlyFindings)
 		}
 		writeClassifiedDependencyViolationCounts(stdout, classifiedDependencyCounts)
@@ -110,7 +106,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 }
 
 func countBlockingViolations(findings scanResult) int {
-	return contractguard.CountBlockingConstructionFindings(findings.constructionFindings) + countAlwaysBlockingViolations(findings) +
+	return countAlwaysBlockingViolations(findings) +
 		countProductionBoundaryViolations(findings)
 }
 
