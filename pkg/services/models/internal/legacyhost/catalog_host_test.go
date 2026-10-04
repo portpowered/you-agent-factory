@@ -8,6 +8,7 @@ import (
 	"time"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
 
@@ -499,4 +500,27 @@ func catalogFactoryConfig(includeResource bool) *testFactoryConfig {
 		}}
 	}
 	return cfg
+}
+
+type localSourceResolverAdapter struct {
+	inner localmodels.ManagedRuntimeSourceResolver
+}
+
+// DefaultManagedRuntimeSourceResolverAdapter exposes the production source resolver through modelhost.
+func DefaultManagedRuntimeSourceResolverAdapter() SourceResolver {
+	return localSourceResolverAdapter{inner: localmodels.DefaultManagedRuntimeSourceResolver()}
+}
+
+func (a localSourceResolverAdapter) Resolve(modelName, backend, loadPolicy, provider string) SourceResolution {
+	resource := apisurface.RuntimeResource{
+		Backend:    backend,
+		LoadPolicy: loadPolicy,
+		Provider:   provider,
+	}
+	resolution := a.inner.Resolve(modelName, &resource)
+	return SourceResolution{
+		SourceKind:    resolution.SourceKind,
+		SourceID:      resolution.SourceID,
+		ResolverNotes: resolution.ResolverNotes,
+	}
 }

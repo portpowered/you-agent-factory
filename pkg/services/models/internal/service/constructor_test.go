@@ -727,3 +727,38 @@ func assertIndividualExecutionCleanup(t *testing.T, root *modelsservice.Root, ct
 		t.Fatal("process close did not retire execution")
 	}
 }
+
+// Command workers without a supervised health endpoint must remain invocable
+// through the canonical scoped owner after retiring ScopedCompatHost.
+func TestRootScopedExecutionAllowsCommandWithoutSupervisedEndpoint(t *testing.T) {
+	t.Parallel()
+	root, host, runtime, _ := newScopedLocalRoot(t, nil, nil)
+	opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{Config: models.RuntimeScopeConfig{
+		CacheDirectory: "command-cache",
+		Runtime: models.RuntimeConfig{
+			BaseDirectory: "command-cache",
+			Resources: []models.RuntimeResource{{Name: "voice", Type: models.RuntimeResourceTypeModel,
+				Model: "voice", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND", Capacity: 1}},
+			Workers: []models.RuntimeWorker{{Name: "voice", Type: models.RuntimeWorkerTypeModel,
+				Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal, Command: "model-command",
+				Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}}},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := root.InvokeLocal(t.Context(), scopedLocalRootRequest(opened.Scope))
+	if err != nil || !result.Handled || result.Content != "command-cache|" || runtime.loads != 1 {
+		t.Fatalf("command invocation = %#v, %v; loads = %d", result, err, runtime.loads)
+	}
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	if len(host.active) != 0 || len(host.releases) != 1 {
+		t.Fatalf("command active/released leases = %d/%d", len(host.active), len(host.releases))
+	}
+	for lease, count := range host.releases {
+		if count != 1 {
+			t.Fatalf("lease %s released %d times", lease, count)
+		}
+	}
+}
