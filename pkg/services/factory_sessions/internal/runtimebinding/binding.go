@@ -670,13 +670,6 @@ func StopSession(
 	}
 	sessionID = session.ID
 	binding := BindingForSession(session)
-	if active := runtimeState.Active(); active != nil && active.SessionID == sessionID {
-		if successor := NextLiveSession(state, sessionID); successor != nil {
-			runtimeState.SetActive(active.Context, successor.ID, HandleFromSession(successor))
-		} else {
-			runtimeState.ClearActive()
-		}
-	}
 	var cleanupErrs []error
 	if stop != nil {
 		if err := stop(handle); err != nil &&
@@ -693,6 +686,11 @@ func StopSession(
 		return err
 	}
 	state.UnregisterGeneration(session)
+	successor := state.Resolve(sessionID)
+	if successor == nil {
+		successor = NextLiveSession(state, sessionID)
+	}
+	runtimeState.retireActive(sessionID, handle, successor)
 	return nil
 }
 

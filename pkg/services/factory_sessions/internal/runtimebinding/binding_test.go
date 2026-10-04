@@ -255,6 +255,72 @@ func TestStopSessionRetiresSessionWhenRuntimeAlreadyStopped(t *testing.T) {
 	}
 }
 
+func TestStopSessionFailedCleanupPreservesSelectionForRetry(t *testing.T) {
+	t.Parallel()
+	state := newRuntimeBindingState()
+	session := registerTestSession(state, "a")
+	peer := registerTestSession(state, "b")
+	t.Cleanup(func() { state.Unregister("a"); state.Unregister("b") })
+	var active runtimebinding.State
+	active.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
+	failure := errors.New("owned stop failed")
+	if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error { return failure }); !errors.Is(err, failure) {
+		t.Fatalf("failed stop = %v, want original failure", err)
+	}
+	if state.Resolve("a") != session || state.Resolve("b") != peer {
+		t.Fatal("failed cleanup lost its retryable record or peer")
+	}
+	if got := active.Current(nil); got != runtimebinding.HandleFromSession(session).RuntimeInstance() {
+		t.Fatal("failed cleanup redirected current runtime away from retryable session")
+	}
+	if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error { return nil }); err != nil {
+		t.Fatalf("retry stop = %v", err)
+	}
+	if state.Resolve("a") != nil || active.Current(nil) != runtimebinding.HandleFromSession(peer).RuntimeInstance() {
+		t.Fatal("successful retry did not retire A and select its live peer")
+	}
+}
+
+func TestStopSessionCleanupKeepsNewActiveSelection(t *testing.T) {
+	t.Parallel()
+	for _, selection := range []string{"replacement", "peer", "unselected replacement"} {
+		t.Run(selection, func(t *testing.T) {
+			t.Parallel()
+			state := newRuntimeBindingState()
+			old := registerTestSession(state, "a")
+			peer := registerTestSession(state, "b")
+			t.Cleanup(func() { state.Unregister("a"); state.Unregister("b") })
+			var active runtimebinding.State
+			active.SetActive(context.Background(), old.ID, runtimebinding.HandleFromSession(old))
+			var expected *livesession.LiveSession
+			selectedContext, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			err := runtimebinding.StopSession(state, &active, old.ID, func(factory.RuntimeRun) error {
+				expected = registerTestSession(state, "a")
+				if selection == "peer" {
+					expected = peer
+				}
+				if selection != "unselected replacement" {
+					active.SetActive(selectedContext, expected.ID, runtimebinding.HandleFromSession(expected))
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("stop = %v", err)
+			}
+			if active.Current(nil) != runtimebinding.HandleFromSession(expected).RuntimeInstance() {
+				t.Fatal("old cleanup replaced the new active runtime selection")
+			}
+			if selection != "unselected replacement" && active.Active().Context != selectedContext {
+				t.Fatal("old cleanup replaced the new selection's context")
+			}
+			if state.Resolve("a") == old || state.Resolve("a") == nil || state.Resolve("b") != peer {
+				t.Fatal("old cleanup retired a replacement or peer")
+			}
+		})
+	}
+}
+
 func TestOpaqueBindingRoutesSessionServiceAndCleanup(t *testing.T) {
 	t.Parallel()
 
