@@ -946,8 +946,9 @@ func (a *lateResolutionAssets) ResolveModelCache(ctx context.Context, config *mo
 // localExecutionFixture adapts the isolated executor to Root's operation port.
 // Production resolves scopes through the completed shared execution owner.
 type localExecutionFixture struct {
-	*Service
-	local *localExecutor
+	runtimeConfig models.RuntimeConfigLoader
+	assetPuller   localmodels.AssetPuller
+	local         *localExecutor
 }
 
 func (s *localExecutionFixture) PullModelForScope(ctx context.Context, request models.PullModelRequest) (models.PullResult, error) {

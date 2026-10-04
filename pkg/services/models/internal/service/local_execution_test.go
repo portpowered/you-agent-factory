@@ -952,10 +952,10 @@ func TestRuntimeServiceInvokeLocalSelectsConfigurationPerCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := &localExecutionFixture{Service: &Service{assetPuller: operationConfigAssets{}, runtimeConfigLookup: func() *models.RuntimeConfig {
+	runtime := &localExecutionFixture{assetPuller: operationConfigAssets{}, runtimeConfig: func() *models.RuntimeConfig {
 		calls++
 		return config
-	}}, local: executor}
+	}, local: executor}
 	request := scopedHandleRequest(t, "operation-config")
 	unmanaged := request
 	unmanaged.Worker.Type = "COMMAND"

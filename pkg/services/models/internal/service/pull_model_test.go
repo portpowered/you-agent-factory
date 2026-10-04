@@ -467,3 +467,45 @@ func TestRootScopedPullPreservesUnsupportedClassification(t *testing.T) {
 		t.Fatalf("unsupported pull error = %v", err)
 	}
 }
+
+func mustLoadedCatalogConfig(t *testing.T, factoryCfg *testFactoryConfig) *modelRuntimeConfig {
+	t.Helper()
+	return projectTestModelsRuntimeConfig(t.TempDir(), factoryCfg)
+}
+
+func catalogFactoryConfig(includeResource bool) *testFactoryConfig {
+	worker := modelRuntimeWorker{
+		Name:          "voice-local",
+		Type:          apisurface.RuntimeWorkerTypeModel,
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelLocality: apisurface.RuntimeModelLocalityLocal,
+		Operations: []apisurface.RuntimeOperation{{
+			Name: "TTS",
+			Inputs: []apisurface.RuntimeOperationSlot{{
+				Name:         "text",
+				ContentTypes: []string{apisurface.RuntimeContentTypeText},
+				Required:     true,
+			}},
+			Outputs: []apisurface.RuntimeOperationSlot{{
+				Name:         "audio",
+				ContentTypes: []string{apisurface.RuntimeContentTypeAudio},
+			}},
+		}},
+	}
+	cfg := &testFactoryConfig{
+		Name:    "factory",
+		Workers: []modelRuntimeWorker{worker},
+	}
+	if includeResource {
+		worker.Resources = []modelRuntimeResource{{Name: "omnivoice-cache", Capacity: 1}}
+		cfg.Resources = []modelRuntimeResource{{
+			Name:       "omnivoice-cache",
+			Type:       apisurface.RuntimeResourceTypeModel,
+			Capacity:   1,
+			Model:      "OMNIVOICE_Q4_K_M",
+			Backend:    "GGUF",
+			LoadPolicy: "ON_DEMAND",
+		}}
+	}
+	return cfg
+}

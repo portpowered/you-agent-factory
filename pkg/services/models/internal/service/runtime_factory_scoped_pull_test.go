@@ -973,15 +973,11 @@ func newLocalExecutor(
 
 func newLocalExecutionFixture(config models.RuntimeConfigLoader, host modelhost.Host,
 	assets localmodels.AssetPuller, runtime localmodels.Runtime, resources *localmodels.ResourceLimiter) (*localExecutionFixture, error) {
-	service, err := NewService(config, host, assets, zap.NewNop(), time.Now, nil)
-	if err != nil {
-		return nil, err
-	}
 	executor, err := newLocalExecutor(host, runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
 	if err != nil {
 		return nil, err
 	}
-	return &localExecutionFixture{Service: service, local: executor}, nil
+	return &localExecutionFixture{runtimeConfig: config, assetPuller: assets, local: executor}, nil
 }
 
 // prepareJoinedAssetFixture supplies selected operation data to the canonical asset planner.

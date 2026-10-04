@@ -293,13 +293,6 @@ func recordModelPullMetric(metrics modelseffects.PullMetricsRecorder, name strin
 	})
 }
 
-func (s *Service) logger() *zap.Logger {
-	if s == nil {
-		return nil
-	}
-	return s.loggerValue
-}
-
 func mergeMetricLabels(parts ...map[string]string) map[string]string {
 	merged := map[string]string{}
 	for _, part := range parts {
