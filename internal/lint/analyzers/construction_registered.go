@@ -94,34 +94,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 			}
 			called := map[ast.Expr]bool{}
 			scanRegisteredCalls(pass, registry, values, getters, decl, caller, filename, called, indirect, recursive, debt, add)
-			ast.Inspect(decl, func(node ast.Node) bool {
-				expr, ok := node.(ast.Expr)
-				if !ok {
-					return true
-				}
-				if id, ok := expr.(*ast.Ident); ok && pass.TypesInfo.Defs[id] != nil {
-					return false // Declarations introduce names; they do not reference constructors.
-				}
-				if called[expr] {
-					_, selector := expr.(*ast.SelectorExpr)
-					return !selector // An invoked closure still contains references in its body.
-				}
-				if values.safe[expr] && values.resolve(pass, expr, map[types.Object]bool{}) != (ConstructionSymbol{}) {
-					return false
-				}
-				callee := values.resolve(pass, expr, map[types.Object]bool{})
-				if getter, ok := getters[callee]; ok {
-					add(caller, callee, getter.Constructor, "unresolved-service-getter-reference", expr.Pos())
-					return false
-				}
-				for _, constructor := range registry.Constructors {
-					if constructor.Symbol == callee && registeredProhibitedKind(constructor, registry.Types) {
-						add(caller, callee, constructor, "unresolved-construction-reference", expr.Pos())
-						return false
-					}
-				}
-				return true
-			})
+			scanRegisteredReferences(pass, registry, values, getters, decl, caller, called, add)
 		}
 	}
 	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference", "unresolved-focused-provider-dispatch", "required-dependency-bag",
@@ -160,6 +133,40 @@ func scanRegisteredCalls(pass *analysis.Pass, registry ConstructionRegistry, val
 				rule = "unresolved-focused-provider-dispatch"
 			}
 			add(caller, callee, constructor, rule, call.Pos())
+		}
+		return true
+	})
+}
+
+func scanRegisteredReferences(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues,
+	getters map[ConstructionSymbol]registeredGetterFact, decl ast.Decl, caller ConstructionSymbol,
+	called map[ast.Expr]bool, add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
+) {
+	ast.Inspect(decl, func(node ast.Node) bool {
+		expr, ok := node.(ast.Expr)
+		if !ok {
+			return true
+		}
+		if id, ok := expr.(*ast.Ident); ok && pass.TypesInfo.Defs[id] != nil {
+			return false // Declarations introduce names; they do not reference constructors.
+		}
+		if called[expr] {
+			_, selector := expr.(*ast.SelectorExpr)
+			return !selector // An invoked closure still contains references in its body.
+		}
+		if values.safe[expr] && values.resolve(pass, expr, map[types.Object]bool{}) != (ConstructionSymbol{}) {
+			return false
+		}
+		callee := values.resolve(pass, expr, map[types.Object]bool{})
+		if getter, ok := getters[callee]; ok {
+			add(caller, callee, getter.Constructor, "unresolved-service-getter-reference", expr.Pos())
+			return false
+		}
+		for _, constructor := range registry.Constructors {
+			if constructor.Symbol == callee && registeredProhibitedKind(constructor, registry.Types) {
+				add(caller, callee, constructor, "unresolved-construction-reference", expr.Pos())
+				return false
+			}
 		}
 		return true
 	})

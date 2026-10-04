@@ -167,7 +167,7 @@ type registeredProviderParityCase struct {
 	count      int
 }
 
-func registeredProviderParityCases() []registeredProviderParityCase {
+func registeredProviderCycleCases() []registeredProviderParityCase {
 	return []registeredProviderParityCase{
 		{"pkg/registeredprovidercycles", "Case01", 1},
 		{"pkg/registeredprovidercycles", "Case02", 1},
@@ -203,6 +203,11 @@ func registeredProviderParityCases() []registeredProviderParityCase {
 		{"pkg/registeredprovidercycles", "Case41", 0},
 		{"pkg/registeredprovidercycles", "Case42", 0},
 		{"pkg/registeredprovidercycles", "Case43", 0},
+	}
+}
+
+func registeredProviderDispatchCases() []registeredProviderParityCase {
+	return []registeredProviderParityCase{
 		{"pkg/registeredproviderdebt", "Case06", 1},
 		{"pkg/registeredproviderdebt", "Case07", 1},
 		{"pkg/registeredproviderdebt", "Case08", 1},
@@ -252,4 +257,8 @@ func registeredProviderParityCases() []registeredProviderParityCase {
 		{"pkg/registeredproviderexecution", "Case11", 0},
 		{"pkg/registeredproviderexecution", "Case12", 0},
 	}
+}
+
+func registeredProviderParityCases() []registeredProviderParityCase {
+	return append(registeredProviderCycleCases(), registeredProviderDispatchCases()...)
 }
