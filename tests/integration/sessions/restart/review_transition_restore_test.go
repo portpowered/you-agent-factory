@@ -109,11 +109,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	assertRestoredReviewDispatchOwners(t, second.baseURL, second.sessionID, dispatchA, dispatchB)
 	activeObservation := evidence.capturePublicObservation(t, "successor-after-migration-with-active-owners", second.baseURL)
 	assertRestartPublicCounts(t, activeObservation, 1, 4, 2, 2)
-	// Terminal Worker Sessions left by the pre-resume attempt may still be
-	// listed for the same Work, so only the active set is exact.
-	if activeObservation.WorkerSessionCount < 2 || activeObservation.ActiveWorkerSessionCount != 2 {
-		t.Fatalf("active public Worker Session counts = total:%d active:%d, want 2/2\n%s", activeObservation.WorkerSessionCount, activeObservation.ActiveWorkerSessionCount, describeRestoredReviewWorkerSessions(t, second.baseURL))
-	}
+	assertRestoredReviewActiveWorkerSessions(t, second.baseURL, activeObservation)
 	evidence.addTiming("successor-ready-to-two-active-owners", time.Since(second.readyAt))
 	workerBarrier.releaseWorkers()
 	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskA, dispatchA, 30*time.Second)
@@ -308,4 +304,14 @@ func describeRestoredReviewWorkerSessions(t *testing.T, baseURL string) string {
 		}
 	}
 	return out.String()
+}
+
+// assertRestoredReviewActiveWorkerSessions requires exactly two active Worker
+// Sessions. Terminal sessions left by the pre-resume attempt may still be
+// listed for the same Work, so the total is only bounded below.
+func assertRestoredReviewActiveWorkerSessions(t *testing.T, baseURL string, observation restartPublicObservation) {
+	t.Helper()
+	if observation.WorkerSessionCount < 2 || observation.ActiveWorkerSessionCount != 2 {
+		t.Fatalf("active public Worker Session counts = total:%d active:%d, want active 2 and total >= 2\n%s", observation.WorkerSessionCount, observation.ActiveWorkerSessionCount, describeRestoredReviewWorkerSessions(t, baseURL))
+	}
 }
