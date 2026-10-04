@@ -615,6 +615,9 @@ func (r *registry) publishAttemptLineageRecord(
 	attemptNumber int,
 ) error {
 	currentDispatchID := attempt.Execution.Dispatch.DispatchID
+	r.mu.RLock()
+	clock := r.observationClockLocked(sessionID)
+	r.mu.RUnlock()
 	lineage := workers.SessionLineage{
 		PreviousDispatchID: previousDispatchID,
 		PreviousAttemptID:  previousDispatchID,
@@ -622,7 +625,7 @@ func (r *registry) publishAttemptLineageRecord(
 	payload := openingSessionPayload(
 		sessionID,
 		currentDispatchID,
-		r.clock.Now(),
+		clock.Now(),
 		attempt.Execution,
 		&lineage,
 	)

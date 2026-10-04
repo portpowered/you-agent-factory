@@ -6492,7 +6492,12 @@ func assertSelectedEffectsResult(t *testing.T, outcome string, result workersess
 
 func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 	t.Parallel()
-	r := newTestRegistry(t)
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := svc.(*registry)
 	facts := platformclock.NewDeterministic(time.Date(2035, 1, 2, 3, 4, 5, 0, time.UTC), time.Second)
 	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
 	calls := 0
@@ -6524,6 +6529,30 @@ func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
 	if err != nil || observation.EndedAt == nil || !observation.EndedAt.Equal(facts.Now()) {
 		t.Fatalf("selected retry terminal facts: %#v, %v", observation, err)
+	}
+	assertSelectedAttemptLineage(t, sink, request.ID, workers.AttemptReasonRetry, facts.Now().Add(-time.Second))
+}
+
+func assertSelectedAttemptLineage(t *testing.T, sink *perRuntimeAppendCapture, id string, reason workers.AttemptReason, started time.Time) {
+	t.Helper()
+	var lineages []workers.SessionPayload
+	for _, appendRequest := range sink.requestsFor(workersessions.Topic(id)) {
+		if appendRequest.SourceType != attemptLineageSourceType {
+			continue
+		}
+		draft := decodePerRuntimeDraft(t, appendRequest)
+		var payload workers.SessionPayload
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		lineages = append(lineages, payload)
+	}
+	if len(lineages) != 1 {
+		t.Fatalf("attempt lineage count = %d, want one", len(lineages))
+	}
+	payload := lineages[0]
+	if payload.WorkerSessionID != id || payload.AttemptReason != reason || payload.StartedAt == nil || !payload.StartedAt.Equal(started) {
+		t.Fatalf("attempt lineage = %#v, want %s/%s at %s", payload, id, reason, started)
 	}
 }
 
