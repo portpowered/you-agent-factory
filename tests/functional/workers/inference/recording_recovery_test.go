@@ -575,3 +575,8 @@ var _ recordings.WorkerRecordingWriter = (*wsrFT009DurableWriter)(nil)
 var _ recordings.WorkerRecordingReader = (*wsrFT009DurableWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*wsrFT009DurableWriter)(nil)
 var _ platformreplay.Storage = (*wsrFT009StripCompletionMetadataStorage)(nil)
+
+// Journals contain no stored projection/completion metadata to strip.
+func (storage *wsrFT009StripCompletionMetadataStorage) AppendFile(path string, data []byte) error {
+	return storage.delegate.(platformreplay.Appender).AppendFile(path, data)
+}

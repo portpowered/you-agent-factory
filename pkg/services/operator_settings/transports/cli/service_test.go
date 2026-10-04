@@ -226,7 +226,7 @@ func TestConfigureFacadeMatchesConstructedService(t *testing.T) {
 	commandCfg.Output = &commandOut
 
 	serviceErr := service.Configure(serviceCfg)
-	commandErr := operatorsettingscli.Configure(commandCfg, root)
+	commandErr := operatorsettingscli.BindConfigure(root)(commandCfg)
 	if (serviceErr == nil) != (commandErr == nil) {
 		t.Fatalf("service error = %v, command error = %v", serviceErr, commandErr)
 	}
