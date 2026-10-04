@@ -52,6 +52,8 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
 	factorysessionwire.NewLiveChangeCoordinator,
+	factorysessionwire.NewIdentity,
+	factorysessionwire.NewResponseStreams,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
