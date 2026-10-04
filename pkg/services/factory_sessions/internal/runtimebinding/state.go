@@ -146,7 +146,6 @@ type SessionState struct {
 	Diagnostics            factoryruntime.RuntimeLogDiagnostics
 	FactoryRuntime         factoryruntime.Service
 	ModelsScope            models.RuntimeScopeRef
-	WorkerSessions         workersessions.ObservationService
 	Logger                 *zap.Logger
 	Reader                 roles.RuntimeReader
 	Projections            recordings.ProjectionService
@@ -157,7 +156,11 @@ type SessionState struct {
 	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 	OrderlyStop            func(context.Context) error
 	// Activation retains lifecycle cleanup on the canonical session record.
-	Activation         interface{ Close(context.Context) error }
+	Activation interface{ Close(context.Context) error }
+	// workerSessionsMu guards workerSessions, which Factory Session start binds
+	// after the session is already resolvable by fleet observation reads.
+	workerSessionsMu   sync.RWMutex
+	workerSessions     workersessions.ObservationService
 	mockWorkersMu      sync.RWMutex
 	mockWorkers        *workers.MockWorkersConfig
 	operatorDefaultsMu sync.RWMutex
@@ -177,7 +180,7 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	}
 	s.FactoryRuntime = previous.FactoryRuntime
 	s.ModelsScope = previous.ModelsScope
-	s.WorkerSessions = previous.WorkerSessions
+	s.SetWorkerSessions(previous.WorkerSessionsObservation())
 	s.SetMockWorkers(previous.MockWorkersConfig())
 	s.SetOperatorDefaults(previous.OperatorDefaults())
 	s.SetWorkerSettings(previous.WorkerSettingsSnapshot())
@@ -193,6 +196,29 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 		s.ResumeRecoveryMetadata = &metadata
 	}
 	s.OrderlyStop = previous.OrderlyStop
+}
+
+// SetWorkerSessions publishes the Worker Sessions observation service bound to
+// this session. Start calls it after the session is already resolvable.
+func (s *SessionState) SetWorkerSessions(observation workersessions.ObservationService) {
+	if s == nil {
+		return
+	}
+	s.workerSessionsMu.Lock()
+	s.workerSessions = observation
+	s.workerSessionsMu.Unlock()
+}
+
+// WorkerSessionsObservation returns the Worker Sessions observation service
+// bound to this session. Concurrent readers must use it instead of the field.
+func (s *SessionState) WorkerSessionsObservation() workersessions.ObservationService {
+	if s == nil {
+		return nil
+	}
+	s.workerSessionsMu.RLock()
+	observation := s.workerSessions
+	s.workerSessionsMu.RUnlock()
+	return observation
 }
 
 func (s *SessionState) SetMockWorkers(config *workers.MockWorkersConfig) {

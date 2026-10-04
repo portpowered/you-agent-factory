@@ -80,7 +80,7 @@ func (s *Service) WorkerSessionsObservationForSession(factorySessionID string) w
 func (a *Assembly) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
 	session := a.Resolve(factorySessionID)
 	if state := runtimebinding.SessionStateFrom(session); state != nil {
-		return state.WorkerSessions
+		return state.WorkerSessionsObservation()
 	}
 	return nil
 }
