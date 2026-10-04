@@ -735,6 +735,100 @@ func newAssemblyTestHost(clock factoryruntime.Clock, scheduler platformclock.Tim
 	}
 	return instancehostwire.New(clock, scheduler, lifecycle)
 }
+
+// This component cell associates Root's published binding with the engine in
+// an actual hosted handle. Provider execution and public session isolation are
+// separate functional properties; no application graph is constructed here.
+func TestBoundRuntimeControlsReachActivatedPhysicalHandle(t *testing.T) {
+	t.Parallel()
+	root := newBoundControlRoot(t)
+	ctx := t.Context()
+	var bindings [2]factoryruntime.RuntimeBinding
+	var handles [2]factoryruntime.RuntimeRun
+	var engines [2]*boundHostedEngine
+	for i, identity := range []string{"first", "second"} {
+		engine := &boundHostedEngine{boundControlRuntimeFake: newBoundControlRuntimeFake(identity, false), started: make(chan struct{})}
+		engines[i] = engine
+		request := factoryruntime.RuntimeActivationRequest{
+			RuntimeID: "runtime-" + identity, FactorySessionID: "session-" + identity,
+			Snapshot: interfaces.RuntimeSnapshot{
+				FactoryDir: "/factories/" + identity, RuntimeBaseDir: "/runtime/" + identity,
+				DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}, EffectiveFactory: interfaces.FactoryConfig{Name: identity},
+			},
+		}
+		result, err := root.Activate(ctx, request, func(ctx context.Context, request factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+			scope := root.instanceHost.Scope(clockwork.NewFakeClock())
+			bundle := &factoryhost.Bundle{RuntimeInstanceID: request.RuntimeID, FactorySessionID: request.FactorySessionID, Factory: engine}
+			run, err := scope.Start(ctx, bundle)
+			if err != nil {
+				return nil, err
+			}
+			handles[i] = run
+			t.Cleanup(func() { _ = scope.Stop(run) })
+			// Run admission is a signal, not a readiness poll or wall-time delay.
+			select {
+			case <-engine.started:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			return &factoryruntime.RuntimeActivation{Service: bundle.RuntimeService(), Close: func(context.Context) error { return scope.Stop(run) }}, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		bindings[i] = result.Binding
+	}
+	assertBoundRuntimeNotActive(t, root, ctx, "unknown-runtime", factoryruntime.RuntimeDeactivationRequest{RuntimeID: "unknown-runtime"})
+	for i := range engines {
+		assertBoundRuntimeControls(t, ctx, bindings[i], engines[i].boundControlRuntimeFake, engines[1-i].boundControlRuntimeFake)
+	}
+	// The process Host also controls the same engine registered by the scope.
+	before := len(engines[0].calls)
+	if _, err := root.instanceHost.Pause(ctx, handles[0]); err != nil || len(engines[0].calls) != before+1 {
+		t.Fatalf("process Host Pause = %v; calls %d, want %d", err, len(engines[0].calls), before+1)
+	}
+	assertSelectedPhysicalHandleStopped(t, ctx, root, bindings, handles, engines)
+}
+
+func assertSelectedPhysicalHandleStopped(t *testing.T, ctx context.Context, root *Root, bindings [2]factoryruntime.RuntimeBinding, handles [2]factoryruntime.RuntimeRun, engines [2]*boundHostedEngine) {
+	t.Helper()
+	if _, err := bindings[0].Deactivate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !handles[0].Completed() || !errors.Is(handles[0].Result(), context.Canceled) || handles[1].Completed() {
+		t.Fatalf("selected/peer runs = %v/%v; selected result %v", handles[0].Completed(), handles[1].Completed(), handles[0].Result())
+	}
+	for _, control := range engines[0].controlCases() {
+		if _, err := control.invoke(ctx, bindings[0].Service()); !errors.Is(err, factoryruntime.ErrNotRunning) {
+			t.Fatalf("stale %s = %v, want ErrNotRunning", control.method, err)
+		}
+	}
+	if _, err := root.instanceHost.Resume(ctx, handles[0]); !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("stale physical Resume = %v, want ErrNotRunning", err)
+	}
+	assertBoundRuntimeControls(t, ctx, bindings[1], engines[1].boundControlRuntimeFake, engines[0].boundControlRuntimeFake)
+	if _, err := bindings[1].Deactivate(ctx); err != nil || !handles[1].Completed() {
+		t.Fatalf("peer Deactivate = %v; completed %v", err, handles[1].Completed())
+	}
+}
+
+type boundHostedEngine struct {
+	factoryhost.Engine // Unused engine operations are outside this component cell.
+	*boundControlRuntimeFake
+	started chan struct{}
+}
+
+func (engine *boundHostedEngine) Run(ctx context.Context) error {
+	close(engine.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (*boundHostedEngine) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error) {
+	return &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet]{
+		RuntimeStatus: interfaces.RuntimeStatusActive, FactoryState: string(interfaces.FactoryStateRunning),
+	}, nil
+}
 func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime, clock factoryruntime.Clock, publisher dispatchplanning.WorkersPublisher, canceler dispatchplanning.WorkersCanceler, scheduler platformclock.TimerSource) (*Root, error) {
 	host, err := newAssemblyTestHost(clock, scheduler)
 	if err != nil {
