@@ -317,6 +317,16 @@ func newTestProvidersService(probe providerswire.CatalogProbeOperation, schedule
 	if err != nil {
 		return nil, err
 	}
+	// Absent fixture routes receive completed command effects with a disabled edge.
+	if antigravity == nil {
+		antigravity = providerswire.NewAgyCommandEffect(disabledNativeRunner{"Antigravity"}, platformclock.Real{}, scheduler)
+	}
+	if codex == nil {
+		codex = providerswire.NewCodexEffect(disabledNativeRunner{"Codex"}, platformclock.Real{})
+	}
+	if claude == nil {
+		claude = providerswire.NewClaudeEffect(disabledNativeRunner{"Claude"}, platformclock.Real{})
+	}
 	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
 	if err != nil {
 		return nil, err
@@ -326,4 +336,13 @@ func newTestProvidersService(probe providerswire.CatalogProbeOperation, schedule
 		return nil, err
 	}
 	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
+}
+
+type disabledNativeRunner struct{ name string }
+
+func (runner disabledNativeRunner) Run(context.Context, providers.CommandRequest) (providers.CommandResult, error) {
+	return providers.CommandResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: runner.name + " native execution is unavailable",
+	}
 }

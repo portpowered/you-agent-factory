@@ -705,7 +705,7 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 		var failure providers.ExecuteFailure
 		if !errors.As(executeErr, &failure) ||
 			failure.Kind != providers.ExecuteFailureKindDependency ||
-			!strings.Contains(failure.Message, test.name) {
+			failure.Message != test.name+" native execution is unavailable" {
 			t.Fatalf(
 				"Execute(%q) error = %#v, want dependency failure from bound %s adapter without effects",
 				test.id,
@@ -723,7 +723,7 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 	}
 }
 
-func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
+func TestNewServiceBindsCodexAndClaudeWithDisabledCommandEdges(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
@@ -763,7 +763,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 		var failure providers.ExecuteFailure
 		if !errors.As(executeErr, &failure) ||
 			failure.Kind != providers.ExecuteFailureKindDependency ||
-			!strings.Contains(failure.Message, test.name) {
+			failure.Message != test.name+" native execution is unavailable" {
 			t.Fatalf(
 				"Execute(%q) error = %#v, want matching private adapter",
 				test.id,
