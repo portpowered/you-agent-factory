@@ -59,7 +59,7 @@ var layeringRules = []layeringRule{
 		name: "constructed-service-edges",
 		hint: "inject exact external-effect ports from pkg/wire instead of the broad Edges bag",
 		violates: func(e edge) bool {
-			return !e.test && under(e.importer, "pkg/services") && !under(e.importer, "pkg/services/edges") && e.importee == "pkg/services/edges"
+			return !e.test && under(e.importer, "pkg/services") && !under(e.importer, "pkg/services/edges") && !containsSegment(e.importer, "testdata") && e.importee == "pkg/services/edges"
 		},
 	},
 	{
@@ -221,10 +221,17 @@ func runLayering(pass *analysis.Pass) (any, error) {
 		if (importer == "pkg/transports/http/client" || importer == "pkg/transports/http/generated") && !ast.IsGenerated(file) {
 			pass.Reportf(file.Package, "generated-only: handwritten Go file in generated-only package %s; generate source with the standard Code generated ... DO NOT EDIT. marker", importer)
 		}
+		test := strings.HasSuffix(filename, "_test.go")
 		if ast.IsGenerated(file) {
+			// The constructed-service rule also owns generated production
+			// imports; other layering policies retain their generated exemption.
+			for _, finding := range layeringImports(file, importer, unit, test) {
+				if finding.rule == "constructed-service-edges" {
+					found = append(found, finding)
+				}
+			}
 			return
 		}
-		test := strings.HasSuffix(filename, "_test.go")
 		hasTests = hasTests || test
 		found = append(found, layeringImports(file, importer, unit, test)...)
 	}

@@ -40,9 +40,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err := scanRepositoryTransportBoundaries(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
-	if err := scanRepositoryProcessBoundaries(repoRoot, &result); err != nil {
-		return scanResult{}, err
-	}
 	if err := scanRepositoryProductionDefaults(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
@@ -131,15 +128,6 @@ func scanRepositoryServiceConstruction(repoRoot string, result *scanResult) erro
 func scanRepositoryTransportBoundaries(repoRoot string, result *scanResult) error {
 	var err error
 	result.externalImplementationFindings, err = scanConvergedServiceSubpackageImports(repoRoot)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func scanRepositoryProcessBoundaries(repoRoot string, result *scanResult) error {
-	var err error
-	result.constructedServiceEdgesFindings, err = scanConstructedServiceEdges(repoRoot)
 	if err != nil {
 		return err
 	}

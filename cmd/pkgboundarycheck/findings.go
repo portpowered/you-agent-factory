@@ -8,7 +8,6 @@ type scanResult struct {
 	staleServiceConstructionEntries     []serviceConstructionBaselineEntry
 	serviceConstructionBaselineCount    int
 	externalImplementationFindings      []transportServiceImplementationFinding
-	constructedServiceEdgesFindings     []constructedServiceEdgesFinding
 	productionDefaultFindings           []productionDefaultFinding
 	recordedProductionDefaultFindings   []productionDefaultFinding
 	staleProductionDefaultEntries       []productionDefaultBaselineEntry

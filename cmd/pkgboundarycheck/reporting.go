@@ -18,7 +18,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
 	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
 	writeExternalServiceImplementationFindings(writer, findings.externalImplementationFindings)
-	writeConstructedServiceEdgesFindings(writer, findings.constructedServiceEdgesFindings)
 	writeProductionDefaultFindings(writer, findings.productionDefaultFindings)
 	writeProductionDefaultFindings(writer, findings.recordedProductionDefaultFindings)
 	writeStaleProductionDefaultBaselineEntries(writer, findings.staleProductionDefaultEntries)
