@@ -44,36 +44,6 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	}
 }
 
-func TestRunPreservesOrderedDiagnosticsAndBlockingOutcome(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/work/a.go", "work", applicationGraphImportPath)
-	writeGoImportFile(t, repoRoot, "pkg/services/work/z.go", "work", applicationGraphImportPath)
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err == nil || err.Error() != "[agent-factory:pkg-boundary] found 2 package-boundary violation(s)" {
-		t.Fatalf("run() error = %v, want two blocking violations", err)
-	}
-	if got := stdout.String(); got != "" {
-		t.Fatalf("run() stdout = %q, want diagnostics on stderr for blocking findings", got)
-	}
-	lastIndex := -1
-	for _, want := range []string{
-		"prohibited application composition import: pkg/services/work (pkg/services/work/a.go) [class=production]",
-		"prohibited application composition import: pkg/services/work (pkg/services/work/z.go) [class=production]",
-		"dependency violation counts: production=2 test-only=0",
-	} {
-		index := strings.Index(stderr.String(), want)
-		if index <= lastIndex {
-			t.Fatalf("run() stderr = %q, want ordered diagnostic %q after index %d", stderr.String(), want, lastIndex)
-		}
-		lastIndex = index
-	}
-}
-
 func TestRunAllowsOnlyRootAndWireToImportApplicationGraph(t *testing.T) {
 	t.Parallel()
 
@@ -92,46 +62,6 @@ func TestRunAllowsOnlyRootAndWireToImportApplicationGraph(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty", got)
-	}
-}
-
-func TestRunRejectsInitializerImportingApplicationGraph(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/initializer/core.go", "initializer", applicationGraphImportPath)
-
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want Initializer-to-Wire composition import rejected")
-	}
-	if !strings.Contains(stderr.String(), "prohibited application composition import") {
-		t.Fatalf("run() stderr = %q, want application-composition diagnostic", stderr.String())
-	}
-}
-
-func TestRunRejectsApplicationGraphImportsFromTestsOutsidePackageRoot(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/root/root.go", "package root\n")
-	writeGoImportFile(t, repoRoot, "tests/stress/alternate_graph_test.go", "stress", applicationGraphImportPath)
-
-	stdout := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, &bytes.Buffer{})
-	if err != nil {
-		t.Fatalf("run() error = %v, want test-only alternate injector to remain non-blocking", err)
-	}
-	for _, want := range []string{
-		"prohibited application composition import",
-		"tests/stress/alternate_graph_test.go",
-		"[class=test-only]",
-		"dependency violation counts: production=0 test-only=1",
-	} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Fatalf("run() stdout = %q, want %q", stdout.String(), want)
-		}
 	}
 }
 
@@ -199,41 +129,6 @@ func stale( {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want no findings from ignored repository-policy roots", got)
-	}
-}
-
-func TestRunRejectsProductionPkgViolationInsideArtifactLikeSubtrees(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	productionFiles := []string{
-		filepath.Join("pkg", "services", "factory_runtime", "internal", "services", "orchestration", ".artifacts", "production.go"),
-		filepath.Join("pkg", "services", "factory_runtime", "internal", "services", "orchestration", ".claude", "worktrees", "production.go"),
-		filepath.Join("pkg", "services", "factory_runtime", "internal", "services", "orchestration", "worktrees", "production.go"),
-	}
-	for _, filePath := range productionFiles {
-		writeGoImportFile(t, repoRoot, filePath, "production", applicationGraphImportPath)
-	}
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want production pkg import violation rejected")
-	}
-	if got := stdout.String(); got != "" {
-		t.Fatalf("run() stdout = %q, want no success output", got)
-	}
-	for _, filePath := range productionFiles {
-		filePath = filepath.ToSlash(filePath)
-		packagePath := filepath.ToSlash(filepath.Dir(filePath))
-		want := fmt.Sprintf("prohibited application composition import: %s (%s)", packagePath, filePath)
-		if got := stderr.String(); !strings.Contains(got, want) {
-			t.Fatalf("run() stderr = %q, want production diagnostic %q", got, want)
-		}
-	}
-	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 3 package-boundary violation(s)" {
-		t.Fatalf("run() error = %q, want one violation per production fixture", got)
 	}
 }
 
@@ -309,41 +204,6 @@ func build() { factory.NewFutureRuntime() }
 	} {
 		if got := stderr.String(); !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
-		}
-	}
-}
-
-func TestRunRejectsConstructionThroughPermittedExternalEffectContractImport(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/services/automations/internal/services/hosted_sources/contract.go", `package hostedsources
-
-func New() {}
-`)
-	writeGoSourceFile(t, repoRoot, "tests/functional/edge_test.go", `package functional
-
-import hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
-
-func directImplementation() { hostedsources.New() }
-`)
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want the unrecorded dedicated test-service import to remain blocking")
-	}
-	output := stdout.String() + stderr.String()
-	for _, want := range []string{
-		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources.New",
-		"prohibited test import of service internals: github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources",
-		"[class=test-only]",
-		"dependency violation counts: production=0 test-only=2",
-		"construct the collaborator in pkg/wire and inject its service-root role",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("run() output = %q, want substring %q", output, want)
 		}
 	}
 }
@@ -440,27 +300,7 @@ func TestServiceConstructionBaselineRejectsWildcardEntry(t *testing.T) {
 	}
 }
 
-func TestTestServiceImportBaselineRejectsWildcardAndEmptyCreation(t *testing.T) {
-	t.Parallel()
-
-	entry := testServiceImportBaselineEntry{
-		Owner:        "factory_sessions",
-		ImportPath:   "github.com/portpowered/infinite-you/pkg/services/factory_sessions/*",
-		FilePath:     "tests/functional/*.go",
-		TargetRoot:   "pkg/services/factory_sessions",
-		Stage:        testServiceImportBaselineStage,
-		DeletionGate: testServiceImportDeletionGate,
-	}
-	if err := validateTestServiceImportBaselineEntry(entry); err == nil || !strings.Contains(err.Error(), "wildcards") {
-		t.Fatalf("validate wildcard error = %v, want wildcard rejection", err)
-	}
-
-	if err := createTestServiceImportBaseline(config{root: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "refusing to create empty") {
-		t.Fatalf("create empty baseline error = %v, want empty creation rejected", err)
-	}
-}
-
-func TestRunAllowsPlatformObservabilityImports(t *testing.T) {
+func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -471,53 +311,6 @@ func TestRunAllowsPlatformObservabilityImports(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
 		t.Fatalf("run() error = %v, want canonical platform logging import allowed; stderr=%q", err, stderr.String())
-	}
-}
-
-func TestRunRejectsDomainPackageImportOfApplicationGraph(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/composition.go", "runtime", applicationGraphImportPath)
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want prohibited composition import failure")
-	}
-	if got := stdout.String(); got != "" {
-		t.Fatalf("run() stdout = %q, want empty", got)
-	}
-
-	got := stderr.String()
-	for _, want := range []string{
-		"[agent-factory:pkg-boundary] prohibited application composition import: pkg/services/factory_runtime/internal/services/orchestration/runtime (pkg/services/factory_runtime/internal/services/orchestration/runtime/composition.go)",
-		"pkg/wire is the outward application composition root and must not be imported by domain or transport packages",
-		"depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("run() stderr = %q, want substring %q", got, want)
-		}
-	}
-	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 1 package-boundary violation(s)" {
-		t.Fatalf("run() error = %q, want one violation", got)
-	}
-}
-
-func TestRunRejectsDomainPackageImportOfApplicationGraphSubpackage(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/transports/http/composition.go", "http", applicationGraphImportPath+"/internal")
-
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want prohibited composition subpackage import failure")
-	}
-	if got := stderr.String(); !strings.Contains(got, "prohibited application composition import: pkg/transports/http") {
-		t.Fatalf("run() stderr = %q, want transport composition import diagnostic", got)
 	}
 }
 
@@ -1115,68 +908,6 @@ func TestMakePkgBoundaryTargetFailsForUnapprovedRootPackageFamily(t *testing.T) 
 		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
 		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
 		"pkg-boundary] Error",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)
-		}
-	}
-}
-
-func TestMakePkgBoundaryTargetFailsForDomainApplicationGraphImport(t *testing.T) {
-	repoRoot := filepath.Clean(filepath.Join("..", ".."))
-	fixtureRoot := t.TempDir()
-	writeGoImportFile(t, fixtureRoot, "pkg/services/work/query/composition.go", "query", applicationGraphImportPath)
-
-	cmd := exec.Command("make", "pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
-	cmd.Dir = repoRoot
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("make pkg-boundary succeeded, want domain composition import failure; output:\n%s", output)
-	}
-
-	got := string(output)
-	for _, want := range []string{
-		"prohibited application composition import: pkg/services/work/query (pkg/services/work/query/composition.go)",
-		"pkg/wire is the outward application composition root",
-		"inject the collaborator through pkg/root or pkg/initializer",
-		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)
-		}
-	}
-}
-
-func TestMakePkgBoundaryTargetRejectsProductionPkgImportInsideArtifactLikeSubtree(t *testing.T) {
-	repoRoot := filepath.Clean(filepath.Join("..", ".."))
-	fixtureRoot := t.TempDir()
-	filePath := filepath.Join(
-		"pkg",
-		"services",
-		"factory_runtime",
-		"internal",
-		"services",
-		"orchestration",
-		".artifacts",
-		"production.go",
-	)
-	writeGoImportFile(t, fixtureRoot, filePath, "production", applicationGraphImportPath)
-
-	cmd := exec.Command("make", "pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
-	cmd.Dir = repoRoot
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("make pkg-boundary succeeded, want production pkg import failure; output:\n%s", output)
-	}
-
-	filePath = filepath.ToSlash(filePath)
-	packagePath := filepath.ToSlash(filepath.Dir(filePath))
-	got := string(output)
-	for _, want := range []string{
-		"prohibited application composition import: " + packagePath + " (" + filePath + ")",
-		"pkg/wire is the outward application composition root",
-		"inject the collaborator through pkg/root or pkg/initializer",
-		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)

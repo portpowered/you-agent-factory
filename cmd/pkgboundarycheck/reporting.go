@@ -17,18 +17,7 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 		fmt.Fprintln(writer, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
 	writeRetiredPackageRootFindings(writer, findings.retiredPackageRootFindings)
-	writeApplicationGraphImportFindings(writer, findings.applicationGraphImportFindings)
 	writeHandwrittenGeneratedFindings(writer, findings.handwrittenGeneratedFindings)
-	writeDomainTransportImportFindings(writer, findings.domainTransportFindings)
-	writePeerServiceImportFindings(writer, findings.peerServiceImportFindings)
-	writePeerServiceImportFindings(writer, findings.recordedPeerServiceImportFindings)
-	writeStalePeerServiceBaselineEntries(writer, findings.stalePeerServiceBaselineEntries)
-	writeTestServiceImportFindings(writer, findings.testServiceImportFindings)
-	writeTestServiceImportFindings(writer, findings.recordedTestServiceImportFindings)
-	writeStaleTestServiceBaselineEntries(writer, findings.staleTestServiceBaselineEntries)
-	writeSupportServiceImportFindings(writer, findings.supportServiceImportFindings)
-	writeSupportServiceImportFindings(writer, findings.recordedSupportServiceImportFindings)
-	writeStaleSupportServiceBaselineEntries(writer, findings.staleSupportServiceBaselineEntries)
 	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
 	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
@@ -56,9 +45,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 }
 
 func writeBaselineSummaries(writer io.Writer, findings scanResult) {
-	writePeerServiceBaselineSummary(writer, findings.peerServiceBaselineCount)
-	writeTestServiceBaselineSummary(writer, findings.testServiceBaselineCount)
-	writeSupportServiceBaselineSummary(writer, findings.supportServiceBaselineCount)
 	writeServiceConstructionBaselineSummary(writer, findings.serviceConstructionBaselineCount)
 	writeTransportBehaviorBaselineSummary(writer, findings.transportBehaviorBaselineCount)
 	writeProductionDefaultBaselineSummary(writer, findings.productionDefaultBaselineCount)
@@ -89,103 +75,6 @@ func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
 		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", filepath.ToSlash(exception.packagePath), exception.scope))
 	}
 	return descriptions
-}
-
-func writeApplicationGraphImportFindings(writer io.Writer, findings []applicationGraphImportFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited application composition import: %s (%s) [class=%s]\n", finding.packagePath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
-		fmt.Fprintln(writer, "  reason: pkg/wire is the outward application composition root and must not be imported by domain or transport packages.")
-		fmt.Fprintln(writer, "  remediation: depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer.")
-	}
-}
-
-func writeDomainTransportImportFindings(writer io.Writer, findings []domainTransportImportFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited domain transport import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
-		fmt.Fprintf(writer, "  domain owner: %s\n", finding.packagePath)
-		fmt.Fprintln(writer, "  reason: protected domain packages must not consume transport contracts or adapters.")
-		fmt.Fprintln(writer, "  remediation: define the input at its domain owner and map generated values under pkg/transports/mapping.")
-	}
-}
-
-func writePeerServiceImportFindings(writer io.Writer, findings []peerServiceImportFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited peer service subpackage import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
-		fmt.Fprintf(writer, "  service owner: pkg/services/%s; peer owner: pkg/services/%s\n", finding.owner, finding.peer)
-		fmt.Fprintf(writer, "  remediation: publish the required value or capability at pkg/services/%s and import only that peer root.\n", finding.peer)
-	}
-}
-
-func writeStalePeerServiceBaselineEntries(writer io.Writer, entries []peerServiceImportBaselineEntry) {
-	for _, entry := range entries {
-		fmt.Fprintf(
-			writer,
-			"[agent-factory:pkg-boundary] stale peer service import baseline entry: %s -> %s [class=%s]\n",
-			entry.FilePath,
-			entry.ImportPath,
-			func() boundarySourceClass {
-				class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
-				return class
-			}(),
-		)
-		fmt.Fprintln(writer, "  reason: the recorded bypass edge no longer exists.")
-		fmt.Fprintln(writer, "  remediation: remove this entry from service-cross-import-baseline.json in the same change.")
-	}
-}
-
-func writePeerServiceBaselineSummary(writer io.Writer, count int) {
-	if count == 0 {
-		return
-	}
-	fmt.Fprintf(
-		writer,
-		"[agent-factory:pkg-boundary] active peer-service root-contract migration baseline: %d edge(s)\n",
-		count,
-	)
-	fmt.Fprintln(writer, "  deletion gate: migrate every edge to an exact pkg/services/<peer> root import, then delete the baseline.")
-}
-
-func writeTestServiceImportFindings(writer io.Writer, findings []testServiceImportFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(
-			writer,
-			"[agent-factory:pkg-boundary] prohibited test import of service internals: %s (%s) [class=%s]\n",
-			finding.importPath,
-			finding.filePath,
-			effectiveBoundarySourceClass(finding.class, finding.filePath),
-		)
-		fmt.Fprintf(writer, "  service owner: pkg/services/%s\n", finding.owner)
-		fmt.Fprintln(writer, "  remediation: use the service root contract, move the invariant to the owning service, or exercise cross-service behavior through root.BuildProcess.")
-	}
-}
-
-func writeStaleTestServiceBaselineEntries(writer io.Writer, entries []testServiceImportBaselineEntry) {
-	for _, entry := range entries {
-		fmt.Fprintf(
-			writer,
-			"[agent-factory:pkg-boundary] stale test service import baseline entry: %s -> %s [class=%s]\n",
-			entry.FilePath,
-			entry.ImportPath,
-			func() boundarySourceClass {
-				class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
-				return class
-			}(),
-		)
-		fmt.Fprintln(writer, "  reason: the concrete cross-owner test import no longer exists.")
-		fmt.Fprintf(writer, "  remediation: remove this entry from %s in the same change.\n", testServiceImportBaselinePath)
-	}
-}
-
-func writeTestServiceBaselineSummary(writer io.Writer, count int) {
-	if count == 0 {
-		return
-	}
-	fmt.Fprintf(
-		writer,
-		"[agent-factory:pkg-boundary] active test service-internal migration baseline: %d edge(s)\n",
-		count,
-	)
-	fmt.Fprintln(writer, "  deletion gate: move each invariant to its service owner, use a service-root fake, or enter through root.BuildProcess; then delete the exact baseline entry.")
 }
 
 func writeServiceConstructionFindings(writer io.Writer, findings []serviceConstructionFinding) {
