@@ -8,7 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
-	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -30,7 +29,22 @@ func New(
 	activationGateway factoryroot.DefinitionActivationGateway,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.New(host, activationGateway, versionFileSystems...)
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host,
+		activationGateway,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
+	)
 }
 
 func NewWithCatalog(
@@ -39,7 +53,22 @@ func NewWithCatalog(
 	catalogService catalog.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host,
+		activationGateway,
+		catalogService,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
+	)
 }
 
 func NewWithCatalogAndPackages(
@@ -78,7 +107,7 @@ func NewWithCatalogPackagesAndInstallation(
 
 func NewWithCompilation(
 	host Host,
-	compilationService compilationservice.Service,
+	compilationService lifecycle.CompilationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
 	return lifecycle.NewWithCompilation(host, compilationService, versionFileSystems...)
@@ -91,12 +120,21 @@ func NewWithValidation(
 	validationService validationservice.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithValidation(
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host,
 		activationGateway,
 		catalogService,
 		validationService,
-		versionFileSystems...,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
 	)
 }
 

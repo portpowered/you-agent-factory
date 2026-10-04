@@ -16,7 +16,9 @@ import (
 func completeDependencies() authoringlayout.Dependencies {
 	mapper := factorymapping.NewFactoryConfigMapper()
 	return authoringlayout.Dependencies{
-		Validator: factoryvalidation.New(nil),
+		Validator: factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return nil, nil
+		}),
 		MapInput: func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return factorydefinitions.DefinitionValidationRequest{}, nil
 		},

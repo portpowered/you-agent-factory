@@ -414,7 +414,7 @@ func packagedTTSFailureWorldState(requestID, workID, failureMessage string) fact
 
 func TestResolveExecutionCatalog_DetachesInterpolatedPolicy(t *testing.T) {
 	t.Parallel()
-	resolver := factorylifecycle.New(nil, nil)
+	resolver := &factorylifecycle.Service{}
 	request := detachedExecutionCatalogRequest()
 
 	first := mustResolveExecutionCatalog(t, resolver, request)
@@ -430,7 +430,7 @@ func TestResolveExecutionCatalog_DetachesInterpolatedPolicy(t *testing.T) {
 
 func TestResolveExecutionCatalog_AppliesDetachedWorkerDefaults(t *testing.T) {
 	t.Parallel()
-	resolver := factorylifecycle.New(nil, nil)
+	resolver := &factorylifecycle.Service{}
 	request := detachedExecutionCatalogRequest()
 	worker := &request.EffectiveDefinition.Workers[0]
 	worker.RuntimeDefaultModelProvider = "provider-a"
@@ -580,7 +580,7 @@ func mutateDetachedExecutionCatalog(result factorydefinitions.ResolveExecutionCa
 
 func TestResolveExecutionCatalog_ReportsTypedDetachedReferenceDiagnostics(t *testing.T) {
 	t.Parallel()
-	resolver := factorylifecycle.New(nil, nil)
+	resolver := &factorylifecycle.Service{}
 
 	result, err := resolver.ResolveExecutionCatalog(context.Background(), factorydefinitions.ResolveExecutionCatalogRequest{
 		EffectiveDefinition: &factorydefinitions.FactoryConfig{

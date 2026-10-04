@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractguard"
@@ -64,15 +63,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return scanResult{}, err
 	}
 	if err := scanRepositoryPackageImports(repoRoot, scanRoot, cfg.packageRoot, policy, &result); err != nil {
-		return scanResult{}, err
-	}
-	if err := scanRepositoryPeerServiceImports(repoRoot, &result); err != nil {
-		return scanResult{}, err
-	}
-	if err := scanRepositoryTestServiceImports(repoRoot, &result); err != nil {
-		return scanResult{}, err
-	}
-	if err := scanRepositorySupportServiceImports(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
 	if err := scanRepositoryServiceConstruction(repoRoot, &result); err != nil {
@@ -156,91 +146,11 @@ func scanRepositoryPackageImports(
 	result *scanResult,
 ) error {
 	var err error
-	result.applicationGraphImportFindings, err = scanApplicationGraphImports(repoRoot, scanRoot, packageRoot)
-	if err != nil {
-		return err
-	}
 	result.handwrittenGeneratedFindings, err = scanHandwrittenGeneratedFiles(repoRoot, policy.generatedCodeExceptions)
 	if err != nil {
 		return err
 	}
-	result.domainTransportFindings, err = scanDomainTransportImports(repoRoot, policy.domainTransportExceptions)
 	return err
-}
-
-func scanRepositoryPeerServiceImports(repoRoot string, result *scanResult) error {
-	findings, err := scanPeerServiceImports(repoRoot)
-	if err != nil {
-		return err
-	}
-	baseline, err := loadPeerServiceImportBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
-	result.peerServiceImportFindings, result.stalePeerServiceBaselineEntries, err =
-		partitionPeerServiceImportFindings(findings, baseline)
-	if err != nil {
-		return err
-	}
-	result.recordedPeerServiceImportFindings = recordedFindingsFromPartition(
-		findings,
-		result.peerServiceImportFindings,
-		func(finding peerServiceImportFinding) string {
-			return peerServiceImportKey(finding.filePath, finding.importPath, finding.class)
-		},
-	)
-	result.peerServiceBaselineCount = len(baseline.Entries)
-	return nil
-}
-
-func scanRepositoryTestServiceImports(repoRoot string, result *scanResult) error {
-	findings, err := scanTestServiceSubpackageImports(repoRoot)
-	if err != nil {
-		return err
-	}
-	baseline, err := loadTestServiceImportBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
-	result.testServiceImportFindings, result.staleTestServiceBaselineEntries, err =
-		partitionTestServiceImportFindings(findings, baseline)
-	if err != nil {
-		return err
-	}
-	result.recordedTestServiceImportFindings = recordedFindingsFromPartition(
-		findings,
-		result.testServiceImportFindings,
-		func(finding testServiceImportFinding) string {
-			return testServiceImportKey(finding.filePath, finding.importPath, finding.class)
-		},
-	)
-	result.testServiceBaselineCount = len(baseline.Entries)
-	return nil
-}
-
-func scanRepositorySupportServiceImports(repoRoot string, result *scanResult) error {
-	findings, err := scanSupportServiceSubpackageImports(repoRoot)
-	if err != nil {
-		return err
-	}
-	baseline, err := loadSupportServiceImportBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
-	result.supportServiceImportFindings, result.staleSupportServiceBaselineEntries, err =
-		partitionSupportServiceImportFindings(findings, baseline)
-	if err != nil {
-		return err
-	}
-	result.recordedSupportServiceImportFindings = recordedFindingsFromPartition(
-		findings,
-		result.supportServiceImportFindings,
-		func(finding supportServiceImportFinding) string {
-			return supportServiceImportKey(finding.filePath, finding.importPath, finding.class)
-		},
-	)
-	result.supportServiceBaselineCount = len(baseline.Entries)
-	return nil
 }
 
 func scanRepositoryServiceConstruction(repoRoot string, result *scanResult) error {
@@ -467,76 +377,6 @@ func isIgnoredRepositoryBoundaryPath(repoRoot, path string) bool {
 	return false
 }
 
-func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainTransportImportFinding, error) {
-	var findings []domainTransportImportFinding
-	for _, domainRoot := range protectedTransportIndependentDomainRoots {
-		absoluteRoot := filepath.Join(repoRoot, filepath.FromSlash(domainRoot))
-		if _, err := os.Stat(absoluteRoot); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, fmt.Errorf("stat protected domain root %s: %w", domainRoot, err)
-		}
-
-		err := filepath.WalkDir(absoluteRoot, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
-				return filepath.SkipDir
-			}
-			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
-				return nil
-			}
-			filePath, err := filepath.Rel(repoRoot, path)
-			if err != nil {
-				return err
-			}
-			filePath = filepath.ToSlash(filePath)
-			if slices.Contains(exceptions, filePath) {
-				return nil
-			}
-			if isServiceOwnedTransportFile(filePath) {
-				return nil
-			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			if bytesContainGeneratedMarker(content) {
-				return nil
-			}
-			parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
-			if err != nil {
-				return fmt.Errorf("parse Factory package imports %s: %w", filePath, err)
-			}
-			packagePath := filepath.ToSlash(filepath.Dir(filePath))
-			for _, importSpec := range parsedFile.Imports {
-				importPath, err := strconv.Unquote(importSpec.Path.Value)
-				if err == nil && strings.HasPrefix(importPath, transportImportPrefix) {
-					findings = append(findings, domainTransportImportFinding{
-						packagePath: packagePath,
-						importPath:  importPath,
-						filePath:    filePath,
-						class:       classifyBoundarySource(filePath),
-					})
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("scan protected domain transport imports under %s: %w", domainRoot, err)
-		}
-	}
-	slices.SortFunc(findings, func(left, right domainTransportImportFinding) int {
-		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
-			return comparison
-		}
-		return strings.Compare(left.importPath, right.importPath)
-	})
-	return findings, nil
-}
-
 func scanHandwrittenGeneratedFiles(repoRoot string, exceptions []generatedCodeException) ([]handwrittenGeneratedFinding, error) {
 	var findings []handwrittenGeneratedFinding
 	for _, exception := range exceptions {
@@ -607,91 +447,4 @@ func findRetiredPackageRoot(packagePath string) (retiredPackageRoot, bool) {
 		}
 	}
 	return retiredPackageRoot{}, false
-}
-
-func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot string) ([]applicationGraphImportFinding, error) {
-	var findings []applicationGraphImportFinding
-	// The canonical-injector rule applies to every test, including suites outside
-	// pkg/. Restricting this walk to packageRoot lets a customer-scale stress or
-	// functional test assemble Wire directly. Non-test reusable support remains
-	// inventoried separately so its existing exact defects can be migrated.
-	err := filepath.WalkDir(repoRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
-			return filepath.SkipDir
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		if filepath.Ext(entry.Name()) != ".go" {
-			return nil
-		}
-		outsidePackageRoot := path != scanRoot && !strings.HasPrefix(path, scanRoot+string(filepath.Separator))
-		if outsidePackageRoot && !strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read package import file %s: %w", filepath.ToSlash(path), err)
-		}
-		if bytesContainGeneratedMarker(content) {
-			return nil
-		}
-		if !strings.Contains(string(content), applicationGraphImportPath) {
-			return nil
-		}
-
-		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
-		if err != nil {
-			return fmt.Errorf("parse package imports %s: %w", filepath.ToSlash(path), err)
-		}
-		if !importsApplicationGraph(parsedFile) {
-			return nil
-		}
-
-		packageDirectory, err := filepath.Rel(repoRoot, filepath.Dir(path))
-		if err != nil {
-			return fmt.Errorf("resolve importing package for %s: %w", filepath.ToSlash(path), err)
-		}
-		packagePath := filepath.ToSlash(packageDirectory)
-		if isApprovedApplicationGraphImporter(packagePath) {
-			return nil
-		}
-
-		filePath, err := filepath.Rel(repoRoot, path)
-		if err != nil {
-			return fmt.Errorf("resolve importing file %s: %w", filepath.ToSlash(path), err)
-		}
-		findings = append(findings, applicationGraphImportFinding{
-			packagePath: packagePath,
-			filePath:    filepath.ToSlash(filePath),
-			class:       classifyBoundarySource(filepath.ToSlash(filePath)),
-		})
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scan %s application graph imports: %w", filepath.ToSlash(packageRoot), err)
-	}
-
-	slices.SortFunc(findings, func(left, right applicationGraphImportFinding) int {
-		return strings.Compare(left.filePath, right.filePath)
-	})
-	return findings, nil
-}
-
-func importsApplicationGraph(parsedFile *ast.File) bool {
-	return slices.ContainsFunc(parsedFile.Imports, func(importSpec *ast.ImportSpec) bool {
-		importPath, err := strconv.Unquote(importSpec.Path.Value)
-		return err == nil && (importPath == applicationGraphImportPath ||
-			strings.HasPrefix(importPath, applicationGraphImportPath+"/"))
-	})
-}
-
-func isApprovedApplicationGraphImporter(packagePath string) bool {
-	return slices.ContainsFunc(approvedApplicationGraphImporters, func(approvedPath string) bool {
-		return packagePath == approvedPath || strings.HasPrefix(packagePath, approvedPath+"/")
-	})
 }

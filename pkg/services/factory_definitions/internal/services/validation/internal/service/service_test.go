@@ -10,7 +10,6 @@ import (
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
-	validationserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
@@ -72,14 +71,7 @@ func (s stubOperations) ValidateEffectiveDefinition(
 
 func newValidationService(t *testing.T, operations stubOperations) validationservice.Service {
 	t.Helper()
-	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:    operations,
-		Effective:     operations,
-		LoadCanonical: stubLoadCanonical,
-	})
-	if err != nil {
-		t.Fatalf("validationwire.NewService: %v", err)
-	}
+	svc := validationwire.NewService(operations, operations, stubLoadCanonical, nil, nil)
 	return svc
 }
 
@@ -90,17 +82,8 @@ func newValidationServiceWithConfig(
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 ) validationservice.Service {
 	t.Helper()
-	validator := factoryvalidation.New(orchestratorValidator)
-	svc, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:            validator,
-		Effective:             validator,
-		LoadCanonical:         stubLoadCanonicalForConfig(cfg),
-		RequiredToolChecker:   checker,
-		OrchestratorValidator: orchestratorValidator,
-	})
-	if err != nil {
-		t.Fatalf("validationwire.NewService: %v", err)
-	}
+	validator := factoryvalidation.New(orchestratorValidator, stubLoadCanonicalForConfig(cfg))
+	svc := validationwire.NewService(validator, validator, stubLoadCanonicalForConfig(cfg), checker, orchestratorValidator)
 	return svc
 }
 
@@ -131,16 +114,6 @@ func validPetriFactoryConfig() *factoryroot.FactoryConfig {
 			Outputs:        []factoryroot.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 			OnFailure:      []factoryroot.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
-	}
-}
-
-func TestValidationService_RejectsMissingDependencies(t *testing.T) {
-	t.Parallel()
-	if svc := validationserviceimpl.New(nil, nil, nil, nil, nil); svc != nil {
-		t.Fatal("expected nil service when dependencies are missing")
-	}
-	if _, err := validationwire.NewService(validationservice.Dependencies{}); err == nil {
-		t.Fatal("expected dependency error")
 	}
 }
 
@@ -493,5 +466,51 @@ func TestValidationService_WiredOrchestratorValidationMergesRuntimeValidatorTarg
 	}
 	if !found {
 		t.Fatalf("validation targets = %#v, want runtime orchestrator validator target", validationFailure.Validation.Targets)
+	}
+}
+
+// validationObserver observes all supplied validation effect ports.
+type validationObserver struct{ calls int }
+
+func (o *validationObserver) ValidateDefinition(context.Context, factoryroot.DefinitionValidationRequest) (factoryroot.ValidationResult, error) {
+	o.calls++
+	return factoryroot.ValidationResult{}, nil
+}
+func (o *validationObserver) ValidateEffectiveDefinition(context.Context, factoryroot.EffectiveDefinitionValidationRequest) (factoryroot.ValidationResult, error) {
+	o.calls++
+	return factoryroot.ValidationResult{}, nil
+}
+func (o *validationObserver) Check(factoryroot.RequiredToolConfig) factoryroot.RequiredToolCheckResult {
+	o.calls++
+	return factoryroot.RequiredToolCheckResult{}
+}
+func (o *validationObserver) ValidateJavaScriptFactoryDefinition(context.Context, *factoryroot.FactoryOrchestratorJavaScriptConfig, factoryroot.WorkflowSourceReader) []factoryroot.ValidationTarget {
+	o.calls++
+	return nil
+}
+
+func TestValidationServiceConstructionAndCanceledRequestsHaveNoEffects(t *testing.T) {
+	t.Parallel()
+	observer := &validationObserver{}
+	load := func([]byte, factoryroot.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
+		observer.calls++
+		return stubLoadedSource{cfg: validPetriFactoryConfig()}, nil
+	}
+	svc := validationwire.NewService(observer, observer, load, observer, observer)
+	if svc == nil || observer.calls != 0 {
+		t.Fatalf("construction = %v, calls = %d", svc, observer.calls)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	structural, err := svc.ValidateStructuralFactoryDefinition(ctx, factoryroot.ValidateStructuralFactoryDefinitionRequest{Canonical: []byte(minimalValidFactoryJSON)})
+	if !errors.Is(err, context.Canceled) || len(structural.Validation.Targets) != 0 {
+		t.Fatalf("structural = %#v, error = %v", structural, err)
+	}
+	effective, err := svc.ValidateEffectiveFactoryDefinition(ctx, factoryroot.ValidateEffectiveFactoryDefinitionRequest{Canonical: []byte(minimalValidFactoryJSON)})
+	if !errors.Is(err, context.Canceled) || len(effective.Validation.Targets) != 0 {
+		t.Fatalf("effective = %#v, error = %v", effective, err)
+	}
+	if observer.calls != 0 {
+		t.Fatalf("canceled requests called dependencies %d times", observer.calls)
 	}
 }

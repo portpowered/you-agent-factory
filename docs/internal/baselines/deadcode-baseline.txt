@@ -15,7 +15,6 @@ cmd/gocoveragecheck/manifest.go: unreachable func: validateCoverageManifest
 cmd/gocoveragecheck/manifest.go: unreachable func: validateCoverageManifestAt
 cmd/gocoveragecheck/manifest.go: unreachable func: validateCoverageManifestAtWithTotals
 cmd/gocoveragecheck/manifest_default_floor.go: unreachable func: checkCoverageDefaultFloor
-cmd/ownershipboundarycheck/owner_inventory.go: unreachable func: ownerInventory.kind
 cmd/packagetargetmanifestcheck/inventory.go: unreachable func: listProductionPkgPackages
 cmd/packagetargetmanifestcheck/inventory.go: unreachable func: validateRowsNamePackagesThatExist
 cmd/packagetargetmanifestcheck/manifest.go: unreachable func: validateOpenMoveLedger
