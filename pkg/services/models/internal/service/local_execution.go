@@ -20,7 +20,6 @@ type localExecutor struct {
 	host          modelhost.Host
 	assets        localmodels.AssetPuller
 	runtime       localmodels.Runtime
-	manager       *localmodels.Manager
 	resources     *localmodels.ResourceLimiter
 	hooks         modelseffects.LocalRuntimeHooks
 	now           func() time.Time
@@ -39,13 +38,21 @@ func newLocalExecutor(
 	host modelhost.Host,
 	assets localmodels.AssetPuller,
 	runtime localmodels.Runtime,
-	manager *localmodels.Manager,
 	resources *localmodels.ResourceLimiter,
 	hooks modelseffects.LocalRuntimeHooks,
 	now func() time.Time,
 ) (*localExecutor, error) {
 	if runtimeConfig == nil {
 		return nil, missingDependencyError("local executor runtime configuration lookup")
+	}
+	if isNilDependency(host) {
+		return nil, missingDependencyError("local executor model host")
+	}
+	if isNilDependency(assets) {
+		return nil, missingDependencyError("local executor model assets")
+	}
+	if isNilDependency(runtime) {
+		return nil, missingDependencyError("local executor model runtime")
 	}
 	if resources == nil {
 		return nil, missingDependencyError("local executor resource limiter")
@@ -58,7 +65,6 @@ func newLocalExecutor(
 		host:          host,
 		assets:        assets,
 		runtime:       runtime,
-		manager:       manager,
 		resources:     resources,
 		hooks:         hooks,
 		now:           now,
@@ -93,14 +99,7 @@ func (e *localExecutor) InvokeLocal(
 		ModelBindings:    append([]models.ResolvedModelOperationBinding(nil), request.ModelBindings...),
 		WorkingDirectory: request.WorkingDirectory,
 	}
-	if e.host != nil && e.assets != nil && e.runtime != nil {
-		return e.invokeWithLease(ctx, runtimeConfig, factoryConfig, worker, request.Holder, invocation)
-	}
-	if e.manager == nil {
-		return models.LocalInvocationResult{}, nil
-	}
-	response, handled, err := e.manager.Invoke(ctx, runtimeConfig, factoryConfig, worker, invocation)
-	return models.LocalInvocationResult{Handled: handled, Content: response.Content}, err
+	return e.invokeWithLease(ctx, runtimeConfig, factoryConfig, worker, request.Holder, invocation)
 }
 
 func (e *localExecutor) invokeWithLease(

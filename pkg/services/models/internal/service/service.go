@@ -844,16 +844,13 @@ func newRuntimeWithHostEdges(
 	if localRuntime == nil {
 		return nil, missingDependencyError("local model runtime")
 	}
-	manager, err := localmodels.NewManagedRuntime(assetPuller, localRuntime, hooks, now)
-	if err != nil {
-		return nil, err
-	}
 	if resources == nil {
 		return nil, missingDependencyError("local model resource limiter")
 	}
 	modelHost := host
 	if modelHost == nil {
 		gateway := modelhost.NewLocalAssetGateway(assetPuller)
+		var err error
 		modelHost, err = modelhost.NewScopedCompatHost(
 			scope,
 			runtimeHost,
@@ -881,7 +878,6 @@ func newRuntimeWithHostEdges(
 		modelHost,
 		assetPuller,
 		localRuntime,
-		manager,
 		resources,
 		hooks,
 		now,
