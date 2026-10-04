@@ -48,6 +48,9 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 	if under(unit, "pkg/transports") {
 		inspectTestWorkCallbacks(pass, file, unit)
 	}
+	if under(unit, "pkg/transports/http") {
+		inspectTestEngineLiterals(pass, file, unit)
+	}
 	called := testBoundaryCalls(file)
 	ast.Inspect(file, func(node ast.Node) bool {
 		id, ok := node.(*ast.Ident)
@@ -65,6 +68,30 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		}
 		if under(unit, "tests/functional") && testBoundaryCallable(obj, called[id]) && functionalTransportComposition(obj.Pkg().Path(), obj.Name()) {
 			pass.Reportf(id.Pos(), "test-functional-transport-composition: %s -> %s.%s; exercise customer behavior through root.BuildProcess instead of constructing a handwritten transport", unit, strings.TrimPrefix(obj.Pkg().Path(), modulePrefix), obj.Name())
+		}
+		return true
+	})
+}
+
+// HTTP tests consume detached service results instead of recreating engine
+// projections. Resolve aliases and dot imports through the compiler's types.
+func inspectTestEngineLiterals(pass *analysis.Pass, file *ast.File, unit string) {
+	ast.Inspect(file, func(node ast.Node) bool {
+		literal, ok := node.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		typ := pass.TypesInfo.TypeOf(literal)
+		if typ == nil {
+			return true
+		}
+		named, ok := types.Unalias(typ).(*types.Named)
+		if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != modulePrefix+"pkg/services/factory_runtime" {
+			return true
+		}
+		switch named.Obj().Name() {
+		case "EngineStateSnapshot", "Net", "PetriMarkingSnapshot", "RuntimeToken", "RuntimeTokenColor":
+			pass.Reportf(literal.Pos(), "test-http-engine-literal: %s -> pkg/services/factory_runtime.%s; use detached service-root results instead of implementing engine policy in HTTP tests", unit, named.Obj().Name())
 		}
 		return true
 	})

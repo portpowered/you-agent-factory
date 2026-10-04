@@ -135,17 +135,6 @@ var prohibitedTransportTestPolicyOperations = map[string]map[string]string{
 	},
 }
 
-// HTTP transport tests prove protocol behavior against strict roles. Building
-// engine-shaped values in them recreates projection and movement policy behind
-// those roles, so they may traffic only in detached service-root results.
-var prohibitedHTTPTransportTestEngineTypes = map[string]string{
-	"EngineStateSnapshot":  "factory_runtime",
-	"Net":                  "factory_runtime",
-	"PetriMarkingSnapshot": "factory_runtime",
-	"RuntimeToken":         "factory_runtime",
-	"RuntimeTokenColor":    "factory_runtime",
-}
-
 type testBehaviorFinding struct {
 	Kind       string `json:"kind"`
 	Owner      string `json:"owner,omitempty"`
@@ -210,7 +199,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 		}
 
 		callerOwner, callerIsService := servicePackageOwner(rel)
-		insideHTTPTransportTest := strings.HasPrefix(rel, "pkg/transports/http/")
 		importsByName := map[string]string{}
 		dotImports := map[string]struct{}{}
 		for _, spec := range parsed.Imports {
@@ -316,20 +304,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 		}
 
 		ast.Inspect(parsed, func(node ast.Node) bool {
-			if insideHTTPTransportTest {
-				literal, ok := node.(*ast.CompositeLit)
-				if ok {
-					selector, selected := literal.Type.(*ast.SelectorExpr)
-					if selected {
-						identifier, identified := selector.X.(*ast.Ident)
-						if identified && importsByName[identifier.Name] == factoryRuntimeRootImportPath {
-							if owner, prohibited := prohibitedHTTPTransportTestEngineTypes[selector.Sel.Name]; prohibited {
-								record(testBehaviorOperation{testBehaviorPolicyKind, owner, factoryRuntimeRootImportPath, selector.Sel.Name}, selector.Sel.Pos())
-							}
-						}
-					}
-				}
-			}
 			call, ok := node.(*ast.CallExpr)
 			if !ok {
 				return true
@@ -469,11 +443,6 @@ func validateTestBehaviorBaselineEntry(entry testBehaviorBaselineEntry) error {
 }
 
 func testBehaviorPolicyOwner(importPath, symbol string) (string, bool) {
-	if importPath == factoryRuntimeRootImportPath {
-		if owner, known := prohibitedHTTPTransportTestEngineTypes[symbol]; known {
-			return owner, true
-		}
-	}
 	if owner, known := prohibitedCrossOwnerTestOperations[importPath][symbol]; known {
 		return owner, true
 	}

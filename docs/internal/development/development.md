@@ -251,6 +251,9 @@ and functional-test transport composition (with exact generated HTTP client
 and contract allowances). Transport test `PrepareInvocationInput` declarations
 may only delegate directly to a receiver callback; parsing, normalization and
 authored response policy remain Work-owned.
+HTTP transport tests also reject internal engine literals for the five retired
+runtime types, resolving aliases and dot imports through compiler identities.
+Detached public results and tests outside HTTP transport retain their scope.
 Compiler-resolved function references cover aliases, dot imports and captured
 values in test files and reusable test support. Work-owned tests remain allowed;
 generated files and ordinary production consumers are excluded.

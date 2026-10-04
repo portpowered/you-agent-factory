@@ -229,31 +229,6 @@ func detachedContracts() {
 	}
 }
 
-func TestScanTestBehaviorBoundariesRejectsEngineImplementationsInHTTPTransportTests(t *testing.T) {
-	t.Parallel()
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/transports/http/servertests/server_move_work_test.go", `package http
-import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-func hiddenEngineFixtures() {
-  _ = runtime.RuntimeToken{}
-  _ = runtime.PetriMarkingSnapshot{}
-  _ = runtime.Net{}
-}
-`)
-
-	findings, err := scanTestBehaviorBoundaries(repoRoot)
-	if err != nil {
-		t.Fatalf("scanTestBehaviorBoundaries() error = %v", err)
-	}
-	joined := testBehaviorFindingSummary(findings)
-	for _, symbol := range []string{"RuntimeToken", "PetriMarkingSnapshot", "Net"} {
-		want := "pkg/transports/http/servertests/server_move_work_test.go|cross-owner-service-policy|pkg/services/factory_runtime|" + symbol + "|1"
-		if !strings.Contains(joined, want) {
-			t.Fatalf("findings = %q, want %q", joined, want)
-		}
-	}
-}
-
 func TestPartitionTestBehaviorFindingsRejectsNewCountChangesAndStaleEntries(t *testing.T) {
 	t.Parallel()
 	finding := testBehaviorFinding{
