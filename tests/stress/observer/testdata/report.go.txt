@@ -86,6 +86,9 @@ func validateOwner(owner baselineobservation.OwnerSnapshot) (resourceTotals, err
 }
 
 func validateReport(report checkpointReport) error {
+	if report.RuntimeGenerationIDs == nil || report.BootstrapSessionIDs == nil {
+		return fmt.Errorf("runtimeGenerationIDs and bootstrapSessionIDs must be arrays")
+	}
 	if report.Checkpoint != "Q0" && report.Checkpoint != "Q1" && report.Checkpoint != "Q2" {
 		return fmt.Errorf("unknown checkpoint")
 	}

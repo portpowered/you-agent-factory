@@ -27,7 +27,7 @@ $hostPackage = './pkg/services/factory_runtime/internal/services/instance_host/i
 $leasesPackage = './pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service'
 go test -overlay $overlay -p 1 -count=1 -run TestInProcessObserver ./pkg/platform/baselineobservation $hostPackage $leasesPackage
 go test -race -overlay $overlay -p 1 -count=1 -run TestInProcessObserver ./pkg/platform/baselineobservation $hostPackage $leasesPackage
-go test -overlay $overlay -p 1 -count=1 -short=true -run '^TestObserverReportValidation$' ./tests/stress/observer
+go test -overlay $overlay -p 1 -count=1 -short=true -run '^TestObserverReport' ./tests/stress/observer
 go test -overlay $overlay -p 1 -count=1 -short=false -run '^TestInProcessObserverQ0$' ./tests/stress/observer
 make lint pkg-file-count
 git diff --check

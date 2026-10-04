@@ -248,7 +248,7 @@ func (observer *smokeObserver) capture(t *testing.T, checkpoint, barrier string)
 		}
 	}
 	report := checkpointReport{Checkpoint: checkpoint, Timestamp: time.Now().UTC().Format(time.RFC3339Nano), FixtureScope: "one root process; controlled Codex; no model/remote effects", Artifact: observer.artifact,
-		Owners: owners, OwnerInventoryComplete: true, LiveGoroutines: runtime.NumGoroutine(), Barriers: []string{barrier}, RuntimeGenerationIDs: observer.generations, BootstrapSessionIDs: observer.bootstrap,
+		Owners: owners, OwnerInventoryComplete: true, LiveGoroutines: runtime.NumGoroutine(), Barriers: []string{barrier}, RuntimeGenerationIDs: append([]string{}, observer.generations...), BootstrapSessionIDs: append([]string{}, observer.bootstrap...),
 		Findings: []string{"controlled Models activity only; RQ-2-COMPOSED-CAPACITY, T27/T22-P01, I01 and VAL01 unproven"},
 	}
 	if observer.sessionID != "" {
