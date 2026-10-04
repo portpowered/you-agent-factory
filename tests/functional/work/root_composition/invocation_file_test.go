@@ -76,6 +76,18 @@ func fileInvocationText(sessionID string) string {
 }
 func runFileInvocationCase(t *testing.T, process support.Process, scenario *flushCase) {
 	t.Helper()
+	baseURL, env := startFileInvocationHost(t, process, scenario)
+	input, err := executeFileInvocation(t, process, scenario, baseURL, env)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, scenario.sessionID, "/work"))
+	if scenario.name != "regular file" {
+		assertFileInvocationRejected(t, scenario, input, err, listed)
+		return
+	}
+	assertFileInvocationCompleted(t, scenario, input, err, listed)
+}
+
+func startFileInvocationHost(t *testing.T, process support.Process, scenario *flushCase) (string, []string) {
+	t.Helper()
 	env := recoveryActivationHomeEnvironment(scenario.home)
 	support.InitializeCustomerHomeWithProcess(t, process, env, scenario.dir)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -83,7 +95,11 @@ func runFileInvocationCase(t *testing.T, process support.Process, scenario *flus
 	host.Input.Env, host.Input.WorkingDirectory = env, scenario.dir
 	command := support.StartProcessCommand(t, process, host.Input)
 	t.Cleanup(func() { cancel(); command.Stop(t) })
-	baseURL := scenario.api.WaitForURL(t)
+	return scenario.api.WaitForURL(t), env
+}
+
+func executeFileInvocation(t *testing.T, process support.Process, scenario *flushCase, baseURL string, env []string) (*support.CapturedInputs, error) {
+	t.Helper()
 	path := filepath.Join(scenario.dir, "owned input.txt")
 	switch scenario.name {
 	case "regular file":
@@ -97,22 +113,32 @@ func runFileInvocationCase(t *testing.T, process support.Process, scenario *flus
 	input.Input.Env, input.Input.WorkingDirectory = env, scenario.dir
 	input.Input.Stdin = strings.NewReader("")
 	err := process.Execute(input.Input)
-	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, scenario.sessionID, "/work"))
-	if scenario.name != "regular file" {
-		if err == nil || !strings.Contains(err.Error(), "REMOTE_DURABLE_START_FAILED") || !strings.Contains(err.Error(), "(400)") || !strings.Contains(err.Error(), "could not read FILE_CONTENTS path") {
-			t.Fatalf("file diagnostic = %v, stderr=%s", err, input.Stderr())
-		}
-		if len(listed.Results) != 0 || scenario.dispatches.Load() != 0 {
-			t.Fatalf("rejected input admitted Work/dispatch = %#v/%d", listed, scenario.dispatches.Load())
-		}
-		return
+	return input, err
+}
+
+func assertFileInvocationRejected(t *testing.T, scenario *flushCase, input *support.CapturedInputs, err error, listed factoryapi.ListWorkResponse) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), "REMOTE_DURABLE_START_FAILED") || !strings.Contains(err.Error(), "(400)") || !strings.Contains(err.Error(), "could not read FILE_CONTENTS path") {
+		t.Fatalf("file diagnostic = %v, stderr=%s", err, input.Stderr())
 	}
+	if len(listed.Results) != 0 || scenario.dispatches.Load() != 0 {
+		t.Fatalf("rejected input admitted Work/dispatch = %#v/%d", listed, scenario.dispatches.Load())
+	}
+}
+
+func assertFileInvocationCompleted(t *testing.T, scenario *flushCase, input *support.CapturedInputs, err error, listed factoryapi.ListWorkResponse) {
+	t.Helper()
 	if err != nil || !strings.Contains(input.Stdout(), "file preparation") {
 		t.Fatalf("invocation output=%q, stderr=%q, error=%v", input.Stdout(), input.Stderr(), err)
 	}
 	if scenario.dispatches.Load() != 1 || len(listed.Results) != 1 {
 		t.Fatalf("completed Work/dispatch = %#v/%d", listed, scenario.dispatches.Load())
 	}
+	assertFileInvocationTerminalWork(t, listed)
+}
+
+func assertFileInvocationTerminalWork(t *testing.T, listed factoryapi.ListWorkResponse) {
+	t.Helper()
 	item := listed.Results[0]
 	if item.State == nil || item.State.Name != "complete" || item.WorkId == nil || *item.WorkId == "" || item.RequestId == nil || *item.RequestId == "" || item.CurrentChainingTraceId == nil || *item.CurrentChainingTraceId == "" {
 		t.Fatalf("terminal Work lost identity/lineage = %#v", item)
