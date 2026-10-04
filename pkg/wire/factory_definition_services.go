@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"runtime"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
@@ -189,7 +188,7 @@ func provideFactoryDefinitionClock(edges serviceedges.Edges) factorydefinitions.
 	if edges.FactoryDefinitionClock != nil {
 		return edges.FactoryDefinitionClock
 	}
-	return platformclock.Real{}
+	return edges.Clock
 }
 
 func provideFactoryDefinitionVersionFileSystem(

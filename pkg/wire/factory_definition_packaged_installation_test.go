@@ -94,8 +94,9 @@ func TestProvideFactoryDefinitionRemainingEffectsSelectOverridesOrPolicyFreeDefa
 		t.Fatalf("portable inspection override = %T, want exact override", got)
 	}
 
-	if got := provideFactoryDefinitionClock(serviceedges.Edges{}); got != (platformclock.Real{}) {
-		t.Fatalf("clock default = %T, want platform clock Real", got)
+	selected := platformclock.NewDeterministic(time.Unix(9, 0), time.Second)
+	if got := provideFactoryDefinitionClock(serviceedges.Edges{Clock: selected}); got != selected {
+		t.Fatalf("clock default = %T, want selected process clock", got)
 	}
 	if got := provideFactoryDefinitionVersionFileSystem(serviceedges.Edges{}); got != (platformfilesystem.Local{}) {
 		t.Fatalf("version filesystem default = %T, want platform filesystem Local", got)
