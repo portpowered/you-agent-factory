@@ -40,7 +40,7 @@ func newPublicWorkRootMaterializer(t *testing.T) work.ContentMaterializer {
 
 func newPublicWorkRootWithMaterialization(t *testing.T) work.Service {
 	t.Helper()
-	return workwire.NewRuntimeService(nil, nil, nil, nil, newPublicWorkRootMaterializer(t))
+	return testRuntimeService(nil, nil, nil, nil, newPublicWorkRootMaterializer(t))
 }
 
 func TestPublicWorkRootMaterializationSeamSuccessLocalFile(t *testing.T) {
@@ -149,4 +149,45 @@ func TestPublicWorkRootMaterializationSeamSealsMaterializationCutWithoutStagingO
 	if _, _, err := root.MaterializeContentURL(ctx, "https://example.invalid/missing.png"); !errors.Is(err, work.ErrContentURLInaccessible) {
 		t.Fatalf("inaccessible materialize error = %v, want ErrContentURLInaccessible", err)
 	}
+}
+
+func testRuntimeService(runtimes work.RuntimeResolver, readFile work.SubmittedFileReader, inspectPath work.SubmittedFilePathInspector, staging work.ContentStagingService, materializer work.ContentMaterializer) work.Service {
+	if staging == nil {
+		staging = admissionOnlyContentStaging{}
+	}
+	if materializer == nil {
+		materializer = admissionOnlyContentMaterializer{}
+	}
+	content := workwire.NewContentPreparation(workwire.NewContentPolicy())
+	prep := workwire.NewRequestPreparationService(workwire.NewRequestPolicy(workwire.NewRequestContentBridge(content)))
+	input := workwire.NewInvocationInputAdapter(workwire.NewInvocationInputPolicy(readFile, inspectPath))
+	state := workwire.NewStateAccess(workwire.NewRuntimeSessionResolver(runtimes), nil, fixtureDurability{})
+	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, staging, materializer, state, prep, input)
+}
+
+type fixtureDurability struct{}
+
+func (fixtureDurability) CompletedFlushSequence(string) (int64, bool) { return 0, false }
+
+// admissionOnlyContentStaging keeps unsupported content operations explicit.
+type admissionOnlyContentStaging struct{}
+
+func (admissionOnlyContentStaging) StageContent(context.Context, work.StageContentRequest) (work.StageContentResult, error) {
+	return work.StageContentResult{}, errors.New("Work content staging is required")
+}
+func (admissionOnlyContentStaging) PrepareContent(context.Context, []work.StagedSubmissionItem) ([]work.WorkContentPart, error) {
+	return nil, errors.New("Work content staging is required")
+}
+func (admissionOnlyContentStaging) ResolveContent(context.Context, string) (work.ResolvedStagedContent, error) {
+	return work.ResolvedStagedContent{}, errors.New("Work content staging is required")
+}
+func (admissionOnlyContentStaging) CleanupContent(context.Context, string) error {
+	return errors.New("Work content staging is required")
+}
+
+// admissionOnlyContentMaterializer keeps unsupported materialization explicit.
+type admissionOnlyContentMaterializer struct{}
+
+func (admissionOnlyContentMaterializer) MaterializeContentURL(context.Context, string) (string, work.ContentCleanup, error) {
+	return "", nil, errors.New("Work content materializer is required")
 }

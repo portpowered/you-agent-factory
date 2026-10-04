@@ -109,7 +109,6 @@ service-subpackage-test|pkg/services/worker_sessions/wire_test|pkg/services/even
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire
 service-subpackage-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire
-service-subpackage-test|tests/functional/runtime_api|pkg/services/work/wire
 service-subpackage-test|tests/functional/sessions_test|pkg/services/factory_sessions/wire
 service-subpackage-test|tests/functional/workers/inference_test|pkg/services/recordings/wire
 service-subpackage|tests/functional/internal/support|pkg/services/factory_sessions/transports/http
@@ -129,10 +128,6 @@ service-construction-test|pkg/services/workers/internal/services/runners/interna
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire.NewService
 service-construction-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire.NewService
 service-construction-test|tests/functional/recordings/root_composition_test|pkg/services/recordings/transports/cli.New
-service-construction-test|tests/functional/runtime_api|pkg/services/work.NewContentPreparation
-service-construction-test|tests/functional/runtime_api|pkg/services/work.NewInvocationPolicyService
-service-construction-test|tests/functional/runtime_api|pkg/services/work.NewRequestPreparationService
-service-construction-test|tests/functional/runtime_api|pkg/services/work/wire.NewRuntimeService
 service-construction-test|tests/functional/sessions_test|pkg/services/factory_sessions/wire.NewLiveChangeCoordinator
 service-construction-test|tests/functional/workers/inference_test|pkg/services/recordings/wire.NewWorkerRecordingFileWriter
 service-construction-test|tests/functional/workers/invoke_continue|pkg/services/providers/wire.NewService

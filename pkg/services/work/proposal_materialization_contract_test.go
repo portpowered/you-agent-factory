@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
 func TestMaterializeWorkerOutputRootAssignsCanonicalIDs(t *testing.T) {
 	t.Parallel()
 
 	ids := 0
-	service := workwire.NewRuntimeService(nil, nil, nil, nil, nil)
+	service := testRuntimeService(nil, nil, nil, nil, nil)
 	result, err := service.MaterializeWorkerOutput(context.Background(), work.MaterializeWorkerOutputRequest{
 		Lineage: work.MaterializationLineageContext{
 			DispatchID:             "dispatch-1",
@@ -57,7 +56,7 @@ func TestMaterializeWorkerOutputRootAssignsCanonicalIDs(t *testing.T) {
 func TestMaterializeWorkerOutputRootRejectsUnknownType(t *testing.T) {
 	t.Parallel()
 
-	service := workwire.NewRuntimeService(nil, nil, nil, nil, nil)
+	service := testRuntimeService(nil, nil, nil, nil, nil)
 	_, err := service.MaterializeWorkerOutput(context.Background(), work.MaterializeWorkerOutputRequest{
 		ProposedWork: []work.ProposedWorkItem{{
 			WorkTypeID: "missing",
@@ -76,7 +75,7 @@ func TestMaterializeWorkerOutputRootHonorsCanceledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	service := workwire.NewRuntimeService(nil, nil, nil, nil, nil)
+	service := testRuntimeService(nil, nil, nil, nil, nil)
 	_, err := service.MaterializeWorkerOutput(ctx, work.MaterializeWorkerOutputRequest{})
 	if err == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)

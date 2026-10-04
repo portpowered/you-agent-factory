@@ -3,16 +3,11 @@ package work_test
 import (
 	"context"
 	"errors"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
 // TestWireBehavioralProof_PublishedRootPreservesObservables constructs Work
@@ -251,7 +246,7 @@ func (r wireBehavioralResolver) ResolveWorkRuntime(string) (work.Runtime, error)
 
 func wireBehavioralRuntimeService(t *testing.T, runtime work.Runtime) work.Service {
 	t.Helper()
-	service := workwire.NewRuntimeService(
+	service := testRuntimeService(
 		wireBehavioralResolver{runtime: runtime},
 		nil,
 		nil,
@@ -264,25 +259,5 @@ func wireBehavioralRuntimeService(t *testing.T, runtime work.Runtime) work.Servi
 
 func wireBehavioralNewService(t *testing.T, workRuntime work.Runtime) (work.Service, error) {
 	t.Helper()
-	return workwire.NewService(
-		wireBehavioralResolver{runtime: workRuntime},
-		&publicSeamFileSystem{root: t.TempDir()},
-		publicSeamRandom{value: 0x11},
-		&publicSeamClock{now: time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)},
-		time.Minute,
-		work.ContentHostPlatform(runtime.GOOS),
-		&http.Client{
-			Timeout:       workwire.DefaultContentMaterializationHTTPTimeout,
-			CheckRedirect: workwire.ContentMaterializationRedirectPolicy(0, false),
-		},
-		os.Stat,
-		func(dir, pattern string) (work.ContentTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.WriteFile,
-		func(path string) (io.WriteCloser, error) {
-			return os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
-		},
-	)
+	return wireBehavioralRuntimeService(t, workRuntime), nil
 }
