@@ -25,61 +25,6 @@ type runtimeSessionInvoker interface {
 	InvokeRuntimeSession(context.Context, workersessions.RuntimeAttemptRequest, workersessions.RetryPolicy, workers.Service, platformclock.Source, platformclock.TimerSource) (workersessions.InvokeSessionResult, error)
 }
 
-// startThroughWorkerSessions reserves identity and preserves the dispatch shape.
-func startThroughWorkerSessions(
-	ctx context.Context,
-	cfg *runtimeConfig,
-	eventHistory recordings.RuntimeLedger,
-	request workers.WorkstationDispatchRequest,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	if strings.TrimSpace(request.Execution.RecordingID) == "" && cfg != nil {
-		request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
-	}
-	dispatchID := request.Execution.Dispatch.DispatchID
-	sessionID := dispatchID
-	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
-		recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch)
-		if found {
-			sessionID = recordedSessionID
-		}
-	}
-	if _, err := cfg.workerSessions.Reserve(
-		context.WithoutCancel(ctx),
-		workersessions.ReserveRequest{ID: sessionID},
-	); err != nil {
-		return err
-	}
-	recordDispatchWorkerSessionAssociation(
-		eventHistory,
-		request.Execution.Dispatch.Execution.DispatchCreatedTick,
-		dispatchID,
-		sessionID,
-		request.Execution.Dispatch.Execution.RequestID,
-		recordings.DispatchWorkerSessionExecutionFacts{
-			Model:           request.Execution.Model,
-			ReasoningEffort: request.Execution.ReasoningEffort,
-		},
-		cfg.clock.Now(),
-	)
-	execute := func() {
-		// Petri dispatch remains one attempt; retryability is classified outward.
-		startResult, startErr := cfg.workerSessions.InvokeSession(
-			context.WithoutCancel(ctx),
-			workersessions.InvokeSessionRequest{ID: sessionID, Execution: request},
-		)
-		result, dispatchErr := workerSessionDispatchOutcome(request, startResult, startErr)
-		accept(context.Background(), request, result, dispatchErr)
-	}
-	async := !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil
-	if async {
-		go execute()
-		return nil
-	}
-	execute()
-	return nil
-}
-
 func runtimeAttemptPreparation(
 	cfg *runtimeConfig,
 	request workers.WorkstationDispatchRequest,

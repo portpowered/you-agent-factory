@@ -597,8 +597,7 @@ func cloneRuntimeContinuation(reference *workers.ProviderContinuationRef) *worke
 // invocation also receives the durable opening/observation window without
 // transferring execution or cancellation ownership away from Runtime.
 //
-// The body is deliberately the same three steps as startThroughWorkerSessions:
-// reserve the Worker Session, commit the dispatch/Worker Session association to
+// Reserve the Worker Session, commit the dispatch/Worker Session association to
 // this runtime's canonical Factory Events, then invoke. Committing the
 // association here -- on the runtime that owns the ledger -- is the whole
 // reason this is an operation rather than a collaborator handed to callers: the

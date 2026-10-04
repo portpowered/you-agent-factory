@@ -888,3 +888,40 @@ func (p *runtimeInvocationProbe) InvokeRuntimeSession(_ context.Context, req wor
 	p.request, p.retry, p.execution, p.clock, p.scheduler = req, retry, execution, clock, scheduler
 	return workersessions.InvokeSessionResult{Session: workersessions.Session{ID: req.ID, State: p.outcome}}, nil
 }
+
+// This boundary supplies a canceled admission result; Worker Sessions' own
+// component tests prove the control/command race. Here the observer is Runtime's
+// reservation/association/invocation order and outward result mapping.
+type associationWindowSessions struct {
+	workersessions.Service
+	reserved chan workersessions.ReserveRequest
+	invoked  chan workersessions.RuntimeAttemptRequest
+}
+
+func (s *associationWindowSessions) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
+	s.reserved <- req
+	return workersessions.Session{ID: req.ID, State: workersessions.StateReserved}, nil
+}
+
+func (s *associationWindowSessions) InvokeRuntimeSession(_ context.Context, req workersessions.RuntimeAttemptRequest, _ workersessions.RetryPolicy, _ workers.Service, _ platformclock.Source, _ platformclock.TimerSource) (workersessions.InvokeSessionResult, error) {
+	s.invoked <- req
+	return workersessions.InvokeSessionResult{Session: workersessions.Session{ID: req.ID, State: workersessions.StateCanceled}}, nil
+}
+
+func assertInvokeWorkerReservationWindow(t *testing.T, sessions *associationWindowSessions, ledger *blockingAssociationLedger) {
+	t.Helper()
+	select {
+	case reserved := <-sessions.reserved:
+		associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
+		if reserved.ID != "dispatch-1" || len(associations) != 1 || associations[0].DispatchID != "dispatch-1" || associations[0].WorkerSessionID != reserved.ID {
+			t.Fatalf("association did not retain the already-reserved identity: %#v, %#v", reserved, associations)
+		}
+	default:
+		t.Fatal("association published before identity reservation")
+	}
+	select {
+	case invoked := <-sessions.invoked:
+		t.Fatalf("invocation began before association publication returned: %#v", invoked)
+	default:
+	}
+}
