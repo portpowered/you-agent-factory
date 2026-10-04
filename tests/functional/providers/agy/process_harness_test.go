@@ -15,7 +15,9 @@ import (
 // Public primary output and the controlled command edge prove that overrides
 // affect this invocation without becoming state on the injected collaborator.
 func TestAgyRequestOverridesRemainScopedThroughPublicRun(t *testing.T) {
-	t.Parallel()
+	// One-shot activation owns the process-wide ~default session. Run this
+	// local phase before parallel explicit-session tests start their hosted
+	// process, which also owns ~default for the lifetime of its listener.
 	fixture := agySharedProcess(t)
 	route := fixture.routes["one-shot-overrides"]
 	scopes := make(map[string]bool)
