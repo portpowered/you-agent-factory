@@ -222,7 +222,7 @@ a feature deletion; it is removing the second, weaker implementation of an artif
 already write.
 
 The order matters. `runtimepersist` is imported by 16 files, 11 of them tests, plus
-`cmd/durableruntimeconstructioncheck`, `pkg/services/factory_sessions/wire/application_graph.go`
+`internal/lint/analyzers/construction_durable.go`, `pkg/services/factory_sessions/wire/application_graph.go`
 and `cmd/pkgboundarycheck/converged_boundaries_test.go`. The read surfaces move first, the
 writes go quiet second, the package dies last.
 
@@ -289,7 +289,7 @@ recording. Durable writes go behind a flag defaulting to off. No package is dele
 so this step is revertible.
 
 **REC-7. Delete.** Remove `runtimepersist`, `DirForProjectRoot`, `durableSessionIDPattern`,
-`cmd/durableruntimeconstructioncheck`, and the wire and boundary-check entries. Add the
+`internal/lint/analyzers/construction_durable.go`, and the wire and boundary-check entries. Add the
 oversized-artifact diagnostic. `make lint` and `cmd/pkgboundarycheck` are the gates here.
 
 ## Non-goals

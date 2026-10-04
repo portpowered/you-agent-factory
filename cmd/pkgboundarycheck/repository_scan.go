@@ -9,34 +9,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
-func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
-	result, err := scanBoundaryRepo(cfg, policy)
-	if err != nil {
-		return scanResult{}, err
-	}
-	repoRoot, err := filepath.Abs(cfg.root)
-	if err != nil {
-		return scanResult{}, fmt.Errorf("resolve repo root: %w", err)
-	}
-	scanRoot := filepath.Join(repoRoot, filepath.FromSlash(cfg.packageRoot))
-	if info, err := os.Stat(scanRoot); err != nil || !info.IsDir() || isIgnoredRepositoryBoundaryPath(repoRoot, scanRoot) {
-		return result, nil
-	}
-	if cfg.constructionRegistry != nil {
-		result.constructionFindings, err = contractguard.ScanConstruction(repoRoot, *cfg.constructionRegistry)
-	} else {
-		result.constructionFindings, err = contractguard.ScanRepositoryConstruction(repoRoot)
-	}
-	return result, err
-}
-
 // scanBoundaryRepo collects only rules eligible for historical suppression.
-// Current construction metadata is validated separately against the current tree;
-// construction observations are never admitted to the historical baseline.
 func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	repoRoot, err := filepath.Abs(cfg.root)
 	if err != nil {

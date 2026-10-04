@@ -2223,7 +2223,7 @@ This lane does not change logger policy. The F14 concurrency witness belongs to 
 
 **Acceptance criteria:**
 
-- [ ] Given the lint.md §5 fixture matrix, when `go test ./cmd/pkgboundarycheck ./cmd/durableruntimeconstructioncheck ./cmd/loggingboundarycheck ./cmd/pkgmaintcheck ./cmd/servicecyclecheck` runs, then every prohibited-pattern fixture (secondary constructor call in an operation, dependency bag, service getter used as locator, recursive provider, nil-to-default substitution, redundant requiredness guard, hidden clock/logger default) is reported with its qualified symbol, and every listed exclusion fixture (scoped state allocation, legitimate derived logger, replay clock, domain validation) is not reported.
+- [ ] Given the lint.md §5 fixture matrix, when `go test ./internal/lint/analyzers ./cmd/pkgboundarycheck ./cmd/pkgmaintcheck ./cmd/servicecyclecheck` runs, then every prohibited-pattern fixture (secondary constructor call in an operation, dependency bag, service getter used as locator, recursive provider, nil-to-default substitution, redundant requiredness guard, hidden clock/logger default) is reported with its qualified symbol, and every listed exclusion fixture (scoped state allocation, legitimate derived logger, replay clock, domain validation) is not reported.
 - [ ] Given a capability set whose owner lane has merged with zero findings, when the set is enabled and `make lint` runs on the rebased head, then it passes; adding one prohibited fixture-shaped line to that owner package makes it fail with a symbol/path-only diagnostic.
 - [ ] Static/generation gates prove direct construction/effects in this lane and every assigned inventory entry has a terminal disposition.
 - [ ] Valid internal construction requires no implicit fallback; boundary nil/typed-nil classification is preserved.
@@ -2232,7 +2232,7 @@ This lane does not change logger policy. The F14 concurrency witness belongs to 
 
 - Behavioral witness: S01, observed public result/events/replay or supported effect calls. For S01 this is static evidence, not functional behavior.
 - Executable-spine effect: preserve; shared effect/checker enablers extend fidelity.
-- Required evidence: unit, controlled; `go test ./cmd/pkgboundarycheck ./cmd/loggingboundarycheck ./cmd/durableruntimeconstructioncheck ./cmd/servicecyclecheck ./cmd/pkgmaintcheck`. Proves owned transitions/validation/cleanup or checker fixtures; does not prove whole composition.
+- Required evidence: unit, controlled; `go test ./internal/lint/analyzers ./cmd/pkgboundarycheck ./cmd/servicecyclecheck ./cmd/pkgmaintcheck`. Proves owned transitions/validation/cleanup or checker fixtures; does not prove whole composition.
 - Required evidence: functional, controlled; the focused `go run ./cmd/functionallane -root <dir>/...` runs named under "Validation-review coverage and scope" (the lane accepts `-root`, `-short`, `-count`, `-jobs`, `-timeout`; there is no `-run`), then required CI runs the broad functional gate after push/open PR; do not use `make test-functional`, `make test-full` or `make verify-pr` locally as a push gate on the shared host. Cases guarded by `SkipLongFunctional` need `-short=false`; `functionallong`-tagged cases need `make test-functional-long`. Proves named public behavior; does not prove OS signals or remote availability. T20 instead uses checker/static evidence; T22 instead runs dedicated P01/I01 procedures from plan section 7.
 - Static/generation: `make pkg-boundary logging-boundary-check durable-runtime-construction-check service-cycle-check pkg-maint pkg-file-count`. `pkg-file-count` is exact and deletion-only: `pkg/wire` is pinned at 50 files in `docs/internal/baselines/backend-package-file-count.json`, and owner packages are limited to 15 files. Add providers to existing files or to owner `wire` packages; a deleted file lowers its baseline entry in the same PR, and the lane must rebase and re-run immediately before merge because concurrent lanes edit the same JSON; changed graph also `make wire-smoke`; PR CI runs `make lint` and appropriate `make verify-fast`/`make verify-pr`; narrow changed-package tests/lint precede early push. Proves actual source/generation properties only.
 - Highest feasible: controlled composed-process functional for service lanes; AST fixture/repository scan for T20; local real prebuilt integration and dedicated stress for T22.
@@ -3033,7 +3033,7 @@ Generated: `pkg/wire/wire_gen.go` via `make generate-wire`.
 - [ ] Given a new prohibited construction in any service package, when `make pkg-boundary` runs, then it fails with that symbol.
 
 **Verification:**
-- Static: `make lint` and `go test ./cmd/pkgboundarycheck ./cmd/durableruntimeconstructioncheck ./cmd/loggingboundarycheck ./cmd/pkgmaintcheck ./cmd/servicecyclecheck`.
+- Static: `make lint` and `go test ./internal/lint/analyzers ./cmd/pkgboundarycheck ./cmd/pkgmaintcheck ./cmd/servicecyclecheck`.
 - Proves source properties only. Runtime behavior is covered by VAL01.
 
 **Paid validation:** Not applicable.
