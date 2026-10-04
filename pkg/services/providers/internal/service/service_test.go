@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -894,11 +895,7 @@ func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) pr
 	t.Helper()
 	service, err := providerswire.NewService(
 		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
-		providerswire.WithAgyPTY(providerswire.AgyPTYPlatformDependencies{
-			Allocator: allocator,
-			Locator:   platformprocess.HostExecutableLocator{},
-			Inspector: platformfilesystem.Local{},
-		}),
+		providerswire.WithAgyPTYEffect(providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{})),
 	)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)

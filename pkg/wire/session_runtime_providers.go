@@ -161,12 +161,12 @@ func provideConfiguredProvidersService(
 	integrations []operatorsettings.ACPIntegration,
 	workersRunner platformprocess.CommandRunner,
 ) (providers.Service, error) {
-	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
+	agyPTYEffect, err := provideProvidersAgyPTYEffect(edges)
 	if err != nil {
 		return nil, err
 	}
 	options := []providerswire.Option{
-		providerswire.WithAgyPTY(agyPTYPlatform),
+		providerswire.WithAgyPTYEffect(agyPTYEffect),
 		providerswire.WithAgyCommandClock(effectiveProviderCommandClock(edges)),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(provideProvidersExecutableLocator(edges)),
@@ -1033,12 +1033,11 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 	return platformfilesystem.Local{}
 }
 
-// provideProvidersAgyPTYPlatform projects the Providers-owned PTY effect into
-// the Workers-private invocation seam at the canonical composition boundary.
-func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
+// provideProvidersAgyPTYEffect completes the native adapter before root assembly.
+func provideProvidersAgyPTYEffect(edges serviceedges.Edges) (providerswire.AgyEffect, error) {
 	allocator, err := provideProvidersAgyPTYAllocator(edges)
 	if err != nil {
-		return providerswire.AgyPTYPlatformDependencies{}, err
+		return nil, err
 	}
 	executableLocator := edges.WorkersExecutableLocator
 	if executableLocator == nil {
@@ -1048,11 +1047,10 @@ func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.Agy
 	if executableInspector == nil {
 		executableInspector = platformfilesystem.Local{}
 	}
-	return providerswire.AgyPTYPlatformDependencies{
-		Allocator: allocator,
-		Locator:   executableLocator,
-		Inspector: executableInspector,
-	}, nil
+	return providerswire.NewAgyPTYEffect(
+		allocator, executableLocator, executableInspector,
+		effectiveProviderCommandClock(edges), providerswire.AgyPTYPolicy{},
+	), nil
 }
 
 func provideWorkersFactoryDocsFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileTree {

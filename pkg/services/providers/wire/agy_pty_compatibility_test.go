@@ -124,11 +124,7 @@ func newLegacyAgyProvidersService(
 		t.Fatalf("NewAgyPTYAllocator() error = %v", err)
 	}
 	service, err := NewService(
-		WithAgyPTY(AgyPTYPlatformDependencies{
-			Allocator: allocator,
-			Locator:   legacyAgyExecutableLocator{path: executable},
-			Inspector: platformfilesystem.Local{},
-		}),
+		WithAgyPTYEffect(NewAgyPTYEffect(allocator, legacyAgyExecutableLocator{path: executable}, platformfilesystem.Local{}, clock, AgyPTYPolicy{})),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

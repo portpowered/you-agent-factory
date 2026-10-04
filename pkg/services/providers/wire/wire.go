@@ -65,12 +65,15 @@ func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source, sched
 	return executionwire.NewAgyPTYAllocator(host, clock, scheduler)
 }
 
-// AgyPTYPlatformDependencies are platform facts required for the built-in Agy
-// PTY execution adapter.
-type AgyPTYPlatformDependencies struct {
-	Allocator any
-	Locator   platformprocess.ExecutableLocator
-	Inspector platformfilesystem.PathInspector
+// AgyEffect exposes the completed AGY execution collaborator to composition.
+type AgyEffect = executionwire.AgyEffect
+
+// AgyPTYPolicy contains detached native-session policy, without host effects.
+type AgyPTYPolicy = executionwire.AgyPTYPolicy
+
+// NewAgyPTYEffect constructs one native effect over individually supplied ports.
+func NewAgyPTYEffect(allocator PTYAllocator, locator platformprocess.ExecutableLocator, inspector platformfilesystem.PathInspector, clock platformclock.Source, policy AgyPTYPolicy) AgyEffect {
+	return executionwire.NewAgyPTYEffect(allocator, locator, inspector, clock, policy)
 }
 
 // CatalogCapabilityOverride supplies an authoritative capability view for one
@@ -102,7 +105,7 @@ type wireOptions struct {
 	commandRunner      providerservice.CommandRunner
 	agyCommandRunner   providerservice.CommandRunner
 	agyCommandClock    platformclock.Source
-	agyPTYPlatform     AgyPTYPlatformDependencies
+	agyPTYEffect       AgyEffect
 	acpIntegrations    []providers.ACPIntegration
 	commandFactory     platformprocess.CommandFactory
 	executableLocator  platformprocess.ExecutableLocator
@@ -272,18 +275,18 @@ func WithAgyCommandClock(clock platformclock.Source) Option {
 	return agyCommandClockOption{clock: clock}
 }
 
-type agyPTYPlatformOption struct {
-	platform AgyPTYPlatformDependencies
+type agyPTYEffectOption struct {
+	effect AgyEffect
 }
 
-func (o agyPTYPlatformOption) apply(opts *wireOptions) {
-	opts.agyPTYPlatform = o.platform
+func (o agyPTYEffectOption) apply(opts *wireOptions) {
+	opts.agyPTYEffect = o.effect
 }
 
-// WithAgyPTY injects the platform facts required for the built-in Agy PTY
-// execution adapter.
-func WithAgyPTY(platform AgyPTYPlatformDependencies) Option {
-	return agyPTYPlatformOption{platform: platform}
+// WithAgyPTYEffect supplies the completed legacy PTY effect. An explicit
+// command runner retains priority over this effect.
+func WithAgyPTYEffect(effect AgyEffect) Option {
+	return agyPTYEffectOption{effect: effect}
 }
 
 // WithWorkersCommandRunner is retained as a source-compatible migration
@@ -343,7 +346,7 @@ func NewService(options ...Option) (providers.Service, error) {
 		config.commandRunner,
 		config.agyCommandRunner,
 		config.agyCommandClock,
-		config.agyPTYPlatform,
+		config.agyPTYEffect,
 		acp,
 		config.commandFactory,
 		config.executableLocator,
@@ -393,7 +396,7 @@ func newRootWithOptions(
 	commandRunner providerservice.CommandRunner,
 	agyCommandRunner providerservice.CommandRunner,
 	agyCommandClock platformclock.Source,
-	agyPTYPlatform AgyPTYPlatformDependencies,
+	agyPTYEffect AgyEffect,
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
 	executableLocator platformprocess.ExecutableLocator,
@@ -404,7 +407,7 @@ func newRootWithOptions(
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
-	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, agyCommandClock, agyPTYPlatform)
+	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, agyCommandClock, agyPTYEffect)
 	scheduler, ok := agyCommandClock.(platformclock.TimerSource)
 	if !ok {
 		scheduler = platformclock.Real{}
@@ -555,7 +558,7 @@ func executionserviceRegistrations(
 	commandRunner providerservice.CommandRunner,
 	agyCommandRunner providerservice.CommandRunner,
 	agyCommandClock platformclock.Source,
-	agyPTYPlatform AgyPTYPlatformDependencies,
+	agyPTYEffect AgyEffect,
 ) []execution.Registration {
 	if agyCommandClock == nil {
 		agyCommandClock = platformclock.Real{}
@@ -564,10 +567,7 @@ func executionserviceRegistrations(
 	if !ok {
 		scheduler = platformclock.Real{}
 	}
-	var antigravity executionwire.AgyEffect
-	if allocator := providerservice.AdaptPTYAllocator(agyPTYPlatform.Allocator); allocator != nil {
-		antigravity = executionwire.NewAgyPTYEffect(allocator, agyPTYPlatform.Locator, agyPTYPlatform.Inspector, agyCommandClock, executionwire.AgyPTYPolicy{})
-	}
+	antigravity := agyPTYEffect
 	if agyCommandRunner != nil {
 		antigravity = executionwire.NewAgyCommandEffect(agyCommandRunner, agyCommandClock, scheduler)
 	}

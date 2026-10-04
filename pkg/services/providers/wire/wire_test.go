@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/providerpackages"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -446,11 +447,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		})),
 		WithCommandRunner(platformRunner),
 		WithWorkersCommandRunner(workersRunner),
-		WithAgyPTY(AgyPTYPlatformDependencies{
-			Allocator: agyAllocator,
-			Locator:   agyLocator,
-			Inspector: agyInspector,
-		}),
+		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{})),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -531,20 +528,21 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	t.Parallel()
 
 	workersRunner := &recordingWorkersCommandRunner{}
+	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
+	policy := DefaultPTYSessionConfig()
+	policy.HardTimeout = 17 * time.Minute
 	agyAllocator := &recordingPTYAllocator{
-		result: PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
+		result:     PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
+		onAllocate: func() { clock.SetTick(37) },
 	}
 	agyPath := filepath.Join(t.TempDir(), "agy")
-	agyLocator := fakeExecutableLocator{string(providers.IDAntigravity): agyPath}
+	agyLocator := fakeExecutableLocator{"agy": agyPath}
 	agyInspector := fakeExecutableInspector{agyPath: fakeExecutableInfo{directory: false}}
 
 	root, err := NewService(
 		WithWorkersCommandRunner(workersRunner),
-		WithAgyPTY(AgyPTYPlatformDependencies{
-			Allocator: agyAllocator,
-			Locator:   agyLocator,
-			Inspector: agyInspector,
-		}),
+		WithAgyCommandClock(platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
+		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy})),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -571,6 +569,15 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	}
 	if agyResult.Content != "agy via wire" {
 		t.Fatalf("Execute(agy) content = %q, want injected allocator output", agyResult.Content)
+	}
+	if agyResult.Diagnostics == nil || agyResult.Diagnostics.DurationMillis != 37 {
+		t.Fatalf("PTY duration = %#v, want the supplied effect's 37ms clock", agyResult.Diagnostics)
+	}
+	if agyAllocator.config != policy {
+		t.Fatalf("PTY config = %#v, want detached policy %#v", agyAllocator.config, policy)
+	}
+	if agyAllocator.launch.Executable != agyPath || agyAllocator.closes != 1 {
+		t.Fatalf("PTY launch/close = %#v/%d, want selected executable and joined resource", agyAllocator.launch, agyAllocator.closes)
 	}
 }
 
@@ -727,7 +734,7 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 		{
 			name: "catalog",
 			call: func() (providers.Service, error) {
-				return newRootWithOptions(nil, nil, nil, nil, AgyPTYPlatformDependencies{}, nil, nil, nil, nil, nil)
+				return newRootWithOptions(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 			},
 			want: "construct Providers: catalog is required",
 		},
@@ -842,28 +849,37 @@ func (r *recordingWorkersCommandRunner) Run(
 }
 
 type recordingPTYAllocator struct {
-	calls  int
-	result PTYSessionResult
+	calls      int
+	closes     int
+	result     PTYSessionResult
+	launch     PTYProcessLaunch
+	config     PTYSessionConfig
+	onAllocate func()
 }
 
 func (a *recordingPTYAllocator) Allocate(
 	_ context.Context,
-	_ PTYProcessLaunch,
-	_ PTYSessionConfig,
+	launch PTYProcessLaunch,
+	config PTYSessionConfig,
 ) (PTYSession, error) {
 	a.calls++
-	return &recordingPTYSession{result: a.result}, nil
+	a.launch, a.config = launch, config
+	if a.onAllocate != nil {
+		a.onAllocate()
+	}
+	return &recordingPTYSession{result: a.result, close: func() { a.closes++ }}, nil
 }
 
 type recordingPTYSession struct {
 	result PTYSessionResult
+	close  func()
 }
 
 func (s *recordingPTYSession) Run(context.Context) (PTYSessionResult, error) {
 	return s.result, nil
 }
 
-func (s *recordingPTYSession) Close() error { return nil }
+func (s *recordingPTYSession) Close() error { s.close(); return nil }
 
 type fakeExecutableLocator map[string]string
 
