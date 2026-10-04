@@ -1,5 +1,7 @@
 # Concrete construction and operation contracts
 
+Authority: OWNER option b, 2026-10-03T22:45Z. All acceptance outside the observation technology remains unchanged. See [exact method amendments](inprocess-baseline-observer.md).
+
 Companion to [plan.md](plan.md). These documentation proposals specify the target; they do not change application code. Current blocks quote source signatures or records from the audited checkout. Task packets contain the additional smaller-owner contract pairs. Two pairs are authored by their lanes as each lane's first required step, before any structural change (operator decision, 2026-10-02): T16's keyed attempt request and T31's `BundleBuilder`/`WorkstationRequestExecutorConfig`. If either cannot be written, that lane stops and returns a delta plan. A deletion does not authorize replacing the container with another aggregate.
 
 Every peer construction alias below belongs in the owning service's outer `wire` package. For a nested `internal` implementation, expose its type first from the nearest legally enclosing `wire` package, then re-export that alias through outer owner Wire; outer Wire cannot directly import a grandchild internal package outside its permitted ancestor. Public private-contract packages can be imported directly where Go permits it. Canonical `pkg/wire` uses those aliases without importing forbidden `internal` packages. Peers continue to consume public service-root contracts; these aliases are construction vocabulary only. Focused providers construct one implementation each, with already selected collaborators, and start no lifecycle activity.
@@ -2830,7 +2832,7 @@ AM03/AM04: no HTTP/MCP Settings load/update routes are created. Existing canonic
 
 AM05: RetainWorktree/reused checkout semantics remain unchanged. T09 releases attempt resources and nonretained checkout; T15 owns retained session/generation checkout disposition. Deleting retained checkouts requires an operator policy decision, not constructor cleanup.
 
-AM10: no public observation API or baseline instrumentation is introduced. FI-PREREQ-BASELINE-OBS must independently prove read-only private handles/leases/capacityHolders observation at original pin; T27/T22 P01 stays blocked if infeasible.
+AM10 / OWNER22:45Z: no public observation API is introduced. Authorized test-only in-process observations or existing metrics/diagnostics replace external-reader acquisition and the no-test-hook prohibition only. FI-PREREQ-BASELINE-OBS independently proves synchronized complete owner handles, Models lease records with status, per-slot capacityHolders integers and total, and live goroutines at Q0/Q1/Q2 on original pinned source with separately attested overlay/tool/artifact identities. Reads never expire, release or delete state. Unsupported observation remains a finding; T27/T22 timing/retention and full FI-A6/P01 remain later gates.
 
 AM11: post-start cancellation plus failing final-flush writer and injected UTC clock preserve terminal causes/metadata; absent clock returns ErrInvalidRecordingTerminalMetadata and leaves FinalizedAt unset. Keep retained T03 head and F07/F08; no successful zero-time finalization claim.
 

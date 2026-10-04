@@ -1,0 +1,133 @@
+// Package baselineobservation exists only in an attested Go test overlay.
+package baselineobservation
+
+import (
+	"fmt"
+	"sort"
+	"sync"
+)
+
+type HandleEntry struct {
+	Key            string `json:"key"`
+	HandleIdentity string `json:"handleIdentity"`
+}
+type LeaseRecord struct {
+	Key       string `json:"key"`
+	Scope     string `json:"scope"`
+	ModelName string `json:"modelName"`
+	Status    string `json:"status"`
+	Claimed   bool   `json:"claimed"`
+}
+type HostSnapshot struct {
+	Handles     []HandleEntry `json:"handles"`
+	HandleCount int           `json:"handleCount"`
+}
+type LeaseSnapshot struct {
+	LeaseRecords         []LeaseRecord  `json:"leaseRecords"`
+	LeaseRecordCount     int            `json:"leaseRecordCount"`
+	CapacityHolders      map[string]int `json:"capacityHolders"`
+	CapacityHoldersTotal int            `json:"capacityHoldersTotal"`
+}
+type OwnerSnapshot struct {
+	Kind          string         `json:"kind"`
+	OwnerIdentity string         `json:"ownerIdentity"`
+	Source        string         `json:"source"`
+	Host          *HostSnapshot  `json:"host,omitempty"`
+	Leases        *LeaseSnapshot `json:"leases,omitempty"`
+}
+type callback struct {
+	kind, source string
+	read         func() OwnerSnapshot
+}
+
+var registry = struct {
+	sync.Mutex
+	owners   map[string]callback
+	failures []error
+}{owners: make(map[string]callback)}
+
+func Register(kind, identity, source string, read func() OwnerSnapshot) {
+	registry.Lock()
+	defer registry.Unlock()
+	if identity == "" || source == "" || read == nil || (kind != "instance_host" && kind != "models_leases") {
+		registry.failures = append(registry.failures, fmt.Errorf("invalid owner registration %q", identity))
+		return
+	}
+	if _, exists := registry.owners[identity]; exists {
+		registry.failures = append(registry.failures, fmt.Errorf("duplicate owner registration %q", identity))
+		return
+	}
+	registry.owners[identity] = callback{kind, source, read}
+}
+
+func readOwner(identity string, cb callback) (snapshot OwnerSnapshot, err error) {
+	defer func() {
+		if failure := recover(); failure != nil {
+			err = fmt.Errorf("read owner %s: %v", identity, failure)
+		}
+	}()
+	snapshot = cb.read()
+	if snapshot.Kind != cb.kind || snapshot.OwnerIdentity != identity || snapshot.Source != cb.source {
+		return OwnerSnapshot{}, fmt.Errorf("owner %s returned inconsistent attribution", identity)
+	}
+	if cb.kind == "instance_host" && (snapshot.Host == nil || snapshot.Leases != nil) || cb.kind == "models_leases" && (snapshot.Leases == nil || snapshot.Host != nil) {
+		return OwnerSnapshot{}, fmt.Errorf("owner %s returned incomplete state", identity)
+	}
+	return snapshot, nil
+}
+
+func CaptureOwner(identity string) (OwnerSnapshot, error) {
+	registry.Lock()
+	cb, exists := registry.owners[identity]
+	registry.Unlock()
+	if !exists {
+		return OwnerSnapshot{}, fmt.Errorf("owner %s unavailable", identity)
+	}
+	return readOwner(identity, cb)
+}
+
+// Capture releases the collector mutex before acquiring any owner's mutex.
+// Cross-owner coherence requires the caller's quiescent lifecycle barrier.
+func Capture() ([]OwnerSnapshot, error) {
+	registry.Lock()
+	owners := make(map[string]callback, len(registry.owners))
+	for identity, cb := range registry.owners {
+		owners[identity] = cb
+	}
+	failures := append([]error(nil), registry.failures...)
+	registry.Unlock()
+	if len(failures) != 0 {
+		return nil, fmt.Errorf("registration failed: %v", failures)
+	}
+	if len(owners) == 0 {
+		return nil, fmt.Errorf("no owners registered; inventory unavailable")
+	}
+	keys := make([]string, 0, len(owners))
+	for identity := range owners {
+		keys = append(keys, identity)
+	}
+	sort.Strings(keys)
+	snapshots := make([]OwnerSnapshot, 0, len(keys))
+	for _, identity := range keys {
+		snapshot, err := readOwner(identity, owners[identity])
+		if err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+	return snapshots, nil
+}
+
+func Unregister(identity string) {
+	registry.Lock()
+	delete(registry.owners, identity)
+	registry.Unlock()
+}
+
+// Close releases observer references only. Product state is never changed.
+func Close() {
+	registry.Lock()
+	registry.owners = make(map[string]callback)
+	registry.failures = nil
+	registry.Unlock()
+}

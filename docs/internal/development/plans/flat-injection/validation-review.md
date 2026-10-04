@@ -1,5 +1,7 @@
 # Flat-injection plan: blind validation review
 
+Authority: OWNER option b, 2026-10-03T22:45Z. All acceptance outside the observation technology remains unchanged. See [exact method amendments](inprocess-baseline-observer.md).
+
 Reviewed 2026-10-02 against origin/main `933b8c691d`. Inputs: [plan.md](plan.md), [tasks.md](tasks.md), [contracts.md](contracts.md), [inventory.md](inventory.md) and [lint.md](lint.md). The review read source only. No tests ran and no code changed.
 
 ## Verdict
@@ -130,7 +132,7 @@ This correction record supersedes contradictory 2026-10-02 findings above. It is
 | AM07 | Independent authority/control -> durable -> invocation -> gateway; T13 binder removal/clock retention; T17 final opening | F03/F04/F06/F07/F08; T15 final opaque RuntimeBinding; S01 |
 | AM08 | Replay Clock distinct from process scheduler; readiness preserves cancellation/durations | T14 F06; U01/F15/F16 |
 | AM09 | Merged first-step contract precedes production UUID characterization, U03-T16 scoped proof and real-path collision disposition, then complete factory removal; T15 consumes | T16-CHAR-PRODUCTION-ID; U03-T16; T16-REAL-PATH-COLLISION; contingent authorized T16-IDENTITY-DELTA; T16-CUTOVER/F05/F06 |
-| AM10 | Exact pin, private handles/lease records/holder values and goroutine counts require read-only access proof | FI-PREREQ-BASELINE-OBS feasibility held; T27/T22 P01 |
+| AM10 | Exact original source pin, synchronized program-owned handles/lease records with status/per-slot capacity-holder integers and total/live goroutines at Q0/Q1/Q2 through authorized test-only observation; attest overlay/artifact and matching final overhead | FI-PREREQ-BASELINE-OBS independent observer feasibility/checkpoint proof; T27 full baseline, T22 final P01/I01 and VAL01 remain later gates. OWNER22:45Z replaces external-reader acquisition only. |
 | AM11 | Started recording, cancellation/final-flush-failure UTC metadata; absent clock error/unset FinalizedAt | T03 F07/F08; retained 5725072a work preserved |
 | AM12 | start_sync completion and ordered returned-session events both mandatory; retained failing witness | FI-PREREQ-MCP-DISCOVERY, M01/F13; policy delta operator hold |
 | AM13 | Characterization vs production prerequisite vs cutover; both retained heads/reproduction preserved | FI-PREREQ-WEBHOOK-READINESS authority held; F18a-f unchanged |
