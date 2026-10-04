@@ -180,28 +180,19 @@ func workstationDispatchRequestFromExecute(
 	}
 }
 
-// WorkstationRequestExecutorConfig supplies the immutable Runtime facts needed
-// to resolve a direct Worker Session request before handing it to the shared
-// Workers Execute boundary. It is deliberately separate from the Runtime's
-// active attempt lifecycle: direct Worker Sessions own their own supervision.
-type WorkstationRequestExecutorConfig struct {
-	Service                    workers.Service
-	RuntimeDefinitions         interfaces.RuntimeDefinitionLookup
-	InvocationInterpolation    interfaces.InvocationInterpolationService
-	InvocationFileReader       interfaces.FileReader
-	WorkflowContext            *workers.Context
-	FactorySessionID           string
-	RuntimeID                  string
-	RecordingID                string
-	EventHistory               recordings.RuntimeLedger
-	NewID                      factory.IDGenerator
-	PromptRenderer             runtimePromptRenderer
-	TemplateFieldResolver      runtimeTemplateFieldResolver
-	PromptSourceReader         interfaces.FileReader
-	MockWorkers                *workers.MockWorkersConfig
-	ProgressPublisher          workers.ProgressPublisher
-	Net                        *state.Net
-	ExpectedArtifactFileSystem any
+// WorkstationRequestValues contains session facts only. Definitions and Net
+// must be detached and exclusively owned by the binding's caller.
+type WorkstationRequestValues struct {
+	RuntimeDefinitions interfaces.RuntimeDefinitionLookup
+	WorkflowContext    *workers.Context
+	FactorySessionID   string
+	RuntimeID          string
+	RecordingID        string
+	GenerationID       string
+	FactoryDirectory   string
+	RuntimeBaseDir     string
+	MockWorkers        *workers.MockWorkersConfig
+	Net                *state.Net
 }
 
 type attemptProcessObserver struct {
@@ -318,85 +309,103 @@ func (f *factoryImpl) canonicalWorkerSessionControlEvents() []interfaces.Factory
 	return f.eventHistory.CanonicalEvents()
 }
 
-// NewWorkstationRequestExecutor creates the Runtime-owned compatibility
-// adapter used by top-level Worker Session routes. It resolves minimal legacy
-// direct requests from the immutable Factory definition and then invokes the
-// process-scoped Workers service with a complete detached ExecuteRequest.
-func NewWorkstationRequestExecutor(
-	config WorkstationRequestExecutorConfig,
-) workers.WorkstationRequestExecutor {
-	if config.Service == nil {
-		return nil
-	}
-	return &workstationRequestExecutor{
-		service: config.Service,
-		cfg: &runtimeConfig{
-			executeService:             config.Service,
-			runtimeConfig:              config.RuntimeDefinitions,
-			invocationInterpolation:    config.InvocationInterpolation,
-			invocationFileReader:       config.InvocationFileReader,
-			workflowContext:            config.WorkflowContext.Clone(),
-			recordingID:                strings.TrimSpace(config.RecordingID),
-			runtimeID:                  strings.TrimSpace(config.RuntimeID),
-			eventHistory:               config.EventHistory,
-			newID:                      config.NewID,
-			promptRenderer:             config.PromptRenderer,
-			templateFieldResolver:      config.TemplateFieldResolver,
-			promptSourceReader:         config.PromptSourceReader,
-			mockWorkersConfig:          config.MockWorkers.Clone(),
-			progressPublisher:          config.ProgressPublisher,
-			net:                        config.Net,
-			expectedArtifactFileSystem: expectedArtifactFileSystemFrom(config.ExpectedArtifactFileSystem),
-		},
-		sessionID: strings.TrimSpace(config.FactorySessionID),
-	}
-}
+// WorkstationRequestExecutor is the fixed request resolver constructed by Wire.
+type WorkstationRequestExecutor = workstationRequestExecutor
 
 type workstationRequestExecutor struct {
-	service   executeCapability
-	cfg       *runtimeConfig
-	sessionID string
+	service                 workers.Service
+	invocationInterpolation interfaces.InvocationInterpolationService
+	invocationFileReader    interfaces.FileReader
+	newID                   factory.IDGenerator
+	promptRenderer          runtimePromptRenderer
+	templateFieldResolver   runtimeTemplateFieldResolver
+	promptSourceReader      interfaces.FileReader
+	progressPublisher       workers.ProgressPublisher
+	expectedArtifacts       expectedArtifactFileSystem
+	logger                  factory.Logger
 }
 
-// ResolveExecutionRequest resolves a direct Worker Session request without
-// executing it. The Factory Runtime wrapper uses this narrow capability to
-// preserve the public direct Worker Session route after Worker Sessions hands
-// execution to the request-scoped Workers service.
-func (executor workstationRequestExecutor) ResolveExecutionRequest(
+func NewWorkstationRequestExecutor(service workers.Service,
+	interpolation interfaces.InvocationInterpolationService, invocationFiles interfaces.FileReader,
+	newID factory.IDGenerator, prompts runtimePromptRenderer, templateFields runtimeTemplateFieldResolver,
+	promptSources interfaces.FileReader, progress workers.ProgressPublisher,
+	expectedArtifacts expectedArtifactFileSystem, logger factory.Logger,
+) *workstationRequestExecutor {
+	return &workstationRequestExecutor{service: service, invocationInterpolation: interpolation,
+		invocationFileReader: invocationFiles, newID: newID, promptRenderer: prompts,
+		templateFieldResolver: templateFields, promptSourceReader: promptSources,
+		progressPublisher: progress, expectedArtifacts: expectedArtifacts, logger: logger}
+}
+
+type workstationRequestBinding struct {
+	executor *workstationRequestExecutor
+	values   WorkstationRequestValues
+}
+
+// Bind captures session scalars and copies mutable context and mock values.
+// Definitions and Net are already detached before entering this boundary.
+func (executor *workstationRequestExecutor) Bind(values WorkstationRequestValues) *workstationRequestBinding {
+	values.WorkflowContext = values.WorkflowContext.Clone()
+	values.MockWorkers = values.MockWorkers.Clone()
+	return &workstationRequestBinding{executor: executor, values: values}
+}
+
+func (binding workstationRequestBinding) ResolveExecutionRequest(request workers.WorkstationExecutionRequest) (workers.ExecuteRequest, error) {
+	return binding.executor.ResolveExecutionRequest(binding.values, request)
+}
+
+func (binding workstationRequestBinding) Execute(ctx context.Context, request workers.WorkstationExecutionRequest) (workers.WorkResult, error) {
+	return binding.executor.Execute(ctx, binding.values, request)
+}
+
+var _ WorkstationExecutionResolver = workstationRequestBinding{}
+var _ workers.WorkstationRequestExecutor = workstationRequestBinding{}
+
+// requestConfig projects values into the existing pure selection helpers. It
+// allocates no service graph and retains no per-session state on the resolver.
+func (executor *workstationRequestExecutor) requestConfig(values WorkstationRequestValues) *runtimeConfig {
+	return &runtimeConfig{executeService: executor.service,
+		runtimeConfig: values.RuntimeDefinitions, workflowContext: values.WorkflowContext.Clone(),
+		recordingID: strings.TrimSpace(values.RecordingID), runtimeID: strings.TrimSpace(values.RuntimeID),
+		requestFactoryDirectory: values.FactoryDirectory, requestRuntimeBaseDir: values.RuntimeBaseDir,
+		invocationInterpolation: executor.invocationInterpolation, invocationFileReader: executor.invocationFileReader,
+		newID: executor.newID, promptRenderer: executor.promptRenderer, templateFieldResolver: executor.templateFieldResolver,
+		promptSourceReader: executor.promptSourceReader, mockWorkersConfig: values.MockWorkers.Clone(),
+		progressPublisher: executor.progressPublisher, net: values.Net,
+		expectedArtifactFileSystem: executor.expectedArtifacts, logger: executor.logger}
+}
+
+// ResolveExecutionRequest performs selection without execution or publication.
+func (executor *workstationRequestExecutor) ResolveExecutionRequest(values WorkstationRequestValues,
 	request workers.WorkstationExecutionRequest,
 ) (workers.ExecuteRequest, error) {
-	if executor.service == nil || executor.cfg == nil {
+	if executor == nil || executor.service == nil {
 		return workers.ExecuteRequest{}, workers.ErrExecuteUnavailable
 	}
-	request = executor.normalizeExecutionRequest(request)
-	return executeRequestFromWorkstationRequest(executor.cfg, workers.WorkstationDispatchRequest{
-		WorkstationName: firstRuntimeValue(request.Dispatch.WorkstationName, request.WorkstationType),
-		Execution:       request,
-	})
+	request = normalizeWorkstationRequest(values, request)
+	return executeRequestFromWorkstationRequest(executor.requestConfig(values), workers.WorkstationDispatchRequest{
+		WorkstationName: firstRuntimeValue(request.Dispatch.WorkstationName, request.WorkstationType), Execution: request})
 }
 
-func (executor workstationRequestExecutor) normalizeExecutionRequest(
-	request workers.WorkstationExecutionRequest,
-) workers.WorkstationExecutionRequest {
+func normalizeWorkstationRequest(values WorkstationRequestValues, request workers.WorkstationExecutionRequest) workers.WorkstationExecutionRequest {
 	request = workers.CloneWorkstationExecutionRequest(request)
 	if strings.TrimSpace(request.FactorySessionID) == "" {
-		request.FactorySessionID = executor.sessionID
+		request.FactorySessionID = strings.TrimSpace(values.FactorySessionID)
+	}
+	if strings.TrimSpace(request.RuntimeID) == "" {
+		request.RuntimeID = strings.TrimSpace(values.RuntimeID)
+	}
+	if strings.TrimSpace(request.RecordingID) == "" {
+		request.RecordingID = strings.TrimSpace(values.RecordingID)
+	}
+	if strings.TrimSpace(request.GenerationID) == "" {
+		request.GenerationID = strings.TrimSpace(values.GenerationID)
 	}
 	request.WorkerType = firstRuntimeValue(request.WorkerType, request.Dispatch.WorkerType)
 	if strings.TrimSpace(request.WorkstationType) == "" {
-		request.WorkstationType = firstRuntimeValue(request.WorkstationType, request.Dispatch.WorkstationName)
+		request.WorkstationType = request.Dispatch.WorkstationName
 	}
-	return runtimeRecordingExecutionRequest(executor.cfg, request)
-}
-
-// SetRuntimeLogger binds the opened Runtime's log sink to this compatibility
-// adapter. The adapter itself remains detached; only the per-attempt logger
-// capability crosses into the process-scoped Workers request.
-func (executor *workstationRequestExecutor) SetRuntimeLogger(logger factory.Logger) {
-	if executor == nil || executor.cfg == nil {
-		return
-	}
-	executor.cfg.logger = logger
+	return request
 }
 
 func isRuntimePromptRenderError(err error) bool {
@@ -652,15 +661,16 @@ func platformCancellationReason(reason workers.DispatchCancellationReason) platf
 	return platformprocess.CancellationReasonCanceled
 }
 
-func (executor workstationRequestExecutor) Execute(
+func (executor *workstationRequestExecutor) Execute(
 	ctx context.Context,
+	values WorkstationRequestValues,
 	request workers.WorkstationExecutionRequest,
 ) (workers.WorkResult, error) {
-	if executor.service == nil || executor.cfg == nil {
+	if executor == nil || executor.service == nil {
 		return workers.WorkResult{}, workers.ErrExecuteUnavailable
 	}
-	request = executor.normalizeExecutionRequest(request)
-	executeRequest, err := executor.ResolveExecutionRequest(request)
+	request = normalizeWorkstationRequest(values, request)
+	executeRequest, err := executor.ResolveExecutionRequest(values, request)
 	if err != nil {
 		result := workers.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,
@@ -675,7 +685,7 @@ func (executor workstationRequestExecutor) Execute(
 		return result, err
 	}
 	result, executeErr := executor.service.Execute(ctx, executeRequest)
-	result = normalizeDetachedExecutionResult(executor.cfg, executeRequest, result)
+	result = normalizeDetachedExecutionResult(executor.requestConfig(values), executeRequest, result)
 	dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 		workstationDispatchRequestForResult(workers.WorkstationDispatchRequest{
 			WorkstationName: firstRuntimeValue(request.Dispatch.WorkstationName, request.WorkstationType),
@@ -685,25 +695,6 @@ func (executor workstationRequestExecutor) Execute(
 		executeErr,
 	)
 	return dispatchResult.Result, dispatchErr
-}
-
-func runtimeRecordingExecutionRequest(
-	cfg *runtimeConfig,
-	request workers.WorkstationExecutionRequest,
-) workers.WorkstationExecutionRequest {
-	if cfg == nil {
-		return request
-	}
-	if strings.TrimSpace(request.RuntimeID) == "" {
-		request.RuntimeID = strings.TrimSpace(cfg.runtimeID)
-	}
-	if strings.TrimSpace(request.RecordingID) == "" {
-		request.RecordingID = strings.TrimSpace(cfg.recordingID)
-	}
-	if strings.TrimSpace(request.GenerationID) == "" && cfg.eventHistory != nil {
-		request.GenerationID = strings.TrimSpace(cfg.eventHistory.StreamGenerationID())
-	}
-	return request
 }
 
 func validateRuntimeExecutionSelection(selection runtimeExecutionSelection) error {
@@ -721,8 +712,12 @@ func finalizeRuntimeWorkspaceSelection(
 ) {
 	baseDirectory := strings.TrimSpace(selection.factoryDirectory)
 	if cfg != nil {
+		baseDirectory = firstRuntimeValue(cfg.requestRuntimeBaseDir, baseDirectory)
+	}
+	if cfg != nil {
 		if runtimeLookup, ok := cfg.runtimeConfig.(interfaces.RuntimeConfigLookup); ok && runtimeLookup != nil {
 			baseDirectory = firstRuntimeValue(
+				strings.TrimSpace(cfg.requestRuntimeBaseDir),
 				strings.TrimSpace(runtimeLookup.RuntimeBaseDir()),
 				baseDirectory,
 			)

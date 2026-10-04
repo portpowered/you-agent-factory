@@ -1172,3 +1172,31 @@ func provideProviderFromCommandRunnerFactory(
 func provideRuntimePreparationWorkstationLoader() factorydefinitions.WorkstationLoader {
 	return nil
 }
+
+func provideRuntimeRequestInvocationFiles(files factoryruntimewire.InputFileSystem) factorydefinitions.FileReader {
+	return files.ReadFile
+}
+
+func provideRuntimeRequestPrompts(service workers.Service) factoryruntimewire.RequestPromptRenderer {
+	prompts, _ := service.(factoryruntimewire.RequestPromptRenderer)
+	return prompts
+}
+
+func provideRuntimeRequestTemplateFields(service workers.Service) factoryruntimewire.RequestTemplateFieldResolver {
+	fields, _ := service.(factoryruntimewire.RequestTemplateFieldResolver)
+	return fields
+}
+
+func provideRuntimeRequestArtifactFiles(files factoryruntimewire.InputFileSystem) factoryruntimewire.ExpectedArtifactFileSystem {
+	artifacts, _ := files.(factoryruntimewire.ExpectedArtifactFileSystem)
+	return artifacts
+}
+
+// Production calls Resolve; its session Workers wrapper supplies progress on execution.
+func provideRuntimeRequestProgress() workers.ProgressPublisher {
+	return func(workers.ProgressFragment) {}
+}
+
+func provideRuntimeRequestLogger(baseLogger *zap.Logger, loggerFactory factoryruntime.RuntimeLoggerFactory) factoryruntime.Logger {
+	return loggerFactory(baseLogger, false)
+}

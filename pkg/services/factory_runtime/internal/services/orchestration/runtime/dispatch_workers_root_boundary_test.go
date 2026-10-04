@@ -803,3 +803,145 @@ func TestAttemptShutdownDrainsRejectedPreparation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// requestWorkers observes only the injected Workers boundary.
+type requestWorkers struct {
+	workers.Service
+	calls   atomic.Int32
+	execute func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
+func (service *requestWorkers) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	service.calls.Add(1)
+	if service.execute != nil {
+		return service.execute(ctx, request)
+	}
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+}
+
+func TestWorkstationRequestConcurrentBindingsKeepDetachedCorrelation(t *testing.T) {
+	t.Parallel()
+	service := &requestWorkers{}
+	var publications atomic.Int32
+	resolver := NewWorkstationRequestExecutor(service, invocationInterpolationTestService{}, nil,
+		func() string { return "attempt-selected" }, runtimePromptRendererFunc(func(_ string, tokens []workers.Token, ctx *workers.Context) (string, error) {
+			return ctx.SessionID + ":" + tokens[0].Color.Content[0].Text, nil
+		}), nil, nil, func(workers.ProgressFragment) { publications.Add(1) }, nil, nil)
+	for _, session := range []string{"session-a", "session-b"} {
+		t.Run(session, func(t *testing.T) {
+			t.Parallel()
+			cfg, dispatch, _ := directInputPromptRuntimeFixture(t)
+			values := WorkstationRequestValues{RuntimeDefinitions: cfg.runtimeConfig,
+				WorkflowContext:  &workers.Context{SessionID: session, EnvVars: map[string]string{"session": session}},
+				FactorySessionID: session, RuntimeID: "runtime-" + session, RecordingID: "recording-" + session,
+				GenerationID: "generation-" + session, FactoryDirectory: "factory-" + session, RuntimeBaseDir: "base-" + session,
+				MockWorkers: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: session}}},
+			}
+			binding := resolver.Bind(values)
+			values.WorkflowContext.EnvVars["session"] = "caller-mutated"
+			values.MockWorkers.MockWorkers[0].ID = "caller-mutated"
+			request := dispatch.Execution
+			request.FactorySessionID, request.RuntimeID, request.GenerationID = "", "", ""
+			result, err := binding.ResolveExecutionRequest(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertRequestBindingSelection(t, session, result)
+			result.Input.WorkflowContext.EnvVars["session"] = "result-mutated"
+			result.Input.MockWorkers.MockWorkers[0].ID = "result-mutated"
+			result.Input.Work[0].Content[0].Text = "result-mutated"
+			again, err := binding.ResolveExecutionRequest(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if again.Input.WorkflowContext.EnvVars["session"] != session || again.Input.MockWorkers.MockWorkers[0].ID != session ||
+				again.Input.Work[0].Content[0].Text != "The release is ready." {
+				t.Fatalf("binding/request mutated: %#v", again.Input)
+			}
+			request.FactorySessionID, request.RuntimeID, request.GenerationID, request.RecordingID = "explicit-session", "explicit-runtime", "explicit-generation", "explicit-recording"
+			explicit, err := binding.ResolveExecutionRequest(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertExplicitRequestCorrelation(t, explicit)
+			if service.calls.Load() != 0 || publications.Load() != 0 {
+				t.Fatal("Resolve executed or published")
+			}
+		})
+	}
+}
+
+func TestWorkstationRequestExecutePreservesResultsAndProgress(t *testing.T) {
+	t.Parallel()
+	for _, outcome := range []string{"success", "failure", "canceled"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			var published bool
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if outcome == "canceled" {
+				cancel()
+			}
+			service := &requestWorkers{execute: func(received context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				if received != ctx {
+					t.Fatal("context replaced")
+				}
+				assertExecutedRequestCorrelation(t, request)
+				request.Input.ProgressPublisher(workers.ProgressFragment{})
+				if outcome == "canceled" {
+					return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled}, context.Canceled
+				}
+				if outcome == "failure" {
+					return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed}, errors.New("selected-worker-error")
+				}
+				return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil
+			}}
+			resolver := NewWorkstationRequestExecutor(service, nil, nil, func() string { return "selected-attempt" }, nil, nil, nil,
+				func(workers.ProgressFragment) { published = true }, nil, nil)
+			values := WorkstationRequestValues{FactorySessionID: "selected-session", RuntimeID: "selected-runtime",
+				RecordingID: "selected-recording", GenerationID: "selected-generation"}
+			result, err := resolver.Bind(values).Execute(ctx, workers.WorkstationExecutionRequest{RunnerID: "script", Command: "selected-command",
+				Dispatch: work.WorkDispatch{DispatchID: "selected-dispatch", TransitionID: "selected-transition"}})
+			if service.calls.Load() != 1 || !published || result.DispatchID != "selected-dispatch" || result.TransitionID != "selected-transition" {
+				t.Fatalf("result = %#v, err = %v", result, err)
+			}
+			assertRequestExecutionOutcome(t, outcome, result, err)
+		})
+	}
+}
+
+func TestWorkstationRequestResolutionFailureDoesNotExecute(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"dispatch", "script-definition", "prompt"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			service := &requestWorkers{}
+			resolver := NewWorkstationRequestExecutor(service, nil, nil, func() string { return "attempt" },
+				runtimePromptRendererFunc(func(string, []workers.Token, *workers.Context) (string, error) {
+					return "", errors.New("selected prompt error")
+				}), nil, nil, nil, nil, nil)
+			cfg, dispatch, _ := directInputPromptRuntimeFixture(t)
+			values := WorkstationRequestValues{RuntimeDefinitions: cfg.runtimeConfig, FactorySessionID: "session", RuntimeID: "runtime", GenerationID: "generation"}
+			request := dispatch.Execution
+			if failure == "dispatch" {
+				request.Dispatch.DispatchID = ""
+			}
+			if failure == "script-definition" {
+				values.RuntimeDefinitions = nil
+				request.RunnerID = "script"
+				request.Command = ""
+			}
+			result, err := resolver.Execute(context.Background(), values, request)
+			if service.calls.Load() != 0 || result.Outcome != workers.OutcomeFailed {
+				t.Fatalf("unexpected execution/result: %d %#v", service.calls.Load(), result)
+			}
+			if failure == "prompt" {
+				if err != nil || result.Error != "prompt render failed: render workstation prompt: selected prompt error" {
+					t.Fatalf("prompt result = %#v, err = %v", result, err)
+				}
+			} else if err == nil {
+				t.Fatal("want resolution error")
+			}
+		})
+	}
+}

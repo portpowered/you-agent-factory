@@ -14,6 +14,7 @@ import (
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -30,6 +31,7 @@ type Assembly struct {
 	metricsClock          platformclock.TimerSource
 	instanceHost          instancehost.Service
 	preparation           *runtimebuild.Service
+	requestResolver       *runtime.WorkstationRequestExecutor
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected
@@ -44,6 +46,7 @@ func NewAssembly(
 	metricsClock platformclock.TimerSource,
 	instanceHost instancehost.Service,
 	preparation *runtimebuild.Service,
+	requestResolver *runtime.WorkstationRequestExecutor,
 ) (*Assembly, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
@@ -56,7 +59,7 @@ func NewAssembly(
 	}
 	return &Assembly{
 		runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory,
-		workerService: workerService, metricsClock: metricsClock, instanceHost: instanceHost, preparation: preparation,
+		workerService: workerService, metricsClock: metricsClock, instanceHost: instanceHost, preparation: preparation, requestResolver: requestResolver,
 	}, nil
 }
 
@@ -175,6 +178,7 @@ func (a *Assembly) Assemble(
 		loadFactory,
 		initialFactorySnapshot,
 		a.preparation,
+		a.requestResolver,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
