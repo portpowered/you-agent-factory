@@ -100,7 +100,7 @@ func assertRuntimeRecorderAppendRequests(t *testing.T, requests []recordings.App
 	}
 }
 
-func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) {
+func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
@@ -113,8 +113,13 @@ func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
-	root := NewRuntimeRoot(
-		nil, nil, nil, nil,
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "runtime-provenance",
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: "session-runtime-provenance"},
+	}}
+	clock := runtimeRecorderTestClock{now: startedAt}
+	root := NewCombinedService(nil, nil, owner, nil, nil, nil, nil,
+		clock, logging.NoopLogger{}, newRuntimeLedgerRouter(clock.Now),
 		func(
 			factorydefinitions.FactorySnapshotSource,
 			string,
@@ -122,8 +127,7 @@ func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) 
 		) (*factorydefinitions.FactorySnapshot, error) {
 			return snapshot, nil
 		},
-		nil, nil, nil, nil,
-		runtimeRecorderTestClock{now: startedAt},
+		nil, nil, nil,
 	)
 	opening, ok := root.(recordings.RuntimeScopeService)
 	if !ok {
@@ -140,59 +144,32 @@ func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) 
 	if err != nil {
 		t.Fatalf("OpenRuntime: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := opened.Recorder.Finalize(startedAt.Add(time.Minute)); err != nil {
+			t.Errorf("Finalize cleanup: %v", err)
+		}
+	})
 	if err := opened.Recorder.Finalize(startedAt.Add(time.Minute)); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
 
-	built, err := root.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: "runtime-provenance",
-	})
-	if err != nil {
-		t.Fatalf("BuildPortableArtifact: %v", err)
+	if len(owner.events) != 2 || len(owner.finishes) != 1 {
+		t.Fatalf("lifecycle requests = %#v / %#v, want initial, terminal and one Finish", owner.events, owner.finishes)
 	}
-	if len(built.Artifact.Events) < 2 {
-		t.Fatalf("final artifact events = %d, want initial and terminal events", len(built.Artifact.Events))
+	want := []recordings.RecordingSecret{
+		{JSONPointer: "/factory/credential", Provenance: recordings.RecordingSecretProvenanceDeclared},
+		{JSONPointer: "/factory/items/0/token", Provenance: recordings.RecordingSecretProvenanceDeclared},
+		{JSONPointer: "/factory/a~1b/~0key", Provenance: recordings.RecordingSecretProvenanceDeclared},
 	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(built.Artifact.Events[0].Payload), &payload); err != nil {
-		t.Fatalf("decode initial event payload: %v", err)
+	if !reflect.DeepEqual(owner.events[0].SecretProvenance, want) || len(owner.events[1].SecretProvenance) != 0 {
+		t.Fatalf("initial/terminal provenance = %#v / %#v", owner.events[0].SecretProvenance, owner.events[1].SecretProvenance)
 	}
-	factory, ok := payload["factory"].(map[string]any)
-	if !ok {
-		t.Fatalf("initial event factory payload = %#v", payload["factory"])
+	for _, request := range owner.events {
+		if request.RecordingID != owner.status.RecordingID || request.Event.Scope != owner.status.Scope {
+			t.Fatalf("selected recording/scope = %#v", request)
+		}
 	}
-	assertRedactedRuntimeValue(t, factory["credential"], "credential")
-	items, ok := factory["items"].([]any)
-	if !ok || len(items) != 1 {
-		t.Fatalf("initial event items = %#v, want one item", factory["items"])
-	}
-	item, ok := items[0].(map[string]any)
-	if !ok {
-		t.Fatalf("initial event item = %#v", items[0])
-	}
-	assertRedactedRuntimeValue(t, item["token"], "items/0/token")
-	escaped, ok := factory["a/b"].(map[string]any)
-	if !ok {
-		t.Fatalf("initial event escaped object = %#v", factory["a/b"])
-	}
-	assertRedactedRuntimeValue(t, escaped["~key"], "a/b/~key")
-	if factory["scalar"] != "leaf" {
-		t.Fatalf("unclassified scalar = %#v, want leaf", factory["scalar"])
-	}
-	if _, exists := factory["missing"]; exists {
-		t.Fatalf("missing declared path changed the Factory payload: %#v", factory["missing"])
-	}
-}
-
-func assertRedactedRuntimeValue(t *testing.T, value any, path string) {
-	t.Helper()
-	marker, ok := value.(map[string]any)
-	if !ok || marker["redacted"] != true || marker["provenance"] != string(recordings.RecordingSecretProvenanceDeclared) {
-		t.Fatalf("redacted %s value = %#v, want typed redaction marker", path, value)
-	}
-	if _, hasOriginalValue := marker["value"]; hasOriginalValue {
-		t.Fatalf("redacted %s value retained original content: %#v", path, marker)
-	}
+	assertTerminalRunPayload(t, owner.events[1].Event.Payload, startedAt, startedAt.Add(time.Minute))
 }
 
 type invocationSensitiveLoadedFactory struct {

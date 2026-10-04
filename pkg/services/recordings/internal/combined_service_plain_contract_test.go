@@ -1536,33 +1536,6 @@ func NewServiceWithLifecycleEffectsAndLogger(
 	)
 }
 
-// NewServiceWithLifecycleEffectsAndHistoricalQuery constructs the Recordings
-// root with a Wire-selected historical read capability and no-op logging.
-func NewServiceWithLifecycleEffectsAndHistoricalQuery(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targetPlanner recordings.LiveRecordingTargetPlanner,
-	writer recordings.RecordingSnapshotWriter,
-	tickers recordings.RecordingFlushTickerFactory,
-	publication portableArtifactPublication,
-	historicalQuery historicalquery.Service,
-	clocks ...recordings.RecordingClock,
-) recordings.Service {
-	return newServiceWithLifecycleEffects(
-		ledger,
-		projection,
-		targetPlanner,
-		writer,
-		tickers,
-		publication,
-		logging.NoopLogger{},
-		historicalQuery,
-		nil,
-		nil,
-		clocks...,
-	)
-}
-
 func newServiceWithLifecycleEffects(
 	ledger recordings.Ledger,
 	projection recordings.ProjectionService,
@@ -1609,73 +1582,6 @@ func recordingClockNow(clocks ...recordings.RecordingClock) func() time.Time {
 		return nil
 	}
 	return func() time.Time { return clock.Now() }
-}
-
-// NewRuntimeRoot constructs the one process-scoped Recordings root. Runtime
-// ledgers and lifecycle bindings are acquired through OpenRuntime; no caller
-// receives a constructor for those private resources.
-func NewRuntimeRoot(
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	readFile recordings.RecordingReadFile,
-	publication interface {
-		Publish(context.Context, string, []byte) error
-		Read(context.Context, string) ([]byte, error)
-	},
-	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputLoader,
-	logger logging.Logger,
-	clocks ...recordings.RecordingClock,
-) recordings.Service {
-	return NewRuntimeRootWithHistoricalQuery(
-		targets,
-		writeFile,
-		readFile,
-		publication,
-		captureSnapshot,
-		decodeSnapshot,
-		decodeRuntimeConfig,
-		replayInputs,
-		logger,
-		nil,
-		clocks...,
-	)
-}
-
-// NewRuntimeRootWithHistoricalQuery constructs the process-scoped Recordings
-// root with the Wire-selected durable historical reader.
-func NewRuntimeRootWithHistoricalQuery(
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	readFile recordings.RecordingReadFile,
-	publication interface {
-		Publish(context.Context, string, []byte) error
-		Read(context.Context, string) ([]byte, error)
-	},
-	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputLoader,
-	logger logging.Logger,
-	historicalQuery historicalquery.Service,
-	clocks ...recordings.RecordingClock,
-) recordings.Service {
-	return NewRuntimeRootWithHistoricalQueryAndAppender(
-		targets,
-		writeFile,
-		nil,
-		readFile,
-		publication,
-		captureSnapshot,
-		decodeSnapshot,
-		decodeRuntimeConfig,
-		replayInputs,
-		logger,
-		historicalQuery,
-		clocks...,
-	)
 }
 
 var _ recordings.Service = (*combinedService)(nil)
