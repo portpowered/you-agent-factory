@@ -901,6 +901,94 @@ func assertStartupCleanupBeforeRetirement(t *testing.T, ctx context.Context, han
 	}
 }
 
+func TestFailStartupPreservesReplacementAcrossCleanup(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"before rollback", "during stop", "during activation", "activation failure"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			sessions := newRuntimeBindingState()
+			failed := registerTestSession(sessions, "a")
+			peer := registerTestSession(sessions, "b")
+			handle := runtimebinding.HandleFromSession(failed)
+			var active runtimebinding.State
+			active.SetActive(t.Context(), failed.ID, handle)
+			startupErr := errors.New("startup failed")
+			cleanupErr := errors.New("activation cleanup failed")
+			closed := false
+			var replacement *livesession.LiveSession
+			publish := func() {
+				replacement = registerTestSession(sessions, failed.ID)
+				active.SetActive(t.Context(), replacement.ID, runtimebinding.HandleFromSession(replacement))
+				runtimebinding.SessionStateFrom(replacement).Activation = startupActivationClose(func(context.Context) error {
+					t.Error("failed startup closed replacement activation")
+					return nil
+				})
+			}
+			runtimebinding.SessionStateFrom(failed).Activation = startupActivationClose(func(ctx context.Context) error {
+				if ctx.Err() != nil || !handle.Completed() {
+					t.Fatal("activation closed before failed run joined or with canceled context")
+				}
+				closed = true
+				if phase == "during activation" || phase == "activation failure" {
+					publish()
+				}
+				if phase == "activation failure" {
+					return cleanupErr
+				}
+				return nil
+			})
+			if phase == "before rollback" {
+				publish()
+			}
+			err := runtimebinding.FailStartup(sessions, &active, failed.ID, handle, func(got factory.RuntimeRun) error {
+				if got != handle {
+					t.Fatal("rollback stopped a foreign run")
+				}
+				if phase == "during stop" {
+					publish()
+				}
+				got.CancelRun()
+				return got.Wait()
+			}, startupErr)
+			if !errors.Is(err, startupErr) || errors.Is(err, cleanupErr) != (phase == "activation failure") {
+				t.Fatalf("rollback error = %v, want original startup and selected cleanup error", err)
+			}
+			if closed != (phase != "before rollback") || !handle.Completed() {
+				t.Fatalf("failed run joined = %t, owned activation closed = %t", handle.Completed(), closed)
+			}
+			if sessions.Resolve("a") != replacement || sessions.Resolve("b") != peer {
+				t.Fatal("rollback retired replacement or peer")
+			}
+			if selected := active.Active(); selected == nil || selected.Handle != runtimebinding.HandleFromSession(replacement) || selected.Context != t.Context() {
+				t.Fatalf("replacement lost active selection: %#v", selected)
+			}
+			if _, err := sessions.ResponseStreams().Streams("a").Subscribe("next", 0); err != nil {
+				t.Fatalf("replacement response stream closed: %v", err)
+			}
+		})
+	}
+}
+
+func TestFailStartupLeavesSelectedPeerUsable(t *testing.T) {
+	t.Parallel()
+	sessions := newRuntimeBindingState()
+	failed := registerTestSession(sessions, "a")
+	peer := registerTestSession(sessions, "b")
+	var active runtimebinding.State
+	active.SetActive(t.Context(), peer.ID, runtimebinding.HandleFromSession(peer))
+	startupErr := errors.New("startup failed")
+	err := runtimebinding.FailStartup(sessions, &active, failed.ID, runtimebinding.HandleFromSession(failed), func(run factory.RuntimeRun) error {
+		run.CancelRun()
+		return run.Wait()
+	}, startupErr)
+	if !errors.Is(err, startupErr) || sessions.Resolve("a") != nil || sessions.Resolve("b") != peer {
+		t.Fatalf("failed startup retirement = %v, want only A removed", err)
+	}
+	if selected := active.Active(); selected == nil || selected.Handle != runtimebinding.HandleFromSession(peer) || selected.Context != t.Context() {
+		t.Fatalf("peer lost active selection: %#v", selected)
+	}
+}
+
 type streamGenerationService struct {
 	factory.Service
 	streamGenerationID string

@@ -716,20 +716,29 @@ func FailStartup(
 	stop func(RuntimeHandle) error,
 	startupErr error,
 ) error {
-	runtimeState.ClearActive()
+	// Capture cleanup ownership before stopping the run: stopping or closing
+	// activation may publish a replacement under this same public session ID.
+	var session *livesession.LiveSession
+	if state != nil {
+		session = state.Resolve(sessionID)
+		if HandleFromSession(session) != handle {
+			session = nil
+		}
+	}
+	runtimeState.retireActive(sessionID, handle, nil)
 	if handle != nil && stop != nil {
 		if stopErr := stop(handle); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
 			return errors.Join(startupErr, stopErr)
 		}
 	}
-	if state != nil {
-		bound := SessionStateFrom(state.Resolve(sessionID))
+	if session != nil {
+		bound := SessionStateFrom(session)
 		if bound != nil && bound.Activation != nil {
 			if err := bound.Activation.Close(context.Background()); err != nil {
 				return errors.Join(startupErr, err)
 			}
 		}
-		state.Unregister(sessionID)
+		state.UnregisterGeneration(session)
 	}
 	return startupErr
 }
