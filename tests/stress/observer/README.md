@@ -363,10 +363,8 @@ calibration, never composed public capacity evidence. This gate is not yet wired
 into the public capability; story 003 remains incomplete. The method hash also
 includes the gate template after the sample, cycle and report templates.
 
-The dedicated `TestLifecycleProfileModelDiagnostic` selector checks one explicit-session
-EMBED Work using controlled cached assets and joined host effects. It reports active
-and released holder counts in raw output; it does not qualify composed two-holder
-capacity, fault/cancellation outcomes, full profiling, or baseline acceptance.
-It skips under `-short`; use the same attested artifact environment as the samples
-capability, with `-test.run=^TestLifecycleProfileModelDiagnostic$ -test.short=false
--test.count=1 -test.timeout=3m -test.v`.
+The controlled Models fixture now supplies cached inert model/backend bytes,
+loopback health, negotiated protocol, and a joinable host lifetime at the existing
+external-effect edges. Its component tests establish stop/join and refusal of
+downloads. Public session composition is still unfinished; these fixture tests
+do not establish real capacity acquisition or baseline acceptance.

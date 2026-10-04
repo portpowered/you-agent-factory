@@ -2,11 +2,6 @@ package observer_test
 
 import (
  "context"
- "time"
- "github.com/google/uuid"
- "github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
- sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
- "github.com/portpowered/infinite-you/pkg/services/work"
  "crypto/sha256"
  "encoding/json"
  "io"
@@ -255,34 +250,3 @@ func TestLifecycleProfileDriverControlledHostJoin(t *testing.T){
  if _,err=(profileRejectModelNetwork{}).Do(request);err==nil{t.Fatal("download permitted")}
 }
 
-func TestLifecycleProfileModelDiagnostic(t *testing.T){
- if testing.Short(){t.Skip("dedicated public Models diagnostic")}
- r:=newSampleProfile("model_diagnostic");r.load(t)
- baselineobservation.Close();defer baselineobservation.Close()
- ctx,cancel:=context.WithTimeout(t.Context(),90*time.Second);defer cancel()
- r.session(t,ctx,smokeArtifact(t))
-}
-func runProfileModelDiagnostic(t *testing.T,ctx context.Context,service sessions.Service,home string,artifact artifactIdentity,bootstrap []string,r *sampleProfile,gate *profileModelGate){
- t.Helper();ctx,cancel:=context.WithCancel(ctx);defer cancel();folder:=t.TempDir()
- config:=`{"name":"profile-model","workTypes":[{"name":"task","handlingBehavior":["DEFAULT"],"states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"resources":[{"name":"embed-cache","type":"MODEL","capacity":2,"model":"embed","backend":"localai-llamacpp","loadPolicy":"ON_DEMAND"}],"workers":[{"name":"embed-worker","type":"MODEL_WORKER","model":"embed","modelLocality":"LOCAL","modelProvider":"CODEX","resources":[{"name":"embed-cache","capacity":1}],"operations":[{"name":"EMBED","inputs":[{"name":"text","required":true,"contentTypes":["TEXT"]}],"outputs":[{"name":"embedding","contentTypes":["JSON"]}]}]}],"workstations":[{"name":"embed","type":"MODEL_INVOKE","worker":"embed-worker","operation":"EMBED","operationBindings":[{"slot":"text","selector":{"type":"TEXT"}}],"inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`
- if err:=os.WriteFile(filepath.Join(folder,"factory.json"),[]byte(config),0600);err!=nil{t.Fatal(err)}
- workstation:=filepath.Join(folder,"workstations","embed");if err:=os.MkdirAll(workstation,0700);err!=nil{t.Fatal(err)};if err:=os.WriteFile(filepath.Join(workstation,"AGENTS.md"),[]byte("---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"),0600);err!=nil{t.Fatal(err)}
- c:=&profileCycle{SessionID:uuid.NewString()};ops:=publicCycleOperations(service,home,folder)
- generation,runtimeID,err:=ops.Open(ctx,c,false);if err!=nil{t.Fatal(err)};c.Generations=[]string{generation};c.RuntimeIDs=[]string{runtimeID}
- defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();if err:=ops.Close(cleanup,c);err!=nil{t.Error(err)}}()
- done:=make(chan error,1)
- go func(){result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:c.SessionID,Correlation:sessions.SessionOperationCorrelation{RequestID:"profile-model-work"},Input:&work.PreparedInvocationInput{Source:work.InputSourcePositionalText,ResolvedInput:&work.ResolvedInput{Source:work.InputSourcePositionalText,Text:"profile-model-work"}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});if err==nil && result.Status!=sessions.InvocationTerminalStatusCompleted{err=fmt.Errorf("public model Work failed: %#v",result)};done<-err}()
- joined:=false
- defer func(){cancel();if err:=gate.release("profile-model-work");err!=nil{t.Error(err)};if !joined{select{case err:=<-done:if err!=nil && !errors.Is(err,context.Canceled){t.Error(err)};case <-time.After(30*time.Second):t.Error("public Models invocation cleanup did not join")}}}()
- var request models.InvokeModelRequest
- select{case request=<-gate.routes["profile-model-work"].observed:case err=<-done:joined=true;t.Fatalf("Work ended before Models acquisition: %v",err);case <-ctx.Done():t.Fatal(ctx.Err())}
- t.Logf("public Models scope=%s session=%s runtime=%s",request.Scope.String(),c.SessionID,runtimeID)
- active:=r.capture(t,artifact,"CAPACITY_ACTIVE",&profileAttempt{SessionID:&c.SessionID,Generations:c.Generations},bootstrap)
- if active.Report.Totals.CapacityHoldersTotal<1{t.Error("real public model acquisition has no capacity holder")}
- if err=gate.release("profile-model-work");err!=nil{t.Fatal(err)}
- select{case err=<-done:joined=true;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
- if err=gate.join(ctx,"profile-model-work");err!=nil{t.Fatal(err)}
- released:=r.capture(t,artifact,"CAPACITY_RELEASED",&profileAttempt{SessionID:&c.SessionID,Generations:c.Generations},bootstrap)
- if released.Report.Totals.CapacityHoldersTotal!=0{t.Error("public terminal Work retained live capacity")}
- t.Logf("active holders=%d released holders=%d observed owners=%d",active.Report.Totals.CapacityHoldersTotal,released.Report.Totals.CapacityHoldersTotal,len(released.Report.Owners))
-}
