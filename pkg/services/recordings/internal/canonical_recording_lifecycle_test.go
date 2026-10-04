@@ -7,6 +7,8 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 	"reflect"
 	"strings"
 	"sync"
@@ -14,82 +16,49 @@ import (
 	"time"
 )
 
-func TestCombinedServiceCanonicalAppendCanRecordReplayAndExport(t *testing.T) {
+func TestLifecycleOwnerRejectsInvalidFactsWithoutMutatingAcceptedHistory(t *testing.T) {
 	t.Parallel()
-
-	svc := NewService(&stubLedger{}, projectionquerywire.NewService())
-	scope := recordings.CanonicalEventScope{FactorySessionID: "session-canonical"}
-	appended, err := svc.Append(recordings.AppendRecordedEventRequest{
-		Event: recordings.CanonicalEvent{
-			ID:          "canonical-lifecycle-event",
-			FactoryTick: 0,
-			Scope:       scope,
-			RecordedAt:  time.Unix(1_700_000_000, 0).UTC(),
-			Kind:        "FACTORY_STATE_RESPONSE",
-			Payload:     `{"state":"RUNNING"}`,
-		},
-	})
-	if err != nil {
-		t.Fatalf("Append canonical lifecycle event: %v", err)
+	svc := recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{})
+	event := recordings.CanonicalEvent{
+		ID: "canonical-lifecycle-event", FactoryTick: 0,
+		Scope:      recordings.CanonicalEventScope{FactorySessionID: "session-canonical"},
+		Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "gen-1", Sequence: 0},
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Kind:       "FACTORY_STATE_RESPONSE", Payload: `{"state":"RUNNING"}`,
 	}
 	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-canonical",
-		Artifact:    "artifact:canonical",
-		Scope:       scope,
+		RecordingID: "recording-canonical", Artifact: "artifact:canonical", Scope: event.Scope,
 	})
 	if err != nil {
-		t.Fatalf("BindRecording canonical lifecycle: %v", err)
+		t.Fatalf("BindRecording: %v", err)
 	}
-	assertInvalidCanonicalRecordingEventsDoNotMutate(
-		t,
-		svc,
-		bound.Status,
-		appended.Event,
-	)
+	assertInvalidCanonicalRecordingEventsDoNotMutate(t, svc, bound.Status, event)
 	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       appended.Event,
+		RecordingID: bound.Status.RecordingID, Event: event,
 	}); err != nil {
-		t.Fatalf("RecordRecordingEvent appended fact: %v", err)
+		t.Fatalf("RecordRecordingEvent valid fact after rejection: %v", err)
 	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording canonical lifecycle: %v", err)
-	}
-	loaded, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
+	finishedAt := time.Unix(1_700_000_001, 0).UTC()
+	finished, err := svc.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID, FinishedAt: finishedAt,
 	})
-	if err != nil {
-		t.Fatalf("LoadReplayRecording appended fact: %v", err)
+	if err != nil || finished.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("FinishRecording = (%#v, %v), want finalized", finished, err)
 	}
-	plan, err := svc.CreateReplayPlan(recordings.CreateReplayPlanRequest{
-		SchemaVersion: recordings.ReplayPlanSchemaV1,
-		Timing:        recordings.ReplayTimingOrderOnly,
-		Recording:     loaded.Recording,
-	})
-	if err != nil {
-		t.Fatalf("CreateReplayPlan appended fact: %v", err)
+	snapshot, err := svc.Snapshot(bound.Status.RecordingID)
+	if err != nil || !reflect.DeepEqual(snapshot.Events, []recordings.CanonicalEvent{event}) {
+		t.Fatalf("Snapshot = (%#v, %v), want only the admitted fact", snapshot, err)
 	}
-	observed, err := svc.ObserveReplay(recordings.ObserveReplayRequest{
-		Plan: plan.Plan.Handle,
-	})
-	if err != nil || observed.Observation.Kind != recordings.ReplayCompleted {
-		t.Fatalf("ObserveReplay appended fact = (%#v, %v)", observed, err)
-	}
-	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	})
-	if err != nil || len(built.Artifact.Events) != 1 ||
-		built.Artifact.Events[0] != appended.Event {
-		t.Fatalf("BuildPortableArtifact appended fact = (%#v, %v)", built, err)
+	if snapshot.Status.AcceptedEvents != 1 || snapshot.Status.LastEvent == nil ||
+		*snapshot.Status.LastEvent != event.Cursor || snapshot.Status.FinalizedAt == nil ||
+		!snapshot.Status.FinalizedAt.Equal(finishedAt) {
+		t.Fatalf("finalized status = %#v, want accepted cursor and exact finish time", snapshot.Status)
 	}
 }
 
 func assertInvalidCanonicalRecordingEventsDoNotMutate(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordinglifecycle.Service,
 	status recordings.RecordingStatusFacts,
 	valid recordings.CanonicalEvent,
 ) {
@@ -120,7 +89,7 @@ func assertInvalidCanonicalRecordingEventsDoNotMutate(
 	}
 }
 
-func TestCombinedServiceRejectsMalformedCanonicalReplayEvents(t *testing.T) {
+func TestReplayOwnerRejectsMalformedCanonicalEvents(t *testing.T) {
 	t.Parallel()
 
 	valid := recordings.ReplayRecordingFacts{
@@ -134,7 +103,7 @@ func TestCombinedServiceRejectsMalformedCanonicalReplayEvents(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := NewService(&stubLedger{}, projectionquerywire.NewService())
+			svc := replaywire.NewService(nil, &plainReplayProjection{}, nil, nil)
 			corrupt := cloneReplayRecording(valid)
 			mutate(&corrupt)
 			result, err := svc.CreateReplayPlan(replayPlanRequest(corrupt))
