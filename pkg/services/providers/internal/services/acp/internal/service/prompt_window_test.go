@@ -17,6 +17,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -273,7 +274,7 @@ func newAttemptConcurrencyService(t *testing.T) (acp.ContinuationService, *sync.
 	})
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "shared-acp", Transport: "stdio", Command: "shared-agent acp",
-	}}, factory, availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, factory, availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -709,7 +710,7 @@ func TestCloseDuringPrePublicationStartupLeavesNothingOwned(t *testing.T) {
 	})
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "shared-acp", Transport: "stdio", Command: "shared-agent acp",
-	}}, factory, availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, factory, availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

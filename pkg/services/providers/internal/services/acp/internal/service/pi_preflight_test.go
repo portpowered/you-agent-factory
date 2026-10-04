@@ -12,6 +12,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -67,7 +68,7 @@ func TestPiPreflightVersionRequirement(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			var calls atomic.Int32
-			err := piPreflight(context.Background(), piVersionCommandFactory(&calls), piVersionLocator{}, t.TempDir(), piVersionEnvironment(testCase.output), platformclock.Real{})
+			err := piPreflight(context.Background(), piVersionCommandFactory(&calls), piVersionLocator{}, t.TempDir(), piVersionEnvironment(testCase.output), platformclock.Real{}, logging.NoopLogger{})
 			if calls.Load() != 1 {
 				t.Fatalf("version command calls = %d, want 1", calls.Load())
 			}
@@ -90,7 +91,7 @@ func TestPiPreflightVersionRequirement(t *testing.T) {
 
 func TestPiPreflightMissingExecutable(t *testing.T) {
 	var calls atomic.Int32
-	err := piPreflight(context.Background(), piVersionCommandFactory(&calls), piVersionLocator{missing: true}, t.TempDir(), nil, platformclock.Real{})
+	err := piPreflight(context.Background(), piVersionCommandFactory(&calls), piVersionLocator{missing: true}, t.TempDir(), nil, platformclock.Real{}, logging.NoopLogger{})
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency ||
 		failure.Diagnostics == nil || failure.Diagnostics.Metadata["work-failure-type"] != "missing_executable" {
@@ -103,13 +104,13 @@ func TestPiPreflightMissingExecutable(t *testing.T) {
 
 func TestPiPreflightWithoutLocatorUsesCommandFactory(t *testing.T) {
 	var calls atomic.Int32
-	err := piPreflight(context.Background(), piVersionCommandFactory(&calls), nil, t.TempDir(), piVersionEnvironment("0.87.1"), platformclock.Real{})
+	err := piPreflight(context.Background(), piVersionCommandFactory(&calls), nil, t.TempDir(), piVersionEnvironment("0.87.1"), platformclock.Real{}, logging.NoopLogger{})
 	if err != nil || calls.Load() != 1 {
 		t.Fatalf("preflight without locator = %v; command calls = %d, want success and one call", err, calls.Load())
 	}
 	err = piPreflight(context.Background(), func(string, ...string) *exec.Cmd {
 		return exec.Command("you-pi-does-not-exist-4e6ad0")
-	}, nil, t.TempDir(), os.Environ(), platformclock.Real{})
+	}, nil, t.TempDir(), os.Environ(), platformclock.Real{}, logging.NoopLogger{})
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency ||
 		failure.Diagnostics == nil || failure.Diagnostics.Metadata["work-failure-type"] != "missing_executable" {
@@ -121,7 +122,7 @@ func TestPiPreflightCanceledContextSkipsCommand(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var calls atomic.Int32
-	err := piPreflight(ctx, piVersionCommandFactory(&calls), piVersionLocator{}, t.TempDir(), nil, platformclock.Real{})
+	err := piPreflight(ctx, piVersionCommandFactory(&calls), piVersionLocator{}, t.TempDir(), nil, platformclock.Real{}, logging.NoopLogger{})
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindCanceled || calls.Load() != 0 {
 		t.Fatalf("canceled preflight = %#v, command calls = %d", err, calls.Load())
@@ -133,7 +134,7 @@ func TestPiPreflightCancelsRunningVersionProbe(t *testing.T) {
 	defer cancel()
 	var calls atomic.Int32
 	started := time.Now()
-	err := piPreflight(ctx, piVersionCommandFactory(&calls), piVersionLocator{}, t.TempDir(), piVersionEnvironment("sleep"), platformclock.Real{})
+	err := piPreflight(ctx, piVersionCommandFactory(&calls), piVersionLocator{}, t.TempDir(), piVersionEnvironment("sleep"), platformclock.Real{}, logging.NoopLogger{})
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindTimeout || calls.Load() != 1 {
 		t.Fatalf("running probe cancellation = %#v, command calls = %d", err, calls.Load())

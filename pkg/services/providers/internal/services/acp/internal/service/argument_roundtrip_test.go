@@ -11,6 +11,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
@@ -100,7 +101,7 @@ func newTestAttempt(
 	locator platformprocess.ExecutableLocator,
 ) *attempt {
 	t.Helper()
-	target := newProvider(id, providers.ACPIntegration{Name: id, Transport: "stdio"}, command, commandFactory, locator, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	target := newProvider(id, providers.ACPIntegration{Name: id, Transport: "stdio"}, command, commandFactory, locator, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	owned := target.newAttempt(providers.ExecuteRequest{AttemptID: "launch-argument-attempt"})
 	t.Cleanup(owned.release)
 	return owned
@@ -122,7 +123,7 @@ func TestExecuteUsesLosslessQuotedLaunch(t *testing.T) {
 		Transport: "stdio",
 		Command:   `'agent'\''\tool' 'hello world' 'semi;colon' 'quote'\''s'`,
 		Arguments: wantArguments,
-	}}, commandFactory, availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, commandFactory, availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -180,7 +181,7 @@ func TestConfigureRetainsUnchangedProviderAndReplacesChangedCommand(t *testing.T
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Aliases: []string{"custom"}, Transport: "stdio",
 		Command: "agent acp", RuntimePosture: "installed_executable", ImplementationProfile: "custom-acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -266,7 +267,7 @@ func TestConfigureStopsAttemptsOfRemovedIntegration(t *testing.T) {
 		ID: "entry-1", Name: "custom-acp", Transport: "stdio", Command: "agent acp",
 	}, {
 		ID: "entry-2", Name: "other-acp", Transport: "stdio", Command: "other acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -300,7 +301,7 @@ func TestConfigureStopsAttemptsOfRemovedIntegration(t *testing.T) {
 func TestCloseStopsEveryRegisteredAttempt(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Transport: "stdio", Command: "agent acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -349,7 +350,7 @@ func TestRetiredAttemptRefusesToLaunch(t *testing.T) {
 func TestExecuteCanceledBeforeStartupCompletes(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Transport: "stdio", Command: "agent acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -381,7 +382,7 @@ func TestExecuteCanceledBeforeStartupCompletes(t *testing.T) {
 func TestExecuteAfterCloseFailsAsUnavailable(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Transport: "stdio", Command: "agent acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -451,7 +452,7 @@ func TestOpenCodeEnvironment(t *testing.T) {
 func TestConfigureRejectsMalformedReplacementWithoutChangingLiveSet(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Transport: "stdio", Command: "agent acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -27,8 +29,9 @@ func TestAttemptTeardownUsesInjectedScheduler(t *testing.T) {
 			t.Parallel()
 			scheduler := newTeardownScheduler()
 			stdin, stdout := &teardownStream{}, &teardownStream{}
+			logger := &teardownLogger{}
 			handles := &attemptHandles{
-				stdin: stdin, stdout: stdout, finished: make(chan error, 1), scheduler: scheduler,
+				stdin: stdin, stdout: stdout, finished: make(chan error, 1), scheduler: scheduler, logger: logger,
 			}
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -52,6 +55,7 @@ func TestAttemptTeardownUsesInjectedScheduler(t *testing.T) {
 				}
 			}
 			assertTeardownOutcome(t, outcome, <-done, stdin, stdout, timers)
+			assertTeardownLogs(t, outcome, logger)
 		})
 	}
 }
@@ -177,7 +181,7 @@ func newPipedConnection(t *testing.T, peer *fakeSessionPeer) *acpsdk.ClientSideC
 func TestServiceClaimAndTryCancelResolveAliasAndDelegateToAttempt(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Aliases: []string{"custom"}, Transport: "stdio", Command: "agent acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{})
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -294,5 +298,30 @@ func assertStaleGenerationDeliversNothing(
 	replacement.window.End(replacementSession, true)
 	if result := <-replacementCancel; result.err != nil || !result.accepted {
 		t.Fatalf("TryCancel(replacement generation) = (%v, %v), want (true, nil)", result.accepted, result.err)
+	}
+}
+
+// Each attempt owns its diagnostic sink; reading follows the joined teardown.
+type teardownLogger struct {
+	logging.NoopLogger
+	reasons []string
+}
+
+func (logger *teardownLogger) Verbose(_ string, fields ...any) {
+	for index := 0; index+1 < len(fields); index += 2 {
+		if fields[index] == "cleanup_reason" {
+			logger.reasons = append(logger.reasons, fields[index+1].(string))
+		}
+	}
+}
+
+func assertTeardownLogs(t *testing.T, outcome string, logger *teardownLogger) {
+	t.Helper()
+	want := []string{"cancel", "post_run"}
+	if outcome == "graceful" {
+		want = []string{"post_run"}
+	}
+	if !slices.Equal(logger.reasons, want) {
+		t.Fatalf("cleanup diagnostics = %v, want %v", logger.reasons, want)
 	}
 }

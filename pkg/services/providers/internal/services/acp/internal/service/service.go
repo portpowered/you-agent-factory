@@ -20,6 +20,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -54,6 +55,7 @@ type Service struct {
 	locator      platformprocess.ExecutableLocator
 	stdioPipes   platformprocess.StdioPipeFactory
 	scheduler    platformclock.TimerSource
+	logger       logging.Logger
 }
 
 var _ acp.ContinuationService = (*Service)(nil)
@@ -69,6 +71,7 @@ func New(
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
 	scheduler platformclock.TimerSource,
+	logger logging.Logger,
 ) (acp.ContinuationService, error) {
 	service := &Service{
 		providers:  map[providers.ID]*provider{},
@@ -76,6 +79,7 @@ func New(
 		locator:    locator,
 		stdioPipes: stdioPipes,
 		scheduler:  scheduler,
+		logger:     logger,
 	}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
@@ -288,7 +292,7 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 			next[id] = current
 			continue
 		}
-		next[id] = newProvider(id, values[id], command, service.newCommand, service.locator, service.stdioPipes, service.scheduler)
+		next[id] = newProvider(id, values[id], command, service.newCommand, service.locator, service.stdioPipes, service.scheduler, service.logger)
 		if current := service.providers[id]; current != nil {
 			retired = append(retired, current)
 		}
@@ -349,6 +353,7 @@ type provider struct {
 	locator     platformprocess.ExecutableLocator
 	stdioPipes  platformprocess.StdioPipeFactory
 	scheduler   platformclock.TimerSource
+	logger      logging.Logger
 
 	mu sync.Mutex
 	// attempts is registration-ordered so Claim resolves an ambiguous
@@ -369,6 +374,7 @@ func newProvider(
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
 	scheduler platformclock.TimerSource,
+	logger logging.Logger,
 ) *provider {
 	return &provider{
 		id:          id,
@@ -378,6 +384,7 @@ func newProvider(
 		locator:     locator,
 		stdioPipes:  stdioPipes,
 		scheduler:   scheduler,
+		logger:      logger,
 	}
 }
 
@@ -555,6 +562,7 @@ type attemptHandles struct {
 	finished   chan error
 	tree       platformprocess.SubprocessTree
 	scheduler  platformclock.TimerSource
+	logger     logging.Logger
 }
 
 // release unregisters this attempt and completes the teardown of the process it
@@ -778,7 +786,7 @@ func (target *provider) preflight(ctx context.Context, cwd string, environment [
 	if target.id != providers.IDPi {
 		return nil
 	}
-	return piPreflight(ctx, target.newCommand, target.locator, cwd, environment, target.scheduler)
+	return piPreflight(ctx, target.newCommand, target.locator, cwd, environment, target.scheduler, target.logger)
 }
 
 // pi-acp replays this session metadata as an agent message outside the prompt
@@ -1001,6 +1009,7 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 		cmd: cmd, stdin: requests, stdout: responses,
 		connection: connection, client: client, finished: finished, tree: tree,
 		scheduler: a.provider.scheduler,
+		logger:    a.provider.logger,
 	})
 	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
 		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
@@ -1158,9 +1167,9 @@ func (h *attemptHandles) terminate(ctx context.Context) error {
 		exited = true
 	case <-ctx.Done():
 		stopErr = ctx.Err()
-		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
+		_ = platformprocess.TerminateSubprocessTreeWithEffects(h.cmd, h.tree, h.scheduler, h.logger)
 	case <-grace.C():
-		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
+		_ = platformprocess.TerminateSubprocessTreeWithEffects(h.cmd, h.tree, h.scheduler, h.logger)
 	}
 	if !exited {
 		kill := h.scheduler.NewTimer(2 * time.Second)
@@ -1173,7 +1182,7 @@ func (h *attemptHandles) terminate(ctx context.Context) error {
 			}
 		}
 	}
-	platformprocess.CloseSubprocessTree(h.cmd, h.tree)
+	platformprocess.CloseSubprocessTreeWithEffects(h.cmd, h.tree, h.scheduler, h.logger)
 	// The response reader outlives the peer only while the peer is retained;
 	// releasing it here keeps a retired peer from holding an open pipe handle.
 	_ = h.stdout.Close()

@@ -398,7 +398,7 @@ func newRootWithOptions(
 	if !ok {
 		scheduler = platformclock.Real{}
 	}
-	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes, scheduler)
+	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes, scheduler, logging.EnsureLogger(logger))
 	if err != nil {
 		return nil, err
 	}
