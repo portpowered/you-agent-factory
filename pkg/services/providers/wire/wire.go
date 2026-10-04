@@ -548,18 +548,22 @@ func executionserviceRegistrations(
 	if agyCommandClock == nil {
 		agyCommandClock = platformclock.Real{}
 	}
-	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromCommandRunner(
-		commandRunner,
-		executionwire.BuiltInRunnerPlatformDependencies{
-			AgyCommandRunner: agyCommandRunner,
-			AgyCommandClock:  agyCommandClock,
-			AgyPTY: executionwire.AgyPTYPlatformDependencies{
-				Allocator: providerservice.AdaptPTYAllocator(agyPTYPlatform.Allocator),
-				Locator:   agyPTYPlatform.Locator,
-				Inspector: agyPTYPlatform.Inspector,
-			},
-		},
-	))
+	scheduler, ok := agyCommandClock.(platformclock.TimerSource)
+	if !ok {
+		scheduler = platformclock.Real{}
+	}
+	var antigravity executionwire.AgyEffect
+	if allocator := providerservice.AdaptPTYAllocator(agyPTYPlatform.Allocator); allocator != nil {
+		antigravity = executionwire.NewAgyPTYEffect(allocator, agyPTYPlatform.Locator, agyPTYPlatform.Inspector, agyCommandClock, executionwire.AgyPTYPolicy{})
+	}
+	if agyCommandRunner != nil {
+		antigravity = executionwire.NewAgyCommandEffect(agyCommandRunner, agyCommandClock, scheduler)
+	}
+	return executionwire.BuiltInRegistrations(
+		antigravity,
+		executionwire.NewCodexEffect(commandRunner, platformclock.Real{}),
+		executionwire.NewClaudeEffect(commandRunner, platformclock.Real{}),
+	)
 }
 
 func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) []providers.ACPIntegration {

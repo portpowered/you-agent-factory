@@ -55,88 +55,35 @@ func NewACPRegistration(id providers.ID, service acp.ContinuationService) execut
 	}
 }
 
-// NewBuiltInService constructs an inert execution service with the native
-// adapters owned by Providers Execution.
-func NewBuiltInService(
-	catalogService catalog.Service,
-	dependencies ...executionservice.BuiltInDependencies,
-) (execution.Service, error) {
-	return NewService(catalogService, executionservice.BuiltInRegistrations(dependencies...)...)
+// Effect aliases expose completed native collaborators to owner composition.
+type CodexEffect = codexadapter.Effect
+type ClaudeEffect = claudeadapter.Effect
+type AgyEffect = agyadapter.Effect
+type AgyPTYPolicy = agyadapter.PTYPolicy
+
+// BuiltInRegistrations binds individually supplied native effects.
+func BuiltInRegistrations(antigravity AgyEffect, codex CodexEffect, claude ClaudeEffect) []execution.Registration {
+	return executionservice.BuiltInRegistrations(antigravity, codex, claude)
 }
 
-// BuiltInRegistrations exposes the complete native registration set to the
-// Providers root so configured ACP registrations can be appended.
-func BuiltInRegistrations(dependencies ...executionservice.BuiltInDependencies) []execution.Registration {
-	return executionservice.BuiltInRegistrations(dependencies...)
+// NewCodexEffect constructs one native Codex command effect.
+func NewCodexEffect(runner providerservice.CommandRunner, clock platformclock.Source) CodexEffect {
+	return codexadapter.NewCommandEffect(runner, clock)
 }
 
-// BuiltInDependenciesFromRunner constructs built-in adapter effects from the
-// shared platform process runner.
-func BuiltInDependenciesFromRunner(
-	runner platformprocess.CommandRunner,
-) executionservice.BuiltInDependencies {
-	return BuiltInDependenciesFromCommandRunner(AdaptPlatformCommandRunner(runner))
+// NewClaudeEffect constructs one native Claude command effect.
+func NewClaudeEffect(runner providerservice.CommandRunner, clock platformclock.Source) ClaudeEffect {
+	return claudeadapter.NewCommandEffect(runner, clock)
 }
 
-// BuiltInDependenciesFromWorkersRunner is a compatibility entry point for
-// older composition tests. The provider package accepts the edge opaquely and
-// projects its named request/result fields at this boundary.
-func BuiltInDependenciesFromWorkersRunner(
-	runner any,
-	platform ...BuiltInRunnerPlatformDependencies,
-) executionservice.BuiltInDependencies {
-	return BuiltInDependenciesFromCommandRunner(providerservice.AdaptCommandRunner(runner), platform...)
+// NewAgyCommandEffect constructs one native AGY command effect.
+func NewAgyCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) AgyEffect {
+	return agyadapter.NewCommandEffect(runner, clock, scheduler)
 }
 
-// AgyPTYPlatformDependencies are platform facts required for the built-in Agy
-// PTY execution adapter.
-type AgyPTYPlatformDependencies struct {
-	Allocator agypty.PTYAllocator
-	Locator   platformprocess.ExecutableLocator
-	Inspector platformfilesystem.PathInspector
-}
-
-// BuiltInRunnerPlatformDependencies carries optional platform facts for
-// built-in adapter effects constructed from the Providers subprocess effect.
-type BuiltInRunnerPlatformDependencies struct {
-	AgyCommandRunner providerservice.CommandRunner
-	AgyCommandClock  platformclock.Source
-	AgyPTY           AgyPTYPlatformDependencies
-}
-
-// BuiltInDependenciesFromCommandRunner constructs built-in adapter effects
-// from the shared Providers subprocess effect.
-func BuiltInDependenciesFromCommandRunner(
-	runner providerservice.CommandRunner,
-	platform ...BuiltInRunnerPlatformDependencies,
-) executionservice.BuiltInDependencies {
-	var deps BuiltInRunnerPlatformDependencies
-	if len(platform) > 0 {
-		deps = platform[0]
-	}
-	clock := deps.AgyCommandClock
-	if clock == nil {
-		clock = platformclock.Real{}
-	}
-	var antigravity agyadapter.Effect
-	if deps.AgyPTY.Allocator != nil {
-		antigravity = agyadapter.NewPTYEffect(
-			deps.AgyPTY.Allocator, deps.AgyPTY.Locator, deps.AgyPTY.Inspector,
-			clock, agyadapter.PTYPolicy{},
-		)
-	}
-	if deps.AgyCommandRunner != nil {
-		scheduler, ok := clock.(platformclock.TimerSource)
-		if !ok {
-			scheduler = platformclock.Real{}
-		}
-		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner, clock, scheduler)
-	}
-	return executionservice.BuiltInDependencies{
-		Antigravity: antigravity,
-		Codex:       codexadapter.NewCommandEffect(runner, platformclock.Real{}),
-		Claude:      claudeadapter.NewCommandEffect(runner, platformclock.Real{}),
-	}
+// NewAgyPTYEffect constructs the intentionally selected legacy PTY effect.
+func NewAgyPTYEffect(allocator providerservice.PTYAllocator, locator platformprocess.ExecutableLocator, inspector platformfilesystem.PathInspector, clock platformclock.Source, policy AgyPTYPolicy) AgyEffect {
+	return agyadapter.NewPTYEffect(allocator, locator, inspector, clock, policy)
 }
 
 // AdaptPlatformCommandRunner projects the policy-free platform process edge

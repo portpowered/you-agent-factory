@@ -5,35 +5,24 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
-	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 )
-
-type recordingWorkersRunner struct {
-	calls int
-}
-
-func (r *recordingWorkersRunner) Run(
-	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	r.calls++
-	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
-}
 
 type recordingPlatformRunner struct {
 	calls   int
 	request platformprocess.CommandRequest
 	result  platformprocess.CommandResult
 	err     error
+	onRun   func()
 }
 
 func (r *recordingPlatformRunner) Run(
@@ -42,6 +31,9 @@ func (r *recordingPlatformRunner) Run(
 ) (platformprocess.CommandResult, error) {
 	r.calls++
 	r.request = request
+	if r.onRun != nil {
+		r.onRun()
+	}
 	if r.result.Stdout == nil && r.result.Stderr == nil && r.result.ExitCode == 0 {
 		r.result.Stdout = []byte("ok")
 	}
@@ -67,44 +59,41 @@ func (r *recordingStreamingPlatformRunner) RunStreaming(
 	return r.result, r.streamErr
 }
 
-func TestBuiltInDependenciesFromWorkersRunnerConstructsCodexAndClaudeEffects(t *testing.T) {
+func TestNativeEffectsUseSuppliedClockAndRunner(t *testing.T) {
 	t.Parallel()
-
-	runner := &recordingWorkersRunner{}
-	deps := BuiltInDependenciesFromWorkersRunner(runner)
-	if deps.Codex == nil || deps.Claude == nil {
-		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
-	}
-	if deps.Antigravity != nil {
-		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
-	}
-}
-
-func TestBuiltInDependenciesFromRunnerAdaptsPlatformRunner(t *testing.T) {
-	t.Parallel()
-
-	runner := &recordingPlatformRunner{}
-	deps := BuiltInDependenciesFromRunner(runner)
-	if deps.Codex == nil || deps.Claude == nil {
-		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
-	}
-	if deps.Antigravity != nil {
-		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
-	}
-}
-
-func TestBuiltInDependenciesFromCommandRunnerUsesAgyCommandEffect(t *testing.T) {
-	t.Parallel()
-
-	runner := &recordingWorkersRunner{}
-	deps := BuiltInDependenciesFromCommandRunner(
-		providerservice.AdaptCommandRunner(runner),
-		BuiltInRunnerPlatformDependencies{
-			AgyCommandRunner: providerservice.AdaptCommandRunner(runner),
-		},
-	)
-	if deps.Antigravity == nil {
-		t.Fatalf("built-in Agy effect = nil, want command effect when runner is configured")
+	for _, provider := range []providers.ID{providers.IDCodex, providers.IDClaude, providers.IDAntigravity} {
+		t.Run(string(provider), func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Unix(0, 0), 37*time.Millisecond)
+			runner := &recordingPlatformRunner{onRun: func() { clock.SetTick(1) }}
+			adapted := AdaptPlatformCommandRunner(runner)
+			request := execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{Provider: provider, UserMessage: "supplied effect"}}
+			var output []byte
+			observe := func(chunk []byte) error { output = append(output, chunk...); return nil }
+			var duration int64
+			var err error
+			switch provider {
+			case providers.IDCodex:
+				result, effectErr := NewCodexEffect(adapted, clock).Execute(t.Context(), request, observe)
+				duration, err = result.DurationMillis, effectErr
+			case providers.IDClaude:
+				result, effectErr := NewClaudeEffect(adapted, clock).Execute(t.Context(), request, observe)
+				duration, err = result.DurationMillis, effectErr
+			case providers.IDAntigravity:
+				result, effectErr := NewAgyCommandEffect(adapted, clock, clock).Execute(t.Context(), request, observe)
+				duration, err = result.DurationMillis, effectErr
+			}
+			if err != nil || duration != 37 || string(output) != "ok" {
+				t.Fatalf("effect = (%dms, %q, %v), want (37ms, ok, nil)", duration, output, err)
+			}
+			wantCommand := string(provider)
+			if provider == providers.IDAntigravity {
+				wantCommand = "agy"
+			}
+			if runner.calls != 1 || runner.request.Command != wantCommand {
+				t.Fatalf("runner = (%d calls, %q), want one %q command", runner.calls, runner.request.Command, wantCommand)
+			}
+		})
 	}
 }
 
@@ -226,54 +215,12 @@ func TestAdaptPlatformCommandRunnerNilAndEmptyOutput(t *testing.T) {
 	}
 }
 
-func TestBuiltInDependenciesFromWorkersRunnerConstructsAgyPTYEffectWithAllocator(t *testing.T) {
-	t.Parallel()
-
-	runner := &recordingWorkersRunner{}
-	deps := BuiltInDependenciesFromWorkersRunner(runner, BuiltInRunnerPlatformDependencies{
-		AgyPTY: AgyPTYPlatformDependencies{
-			Allocator: &agypty.MockAllocator{},
-			Locator:   platformprocess.HostExecutableLocator{},
-			Inspector: platformfilesystem.Local{},
-		},
-	})
-	if deps.Antigravity == nil {
-		t.Fatalf("built-in Agy effect = nil, want PTY effect when allocator is configured")
-	}
-}
-
 func TestNewAgyPTYAllocatorRequiresExplicitPlatformEffects(t *testing.T) {
 	t.Parallel()
 
 	allocator, err := NewAgyPTYAllocator(nil, nil)
 	if !errors.Is(err, agypty.ErrHostRequired) {
 		t.Fatalf("NewAgyPTYAllocator(nil, nil) = (%v, %v), want host validation error", allocator, err)
-	}
-}
-
-func TestNewBuiltInServiceUsesWorkersRunnerDependencies(t *testing.T) {
-	t.Parallel()
-
-	catalogService, err := catalogwire.NewService()
-	if err != nil {
-		t.Fatalf("catalogwire.NewService() error = %v", err)
-	}
-	runner := &recordingWorkersRunner{}
-	service, err := NewBuiltInService(
-		catalogService,
-		BuiltInDependenciesFromWorkersRunner(runner),
-	)
-	if err != nil || service == nil {
-		t.Fatalf("NewBuiltInService() = (%v, %v), want execution service", service, err)
-	}
-	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 3 {
-		t.Fatalf("built-in registrations = %d, want 3 antigravity/codex/claude adapters", len(got))
-	}
-	if got := executionservice.BuiltInRegistrations(); len(got) != 3 {
-		t.Fatalf("default built-in registrations = %d, want 3 unavailable adapter bindings", len(got))
-	}
-	if got := BuiltInRegistrations(); len(got) != 3 {
-		t.Fatalf("wire built-in registrations = %d, want 3 unavailable adapter bindings", len(got))
 	}
 }
 

@@ -108,12 +108,12 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 	}
 }
 
-func TestBuiltInRegistrationsDefaultToUnavailableEffects(t *testing.T) {
+func TestBuiltInRegistrationsExplicitAbsentEffects(t *testing.T) {
 	t.Parallel()
 
-	registrations := executionservice.BuiltInRegistrations()
+	registrations := executionservice.BuiltInRegistrations(nil, nil, nil)
 	if len(registrations) != 3 {
-		t.Fatalf("BuiltInRegistrations() = %d registrations, want antigravity/codex/claude", len(registrations))
+		t.Fatalf("BuiltInRegistrations(nil, nil, nil) = %d registrations, want antigravity/codex/claude", len(registrations))
 	}
 }
 

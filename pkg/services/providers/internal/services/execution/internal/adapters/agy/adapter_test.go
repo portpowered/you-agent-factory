@@ -56,7 +56,7 @@ func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
-	executionService, err := executionwire.NewBuiltInService(catalog)
+	executionService, err := executionwire.NewService(catalog, executionwire.BuiltInRegistrations(nil, nil, nil)...)
 	if err != nil {
 		t.Fatalf("NewBuiltInService() = %v", err)
 	}
