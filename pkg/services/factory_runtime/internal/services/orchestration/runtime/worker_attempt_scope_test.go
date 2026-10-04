@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -64,6 +65,22 @@ func TestWorkerSessionControlFanoutCarriesCapturedFactoryScope(t *testing.T) {
 		if request.FactorySessionID != "replay-session" || request.ID != captured.workerSessionIDs[index] || request.RequestID != "control-1" {
 			t.Fatalf("child request lost captured owner: %+v", request)
 		}
+	}
+}
+
+func TestWorkerSessionControlCapturesCanonicalOwnerBeforeFanout(t *testing.T) {
+	t.Parallel()
+	probe := &scopedWorkerControlProbe{}
+	instance, ledger, err := newTestFactoryWithScriptedLedger(withNet(buildMoveControlNet()), withWorkerSessions(probe), withWorkflowContext(&factory_context.FactoryContext{SessionID: "execution-owner"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := instance.(*factoryImpl)
+	runtime.cfg.publicSessionID = "public-durable-session"
+	ledger.Events = append(ledger.Events, workerSessionAssociationEvent(t, 1, "association", "turn-1", "recorded-worker"))
+	result := runtime.controlAssociatedWorkerSessions(context.Background(), "turn-1", "control-1", factory.WorkerSessionControlActionCancel, factory.ControlOutcomeAccepted)
+	if result.Outcome != factory.WorkerSessionControlAggregateOutcomeNoOp || len(probe.requests) != 1 || probe.requests[0].FactorySessionID != "execution-owner" {
+		t.Fatalf("control lost canonical owner: result=%+v requests=%+v", result, probe.requests)
 	}
 }
 

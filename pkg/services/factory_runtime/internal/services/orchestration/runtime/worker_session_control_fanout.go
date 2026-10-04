@@ -55,7 +55,7 @@ func (f *factoryImpl) controlAssociatedWorkerSessions(
 	}
 
 	captured := selectAssociatedWorkerSessionTargets(f.canonicalWorkerSessionControlEvents(), turnID)
-	captured.factorySessionID = sessionIDFromFactoryConfig(f.cfg)
+	captured.factorySessionID = canonicalSessionIDFromFactoryConfig(f.cfg)
 	result := fanOutWorkerSessionControl(ctx, f.cfg.workerSessions, captured, action, controlID)
 	f.workerSessionControlResults[key] = cloneWorkerSessionControlResult(result)
 	f.logWorkerSessionControlFanout(result)

@@ -36,7 +36,7 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	request := workstationDispatchRequestFromExecute(executeRequest)
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
 	initialSessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
-	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID, sessionIDFromFactoryConfig(f.cfg))
+	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID, executeRequest.Correlation.FactorySessionID)
 	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, allowRetry)
 	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
 	if prepare == nil {
