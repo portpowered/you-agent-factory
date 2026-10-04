@@ -51,6 +51,34 @@ class IdeafyReadTest(unittest.TestCase):
                 self.assertIn("class=http-5xx", err)
                 self.assertNotIn(message, err)
 
+    def test_paginated_work_5xx_recovers_with_original_session_and_streams(self):
+        for prefix in ("", "Error: ", "debug: cause[0]="):
+            with self.subTest(prefix=prefix):
+                message = prefix + "work list page 2 failed (503): transient fixture"
+                code, out, err, calls, delays = self.invoke(
+                    [result(1, "partial page one", message), result(stdout="complete\r\n", stderr="success\r\n")], WORK)
+                self.assertEqual((code, out, delays), (0, "complete\r\n", [1]))
+                self.assertEqual([c[0] for c in calls], [["you", "--debug", *WORK]] * 2)
+                self.assertEqual(err, "ideafy-read: work-list attempt=1/4 class=http-5xx retry-delay=1.000s\nsuccess\r\n")
+
+    def test_paginated_work_4xx_fails_without_retry_despite_misleading_body(self):
+        for status in (400, 401, 403, 404):
+            with self.subTest(status=status):
+                message = (f'debug: cause[0]=work list page 2 failed ({status}): '
+                           'timeout 503\nGet "http://localhost/work": i/o timeout\n')
+                code, out, err, calls, delays = self.invoke([result(8, "partial page one", message)], WORK)
+                self.assertEqual((code, out, len(calls), delays), (8, "", 1, []))
+                self.assertEqual(calls[0][0], ["you", "--debug", *WORK])
+                self.assertEqual(err, message + "ideafy-read: work-list failed after 1 attempt(s); class=permanent-or-local\n")
+
+    def test_paginated_work_5xx_exhausts_four_attempt_budget(self):
+        message = "debug: cause[0]=work list page 12 failed (503): transient fixture\n"
+        code, out, err, calls, delays = self.invoke([result(7, "partial page one", message)] * 4, WORK)
+        self.assertEqual((code, out, delays), (7, "", [1, 2, 4]))
+        self.assertEqual([c[0] for c in calls], [["you", "--debug", *WORK]] * 4)
+        self.assertEqual(err.count("retry-delay="), 3)
+        self.assertTrue(err.endswith(message + "ideafy-read: work-list failed after 4 attempt(s); class=http-5xx\n"))
+
     def test_U04_typed_and_transport_timeouts_recover(self):
         errors = [subprocess.TimeoutExpired(["you"], 30)]
         errors += [result(1, "partial", f'Error: Get "http://localhost/work": {text}')

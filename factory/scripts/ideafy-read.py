@@ -18,7 +18,10 @@ BACKOFF = (1, 2, 4)
 ATTEMPT_TIMEOUT = 30
 MAX_JITTER = 0.25
 DIAGNOSTIC_PREFIX = r"^(?:Error: |debug: cause\[\d+\]=)?"
-STATUS = re.compile(DIAGNOSTIC_PREFIX + r"(?:list factory sessions|list work) failed \((\d{3})\)", re.MULTILINE)
+STATUS = re.compile(
+    DIAGNOSTIC_PREFIX + r"(?:list factory sessions|list work|work list page [1-9]\d*) failed \((\d{3})\)",
+    re.MULTILINE
+)
 TRANSPORT_TIMEOUT = re.compile(
     DIAGNOSTIC_PREFIX + r'(?:factory (?:sessions endpoint )?not reachable at [^\r\n]+: )?'
     r'Get "[^"\r\n]+":[^\r\n]*'
