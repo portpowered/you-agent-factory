@@ -3,16 +3,15 @@ package wire
 import (
 	"context"
 	"errors"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
-	platformcontentstaging "github.com/portpowered/infinite-you/pkg/platform/contentstaging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -156,6 +155,25 @@ type timestampTestSource struct{ nanos atomic.Int64 }
 
 func (source *timestampTestSource) Now() time.Time { return time.Unix(0, source.nanos.Load()).UTC() }
 
+type timestampRecordingReserver struct {
+	at   time.Time
+	path string
+}
+
+func (reserver *timestampRecordingReserver) ReserveNamed(root string, at time.Time, name, ext string) (string, error) {
+	reserver.at = at
+	reserver.path = filepath.Join(root, at.Format("2006"), at.Format("01"), at.Format("02"), name+ext)
+	return reserver.path, nil
+}
+
+func (*timestampRecordingReserver) Reserve(string, time.Time, string, string) (string, error) {
+	return "", errors.New("unexpected unnamed reservation")
+}
+
+func (*timestampRecordingReserver) ReserveNamedWithCollision(string, time.Time, string, string) (string, error) {
+	return "", errors.New("unexpected collision reservation")
+}
+
 func TestSelectedTimestampProvidersUseProcessSource(t *testing.T) {
 	t.Parallel()
 	source := &timestampTestSource{}
@@ -163,12 +181,9 @@ func TestSelectedTimestampProvidersUseProcessSource(t *testing.T) {
 	source.nanos.Store(base.UnixNano())
 	artifactNow := provideRuntimeArtifactClock(source)
 	defaults := provideCLIRunDefaults(nil, provideRecordingsCLIAdapter(), source)
-	reserver, err := provideRuntimeArtifactPathReserver()
-	if err != nil {
-		t.Fatal(err)
-	}
+	reserver := &timestampRecordingReserver{}
 	planner := provideLiveRecordingTargetPlanner(reserver, source)
-	home := t.TempDir()
+	home := "selected-home"
 	for index, instant := range []time.Time{base, base.Add(24 * time.Hour)} {
 		source.nanos.Store(instant.UnixNano())
 		if got := artifactNow(); !got.Equal(instant) {
@@ -182,20 +197,44 @@ func TestSelectedTimestampProvidersUseProcessSource(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		datedSuffix := filepath.Join(instant.Format("2006"), instant.Format("01"), instant.Format("02"), id+".json")
-		if !strings.HasSuffix(target.ServicePath, datedSuffix) || target.ReportedPath != target.ServicePath {
-			t.Fatalf("target = %#v, want shared path ending %q", target, datedSuffix)
+		if !reserver.at.Equal(instant) {
+			t.Fatalf("reservation time = %v, want %v", reserver.at, instant)
+		}
+		if target.ServicePath != reserver.path || target.ReportedPath != reserver.path {
+			t.Fatalf("target = %#v, want reserved path %q", target, reserver.path)
 		}
 	}
 }
 
 type timestampStagingFiles struct {
-	platformcontentstaging.FileSystem
-	root string
+	files fstest.MapFS
 }
 
-func (files timestampStagingFiles) MkdirTemp(_ string, pattern string) (string, error) {
-	return os.MkdirTemp(files.root, pattern)
+func (*timestampStagingFiles) MkdirTemp(_, _ string) (string, error) {
+	return filepath.Abs("submit-work-stage-selected")
+}
+
+func (files *timestampStagingFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	files.files[filepath.Base(path)] = &fstest.MapFile{Data: append([]byte(nil), data...), Mode: mode}
+	return nil
+}
+
+func (files *timestampStagingFiles) Stat(path string) (fs.FileInfo, error) {
+	return files.files.Stat(filepath.Base(path))
+}
+
+func (files *timestampStagingFiles) RemoveAll(_ string) error {
+	clear(files.files)
+	return nil
+}
+
+type timestampStagingRandom struct{}
+
+func (timestampStagingRandom) Read(buffer []byte) (int, error) {
+	for index := range buffer {
+		buffer[index] = 0x2a
+	}
+	return len(buffer), nil
 }
 
 func TestSelectedStagingClockPreservesOverride(t *testing.T) {
@@ -207,7 +246,10 @@ func TestSelectedStagingClockPreservesOverride(t *testing.T) {
 			selected, specialized := &timestampTestSource{}, &timestampTestSource{}
 			selected.nanos.Store(base.UnixNano())
 			specialized.nanos.Store(base.Add(time.Hour).UnixNano())
-			edges := serviceedges.Edges{WorkContentStagingFileSystem: timestampStagingFiles{root: t.TempDir()}}
+			edges := serviceedges.Edges{
+				WorkContentStagingFileSystem: &timestampStagingFiles{files: fstest.MapFS{}},
+				WorkContentStagingRandom:     timestampStagingRandom{},
+			}
 			effective := selected
 			if overridden {
 				edges.WorkContentStagingClock = specialized
