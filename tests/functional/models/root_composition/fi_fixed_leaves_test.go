@@ -27,8 +27,9 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, body)
 	routes := newFixedLeafRoutes()
 	network := &rejectingModelAssetHTTP{}
+	launcher := &recordingModelHostLauncher{endpoint: host.URL}
 	edges := story004EmbedEdges(home, network, host.Client(),
-		&recordingModelHostLauncher{endpoint: host.URL}, &joinedProtocolNegotiator{},
+		launcher, &joinedProtocolNegotiator{},
 		&joinedCompatibilityChecker{}, selection, nil)
 	edges.ModelEmbeddingBackend = nil
 	edges.ModelInvocationBackend = routes.invoke
@@ -49,6 +50,10 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 	t.Run("fault and retry while peer is accepted", func(t *testing.T) {
 		t.Parallel()
 		runFixedLeafSessionFaultWithHeldPeer(t, server.URL(), routes)
+	})
+	t.Run("capacity refusal and recovery while peer is accepted", func(t *testing.T) {
+		t.Parallel()
+		runFixedLeafSessionCapacityWithHeldPeer(t, server.URL(), routes, launcher)
 	})
 }
 
