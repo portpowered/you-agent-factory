@@ -270,7 +270,7 @@ func NewRuntimeBuild(
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
 	}
-	return preparation.BindCompatibility(runtimebuild.BuildDefaults{
+	return runtimebuild.BindCompatibility(preparation, runtimebuild.BuildDefaults{
 		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
 		ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
 	},
@@ -504,7 +504,7 @@ func newRuntimeWorkersService(
 		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID),
 	}
 	if requestResolver != nil && spec.LoadedFactoryCfg != nil {
-		service.workstationResolver = requestResolver.Bind(runtime.WorkstationRequestValues{
+		service.workstationResolver = runtime.BindWorkstationRequests(requestResolver, runtime.WorkstationRequestValues{
 			RuntimeDefinitions: spec.LoadedFactoryCfg,
 			WorkflowContext:    RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), canonicalSessionID).Clone(),
 			FactorySessionID:   canonicalSessionID, RuntimeID: spec.RuntimeInstanceID,

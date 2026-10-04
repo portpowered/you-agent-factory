@@ -119,8 +119,10 @@ type CompatibilityBuild struct {
 	petriMutationRecorder factory.PetriMutationRecorder
 }
 
-// BindCompatibility binds the legacy activation effects to detached defaults.
-func (s *Service) BindCompatibility(
+// BindCompatibility binds the T15 activation bridge without exposing its effect
+// types through the fixed preparation service exported by owner Wire.
+func BindCompatibility(
+	s *Service,
 	defaults BuildDefaults,
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,

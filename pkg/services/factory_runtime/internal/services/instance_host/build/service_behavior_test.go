@@ -427,7 +427,7 @@ func TestNewRejectsMissingFactoryLoader(t *testing.T) {
 	build := func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
 		return &factoryhost.Bundle{}, nil
 	}
-	service, err := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()).BindCompatibility(runtimebuild.BuildDefaults{},
+	service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), runtimebuild.BuildDefaults{},
 		nil,
 		nil,
 		nil,
@@ -457,7 +457,7 @@ func mustNewBehaviorService(
 	recorder factory.PetriMutationRecorder,
 ) *runtimebuild.CompatibilityBuild {
 	t.Helper()
-	service, err := runtimebuild.New(nil, loadFactory, testRuntimeID, zap.NewNop()).BindCompatibility(runtimebuild.BuildDefaults{WorkerModelProvider: defaultProvider, WorkerModel: defaultModel, ApplyOperatorDefaults: applyDefaults, RecordPath: recordPath, WorkflowID: workflowID},
+	service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, loadFactory, testRuntimeID, zap.NewNop()), runtimebuild.BuildDefaults{WorkerModelProvider: defaultProvider, WorkerModel: defaultModel, ApplyOperatorDefaults: applyDefaults, RecordPath: recordPath, WorkflowID: workflowID},
 		provider,
 		providerRunner,
 		scriptRunner,

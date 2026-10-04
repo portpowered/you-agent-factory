@@ -22,9 +22,9 @@ func newRuntimeBuildService(
 	build runtimebuild.BundleBuilder,
 	recorder factory.PetriMutationRecorder,
 ) (*runtimebuild.CompatibilityBuild, error) {
-	return runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	return runtimebuild.BindCompatibility(runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return nil, errors.New("unused test loader")
-	}, testRuntimeID, logger).BindCompatibility(runtimebuild.BuildDefaults{},
+	}, testRuntimeID, logger), runtimebuild.BuildDefaults{},
 		nil,
 		nil,
 		nil,
@@ -116,7 +116,7 @@ func TestNewRejectsMissingConstructionDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := runtimebuild.New(nil, test.loadFactory, test.newID, test.logger).BindCompatibility(runtimebuild.BuildDefaults{},
+			service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, test.loadFactory, test.newID, test.logger), runtimebuild.BuildDefaults{},
 				nil,
 				nil,
 				nil,

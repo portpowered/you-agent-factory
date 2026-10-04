@@ -837,7 +837,7 @@ func TestWorkstationRequestConcurrentBindingsKeepDetachedCorrelation(t *testing.
 				GenerationID: "generation-" + session, FactoryDirectory: "factory-" + session, RuntimeBaseDir: "base-" + session,
 				MockWorkers: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: session}}},
 			}
-			binding := resolver.Bind(values)
+			binding := BindWorkstationRequests(resolver, values)
 			values.WorkflowContext.EnvVars["session"] = "caller-mutated"
 			values.MockWorkers.MockWorkers[0].ID = "caller-mutated"
 			request := dispatch.Execution
@@ -900,7 +900,7 @@ func TestWorkstationRequestExecutePreservesResultsAndProgress(t *testing.T) {
 				func(workers.ProgressFragment) { published = true }, nil, nil)
 			values := WorkstationRequestValues{FactorySessionID: "selected-session", RuntimeID: "selected-runtime",
 				RecordingID: "selected-recording", GenerationID: "selected-generation"}
-			result, err := resolver.Bind(values).Execute(ctx, workers.WorkstationExecutionRequest{RunnerID: "script", Command: "selected-command",
+			result, err := BindWorkstationRequests(resolver, values).Execute(ctx, workers.WorkstationExecutionRequest{RunnerID: "script", Command: "selected-command",
 				Dispatch: work.WorkDispatch{DispatchID: "selected-dispatch", TransitionID: "selected-transition"}})
 			if service.calls.Load() != 1 || !published || result.DispatchID != "selected-dispatch" || result.TransitionID != "selected-transition" {
 				t.Fatalf("result = %#v, err = %v", result, err)
@@ -931,7 +931,7 @@ func TestWorkstationRequestResolutionFailureDoesNotExecute(t *testing.T) {
 				request.RunnerID = "script"
 				request.Command = ""
 			}
-			result, err := resolver.Execute(context.Background(), values, request)
+			result, err := BindWorkstationRequests(resolver, values).Execute(context.Background(), request)
 			if service.calls.Load() != 0 || result.Outcome != workers.OutcomeFailed {
 				t.Fatalf("unexpected execution/result: %d %#v", service.calls.Load(), result)
 			}

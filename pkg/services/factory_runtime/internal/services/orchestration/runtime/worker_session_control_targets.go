@@ -342,20 +342,21 @@ type workstationRequestBinding struct {
 	values   WorkstationRequestValues
 }
 
-// Bind captures session scalars and copies mutable context and mock values.
-// Definitions and Net are already detached before entering this boundary.
-func (executor *workstationRequestExecutor) Bind(values WorkstationRequestValues) *workstationRequestBinding {
+// BindWorkstationRequests captures session scalars and copies mutable context and
+// mock values inside Factory Runtime. Definitions and Net are already detached;
+// their activation types stay outside the fixed executor exported by owner Wire.
+func BindWorkstationRequests(executor *WorkstationRequestExecutor, values WorkstationRequestValues) *workstationRequestBinding {
 	values.WorkflowContext = values.WorkflowContext.Clone()
 	values.MockWorkers = values.MockWorkers.Clone()
 	return &workstationRequestBinding{executor: executor, values: values}
 }
 
 func (binding workstationRequestBinding) ResolveExecutionRequest(request workers.WorkstationExecutionRequest) (workers.ExecuteRequest, error) {
-	return binding.executor.ResolveExecutionRequest(binding.values, request)
+	return binding.executor.resolveExecutionRequest(binding.values, request)
 }
 
 func (binding workstationRequestBinding) Execute(ctx context.Context, request workers.WorkstationExecutionRequest) (workers.WorkResult, error) {
-	return binding.executor.Execute(ctx, binding.values, request)
+	return binding.executor.execute(ctx, binding.values, request)
 }
 
 var _ WorkstationExecutionResolver = workstationRequestBinding{}
@@ -375,8 +376,8 @@ func (executor *workstationRequestExecutor) requestConfig(values WorkstationRequ
 		expectedArtifactFileSystem: executor.expectedArtifacts, logger: executor.logger}
 }
 
-// ResolveExecutionRequest performs selection without execution or publication.
-func (executor *workstationRequestExecutor) ResolveExecutionRequest(values WorkstationRequestValues,
+// resolveExecutionRequest performs selection without execution or publication.
+func (executor *workstationRequestExecutor) resolveExecutionRequest(values WorkstationRequestValues,
 	request workers.WorkstationExecutionRequest,
 ) (workers.ExecuteRequest, error) {
 	if executor == nil || executor.service == nil {
@@ -661,7 +662,7 @@ func platformCancellationReason(reason workers.DispatchCancellationReason) platf
 	return platformprocess.CancellationReasonCanceled
 }
 
-func (executor *workstationRequestExecutor) Execute(
+func (executor *workstationRequestExecutor) execute(
 	ctx context.Context,
 	values WorkstationRequestValues,
 	request workers.WorkstationExecutionRequest,
@@ -670,7 +671,7 @@ func (executor *workstationRequestExecutor) Execute(
 		return workers.WorkResult{}, workers.ErrExecuteUnavailable
 	}
 	request = normalizeWorkstationRequest(values, request)
-	executeRequest, err := executor.ResolveExecutionRequest(values, request)
+	executeRequest, err := executor.resolveExecutionRequest(values, request)
 	if err != nil {
 		result := workers.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,

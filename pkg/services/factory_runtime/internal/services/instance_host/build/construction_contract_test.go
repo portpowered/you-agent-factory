@@ -34,9 +34,9 @@ func TestConstructionRejectsMissingOwnedDependencies(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 				return nil, errors.New("unused test loader")
-			}, testRuntimeID, test.logger).BindCompatibility(runtimebuild.BuildDefaults{},
+			}, testRuntimeID, test.logger), runtimebuild.BuildDefaults{},
 				nil,
 				nil,
 				nil,
