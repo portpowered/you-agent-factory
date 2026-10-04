@@ -271,7 +271,7 @@ func profileModelEdges(t *testing.T,home string,gate *profileModelGate)edges.Edg
  name:=filepath.Base(definition.Source);for i,c:=range name{if c=='@'{name=name[:i];break}}
  if _,err:=profileModelCache(home,"model",definition.Source,name,[]byte("controlled profile embedding weights"));err!=nil{t.Fatal(err)}
  body:=[]byte("controlled profile backend")
- selection:=edges.ModelBackendArtifactSelection{Name:"profile-backend.tar.gz",Location:"https://profile.invalid/backend.tar.gz",Bytes:int64(len(body)),SHA256:fmt.Sprintf("%x",sha256.Sum256(body))}
+ selection:=edges.ModelBackendArtifactSelection{Name:"profile-backend.tar.gz",Location:"https://github.com/portpowered/infinite-you/releases/download/profile-fixture/profile-backend.tar.gz",Bytes:int64(len(body)),SHA256:fmt.Sprintf("%x",sha256.Sum256(body))}
  source:="backend://localai-llamacpp/release://"+fmt.Sprintf("%x",sha256.Sum256([]byte(selection.Location)))
  if _,err:=profileModelCache(home,"backend",source,selection.Name,body);err!=nil{t.Fatal(err)}
  effects:=profileModelEffects{endpoint:host.URL}
