@@ -17,6 +17,17 @@ func (h *registeredGuardHelpers) providerValueEscaped(obj types.Object, visiting
 	visiting[obj] = true
 	defer delete(visiting, obj)
 	allowed := map[ast.Expr]bool{}
+	h.markProviderTransfers(allowed)
+	h.markProviderAliases(obj, visiting, allowed)
+	for id, used := range h.pass.TypesInfo.Uses {
+		if used == obj && !allowed[id] {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *registeredGuardHelpers) markProviderTransfers(allowed map[ast.Expr]bool) {
 	for _, file := range h.pass.Files {
 		ast.Inspect(file, func(node ast.Node) bool {
 			switch n := node.(type) {
@@ -36,6 +47,9 @@ func (h *registeredGuardHelpers) providerValueEscaped(obj types.Object, visiting
 			return true
 		})
 	}
+}
+
+func (h *registeredGuardHelpers) markProviderAliases(obj types.Object, visiting map[types.Object]bool, allowed map[ast.Expr]bool) {
 	for target, initializer := range h.values.initial {
 		if target == obj || target.Parent() == h.pass.Pkg.Scope() || h.values.mutated[target] {
 			continue
@@ -48,10 +62,4 @@ func (h *registeredGuardHelpers) providerValueEscaped(obj types.Object, visiting
 			}
 		}
 	}
-	for id, used := range h.pass.TypesInfo.Uses {
-		if used == obj && !allowed[id] {
-			return true
-		}
-	}
-	return false
 }

@@ -16,86 +16,19 @@ import (
 // Each compilation unit validates declarations it owns. Compiler-invalid
 // selectors and aliases are rejected by Go before the analyzer runs.
 func validateRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistry) error {
-	sets := map[string]bool{}
-	for _, set := range registry.CapabilitySets {
-		if set.Name == "" || strings.TrimSpace(set.OwnerTask) == "" || (set.Mode != ConstructionReport && set.Mode != ConstructionEnforce) {
-			return fmt.Errorf("invalid capability set %q", set.Name)
-		}
-		if sets[set.Name] {
-			return fmt.Errorf("duplicate capability set %q", set.Name)
-		}
-		sets[set.Name] = true
+	sets, err := validateRegisteredSets(registry)
+	if err != nil {
+		return err
 	}
-	classified := map[ConstructionSymbol]ConstructionType{}
-	for _, typ := range registry.Types {
-		if !validRegisteredSymbol(typ.Symbol) || !sets[typ.CapabilitySet] {
-			return fmt.Errorf("invalid type metadata %s", typ.Symbol)
-		}
-		if _, exists := classified[typ.Symbol]; exists {
-			return fmt.Errorf("duplicate type %s", typ.Symbol)
-		}
-		switch typ.Kind {
-		case ConstructionBehavior, ConstructionEffect, ConstructionState, ConstructionResource, ConstructionDomain:
-		default:
-			return fmt.Errorf("invalid construction kind %s", typ.Symbol)
-		}
-		classified[typ.Symbol] = typ
-		if typ.Symbol.ImportPath == pass.Pkg.Path() {
-			if _, ok := pass.Pkg.Scope().Lookup(typ.Symbol.Name).(*types.TypeName); !ok {
-				return fmt.Errorf("missing type declaration %s", typ.Symbol)
-			}
-		}
+	classified, err := validateRegisteredTypes(pass, registry, sets)
+	if err != nil {
+		return err
 	}
-	constructors := map[ConstructionSymbol]bool{}
-	for _, constructor := range registry.Constructors {
-		if !validRegisteredSymbol(constructor.Symbol) || !sets[constructor.CapabilitySet] {
-			return fmt.Errorf("invalid constructor metadata %s", constructor.Symbol)
-		}
-		if constructors[constructor.Symbol] {
-			return fmt.Errorf("duplicate constructor %s", constructor.Symbol)
-		}
-		constructors[constructor.Symbol] = true
-		for _, result := range constructor.Results {
-			if typ, ok := classified[result]; !ok || typ.CapabilitySet != constructor.CapabilitySet {
-				return fmt.Errorf("constructor result requires matching type classification %s", result)
-			}
-		}
-		if constructor.Symbol.ImportPath != pass.Pkg.Path() {
-			continue
-		}
-		fn := registeredConstructorDeclaration(pass.Pkg, constructor.Symbol)
-		if fn == nil {
-			return fmt.Errorf("missing constructor declaration %s", constructor.Symbol)
-		}
-		if err := validateRegisteredSignature(fn, constructor); err != nil {
-			return err
-		}
+	constructors, err := validateRegisteredConstructors(pass, registry, sets, classified)
+	if err != nil {
+		return err
 	}
-	seen := map[string]bool{}
-	for _, a := range registry.Allowances {
-		key := a.FilePath + "|" + a.Caller.String() + "|" + a.Callee.String()
-		if seen[key] {
-			return fmt.Errorf("duplicate allowance %s", key)
-		}
-		seen[key] = true
-		if !validRegisteredSymbol(a.Caller) || !validRegisteredSymbol(a.Callee) || !constructors[a.Callee] ||
-			a.FilePath == "." || path.IsAbs(a.FilePath) || path.Clean(a.FilePath) != a.FilePath ||
-			strings.ContainsAny(a.FilePath, "*?\\:") || strings.HasPrefix(a.FilePath, "../") ||
-			strings.TrimSpace(a.OwnerTask) == "" || strings.TrimSpace(a.Reason) == "" {
-			return fmt.Errorf("invalid exact allowance %s", key)
-		}
-		switch a.Kind {
-		case "focused-provider", "boundary-normalization", "leaf-effect", "scoped-view":
-		default:
-			return fmt.Errorf("invalid allowance kind %s", key)
-		}
-		if a.Caller.ImportPath == pass.Pkg.Path() {
-			if err := validateRegisteredAllowance(pass, a); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return validateRegisteredAllowances(pass, registry, constructors)
 }
 
 func validateRegisteredAllowance(pass *analysis.Pass, allowance ConstructionAllowance) error {
@@ -184,4 +117,103 @@ func validateRegisteredSignature(fn *types.Func, constructor ConstructionConstru
 func validRegisteredSymbol(symbol ConstructionSymbol) bool {
 	return symbol.ImportPath != "" && !strings.ContainsAny(symbol.ImportPath, "*?\\ \t\n") && path.Clean(symbol.ImportPath) == symbol.ImportPath &&
 		token.IsIdentifier(symbol.Name) && (symbol.Receiver == "" || token.IsIdentifier(symbol.Receiver))
+}
+
+func validateRegisteredSets(registry ConstructionRegistry) (map[string]bool, error) {
+	sets := map[string]bool{}
+	for _, set := range registry.CapabilitySets {
+		if set.Name == "" || strings.TrimSpace(set.OwnerTask) == "" || (set.Mode != ConstructionReport && set.Mode != ConstructionEnforce) {
+			return nil, fmt.Errorf("invalid capability set %q", set.Name)
+		}
+		if sets[set.Name] {
+			return nil, fmt.Errorf("duplicate capability set %q", set.Name)
+		}
+		sets[set.Name] = true
+	}
+	return sets, nil
+}
+
+func validateRegisteredTypes(pass *analysis.Pass, registry ConstructionRegistry, sets map[string]bool) (map[ConstructionSymbol]ConstructionType, error) {
+	classified := map[ConstructionSymbol]ConstructionType{}
+	for _, typ := range registry.Types {
+		if !validRegisteredSymbol(typ.Symbol) || !sets[typ.CapabilitySet] {
+			return nil, fmt.Errorf("invalid type metadata %s", typ.Symbol)
+		}
+		if _, exists := classified[typ.Symbol]; exists {
+			return nil, fmt.Errorf("duplicate type %s", typ.Symbol)
+		}
+		switch typ.Kind {
+		case ConstructionBehavior, ConstructionEffect, ConstructionState, ConstructionResource, ConstructionDomain:
+		default:
+			return nil, fmt.Errorf("invalid construction kind %s", typ.Symbol)
+		}
+		classified[typ.Symbol] = typ
+		if typ.Symbol.ImportPath == pass.Pkg.Path() {
+			if _, ok := pass.Pkg.Scope().Lookup(typ.Symbol.Name).(*types.TypeName); !ok {
+				return nil, fmt.Errorf("missing type declaration %s", typ.Symbol)
+			}
+		}
+	}
+	return classified, nil
+}
+
+func validateRegisteredConstructors(pass *analysis.Pass, registry ConstructionRegistry, sets map[string]bool, classified map[ConstructionSymbol]ConstructionType) (map[ConstructionSymbol]bool, error) {
+	constructors := map[ConstructionSymbol]bool{}
+	for _, constructor := range registry.Constructors {
+		if !validRegisteredSymbol(constructor.Symbol) || !sets[constructor.CapabilitySet] {
+			return nil, fmt.Errorf("invalid constructor metadata %s", constructor.Symbol)
+		}
+		if constructors[constructor.Symbol] {
+			return nil, fmt.Errorf("duplicate constructor %s", constructor.Symbol)
+		}
+		constructors[constructor.Symbol] = true
+		for _, result := range constructor.Results {
+			if typ, ok := classified[result]; !ok || typ.CapabilitySet != constructor.CapabilitySet {
+				return nil, fmt.Errorf("constructor result requires matching type classification %s", result)
+			}
+		}
+		if constructor.Symbol.ImportPath != pass.Pkg.Path() {
+			continue
+		}
+		fn := registeredConstructorDeclaration(pass.Pkg, constructor.Symbol)
+		if fn == nil {
+			return nil, fmt.Errorf("missing constructor declaration %s", constructor.Symbol)
+		}
+		if err := validateRegisteredSignature(fn, constructor); err != nil {
+			return nil, err
+		}
+	}
+	return constructors, nil
+}
+
+func validateRegisteredAllowances(pass *analysis.Pass, registry ConstructionRegistry, constructors map[ConstructionSymbol]bool) error {
+	seen := map[string]bool{}
+	for _, a := range registry.Allowances {
+		key := a.FilePath + "|" + a.Caller.String() + "|" + a.Callee.String()
+		if seen[key] {
+			return fmt.Errorf("duplicate allowance %s", key)
+		}
+		seen[key] = true
+		if invalidRegisteredAllowance(a, constructors) {
+			return fmt.Errorf("invalid exact allowance %s", key)
+		}
+		switch a.Kind {
+		case "focused-provider", "boundary-normalization", "leaf-effect", "scoped-view":
+		default:
+			return fmt.Errorf("invalid allowance kind %s", key)
+		}
+		if a.Caller.ImportPath == pass.Pkg.Path() {
+			if err := validateRegisteredAllowance(pass, a); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func invalidRegisteredAllowance(a ConstructionAllowance, constructors map[ConstructionSymbol]bool) bool {
+	return !validRegisteredSymbol(a.Caller) || !validRegisteredSymbol(a.Callee) || !constructors[a.Callee] ||
+		a.FilePath == "." || path.IsAbs(a.FilePath) || path.Clean(a.FilePath) != a.FilePath ||
+		strings.ContainsAny(a.FilePath, "*?\\:") || strings.HasPrefix(a.FilePath, "../") ||
+		strings.TrimSpace(a.OwnerTask) == "" || strings.TrimSpace(a.Reason) == ""
 }

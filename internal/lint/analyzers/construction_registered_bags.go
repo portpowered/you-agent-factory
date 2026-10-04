@@ -31,27 +31,7 @@ func scanRegisteredConstructionBags(pass *analysis.Pass, registry ConstructionRe
 	add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
 ) registeredBagTypes {
 	typeset := registeredBagTypes{pass: pass, registry: registry, declared: map[*types.TypeName]types.Type{}}
-	authored := map[*types.Func]bool{}
-	for _, file := range pass.Files {
-		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
-			continue
-		}
-		for _, decl := range file.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok {
-				if obj, ok := pass.TypesInfo.Defs[fn.Name].(*types.Func); ok {
-					authored[obj] = true
-				}
-			}
-		}
-		ast.Inspect(file, func(node ast.Node) bool {
-			if spec, ok := node.(*ast.TypeSpec); ok {
-				if obj, ok := pass.TypesInfo.Defs[spec.Name].(*types.TypeName); ok {
-					typeset.declared[obj] = pass.TypesInfo.TypeOf(spec.Type)
-				}
-			}
-			return true
-		})
-	}
+	authored := typeset.collectDeclarations()
 	for obj, rhs := range typeset.declared {
 		if obj.Parent() != pass.Pkg.Scope() || obj.IsAlias() || typeset.explicitKind(obj) != "" {
 			continue
@@ -77,6 +57,31 @@ func scanRegisteredConstructionBags(pass *analysis.Pass, registry ConstructionRe
 		}
 	}
 	return typeset
+}
+
+func (s registeredBagTypes) collectDeclarations() map[*types.Func]bool {
+	authored := map[*types.Func]bool{}
+	for _, file := range s.pass.Files {
+		if ast.IsGenerated(file) || strings.HasSuffix(s.pass.Fset.Position(file.Pos()).Filename, "_test.go") {
+			continue
+		}
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				if obj, ok := s.pass.TypesInfo.Defs[fn.Name].(*types.Func); ok {
+					authored[obj] = true
+				}
+			}
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			if spec, ok := node.(*ast.TypeSpec); ok {
+				if obj, ok := s.pass.TypesInfo.Defs[spec.Name].(*types.TypeName); ok {
+					s.declared[obj] = s.pass.TypesInfo.TypeOf(spec.Type)
+				}
+			}
+			return true
+		})
+	}
+	return authored
 }
 
 func (s registeredBagTypes) explicitKind(obj *types.TypeName) ConstructionKind {
@@ -146,12 +151,7 @@ func (s registeredBagTypes) bag(typ types.Type, visited map[types.Type]bool) boo
 	case *types.Map:
 		return s.bag(typ.Key(), visited) || s.bag(typ.Elem(), visited)
 	case *types.Struct:
-		for i := 0; i < typ.NumFields(); i++ {
-			field := typ.Field(i).Type()
-			if s.collaborator(field, map[types.Type]bool{}) || s.bag(field, visited) {
-				return true
-			}
-		}
+		return s.structBag(typ, visited)
 	}
 	return false
 }
@@ -180,6 +180,16 @@ func (s registeredBagTypes) collaborator(typ types.Type, visited map[types.Type]
 		return s.collaborator(typ.Elem(), visited)
 	case *types.Map:
 		return s.collaborator(typ.Key(), visited) || s.collaborator(typ.Elem(), visited)
+	}
+	return false
+}
+
+func (s registeredBagTypes) structBag(typ *types.Struct, visited map[types.Type]bool) bool {
+	for i := 0; i < typ.NumFields(); i++ {
+		field := typ.Field(i).Type()
+		if s.collaborator(field, map[types.Type]bool{}) || s.bag(field, visited) {
+			return true
+		}
 	}
 	return false
 }

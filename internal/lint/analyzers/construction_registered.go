@@ -125,12 +125,9 @@ func scanRegisteredCalls(pass *analysis.Pass, registry ConstructionRegistry, val
 			allowed := slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
 				return a.Caller == caller && a.Callee == callee && a.FilePath == filename
 			})
-			if allowed && !indirect[call] && !recursive && !debt {
+			rule := registeredCallRule(allowed, indirect[call], recursive, debt)
+			if rule == "" {
 				continue
-			}
-			rule := "registered-construction"
-			if allowed && debt && !recursive && !indirect[call] {
-				rule = "unresolved-focused-provider-dispatch"
 			}
 			add(caller, callee, constructor, rule, call.Pos())
 		}
@@ -208,4 +205,14 @@ func markRegisteredCallee(marked map[ast.Expr]bool, expr ast.Expr) {
 	case *ast.IndexListExpr:
 		markRegisteredCallee(marked, expr.X)
 	}
+}
+
+func registeredCallRule(allowed, indirect, recursive, debt bool) string {
+	if allowed && !indirect && !recursive && !debt {
+		return ""
+	}
+	if allowed && debt && !recursive && !indirect {
+		return "unresolved-focused-provider-dispatch"
+	}
+	return "registered-construction"
 }

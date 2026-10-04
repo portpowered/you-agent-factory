@@ -74,38 +74,13 @@ func (p registeredGuardOrigins) origin(expr ast.Expr, status bool, visited map[t
 			return p.origin(expr.X, true, visited)
 		}
 	case *ast.BinaryExpr:
-		if status && (expr.Op == token.EQL || expr.Op == token.NEQ) {
-			for _, pair := range [][2]ast.Expr{{expr.X, expr.Y}, {expr.Y, expr.X}} {
-				if id, ok := pair[0].(*ast.Ident); ok && (p.pass.TypesInfo.ObjectOf(id) == types.Universe.Lookup("true") || p.pass.TypesInfo.ObjectOf(id) == types.Universe.Lookup("false")) {
-					return p.origin(pair[1], true, visited)
-				}
-			}
-		}
+		return p.binaryOrigin(expr, status, visited)
 	case *ast.CallExpr:
-		if !status && p.helpers != nil {
-			return p.helperOrigin(expr)
-		}
-		if status {
-			for _, arg := range expr.Args {
-				if p.origin(arg, true, map[types.Object]bool{}) != "" {
-					return "unresolved-required-dependency-guard"
-				}
-			}
-		}
+		return p.callOrigin(expr, status)
 	case *ast.Ident:
 		return p.objectOrigin(p.pass.TypesInfo.ObjectOf(expr), status, visited)
 	case *ast.SelectorExpr:
-		if !status {
-			selection := p.pass.TypesInfo.Selections[expr]
-			if selection != nil && selection.Kind() == types.FieldVal && p.receiverAlias(expr.X, map[types.Object]bool{}) {
-				field := selection.Obj().(*types.Var)
-				rule := p.fields[field]
-				if rule != "" && (p.fieldMutations[field] || p.storageMutated(expr.X, map[types.Object]bool{})) {
-					return "unresolved-required-dependency-guard"
-				}
-				return rule
-			}
-		}
+		return p.selectorOrigin(expr, status)
 	}
 	return ""
 }
@@ -174,4 +149,44 @@ func (p registeredGuardOrigins) scan(body ast.Node, add func(string, token.Pos))
 		}
 		return true
 	})
+}
+
+func (p registeredGuardOrigins) binaryOrigin(expr *ast.BinaryExpr, status bool, visited map[types.Object]bool) string {
+	if status && (expr.Op == token.EQL || expr.Op == token.NEQ) {
+		for _, pair := range [][2]ast.Expr{{expr.X, expr.Y}, {expr.Y, expr.X}} {
+			if id, ok := pair[0].(*ast.Ident); ok && (p.pass.TypesInfo.ObjectOf(id) == types.Universe.Lookup("true") || p.pass.TypesInfo.ObjectOf(id) == types.Universe.Lookup("false")) {
+				return p.origin(pair[1], true, visited)
+			}
+		}
+	}
+	return ""
+}
+
+func (p registeredGuardOrigins) callOrigin(expr *ast.CallExpr, status bool) string {
+	if !status && p.helpers != nil {
+		return p.helperOrigin(expr)
+	}
+	if status {
+		for _, arg := range expr.Args {
+			if p.origin(arg, true, map[types.Object]bool{}) != "" {
+				return "unresolved-required-dependency-guard"
+			}
+		}
+	}
+	return ""
+}
+
+func (p registeredGuardOrigins) selectorOrigin(expr *ast.SelectorExpr, status bool) string {
+	if !status {
+		selection := p.pass.TypesInfo.Selections[expr]
+		if selection != nil && selection.Kind() == types.FieldVal && p.receiverAlias(expr.X, map[types.Object]bool{}) {
+			field := selection.Obj().(*types.Var)
+			rule := p.fields[field]
+			if rule != "" && (p.fieldMutations[field] || p.storageMutated(expr.X, map[types.Object]bool{})) {
+				return "unresolved-required-dependency-guard"
+			}
+			return rule
+		}
+	}
+	return ""
 }

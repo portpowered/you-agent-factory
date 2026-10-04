@@ -29,10 +29,7 @@ func (h *registeredGuardHelpers) providerCallable(expr ast.Expr, visiting map[as
 	case *ast.Ident:
 		obj := h.pass.TypesInfo.ObjectOf(expr)
 		if _, variable := obj.(*types.Var); variable {
-			if !h.values.mutated[obj] && !h.providerValueEscaped(obj, map[types.Object]bool{}) {
-				return h.providerCallable(h.values.initial[obj], visiting)
-			}
-			return registeredCallable{}
+			return h.providerVariable(obj, visiting)
 		}
 	case *ast.CallExpr:
 		producer := h.providerCallable(expr.Fun, visiting)
@@ -87,4 +84,11 @@ func (h *registeredGuardHelpers) providerReturn(signature *ast.FuncType, body *a
 		return registeredCallable{}
 	}
 	return identity
+}
+
+func (h *registeredGuardHelpers) providerVariable(obj types.Object, visiting map[ast.Node]bool) registeredCallable {
+	if !h.values.mutated[obj] && !h.providerValueEscaped(obj, map[types.Object]bool{}) {
+		return h.providerCallable(h.values.initial[obj], visiting)
+	}
+	return registeredCallable{}
 }
