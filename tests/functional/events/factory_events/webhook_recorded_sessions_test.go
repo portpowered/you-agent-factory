@@ -263,6 +263,15 @@ func runRecordedWebhookFault(t *testing.T, peer *initialRecordedWebhookSession, 
 			if response.StatusCode != 200 {
 				t.Fatalf("terminate status=%d: %s", response.StatusCode, body)
 			}
+			var control factoryapi.FactorySessionLifecycleControlResponse
+			if err := json.Unmarshal(body, &control); err != nil {
+				t.Fatal(err)
+			}
+			// Live terminate preserves its existing public SUCCEEDED outcome.
+			if control.SessionId != session.id || string(control.Status) != "SUCCEEDED" {
+				t.Fatalf("terminate result: %s", body)
+			}
+
 		} else {
 			// The later terminal Work event is processed only after the first event's
 			// persistence/success. This observes a deterministic appender completion.
