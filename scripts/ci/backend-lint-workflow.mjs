@@ -1,6 +1,6 @@
 import { BACKEND_LINT_COMMENT_MARKER } from "./backend-lint-report.mjs";
 
-export const BACKEND_LINT_EVENTS = Object.freeze(["pull_request", "push"]);
+export const BACKEND_LINT_EVENTS = Object.freeze(["pull_request", "merge_group", "push"]);
 // Keep this positive: the workflow must never pass an empty jobs value to
 // lintlane when runner parallelism discovery is unavailable.
 export const BACKEND_LINT_FALLBACK_JOBS = 2;
@@ -71,6 +71,7 @@ export function selectBackendLint({
 } = {}) {
 	const selected =
 		eventName === "pull_request" ||
+		eventName === "merge_group" ||
 		(eventName === "push" && ref === "refs/heads/main");
 	if (!selected) {
 		return {

@@ -166,3 +166,34 @@ test("required-result propagation rejects every non-success Backend Lint result"
 		assert.equal(policyFor(result).ok, false, `${result} must fail the required lane`);
 	}
 });
+
+test("selects merge queue groups at the tested merge group commit", () => {
+	assert.deepEqual(
+		selectBackendLint({
+			eventName: "merge_group",
+			ref: "refs/heads/gh-readonly-queue/main/pr-42-abc",
+			sha: SHA("d"),
+		}),
+		{ selected: true, testedSha: SHA("d"), checkoutRef: SHA("d"), error: "" },
+	);
+	assert.match(
+		selectBackendLint({ eventName: "merge_group", ref: "", sha: "" }).error,
+		/requires github\.sha/,
+	);
+});
+
+test("required checks report on merge_group using merge group base and head SHAs", () => {
+	const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+	assert.match(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/);
+	assert.match(
+		workflow,
+		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
+	);
+	assert.match(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/);
+	assert.match(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/);
+	const lint = workflow.split("\n  backend-lint:")[1]?.split("\n  ui-backend-integration:")[0] ?? "";
+	assert.match(lint, /github\.event_name == 'merge_group'/);
+	const pkg = workflow.split("\n  development-package:")[1]?.split("\n  development-package-behavior:")[0] ?? "";
+	assert.match(pkg, /github\.event_name == 'merge_group'/);
+	assert.match(pkg, /run_candidates: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+});

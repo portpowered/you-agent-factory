@@ -3,6 +3,10 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  # The main merge queue tests each queued PR against the latest main in a
+  # temporary gh-readonly-queue branch. Required checks must report here.
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
 
@@ -58,9 +62,9 @@ jobs:
           go-version-file: go.mod
           cache: true
       - id: classify
-        if: github.event_name == 'pull_request'
-        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
-      - if: github.event_name != 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" -head "${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}"
+      - if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         run: |
           for lane in docs_reference readme frontend backend backend_conformance ui_backend_integration api_package packaged_factories_package model_providers_package; do
             echo "run_${lane}=true" >> "$GITHUB_OUTPUT"
@@ -220,7 +224,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
       # Package-floor enforcement is BLOCKING. Both coverage lanes inherit the
       # Makefile default (GO_COVERAGE_FLOOR_POLICY ?= blocking), so a package
       # that drops below its floor fails CI and the floor must be updated
@@ -769,7 +773,7 @@ jobs:
 
   backend-lint:
     name: Backend Lint
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -953,7 +957,7 @@ jobs:
     if: >-
       ${{
         always() &&
-        (github.event_name == 'pull_request' || github.event_name == 'push')
+        (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')
       }}
     uses: ./.github/workflows/development-package.yml
     permissions:
