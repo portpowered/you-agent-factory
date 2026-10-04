@@ -260,3 +260,52 @@ func (process *legacyAgyPTYProcess) ExitCode() int {
 var _ platformprocess.ExecutableLocator = legacyAgyExecutableLocator{}
 var _ platformpty.Host = (*legacyAgyPTYHost)(nil)
 var _ platformpty.Process = (*legacyAgyPTYProcess)(nil)
+
+func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
+	t.Parallel()
+	for _, id := range []providers.ID{providers.IDCodex, providers.IDClaude} {
+		t.Run(id.String(), func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
+			runner := &clockCommandRunner{clock: clock}
+			root, err := NewService(IdentityCatalogProbe, clock, platformclock.Real{}, logging.NoopLogger{},
+				WithCommandRunner(runner), WithAgyCommandRunner(runner))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if runner.calls != 0 {
+				t.Fatal("construction started a provider command")
+			}
+			result, err := root.Execute(t.Context(), providers.ExecuteRequest{AttemptID: "clock-attempt", Provider: id, UserMessage: "clock proof", WorkingDirectory: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Content != "selected clock result" || result.Diagnostics == nil || result.Diagnostics.DurationMillis != 37 {
+				t.Fatalf("result = %#v, want content and supplied 37ms duration", result)
+			}
+			if runner.calls != 1 {
+				t.Fatalf("command calls = %d, want one", runner.calls)
+			}
+		})
+	}
+}
+
+type clockCommandRunner struct {
+	clock *platformclock.Deterministic
+	calls int
+}
+
+func (runner *clockCommandRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.calls++
+	runner.clock.SetTick(37)
+	output := "selected clock result"
+	switch request.Command {
+	case "codex":
+		output = `{"type":"thread.started","thread_id":"clock-thread"}` + "\n" +
+			`{"type":"item.completed","item":{"id":"clock-message","type":"agent_message","text":"selected clock result"}}` + "\n" +
+			`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}` + "\n"
+	case "claude":
+		output = `{"type":"result","subtype":"success","is_error":false,"result":"selected clock result","session_id":"clock-session"}` + "\n"
+	}
+	return platformprocess.CommandResult{Stdout: []byte(output)}, nil
+}
