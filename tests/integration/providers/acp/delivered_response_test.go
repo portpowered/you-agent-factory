@@ -78,9 +78,97 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 	// The hosted prebuilt target selects this parent by exact name. Keep the
 	// same-daemon witness in that selection, sharing the upstream artifact.
 	t.Run("daemon-recovery", testDeliveredACPDaemonRecoversAfterDisconnect)
+	t.Run("daemon-worker-disconnect-recovery", testDeliveredACPWorkerDisconnectRecovery)
 }
 
 const deliveredACPSecret = "delivered-acp-configured-secret-token"
+
+// Direct Worker Sessions retain their public terminal classification after
+// disconnect reconciliation. Both real attempts use the same daemon; configured
+// stderr must not escape into either caller's terminal output.
+func testDeliveredACPWorkerDisconnectRecovery(t *testing.T) {
+	binary := prebuiltCLI(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer, err := filepath.Abs(filepath.Join("testdata", "delivered-peer.cjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	directory := t.TempDir()
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(directory)
+	journal := filepath.Join(directory, "attempts.txt")
+	launch := fmt.Sprintf("%q %q disconnect-once %q", node, peer, journal)
+	_, diagnostic, err := invokeCLI(ctx, binary, directory, env,
+		"workers", "acp", "add", "--name", "opencode", "--transport", "stdio", "--argument", launch)
+	if err != nil {
+		t.Fatalf("register peer: %v %s", err, diagnostic)
+	}
+	baseURL := startDeliveredACPDaemon(t, ctx, binary, directory, env)
+	client := &http.Client{Timeout: 20 * time.Second}
+	defer client.CloseIdleConnections()
+	for _, id := range []string{"redacted-disconnect", "fresh-recovery"} {
+		request := map[string]any{
+			"requestId": id, "workerSessionId": id,
+			"execution": map[string]any{
+				"factorySessionId": "~default", "workstationName": "__provider_invocation__", "workerType": "direct-worker",
+				"workingDirectory": directory, "workstationType": "MODEL_WORKSTATION", "runnerId": "opencode", "executorProvider": "ACP", "modelProvider": "opencode", "model": "fixture",
+				"userMessage": "complete one turn", "envVars": map[string]string{"ACP_TEST_API_TOKEN": deliveredACPSecret},
+				"dispatch": map[string]any{"dispatchId": id, "workstationName": "__provider_invocation__", "workerType": "direct-worker"},
+			},
+		}
+		payload, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stdout, stderr, runErr := invokeCLI(ctx, binary, directory, env,
+			"--remote", "--server", baseURL, "--json", "worker-sessions", "invoke", "--execution", string(payload), "--retry-max-attempts", "1")
+		if strings.Contains(stdout+stderr, deliveredACPSecret) {
+			t.Fatal("direct Worker Session leaked the configured secret")
+		}
+		if id == "redacted-disconnect" {
+			var failure factoryapi.ErrorResponse
+			if err := json.Unmarshal([]byte(stderr), &failure); err != nil {
+				t.Fatalf("decode direct failure: %v stderr=%q", err, stderr)
+			}
+			// Direct supervision currently reports the reconciled unsupported
+			// continuation class, just as the JavaScript dispatch witness does.
+			if runErr == nil || stdout != "" || failure.Code != "WORKER_SESSION_FAILED" || failure.Message != "family=terminal type=permanent_bad_request" {
+				t.Fatalf("direct disconnect: error=%v stdout=%q stderr=%q", runErr, stdout, stderr)
+			}
+			assertDeliveredLaunchJournal(t, journal, "disconnect\n")
+			assertDeliveredWorkerTerminal(t, ctx, client, baseURL, id, "FAILED")
+		} else {
+			if runErr != nil || !strings.Contains(stdout, "delivered EOF primary result") {
+				t.Fatalf("direct recovery: error=%v stdout=%q stderr=%q", runErr, stdout, stderr)
+			}
+			assertDeliveredLaunchJournal(t, journal, "disconnect\nsuccess\n")
+			assertDeliveredWorkerTerminal(t, ctx, client, baseURL, id, "COMPLETED")
+		}
+	}
+}
+
+func assertDeliveredWorkerTerminal(t *testing.T, ctx context.Context, client *http.Client, baseURL, id, state string) {
+	t.Helper()
+	data := deliveredACPRead(t, ctx, client, baseURL+"/worker-sessions/"+id)
+	var observation factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal(data, &observation); err != nil {
+		t.Fatal(err)
+	}
+	if !observation.Direct || observation.WorkerSessionId != id || observation.AttemptId != id || string(observation.State) != state || observation.EndedAt == nil {
+		t.Fatalf("direct terminal observation = %#v, want %s with request-owned identities and end time", observation, state)
+	}
+	if state == "FAILED" {
+		if observation.Failure == nil || observation.Failure.Detail != "family=terminal type=permanent_bad_request" {
+			t.Fatalf("direct failure classification = %#v", observation.Failure)
+		}
+	} else if observation.Failure != nil {
+		t.Fatalf("recovered direct session retained failure = %#v", observation.Failure)
+	}
+}
 
 func writeDeliveredSecretFactory(t *testing.T, directory string) string {
 	t.Helper()
