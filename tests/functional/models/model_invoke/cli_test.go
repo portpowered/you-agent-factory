@@ -837,13 +837,37 @@ func assertModelsDiagnosticOrigins(t *testing.T, observed *observer.ObservedLogs
 		if entry.LoggerName == "modelhost" && fields["correlation_id"] != nil {
 			hostOrigin = true
 		}
-		encoded, err := json.Marshal(fields)
-		if err != nil {
-			t.Fatal(err)
+		sentinels := []string{"private-warmup-prompt", "private-failure-prompt", "private-recovery-prompt"}
+		// The shared backend also receives retention diagnostics with an explicit
+		// filesystem root. Path redaction here belongs to Models and its host;
+		// prompt contents must never appear in any captured diagnostic.
+		if strings.HasPrefix(entry.Message, "models ") || entry.LoggerName == "modelhost" {
+			sentinels = append(sentinels, home)
 		}
-		for _, sentinel := range []string{"private-failure-prompt", "private-recovery-prompt", home} {
-			if strings.Contains(string(encoded), sentinel) {
-				t.Fatal("private prompt or path reached process diagnostics")
+		safeMessage := entry.Message
+		for _, sentinel := range sentinels {
+			safeMessage = strings.ReplaceAll(safeMessage, sentinel, "[redacted]")
+		}
+		for _, sentinel := range sentinels {
+			if strings.Contains(entry.Message, sentinel) {
+				t.Errorf("private prompt or path reached diagnostic logger=%q message=%q field=<message>", entry.LoggerName, safeMessage)
+			}
+		}
+		for key, value := range fields {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, sentinel := range sentinels {
+				needle, err := json.Marshal(sentinel)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Encode the needle too: JSON escapes Windows backslashes and
+				// nested field values, so a raw path would miss leaked content.
+				if strings.Contains(string(encoded), string(needle[1:len(needle)-1])) {
+					t.Errorf("private prompt or path reached diagnostic logger=%q message=%q field=%q", entry.LoggerName, safeMessage, key)
+				}
 			}
 		}
 	}
