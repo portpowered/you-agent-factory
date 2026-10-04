@@ -72,7 +72,7 @@ func TestPublishRecordRequest_Validate_RejectsInvalidDraft(t *testing.T) {
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProgress(t *testing.T) {
 	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+	publisher := workersessions.ProgressPublisherForTest(func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, workers.ProgressFragment{
 			DispatchID:   fragment.DispatchID,
 			Continuation: (fragment.Continuation).ClonePtr(),
@@ -155,7 +155,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 		forwarded[2].Continuation.ProviderSessionID != "" {
 		t.Fatalf("incomplete continuation association or forwarding = requests:%#v forwarded:%#v", first.requests, forwarded)
 	}
-	noDownstream := workersessions.NewProviderSessionObservationPublisher(nil)
+	noDownstream := workersessions.ProgressPublisherForTest(nil)
 	noDownstream.Bind(first)
 	noDownstream.Publish(legacy)
 	if len(first.requests) != 3 {
@@ -243,7 +243,7 @@ func (s *workerRecordSpy) WorkerSessionIDForDispatch(
 func TestPublish_CanonicalDraftBindsBeforeWorkerOutput(t *testing.T) {
 	spy := &workerRecordSpy{}
 	forwarded := 0
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+	publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {
 		forwarded++
 	})
 	publisher.Bind(spy)
@@ -272,7 +272,7 @@ func TestPublish_CanonicalDraftBindsBeforeWorkerOutput(t *testing.T) {
 func TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance(t *testing.T) {
 	spy := &workerRecordSpy{}
 	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+	publisher := workersessions.ProgressPublisherForTest(func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, fragment)
 	})
 	publisher.Bind(spy)
@@ -396,7 +396,7 @@ func TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			spy := &workerRecordSpy{}
 			var forwarded []workers.ProgressFragment
-			publisher := workersessions.NewProviderSessionObservationPublisher(
+			publisher := workersessions.ProgressPublisherForTest(
 				func(fragment workers.ProgressFragment) { forwarded = append(forwarded, fragment) })
 			publisher.Bind(spy)
 			publisher.Publish(tc.fragment)
@@ -435,7 +435,7 @@ func TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards(t *testing.T)
 // records from whichever Worker fell behind.
 func TestPublish_KeepsEachWorkerSessionSequenceIndependent(t *testing.T) {
 	spy := &workerRecordSpy{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+	publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 	publisher.Bind(spy)
 
 	for _, dispatch := range []string{"d1", "d2", "d1", "d2", "d1"} {
@@ -520,7 +520,7 @@ func TestPublish_ReportsARejectedWorkerRecordWithoutFailingTheDispatch(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			logger := &recordingLogger{}
 			var forwarded int
-			publisher := workersessions.NewProviderSessionObservationPublisher(
+			publisher := workersessions.ProgressPublisherForTest(
 				func(workers.ProgressFragment) { forwarded++ }).WithLogger(logger)
 			publisher.Bind(&rejectingWorkerRecordSpy{err: tc.err})
 
@@ -622,7 +622,7 @@ func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 			if tc.bind {
 				publisher.Bind(spy)
 			}
@@ -770,7 +770,7 @@ func TestPublish_CommitsRemainingWorkerVocabulary(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 			publisher.Bind(spy)
 			publisher.Publish(tc.fragment)
 
@@ -793,7 +793,7 @@ func TestPublish_CommitsRemainingWorkerVocabulary(t *testing.T) {
 // Worker-authored fragment kind: the runner's own terminal content.
 func TestPublish_ResponseFragmentsAlsoReachTheWorkerTopic(t *testing.T) {
 	spy := &workerRecordSpy{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+	publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 	publisher.Bind(spy)
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID: "d1", Kind: workers.ResponseFragmentKind, Type: "delta", Payload: "final",
@@ -842,7 +842,7 @@ func TestPublish_DropsFactsThatCannotBecomeALegalRecord(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 			publisher.Bind(spy)
 			publisher.Publish(tc.fragment)
 			if len(spy.published) != 0 {
@@ -901,7 +901,7 @@ func TestPublish_CoversTheRemainingPhaseVocabulary(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 			publisher.Bind(spy)
 			publisher.Publish(tc.fragment)
 			if len(spy.published) != 1 {
@@ -923,7 +923,7 @@ func TestPublish_CoversTheRemainingPhaseVocabulary(t *testing.T) {
 // when a record is refused.
 func TestPublish_WithoutALoggerStaysSilentAndSafe(t *testing.T) {
 	var forwarded int
-	publisher := workersessions.NewProviderSessionObservationPublisher(
+	publisher := workersessions.ProgressPublisherForTest(
 		func(workers.ProgressFragment) { forwarded++ })
 	publisher.Bind(&rejectingWorkerRecordSpy{err: workersessions.ErrPublicationNotOpen})
 	publisher.Publish(workers.ProgressFragment{

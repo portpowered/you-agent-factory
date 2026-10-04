@@ -10,6 +10,28 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// RuntimeProgressOperation commits progress through an explicitly keyed owner.
+type RuntimeProgressOperation interface {
+	PublishRuntimeProgress(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error
+}
+
+// RuntimeProgress captures the runtime and supervisor before Workers
+// execution is assembled. Only an explicit standalone bypass may forward output
+// without supervision; rejected or terminal attempts stay suppressed.
+func RuntimeProgress(runtimeID string, publisher RuntimeProgressOperation, next workers.ProgressPublisher) workers.ProgressPublisher {
+	runtimeID = strings.TrimSpace(runtimeID)
+	return func(fragment workers.ProgressFragment) {
+		if !providerFragmentAgrees(fragment) {
+			return
+		}
+		key := RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: strings.TrimSpace(fragment.Correlation.DispatchID)}
+		err := publisher.PublishRuntimeProgress(context.Background(), key, fragment, next)
+		if errors.Is(err, ErrRuntimeProgressUnsupervised) && fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
+			next(fragment)
+		}
+	}
+}
+
 // RuntimeAttemptKey identifies a logical dispatch within one runtime. It is
 // process-local and does not replace a Worker Session or physical attempt ID.
 type RuntimeAttemptKey struct {

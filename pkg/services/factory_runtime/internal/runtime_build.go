@@ -56,6 +56,9 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 	ctx context.Context,
 	request workers.ExecuteRequest,
 ) (workers.ExecuteResult, error) {
+	correlation := request.Correlation
+	progress := request.Input.ProgressPublisher
+	observer := request.Input.ProcessLifecycleObserver
 	if service.workstationResolver != nil && targetNeedsRuntimeResolution(request.Target) {
 		resolved, err := service.workstationResolver.ResolveExecutionRequest(
 			workstationExecutionRequestFromExecute(
@@ -69,6 +72,11 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 			return workers.ExecuteResult{}, err
 		}
 		request = resolved
+		if progress != nil {
+			request.Correlation = correlation
+			request.Input.ProgressPublisher = progress
+		}
+		request.Input.ProcessLifecycleObserver = observer
 	}
 	if service.providerOverride != nil {
 		request.Input.ProviderOverride = service.providerOverride
@@ -76,7 +84,7 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 	if service.modelInvocationOverride != nil {
 		request.Input.ModelInvocationOverride = service.modelInvocationOverride
 	}
-	if service.publisher != nil {
+	if service.publisher != nil && request.Input.ProgressPublisher == nil {
 		request.Input.ProgressPublisher = service.publisher
 	}
 	request.Input.SkipBuiltInPrerequisiteValidation = service.skipBuiltInPrerequisiteValidation
@@ -255,7 +263,8 @@ func NewRuntimeBuild(
 	baseLogger *zap.Logger,
 	runtimeFactory *RuntimeFactory,
 	workerService workers.Service,
-	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerSessions workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
 	progressFactory ProgressPublisherFactory,
 	completionFactory DispatchCompletionFactory,
@@ -298,9 +307,7 @@ func NewRuntimeBuild(
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
-			// Bind the session-local progress bridge before any Worker Session can
-			// admit a dispatch or publish an observation.
-			providerSessionProgress := workersessions.NewProviderSessionObservationPublisher(progressPublisher).WithUnassociatedProgressFallback()
+			providerSessionProgress := workersessions.RuntimeProgress(spec.RuntimeInstanceID, workerAttempts, progressPublisher)
 			if workerService == nil {
 				return nil, fmt.Errorf("Workers service is required")
 			}
@@ -331,7 +338,8 @@ func NewRuntimeBuild(
 				invocationSkipPermissionsOverride,
 				workerService,
 				mockWorkersConfig,
-				workerSessionsFactory,
+				workerSessions,
+				workerAttempts,
 				providerSessionProgress,
 				runtimeFactory,
 				dispatchCompleted,
@@ -367,8 +375,9 @@ func buildBundle(
 	invocationSkipPermissionsOverride *bool,
 	workerExecution workers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
-	workerSessionsFactory factory.WorkerSessionsFactory,
-	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	workerSessions workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
+	providerSessionProgress workers.ProgressPublisher,
 	runtimeFactory *RuntimeFactory,
 	dispatchCompleted func(string),
 	worldStateProjector factory.WorldStateProjector,
@@ -382,20 +391,11 @@ func buildBundle(
 		return nil, err
 	}
 	metricsSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
-	workerServiceWithProgress, workerSessionsFactory, err := prepareRuntimeBundleWorkers(
-		workerExecution,
-		providerSessionProgress,
-		spec,
-		sessionID,
-		skipBuiltInPrerequisiteValidation,
-		invocationSkipPermissionsOverride,
-		runtimeFactory,
-		mockWorkersConfig,
-		workerSessionsFactory,
+	workerServiceWithProgress := newRuntimeWorkersService(
+		workerExecution, providerSessionProgress, spec, sessionID,
+		skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride,
+		runtimeFactory, mockWorkersConfig,
 	)
-	if err != nil {
-		return nil, err
-	}
 	bundle, err := runtimeFactory.Build(
 		ctx,
 		spec.Dir,
@@ -432,7 +432,8 @@ func buildBundle(
 			resumeCanonicalEvents: cloneFactoryEvents(spec.ResumeCanonicalEvents),
 		},
 		workerServiceWithProgress,
-		workerSessionsFactory,
+		runtimeWorkerSessionBoundary{Service: workerSessions, opener: workerAttempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: runtimeFactory.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
+		workerAttempts,
 		dispatchCompleted,
 		mockWorkersConfig,
 	)
@@ -440,51 +441,20 @@ func buildBundle(
 		return nil, err
 	}
 	setReplayEvents(bundle.Factory, spec.ReplayEvents)
-	setBundleProgressPublisher(bundle, providerSessionProgress.Publish)
+	setBundleProgressPublisher(bundle, providerSessionProgress)
 	return bundle, nil
-}
-
-func prepareRuntimeBundleWorkers(
-	workerExecution workers.Service,
-	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
-	spec runtimebuild.SessionBuildSpec,
-	sessionID string,
-	skipBuiltInPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	runtimeFactory *RuntimeFactory,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	workerSessionsFactory factory.WorkerSessionsFactory,
-) (workers.Service, factory.WorkerSessionsFactory, error) {
-	var err error
-	workerSessionsFactory, err = prepareBundleExecution(
-		workerSessionsFactory,
-		providerSessionProgress,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	return newRuntimeWorkersService(
-		workerExecution,
-		providerSessionProgress,
-		spec,
-		sessionID,
-		skipBuiltInPrerequisiteValidation,
-		invocationSkipPermissionsOverride,
-		runtimeFactory,
-		mockWorkersConfig,
-	), workerSessionsFactory, nil
 }
 
 func newRuntimeWorkersService(
 	workerExecution workers.Service,
-	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	providerSessionProgress workers.ProgressPublisher,
 	spec runtimebuild.SessionBuildSpec,
 	sessionID string,
 	skipBuiltInPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
 	runtimeFactory *RuntimeFactory,
 	mockWorkersConfig *workers.MockWorkersConfig,
-) workers.Service {
+) *runtimeWorkersServiceWithProgress {
 	canonicalSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
 	var invocationOverride *bool
 	if invocationSkipPermissionsOverride != nil {
@@ -493,7 +463,7 @@ func newRuntimeWorkersService(
 	}
 	service := &runtimeWorkersServiceWithProgress{
 		Service:                           workerExecution,
-		publisher:                         providerSessionProgress.Publish,
+		publisher:                         providerSessionProgress,
 		providerOverride:                  spec.ProviderOverride,
 		commandRunnerOverride:             spec.CommandRunnerOverride,
 		replayCommandRunner:               spec.ReplayCommandRunner,
@@ -519,7 +489,7 @@ func newRuntimeWorkersService(
 			PromptRenderer:             service,
 			TemplateFieldResolver:      service,
 			MockWorkers:                mockWorkersConfig,
-			ProgressPublisher:          providerSessionProgress.Publish,
+			ProgressPublisher:          providerSessionProgress,
 			ExpectedArtifactFileSystem: runtimeFactory.inputFiles,
 		})
 		if typed, ok := resolver.(runtime.WorkstationExecutionResolver); ok {
@@ -539,17 +509,6 @@ func setReplayEvents(
 	if ok {
 		setter.SetReplayEvents(events)
 	}
-}
-
-func prepareBundleExecution(
-	workerSessionsFactory factory.WorkerSessionsFactory,
-	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
-) (factory.WorkerSessionsFactory, error) {
-	if err := validateBundleDependencies(providerSessionProgress, workerSessionsFactory); err != nil {
-		return nil, err
-	}
-	workerSessionsFactory = bindProviderSessionProgress(workerSessionsFactory, providerSessionProgress)
-	return workerSessionsFactory, nil
 }
 
 func setBundleProgressPublisher(bundle *factoryhost.Bundle, publisher workers.ProgressPublisher) {
@@ -600,33 +559,28 @@ func firstNonEmptySessionID(values ...string) string {
 	return ""
 }
 
-func validateBundleDependencies(
-	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
-	workerSessionsFactory factory.WorkerSessionsFactory,
-) error {
-	if providerSessionProgress == nil {
-		return fmt.Errorf("Worker Session provider progress bridge is required")
-	}
-	if workerSessionsFactory == nil {
-		return fmt.Errorf("Worker Sessions factory is required")
-	}
-	return nil
+// runtimeWorkerSessionBoundary supplies selected runtime effects to the direct
+// HTTP admission boundary. Reads and controls keep the canonical supervisor.
+type runtimeWorkerSessionBoundary struct {
+	workersessions.Service
+	opener    factory.WorkerAttemptOpener
+	execution *runtimeWorkersServiceWithProgress
+	clock     platformclock.Source
+	scheduler platformclock.TimerSource
+	runtimeID string
 }
 
-// bindProviderSessionProgress keeps the Workers progress bridge session-local:
-// Factory Runtime creates the same Worker Sessions service that owns the
-// execution service and binds it before any dispatch can be admitted or
-// produce output.
-func bindProviderSessionProgress(
-	workerSessionsFactory factory.WorkerSessionsFactory,
-	publisher *workersessions.ProviderSessionObservationPublisher,
-) factory.WorkerSessionsFactory {
-	return func(execution workers.Service, clock platformclock.Source) (workersessions.Service, error) {
-		service, err := workerSessionsFactory(execution, clock)
-		if err != nil {
-			return nil, err
-		}
-		publisher.Bind(service)
-		return service, nil
+func (boundary runtimeWorkerSessionBoundary) Start(ctx context.Context, request workersessions.StartRequest) (workersessions.StartResult, error) {
+	request.Execution.Execution = workers.CloneWorkstationExecutionRequest(request.Execution.Execution)
+	if supplied := strings.TrimSpace(request.Execution.Execution.RuntimeID); supplied != "" && supplied != boundary.runtimeID {
+		return workersessions.StartResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
+	request.Execution.Execution.RuntimeID = boundary.runtimeID
+	if strings.TrimSpace(request.Execution.Execution.FactorySessionID) == "" {
+		request.Execution.Execution.FactorySessionID = boundary.execution.factorySessionID
+	}
+	if strings.TrimSpace(request.Execution.Execution.GenerationID) == "" {
+		request.Execution.Execution.GenerationID = boundary.runtimeID
+	}
+	return boundary.opener.AdmitRuntimeAttemptAsync(ctx, request, boundary.execution, boundary.clock, boundary.scheduler)
 }

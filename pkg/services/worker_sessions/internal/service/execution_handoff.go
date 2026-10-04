@@ -942,6 +942,11 @@ func (r *registry) registerSupervisionOwned(
 	if runtimeKey.RuntimeID != "" && r.runtimeAdmissions[runtimeKey.RuntimeID].closed {
 		return nil, false
 	}
+	if serverOwned && len(executions) > 0 {
+		if admission := r.runtimeAdmissions[strings.TrimSpace(executions[0].Execution.RuntimeID)]; admission != nil && admission.closed {
+			return nil, false
+		}
+	}
 	supervision := newSupervision(dispatchID, turnID, executions...)
 	supervision.runtimeKey = runtimeKey
 	supervision.executor = executor

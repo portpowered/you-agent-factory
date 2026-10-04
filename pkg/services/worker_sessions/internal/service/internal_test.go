@@ -1249,7 +1249,7 @@ func TestKeyedRuntime_ProgressCommitsScopedAssociationBeforeForwarding(t *testin
 	first := newPerRuntimeAttemptFixture(t, "a", sink)
 	peer := newPerRuntimeAttemptFixture(t, "b", sink, first)
 	counts := map[string]int{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+	next := func(fragment workers.ProgressFragment) {
 		fixture := first
 		if fragment.Correlation.RuntimeID == peer.request.Key.RuntimeID {
 			fixture = peer
@@ -1259,10 +1259,15 @@ func TestKeyedRuntime_ProgressCommitsScopedAssociationBeforeForwarding(t *testin
 		if !reflect.DeepEqual(fragment, keyedRuntimeProgressFragment(fixture)) {
 			t.Fatal("downstream fragment changed")
 		}
-	})
-	publisher.Bind(first.service)
+	}
+	publisher := workersessions.RuntimeProgress(first.request.Key.RuntimeID, first.service, next)
+	peerPublisher := workersessions.RuntimeProgress(peer.request.Key.RuntimeID, peer.service, next)
 	for _, fixture := range []*perRuntimeAttemptFixture{first, peer, first, peer} {
-		publisher.Publish(keyedRuntimeProgressFragment(fixture))
+		if fixture == first {
+			publisher(keyedRuntimeProgressFragment(fixture))
+		} else {
+			peerPublisher(keyedRuntimeProgressFragment(fixture))
+		}
 	}
 	if counts[first.request.ID] != 2 || counts[peer.request.ID] != 2 {
 		t.Fatalf("forwarded counts = %#v", counts)
@@ -1270,14 +1275,14 @@ func TestKeyedRuntime_ProgressCommitsScopedAssociationBeforeForwarding(t *testin
 	handoff := keyedRuntimeProgressFragment(first)
 	handoff.Kind = workers.ProviderSessionObservedFragmentKind
 	before := sink.requestsFor("")
-	publisher.Publish(handoff)
+	publisher(handoff)
 	if !reflect.DeepEqual(before, sink.requestsFor("")) || counts[first.request.ID] != 2 {
 		t.Fatal("internal provider handoff appended or forwarded")
 	}
 	if err := first.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
 		t.Fatal(err)
 	}
-	publisher.Publish(keyedRuntimeProgressFragment(peer))
+	peerPublisher(keyedRuntimeProgressFragment(peer))
 	if counts[peer.request.ID] != 3 {
 		t.Fatal("peer progress stopped after target completion")
 	}
@@ -1372,19 +1377,19 @@ func assertProgressFallbackIsolation(t *testing.T, target, peer *perRuntimeAttem
 		t.Fatal(err)
 	}
 	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+	next := func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, fragment)
-	}).WithUnassociatedProgressFallback()
-	publisher.Bind(peer.service)
-	publisher.Publish(fragment)
+	}
+	publisher := workersessions.RuntimeProgress(target.request.Key.RuntimeID, target.service, next)
+	publisher(fragment)
 	handoff := fragment
 	handoff.Kind = workers.ProviderSessionObservedFragmentKind
-	publisher.Publish(handoff)
+	publisher(handoff)
 	after, err := target.service.List(context.Background(), workersessions.ListRequest{})
 	if err != nil || len(forwarded) != 0 || !reflect.DeepEqual(before, sink.requestsFor("")) || !reflect.DeepEqual(retained, after) {
 		t.Fatalf("rejected scoped progress: forwarded=%d, historyChanged=%t, sessionsChanged=%t, err=%v", len(forwarded), !reflect.DeepEqual(before, sink.requestsFor("")), !reflect.DeepEqual(retained, after), err)
 	}
-	publisher.Publish(keyedRuntimeProgressFragment(peer))
+	workersessions.RuntimeProgress(peer.request.Key.RuntimeID, peer.service, next)(keyedRuntimeProgressFragment(peer))
 	if len(forwarded) != 1 || forwarded[0].Correlation.RuntimeID != peer.request.Key.RuntimeID {
 		t.Fatalf("live peer progress = %#v", forwarded)
 	}
@@ -1394,9 +1399,10 @@ func assertProgressFallbackIsolation(t *testing.T, target, peer *perRuntimeAttem
 	bypass := fragment
 	bypass.Correlation.RuntimeID = "standalone-runtime"
 	before = sink.requestsFor("")
-	publisher.Publish(bypass)
+	publisher = workersessions.RuntimeProgress(bypass.Correlation.RuntimeID, peer.service, next)
+	publisher(bypass)
 	handoff.Correlation.RuntimeID = bypass.Correlation.RuntimeID
-	publisher.Publish(handoff)
+	publisher(handoff)
 	if len(forwarded) != 2 || !reflect.DeepEqual(forwarded[1], bypass) || !reflect.DeepEqual(before, sink.requestsFor("")) {
 		t.Fatalf("standalone bypass progress = %#v", forwarded)
 	}
@@ -1535,15 +1541,14 @@ func TestKeyedRuntime_CanonicalProgressPreservesDraftBeforeForwarding(t *testing
 			fragment := keyedRuntimeProgressFragment(first)
 			fragment.CanonicalDraft = draft
 			forwarded := 0
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(got workers.ProgressFragment) {
+			publisher := workersessions.RuntimeProgress(first.request.Key.RuntimeID, first.service, func(got workers.ProgressFragment) {
 				forwarded++
 				records := sink.requestsFor(workersessions.Topic(first.request.ID))
 				if len(records) != 3 || !reflect.DeepEqual(decodePerRuntimeDraft(t, records[2]), draft) || !reflect.DeepEqual(got, fragment) {
 					t.Fatalf("canonical publication changed draft/fragment or preceded binding: %#v", records)
 				}
 			})
-			publisher.Bind(first.service)
-			publisher.Publish(fragment)
+			publisher(fragment)
 			if forwarded != 1 {
 				t.Fatalf("canonical output forwarded=%d, want 1", forwarded)
 			}
@@ -1560,14 +1565,16 @@ func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string, keyed
 	t.Helper()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 	forwarded := 0
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+	next := func(workers.ProgressFragment) {
 		forwarded++
 		if records := sink.requestsFor(workersessions.Topic("compat-worker")); len(records) != 3 {
 			t.Fatalf("forwarding preceded opening/binding/output: %#v", records)
 		}
-	})
+	}
+	var publisher workers.ProgressPublisher
+
 	execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
-		publisher.Publish(workers.ProgressFragment{
+		publisher(workers.ProgressFragment{
 			Correlation: request.Correlation, DispatchID: request.Correlation.DispatchID,
 			Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "compatibility output", Provider: "codex",
 			Continuation: &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "compat-provider"},
@@ -1578,7 +1585,14 @@ func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string, keyed
 	if err != nil {
 		t.Fatal(err)
 	}
-	publisher.Bind(service)
+	progress := &workersessions.ProviderSessionObservationPublisher{}
+	publisher = func(fragment workers.ProgressFragment) {
+		if err := progress.PublishWorkerSessionProgress(context.Background(), service, "compat-worker", fragment); err != nil {
+			t.Errorf("publish compatibility: %v", err)
+			return
+		}
+		next(fragment)
+	}
 	request := validStartRequest("compat-worker", "compat-dispatch")
 	request.Execution.Execution.RuntimeID = runtimeID
 	var result workersessions.InvokeSessionResult
@@ -5284,7 +5298,7 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 
 	running := newTestRegistry(t)
 	running.sessions["running"] = workersessions.Session{ID: "running", State: workersessions.StateRunning}
-	if _, err := running.startReserved(ctx, workersessions.StartRequest{RequestID: "running-request", ID: "running"}); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+	if _, err := running.startReservedWithEffects(workersessions.StartRequest{RequestID: "running-request", ID: "running"}, running.execution, running.clock, running.scheduler); !errors.Is(err, workersessions.ErrSessionNotStartable) {
 		t.Fatalf("startReserved(running) error = %v, want ErrSessionNotStartable", err)
 	}
 
@@ -6178,6 +6192,9 @@ func TestContinue_ReturnsAtTheAdmissionBarrierBeforeCompletion(t *testing.T) {
 	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
 	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
 	r.execution = boundary
+	r.supervisions[request.SourceWorkerSessionID].executor = boundary
+	r.supervisions[request.SourceWorkerSessionID].clock = r.clock
+	r.supervisions[request.SourceWorkerSessionID].scheduler = r.scheduler
 
 	outcomes := make(chan struct {
 		result workersessions.ContinueResult
@@ -7871,6 +7888,7 @@ func TestWorkerSessionCallerCancellation_DetachesStartAndContinueAfterReadinessB
 		ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "continue-cancel-provider"}
 		association := validAssociation("continue-cancel-source", "continue-cancel-dispatch", ref)
 		supervision := newSupervision("continue-cancel-dispatch", "", dispatchHandoff("continue-cancel-dispatch"))
+		supervision.executor, supervision.clock, supervision.scheduler = r.execution, r.clock, r.scheduler
 		setCoverageAccepted(supervision, true)
 		r.sessions["continue-cancel-source"] = workersessions.Session{ID: "continue-cancel-source", State: workersessions.StateCompleted, ProviderSessionAssociation: &association}
 		r.supervisions["continue-cancel-source"] = supervision
@@ -7948,11 +7966,11 @@ func TestWorkerSessionInterruptAndStartCompletion_CoversEarlyBranches(t *testing
 	}
 
 	r.execution = nil
-	result, err := r.startReserved(context.Background(), workersessions.StartRequest{
+	result, err := r.startReservedWithEffects(workersessions.StartRequest{
 		RequestID: "start-no-execution-request",
 		ID:        "start-no-execution-session",
 		Execution: dispatchHandoff("start-no-execution-dispatch"),
-	})
+	}, r.execution, r.clock, r.scheduler)
 	if !errors.Is(err, ErrMissingExecution) || result.Session.ID != "" {
 		t.Fatalf("startReserved(no execution) = %#v, %v, want missing execution before admission", result, err)
 	}
@@ -9670,5 +9688,97 @@ func cancelEqualPhysicalAttempt(t *testing.T, a *perRuntimeAttemptFixture, contr
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatal("targeted cancellation did not join its completion")
+	}
+}
+
+func TestKeyedRuntimeAsyncAdmissionSelectsEffectsAndKeepsDirectScope(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	facts := platformclock.NewDeterministic(time.Date(2042, 1, 2, 3, 4, 5, 0, time.UTC), time.Second)
+	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	started := make(chan workers.ExecuteRequest, 1)
+	canceled := make(chan struct{})
+	execution := coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		started <- request
+		<-ctx.Done()
+		close(canceled)
+		return workers.ExecuteResult{Correlation: request.Correlation}, ctx.Err()
+	}}
+	req := workersessions.StartRequest{RequestID: "async-request", ID: "async-worker", Execution: dispatchHandoff("async-physical")}
+	req.Execution.Execution.RuntimeID = "async-runtime"
+	req.Execution.Execution.Model = "selected-model"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result, err := r.AdmitRuntimeAttemptAsync(ctx, req, execution, facts, scheduler)
+	if err != nil || result.Session.State != workersessions.StateRunning {
+		t.Fatalf("admit: %#v, %v", result, err)
+	}
+	t.Cleanup(func() { _ = r.Stop(context.Background()) })
+	select {
+	case request := <-started:
+		if request.Correlation.DispatchID != "async-physical" || request.Correlation.AttemptID != "async-physical" || request.Target.Model.Name != "selected-model" {
+			t.Errorf("selected direct request: %#v", request)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected execution was not started")
+	}
+	cancel()
+	replay, err := r.AdmitRuntimeAttemptAsync(context.Background(), req, unusedExecution{t: t}, r.clock, r.scheduler)
+	if err != nil || !reflect.DeepEqual(replay, result) {
+		t.Fatalf("replay changed: %#v, %v", replay, err)
+	}
+	peer := startSelectedEffectsInvocation(t, r, "async-peer", "success", 2043, "peer-runtime")
+	if err := r.CloseRuntimeAttempts(context.Background(), "async-runtime"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-canceled:
+	case <-time.After(30 * time.Second):
+		t.Fatal("scope did not join direct attempt")
+	}
+	assertAsyncAdmissionTerminalFacts(t, r, req.ID)
+	close(peer.release)
+	if got := awaitSelectedEffectsInvocation(t, peer); got.Session.State != workersessions.StateCompleted {
+		t.Fatalf("peer: %#v", got)
+	}
+}
+
+func TestKeyedRuntimeAsyncAdmissionRejectsMissingEffectsBeforeReservation(t *testing.T) {
+	for _, missing := range []string{"execution", "clock", "scheduler"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			r := newTestRegistry(t)
+			var execution workers.Service = unusedExecution{t: t}
+			var clock platformclock.Source = r.clock
+			var scheduler platformclock.TimerSource = r.scheduler
+			want := ErrMissingExecution
+			switch missing {
+			case "execution":
+				execution = nil
+			case "clock":
+				clock, want = nil, ErrMissingClock
+			case "scheduler":
+				scheduler, want = nil, ErrMissingScheduler
+			}
+			req := workersessions.StartRequest{RequestID: "missing-request", ID: "missing-worker", Execution: dispatchHandoff("missing-dispatch")}
+			if _, err := r.AdmitRuntimeAttemptAsync(context.Background(), req, execution, clock, scheduler); !errors.Is(err, want) {
+				t.Fatalf("missing %s: %v", missing, err)
+			}
+			if _, err := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+				t.Fatalf("reserved rejected session: %v", err)
+			}
+		})
+	}
+}
+
+func assertAsyncAdmissionTerminalFacts(t *testing.T, r *registry, id string) {
+	t.Helper()
+	snapshot, err := r.Get(context.Background(), workersessions.GetRequest{ID: id})
+	if err != nil || snapshot.State != workersessions.StateCanceled {
+		t.Fatalf("terminal direct attempt: %#v, %v", snapshot, err)
+	}
+	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: id})
+	if err != nil || observation.StartedAt == nil || !observation.StartedAt.Equal(time.Date(2042, 1, 2, 3, 4, 5, 0, time.UTC)) {
+		t.Fatalf("selected fact time: %#v, %v", observation, err)
 	}
 }

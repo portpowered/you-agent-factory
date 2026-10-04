@@ -81,6 +81,9 @@ type continueTuple struct {
 }
 
 type continuePlan struct {
+	executor  workers.Service
+	clock     platformclock.Source
+	scheduler platformclock.TimerSource
 	request   workersessions.ContinueRequest
 	execution workers.WorkstationDispatchRequest
 	direct    bool
@@ -88,6 +91,9 @@ type continuePlan struct {
 }
 
 type continuationSourceSnapshot struct {
+	executor   workers.Service
+	clock      platformclock.Source
+	scheduler  platformclock.TimerSource
 	session    workersessions.Session
 	execution  workers.WorkstationDispatchRequest
 	dispatchID string
@@ -252,6 +258,7 @@ func (r *registry) snapshotContinuationSourceLocked(
 		direct = metadata.direct
 	}
 	return continuationSourceSnapshot{
+		executor: supervision.executor, clock: supervision.clock, scheduler: supervision.scheduler,
 		session:    source,
 		execution:  execution,
 		dispatchID: dispatchID,
@@ -314,6 +321,7 @@ func (r *registry) storeContinuationReservationLocked(
 	replay := &continueReplay{
 		tuple: tuple,
 		plan: continuePlan{
+			executor: snapshot.executor, clock: snapshot.clock, scheduler: snapshot.scheduler,
 			request:   req,
 			execution: continuation,
 			direct:    snapshot.direct,
@@ -387,6 +395,14 @@ func continuationDispatchID(sourceDispatchID, successorID string) string {
 }
 
 func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueResult, error) {
+	runtimeID := strings.TrimSpace(plan.execution.Execution.RuntimeID)
+	if runtimeID != "" {
+		if !r.beginRuntimeOpening(runtimeID) {
+			r.releaseContinuationReservation(plan)
+			return r.continuationResult(plan), continuationNotAccepted(workersessions.ErrContinuationServerStopping)
+		}
+		defer r.finishRuntimeOpening(runtimeID)
+	}
 	serverCtx := r.serverOwnedContext()
 	invoke := workersessions.InvokeSessionRequest{
 		ID:        plan.request.SuccessorWorkerSessionID,
@@ -403,9 +419,9 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 			verifyTopicReady: true,
 			lineage:          plan.lineage,
 		},
-		r.execution,
-		r.clock,
-		r.scheduler,
+		plan.executor,
+		plan.clock,
+		plan.scheduler,
 	)
 	if err != nil {
 		r.releaseContinuationReservation(plan)
@@ -880,7 +896,10 @@ func (r *registry) CloseRuntimeAttempts(ctx context.Context, runtimeID string) e
 		}
 	}
 	for id, supervision := range r.supervisions {
-		if supervision.runtimeKey.RuntimeID == runtimeID {
+		supervision.mu.Lock()
+		owned := supervision.runtimeKey.RuntimeID == runtimeID || (supervision.serverOwned && strings.TrimSpace(supervision.execution.Execution.RuntimeID) == runtimeID)
+		supervision.mu.Unlock()
+		if owned {
 			ids = append(ids, id)
 		}
 	}
@@ -940,7 +959,7 @@ func (r *registry) registerInvocationSupervision(
 			return invocationPreparation{session: final, terminal: true, preAdmission: true, failure: workersessions.ErrStartAdmissionFailed}, nil
 		}
 		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		if options.serverOwned && r.isStopping() && !final.Terminal() {
+		if options.serverOwned && (r.isStopping() || r.runtimeAdmissionClosed(req.Execution.Execution.RuntimeID)) && !final.Terminal() {
 			final = r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
 			return invocationPreparation{
 				session:  final,
@@ -963,30 +982,4 @@ func (r *registry) registerInvocationSupervision(
 	supervision.continuing = options.continuation
 	supervision.mu.Unlock()
 	return invocationPreparation{supervision: supervision}, nil
-}
-
-// Direct attempts publish through their admitted identity rather than a
-// composition-time bridge that must rediscover the Worker by bare dispatch.
-// Capture physical correlation per execution so a retry cannot redirect an
-// earlier execution's delayed progress to its replacement.
-func (r *registry) directAttemptProgress(
-	sessionID string,
-	supervision *supervision,
-) func(workers.ExecutionCorrelation, workers.ProgressFragment) {
-	return func(correlation workers.ExecutionCorrelation, fragment workers.ProgressFragment) {
-		attemptID := correlation.AttemptID
-		if (fragment.DispatchID != "" && fragment.DispatchID != attemptID) ||
-			(fragment.Correlation.DispatchID != "" && fragment.Correlation.DispatchID != attemptID) ||
-			(fragment.Correlation.AttemptID != "" && fragment.Correlation.AttemptID != attemptID) ||
-			(fragment.Correlation.RuntimeID != "" && fragment.Correlation.RuntimeID != correlation.RuntimeID) ||
-			!runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
-			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "correlation_mismatch")
-			return
-		}
-		fragment.Correlation.DispatchID = attemptID
-		fragment.Correlation.AttemptID = attemptID
-		if err := supervision.progress.PublishWorkerSessionProgress(context.Background(), r, sessionID, fragment); err != nil {
-			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "publication_rejected")
-		}
-	}
 }

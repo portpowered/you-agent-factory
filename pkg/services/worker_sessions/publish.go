@@ -52,14 +52,6 @@ var ErrRuntimeProgressDirectSupervision = errors.New("worker sessions: progress 
 // a missing or completed attempt in a supervised runtime remains rejected.
 var ErrRuntimeProgressUnsupervised = errors.New("worker sessions: runtime progress bypasses supervision")
 
-// NewProviderSessionObservationPublisher creates an unbound progress bridge.
-// Fragments without an exact typed reference remain non-resumable and continue
-// to the supplied publisher, while reference-bearing fragments wait for Bind
-// and a successful Worker Sessions association before they are forwarded.
-func NewProviderSessionObservationPublisher(next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
-	return &ProviderSessionObservationPublisher{next: next}
-}
-
 // WithUnassociatedProgressFallback keeps provider-authored progress visible
 // when the caller owns attempt supervision and Worker Sessions is present only
 // as a historical association/read model. The exact Provider Session hand-off

@@ -9,6 +9,7 @@ import (
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -75,12 +76,13 @@ func NewRuntimeFactory(
 // Wire. It does not start a runtime or sidecar.
 func NewAssembly(
 	runtimeFactory *RuntimeFactory,
-	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
+	workerSessions workersessions.Service,
+	workerAttempts factoryruntime.WorkerAttemptOpener,
 	workerService workers.Service,
 	metricsClock platformclock.TimerSource,
 	instanceHost InstanceHost,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService, metricsClock, instanceHost)
+	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessions, workerAttempts, workerService, metricsClock, instanceHost)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator

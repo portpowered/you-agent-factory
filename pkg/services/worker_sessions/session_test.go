@@ -53,7 +53,7 @@ func TestSession_Validate_AcceptsNonEmptyIDAndAcceptedState(t *testing.T) {
 
 func TestPublish_CanonicalMockUsagePreservesExplicitZeroesAndModel(t *testing.T) {
 	spy := &workerRecordSpy{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+	publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 	publisher.Bind(spy)
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID: "worker-1",
@@ -627,7 +627,7 @@ func TestProviderSessionObservationPublisher_FallbackNilReceiverIsSafe(t *testin
 func TestProviderSessionObservationPublisher_SuppressesProviderIdentityDisagreement(t *testing.T) {
 	observer := &providerSessionObservationSpy{}
 	forwarded := 0
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+	publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {
 		forwarded++
 	})
 	publisher.Bind(observer)
@@ -645,7 +645,7 @@ func TestProviderSessionObservationPublisher_SuppressesProviderIdentityDisagreem
 
 func TestPublish_MalformedCanonicalUsageFallsBackToUsedTokens(t *testing.T) {
 	spy := &workerRecordSpy{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+	publisher := workersessions.ProgressPublisherForTest(func(workers.ProgressFragment) {})
 	publisher.Bind(spy)
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID: "worker-usage",

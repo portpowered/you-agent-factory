@@ -926,7 +926,7 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 	}
 
 	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+	publisher := newTestSessionPublisher(func(fragment workers.ProgressFragment) {
 		current, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
 		if err != nil || current.ProviderSessionAssociation == nil {
 			t.Fatalf("Get() before forwarding provider output = %#v, %v, want committed association", current, err)
@@ -2581,7 +2581,7 @@ func TestStart_NoProviderSessionReferenceStillRetainsProviderIndependentHistory(
 	eventsSvc := newEventsAppender()
 	var svc workersessions.Service
 	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+	publisher := newTestSessionPublisher(func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, fragment)
 	})
 	execution := &fakeExecution{dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
@@ -2647,7 +2647,7 @@ func TestStart_CanonicalProviderOutputBindsBeforePublication(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	var svc workersessions.Service
 	forwarded := 0
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) { forwarded++ })
+	publisher := newTestSessionPublisher(func(workers.ProgressFragment) { forwarded++ })
 	execution := &fakeExecution{dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
 		publisher.Publish(workers.CanonicalDraftFragment(req.Execution.Dispatch.DispatchID, canonicalMessageDraft(t, req.Execution.Dispatch.DispatchID)))
 		return completedDispatchResult(req.Execution.Dispatch.DispatchID), nil
@@ -4422,5 +4422,36 @@ func TestListWorkerSessionObservations_CanceledContextIsTyped(t *testing.T) {
 	_, err = registry.ListWorkerSessionObservations(ctx, workersessions.ListWorkerSessionObservationsRequest{})
 	if !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("ListWorkerSessionObservations() error = %v, want ErrObservationCanceled", err)
+	}
+}
+
+// testSessionPublisher supplies an explicit session to the retained progress
+// operation; late binding exists only in this legacy test fixture.
+type testSessionPublisher struct {
+	progress workersessions.ProviderSessionObservationPublisher
+	observer workersessions.Service
+	next     workers.ProgressPublisher
+}
+
+func newTestSessionPublisher(next workers.ProgressPublisher) *testSessionPublisher {
+	return &testSessionPublisher{next: next}
+}
+func (p *testSessionPublisher) Bind(observer workersessions.Service) { p.observer = observer }
+func (p *testSessionPublisher) Publish(fragment workers.ProgressFragment) {
+	if fragment.Correlation.DispatchID == "" {
+		fragment.Correlation.DispatchID = fragment.DispatchID
+	}
+	if fragment.Correlation.AttemptID == "" {
+		fragment.Correlation.AttemptID = fragment.DispatchID
+	}
+	id, err := p.observer.WorkerSessionIDForDispatch(context.Background(), fragment.DispatchID)
+	if err != nil {
+		return
+	}
+	if err := p.progress.PublishWorkerSessionProgress(context.Background(), p.observer, id, fragment); err != nil {
+		return
+	}
+	if p.next != nil {
+		p.next(fragment)
 	}
 }

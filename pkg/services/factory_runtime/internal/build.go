@@ -20,6 +20,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -141,7 +142,8 @@ func (f *RuntimeFactory) Build(
 	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerSessions workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
@@ -191,9 +193,9 @@ func (f *RuntimeFactory) Build(
 		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("runtime logger factory returned nil")
 	}
-	if workerSessionsFactory == nil {
+	if workerSessions == nil {
 		_ = factoryhost.CloseBundleSinks(logSink, nil)
-		return nil, fmt.Errorf("Worker Sessions factory is required")
+		return nil, fmt.Errorf("Worker Sessions service is required")
 	}
 	metricsSink, err := openRuntimeMetricsScope(
 		f.runtimeMetrics,
@@ -288,7 +290,8 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerService,
 		mockWorkersConfig,
-		workerSessionsFactory,
+		workerSessions,
+		workerAttempts,
 		f.providerSessions,
 		f.workerAttemptScheduler,
 		f.workService,
@@ -364,7 +367,8 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerService workers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
-	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerSessions workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
 	providerSessions providersessions.Service,
 	workerAttemptScheduler platformclock.TimerSource,
 	workService work.Service,
@@ -403,15 +407,7 @@ func assembleRuntimeBundle(
 			recording.RecordEvent(event)
 		}
 	}
-	workerSessions, err := workerSessionsFactory(workerService, clock)
-	if err != nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
-	}
-	if workerSessions == nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
-	}
-	workerAttempts, ok := workerSessions.(factory.WorkerAttemptOpener)
-	if !ok {
+	if workerAttempts == nil {
 		return nil, fmt.Errorf("Worker Sessions runtime attempt capability is required")
 	}
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)

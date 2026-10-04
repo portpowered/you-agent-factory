@@ -968,3 +968,26 @@ func (r *registry) beginExecutionPublish(id string, supervision *supervision) bo
 	supervision.publishing = true
 	return true
 }
+
+// directAttemptProgress captures physical correlation before execution.
+func (r *registry) directAttemptProgress(
+	sessionID string,
+	supervision *supervision,
+) func(workers.ExecutionCorrelation, workers.ProgressFragment) {
+	return func(correlation workers.ExecutionCorrelation, fragment workers.ProgressFragment) {
+		attemptID := correlation.AttemptID
+		if (fragment.DispatchID != "" && fragment.DispatchID != attemptID) ||
+			(fragment.Correlation.DispatchID != "" && fragment.Correlation.DispatchID != attemptID) ||
+			(fragment.Correlation.AttemptID != "" && fragment.Correlation.AttemptID != attemptID) ||
+			(fragment.Correlation.RuntimeID != "" && fragment.Correlation.RuntimeID != correlation.RuntimeID) ||
+			!runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
+			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "correlation_mismatch")
+			return
+		}
+		fragment.Correlation.DispatchID = attemptID
+		fragment.Correlation.AttemptID = attemptID
+		if err := supervision.progress.PublishWorkerSessionProgress(context.Background(), r, sessionID, fragment); err != nil {
+			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "publication_rejected")
+		}
+	}
+}

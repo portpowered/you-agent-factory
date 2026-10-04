@@ -244,54 +244,45 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	orchestrationCompilation := provideOrchestrationCompilation(v35)
 	timerSource := provideFactoryRuntimeMetricsClock(edges2)
 	v36 := wire5.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, workService, decisionEnvelopeService, invocationInterpolationService, logger, runtimeLoggerFactory, factoryRuntimeLogOwner, factoryRuntimeMetricsOwner, factoryIDGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation, providersessionsService, timerSource)
-	v37, err := provideWorkerRecordingWriter(edges2)
-	if err != nil {
-		return nil, err
-	}
-	v38, err := provideWorkerSessionRecorder(eventsService, v37, loggingLogger)
-	if err != nil {
-		return nil, err
-	}
-	workerSessionsFactory := provideWorkerSessionsFactoryWithRecorder(eventsService, providersessionsService, loggingLogger, v38, timerSource)
-	v39, err := provideModelRuntimeScopes()
+	v37, err := provideModelRuntimeScopes()
 	if err != nil {
 		return nil, err
 	}
 	assetHostPlatform := provideModelAssetHostPlatform(edges2)
-	v40 := provideModelAssetHTTP(edges2)
+	v38 := provideModelAssetHTTP(edges2)
 	runtimeAssetEndpoints := provideModelAssetEndpoints(edges2)
-	v41 := provideModelAssetMakeDirectories(edges2)
-	v42 := provideModelAssetInspectPath(edges2)
-	v43 := provideModelAssetResolveHomeDirectory(edges2)
-	v44 := provideModelAssetWriteFile(edges2)
-	v45 := provideModelAssetRenamePath(edges2)
-	v46 := provideModelAssetRemovePath(edges2)
-	v47 := provideModelAssetReadFile(edges2)
-	v48 := provideModelAssetReadDirectory(edges2)
-	v49 := provideModelAssetCreateFile(edges2)
-	v50 := provideModelAssetOpenFile(edges2)
-	v51 := provideModelAssetResolveEnvironment(edges2)
+	v39 := provideModelAssetMakeDirectories(edges2)
+	v40 := provideModelAssetInspectPath(edges2)
+	v41 := provideModelAssetResolveHomeDirectory(edges2)
+	v42 := provideModelAssetWriteFile(edges2)
+	v43 := provideModelAssetRenamePath(edges2)
+	v44 := provideModelAssetRemovePath(edges2)
+	v45 := provideModelAssetReadFile(edges2)
+	v46 := provideModelAssetReadDirectory(edges2)
+	v47 := provideModelAssetCreateFile(edges2)
+	v48 := provideModelAssetOpenFile(edges2)
+	v49 := provideModelAssetResolveEnvironment(edges2)
 	wireModelAssetRevisionResolver := provideModelAssetRevision(edges2)
-	v52, err := provideModelAssetCoordination(edges2)
+	v50, err := provideModelAssetCoordination(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v53, err := provideModelAssets(v39, assetHostPlatform, v40, runtimeAssetEndpoints, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, wireModelAssetRevisionResolver, v52)
+	v51, err := provideModelAssets(v37, assetHostPlatform, v38, runtimeAssetEndpoints, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, wireModelAssetRevisionResolver, v50)
 	if err != nil {
 		return nil, err
 	}
-	v54 := wire6.NewCatalogReadinessQuery(v53)
-	v55, err := wire6.NewCatalog(v39, v54)
+	v52 := wire6.NewCatalogReadinessQuery(v51)
+	v53, err := wire6.NewCatalog(v37, v52)
 	if err != nil {
 		return nil, err
 	}
-	v56 := provideModelHostClock(edges2)
-	v57 := wire6.NewSlotState()
-	v58 := provideModelSlotFacts(v57, v39, v53)
-	v59 := provideModelHostLogger(logger)
-	v60 := provideModelHostMetrics(edges2)
-	v61 := provideModelSlotCoordinator(v57, v39, v56, v59, v60)
-	v62, err := wire6.NewHostLeases(v56, v58, v61)
+	v54 := provideModelHostClock(edges2)
+	v55 := wire6.NewSlotState()
+	v56 := provideModelSlotFacts(v55, v37, v51)
+	v57 := provideModelHostLogger(logger)
+	v58 := provideModelHostMetrics(edges2)
+	v59 := provideModelSlotCoordinator(v55, v37, v54, v57, v58)
+	v60, err := wire6.NewHostLeases(v54, v56, v59)
 	if err != nil {
 		return nil, err
 	}
@@ -299,16 +290,16 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v63 := provideModelHostLauncher(edges2, wireModelRuntimeEvidenceSource)
-	v64 := provideModelHostHTTP(edges2)
-	v65 := provideModelHostSymlinks()
-	v66 := provideModelHostProtocol(edges2, v65)
-	v67, err := provideModelHostCompatibility(edges2)
+	v61 := provideModelHostLauncher(edges2, wireModelRuntimeEvidenceSource)
+	v62 := provideModelHostHTTP(edges2)
+	v63 := provideModelHostSymlinks()
+	v64 := provideModelHostProtocol(edges2, v63)
+	v65, err := provideModelHostCompatibility(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v68 := provideModelOrderedRuntimeEvidence(wireModelRuntimeEvidenceSource)
-	v69, err := provideModelRuntimeHost(v39, v53, v62, v57, v63, v64, v56, v59, v60, assetHostPlatform, v66, v67, v65, v68)
+	v66 := provideModelOrderedRuntimeEvidence(wireModelRuntimeEvidenceSource)
+	v67, err := provideModelRuntimeHost(v37, v51, v60, v55, v61, v62, v54, v57, v58, assetHostPlatform, v64, v65, v63, v66)
 	if err != nil {
 		return nil, err
 	}
@@ -316,29 +307,29 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v70 := provideModelRuntimeTempDirectory(edges2)
-	v71 := provideModelRuntimeTempFile(edges2)
-	v72 := provideModelRuntimeInspectFile(edges2)
-	v73, err := provideModelInvocationRuntime(edges2, wireModelRuntimeRunner, v70, v71, v44, v72, v47, v46)
+	v68 := provideModelRuntimeTempDirectory(edges2)
+	v69 := provideModelRuntimeTempFile(edges2)
+	v70 := provideModelRuntimeInspectFile(edges2)
+	v71, err := provideModelInvocationRuntime(edges2, wireModelRuntimeRunner, v68, v69, v42, v70, v45, v44)
 	if err != nil {
 		return nil, err
 	}
 	wireModelNow := provideModelNow(edges2)
-	v74, err := provideModelInference(v39, v53, v55, v69, v73, wireModelNow)
+	v72, err := provideModelInference(v37, v51, v53, v67, v71, wireModelNow)
 	if err != nil {
 		return nil, err
 	}
-	v75 := provideModelRuntimeHTTP(edges2)
-	v76, err := provideModelBackendArtifactResolver(edges2, wireModelRuntimeRunner, v40)
+	v73 := provideModelRuntimeHTTP(edges2)
+	v74, err := provideModelBackendArtifactResolver(edges2, wireModelRuntimeRunner, v38)
 	if err != nil {
 		return nil, err
 	}
-	modelsService, err := provideModelsService(edges2, v39, v53, v55, v69, v74, v63, v64, v56, wireModelRuntimeRunner, v75, v72, v70, v71, wireModelNow, v59, v60, v68, v76, assetHostPlatform, logger)
+	modelsService, err := provideModelsService(edges2, v37, v51, v53, v67, v72, v61, v62, v54, wireModelRuntimeRunner, v73, v70, v68, v69, wireModelNow, v57, v58, v66, v74, assetHostPlatform, logger)
 	if err != nil {
 		return nil, err
 	}
 	readOpener := provideWorkersInferenceMediaFileReader(edges2)
-	v77, err := provideFactoryRuntimeScriptCommandRunner(edges2)
+	v75, err := provideFactoryRuntimeScriptCommandRunner(edges2)
 	if err != nil {
 		return nil, err
 	}
@@ -347,11 +338,27 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v78 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
+	v76 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v79 := provideFactoryRuntimeProviderOverride(edges2)
+	v77 := provideFactoryRuntimeProviderOverride(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v77, readFileTree, clock, logger, factoryWorktreePreparer, v78, temporaryFileSystem, v79, agentToolFileSystem, decisionEnvelopeService)
+	workersService, err := provideStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v75, readFileTree, clock, logger, factoryWorktreePreparer, v76, temporaryFileSystem, v77, agentToolFileSystem, decisionEnvelopeService)
+	if err != nil {
+		return nil, err
+	}
+	v78, err := provideWorkerRecordingWriter(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v79, err := provideWorkerSessionRecorder(eventsService, v78, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	workersessionsService, err := provideWorkerSessionsService(workersService, eventsService, providersessionsService, loggingLogger, clock, timerSource, v79)
+	if err != nil {
+		return nil, err
+	}
+	workerAttemptOpener, err := provideWorkerAttemptOpener(workersessionsService)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +370,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v82, err := wire5.NewAssembly(v36, workerSessionsFactory, workersService, timerSource, v81)
+	v82, err := wire5.NewAssembly(v36, workersessionsService, workerAttemptOpener, workersService, timerSource, v81)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +393,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ResolveClock:                    clockResolver,
 		NewSessionLogger:                sessionLoggerFactory,
 		Clock:                           clock,
-		ProviderOverride:                v79,
+		ProviderOverride:                v77,
 		SubmissionRecorder:              v84,
 		DispatchRecorder:                v85,
 	}
@@ -472,7 +479,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v111 := provideWorkerCommandRunnerAdapter()
-	v112 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v106, v108, v109, v9, responseEventIDGenerator, v14, v110, v111, v79, v15)
+	v112 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v106, v108, v109, v9, responseEventIDGenerator, v14, v110, v111, v77, v15)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v113, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
@@ -561,7 +568,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		Service:                          workersService,
 		ProviderFromCommandRunnerFactory: providerFromCommandRunnerFactory,
 		ProviderCommandRunner:            providerCommandRunner,
-		ScriptCommandRunner:              v77,
+		ScriptCommandRunner:              v75,
 	}
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(operatorsettingsService)
 	v139 := &wire2.OperatorSettingsPorts{
@@ -659,7 +666,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v152 := provideStreamWorkerSessionOperation(wireStreamingCLIHTTPProtocol)
-	wireLocalWorkerSessionsBoundary, err := provideLocalWorkerSessionsBoundary(eventsService, providersessionsService, loggingLogger, workersService, v38, clock, timerSource)
+	wireLocalWorkerSessionsBoundary, err := provideLocalWorkerSessionsBoundary(workersessionsService)
 	if err != nil {
 		return nil, err
 	}
@@ -853,7 +860,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	workerRecordingReader, err := provideWorkerRecordingReader(v37)
+	workerRecordingReader, err := provideWorkerRecordingReader(v78)
 	if err != nil {
 		return nil, err
 	}
@@ -890,7 +897,8 @@ var servicesSet = wire9.NewSet(
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
 	provideWorkerRecordingReader,
-	provideWorkerSessionsFactoryWithRecorder,
+	provideWorkerSessionsService,
+	provideWorkerAttemptOpener,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
 	provideFactorySessionProviderIdentityResolver, wire2.NewRequestPreparation, wire2.NewLiveChangeCoordinator, wire2.NewIdentity, wire2.NewResponseStreams, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,

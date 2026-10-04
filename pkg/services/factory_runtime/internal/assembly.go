@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -23,21 +24,21 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	runtimeFactory        *RuntimeFactory
-	workerSessionsFactory factoryruntime.WorkerSessionsFactory
-	workerService         workers.Service
-	metricsClock          platformclock.TimerSource
-	instanceHost          instancehost.Service
+	runtimeFactory *RuntimeFactory
+	workerSessions workersessions.Service
+	workerAttempts factoryruntime.WorkerAttemptOpener
+	workerService  workers.Service
+	metricsClock   platformclock.TimerSource
+	instanceHost   instancehost.Service
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected
-// by Wire. It does not start a runtime or sidecar. workerSessionsFactory is
-// the one directly injected per-session Worker Sessions construction path
-// (W4 dispatch cutover); Wire owns composing it over worker_sessions/wire so
-// Factory Runtime never imports that peer service's wire package directly.
+// by Wire. It retains the canonical supervisor and its keyed operations without
+// constructing another service during runtime opening.
 func NewAssembly(
 	runtimeFactory *RuntimeFactory,
-	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
+	workerSessions workersessions.Service,
+	workerAttempts factoryruntime.WorkerAttemptOpener,
 	workerService workers.Service,
 	metricsClock platformclock.TimerSource,
 	instanceHost instancehost.Service,
@@ -45,14 +46,14 @@ func NewAssembly(
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
 	}
-	if workerSessionsFactory == nil {
-		return nil, fmt.Errorf("Worker Sessions factory is required")
+	if workerSessions == nil {
+		return nil, fmt.Errorf("Worker Sessions service is required")
 	}
 	if workerService == nil {
 		return nil, fmt.Errorf("Workers service is required")
 	}
 	return &Assembly{
-		runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory,
+		runtimeFactory: runtimeFactory, workerSessions: workerSessions, workerAttempts: workerAttempts,
 		workerService: workerService, metricsClock: metricsClock, instanceHost: instanceHost,
 	}, nil
 }
@@ -162,7 +163,8 @@ func (a *Assembly) Assemble(
 		baseLogger,
 		a.runtimeFactory,
 		a.workerService,
-		a.workerSessionsFactory,
+		a.workerSessions,
+		a.workerAttempts,
 		mockCommandRunnerFactory,
 		progressFactory,
 		completionFactory,

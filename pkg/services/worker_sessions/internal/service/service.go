@@ -200,28 +200,6 @@ func New(
 	return registry, nil
 }
 
-// LoadWorkerRecording forwards the optional Recordings-owned durable reader
-// through the same per-Factory-Session Worker Sessions instance used for
-// observation. It is intentionally not part of the broad Worker Sessions
-// service contract; runtime projections discover this read capability only
-// when the composed capture service provides it.
-func (r *registry) LoadWorkerRecording(
-	ctx context.Context,
-	recordingID string,
-) (recordings.WorkerRecordingSnapshot, error) {
-	if r == nil || r.recording == nil {
-		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	reader, ok := r.recording.(recordings.WorkerRecordingReader)
-	if !ok || reader == nil {
-		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
-	}
-	return reader.LoadWorkerRecording(ctx, recordingID)
-}
-
 func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {
 	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled || errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) {
 		if action == workersessions.ControlActionTerminate {
@@ -253,6 +231,15 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 // owner drives the state machine once; concurrent and later replays wait for
 // and return the owner's stored acceptance or pre-admission failure.
 func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	return r.AdmitRuntimeAttemptAsync(ctx, req, r.execution, r.clock, r.scheduler)
+}
+
+// AdmitRuntimeAttemptAsync preserves direct Start routing and replay while
+// capturing the selected execution and timing effects before admission.
+func (r *registry) AdmitRuntimeAttemptAsync(
+	ctx context.Context, req workersessions.StartRequest,
+	executor workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource,
+) (workersessions.StartResult, error) {
 	callerCtx := ctx
 	if callerCtx == nil {
 		callerCtx = context.Background()
@@ -261,6 +248,15 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.StartResult{}, err
+	}
+	if executor == nil {
+		return workersessions.StartResult{}, ErrMissingExecution
+	}
+	if clock == nil {
+		return workersessions.StartResult{}, ErrMissingClock
+	}
+	if scheduler == nil {
+		return workersessions.StartResult{}, ErrMissingScheduler
 	}
 	req = normalizeStartRequest(req)
 	replay, owner, err := r.reserveStart(req)
@@ -276,7 +272,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 
 	outcomes := make(chan asyncStartCompletion, 1)
 	go func() {
-		result, startErr := r.startReserved(callerCtx, req)
+		result, startErr := r.startReservedWithEffects(req, executor, clock, scheduler)
 		r.finishStartReplay(replay, result, startErr)
 		r.finishStart()
 		outcomes <- asyncStartCompletion{result: result, err: startErr}
@@ -403,13 +399,9 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 	return slices.Contains(filter.States, session.State)
 }
 
-// reserveIfAbsent stores id as a new StateReserved session when it is not
-// already registered, in its own locked critical section distinct from
-// transitionToStarting. This makes a brand-new identity's RESERVED state a
-// genuine, observable map write (visible to a concurrent Get/List) before
-// Start ever transitions it to StateStarting or calls Workers. An identity
-// already registered, in any state, is left untouched here; conflicts are
-// reported by the following transitionToStarting call.
+// reserveIfAbsent exposes a newly reserved identity before the separate
+// STARTING transition. Existing identities remain unchanged; the transition
+// reports conflicts before any Workers call.
 func (r *registry) reserveIfAbsent(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -996,4 +988,11 @@ func (r *registry) finishRuntimeOpening(runtimeID string) {
 	if admission.openings == 0 {
 		close(admission.drained)
 	}
+}
+
+func (r *registry) runtimeAdmissionClosed(runtimeID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	admission := r.runtimeAdmissions[strings.TrimSpace(runtimeID)]
+	return admission != nil && admission.closed
 }

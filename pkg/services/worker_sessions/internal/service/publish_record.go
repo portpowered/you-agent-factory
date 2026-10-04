@@ -327,9 +327,18 @@ func (r *registry) rejectOpening(
 	}
 }
 
-// startReserved runs the original Start state machine after reserveStart has
-// atomically installed the request replay and RESERVED session records.
-func (r *registry) startReserved(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+// startReservedWithEffects drives the server-owned admission barrier.
+func (r *registry) startReservedWithEffects(
+	req workersessions.StartRequest, executor workers.Service,
+	clock platformclock.Source, scheduler platformclock.TimerSource,
+) (workersessions.StartResult, error) {
+	runtimeID := strings.TrimSpace(req.Execution.Execution.RuntimeID)
+	if runtimeID != "" {
+		if !r.beginRuntimeOpening(runtimeID) {
+			return workersessions.StartResult{}, workersessions.ErrStartServerStopping
+		}
+		defer r.finishRuntimeOpening(runtimeID)
+	}
 	serverCtx := r.serverOwnedContext()
 	prepared, err := r.prepareInvocation(
 		serverCtx,
@@ -340,9 +349,9 @@ func (r *registry) startReserved(ctx context.Context, req workersessions.StartRe
 			requestID:        req.RequestID,
 			verifyTopicReady: true,
 		},
-		r.execution,
-		r.clock,
-		r.scheduler,
+		executor,
+		clock,
+		scheduler,
 	)
 	if err != nil {
 		return workersessions.StartResult{}, err

@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -950,4 +951,26 @@ func (s *observationSubscription) closeSource() {
 		cancel()
 		s.source.Next(cancelled)
 	}
+}
+
+// LoadWorkerRecording forwards the optional Recordings-owned durable reader
+// through the same per-Factory-Session Worker Sessions instance used for
+// observation. It is intentionally not part of the broad Worker Sessions
+// service contract; runtime projections discover this read capability only
+// when the composed capture service provides it.
+func (r *registry) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if r == nil || r.recording == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reader, ok := r.recording.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
 }

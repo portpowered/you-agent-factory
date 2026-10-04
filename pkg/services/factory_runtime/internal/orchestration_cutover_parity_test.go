@@ -99,6 +99,7 @@ func TestOrchestrationCompileSelectsJavaScriptKindWithoutPetriNet(t *testing.T) 
 }
 
 func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -117,7 +118,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -136,6 +137,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 }
 
 func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -176,7 +178,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
