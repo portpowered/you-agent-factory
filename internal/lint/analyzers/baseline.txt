@@ -2070,7 +2070,6 @@ testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/servic
 testsleep-deadline-test|pkg/services/models/internal/effects|pkg/services/models/internal/effects/asr_live_correlation_signals_test.go::testSignalContext::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/supervisor_test.go::TestCatalogHost_SupervisedBackend_UnloadRejectsLoadingRuntime::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_inference_test.go::awaitCloseRaceSignal::deadline::1
-testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_inference_test.go::TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_scoped_pull_test.go::TestRootRemoveModelAssetsSerializesCacheRemovalAgainstLeaseAcquisition::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_scoped_pull_test.go::TestRootRemoveModelAssetsSerializesCacheRemovalAgainstLeaseAcquisition::deadline::2
 testsleep-deadline-test|pkg/services/models/internal/services/assets/internal/service|pkg/services/models/internal/services/assets/internal/service/generic_cache_concurrency_test.go::TestPrepareGenericAssetsAllowsDistinctCrossServiceTransfersToOverlap::deadline::1
