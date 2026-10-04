@@ -1,6 +1,7 @@
 package agy
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -9,6 +10,61 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// One reusable process executes invocation-owned sessions and an isolated home.
+// Public primary output and the controlled command edge prove that overrides
+// affect this invocation without becoming state on the injected collaborator.
+func TestAgyRequestOverridesRemainScopedThroughPublicRun(t *testing.T) {
+	t.Parallel()
+	fixture := agySharedProcess(t)
+	route := fixture.routes["one-shot-overrides"]
+	scopes := make(map[string]bool)
+	for _, test := range []struct {
+		name    string
+		flags   []string
+		model   string
+		failure string
+	}{
+		{name: "environment default", model: agyFunctionalModel},
+		{name: "explicit model", flags: []string{"--model", "gemini-3.6-flash-low"}, model: "gemini-3.6-flash-low"},
+		{name: "invalid effort", flags: []string{"--worker-reasoning-effort", "turbo"}, failure: `invalid --worker-reasoning-effort "turbo"`},
+		{name: "default after override and rejection", model: agyFunctionalModel},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"you", "run", "--factory", route.workDir, "--quiet", "--no-record"}
+			args = append(args, test.flags...)
+			args = append(args, "prove scoped AGY overrides")
+			inputs := support.FakeInputs(context.Background(), args)
+			inputs.Input.Env = append(agySharedEnvironment(route.homeDir),
+				"YOU_DEFAULT_WORKER_MODEL_PROVIDER=ANTIGRAVITY", "YOU_DEFAULT_WORKER_MODEL="+agyFunctionalModel)
+			inputs.Input.WorkingDirectory = route.workDir
+			before := route.callCount()
+			err := fixture.process.Execute(inputs.Input)
+			if test.failure != "" {
+				if err == nil || !strings.Contains(err.Error(), test.failure) || route.callCount() != before {
+					t.Fatalf("rejection = %v, calls = %d, want %s without dispatch", err, route.callCount()-before, test.failure)
+				}
+				return
+			}
+			if err != nil || strings.TrimSpace(inputs.Stdout()) != "override answer COMPLETE" || inputs.Stderr() != "" {
+				t.Fatalf("invocation = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+			}
+			if route.callCount()-before != 1 {
+				t.Fatalf("provider calls = %d, want 1", route.callCount()-before)
+			}
+			request := route.lastRequest()
+			if request.WorkDir != route.workDir || request.ExecutionScopeID == "" || scopes[request.ExecutionScopeID] {
+				t.Fatalf("provider workdir/scope = %q/%q, want this workspace and a fresh invocation scope", request.WorkDir, request.ExecutionScopeID)
+			}
+			scopes[request.ExecutionScopeID] = true
+			if !containsArgPair(request.Args, "--model", test.model) ||
+				!containsArgPair(request.Args, "--print-timeout", "2m") ||
+				containsArg(request.Args, "--dangerously-skip-permissions") {
+				t.Fatalf("provider argv = %#v, want model %s and authored timeout/permission policy", request.Args, test.model)
+			}
+		})
+	}
+}
 
 const agyFunctionalModel = agyGoldenModel
 

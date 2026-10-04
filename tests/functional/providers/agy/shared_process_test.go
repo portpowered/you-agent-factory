@@ -173,6 +173,7 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	}()
 
 	fixture.registerDirectRoutes(t)
+	fixture.registerOverrideRoute(t)
 	fixture.registerGoldenRoutes(t)
 	fixture.registerRoleRoutes(t)
 	fixture.registerRecoveryRoute(t)
@@ -188,6 +189,27 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	}
 	fixture.process = process
 	return fixture
+}
+
+func (fixture *agySharedProcessFixture) registerOverrideRoute(t *testing.T) {
+	t.Helper()
+	route := fixture.newRouteDirectories(t, "one-shot-overrides")
+	copyAgyDirectory(t, support.LegacyFixtureDir(t, "executor_success"), route.workDir)
+	support.UpdateFactoryConfig(t, route.workDir, func(config map[string]any) {
+		config["workTypes"].([]any)[0].(map[string]any)["handlingBehavior"] = []string{"DEFAULT"}
+	})
+	registered, err := fixture.runner.registerOutcomes("one-shot-overrides", route.workDir, agySharedCommandOutcome{
+		result: platformprocess.CommandResult{Stdout: []byte(`{"event":"result","result":{"conversation_id":"agy-overrides","status":"SUCCESS","response":"override answer COMPLETE","duration_seconds":1.0,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}` + "\n")},
+	})
+	if err != nil {
+		t.Fatalf("register AGY override route: %v", err)
+	}
+	registered.homeDir = route.homeDir
+	fixture.routes[registered.selector] = registered
+	// Leave selection to invocation defaults so CLI versus environment precedence
+	// is observable at the provider command edge, without changing authored policy.
+	support.WriteAgentConfig(t, fixture.routes["one-shot-overrides"].workDir, "worker",
+		"---\ntype: MODEL_WORKER\nstopToken: COMPLETE\ntimeout: 2m\n---\nProcess the input task.\n")
 }
 
 func (fixture *agySharedProcessFixture) registerDirectRoutes(t *testing.T) {
