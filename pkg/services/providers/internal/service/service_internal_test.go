@@ -103,6 +103,77 @@ func (internalDisabledACP) Resolve(providers.ID) (providers.ID, bool) { return "
 func (internalDisabledACP) Integrations() []providers.ACPIntegration  { return nil }
 func (internalDisabledACP) Close(context.Context) error               { return nil }
 
+type configureACPStub struct {
+	internalDisabledACP
+	configure func(context.Context, []providers.ACPIntegration) error
+}
+
+func (stub configureACPStub) Configure(ctx context.Context, integrations []providers.ACPIntegration) error {
+	return stub.configure(ctx, integrations)
+}
+
+func TestRootConfigurationUsesCompletedACPAndKeepsPeerIsolated(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("configuration rejected")
+	for _, outcome := range []struct {
+		name string
+		err  error
+	}{
+		{"success", nil}, {"failure", failure}, {"canceled", context.Canceled},
+	} {
+		t.Run(outcome.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if outcome.name == "canceled" {
+				cancel()
+			}
+			calls, peerCalls := 0, 0
+			owned := configureACPStub{configure: func(received context.Context, integrations []providers.ACPIntegration) error {
+				calls++
+				assertOwnedACPConfiguration(t, ctx, received, integrations)
+				integrations[0].Command = "changed by collaborator"
+				return outcome.err
+			}}
+			peer := configureACPStub{configure: func(context.Context, []providers.ACPIntegration) error {
+				peerCalls++
+				return nil
+			}}
+			first, err := NewWithACP(internalCatalogStub{}, internalExecutionStub{}, owned, nil, logging.NoopLogger{}, owned)
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := NewWithACP(internalCatalogStub{}, internalExecutionStub{}, peer, nil, logging.NoopLogger{}, peer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 0 || peerCalls != 0 {
+				t.Fatal("construction configured an ACP collaborator")
+			}
+			configured := []providers.ACPIntegration{{Name: "owned", Command: "owned-agent acp"}}
+			if err := first.ConfigureACPIntegrations(ctx, configured); err != outcome.err {
+				t.Fatalf("ConfigureACPIntegrations() = %v, want exact error %v", err, outcome.err)
+			}
+			if calls != 1 || peerCalls != 0 || configured[0].Command != "owned-agent acp" {
+				t.Fatalf("configuration leaked: owned/peer calls %d/%d, input %#v", calls, peerCalls, configured)
+			}
+			if err := second.ConfigureACPIntegrations(t.Context(), nil); err != nil || peerCalls != 1 || calls != 1 {
+				t.Fatalf("peer ConfigureACPIntegrations() = %v, owned/peer calls %d/%d", err, calls, peerCalls)
+			}
+		})
+	}
+}
+
+func assertOwnedACPConfiguration(t *testing.T, expected, received context.Context, integrations []providers.ACPIntegration) {
+	t.Helper()
+	if received != expected {
+		t.Fatal("Configure replaced the supplied context")
+	}
+	if len(integrations) != 1 || integrations[0].Command != "owned-agent acp" {
+		t.Fatalf("Configure received integrations = %#v", integrations)
+	}
+}
+
 type closeOperation func(context.Context) error
 
 func (operation closeOperation) Close(ctx context.Context) error { return operation(ctx) }
