@@ -11,9 +11,9 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 func TestConfigDocumentServiceRoutesLoadUpdatePersistThroughNestedDocumentOwner(t *testing.T) {
@@ -74,21 +74,7 @@ func TestConfigDocumentServiceRoutesMalformedConflictAndUnsupportedThroughNested
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	service := operatorsettings.ConfigDocumentService{
-		Files:      platformfilesystem.Local{},
-		CreateTemp: testCreateTemp,
-		Providers:  controlledProviderCatalog,
-		Decoder:    globalconfigmapping.Decode,
-		Encoder:    globalconfigmapping.Encode,
-		DocumentOwner: settingsconstruct.NewDocumentOwner(
-			platformfilesystem.Local{},
-			testCreateTemp,
-			globalconfigmapping.Decode,
-			globalconfigmapping.Encode,
-			controlledProviderCatalog,
-		),
-		PersistenceLock: &sync.Mutex{},
-	}
+	service := persistedConfigService(platformfilesystem.Local{}, testCreateTemp)
 
 	if writeErr := os.WriteFile(filepath.Join(dir, "malformed.json"), []byte(`{"defaults":`), 0o600); writeErr != nil {
 		t.Fatalf("WriteFile() = %v", writeErr)
@@ -127,14 +113,16 @@ func persistedConfigService(
 	files operatorsettings.FileSystem,
 	create operatorsettings.CreateTemporaryFile,
 ) operatorsettings.ConfigDocumentService {
-	return settingsconstruct.NewConfigDocumentService(
+	owner := settingswire.NewDocumentService(
 		files,
 		create,
 		globalconfigmapping.Decode,
 		globalconfigmapping.Encode,
 		controlledProviderCatalog,
-		&sync.Mutex{},
+		nil,
+		nil,
 	)
+	return settingswire.NewConfigDocumentService(owner, globalconfigmapping.Decode, globalconfigmapping.Encode, &sync.Mutex{})
 }
 
 var testCreateTemp operatorsettings.CreateTemporaryFile = func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
