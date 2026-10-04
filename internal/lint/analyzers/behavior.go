@@ -35,7 +35,7 @@ var behaviorRuleNames = func() map[string]bool {
 	names := map[string]bool{}
 	for _, rule := range []string{
 		"initializer-product-construction", "mapping-filesystem-behavior", "mapping-process-behavior",
-		"mapping-timer-behavior", "mapping-goroutine",
+		"mapping-timer-behavior", "mapping-goroutine", "functional-configuration",
 	} {
 		names[rule] = true
 		names[rule+"-test"] = true
@@ -68,7 +68,8 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 	importer := strings.TrimSuffix(unit, "_test")
 	initializer := under(importer, "pkg/initializer")
 	mapping := under(importer, "pkg/transports/mapping")
-	if !initializer && !mapping {
+	functional := functionalSource(importer)
+	if !initializer && !mapping && !functional {
 		return nil, nil
 	}
 	var found []violation
@@ -84,6 +85,9 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 				rule += "-test"
 			}
 			found = append(found, violation{rule: rule, importer: unit, importee: target, pos: pos, hint: hint})
+		}
+		if functional {
+			functionalConfigurationFindings(file, add)
 		}
 		if initializer {
 			initializerFindings(pass, file, add)

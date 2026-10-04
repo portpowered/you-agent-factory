@@ -3,7 +3,6 @@ package analyzers
 import (
 	"go/ast"
 	"go/parser"
-	"go/token"
 	"strconv"
 	"strings"
 
@@ -49,6 +48,11 @@ var serviceRootPorts = map[string][]string{
 var supportRoots = []string{"internal/configcontractsmoke", "internal/testutil", "tests/functional/internal/support"}
 
 var layeringRules = []layeringRule{
+	{
+		name:     "functional-provider-boundary",
+		hint:     "use tests/functional/internal/support.BuildProcess and exact public external-effect ports",
+		violates: violatesFunctionalProvider,
+	},
 	{
 		name: "application-graph",
 		hint: "only pkg/root and pkg/wire may import pkg/wire; tests build the application through root.BuildProcess",
@@ -192,6 +196,9 @@ func runLayering(pass *analysis.Pass) (any, error) {
 	}
 	importer := strings.TrimSuffix(unit, "_test")
 	var found []violation
+	if providerLocalSupport(importer) {
+		pass.Reportf(pass.Files[0].Package, "functional-provider-support: keep reusable process support in tests/functional/internal/support")
+	}
 	hasTests := false
 	visit := func(file *ast.File, filename string) {
 		if ast.IsGenerated(file) {
@@ -227,7 +234,7 @@ func runLayering(pass *analysis.Pass) (any, error) {
 		if !strings.HasSuffix(name, ".go") {
 			continue
 		}
-		file, err := parser.ParseFile(token.NewFileSet(), name, nil, parser.ImportsOnly|parser.ParseComments)
+		file, err := parser.ParseFile(pass.Fset, name, nil, parser.ImportsOnly|parser.ParseComments)
 		if err == nil {
 			visit(file, name)
 		}

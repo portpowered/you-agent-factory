@@ -119,7 +119,7 @@ func (cfg builtinConfig) excluded(linter, path, message string) bool {
 	return false
 }
 
-func TestFunctionalOSBuiltins(t *testing.T) {
+func TestFunctionalBuiltins(t *testing.T) {
 	t.Parallel()
 	cfg := readBuiltinConfig(t)
 	imports, calls := builtinDepguard(t, cfg), builtinForbidigo(t, cfg)
@@ -147,7 +147,9 @@ func TestFunctionalOSBuiltins(t *testing.T) {
 		"m/tests/functional/osboundary", "m/tests/functional/osalias", "m/tests/functional/osdot",
 		"m/tests/functional/internal/support/osboundary", "m/tests/functional/testdata/osboundary",
 		"m/tests/integration/osboundary", "m/pkg/osboundary", "m/pkg/wire",
-		"m/pkg/osboundary/localexec")
+		"m/pkg/osboundary/localexec", "m/tests/functional/composition",
+		"m/tests/integration/composition", "github.com/portpowered/infinite-you/tests/functional/composition",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/tests/functional/composition")
 }
 
 // Keep the outer fixture root outside testdata: the authored testdata exclusion
@@ -166,6 +168,22 @@ func builtinFixtures(t *testing.T) string {
 		"m/pkg/osboundary/allowed_test.go",
 		"m/pkg/osboundary/localexec/local.go",
 		"m/pkg/wire/profiles.go",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl/stub.go",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/tests/functional/composition/imports.go",
+
+		"github.com/portpowered/infinite-you/tests/functional/composition/imports.go",
+		"github.com/portpowered/infinite-you/pkg/initializer/stub.go",
+		"github.com/portpowered/infinite-you/pkg/platform/runtimeinput/stub.go",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/stub.go",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold/stub.go",
+		"github.com/portpowered/infinite-you/pkg/services/recordings/artifacts/stub.go",
+		"github.com/portpowered/infinite-you/pkg/services/recordings/events/stub.go",
+		"github.com/portpowered/infinite-you/pkg/services/recordings/projections/stub.go",
+		"github.com/portpowered/infinite-you/pkg/services/recordings/replay/stub.go",
+		"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection/stub.go",
+		"github.com/portpowered/infinite-you/pkg/wire/stub.go",
+		"m/tests/functional/composition/calls.go",
+		"m/tests/integration/composition/allowed.go",
 	} {
 		data, err := os.ReadFile(filepath.Join(analysistest.TestData(), "src", path))
 		if err != nil {

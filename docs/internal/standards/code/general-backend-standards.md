@@ -321,6 +321,12 @@ Rules:
   `tests/functional/internal/support` and testdata. Existing sites use the
   `origin/main` merge-base ratchet; new or moved sites fail. Real OS proof
   belongs in integration. Backend Lint owns this enforcement.
+- `make golangci` enforces functional composition through depguard (secondary
+  composition imports), forbidigo (retired harness helpers), and the shared
+  Layering/Behavior analyzers (dedicated-provider imports, provider-local support,
+  and configuration callbacks). Provider scenarios use canonical shared support
+  and exact public effect ports. Required Backend Lint owns static enforcement;
+  functional coverage preserves its runtime selection and concurrency budget.
 - Inventory, package-shape, dependency-direction, source-topology, and similar
   structural enforcement **MUST** be implemented as lint or static checks, not
   runtime tests, unless that structure is itself a published customer contract.

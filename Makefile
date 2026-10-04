@@ -287,7 +287,7 @@ endef
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-localai-runner-v2-component test-localai-runner-v2-prebuilt test-integration-models-managed-process build-integration-models-managed-process-helper test-integration-models-asr-live-correlation build-integration-models-asr-live-correlation-harness test-contract test-stress test-release
-.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
+.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-backend-conformance test-backend-conformance-live test-root-process-acceptance long-tests long-tests-managed-runtime
@@ -674,12 +674,10 @@ test-contract:
 # Cache-aware developer feedback; use test-functional-fresh for an
 # unconditional rerun.
 test-functional:
-	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
 
 # CI-equivalent and flake-investigation path: force every package to execute.
 test-functional-fresh:
-	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 # The resumed-successor witness consumes operator-staged immutable artifacts;
@@ -688,12 +686,9 @@ test-functional-fresh:
 test-functional-resumed-successor-artifact:
 	$(GO) test -tags=factoryartifact ./tests/functional/sessions/root_composition -run '^TestResumedSuccessorResponseScopeAndWorkAdmission$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-functional-boundary-check:
-	$(GO) run ./cmd/functionalboundarycheck
-
 # functional-test-viz is the single functional-report entrypoint. It runs the
-# configured fresh functional coverage tier exactly once (including its
-# boundary check), renders and publishes the Markdown catalog when running in
+# configured fresh functional coverage tier exactly once, renders and publishes
+# the Markdown catalog when running in
 # GitHub Actions, retains the complete command stream in command.log, and prints
 # only pkg/ coverage plus functional-package latencies to the terminal. Artifacts
 # land under .artifacts/functional-test-viz/.
@@ -932,15 +927,9 @@ test-unit-coverage:
 		-timing-summary "$(GO_UNIT_COVERAGE_TIMING_OUTPUT)" \
 		-log "$(GO_UNIT_COVERAGE_LOG)"
 
-# test-functional-coverage always runs functional-boundary-check first so the
-# required CI Backend Functional Coverage lane (and any local/alias caller of
-# this target) cannot succeed without a successful boundary check. The
-# instrumented gocoveragecheck invocation leaves test-count policy to Go, so an
-# eligible repeat may be served from the test cache; use test-functional-fresh
-# for an explicit fresh ordinary-functional run. Boundary failures exit
-# non-zero before gocoveragecheck starts.
+# Instrumented coverage preserves Go test caching and the functional lane budget.
+# Required Backend Lint owns static functional-boundary enforcement.
 test-functional-coverage:
-	$(MAKE) functional-boundary-check
 	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE)"
 	@set +e; \
 	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
