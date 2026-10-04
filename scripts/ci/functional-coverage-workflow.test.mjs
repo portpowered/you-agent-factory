@@ -178,3 +178,23 @@ test("pinned real ACP evidence belongs to backend integration, not functional co
 	assert.match(integrationJob, /name: Require pinned real ACP integration evidence/);
 	assert.match(integrationJob, /if-no-files-found: error/);
 });
+
+test("functional coverage retries failing tests once and publishes the flake ledger", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const job = jobSection(workflow, "backend-coverage");
+	const supervisor = stepSection(job, "      - name: Run Linux functional coverage with concurrent quarantine verification", "      - name: Save functional coverage Go build cache");
+	const record = stepSection(job, "      - name: Record functional flake ledger", "      - name: Upload functional flake ledger");
+	const upload = stepSection(job, "      - name: Upload functional flake ledger", "      - name: Upload functional test diagnostics");
+
+	assert.match(supervisor, /FUNCTIONAL_FLAKE_RETRY_MAX: "5"/);
+	assert.match(supervisor, /FUNCTIONAL_FLAKE_LEDGER: \.artifacts\/functional-test-viz\/flake-ledger\.json/);
+	assert.match(supervisor, /FUNCTIONAL_FLAKE_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+	assert.match(record, /if: always\(\) && matrix\.suite == 'functional'/);
+	assert.match(record, /node scripts\/ci\/flake-ledger-summary\.mjs --ledger \.artifacts\/functional-test-viz\/flake-ledger\.json/);
+	assert.match(upload, /name: functional-flake-ledger/);
+	assert.match(upload, /if-no-files-found: ignore/);
+	assert.ok(
+		job.indexOf("      - name: Report functional coverage verdict") < job.indexOf("      - name: Record functional flake ledger"),
+		"the flake ledger is reported after the coverage verdict",
+	);
+});
