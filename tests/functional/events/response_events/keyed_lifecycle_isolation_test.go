@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,6 +34,7 @@ func TestFourExplicitSessionsKeepPeerOutputsAfterSelectedCancellation(t *testing
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
+	assertLifecycleIsolationUnknownControl(t, server.URL())
 	var sessions [4]string
 	var streams [4]*support.FactoryResponseEventStream
 	prompts := make(map[string]string)
@@ -93,12 +96,118 @@ func TestFourExplicitSessionsKeepPeerOutputsAfterSelectedCancellation(t *testing
 		close(runner.gates[i].release)
 	}
 	support.WaitForSessionStopped(t, server.URL(), sessions[0], concurrentIsolationTimeout)
+	assertLifecycleIsolationSelectedCursor(t, server.URL(), sessions[0], runner.gates[0], runner.gates)
 	for i := 1; i < len(sessions); i++ {
 		result := awaitConcurrentIsolationInvocation(t, invocations[sessions[i]])
 		assertConcurrentIsolationInvocationCompleted(t, result, runner.gates[i].output)
 		frames := collectConcurrentIsolationFrames(t, streams[i], runner.gates[i].output, concurrentIsolationTimeout)
 		assertLifecycleIsolationPeerReads(t, server.URL(), sessions[i], frames, runner.gates[i], runner.gates)
 		assertLifecycleIsolationRecordedWork(t, server.URL(), sessions[i], runner.gates[i], runner.gates)
+	}
+	assertLifecycleIsolationDurableCancellation(t, server.URL(), runner.durable)
+}
+
+func assertLifecycleIsolationUnknownControl(t *testing.T, baseURL string) {
+	t.Helper()
+	for _, action := range []string{"pause", "resume", "cancel"} {
+		var response factoryapi.ErrorResponse
+		lifecycleIsolationPost(t, baseURL+"/factory-sessions/4e5f2c32-6d2e-4f10-93ea-974f657e7001/"+action, map[string]any{}, http.StatusNotFound, &response)
+		if response.Code != "NOT_FOUND" || response.Family != factoryapi.ErrorFamilyNotFound {
+			t.Fatalf("unknown %s = %#v, want typed NOT_FOUND", action, response)
+		}
+	}
+}
+
+func assertLifecycleIsolationSelectedCursor(t *testing.T, baseURL, sessionID string, gate *lifecycleIsolationGate, gates [4]*lifecycleIsolationGate) {
+	t.Helper()
+	retained := retainedFactoryResponseEventsWithoutGaps(support.GetFactoryResponseEventsAt(t, baseURL, sessionID))
+	if len(retained) == 0 {
+		t.Fatalf("selected response events = %d, want retained cursor suffix", len(retained))
+	}
+	assertResponseEventsAscendingSequence(t, retained)
+	stream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURLWithAfterSequence(baseURL, sessionID, 0))
+	t.Cleanup(stream.Close)
+	for _, want := range retained {
+		got := stream.NextFrame(concurrentIsolationTimeout)
+		if got.Event.EventId != want.EventId || got.Event.Sequence != want.Sequence || got.Event.FactorySessionId != sessionID {
+			t.Fatalf("selected response reconnect = %#v, want %#v", got.Event, want)
+		}
+		assertLifecycleIsolationNoPeerMarker(t, got.Event, gate, gates)
+	}
+}
+
+func assertLifecycleIsolationDurableCancellation(t *testing.T, baseURL string, gate *lifecycleIsolationGate) {
+	t.Helper()
+	dir := scaffoldSessionExpiryWorkflow(t)
+	workflowPath := filepath.Join(dir, sessionExpiryChildWorkflowFile)
+	source := strings.ReplaceAll(sessionExpiryChildWorkflowSource, "summarize session expiry", gate.marker)
+	if err := os.WriteFile(workflowPath, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	input := factoryapi.FactorySessionExecutionRequest{
+		RequestId: "t14-owned-durable-cancel",
+		Source:    factoryapi.FactorySessionExecutionSource{Kind: factoryapi.FactorySessionExecutionSourceKindWorkflowFile, WorkflowFile: &workflowPath},
+	}
+	var started factoryapi.FactorySessionExecutionResponse
+	lifecycleIsolationPost(t, baseURL+"/factory-sessions/async", input, http.StatusOK, &started)
+	select {
+	case <-gate.started:
+	case <-t.Context().Done():
+		t.Fatal("durable provider admission interrupted")
+	}
+	control := lifecycleIsolationControl(t, baseURL, started.SessionId, "cancel")
+	if control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted || control.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceling {
+		t.Fatalf("durable cancel = %#v, want accepted CANCELING", control)
+	}
+	select {
+	case <-gate.canceled:
+	case <-t.Context().Done():
+		t.Fatal("durable provider cancellation interrupted")
+	}
+	// Provider cancellation precedes publication of the durable projection.
+	// Observe that public projection through the shared bounded observer.
+	session, err := support.WaitForObservation(concurrentIsolationTimeout, func() (factoryapi.FactorySessionDurableReadModel, error) {
+		read := support.GetJSON[factoryapi.FactorySessionGetResponse](t, baseURL+"/factory-sessions/"+started.SessionId)
+		return read.AsFactorySessionDurableReadModel()
+	}, func(session factoryapi.FactorySessionDurableReadModel) bool {
+		return session.Status == factoryapi.FactorySessionDurableLifecycleStatusCanceled
+	})
+	if err != nil || session.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("durable terminal status = %#v, %v", session, err)
+	}
+	var rejected factoryapi.FactorySessionLifecycleControlResponse
+	lifecycleIsolationPost(t, baseURL+"/factory-sessions/"+started.SessionId+"/resume", map[string]any{}, http.StatusConflict, &rejected)
+	if rejected.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession || rejected.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("terminal resume = %#v, want TERMINAL_SESSION/CANCELED", rejected)
+	}
+	read := support.GetJSON[factoryapi.FactorySessionGetResponse](t, baseURL+"/factory-sessions/"+started.SessionId)
+	session, err = read.AsFactorySessionDurableReadModel()
+	if err != nil || session.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("durable status after rejected resume = %#v, %v", session, err)
+	}
+}
+
+func lifecycleIsolationPost(t *testing.T, endpoint string, input any, status int, output any) {
+	t.Helper()
+	payload, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if err := json.NewDecoder(response.Body).Decode(output); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != status {
+		t.Fatalf("POST %s status = %d, want %d: %#v", endpoint, response.StatusCode, status, output)
 	}
 }
 
@@ -230,10 +339,14 @@ type lifecycleIsolationGate struct {
 	started, release, canceled chan struct{}
 }
 
-type lifecycleIsolationRunner struct{ gates [4]*lifecycleIsolationGate }
+type lifecycleIsolationRunner struct {
+	gates   [4]*lifecycleIsolationGate
+	durable *lifecycleIsolationGate
+}
 
 func newLifecycleIsolationRunner() *lifecycleIsolationRunner {
 	runner := &lifecycleIsolationRunner{}
+	runner.durable = &lifecycleIsolationGate{marker: "t14-durable-cancel-prompt", started: make(chan struct{}), release: make(chan struct{}), canceled: make(chan struct{})}
 	for i := range runner.gates {
 		runner.gates[i] = &lifecycleIsolationGate{
 			marker: fmt.Sprintf("t14-session-%d-prompt", i), output: fmt.Sprintf("t14-session-%d-output COMPLETE", i),
@@ -245,7 +358,7 @@ func newLifecycleIsolationRunner() *lifecycleIsolationRunner {
 
 func (runner *lifecycleIsolationRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	prompt := string(request.Stdin) + "\n" + strings.Join(request.Args, "\n")
-	for _, gate := range runner.gates {
+	for _, gate := range append(runner.gates[:], runner.durable) {
 		if !strings.Contains(prompt, gate.marker) {
 			continue
 		}
