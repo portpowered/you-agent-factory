@@ -30,13 +30,14 @@ type RuntimeAttemptRequest struct {
 }
 
 // Validate rejects contradictory routing before opening a topic or capture.
-// Legacy blank runtime correlation remains blank; callers with a resolved
-// runtime supply it in both the key and execution request.
+// Callers normalize legacy blank runtime correlation from the resolved runtime
+// before supplying it in both the key and execution request.
 func (r RuntimeAttemptRequest) Validate() error {
 	if err := (InvokeSessionRequest{ID: r.ID, Execution: r.Execution}).Validate(); err != nil {
 		return err
 	}
-	if strings.TrimSpace(r.Key.DispatchID) != strings.TrimSpace(r.Execution.Execution.Dispatch.DispatchID) ||
+	if strings.TrimSpace(r.Key.RuntimeID) == "" || strings.TrimSpace(r.Key.DispatchID) == "" ||
+		strings.TrimSpace(r.Key.DispatchID) != strings.TrimSpace(r.Execution.Execution.Dispatch.DispatchID) ||
 		strings.TrimSpace(r.Key.RuntimeID) != strings.TrimSpace(r.Execution.Execution.RuntimeID) {
 		return ErrProviderSessionAssociationAttemptMismatch
 	}
