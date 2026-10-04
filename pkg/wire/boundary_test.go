@@ -115,7 +115,15 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registry := factorysessionwire.NewSessionRegistry()
+	responseRegistry, err := factorysessionwire.NewResponseStreamRegistry(responses, &wireTestClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := factorysessionwire.NewSessionState(registry, responseRegistry, &wireTestClock{}, func() string { return "response-event-test-id" }, func() string { return "session-test-id" }, responses)
+	streams := factorysessionwire.NewStreamManager(state, factorysessionwire.NewStreamObserver(), responseRegistry, responses)
 	assembly, err := provideFactorySessionsAssembly(
+		registry, state, streams,
 		factoryruntime.NewSessionResultProjectionOperation(),
 		nil,
 		nil,

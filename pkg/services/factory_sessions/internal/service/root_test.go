@@ -20,9 +20,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -271,7 +273,18 @@ func (in rootTestInputs) call() (*Root, error) {
 }
 
 func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
+	if err := validateRootDependencies(in.sessionResultProjection, in.eventIDs, in.sessionIDs, in.resolveHome, in.directoryInspection, in.namedPaths, in.invocationInputFiles, in.initialWorkFiles, in.identity, in.responseStreams); err != nil {
+		return nil, err
+	}
+	registry := sessionregistry.New()
+	responses, err := in.responseStreams.NewStreamRegistry(in.clock)
+	if err != nil {
+		return nil, err
+	}
+	state := sessionruntime.NewWithResponseService(registry, responses, nil, in.clock, in.eventIDs, in.sessionIDs, in.responseStreams)
+	streams := stream.NewManagerWithResponseService(state, sessionruntime.NewResponseStreamObserver(nil), responses, in.responseStreams)
 	return NewAssembly(
+		registry, state, streams,
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.interpolation,

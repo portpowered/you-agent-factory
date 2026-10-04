@@ -3,12 +3,8 @@ package wire
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
-	identitycontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	responsecontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"io/fs"
 	"path/filepath"
 	"runtime"
@@ -16,11 +12,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	identitycontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	responsecontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
@@ -314,7 +316,15 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 	if err != nil {
 		return nil, err
 	}
+	registry := NewSessionRegistry()
+	responseRegistry, err := NewResponseStreamRegistry(responses, in.clock)
+	if err != nil {
+		return nil, err
+	}
+	state := NewSessionState(registry, responseRegistry, in.clock, in.eventIDs, in.sessionIDs, responses)
+	streams := NewStreamManager(state, NewStreamObserver(), responseRegistry, responses)
 	return NewRuntimeAssembly(
+		registry, state, streams,
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.interpolation,
@@ -447,5 +457,24 @@ func assertSelectedResponseEvent(t *testing.T, event responseevents.FactoryRespo
 	t.Helper()
 	if event.FactorySessionID != sessionID || !event.RecordedAt.Equal(now) || event.EventID != eventID || event.Sequence != sequence {
 		t.Fatalf("published = %#v, want session %s time %s ID %s sequence %d", event, sessionID, now, eventID, sequence)
+	}
+}
+
+// Only the allocation boundary is implemented; other calls would expose an
+// unexpected construction side effect.
+type failingResponseRegistry struct {
+	ResponseStreams
+	err error
+}
+
+func (f failingResponseRegistry) NewStreamRegistry(factoryruntime.Clock) (*responsestream.Registry, error) {
+	return nil, f.err
+}
+func TestResponseStreamRegistryReturnsSelectedAllocationError(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("selected allocation failed")
+	registry, err := NewResponseStreamRegistry(failingResponseRegistry{err: failure}, &recordingClock{})
+	if registry != nil || !errors.Is(err, failure) {
+		t.Fatalf("allocation = (%v, %v), want nil and selected error", registry, err)
 	}
 }

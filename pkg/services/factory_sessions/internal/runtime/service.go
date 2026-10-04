@@ -216,9 +216,6 @@ func NewWithResponseService(
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEvents responsestreamservice.Service,
 ) *Service {
-	if registry == nil || responses == nil || clock == nil || eventIDs == nil || sessionIDs == nil {
-		return nil
-	}
 	return &Service{registry: registry, responses: responses, close: closeSession, clock: clock, eventIDs: eventIDs, sessionIDs: sessionIDs, responseEvents: responseEvents}
 }
 
