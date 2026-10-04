@@ -13,70 +13,89 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
+	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
-func TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts(t *testing.T) {
+func TestCanonicalOwnerPreservesInterleavedScopePositions(t *testing.T) {
 	t.Parallel()
-
 	ledger := &stubLedger{}
-	svc := NewService(ledger, projectionquerywire.NewService())
+	svc := canonicalledgerwire.NewService(ledger)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
 	retained := appendProjectionFacts(t, svc, scope)
-
 	ledger.subscribeStream = factorydefinitions.FactoryEventStream{
-		StreamGenerationID: ledger.StreamGenerationID(),
-		History:            ledger.CanonicalEvents(),
+		StreamGenerationID: ledger.StreamGenerationID(), History: ledger.CanonicalEvents(),
 	}
 	replayed := collectProjectionFacts(t, svc, scope, len(retained))
 	if len(replayed) != 2 || replayed[0].Sequence != 0 || replayed[1].Sequence != 2 {
 		t.Fatalf("scoped replay order = %#v, want global positions 0 and 2", replayed)
 	}
+	if !reflect.DeepEqual(retained, replayed) {
+		t.Fatalf("retained facts != subscribed facts: %#v != %#v", retained, replayed)
+	}
+}
 
+func interleavedProjectionFacts(scope recordings.CanonicalEventScope) []recordings.CanonicalEvent {
+	return []recordings.CanonicalEvent{
+		canonicalProjectionFact("event-1", 0, scope), canonicalProjectionFact("event-2", 2, scope),
+	}
+}
+
+func TestProjectionOwnerPreservesDetachedCanonicalViews(t *testing.T) {
+	t.Parallel()
+	svc := projectionquerywire.NewService()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
+	retained := interleavedProjectionFacts(scope)
+	replayed := append([]recordings.CanonicalEvent(nil), retained...)
 	retainedView := reconstructProjectionView(t, svc, scope, retained)
 	replayedView := reconstructProjectionView(t, svc, scope, replayed)
 	if retainedView != replayedView {
-		t.Fatalf("retained view != replayed view:\nretained=%#v\nreplayed=%#v", retainedView, replayedView)
+		t.Fatalf("retained view != replayed view: %#v != %#v", retainedView, replayedView)
 	}
-
-	retainedDashboard, err := svc.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
-		WorldState: retainedView,
-	})
+	state, err := decodeWorldStateView(retainedView)
 	if err != nil {
-		t.Fatalf("QuerySimpleDashboard retained: %v", err)
+		t.Fatal(err)
 	}
-	replayedDashboard, err := svc.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
-		WorldState: replayedView,
-	})
+	retainedDashboard := svc.SimpleDashboardRenderData(state)
+	replayedState, err := decodeWorldStateView(replayedView)
 	if err != nil {
-		t.Fatalf("QuerySimpleDashboard replayed: %v", err)
+		t.Fatal(err)
 	}
+	replayedDashboard := svc.SimpleDashboardRenderData(replayedState)
 	if !reflect.DeepEqual(retainedDashboard, replayedDashboard) {
-		t.Fatalf("retained dashboard != replayed dashboard")
+		t.Fatal("retained dashboard != replayed dashboard")
 	}
+	retainedDashboard.PlaceTokenCounts = map[string]int{"caller-only": 1}
+	again := svc.SimpleDashboardRenderData(state)
+	if again.PlaceTokenCounts["caller-only"] != 0 {
+		t.Fatalf("caller mutation leaked into later query: %#v", again.PlaceTokenCounts)
+	}
+}
 
-	retainedDashboard.Data.PlaceTokenCounts = map[string]int{"caller-only": 1}
-	again, err := svc.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
-		WorldState: retainedView,
-	})
-	if err != nil {
-		t.Fatalf("QuerySimpleDashboard detached check: %v", err)
+func TestReplayOwnerPreservesInterleavedScopePositions(t *testing.T) {
+	t.Parallel()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
+	events := interleavedProjectionFacts(scope)
+	projection := &plainReplayProjection{}
+	want := reconstructProjectionView(t, projection, scope, events)
+	svc := replaywire.NewService(nil, projection, nil, nil)
+	assertScopedReplayEquivalent(t, svc, scope, events, want)
+	if len(projection.events) != len(events) || projection.events[0].Id != string(events[0].ID) || projection.events[1].Context.Sequence != int(events[1].Sequence) {
+		t.Fatalf("replay projection inputs = %#v, want retained scoped positions", projection.events)
 	}
-	if again.Data.PlaceTokenCounts["caller-only"] != 0 {
-		t.Fatalf("caller mutation leaked into later query: %#v", again.Data.PlaceTokenCounts)
-	}
-
-	assertScopedReplayEquivalent(t, svc, scope, replayed, replayedView)
-	assertScopedPortableArtifact(t, svc, scope, replayed)
 }
 
 func TestProjectionQueries_RejectInvalidScopeOrderAndView(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, projectionquerywire.NewService())
+	svc := &combinedService{ProjectionService: &plainReplayProjection{}}
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
 	first := canonicalProjectionFact("event-1", 0, scope)
 
@@ -104,7 +123,7 @@ func TestProjectionQueries_RejectInvalidScopeOrderAndView(t *testing.T) {
 
 func appendProjectionFacts(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	scope recordings.CanonicalEventScope,
 ) []recordings.CanonicalEvent {
 	t.Helper()
@@ -133,7 +152,7 @@ func appendProjectionFacts(
 
 func collectProjectionFacts(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	scope recordings.CanonicalEventScope,
 	count int,
 ) []recordings.CanonicalEvent {
@@ -155,12 +174,12 @@ func collectProjectionFacts(
 
 func reconstructProjectionView(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordings.ProjectionService,
 	scope recordings.CanonicalEventScope,
 	events []recordings.CanonicalEvent,
 ) recordings.WorldStateView {
 	t.Helper()
-	result, err := svc.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
+	result, err := canonical.ReconstructWorldState(svc, recordings.ReconstructWorldStateRequest{
 		Scope: scope, Events: events, SelectedTick: 4,
 	})
 	if err != nil {
@@ -194,7 +213,7 @@ func canonicalProjectionFact(
 
 func assertScopedReplayEquivalent(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordingsreplay.Service,
 	scope recordings.CanonicalEventScope,
 	events []recordings.CanonicalEvent,
 	want recordings.WorldStateView,
@@ -228,37 +247,18 @@ func assertScopedReplayEquivalent(
 	}
 }
 
-func assertScopedPortableArtifact(
-	t *testing.T,
-	svc recordings.Service,
-	scope recordings.CanonicalEventScope,
-	events []recordings.CanonicalEvent,
-) {
-	t.Helper()
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-interleaved-export",
-		Artifact:    "artifact:interleaved-export",
-		Scope:       scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording interleaved export: %v", err)
-	}
-	for _, event := range events {
-		if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID,
-			Event:       event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent interleaved export: %v", err)
-		}
-	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_100, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording interleaved export: %v", err)
-	}
+func TestArtifactsOwnerPreservesInterleavedScopePositions(t *testing.T) {
+	t.Parallel()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
+	events := interleavedProjectionFacts(scope)
+	id := recordings.RecordingID("recording-interleaved-export")
+	finishedAt := time.Unix(1_700_000_100, 0).UTC()
+	snapshots := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{
+		id: {Status: recordings.RecordingStatusFacts{RecordingID: id, Artifact: "artifact:interleaved-export", Scope: scope, State: recordings.RecordingFinalized, FinalizedAt: &finishedAt}, Events: events},
+	}}
+	svc := artifactsexportwire.NewService(snapshots, nil)
 	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: id,
 	})
 	if err != nil {
 		t.Fatalf("BuildPortableArtifact interleaved scope: %v", err)
