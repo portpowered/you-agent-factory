@@ -56,12 +56,12 @@ func provideAutomationsHostedPollers(logger *zap.Logger, clock automations.Hoste
 	return automationswire.NewHostedPollers(logger, clock, client, secrets, edges.HostedLinearEndpoint, checkpoints)
 }
 
-// Until T01 integration, retain the existing full-clock selection at canonical composition.
-func provideAutomationsClock(clock factoryruntime.Clock) automationswire.Clock {
-	if scheduler, ok := clock.(clockwork.Clock); ok {
-		return scheduler
+// Explicit legacy full-clock specialization retains precedence over process defaults.
+func provideAutomationsClock(clock factoryruntime.Clock, scheduler platformclock.TimerSource) automationswire.Clock {
+	if legacy, ok := clock.(clockwork.Clock); ok {
+		return legacy
 	}
-	return clockwork.NewRealClock()
+	return automationswire.NewClockView(clock, scheduler)
 }
 func provideAutomationsScriptPollers(logger *zap.Logger, clock automationswire.Clock,
 	runner platformprocess.CommandRunner, policy factorydefinitions.WorkstationExecutionPolicyService,

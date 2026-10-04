@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +15,46 @@ import (
 )
 
 const testDebounceWindow = 50 * time.Millisecond
+
+func TestDebounceCancelJoinsRunningCallbackAndRetiresReplacement(t *testing.T) {
+	t.Parallel()
+	clock := clockwork.NewFakeClock()
+	scheduler := newDebounceScheduler(clock, testDebounceWindow)
+	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var replacementCalls atomic.Int32
+	scheduler.schedule("same", func() { close(started); <-release; close(finished) })
+	clock.Advance(testDebounceWindow)
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		t.Fatal("callback did not start")
+	}
+	scheduler.schedule("same", func() { replacementCalls.Add(1) })
+	done := make(chan struct{})
+	go func() { scheduler.cancelAll(); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("cancel returned before running callback joined")
+	default:
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("cancel did not join")
+	}
+	select {
+	case <-finished:
+	default:
+		t.Fatal("running callback not finished")
+	}
+	clock.Advance(testDebounceWindow)
+	scheduler.schedule("later", func() { replacementCalls.Add(1) })
+	clock.Advance(testDebounceWindow)
+	if replacementCalls.Load() != 0 {
+		t.Fatal("retired scheduler admitted another callback")
+	}
+}
 
 func newDebouncedTestWatcher(
 	dir string,
@@ -149,9 +190,8 @@ func TestFileWatcher_DebounceIndependentPathsSubmitSeparately(t *testing.T) {
 	cancel, done := startDebouncedWatch(t, fw, eventWatcher)
 	defer cancel()
 
-	eventWatcher.events <- fsnotify.Event{Name: pathA, Op: fsnotify.Create}
-	waitForFakeClockWaiters(t, clock, 1)
-	eventWatcher.events <- fsnotify.Event{Name: pathB, Op: fsnotify.Create}
+	// Discovery schedules both existing paths. Sending duplicate events here
+	// can replace a timer after advancement, so observe their actual registration.
 	waitForFakeClockWaiters(t, clock, 2)
 
 	clock.Advance(testDebounceWindow)
