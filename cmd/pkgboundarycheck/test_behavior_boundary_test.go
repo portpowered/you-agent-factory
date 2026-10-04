@@ -254,57 +254,6 @@ func hiddenEngineFixtures() {
 	}
 }
 
-func TestScanTestBehaviorBoundariesRejectsWorkInvocationInputPolicyInTransportFakes(t *testing.T) {
-	t.Parallel()
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/transports/cli/root_run_test.go", `package cli
-import (
-  "context"
-  "strings"
-  work "github.com/portpowered/infinite-you/pkg/services/work"
-)
-type invocationInputFake struct{}
-func (invocationInputFake) PrepareInvocationInput(_ context.Context, request work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
-  text := strings.TrimSpace(strings.Join(request.Arguments, " "))
-  return work.PreparedInvocationInput{ResolvedInput: work.ResolvedInput{Text: text}}, nil
-}
-`)
-
-	findings, err := scanTestBehaviorBoundaries(repoRoot)
-	if err != nil {
-		t.Fatalf("scanTestBehaviorBoundaries() error = %v", err)
-	}
-	want := "pkg/transports/cli/root_run_test.go|cross-owner-service-policy|pkg/services/work|PrepareInvocationInput|1"
-	if joined := testBehaviorFindingSummary(findings); !strings.Contains(joined, want) {
-		t.Fatalf("findings = %q, want %q", joined, want)
-	}
-}
-
-func TestScanTestBehaviorBoundariesAllowsStrictWorkInvocationInputCallback(t *testing.T) {
-	t.Parallel()
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/transports/cli/root_run_test.go", `package cli
-import (
-  "context"
-  work "github.com/portpowered/infinite-you/pkg/services/work"
-)
-type invocationInputFake struct {
-  prepare func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error)
-}
-func (fake invocationInputFake) PrepareInvocationInput(ctx context.Context, request work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
-  return fake.prepare(ctx, request)
-}
-`)
-
-	findings, err := scanTestBehaviorBoundaries(repoRoot)
-	if err != nil {
-		t.Fatalf("scanTestBehaviorBoundaries() error = %v", err)
-	}
-	if len(findings) != 0 {
-		t.Fatalf("findings = %#v, want none", findings)
-	}
-}
-
 func TestPartitionTestBehaviorFindingsRejectsNewCountChangesAndStaleEntries(t *testing.T) {
 	t.Parallel()
 	finding := testBehaviorFinding{

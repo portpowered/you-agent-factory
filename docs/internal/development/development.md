@@ -248,7 +248,9 @@ wrappers and competing provider families. Generated production declarations are
 checked; test declarations are excluded.
 The `TestBoundary` analyzer owns zero-debt cross-owner test Work normalization
 and functional-test transport composition (with exact generated HTTP client
-and contract allowances).
+and contract allowances). Transport test `PrepareInvocationInput` declarations
+may only delegate directly to a receiver callback; parsing, normalization and
+authored response policy remain Work-owned.
 Compiler-resolved function references cover aliases, dot imports and captured
 values in test files and reusable test support. Work-owned tests remain allowed;
 generated files and ordinary production consumers are excluded.

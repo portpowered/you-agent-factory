@@ -45,6 +45,9 @@ func functionalTransportComposition(importPath, symbol string) bool {
 }
 
 func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
+	if under(unit, "pkg/transports") {
+		inspectTestWorkCallbacks(pass, file, unit)
+	}
 	called := testBoundaryCalls(file)
 	ast.Inspect(file, func(node ast.Node) bool {
 		id, ok := node.(*ast.Ident)
@@ -65,6 +68,46 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		}
 		return true
 	})
+}
+
+// A transport fake may forward the Work role to an injected callback, but
+// must not implement parsing, normalization or response policy in that role.
+func inspectTestWorkCallbacks(pass *analysis.Pass, file *ast.File, unit string) {
+	for _, declaration := range file.Decls {
+		fn, ok := declaration.(*ast.FuncDecl)
+		if ok && fn.Name.Name == "PrepareInvocationInput" && !strictTestWorkCallback(fn) {
+			pass.Reportf(fn.Name.Pos(), "test-work-invocation-policy: %s -> pkg/services/work.PrepareInvocationInput; forward to an injected callback instead of implementing Work policy in a transport fake", unit)
+		}
+	}
+}
+
+func strictTestWorkCallback(fn *ast.FuncDecl) bool {
+	if fn.Recv == nil || fn.Body == nil || len(fn.Body.List) != 1 ||
+		len(fn.Recv.List) != 1 || len(fn.Recv.List[0].Names) != 1 {
+		return false
+	}
+	returned, ok := fn.Body.List[0].(*ast.ReturnStmt)
+	if !ok || len(returned.Results) != 1 {
+		return false
+	}
+	call, ok := returned.Results[0].(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	callback, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	receiver, ok := callback.X.(*ast.Ident)
+	if !ok || receiver.Name != fn.Recv.List[0].Names[0].Name {
+		return false
+	}
+	for _, argument := range call.Args {
+		if _, direct := argument.(*ast.Ident); !direct {
+			return false
+		}
+	}
+	return true
 }
 
 func testBoundaryCallable(obj types.Object, called bool) bool {

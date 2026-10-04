@@ -211,7 +211,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 
 		callerOwner, callerIsService := servicePackageOwner(rel)
 		insideHTTPTransportTest := strings.HasPrefix(rel, "pkg/transports/http/")
-		insideTransportTest := strings.HasPrefix(rel, "pkg/transports/")
 		importsByName := map[string]string{}
 		dotImports := map[string]struct{}{}
 		for _, spec := range parsed.Imports {
@@ -317,18 +316,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 		}
 
 		ast.Inspect(parsed, func(node ast.Node) bool {
-			if insideTransportTest {
-				function, ok := node.(*ast.FuncDecl)
-				if ok && function.Name.Name == "PrepareInvocationInput" &&
-					!isStrictTestCallbackDelegation(function) {
-					record(testBehaviorOperation{
-						testBehaviorPolicyKind,
-						"work",
-						workImportPath,
-						"PrepareInvocationInput",
-					}, function.Name.Pos())
-				}
-			}
 			if insideHTTPTransportTest {
 				literal, ok := node.(*ast.CompositeLit)
 				if ok {
@@ -389,41 +376,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 		return strings.Compare(left.Symbol, right.Symbol)
 	})
 	return out, nil
-}
-
-// A transport fake may expose the Work role only by forwarding its request to
-// an injected callback. Any branching, parsing, normalization, or authored
-// response in the method would reproduce Work-owned invocation-input policy.
-func isStrictTestCallbackDelegation(function *ast.FuncDecl) bool {
-	if function.Recv == nil || function.Body == nil || len(function.Body.List) != 1 {
-		return false
-	}
-	if len(function.Recv.List) != 1 || len(function.Recv.List[0].Names) != 1 {
-		return false
-	}
-	receiverName := function.Recv.List[0].Names[0].Name
-	returned, ok := function.Body.List[0].(*ast.ReturnStmt)
-	if !ok || len(returned.Results) != 1 {
-		return false
-	}
-	call, ok := returned.Results[0].(*ast.CallExpr)
-	if !ok {
-		return false
-	}
-	callback, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	receiverField, ok := callback.X.(*ast.Ident)
-	if !ok || receiverField.Name != receiverName {
-		return false
-	}
-	for _, argument := range call.Args {
-		if _, direct := argument.(*ast.Ident); !direct {
-			return false
-		}
-	}
-	return true
 }
 
 func loadTestBehaviorBaseline(repoRoot string) (testBehaviorBaseline, error) {
