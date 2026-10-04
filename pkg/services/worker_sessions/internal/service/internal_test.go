@@ -4459,13 +4459,6 @@ func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
 		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
 	}
 
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, platformclock.Real{}, unavailableProviderSessions{}, nil); !errors.Is(err, ErrMissingClock) {
-		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
-	}
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, platformclock.Real{}, nil, nil); !errors.Is(err, ErrMissingProviderSessions) {
-		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
-	}
-
 	if got := providerIdentityForExecution(workers.WorkstationExecutionRequest{
 		ExecutorProvider: workers.ExecutorProviderACP,
 		ModelProvider:    "cursor-acp",
@@ -6645,14 +6638,6 @@ func TestKeyedRuntimeSupervisorUsesSuppliedDeadlineScheduler(t *testing.T) {
 	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
 	if err != nil || observation.EndedAt == nil || !observation.EndedAt.Equal(facts.Now()) {
 		t.Fatalf("retained terminal facts=%#v err=%v, want supplied fact time", observation, err)
-	}
-}
-
-func TestKeyedRuntimeSupervisorRequiresDeadlineScheduler(t *testing.T) {
-	t.Parallel()
-	_, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, coverageClock{}, nil, unavailableProviderSessions{}, nil)
-	if !errors.Is(err, ErrMissingScheduler) {
-		t.Fatalf("missing scheduler: %v, want ErrMissingScheduler", err)
 	}
 }
 

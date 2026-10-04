@@ -23,24 +23,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// ErrMissingExecution reports that New was constructed without the one
-// required directly injected request-scoped workers.Service.
+// ErrMissingExecution reports a missing selected per-attempt executor.
 var ErrMissingExecution = errors.New("worker sessions: execution service is required")
 
-// ErrMissingEventsAppender reports that New was constructed without the one
-// required directly injected EventsAppender.
-var ErrMissingEventsAppender = errors.New("worker sessions: events appender is required")
-
-// ErrMissingClock reports that New was constructed without the required
-// runtime time source used for observation timing.
+// ErrMissingClock reports a missing selected per-attempt fact clock.
 var ErrMissingClock = errors.New("worker sessions: clock is required")
 
 // ErrMissingScheduler reports that deadline supervision has no supplied timer source.
 var ErrMissingScheduler = errors.New("worker sessions: scheduler is required")
-
-// ErrMissingProviderSessions reports that New was constructed without the
-// Provider Sessions read-side contract used to enrich worker observations.
-var ErrMissingProviderSessions = errors.New("worker sessions: provider sessions service is required")
 
 // EventsAppender is the narrow Events dependency Start's before-handoff
 // publication barrier needs: commit one source-native record into a topic's
@@ -132,10 +122,10 @@ var _ workersessions.Service = (*registry)(nil)
 // New constructs the process-local Worker Session registry from its required
 // lifecycle, time, and Provider Sessions collaborators. The supplied logger
 // is retained directly; callers disabling logging supply logging.NoopLogger{}.
-// A nil execution, Events appender, clock, or
-// Provider Sessions service is rejected: the registry cannot truthfully
-// supervise, time, or enrich an observation without each of them. The supplied
-// scheduler owns safety deadlines independently of the fact clock.
+// Composition supplies normalized collaborators, including explicit disabled
+// implementations where supported. The supplied scheduler owns safety
+// deadlines independently of the fact clock. Selected per-attempt effects are
+// validated at admission, before reservation or publication.
 func New(
 	execution workers.Service,
 	eventsAppender EventsAppender,
@@ -145,21 +135,6 @@ func New(
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
-	if execution == nil {
-		return nil, ErrMissingExecution
-	}
-	if eventsAppender == nil {
-		return nil, ErrMissingEventsAppender
-	}
-	if clock == nil {
-		return nil, ErrMissingClock
-	}
-	if scheduler == nil {
-		return nil, ErrMissingScheduler
-	}
-	if providerSessions == nil {
-		return nil, ErrMissingProviderSessions
-	}
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	startsDone := make(chan struct{})
 	close(startsDone)

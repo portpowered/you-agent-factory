@@ -28,18 +28,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestNew_RejectsNilExecution(t *testing.T) {
-	if _, err := newService(nil, newEventsAppender(), nil); !errors.Is(err, service.ErrMissingExecution) {
-		t.Fatalf("New(nil, events, nil) error = %v, want ErrMissingExecution", err)
-	}
-}
-
-func TestNew_RejectsNilEventsAppender(t *testing.T) {
-	if _, err := newService(executionBoundary{execution: succeedingExecution()}, nil, nil); !errors.Is(err, service.ErrMissingEventsAppender) {
-		t.Fatalf("New(execution, nil, nil) error = %v, want ErrMissingEventsAppender", err)
-	}
-}
-
 func TestStart_InvalidRequest_ReturnsTypedErrorAndMakesNoWorkersCall(t *testing.T) {
 	execution := succeedingExecution()
 	registry := newRegistryWithExecution(execution)
