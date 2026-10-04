@@ -4,11 +4,87 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
+
+type workerRecordingDirectoryProbe struct {
+	root  string
+	err   error
+	calls int
+}
+
+func (probe *workerRecordingDirectoryProbe) Getwd() (string, error) {
+	probe.calls++
+	return probe.root, probe.err
+}
+
+func TestWorkerRecordingDefaultDurableRoot(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	directory := &workerRecordingDirectoryProbe{root: root}
+	writer, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("construction changed project root: %v, %v", entries, err)
+	}
+	record := recordings.WorkerRecordingRecord{
+		RecordingID: "wire-durable", WorkerSessionID: "wire-worker",
+		Record: events.Record{
+			ID:         events.RecordID{Topic: "worker-session/wire-worker/events", Position: 1},
+			SourceType: "worker_session_lifecycle", SourceID: "wire-worker", SourceSequence: 1,
+			SourceEventID: "started", SchemaID: "workers.draft.v1",
+			Payload: json.RawMessage(`{"kind":"SESSION","phase":"STARTED","provenance":{"delivery":"SYNTHESIZED","fidelity":"LIFECYCLE_ONLY","nativeEventType":"worker_session_lifecycle","representation":"NOTIFICATION"},"payload":{"status":"STARTING","workerSessionId":"wire-worker"}}`),
+		},
+	}
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	if directory.calls != 1 {
+		t.Fatalf("Getwd calls = %d, want one", directory.calls)
+	}
+	reopened, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), filepath.Join(root, ".you-agent-factory", "worker-recordings"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := reopened.(recordings.WorkerRecordingReader).LoadWorkerRecording(t.Context(), record.RecordingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Sessions) != 1 || len(snapshot.Sessions[0].Records) != 1 || !reflect.DeepEqual(snapshot.Sessions[0].Records[0], record.Record) {
+		t.Fatalf("reopened durable history = %#v", snapshot)
+	}
+}
+
+func TestWorkerRecordingRootFailureAndOverride(t *testing.T) {
+	t.Parallel()
+	fault := errors.New("private directory resolution fault")
+	directory := &workerRecordingDirectoryProbe{err: fault}
+	_, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory})
+	if !errors.Is(err, fault) {
+		t.Fatalf("root resolution error = %v", err)
+	}
+	override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory.calls = 0
+	got, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory, WorkerRecordingWriter: override})
+	if err != nil || got != override || directory.calls != 0 {
+		t.Fatalf("override = %v, error %v, Getwd calls %d", got, err, directory.calls)
+	}
+}
 
 func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
 	t.Parallel()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	runtime "runtime"
 
@@ -80,10 +79,13 @@ func provideWorkerRecordingWriter(
 ) (recordings.WorkerRecordingWriter, error) {
 	writer := edges.WorkerRecordingWriter
 	if writer == nil {
-		var err error
+		projectRoot, err := provideFactorySessionsWorkingDirectory(edges).Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("resolve Worker recording project root: %w", err)
+		}
 		writer, err = recordingswire.NewWorkerRecordingFileWriter(
 			platformreplay.NewLocal(runtime.GOOS),
-			filepath.Join(os.TempDir(), "you-worker-recordings"),
+			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),
 		)
 		if err != nil {
 			return nil, err
