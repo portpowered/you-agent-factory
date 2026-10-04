@@ -507,12 +507,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/worker_sessions/publish_test.go#TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProgress",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/worker_sessions/publish_test.go#TestPublish_CommitsRemainingWorkerVocabulary",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -1713,12 +1707,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/worker_sessions/publish_test.go#TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProgress",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/interface/schema_contract_test.go#TestMockWorkersSchema_StaleStagingDetectedByContractCheck",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2482,12 +2470,6 @@
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
       "target": "pkg/services/worker_sessions/internal/service/internal_test.go#TestPause_ControlOutcomesKeepTheLifecycleTruthful",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/worker_sessions/publish_test.go#TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProgress",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },

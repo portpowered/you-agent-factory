@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -19,15 +18,6 @@ import (
 // supervision supply the resolved Worker identity explicitly to
 // PublishWorkerSessionProgress; the publisher retains source sequence state.
 type ProviderSessionObservationPublisher struct {
-	mu       sync.RWMutex
-	observer Service
-	next     workers.ProgressPublisher
-	// forwardUnassociated lets Runtime-owned attempts preserve the public
-	// Factory response stream while Worker Sessions has no supervision record
-	// for the attempt. Exact references are still validated before this
-	// fallback, and the internal association hand-off is never forwarded.
-	forwardUnassociated bool
-
 	// records serializes Worker record publication per Worker Session. Every
 	// observation a Worker emits is committed to that Worker's own topic, and
 	// PublishRecord requires non-decreasing SourceSequence within one source,
@@ -36,97 +26,12 @@ type ProviderSessionObservationPublisher struct {
 	// two Workers' sequences and reject valid records.
 	records   sync.Mutex
 	sequences map[string]uint64
-	logger    logging.Logger
 }
-
-// ErrRuntimeProgressDirectSupervision preserves the legacy InvokeSession
-// publication path until runtime compatibility invocation uses the keyed
-// opener. Its source sequence remains owned by the original progress bridge.
-var ErrRuntimeProgressDirectSupervision = errors.New("worker sessions: progress belongs to direct supervision")
 
 // ErrRuntimeProgressUnsupervised identifies a runtime outside keyed admission
 // and close. Only this bypass permits unassociated downstream output;
 // a missing or completed attempt in a supervised runtime remains rejected.
 var ErrRuntimeProgressUnsupervised = errors.New("worker sessions: runtime progress bypasses supervision")
-
-// WithUnassociatedProgressFallback keeps provider-authored progress visible
-// when the caller owns attempt supervision and Worker Sessions is present only
-// as a historical association/read model. The exact Provider Session hand-off
-// remains internal; only the downstream response publisher receives the
-// provider's subsequent progress when Worker Sessions cannot associate it to a
-// supervised attempt.
-func (p *ProviderSessionObservationPublisher) WithUnassociatedProgressFallback() *ProviderSessionObservationPublisher {
-	if p == nil {
-		return p
-	}
-	p.mu.Lock()
-	p.forwardUnassociated = true
-	p.mu.Unlock()
-	return p
-}
-
-// Publish commits a detached exact Provider Session observation before it
-// forwards the original Workers progress fragment. This method intentionally
-// has the same no-return signature as workers.ProgressPublisher: rejection is
-// recorded by Worker Sessions' typed operation and safely suppresses only the
-// reference-bearing output rather than fabricating fallback provider work.
-func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressFragment) {
-	if p == nil {
-		return
-	}
-	observer, next, forwardUnassociated := p.dependencies()
-	if !providerFragmentAgrees(fragment) {
-		return
-	}
-	if p.publishRuntimeProgress(observer, next, fragment, forwardUnassociated) {
-		return
-	}
-	if err := p.associateProviderSession(observer, fragment); err != nil {
-		if forwardUnassociated && errors.Is(err, ErrProviderSessionAssociationAttemptMismatch) &&
-			fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
-			next(fragment)
-		}
-		return
-	}
-	if fragment.Kind == workers.ProviderSessionObservedFragmentKind {
-		return
-	}
-	if !p.publishWorkerObservation(observer, fragment) {
-		if forwardUnassociated && next != nil {
-			next(fragment)
-		}
-		return
-	}
-	if next != nil {
-		next(fragment)
-	}
-}
-
-func (p *ProviderSessionObservationPublisher) publishRuntimeProgress(observer Service, next workers.ProgressPublisher, fragment workers.ProgressFragment, forwardUnassociated bool) bool {
-	runtimeID := strings.TrimSpace(fragment.Correlation.RuntimeID)
-	publisher, ok := observer.(interface {
-		PublishRuntimeProgress(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error
-	})
-	if runtimeID == "" || !ok {
-		return false
-	}
-	key := RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: strings.TrimSpace(fragment.Correlation.DispatchID)}
-	err := publisher.PublishRuntimeProgress(context.Background(), key, fragment, next)
-	if errors.Is(err, ErrRuntimeProgressDirectSupervision) {
-		return false
-	}
-	if forwardUnassociated && errors.Is(err, ErrRuntimeProgressUnsupervised) &&
-		fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
-		next(fragment)
-	}
-	return true
-}
-
-func (p *ProviderSessionObservationPublisher) dependencies() (Service, workers.ProgressPublisher, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.observer, p.next, p.forwardUnassociated
-}
 
 func providerFragmentAgrees(fragment workers.ProgressFragment) bool {
 	continuation := cloneContinuation(fragment.Continuation)
@@ -163,37 +68,6 @@ func sameProviderIdentity(left, right string) bool {
 		providers.ID(left).CanonicalSessionProvider(),
 		providers.ID(right).CanonicalSessionProvider(),
 	)
-}
-
-func (p *ProviderSessionObservationPublisher) associateProviderSession(
-	observer Service,
-	fragment workers.ProgressFragment,
-) error {
-	reference := sessionRefFromContinuation(fragment.Continuation)
-	if reference == nil {
-		return nil
-	}
-	if observer == nil {
-		return ErrProviderSessionAssociationAttemptMismatch
-	}
-	_, err := observer.ObserveProviderSession(context.Background(), ProviderSessionObservationRequest{
-		DispatchID: fragment.DispatchID,
-		Reference:  reference.Clone(),
-	})
-	return err
-}
-
-func (p *ProviderSessionObservationPublisher) publishWorkerObservation(
-	observer Service,
-	fragment workers.ProgressFragment,
-) bool {
-	if draft, ok := canonicalDraftFromFragment(fragment); ok {
-		return p.publishCanonicalWorkerRecord(observer, fragment, draft)
-	}
-	if !isWorkerAuthoredFragment(fragment) {
-		return true
-	}
-	return p.publishWorkerRecord(observer, fragment)
 }
 
 // isWorkerAuthoredFragment reports whether a fragment carries output the
@@ -270,120 +144,12 @@ func isSyntheticWorkerProvider(provider string) bool {
 	return strings.EqualFold(strings.TrimSpace(provider), "agent-run")
 }
 
-func ensureProviderBinding(
-	observer Service,
-	req ProviderBindingRequest,
-) (ProviderBindingResult, error) {
-	return observer.EnsureProviderBinding(context.Background(), req)
-}
-
-func resolveWorkerSessionID(observer Service, dispatchID string) (string, error) {
-	return observer.WorkerSessionIDForDispatch(context.Background(), dispatchID)
-}
-
-func suppressProviderOutput(err error) bool {
-	return errors.Is(err, ErrProviderBindingConflict) ||
-		errors.Is(err, ErrProviderBindingAttemptMismatch)
-}
-
-func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
-	observer Service,
-	fragment workers.ProgressFragment,
-	draft workers.Draft,
-) bool {
-	sessionID := strings.TrimSpace(fragment.DispatchID)
-	if observer == nil || sessionID == "" || draft.DispatchID == "" || !providerIdentityAgrees(fragment, draft) {
-		return false
-	}
-	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
-		binding, err := ensureProviderBinding(observer, ProviderBindingRequest{
-			DispatchID: sessionID,
-			Provider:   provider,
-		})
-		if err != nil {
-			p.reportRejectedRecord(sessionID, draft, err)
-			return !suppressProviderOutput(err)
-		}
-		if binding.WorkerSessionID != "" {
-			sessionID = binding.WorkerSessionID
-		}
-	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
-		p.reportRejectedRecord(sessionID, draft, err)
-		return !suppressProviderOutput(err)
-	} else {
-		sessionID = resolved
-	}
-	if err := p.publishWorkerDraft(observer, sessionID, draft); err != nil {
-		return !errors.Is(err, ErrProviderBindingConflict)
-	}
-	return true
-}
-
-// publishWorkerRecord commits one Worker-authored observation to that Worker
-// Session's topic.
-//
-// The fragment names the current Workers dispatch. The bound Worker Sessions
-// service resolves that attempt to the stable Worker Session topic before the
-// record is appended.
-//
-// A rejected record loses that record and nothing else: Publish has a
-// no-return signature by design, and one malformed or late observation must
-// never fail the dispatch that produced it. Rejection is reported rather than
-// swallowed, because a silently dropped Worker observation is precisely the
-// failure this routing exists to remove.
-func (p *ProviderSessionObservationPublisher) publishWorkerRecord(
-	observer Service,
-	fragment workers.ProgressFragment,
-) bool {
-	sessionID := strings.TrimSpace(fragment.DispatchID)
-	if observer == nil || sessionID == "" {
-		return true
-	}
-	draft, ok := draftFromProgressFragment(fragment)
-	if !ok {
-		return true
-	}
-	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
-		binding, err := ensureProviderBinding(observer, ProviderBindingRequest{
-			DispatchID: sessionID,
-			Provider:   provider,
-		})
-		if err != nil {
-			p.reportRejectedRecord(sessionID, draft, err)
-			return !suppressProviderOutput(err)
-		}
-		if binding.WorkerSessionID != "" {
-			sessionID = binding.WorkerSessionID
-		}
-	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
-		p.reportRejectedRecord(sessionID, draft, err)
-		return !errors.Is(err, ErrProviderBindingAttemptMismatch)
-	} else {
-		sessionID = resolved
-	}
-	if err := p.publishWorkerDraft(observer, sessionID, draft); err != nil {
-		return !errors.Is(err, ErrProviderBindingConflict)
-	}
-	return true
-}
-
-func (p *ProviderSessionObservationPublisher) publishWorkerDraft(
-	observer Service,
-	sessionID string,
-	draft workers.Draft,
-) error {
-	return p.publishWorkerDraftContext(context.Background(), observer, sessionID, draft)
-}
-
 func (p *ProviderSessionObservationPublisher) publishWorkerDraftContext(
 	ctx context.Context,
 	observer Service,
 	sessionID string,
 	draft workers.Draft,
 ) error {
-	if observer == nil || strings.TrimSpace(sessionID) == "" {
-		return nil
-	}
 	p.records.Lock()
 	defer p.records.Unlock()
 	if p.sequences == nil {
@@ -402,7 +168,6 @@ func (p *ProviderSessionObservationPublisher) publishWorkerDraftContext(
 		SchemaID:       WorkerObservationSchemaID,
 	})
 	if err != nil {
-		p.reportRejectedRecord(sessionID, draft, err)
 		return err
 	}
 	return nil
@@ -416,54 +181,6 @@ const (
 	WorkerObservationSourceType events.SourceType = "worker_observation"
 	WorkerObservationSchemaID   events.SchemaID   = "workers.draft.v1"
 )
-
-func (p *ProviderSessionObservationPublisher) reportRejectedRecord(
-	sessionID string,
-	draft workers.Draft,
-	err error,
-) {
-	if p == nil || p.logger == nil {
-		return
-	}
-	// A closed publication window is the expected race, not a defect: the
-	// terminal record can commit while a final observation is still in
-	// flight. It is still reported, so a Worker whose output stops early is
-	// diagnosable rather than mysterious.
-	p.logger.Warn(
-		"worker session dropped a worker observation",
-		"worker_session_id", sessionID,
-		"kind", string(draft.Kind),
-		"phase", string(draft.Phase),
-		"outcome", rejectedRecordOutcome(err),
-	)
-}
-
-func rejectedRecordOutcome(err error) string {
-	switch {
-	case errors.Is(err, ErrPublicationNotOpen):
-		return "publication_not_open"
-	case errors.Is(err, ErrOutOfOrderPublication):
-		return "out_of_order"
-	case errors.Is(err, ErrSessionNotFound):
-		return "session_not_found"
-	default:
-		return "rejected"
-	}
-}
-
-// WithLogger attaches the bounded operator-visible reporting surface used when
-// a Worker observation cannot be committed. A nil logger leaves reporting off
-// rather than failing construction, matching this type's existing
-// never-fail-the-dispatch contract.
-func (p *ProviderSessionObservationPublisher) WithLogger(logger logging.Logger) *ProviderSessionObservationPublisher {
-	if p == nil {
-		return p
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.logger = logger
-	return p
-}
 
 // PublishOutcome distinguishes a newly committed Worker record from a
 // duplicate resolved to its originally accepted Events identity. Both

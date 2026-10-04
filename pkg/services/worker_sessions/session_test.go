@@ -590,7 +590,7 @@ func TestInterruptErrorPreservesPhaseCauseAndErrorsIsContract(t *testing.T) {
 
 type providerSessionObservationSpy struct {
 	workersessions.Service
-	requests []workersessions.ProviderSessionObservationRequest
+	requests []workersessions.ProviderSessionAssociationRequest
 	err      error
 }
 
@@ -599,9 +599,9 @@ func continuationFor(reference providers.SessionRef) *providers.ContinuationRef 
 	return &continuation
 }
 
-func (s *providerSessionObservationSpy) ObserveProviderSession(
+func (s *providerSessionObservationSpy) AssociateProviderSession(
 	_ context.Context,
-	req workersessions.ProviderSessionObservationRequest,
+	req workersessions.ProviderSessionAssociationRequest,
 ) (workersessions.ProviderSessionAssociationResult, error) {
 	req.Reference = req.Reference.Clone()
 	s.requests = append(s.requests, req)
@@ -620,29 +620,16 @@ func validPublishRequest() workersessions.PublishRecordRequest {
 	}
 }
 
-func TestProviderSessionObservationPublisher_FallbackNilReceiverIsSafe(t *testing.T) {
-	var publisher *workersessions.ProviderSessionObservationPublisher
-	if got := publisher.WithUnassociatedProgressFallback(); got != nil {
-		t.Fatalf("nil fallback publisher = %v, want nil", got)
-	}
-}
-
 func TestProviderSessionObservationPublisher_SuppressesProviderIdentityDisagreement(t *testing.T) {
 	t.Parallel()
 	observer := &providerSessionObservationSpy{}
-	forwarded := 0
-	publisher := workersessions.ProgressPublisherForTest(observer, func(workers.ProgressFragment) {
-		forwarded++
-	})
-
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID:   "dispatch-1",
-		Provider:     "claude",
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	err := publisher.PublishWorkerSessionProgress(context.Background(), observer, "selected-worker", workers.ProgressFragment{
+		DispatchID: "dispatch-1", Provider: "claude",
 		Continuation: continuationFor(providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}),
 	})
-
-	if len(observer.requests) != 0 || forwarded != 0 {
-		t.Fatalf("contradictory provider identity requests=%#v forwarded=%d, want both suppressed", observer.requests, forwarded)
+	if !errors.Is(err, workersessions.ErrProviderBindingConflict) || len(observer.requests) != 0 {
+		t.Fatalf("contradictory provider identity error=%v requests=%#v, want conflict before effects", err, observer.requests)
 	}
 }
 
@@ -694,5 +681,37 @@ func TestPublish_MalformedCanonicalUsageFallsBackToUsedTokens(t *testing.T) {
 	}
 	if emptyObjectFallback.TotalTokens != 8 {
 		t.Fatalf("empty canonical object fallback total tokens = %d, want 8", emptyObjectFallback.TotalTokens)
+	}
+}
+
+func TestPublish_SelectedProviderAssociationClonesExactReference(t *testing.T) {
+	t.Parallel()
+	spy := &providerSessionObservationSpy{}
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session"}
+	fragment := workers.ProgressFragment{
+		DispatchID: "physical-attempt", Kind: workers.ProviderSessionObservedFragmentKind,
+		Continuation: continuationFor(reference),
+		Correlation:  workers.ExecutionCorrelation{DispatchID: "logical-dispatch", AttemptID: "physical-attempt"},
+	}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", fragment); err != nil {
+		t.Fatal(err)
+	}
+	fragment.Continuation.ProviderSessionID = "caller-mutated"
+	if len(spy.requests) != 1 || spy.requests[0].WorkerSessionID != "selected-worker" || spy.requests[0].DispatchID != "logical-dispatch" || spy.requests[0].Reference != reference {
+		t.Fatalf("association = %#v, want selected Worker, logical dispatch and detached exact reference", spy.requests)
+	}
+	// Incomplete references cannot establish a resumable association.
+	fragment.Continuation = &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", fragment); err != nil {
+		t.Fatal(err)
+	}
+	if len(spy.requests) != 1 {
+		t.Fatalf("incomplete reference was associated: %#v", spy.requests)
+	}
+	spy.err = workersessions.ErrProviderSessionAssociationAttemptMismatch
+	fragment.Continuation = continuationFor(reference)
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", fragment); !errors.Is(err, spy.err) {
+		t.Fatalf("association rejection = %v, want %v", err, spy.err)
 	}
 }

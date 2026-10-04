@@ -146,23 +146,8 @@ func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*
 		resolved, err := executeRequestFromSessionDispatch(request)
 		return &supervision.progress, ownerID, resolved.Correlation, err
 	}
-	// Compatibility InvokeSession still owns its directly supervised attempt
-	// until the atomic opener cutover. Check its supplied runtime correlation
-	// before allowing the historical dispatch index to resolve that route.
-	ownerID = r.dispatchOwners[key.DispatchID]
-	supervision := r.supervisions[ownerID]
 	_, supervisedRuntime := r.runtimeAdmissions[key.RuntimeID]
 	r.mu.RUnlock()
-	if supervision != nil {
-		supervision.mu.Lock()
-		request := cloneWorkstationDispatchRequest(supervision.execution)
-		attemptID := supervision.dispatchID
-		supervision.mu.Unlock()
-		resolved, err := executeRequestFromSessionDispatch(request)
-		if err == nil && resolved.Correlation.RuntimeID == key.RuntimeID && attemptID == key.DispatchID {
-			return nil, "", workers.ExecutionCorrelation{}, workersessions.ErrRuntimeProgressDirectSupervision
-		}
-	}
 	if !supervisedRuntime {
 		return nil, "", workers.ExecutionCorrelation{}, errors.Join(workersessions.ErrProviderSessionAssociationAttemptMismatch, workersessions.ErrRuntimeProgressUnsupervised)
 	}
