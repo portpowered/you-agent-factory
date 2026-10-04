@@ -296,10 +296,7 @@ func provideSessionStartRequestFactory() runcli.SessionStartRequestFactory {
 // invocation data and observation fallbacks; they do not re-read Edges or
 // manufacture replacement runners.
 func provideFactoryRuntimeClock(edges serviceedges.Edges) factoryruntime.Clock {
-	if edges.Clock != nil {
-		return edges.Clock
-	}
-	return platformclock.Real{}
+	return edges.Clock
 }
 
 func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) factorysessionwire.ProviderOverrideService {

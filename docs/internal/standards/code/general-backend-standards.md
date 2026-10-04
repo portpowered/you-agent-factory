@@ -198,14 +198,39 @@ Default review thresholds:
 - Files that accumulate multiple unrelated responsibilities **SHOULD** be split.
 - New package-level variables **SHOULD** be reviewed with extra scrutiny.
 
-Repository package-size policy:
+Repository Go size and complexity enforcement:
 
-- Checked backend package directories under `pkg/` **MUST NOT** contain more than 15 counted Go files.
-- Counted files are hand-maintained `.go` files in the same package directory, including package-local `_test.go` files.
-- Generated Go files, vendored code, and non-owned fixture roots such as `testdata` are excluded from the package file-count gate.
-- When `make pkg-file-count` or `make lint` reports an oversized package, contributors **SHOULD** split files by durable package responsibility or remove dead files. Broad permanent exceptions for oversized `pkg/` packages are prohibited.
-- Existing audited package-size debt **MAY** remain only in the exact deletion-only baseline, which blocks new oversized packages, count increases, and stale entries while requiring every reduction to lower or remove the recorded count.
-- Run `make pkg-file-count` for the focused package-size check, or `make lint` before review for the full backend lint path that includes this gate.
+- `make golangci` runs pinned golangci-lint v2.11.4 and the shared `repolint`
+  analyzer. Its built-in size rules apply to handwritten Go under `cmd/`,
+  `internal/`, `pkg/`, and `tests/`, including `_test.go` files.
+- Revive `file-length-limit` allows 1000 lines after excluding comment and
+  blank lines. Revive `function-length` allows 100 physical lines inside a
+  function's braces (including comments and blanks); statement counting is
+  disabled. Gocyclo reports cyclomatic complexity greater than 15.
+- Generated files are excluded through the committed configuration. Only the
+  two named revive rules are enabled; revive's default rules are disabled.
+- The changed-line ratchet uses the merge base with `origin/main` and requires
+  fetched history. The canonical target checks that prerequisite explicitly,
+  including for clean input. It accepts unchanged debt and keeps
+  `whole-files: false`.
+  Function length and complexity report at the declaration, so body-only
+  growth can be filtered when that line is unchanged. In the pinned revive
+  version, file length reports at the file's final line. Moving or changing a
+  reported location can expose old debt again.
+- A necessary exemption **MUST** use a narrowly scoped `//nolint:revive` or
+  `//nolint:gocyclo` with an actionable reason. The former size checkers and
+  their exemption-budget ledger are retired; their old directives are inert.
+- `make lint-migration-smoke LINT_MIGRATION_COHORT=size` exercises the actual
+  pinned configuration in disposable modules and git histories, observing
+  accepted limits, deliberate violations, generated exclusions, narrow
+  suppression, ratchet behavior, and configuration/history errors. This is a
+  lint/static gate rather than an application functional test.
+
+Repository package-shape policy:
+
+- Contributors **SHOULD** split packages by durable responsibility and remove dead files. A fixed per-directory Go file budget is no longer enforced.
+- The golangci migration retires `pkg-file-count`, its filesystem walker, and `backend-package-file-count.json`; file count is not a replacement analyzer rule.
+- File length, function length, and complexity remain governed by the pinned built-in rules above. Dependency direction and service shape retain their separate lint gates.
 
 
 ### 6. Error Handling and Contracts

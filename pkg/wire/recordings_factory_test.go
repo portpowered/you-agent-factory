@@ -121,7 +121,7 @@ func TestRecordingClockPreservesSelectedSourceAndRejectsTypedNil(t *testing.T) {
 	if err != nil || clock != selected {
 		t.Fatalf("recording clock = %v, %v; want selected process source", clock, err)
 	}
-	if clock, err := provideRecordingClock(provideFactoryRuntimeClock(serviceedges.Edges{})); err != nil || clock == nil {
+	if clock, err := provideRecordingClock(provideFactoryRuntimeClock(selectedTestTimeEdges(serviceedges.Edges{}))); err != nil || clock == nil {
 		t.Fatalf("default recording clock = %v, %v; want explicit process source", clock, err)
 	}
 	var absent *nilRecordingClock
