@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -324,7 +325,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 	state := NewSessionState(registry, responseRegistry, in.clock, in.eventIDs, in.sessionIDs, responses)
 	streams := NewStreamManager(state, NewStreamObserver(), responseRegistry, responses)
 	return NewRuntimeAssembly(
-		registry, state, streams,
+		registry, state, streams, NewInvocationAuthority(state, platformclock.Real{}, nil),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.interpolation,

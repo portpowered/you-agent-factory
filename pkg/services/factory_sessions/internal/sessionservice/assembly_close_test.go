@@ -188,7 +188,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}

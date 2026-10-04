@@ -29,6 +29,7 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams legacyservice.StreamManager,
+	authority legacyservice.InvocationAuthority,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -47,6 +48,9 @@ func NewAssembly(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (roles.RuntimeAssembly, error) {
+	if authority == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: invocation query authority is required")
+	}
 	if err := validateRootDependencies(
 		sessionResultProjection,
 		eventIDs,
@@ -65,7 +69,7 @@ func NewAssembly(
 		return nil, err
 	}
 	assemblyRole := legacyservice.NewAssembly(
-		registry, state, streams,
+		registry, state, streams, authority,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,

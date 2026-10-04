@@ -9,6 +9,7 @@ package wire
 import (
 	"fmt"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -86,6 +87,14 @@ type ResponseStreamRegistry = responsestream.Registry
 // SessionState is the independent live session authority.
 type SessionState = sessionruntime.Service
 
+// InvocationAuthority selects the addressed generation for invocation queries.
+type InvocationAuthority = sessionservice.InvocationAuthority
+
+// NewInvocationAuthority constructs the independent invocation query adapter.
+func NewInvocationAuthority(state *SessionState, scheduler platformclock.TimerSource, projector factoryruntime.WorldStateProjector) InvocationAuthority {
+	return sessionservice.NewInvocationAuthority(state, scheduler, projector)
+}
+
 // StreamManager supplies provider progress and dispatch completion factories.
 type StreamManager = sessionservice.StreamManager
 
@@ -124,6 +133,7 @@ func NewRuntimeAssembly(
 	registry SessionRegistry,
 	state *SessionState,
 	streams StreamManager,
+	authority InvocationAuthority,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -143,7 +153,7 @@ func NewRuntimeAssembly(
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
-		registry, state, streams,
+		registry, state, streams, authority,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,

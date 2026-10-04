@@ -590,10 +590,16 @@ func provideFactorySessionResponseEventRetentionLimits(
 	return edges.FactorySessionResponseEventRetentionLimits
 }
 
+// provideInvocationWorldStateProjector binds the already-injected Recordings projection.
+func provideInvocationWorldStateProjector(projections recordings.ProjectionService) factoryruntime.WorldStateProjector {
+	return projections.ReconstructFactoryWorldState
+}
+
 func provideFactorySessionsAssembly(
 	registry factorysessionwire.SessionRegistry,
 	state *factorysessionwire.SessionState,
 	streams factorysessionwire.StreamManager,
+	authority factorysessionwire.InvocationAuthority,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
@@ -611,7 +617,7 @@ func provideFactorySessionsAssembly(
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, func() factoryruntime.JavaScriptCheckpointStore {
+	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, authority, func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
 }

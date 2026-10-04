@@ -36,6 +36,7 @@ type Assembly struct {
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
+	invocationAuthority          InvocationAuthority
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
@@ -72,6 +73,7 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams StreamManager,
+	authority InvocationAuthority,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -95,6 +97,7 @@ func NewAssembly(
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
+		invocationAuthority:          authority,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
@@ -471,7 +474,7 @@ func (a *Assembly) Complete(
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	gateway.bindRecordedSessionHistory(a.ListSessions)
-	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
+	invoker, err := NewInvocationOwner(runtime, a.invocationAuthority, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}

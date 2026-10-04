@@ -58,6 +58,8 @@ var servicesSet = wire.NewSet(
 	factorysessionwire.NewSessionRegistry,
 	factorysessionwire.NewResponseStreamRegistry,
 	factorysessionwire.NewSessionState,
+	factorysessionwire.NewInvocationAuthority,
+	provideInvocationWorldStateProjector,
 	factorysessionwire.NewStreamObserver,
 	factorysessionwire.NewStreamManager,
 	provideFactorySessionHTTPRequestPreparation,
