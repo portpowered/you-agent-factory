@@ -1195,6 +1195,10 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata",
+      "minimum": 78.57
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service",
       "minimum": 80.22
     },
@@ -1204,14 +1208,6 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire",
-      "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/internal/service",
-      "minimum": 78.57
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire",
       "minimum": 100.00
     },
     {

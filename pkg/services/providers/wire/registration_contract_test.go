@@ -362,7 +362,7 @@ func newTestProvidersService(probe CatalogProbeOperation, scheduler platformcloc
 	if err != nil {
 		return nil, err
 	}
-	executionService, err := NewExecutionService(catalogService, registrations)
+	executionService, err := NewAttemptExecutionService(catalogService, registrations)
 	if err != nil {
 		return nil, err
 	}

@@ -61,7 +61,7 @@ func newConfiguredProvidersService(
 	if err != nil {
 		return nil, err
 	}
-	executionService, err := providerswire.NewExecutionService(catalogService, registrations)
+	executionService, err := providerswire.NewAttemptExecutionService(catalogService, registrations)
 	if err != nil {
 		return nil, err
 	}

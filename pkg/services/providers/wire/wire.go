@@ -181,8 +181,8 @@ func NewACPService(integrations []providers.ACPIntegration, commandFactory platf
 	return acpwire.NewService(integrations, commandFactory, locator, stdioPipes, scheduler, logger)
 }
 
-// NewExecutionService constructs only normalized execution over completed routes.
-func NewExecutionService(catalogService CatalogService, registrations []ExecutionRegistration) (ExecutionService, error) {
+// NewAttemptExecutionService constructs only normalized execution over completed routes.
+func NewAttemptExecutionService(catalogService CatalogService, registrations []ExecutionRegistration) (ExecutionService, error) {
 	return executionwire.NewService(catalogService, registrations...)
 }
 
