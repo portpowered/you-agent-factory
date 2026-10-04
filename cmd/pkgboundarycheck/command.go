@@ -135,7 +135,6 @@ func countBlockingViolations(findings scanResult) int {
 func countAlwaysBlockingViolations(findings scanResult) int {
 	return len(findings.rootPackageFindings) +
 		len(findings.retiredPackageRootFindings) +
-		len(findings.migrationShimFindings) +
 		len(findings.handwrittenGeneratedFindings) +
 		len(findings.transportBehaviorFindings) +
 		len(findings.staleTransportBehaviorEntries) +
@@ -161,11 +160,6 @@ func countProductionBoundaryViolations(findings scanResult) int {
 func countProductionBoundaryImports(findings scanResult) int {
 	count := 0
 	count += countProductionBoundaryFindings(
-		findings.retiredPackageImportFindings,
-		func(finding retiredPackageImportFinding) boundarySourceClass { return finding.class },
-		func(finding retiredPackageImportFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
 		findings.applicationGraphImportFindings,
 		func(finding applicationGraphImportFinding) boundarySourceClass { return finding.class },
 		func(finding applicationGraphImportFinding) string { return finding.filePath },
@@ -189,11 +183,6 @@ func countProductionBoundaryImports(findings scanResult) int {
 		findings.serviceConstructionFindings,
 		func(finding serviceConstructionFinding) boundarySourceClass { return finding.class },
 		func(finding serviceConstructionFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
-		findings.transportImplementationFindings,
-		func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class },
-		func(finding transportServiceImplementationFinding) string { return finding.filePath },
 	)
 	count += countProductionBoundaryFindings(
 		findings.externalImplementationFindings,

@@ -107,27 +107,6 @@ func scanConvergedServiceSubpackageFile(repoRoot, path string) ([]transportServi
 			continue
 		}
 
-		matchedExplicitPolicy := false
-		for privateRoot := range convergedServiceSubpackageRoots {
-			if repositoryPath != privateRoot && !strings.HasPrefix(repositoryPath, privateRoot+"/") {
-				continue
-			}
-			matchedExplicitPolicy = true
-			findings = append(findings, transportServiceImplementationFinding{
-				importPath: importPath,
-				filePath:   filePath,
-				class:      classifyBoundarySource(filePath),
-			})
-			break
-		}
-		if matchedExplicitPolicy {
-			continue
-		}
-		if strings.HasPrefix(filePath, "pkg/transports/") &&
-			matchesAnyPackageRoot(repositoryPath, transportPrivateServiceSubpackages) {
-			// The transport-specific scanner owns this diagnostic.
-			continue
-		}
 		findings = append(findings, transportServiceImplementationFinding{
 			importPath: importPath,
 			filePath:   filePath,
@@ -559,78 +538,6 @@ func isMatchingServiceOwnedTransportConsumer(filePath, importedRepositoryPath st
 	}
 	consumerRoot := "pkg/transports/" + protocol
 	return filePath == consumerRoot || strings.HasPrefix(filePath, consumerRoot+"/")
-}
-
-func matchesAnyPackageRoot(repositoryPath string, roots []string) bool {
-	for _, root := range roots {
-		if repositoryPath == root || strings.HasPrefix(repositoryPath, root+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-func scanTransportServiceImplementationImports(repoRoot string) ([]transportServiceImplementationFinding, error) {
-	transportRoot := filepath.Join(repoRoot, "pkg", "transports")
-	var findings []transportServiceImplementationFinding
-	err := filepath.WalkDir(transportRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
-			return filepath.SkipDir
-		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
-			return nil
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if bytesContainGeneratedMarker(content) {
-			return nil
-		}
-		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly|parser.ParseComments)
-		if err != nil {
-			return err
-		}
-		filePath, err := filepath.Rel(repoRoot, path)
-		if err != nil {
-			return err
-		}
-		filePath = filepath.ToSlash(filePath)
-		for _, importSpec := range parsedFile.Imports {
-			importPath, err := strconv.Unquote(importSpec.Path.Value)
-			if err != nil {
-				continue
-			}
-			repositoryPath := strings.TrimPrefix(importPath, repositoryImportPrefix)
-			for _, privateRoot := range transportPrivateServiceSubpackages {
-				if repositoryPath == privateRoot || strings.HasPrefix(repositoryPath, privateRoot+"/") {
-					findings = append(findings, transportServiceImplementationFinding{
-						importPath: importPath,
-						filePath:   filePath,
-						class:      classifyBoundarySource(filePath),
-					})
-					break
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("scan transport service implementation imports: %w", err)
-	}
-	slices.SortFunc(findings, func(left, right transportServiceImplementationFinding) int {
-		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
-			return comparison
-		}
-		return strings.Compare(left.importPath, right.importPath)
-	})
-	return findings, nil
 }
 
 func scanPeerServiceImports(repoRoot string) ([]peerServiceImportFinding, error) {

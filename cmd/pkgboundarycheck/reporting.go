@@ -17,8 +17,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 		fmt.Fprintln(writer, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
 	writeRetiredPackageRootFindings(writer, findings.retiredPackageRootFindings)
-	writeRetiredPackageImportFindings(writer, findings.retiredPackageImportFindings)
-	writeMigrationShimBlockingFindings(writer, findings.migrationShimFindings)
 	writeApplicationGraphImportFindings(writer, findings.applicationGraphImportFindings)
 	writeHandwrittenGeneratedFindings(writer, findings.handwrittenGeneratedFindings)
 	writeDomainTransportImportFindings(writer, findings.domainTransportFindings)
@@ -34,7 +32,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
 	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
-	writeTransportServiceImplementationFindings(writer, findings.transportImplementationFindings)
 	writeExternalServiceImplementationFindings(writer, findings.externalImplementationFindings)
 	writeTransportBehaviorFindings(writer, findings.transportBehaviorFindings)
 	writeTransportBehaviorFindings(writer, findings.recordedTransportBehaviorFindings)
@@ -86,37 +83,12 @@ func writeRetiredPackageRootFindings(writer io.Writer, findings []retiredPackage
 	}
 }
 
-func writeRetiredPackageImportFindings(writer io.Writer, findings []retiredPackageImportFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited retired package import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
-		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
-		fmt.Fprintf(writer, "  remediation: import %s directly; do not recreate or depend on %s.\n", finding.canonicalOwner, finding.packagePath)
-	}
-}
-
 func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
 	descriptions := make([]string, 0, len(policy.generatedCodeExceptions))
 	for _, exception := range policy.generatedCodeExceptions {
 		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", filepath.ToSlash(exception.packagePath), exception.scope))
 	}
 	return descriptions
-}
-
-func writeMigrationShimBlockingFindings(writer io.Writer, findings []migrationShimFinding) {
-	if len(findings) == 0 {
-		return
-	}
-
-	for _, finding := range findings {
-		canonicalTarget := finding.canonicalTarget
-		if canonicalTarget == "" {
-			canonicalTarget = "not detected"
-		}
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] blocked migration-only compatibility shim: %s\n", finding.packagePath)
-		fmt.Fprintf(writer, "  marker: %s\n", finding.marker)
-		fmt.Fprintf(writer, "  canonical target: %s\n", canonicalTarget)
-		fmt.Fprintln(writer, "  remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.")
-	}
 }
 
 func writeApplicationGraphImportFindings(writer io.Writer, findings []applicationGraphImportFinding) {
@@ -261,14 +233,6 @@ func writeServiceConstructionBaselineSummary(writer io.Writer, count int) {
 		count,
 	)
 	fmt.Fprintln(writer, "  deletion gate: inject each service role from pkg/wire or move the invariant to its owning service, then delete the exact baseline entry.")
-}
-
-func writeTransportServiceImplementationFindings(writer io.Writer, findings []transportServiceImplementationFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited transport service implementation import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
-		fmt.Fprintln(writer, "  reason: transports may consume only service root contracts or explicitly public service subservices.")
-		fmt.Fprintln(writer, "  remediation: publish the required capability at its service boundary and keep representation mapping in the transport.")
-	}
 }
 
 func writeExternalServiceImplementationFindings(writer io.Writer, findings []transportServiceImplementationFinding) {

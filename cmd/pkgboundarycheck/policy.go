@@ -2,18 +2,12 @@ package main
 
 import (
 	"fmt"
-	"go/parser"
-	"go/token"
-	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 )
 
 const defaultScanRoot = "pkg"
-const batch001MigrationShimMarker = "Batch 001 compatibility shim"
-const factoryRuntimeImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire"
 const transportImportPrefix = "github.com/portpowered/infinite-you/pkg/transports/"
 const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
@@ -70,108 +64,6 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 
 var protectedTransportIndependentDomainRoots = []string{
 	"pkg/services",
-}
-
-var transportPrivateServiceSubpackages = []string{
-	"pkg/services/factory_runtime/internal/services/orchestration/engine",
-	"pkg/services/factory_runtime/internal/services/orchestration/runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/scheduler",
-	"pkg/services/factory_runtime/internal/services/orchestration/state",
-	"pkg/services/factory_runtime/internal/services/orchestration/subsystems",
-	"pkg/services/factory_runtime/internal/services/orchestration/throttle",
-	"pkg/services/factory_runtime/internal/services/orchestration/token",
-	"pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
-	"pkg/services/factory_runtime/internal/services/orchestration/context",
-	"pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
-	"pkg/services/factory_runtime/internal/services/orchestration/metrics",
-	"pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
-	"pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
-	"pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
-	"pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
-	"pkg/services/factory_runtime/internal/services/orchestration/javascript",
-	"pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
-	"pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
-	"pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
-	"pkg/services/factory_sessions/internal/runtime",
-	"pkg/services/factory_sessions/internal/runtimebinding",
-	"pkg/services/factory_sessions/internal/sessionservice",
-	"pkg/services/recordings/events",
-	"pkg/services/recordings/internal/events",
-	"pkg/services/workers/runner",
-	"pkg/services/workers/service",
-	"pkg/services/workers/services",
-}
-
-// convergedServiceSubpackageRoots records service implementation/compatibility
-// paths whose external callers have been migrated to the owning service root.
-// Packages within the same service may continue using these paths internally.
-var convergedServiceSubpackageRoots = map[string]string{
-	"pkg/services/factory_definitions/internal/contracts":                                           "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope":         "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation":  "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput":         "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype":       "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/compilation/loadedsource":                   "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/catalog/persistence":                        "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy":             "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig":         "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/catalog/resource":                           "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/snapshots_portability/capture":              "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability":         "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution":     "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation":          "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers":           "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy":          "factory_definitions",
-	"pkg/services/factory_runtime/internal/services/orchestration/state":                            "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/token":                            "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/metrics":                          "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/instance_host/build":                            "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore":   "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary": "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/context":                          "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/definitionmapping":                "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/engine":                           "factory_runtime",
-	"pkg/services/automations/internal/services/filesystem_watchers":                                "automations",
-	"pkg/services/automations/internal/services/filesystem_watchers/internal/service":               "automations",
-	"pkg/services/automations/internal/services/filesystem_watchers/wire":                           "automations",
-	"pkg/services/factory_runtime/internal":                                                         "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner":               "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract":             "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/replayhooks":                      "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/runtime":                          "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/runtimecontract":                  "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/scheduler":                        "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/subsystems":                       "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/throttle":                         "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/token_transformer":                "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/tooling":                          "factory_runtime",
-	"pkg/services/factory_sessions/internal/invocation":                                             "factory_sessions",
-	"pkg/services/factory_sessions/internal/cursors":                                                "factory_sessions",
-	"pkg/services/factory_sessions/internal/execution":                                              "factory_sessions",
-	"pkg/services/factory_sessions/internal/logicaltarget":                                          "factory_sessions",
-	"pkg/services/factory_sessions/internal/responseevents":                                         "factory_sessions",
-	"pkg/services/factory_sessions/internal/responseeventstore":                                     "factory_sessions",
-	"pkg/services/factory_sessions/internal/responsestream":                                         "factory_sessions",
-	"pkg/services/factory_sessions/internal/runtime":                                                "factory_sessions",
-	"pkg/services/factory_sessions/internal/runtimebinding":                                         "factory_sessions",
-	"pkg/services/factory_definitions/internal/services/validation/impl":                            "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/snapshots_portability/editable":             "factory_definitions",
-	"pkg/services/factory_definitions/scaffold":                                                     "factory_definitions",
-	"pkg/services/factory_definitions/service":                                                      "factory_definitions",
-	"pkg/services/recordings/events":                                                                "recordings",
-	"pkg/services/recordings/internal/events":                                                       "recordings",
-	"pkg/services/recordings/internal/projections":                                                  "recordings",
-	"pkg/services/recordings/internal/projections/dashboard":                                        "recordings",
-	"pkg/services/recordings/internal/artifacts":                                                    "recordings",
-	"pkg/services/recordings/internal/replay":                                                       "recordings",
-	"pkg/services/recordings/artifacts":                                                             "recordings",
-	"pkg/services/recordings/replay":                                                                "recordings",
-	"pkg/services/recordings/service":                                                               "recordings",
-	"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":               "providers",
-	"pkg/services/workers/invocation":                                                               "workers",
-	"pkg/services/workers/prompting":                                                                "workers",
-	"pkg/services/automations/internal/services/hosted_sources":                                     "automations",
-	"pkg/services/workers/services/testing":                                                         "workers",
 }
 
 var factoryRetiredPackageRoots = []retiredPackageRoot{
@@ -243,17 +135,14 @@ var approvedApplicationGraphImporters = []string{
 // request-scoped compatibility adapter and must not add a provider protocol,
 // catalog, adapter, session, or native execution owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
-	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":   {},
-	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                     {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
-	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                            {},
-	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                           {},
-	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":     {},
-	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                {},
-	"pkg/services/recordings/internal/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                             {},
-	"pkg/services/recordings/internal/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                 {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                    {},
+	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                        {},
+	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                       {},
+	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/wire": {},
+	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                            {},
+	"pkg/services/recordings/internal/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                         {},
+	"pkg/services/recordings/internal/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                            {},
 }
 
 // publicExternalEffectContractImports are intentionally declared beside the
@@ -263,10 +152,8 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 // Providers owns the durable public effect port; Workers consumes it through
 // its request-scoped compatibility adapter.
 var publicExternalEffectContractImports = map[string]struct{}{
-	providersLeafEffectContractImport: {},
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
-	"github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                     {},
-	"github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/wire": {},
+	"github.com/portpowered/infinite-you/pkg/services/automations":    {},
 }
 
 const (
@@ -275,16 +162,8 @@ const (
 
 type boundaryPolicy struct {
 	approvedProductPackageFamilies []string
-	migrationPackageExceptions     []migrationPackageException
 	generatedCodeExceptions        []generatedCodeException
 	domainTransportExceptions      []string
-}
-
-type migrationPackageException struct {
-	packagePath  string
-	targetOwner  string
-	workItem     string
-	deletionGate string
 }
 
 type generatedCodeException struct {
@@ -303,14 +182,6 @@ var approvedProductPackageFamilies = []string{
 	"pkg/wire",
 }
 
-const (
-	batch006TransportFamilyMove = "Batch 006 — Transport family move"
-	batch006WorkFamilyMove      = "Batch 006 — Work family move"
-	batch006PlatformFamilyMove  = "Batch 006 — Platform family move"
-)
-
-var documentedMigrationPackageExceptions []migrationPackageException
-
 var documentedGeneratedCodeExceptions = []generatedCodeException{
 	{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
 	{packagePath: "pkg/transports/http/generated", scope: generatedCodeExceptionScopeRoot},
@@ -319,7 +190,6 @@ var documentedGeneratedCodeExceptions = []generatedCodeException{
 func defaultBoundaryPolicy() boundaryPolicy {
 	return boundaryPolicy{
 		approvedProductPackageFamilies: slices.Clone(approvedProductPackageFamilies),
-		migrationPackageExceptions:     slices.Clone(documentedMigrationPackageExceptions),
 		generatedCodeExceptions:        slices.Clone(documentedGeneratedCodeExceptions),
 		domainTransportExceptions:      slices.Clone(documentedDomainTransportExceptions),
 	}
@@ -331,9 +201,6 @@ func defaultBoundaryPolicy() boundaryPolicy {
 var documentedDomainTransportExceptions []string
 
 func validatePolicy(policy boundaryPolicy) error {
-	if err := validateMigrationPackageExceptions(policy); err != nil {
-		return err
-	}
 	for _, exception := range policy.generatedCodeExceptions {
 		if strings.TrimSpace(exception.packagePath) == "" {
 			return fmt.Errorf("generated-code exception path must not be empty")
@@ -341,128 +208,13 @@ func validatePolicy(policy boundaryPolicy) error {
 		if slices.Contains(policy.approvedProductPackageFamilies, exception.packagePath) {
 			return fmt.Errorf("generated-code exception %s must not also be an approved product package family", exception.packagePath)
 		}
-		if containsMigrationPackageException(policy.migrationPackageExceptions, exception.packagePath) {
-			return fmt.Errorf("generated-code exception %s must not also be a migration-only package exception", exception.packagePath)
-		}
 	}
 	return nil
-}
-
-func validateMigrationPackageExceptions(policy boundaryPolicy) error {
-	for _, exception := range policy.migrationPackageExceptions {
-		if strings.TrimSpace(exception.packagePath) == "" {
-			return fmt.Errorf("migration-only package exception path must not be empty")
-		}
-		if slices.Contains(policy.approvedProductPackageFamilies, exception.packagePath) {
-			return fmt.Errorf("migration-only package exception %s must not also be an approved product package family", exception.packagePath)
-		}
-		if strings.TrimSpace(exception.targetOwner) == "" {
-			return fmt.Errorf("migration-only package exception %s target owner must not be empty", exception.packagePath)
-		}
-		if !slices.Contains(policy.approvedProductPackageFamilies, exception.targetOwner) &&
-			!containsMigrationPackageException(policy.migrationPackageExceptions, exception.targetOwner) {
-			return fmt.Errorf("migration-only package exception %s target owner %s must be an approved or documented migration package family", exception.packagePath, exception.targetOwner)
-		}
-		expectedTarget, active := activeMigrationTarget(exception.workItem)
-		if !active {
-			return fmt.Errorf("migration-only package exception %s must name a recognized active work item", exception.packagePath)
-		}
-		if exception.targetOwner != expectedTarget {
-			return fmt.Errorf("migration-only package exception %s work item %q targets %s, not %s", exception.packagePath, exception.workItem, expectedTarget, exception.targetOwner)
-		}
-		if strings.TrimSpace(exception.deletionGate) == "" {
-			return fmt.Errorf("migration-only package exception %s deletion gate must not be empty", exception.packagePath)
-		}
-	}
-	return nil
-}
-
-func activeMigrationTarget(workItem string) (string, bool) {
-	switch workItem {
-	case batch006TransportFamilyMove:
-		return "pkg/transports", true
-	case batch006WorkFamilyMove:
-		return "pkg/services", true
-	case batch006PlatformFamilyMove:
-		return "pkg/platform", true
-	default:
-		return "", false
-	}
-}
-
-func containsMigrationPackageException(exceptions []migrationPackageException, packagePath string) bool {
-	return slices.ContainsFunc(exceptions, func(exception migrationPackageException) bool {
-		return exception.packagePath == packagePath
-	})
 }
 
 func isAllowedRootPackageFamily(policy boundaryPolicy, packageRoot string, packagePath string) bool {
 	return slices.Contains(policy.approvedProductPackageFamilies, packagePath) ||
-		containsMigrationPackageException(policy.migrationPackageExceptions, packagePath) ||
 		slices.Contains(directRootGeneratedCodeExceptionPaths(policy, packageRoot), packagePath)
-}
-
-func detectMigrationShimFinding(repoRoot string, packagePath string) (migrationShimFinding, bool, error) {
-	packageDir := filepath.Join(repoRoot, filepath.FromSlash(packagePath))
-	entries, err := os.ReadDir(packageDir)
-	if err != nil {
-		return migrationShimFinding{}, false, fmt.Errorf("read migration shim package %s: %w", packagePath, err)
-	}
-
-	finding := migrationShimFinding{packagePath: packagePath}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
-			continue
-		}
-
-		goFilePath := filepath.Join(packageDir, entry.Name())
-		marker, canonicalTarget, err := readMigrationShimSignals(goFilePath)
-		if err != nil {
-			return migrationShimFinding{}, false, err
-		}
-		if finding.marker == "" {
-			finding.marker = marker
-		}
-		if finding.canonicalTarget == "" {
-			finding.canonicalTarget = canonicalTarget
-		}
-		if finding.marker != "" && finding.canonicalTarget != "" {
-			return finding, true, nil
-		}
-	}
-
-	return finding, finding.marker != "", nil
-}
-
-func readMigrationShimSignals(goFilePath string) (string, string, error) {
-	content, err := os.ReadFile(goFilePath)
-	if err != nil {
-		return "", "", fmt.Errorf("read migration shim file %s: %w", filepath.ToSlash(goFilePath), err)
-	}
-
-	marker := ""
-	if strings.Contains(string(content), batch001MigrationShimMarker) {
-		marker = batch001MigrationShimMarker
-	}
-	return marker, canonicalTargetImport(content), nil
-}
-
-func canonicalTargetImport(content []byte) string {
-	parsedFile, err := parser.ParseFile(token.NewFileSet(), "", content, parser.ImportsOnly)
-	if err != nil {
-		return ""
-	}
-
-	for _, importSpec := range parsedFile.Imports {
-		importPath, err := strconv.Unquote(importSpec.Path.Value)
-		if err != nil {
-			continue
-		}
-		if importPath == factoryRuntimeImportPath {
-			return importPath
-		}
-	}
-	return ""
 }
 
 func directRootGeneratedCodeExceptionPaths(policy boundaryPolicy, packageRoot string) []string {

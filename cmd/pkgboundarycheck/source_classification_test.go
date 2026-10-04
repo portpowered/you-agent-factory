@@ -120,14 +120,6 @@ func TestPackageBoundaryDependencyScansRetainTestOnlyEdges(t *testing.T) {
 		t.Fatalf("domain transport classes = %s, want production=1 test-only=1", got)
 	}
 
-	transport, err := scanTransportServiceImplementationImports(repoRoot)
-	if err != nil {
-		t.Fatalf("scanTransportServiceImplementationImports() error = %v", err)
-	}
-	if got := countSourceClasses(transport, func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class }, func(finding transportServiceImplementationFinding) string { return finding.filePath }); got != "production=1 test-only=1" {
-		t.Fatalf("transport implementation classes = %s, want production=1 test-only=1", got)
-	}
-
 	support, err := scanSupportServiceSubpackageImports(repoRoot)
 	if err != nil {
 		t.Fatalf("scanSupportServiceSubpackageImports() error = %v", err)

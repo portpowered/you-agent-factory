@@ -68,9 +68,6 @@ func (counts *classifiedDependencyViolationCounts) add(class boundarySourceClass
 
 func countClassifiedDependencyViolations(findings scanResult) classifiedDependencyViolationCounts {
 	var counts classifiedDependencyViolationCounts
-	for _, finding := range findings.retiredPackageImportFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
 	for _, finding := range findings.applicationGraphImportFindings {
 		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
 	}
@@ -87,9 +84,6 @@ func countClassifiedDependencyViolations(findings scanResult) classifiedDependen
 		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
 	}
 	for _, finding := range findings.serviceConstructionFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
-	for _, finding := range findings.transportImplementationFindings {
 		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
 	}
 	for _, finding := range findings.externalImplementationFindings {
@@ -143,24 +137,18 @@ func countProductionBoundaryFindings[T any](findings []T, class func(T) boundary
 
 func testOnlyDependencyFindings(findings scanResult) scanResult {
 	result := scanResult{}
-	result.retiredPackageImportFindings = filterRetiredPackageImportsByClass(findings.retiredPackageImportFindings, testOnlySourceClass)
 	result.applicationGraphImportFindings = filterApplicationGraphImportsByClass(findings.applicationGraphImportFindings, testOnlySourceClass)
 	result.domainTransportFindings = filterDomainTransportFindingsByClass(findings.domainTransportFindings, testOnlySourceClass)
 	result.peerServiceImportFindings = filterPeerServiceImportsByClass(findings.peerServiceImportFindings, testOnlySourceClass)
 	result.testServiceImportFindings = filterTestServiceImportsByClass(findings.testServiceImportFindings, testOnlySourceClass)
 	result.supportServiceImportFindings = filterSupportServiceImportsByClass(findings.supportServiceImportFindings, testOnlySourceClass)
 	result.serviceConstructionFindings = filterServiceConstructionFindingsByClass(findings.serviceConstructionFindings, testOnlySourceClass)
-	result.transportImplementationFindings = filterTransportImplementationFindingsByClass(findings.transportImplementationFindings, testOnlySourceClass)
 	result.externalImplementationFindings = filterTransportImplementationFindingsByClass(findings.externalImplementationFindings, testOnlySourceClass)
 	result.stalePeerServiceBaselineEntries = filterPeerServiceBaselineEntriesByClass(findings.stalePeerServiceBaselineEntries, testOnlySourceClass)
 	result.staleTestServiceBaselineEntries = filterTestServiceBaselineEntriesByClass(findings.staleTestServiceBaselineEntries, testOnlySourceClass)
 	result.staleSupportServiceBaselineEntries = filterSupportServiceBaselineEntriesByClass(findings.staleSupportServiceBaselineEntries, testOnlySourceClass)
 	result.staleServiceConstructionEntries = filterServiceConstructionBaselineEntriesByClass(findings.staleServiceConstructionEntries, testOnlySourceClass)
 	return result
-}
-
-func filterRetiredPackageImportsByClass(findings []retiredPackageImportFinding, want boundarySourceClass) []retiredPackageImportFinding {
-	return filterByClass(findings, want, func(finding retiredPackageImportFinding) boundarySourceClass { return finding.class }, func(finding retiredPackageImportFinding) string { return finding.filePath })
 }
 
 func filterApplicationGraphImportsByClass(findings []applicationGraphImportFinding, want boundarySourceClass) []applicationGraphImportFinding {

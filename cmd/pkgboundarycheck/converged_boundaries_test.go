@@ -57,8 +57,6 @@ func TestRunAllowsEdgeAggregatorToImportPublishedEffectContracts(t *testing.T) {
 	repoRoot := t.TempDir()
 	for index, importPath := range []string{
 		"github.com/portpowered/infinite-you/pkg/services/models",
-		"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-		providersLeafEffectContractImport,
 		"github.com/portpowered/infinite-you/pkg/services/providers/wire",
 		"github.com/portpowered/infinite-you/pkg/services/automations",
 	} {
@@ -338,16 +336,6 @@ func TestRunRejectsRetiredExecutionTestHarnessPackageAndImport(t *testing.T) {
 		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
 		if err == nil || !strings.Contains(stderr.String(), "prohibited retired package root: "+packagePath) {
 			t.Fatalf("run() = %v stderr=%q, want retired package root rejected", err, stderr.String())
-		}
-	})
-	t.Run("import", func(t *testing.T) {
-		repoRoot := t.TempDir()
-		writeGoImportFile(t, repoRoot, "pkg/wire/session_test.go", "wire", importPath)
-
-		stdout := &bytes.Buffer{}
-		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, &bytes.Buffer{})
-		if err != nil || !strings.Contains(stdout.String(), "prohibited retired package import: "+importPath) || !strings.Contains(stdout.String(), "[class=test-only]") {
-			t.Fatalf("run() = %v stdout=%q, want visible non-blocking test-only retired import", err, stdout.String())
 		}
 	})
 }
