@@ -108,12 +108,11 @@ func provideFactoryWebhookSecretResolver(edges serviceedges.Edges) webhooks.Secr
 	}
 }
 
-// T21 owns adoption of the canonical process clock; preserve current selection.
 func provideFactoryWebhookClock(edges serviceedges.Edges) webhookswire.Clock {
 	if edges.FactoryWebhookClock != nil {
 		return edges.FactoryWebhookClock
 	}
-	return platformclock.Real{}
+	return processWallSchedulingClock{wall: edges.Clock, scheduler: edges.ProcessScheduler}
 }
 
 func provideFactoryWebhookDeadLetterAppender(edges serviceedges.Edges) webhooks.DeadLetterAppender {

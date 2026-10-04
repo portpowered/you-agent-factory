@@ -30,15 +30,22 @@ type timeWait struct {
 	channel <-chan time.Time
 }
 
+// Wall observations intentionally expose no replay SetTick capability. Recorded
+// runtimes own their logical ticks; the journey owns process wall advancement.
+type journeyWall struct{ source platformclock.Source }
+
+func (w journeyWall) Now() time.Time { return w.source.Now() }
+
 // Only startup readiness polls are driven at registration. Source After waits
 // are registered separately and held until the journey advances their source.
 type journeyScheduler struct {
 	*platformclock.Deterministic
 	waits chan timeWait
+	base  time.Time
 }
 
 func newJourneyScheduler(base time.Time) *journeyScheduler {
-	return &journeyScheduler{Deterministic: platformclock.NewDeterministic(base, time.Second), waits: make(chan timeWait, 64)}
+	return &journeyScheduler{Deterministic: platformclock.NewDeterministic(base, time.Second), waits: make(chan timeWait, 64), base: base}
 }
 
 func (s *journeyScheduler) NewTimer(delay time.Duration) platformclock.Timer {
@@ -85,7 +92,11 @@ type journeyRoute struct{ calls chan journeyCall }
 type journeyHTTP struct{ routes map[string]*journeyRoute }
 
 func (h journeyHTTP) Do(request *http.Request) (*http.Response, error) {
-	route := h.routes[strings.TrimPrefix(request.Header.Get("Authorization"), "source-time-credential-")]
+	key := strings.TrimPrefix(request.Header.Get("Authorization"), "source-time-credential-")
+	if key == "" {
+		key = strings.TrimPrefix(request.URL.Path, "/")
+	}
+	route := h.routes[key]
 	if route == nil {
 		return nil, fmt.Errorf("unexpected source route")
 	}
@@ -132,6 +143,10 @@ type timeCohort struct {
 	dirs            map[string]string
 	lateAdmissions  atomic.Int32
 	logs            *observer.ObservedLogs
+	cli             support.Process
+	env             []string
+	webhook         *journeyScheduler
+	webhookEffects  *webhookEffects
 }
 
 func startTimeCohort(t *testing.T, specialized bool) *timeCohort {
@@ -139,7 +154,7 @@ func startTimeCohort(t *testing.T, specialized bool) *timeCohort {
 	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
 	c := &timeCohort{wall: platformclock.NewDeterministic(base, time.Second), process: newJourneyScheduler(base.Add(24 * time.Hour)), routes: map[string]*journeyRoute{}, dirs: map[string]string{}}
 	c.hosted = c.process
-	edges := serviceedges.Edges{Clock: c.wall, ProcessScheduler: c.process}
+	edges := serviceedges.Edges{Clock: journeyWall{source: c.wall}, ProcessScheduler: c.process}
 	core, logs := observer.New(zap.InfoLevel)
 	c.logs = logs
 	edges.ProcessLogger = zap.New(core)
@@ -148,6 +163,7 @@ func startTimeCohort(t *testing.T, specialized bool) *timeCohort {
 		edges.HostedClock = c.hosted
 		edges.FactoryDefinitionClock = platformclock.NewDeterministic(base.Add(72*time.Hour), time.Second)
 	}
+	configureWebhookEffects(t, c, &edges, specialized)
 	for _, key := range []string{"periodic", "retry", "blocked", "backoff", "peer"} {
 		c.routes[key] = &journeyRoute{calls: make(chan journeyCall, 4)}
 		config := hostedTimeConfig(key)
@@ -174,10 +190,12 @@ func startTimeHost(t *testing.T, c *timeCohort, edges serviceedges.Edges) *timeC
 	api := support.NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
 	process := support.BuildProcess(t, edges)
+	c.cli = process
 	home := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", idle, "--session", uuid.NewString(), "--continuously", "--with-server", "--quiet", "--no-record"})
 	inputs.WorkingDirectory = idle
 	inputs.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"), "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
+	c.env = inputs.Env
 	support.InitializeCustomerHomeWithProcess(t, process, inputs.Env, idle)
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	t.Cleanup(func() { command.Stop(t) })

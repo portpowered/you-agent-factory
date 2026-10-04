@@ -15,22 +15,27 @@ import (
 // Each immutable cohort owns one root-built process. Wall/scheduler advancement
 // is an ordered customer journey because it intentionally affects every session
 // in that process. The two cohorts overlap and have separate profiles and effects.
-func TestSelectedProcessTimeJourney(t *testing.T) {
+func TestProcessTimeJourneys(t *testing.T) {
 	t.Parallel()
-	c := startTimeCohort(t, false)
-	runDefinitionsJourney(t, c)
-	runHostedJourney(t, c, false)
+	isolation := newCohortIsolation()
+	t.Run("TestSelectedProcessTimeJourney", func(t *testing.T) {
+		t.Parallel()
+		c := startTimeCohort(t, false)
+		runDefinitionsJourney(t, c)
+		runHostedJourney(t, c, false)
+		runCohortIsolation(t, c, isolation, false)
+		runWebhookJourney(t, c, false)
+	})
+	t.Run("TestSpecializedSourceTimeJourney", func(t *testing.T) {
+		t.Parallel()
+		c := startTimeCohort(t, true)
+		// SaveNow belongs to Runtime; exact construction overrides have Wire units.
+		runDefinitionsJourney(t, c)
+		runHostedJourney(t, c, true)
+		runCohortIsolation(t, c, isolation, true)
+		runWebhookJourney(t, c, true)
+	})
 }
-
-func TestSpecializedSourceTimeJourney(t *testing.T) {
-	t.Parallel()
-	c := startTimeCohort(t, true)
-	// SaveNow still belongs to Runtime, even with a Definitions construction
-	// override. Exact Definitions override observations are proved in Wire units.
-	runDefinitionsJourney(t, c)
-	runHostedJourney(t, c, true)
-}
-
 func runDefinitionsJourney(t *testing.T, c *timeCohort) {
 	t.Helper()
 	dir := support.ScaffoldFactory(t, idleTimeConfig())
