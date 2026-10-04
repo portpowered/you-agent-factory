@@ -70,8 +70,11 @@ func reportAgainstBaseline(pass *analysis.Pass, unit string, rules map[string]bo
 		}
 		pass.Report(analysis.Diagnostic{
 			Pos:     v.pos,
-			Message: fmt.Sprintf("%s: %s -> %s; %s (to accept as debt add `%s` to internal/lint/analyzers/baseline.txt)", v.rule, v.importer, v.importee, v.hint, v.key()),
+			Message: fmt.Sprintf("%s: %s -> %s; %s (exact key `%s`; only newly migrated rule IDs may seed authorized debt)", v.rule, v.importer, v.importee, v.hint, v.key()),
 		})
+	}
+	if flag := pass.Analyzer.Flags.Lookup("check-stale"); flag != nil && flag.Value.String() == "false" {
+		return
 	}
 	var stale []string
 	for key := range listed {
