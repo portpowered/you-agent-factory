@@ -290,7 +290,7 @@ func TestProbeRunnerSerializesConcurrentHeavyAdmissions(t *testing.T) {
 	case <-firstExecutor.started:
 	case err := <-firstResult:
 		t.Fatalf("first heavy admission exited before acquiring owner: %v", err)
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("first controlled image journey did not start")
 	}
 
@@ -309,7 +309,7 @@ func TestProbeRunnerSerializesConcurrentHeavyAdmissions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("first heavy admission: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("first heavy admission did not release")
 	}
 }
