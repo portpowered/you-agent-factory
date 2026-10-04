@@ -13,10 +13,64 @@ import (
  "fmt"
  "sync"
  "testing"
+ "time"
+
+ "github.com/google/uuid"
+ "github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+ sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+ "github.com/portpowered/infinite-you/pkg/services/work"
 
  "github.com/portpowered/infinite-you/pkg/services/edges"
  models "github.com/portpowered/infinite-you/pkg/services/models"
 )
+
+// A narrow composed acquisition check, not the complete two-holder capability.
+func TestLifecycleProfileModelDiagnostic(t *testing.T) {
+ if testing.Short(){t.Skip("dedicated public Models acquisition diagnostic")}
+ r:=newSampleProfile("model_diagnostic");defer r.emit(t);r.load(t)
+ baselineobservation.Close();defer baselineobservation.Close()
+ ctx,cancel:=context.WithTimeout(t.Context(),time.Minute);defer cancel()
+ r.session(t,ctx,smokeArtifact(t))
+}
+
+func profileModelFactory(t *testing.T)string {
+ t.Helper();folder:=t.TempDir()
+ config:=`{"name":"profile-model","workTypes":[{"name":"task","handlingBehavior":["DEFAULT"],"states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"resources":[{"name":"embed-cache","type":"MODEL","capacity":2,"model":"embed","backend":"localai-llamacpp","loadPolicy":"ON_DEMAND"}],"invocationSignature":{"parameters":[{"name":"text","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"}]}]},"workers":[{"name":"embed-worker","type":"MODEL_WORKER","model":"embed","modelLocality":"LOCAL","modelProvider":"CODEX","resources":[{"name":"embed-cache","capacity":1}],"operations":[{"name":"EMBED","inputs":[{"name":"text","required":true,"contentTypes":["TEXT"]}],"outputs":[{"name":"embedding","contentTypes":["JSON"]}]}]}],"workstations":[{"name":"embed","type":"MODEL_INVOKE","worker":"embed-worker","operation":"EMBED","operationBindings":[{"slot":"text","selector":{"type":"TEXT"}}],"inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`
+ if err:=os.WriteFile(filepath.Join(folder,"factory.json"),[]byte(config),0600);err!=nil{t.Fatal(err)}
+ worker:=filepath.Join(folder,"workers","embed-worker");if err:=os.MkdirAll(worker,0700);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(worker,"AGENTS.md"),[]byte("---\ntype: MODEL_WORKER\nmodel: embed\nmodelLocality: LOCAL\nmodelProvider: CODEX\n---\nEmbed the selected text.\n"),0600);err!=nil{t.Fatal(err)}
+ workstation:=filepath.Join(folder,"workstations","embed");if err:=os.MkdirAll(workstation,0700);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(workstation,"AGENTS.md"),[]byte("---\ntype: MODEL_WORKSTATION\n---\nEmbed the selected text.\n"),0600);err!=nil{t.Fatal(err)}
+ return folder
+}
+
+func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service sessions.Service,home string,artifact artifactIdentity,bootstrap []string,gate *profileModelGate) {
+ folder:=profileModelFactory(t);id:=uuid.NewString();ops:=publicCycleOperations(service,home,folder)
+ cycle:=&profileCycle{SessionID:id,Generations:[]string{},RuntimeIDs:[]string{}}
+ defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();gate.release("profile-model-work");if err:=ops.Close(cleanup,cycle);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}()
+ generation,runtimeID,err:=ops.Open(ctx,cycle,false);if err!=nil{t.Fatal(err)};cycle.Generations=append(cycle.Generations,generation);cycle.RuntimeIDs=append(cycle.RuntimeIDs,runtimeID)
+ done:=make(chan error,1)
+ joined:=false
+ defer func(){if !joined{gate.release("profile-model-work");select{case err:=<-done:if err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)};case <-time.After(30*time.Second):r.CleanupErrors=append(r.CleanupErrors,"public model Work not joined");t.Error("public model Work not joined")}}}()
+ go func(){result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:"profile-model-work"},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:"profile-model-work"}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});if err==nil && result.Status!=sessions.InvocationTerminalStatusCompleted{err=fmt.Errorf("public model Work failed: %#v",result)};done<-err}()
+ // Observe terminal refusal as well as admission; no timeout hides early errors.
+ var request models.InvokeModelRequest
+ select{case request=<-gate.routes["profile-model-work"].observed:case err=<-done:joined=true;t.Fatalf("Work ended before acquisition: %v",err);case <-ctx.Done():t.Fatal(ctx.Err())}
+ defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();gate.release("profile-model-work");if err:=gate.join(cleanup,"profile-model-work");err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}()
+ attempt:=&profileAttempt{SessionID:&id,Generations:cycle.Generations}
+ active:=r.capture(t,artifact,"CAPACITY_ACTIVE",attempt,bootstrap);r.Final=append(r.Final,active)
+ slot:=request.Scope.String()+"|EMBED";leaseID,ownerID:="",""
+ for _,owner:=range active.Report.Owners{if owner.Leases!=nil && owner.Leases.CapacityHolders[slot]==1{ownerID=owner.OwnerIdentity;for _,lease:=range owner.Leases.LeaseRecords{if lease.Scope==request.Scope.String() && lease.ModelName=="embed" && lease.Status=="ACTIVE" && lease.Claimed{if leaseID!=""{t.Fatal("duplicate active lease")};leaseID=lease.Key}}}}
+ if leaseID=="" || ownerID==""{t.Fatal("missing real Models capacity attribution")}
+ if err=gate.release("profile-model-work");err!=nil{t.Fatal(err)}
+ select{case err=<-done:joined=true;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
+ if err=gate.join(ctx,"profile-model-work");err!=nil{t.Fatal(err)}
+ released:=r.capture(t,artifact,"CAPACITY_RELEASED",attempt,bootstrap);r.Final=append(r.Final,released)
+ found:=false
+ for _,owner:=range released.Report.Owners{if owner.OwnerIdentity!=ownerID{continue};if owner.Leases.CapacityHolders[slot]!=0{t.Fatal("capacity remained held after terminal Work")};for _,lease:=range owner.Leases.LeaseRecords{if lease.Key==leaseID{found=lease.Status=="RELEASED" || lease.Status=="EXPIRED"}}}
+ if !found{t.Fatal("released lease record missing or active")}
+ t.Logf("composed public acquisition session=%s scope=%s owner=%s slot=%s lease=%s; one holder, public capacity=2; multiplicity remains unproven",id,request.Scope.String(),ownerID,slot,leaseID)
+}
 
 // Installed only at ModelInvocationBackend, after the real Models owner has
 // acquired capacity. Calling this component directly is synthetic calibration,

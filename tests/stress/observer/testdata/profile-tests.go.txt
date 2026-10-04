@@ -146,14 +146,25 @@ func (r *sampleProfile) attempt(t *testing.T,kind string,run func(*testing.T,*pr
 func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifactIdentity) {
  folder:=smokeFactory(t);home:=r.Manifest.ChildPaths["HOME"]
  ready:=make(chan struct{})
- process,err:=root.BuildProcess(ctx,edges.Edges{
+ effects:=edges.Edges{
   FactorySessionIDGenerator:uuid.NewString,BrowserOpener:func(context.Context,string)error{return nil},ProviderCommandRunner:smokeCommandRunner{},
   APIServerStarter:func(ctx context.Context,req platformhttpserver.StartRequest)error{
    server:=httptest.NewServer(req.Handler)
    if req.OnBound!=nil{req.OnBound(platformhttpserver.Binding{Port:req.Port})};close(ready)
    <-ctx.Done();server.CloseClientConnections();server.Close();return nil
   },
- })
+ }
+ var modelGate *profileModelGate
+ if r.Mode=="model_diagnostic" {
+  gate,err:=newProfileModelGate(map[string]error{"profile-model-work":nil});if err!=nil{t.Fatal(err)};modelGate=gate
+  modelEffects:=profileModelEdges(t,home,modelGate)
+  modelEffects.FactorySessionIDGenerator=effects.FactorySessionIDGenerator
+  modelEffects.BrowserOpener=effects.BrowserOpener
+  modelEffects.ProviderCommandRunner=effects.ProviderCommandRunner
+  modelEffects.APIServerStarter=effects.APIServerStarter
+  effects=modelEffects
+ }
+ process,err:=root.BuildProcess(ctx,effects)
  if err!=nil{t.Fatal(err)}
  defer func(){
   cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
@@ -176,6 +187,10 @@ func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifa
  bootstrap,err:=service.List(ctx,sessions.SessionListRequest{Mode:sessions.SessionOperationModeLive});if err!=nil{t.Fatal(err)}
  bootstrapIDs:=[]string{};for _,s:=range bootstrap.Sessions{bootstrapIDs=append(bootstrapIDs,s.SessionID)}
  r.Final=append(r.Final,r.capture(t,artifact,"HOST_BASELINE",nil,bootstrapIDs))
+ if r.Mode=="model_diagnostic" {
+  r.modelDiagnostic(t,ctx,service,home,artifact,bootstrapIDs,modelGate)
+  return
+ }
  if r.Mode=="capability" {
   r.runCycles(t,ctx,service,home,folder,artifact,bootstrapIDs,1)
   return

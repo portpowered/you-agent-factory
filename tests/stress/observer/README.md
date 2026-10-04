@@ -368,3 +368,17 @@ loopback health, negotiated protocol, and a joinable host lifetime at the existi
 external-effect edges. Its component tests establish stop/join and refusal of
 downloads. Public session composition is still unfinished; these fixture tests
 do not establish real capacity acquisition or baseline acceptance.
+
+`TestLifecycleProfileModelDiagnostic` is a narrow public acquisition selector
+on the prepared artifact (`-test.short=false -test.count=1 -test.timeout=2m`).
+Set `OBSERVER_REPORT` to an absolute diagnostic output path. It starts an
+explicit session with the published invocation content contract, holds one
+EMBED call at the controlled effect, records CAPACITY_ACTIVE, then joins both
+the effect and terminal Work before CAPACITY_RELEASED. The scenario asserts
+one attributed ACTIVE claimed lease and one integer slot holder, followed by
+zero holders and the retained RELEASED/EXPIRED record. It closes the session
+and joins the host and process. Public configured capacity is 2; this narrow
+selector does not prove two-holder multiplicity, fault/cancellation composition
+or the complete capability. Its report uses mode `model_diagnostic` and stays
+`complete:false`, with empty samples and capacityWitnesses; raw checkpoints and
+attribution remain available. It skips before construction under `-short`.
