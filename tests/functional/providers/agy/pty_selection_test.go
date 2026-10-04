@@ -154,6 +154,7 @@ func (scenario *canonicalAgyScenario) URL() string { return scenario.url }
 func (scenario *canonicalAgyScenario) Close(t testing.TB) {
 	t.Helper()
 	scenario.host.Stop(t)
+	//nolint:testsleep // Bound shutdown failure after the host command joins; scenario completion is observed before cleanup.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := scenario.process.Close(ctx); err != nil {
