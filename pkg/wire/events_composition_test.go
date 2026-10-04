@@ -30,7 +30,7 @@ func eventsWireTestAppendRequest() events.AppendRequest {
 func TestProvideEventsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
 	t.Parallel()
 
-	if _, err := InjectBundle(context.Background(), selectedTestTimeEdges(serviceedges.Edges{})); err != nil {
+	if _, err := InjectBundle(context.Background(), selectedTestTimeEdges(serviceedges.Edges{}), ACPWireLogSettings{}); err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 

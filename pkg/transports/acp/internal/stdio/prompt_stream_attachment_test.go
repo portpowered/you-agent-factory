@@ -609,8 +609,8 @@ func TestServePublishesOutboundBytesAfterTranscriptRecord(t *testing.T) {
 
 	transcript := &capturingTranscript{}
 	out := &transcriptObservingWriter{transcript: transcript}
-	server := New(nil, nil, nil, nil, nil, nil, nil,
-		acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }), nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil,
+		acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }), nil, testInvocationScope)
 
 	if err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), out); err != nil {
 		t.Fatalf("Serve() error = %v, want the response to remain observable", err)
@@ -635,8 +635,8 @@ func TestServeDoesNotRetainUnwrittenOutboundTranscriptFrames(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transcript := &capturingTranscript{}
-			server := New(nil, nil, nil, nil, nil, nil, nil,
-				acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }), nil)
+			server := New(testLogger(), nil, nil, nil, nil, nil, nil,
+				acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }), nil, testInvocationScope)
 
 			err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), tt.writer)
 			if !errors.Is(err, tt.want) {
@@ -660,8 +660,8 @@ func TestServeRecordsBothDirectionsIncludingRejectedFrames(t *testing.T) {
 	t.Parallel()
 
 	transcript := &capturingTranscript{}
-	server := New(nil, nil, nil, nil, nil, nil, nil,
-		acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }), nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil,
+		acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }), nil, testInvocationScope)
 
 	var out strings.Builder
 	input := strings.NewReader("this is not json\n")
@@ -706,7 +706,7 @@ func TestServeRecordsBothDirectionsIncludingRejectedFrames(t *testing.T) {
 func TestServeWithoutARecorderIsUnchanged(t *testing.T) {
 	t.Parallel()
 
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil, nil, nil, testInvocationScope)
 	var out strings.Builder
 	if err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), &out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
@@ -721,10 +721,10 @@ func TestServeWithoutARecorderIsUnchanged(t *testing.T) {
 func TestServeSurvivesARecorderThatCannotOpen(t *testing.T) {
 	t.Parallel()
 
-	server := New(nil, nil, nil, nil, nil, nil, nil,
+	server := New(testLogger(), nil, nil, nil, nil, nil, nil,
 		acp.WireRecorder(func(string) (acp.WireTranscript, error) {
 			return nil, context.DeadlineExceeded
-		}), nil)
+		}), nil, testInvocationScope)
 
 	var out strings.Builder
 	if err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), &out); err != nil {
