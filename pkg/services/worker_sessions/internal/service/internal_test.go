@@ -4550,21 +4550,32 @@ func TestCommitContinuationLineageRejectsUnresolvableSourceAndKeepsLiveTruth(t *
 	}
 }
 
+// sendPendingReservations sends two reservations on the gate. close() may
+// return without consuming the second send, so the sender exits on stop and
+// signals done so the test can join it.
+func sendPendingReservations(gate *controlHistoryGate, received, release, stop, done chan struct{}) {
+	defer close(done)
+	gate.done <- struct{}{}
+	close(received)
+	<-release
+	select {
+	case gate.done <- struct{}{}:
+	case <-stop:
+	}
+}
+
 func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T) {
 	pendingGate := &controlHistoryGate{pending: true, done: make(chan struct{})}
 	pendingClosed := make(chan struct{})
 	pendingReceived := make(chan struct{})
 	pendingRelease := make(chan struct{})
+	senderStop := make(chan struct{})
+	senderDone := make(chan struct{})
 	go func() {
 		pendingGate.close()
 		close(pendingClosed)
 	}()
-	go func() {
-		pendingGate.done <- struct{}{}
-		close(pendingReceived)
-		<-pendingRelease
-		pendingGate.done <- struct{}{}
-	}()
+	go sendPendingReservations(pendingGate, pendingReceived, pendingRelease, senderStop, senderDone)
 	select {
 	case <-pendingReceived:
 	case <-time.After(time.Second):
@@ -4579,6 +4590,8 @@ func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T)
 	case <-time.After(time.Second):
 		t.Fatal("controlHistoryGate.close() did not finish after the pending reservation drained")
 	}
+	close(senderStop)
+	<-senderDone
 
 	gate := &controlHistoryGate{}
 	if !gate.acquire() {
