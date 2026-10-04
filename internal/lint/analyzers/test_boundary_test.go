@@ -98,6 +98,10 @@ func scenario() {
  CreateMapper() // want "test-functional-transport-composition.*CreateMapper"
  submit.NewSubmit() // want "test-functional-transport-composition.*pkg/services/work/transports/cli/submit.NewSubmit"
  child.NewClient() // want "test-functional-transport-composition.*pkg/transports/http/client/child.NewClient"
+ _ = renamed.NewValue(0) // want "test-functional-transport-composition.*NewValue"
+ renamed.BuildVariable() // want "test-functional-transport-composition.*BuildVariable"
+ variable := renamed.BuildVariable // want "test-functional-transport-composition.*BuildVariable"
+ variable()
  renamed.Lookalike{}.NewProtocol()
  renamed := struct { NewProtocol func() }{func(){}}
  renamed.NewProtocol()
@@ -159,6 +163,8 @@ import (
 func allowed() {
  root.BuildProcess(); generated.NewPublicValue(); client.NewClient()
  clihttp.Observe(); submit.NewOther(); transports.NewProtocol()
+ var detached clihttp.NewValue
+ _ = detached; _ = clihttp.NewVersion; _ = clihttp.NewSetting
 }
 `
 	dir, cleanup, err := analysistest.WriteFiles(files)
@@ -174,6 +180,10 @@ func functionalTransportFixtures() map[string]string {
 		"m/pkg/transports/cli/clihttp/protocol.go": `package clihttp
 func NewProtocol() {}
 func Observe() {}
+type NewValue int
+const NewVersion = 1
+var NewSetting = 1
+var BuildVariable = func() {}
 type Lookalike struct{}
 func (Lookalike) NewProtocol() {}
 `,
