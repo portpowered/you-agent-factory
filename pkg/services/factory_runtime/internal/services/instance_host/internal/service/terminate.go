@@ -18,7 +18,7 @@ func (h *Host) Stop(handle factoryruntime.RuntimeRun) error {
 		}
 		return factoryruntime.ErrNotRunning
 	}
-	return h.lifecycle.Stop(concrete)
+	return h.lifecycle.StopWithClock(concrete, h.clock)
 }
 
 func (h *Host) classifyStopHandle(handle factoryruntime.RuntimeRun) (*factoryhost.Handle, error) {

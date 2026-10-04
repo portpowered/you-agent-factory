@@ -1,15 +1,89 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestFileWriterLegacyContinuationTerminalReplays(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"complete", "degraded-recorded", "degraded-authoritative"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			writer := journalWriter(t, local)
+			if err := local.WriteFile(writer.path("legacy"), []byte(legacyWorkerOpeningFixture)); err != nil {
+				t.Fatal(err)
+			}
+			baseline, err := writer.LoadWorkerRecording(t.Context(), "legacy")
+			if err != nil || baseline.Sessions[0].InterruptionReason != recordings.WorkerRecordingInterruptionProcessStopped {
+				t.Fatalf("legacy interruption = %#v, error %v", baseline, err)
+			}
+			want := persistLegacyContinuationTerminal(t, writer, kind)
+			reopened, err := NewFileWriter(local, writer.root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, reader := range []recordings.WorkerRecordingReader{writer, reopened.(recordings.WorkerRecordingReader)} {
+				assertLegacyTerminalReplay(t, reader, want)
+			}
+			unchanged, err := local.ReadFile(writer.path("legacy"))
+			if err != nil || !bytes.Equal(unchanged, []byte(legacyWorkerOpeningFixture)) {
+				t.Fatal("legacy baseline changed")
+			}
+		})
+	}
+}
+
+func persistLegacyContinuationTerminal(t *testing.T, writer *FileWriter, kind string) recordings.WorkerRecordingStatus {
+	t.Helper()
+	record := journalRecord(t, "legacy", "legacy-session")
+	want := recordings.WorkerRecordingStatusComplete
+	if kind != "complete" {
+		want = recordings.WorkerRecordingStatusDegraded
+		failure := recordings.WorkerRecordingFailure{RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Topic: record.Record.ID.Topic, Code: "PERSISTENCE_FAILED"}
+		if kind == "degraded-authoritative" {
+			failure.ExecutionTerminal = &recordings.WorkerRecordingTerminal{Position: 2, Phase: workers.PhaseCompleted, Status: "COMPLETED"}
+		}
+		if err := writer.PersistWorkerRecordingFailure(t.Context(), failure); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if kind != "degraded-authoritative" {
+		record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, record.WorkerSessionID), 2)
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return want
+}
+
+func assertLegacyTerminalReplay(t *testing.T, reader recordings.WorkerRecordingReader, want recordings.WorkerRecordingStatus) {
+	t.Helper()
+	snapshot, err := reader.LoadWorkerRecording(t.Context(), "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := snapshot.Sessions[0]
+	if session.Status != want || session.InterruptionReason != "" || session.ExecutionTerminal == nil {
+		t.Fatalf("terminal continuation = %#v", session)
+	}
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot, WorkerSessionID: session.WorkerSessionID})
+	if err != nil || replayed.Projection.Status != want || !reflect.DeepEqual(replayed.Projection.Records, session.Records) || !reflect.DeepEqual(replayed.Projection.ExecutionTerminal, session.ExecutionTerminal) {
+		t.Fatalf("supported replay = %#v, error %v", replayed, err)
+	}
+}
 
 type failureClassificationWriter struct {
 	failure recordings.WorkerRecordingFailure
@@ -143,3 +217,5 @@ func containsDiagnosticPair(fields []any, key, want string) bool {
 func (logger *captureDiagnosticLogger) Warn(message string, fields ...any) {
 	logger.Info(message, fields...)
 }
+
+const legacyWorkerOpeningFixture = `{"recordingId":"legacy","sessions":[{"workerSessionId":"legacy-session","records":[{"ID":{"Topic":"worker-session/legacy-session/events","Position":1},"SourceType":"worker_session_lifecycle","SourceID":"legacy-session","SourceSequence":1,"SourceEventID":"started","SchemaID":"workers.draft.v1","Payload":{"kind":"SESSION","phase":"STARTED","provenance":{"delivery":"SYNTHESIZED","fidelity":"LIFECYCLE_ONLY","nativeEventType":"worker_session_lifecycle","provider":"","representation":"NOTIFICATION"},"payload":{"status":"STARTING","workerSessionId":"legacy-session"}}}]}]}`

@@ -76,8 +76,9 @@ func NewAssembly(
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
 	workerService workers.Service,
 	metricsClock platformclock.TimerSource,
+	instanceHost InstanceHost,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService, metricsClock)
+	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService, metricsClock, instanceHost)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator
