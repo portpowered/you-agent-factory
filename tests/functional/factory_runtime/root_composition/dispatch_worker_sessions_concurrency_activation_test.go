@@ -771,18 +771,29 @@ func (w *identityRecordingWriter) LoadWorkerRecording(ctx context.Context, id st
 	if len(owned) == 0 {
 		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("empty owned recording %q", id)
 	}
-	history := recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: owned[0].WorkerSessionID}
+	histories := make(map[string]recordings.WorkerRecordingHistory)
+	var workerIDs []string
 	for _, record := range owned {
+		history, exists := histories[record.WorkerSessionID]
+		if !exists {
+			history = recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: record.WorkerSessionID}
+			workerIDs = append(workerIDs, record.WorkerSessionID)
+		}
 		history.Records = append(history.Records, record.Record)
+		histories[record.WorkerSessionID] = history
 	}
-	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(history)
-	if err != nil {
-		return recordings.WorkerRecordingSnapshot{}, err
+	snapshot := recordings.WorkerRecordingSnapshot{RecordingID: id}
+	for _, workerID := range workerIDs {
+		projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(histories[workerID])
+		if err != nil {
+			return recordings.WorkerRecordingSnapshot{}, err
+		}
+		snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
+			WorkerSessionID: projection.WorkerSessionID, Topic: projection.Topic, Status: projection.Status,
+			LastPosition: projection.LastPosition, ExecutionTerminal: projection.ExecutionTerminal, Records: projection.Records,
+		})
 	}
-	return recordings.WorkerRecordingSnapshot{RecordingID: id, Sessions: []recordings.WorkerSessionRecordingSnapshot{{
-		WorkerSessionID: projection.WorkerSessionID, Topic: projection.Topic, Status: projection.Status,
-		LastPosition: projection.LastPosition, ExecutionTerminal: projection.ExecutionTerminal, Records: projection.Records,
-	}}}, nil
+	return snapshot, nil
 }
 func identityInspectRecording(t *testing.T, server *identityFixture, writer *identityRecordingWriter, factoryID, workerID, ownMarker, peerMarker string) string {
 	t.Helper()
