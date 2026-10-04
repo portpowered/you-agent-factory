@@ -21,9 +21,8 @@ type runtimeRoot interface {
 
 // TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent proves the
 // recorder accepts Factory event vocabulary from a runtime producer and
-// preserves observable identity, kind, and payload fields through to the
-// portable artifact, including the terminal run-finished event it appends
-// itself.
+// preserves identity, kind, and payload fields in the lifecycle append
+// requests, including the terminal run-finished event it appends itself.
 //
 // The recorder no longer depends on Factory Runtime at all; that constraint is
 // enforced repo-wide by the cross-service cycle ratchet (cmd/servicecyclecheck)
@@ -33,16 +32,10 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 
 	startedAt := time.Date(2026, 7, 27, 17, 0, 0, 0, time.UTC)
 	finishedAt := startedAt.Add(2 * time.Minute)
-	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
-		nil,
-		nil,
-		nil,
-		runtimeRecorderTestClock{now: startedAt},
-	)
+	lifecycle := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "runtime-recording"}}}
 	recorder := newLifecycleRecorderForTest(t, startedAt, "runtime-root-finished.json")
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-runtime-root"}
-	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
@@ -59,42 +52,33 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 		t.Fatalf("Finalize: %v", err)
 	}
 
-	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: recordings.RecordingID(recorder.recordingID),
-	})
-	if err != nil {
-		t.Fatalf("QueryRecordingStatus: %v", err)
+	if len(lifecycle.appendRequests) != 3 {
+		t.Fatalf("append requests = %d, want initial, work request, and terminal events", len(lifecycle.appendRequests))
 	}
-	if status.Status.AcceptedEvents < 3 {
-		t.Fatalf("accepted events = %d, want run-started, work request, and run-finished", status.Status.AcceptedEvents)
-	}
-
-	built, err := root.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: recordings.RecordingID(recorder.recordingID),
-	})
-	if err != nil {
-		t.Fatalf("BuildPortableArtifact: %v", err)
-	}
-	if len(built.Artifact.Events) < 3 {
-		t.Fatalf("portable events = %d, want at least three", len(built.Artifact.Events))
+	for index, request := range lifecycle.appendRequests {
+		if request.RecordingID != recorder.recordingID || request.Event.Scope.FactorySessionID != scope.FactorySessionID ||
+			request.Event.Sequence != int64(index) || request.Event.Cursor.Sequence != int64(index) ||
+			request.Event.Cursor.StreamGenerationID != string(recorder.recordingID) {
+			t.Fatalf("append request %d = %#v", index, request)
+		}
 	}
 
-	recordedWorkEvent := built.Artifact.Events[len(built.Artifact.Events)-2]
-	if recordedWorkEvent.ID != recordings.CanonicalEventID(runtimeEvent.Id) {
+	recordedWorkEvent := lifecycle.appendRequests[1].Event
+	if recordedWorkEvent.ID != runtimeEvent.Id {
 		t.Fatalf("recorded work event id = %q, want %q", recordedWorkEvent.ID, runtimeEvent.Id)
 	}
-	if recordedWorkEvent.Kind != recordings.CanonicalEventKind(runtimeEvent.Type) {
+	if recordedWorkEvent.Kind != string(runtimeEvent.Type) {
 		t.Fatalf("recorded work event kind = %q, want %q", recordedWorkEvent.Kind, runtimeEvent.Type)
 	}
-	if !strings.Contains(recordedWorkEvent.Payload, "work-runtime-root") {
+	if recordedWorkEvent.Payload != string(runtimeEvent.Payload) || recordedWorkEvent.RecordedAt != runtimeEvent.Context.EventTime {
 		t.Fatalf("recorded work event payload = %q, want runtime-root work id", recordedWorkEvent.Payload)
 	}
 
-	finishedEvent := built.Artifact.Events[len(built.Artifact.Events)-1]
-	if finishedEvent.ID != recordings.CanonicalEventID(recordingevents.RunFinishedFactoryEventID) {
+	finishedEvent := lifecycle.appendRequests[2].Event
+	if finishedEvent.ID != recordingevents.RunFinishedFactoryEventID {
 		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, recordingevents.RunFinishedFactoryEventID)
 	}
-	if finishedEvent.Kind != recordings.CanonicalEventKind(recordings.FactoryEventTypeRunResponse) {
+	if finishedEvent.Kind != string(recordings.FactoryEventTypeRunResponse) {
 		t.Fatalf("finished event kind = %q, want %q", finishedEvent.Kind, recordings.FactoryEventTypeRunResponse)
 	}
 	if !strings.Contains(finishedEvent.Payload, string(recordings.FactoryStateCompleted)) {

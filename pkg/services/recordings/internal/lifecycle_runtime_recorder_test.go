@@ -15,36 +15,26 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
-	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 )
 
 type runtimeRecorderTestClock struct{ now time.Time }
 
 func (clock runtimeRecorderTestClock) Now() time.Time { return clock.now }
 
-func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalization(t *testing.T) {
+func TestLifecycleRuntimeRecorderForwardsFailuresFlushAndFinalization(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 7, 27, 15, 0, 0, 0, time.UTC)
 	finishedAt := startedAt.Add(time.Minute)
 	producerErr := errors.New("producer failed")
 	finalWriteErr := errors.New("final write failed")
-	writeCount := 0
-	writer := func(string, recordings.RecordingSnapshot) error {
-		writeCount++
-		if writeCount == 2 {
-			return finalWriteErr
-		}
-		return nil
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "runtime-recording"}},
+		finishErr:   errors.Join(producerErr, finalWriteErr),
 	}
-	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
-		writer,
-		nil,
-		nil,
-		runtimeRecorderTestClock{now: startedAt},
-	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, "recording.json")
 	recorder.RecordError(producerErr)
 	recorder.RecordEvent(factorydefinitions.FactoryEvent{
@@ -56,7 +46,7 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 		Payload: []byte(`{"workId":"work-1"}`),
 	})
 	scope := recordings.CanonicalEventScope{FactorySessionID: "~default"}
-	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
@@ -68,32 +58,24 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 		t.Fatalf("Finalize error = %v, want producer and final-write identities", err)
 	}
 
-	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: recordings.RecordingID(recorder.recordingID),
-	})
-	if err != nil {
-		t.Fatalf("QueryRecordingStatus: %v", err)
+	if len(lifecycle.failureRequests) != 1 {
+		t.Fatalf("failure requests = %#v, want one pending producer failure", lifecycle.failureRequests)
 	}
-	assertFailedRuntimeRecordingStatus(t, status.Status, scope, finishedAt)
-}
-
-func assertFailedRuntimeRecordingStatus(
-	t *testing.T,
-	status recordings.RecordingStatusFacts,
-	scope recordings.CanonicalEventScope,
-	finishedAt time.Time,
-) {
-	t.Helper()
-	if status.Artifact != "recording.json" ||
-		status.Scope != scope ||
-		status.State != recordings.RecordingFailed ||
-		status.AcceptedEvents != 3 ||
-		len(status.Failures) != 2 ||
-		status.Failures[0].Code != "producer_boundary_failed" ||
-		status.Failures[1].Code != "final_flush_failed" ||
-		status.FinalizedAt == nil ||
-		!status.FinalizedAt.Equal(finishedAt) {
-		t.Fatalf("composed lifecycle status = %#v", status)
+	failure := lifecycle.failureRequests[0]
+	if failure.RecordingID != recorder.recordingID || failure.Cause != producerErr ||
+		failure.Failure.Code != "producer_boundary_failed" || !failure.Failure.RecordedAt.Equal(startedAt) {
+		t.Fatalf("producer failure request = %#v", failure)
+	}
+	if lifecycle.flushRequest.RecordingID != recorder.recordingID || lifecycle.flushCalls != 1 ||
+		lifecycle.finishRequest.RecordingID != recorder.recordingID ||
+		lifecycle.finishRequest.FinishedAt != finishedAt || lifecycle.finishCalls != 1 {
+		t.Fatalf("flush/finish requests = %#v / %#v", lifecycle.flushRequest, lifecycle.finishRequest)
+	}
+	if err := recorder.Finalize(finishedAt); !errors.Is(err, finalWriteErr) || lifecycle.finishCalls != 1 {
+		t.Fatalf("repeated Finalize = %v, finish calls = %d", err, lifecycle.finishCalls)
+	}
+	if !errors.Is(recorder.Err(), producerErr) || !errors.Is(recorder.Err(), finalWriteErr) {
+		t.Fatalf("recorder.Err = %v, want preserved owner causes", recorder.Err())
 	}
 }
 
@@ -104,21 +86,28 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 	finishedAt := startedAt.Add(time.Minute)
 	path := filepath.Join(t.TempDir(), "recording.jsonl")
 	storage := platformreplay.NewLocal(runtime.GOOS)
-	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
-		NewReplayRecordingSnapshotWriter(storage.WriteFile, storage.AppendFile, nil),
-		nil,
-		nil,
-		runtimeRecorderTestClock{now: startedAt},
-	)
-	recorder := newLifecycleRecorderForTest(t, startedAt, path)
-	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), recordings.CanonicalEventScope{
-		FactorySessionID: "00000000-0000-4000-8000-000000000005",
-	}); err != nil {
-		t.Fatalf("BindRecordingLifecycle: %v", err)
+	factory, err := factorydefinitions.NewFactorySnapshot(map[string]any{"id": "factory-1"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := recorder.Finalize(finishedAt); err != nil {
-		t.Fatalf("Finalize: %v", err)
+	initial, err := replayimpl.NewEventLogArtifact(startedAt, factory, nil, recordings.ReplayDiagnostics{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionID := "00000000-0000-4000-8000-000000000005"
+	events := []factorydefinitions.FactoryEvent{initial.Events[0], recordingevents.RunFinishedFactoryEvent(startedAt, finishedAt)}
+	snapshot := recordings.RecordingSnapshot{
+		Status:             recordings.RecordingStatusFacts{State: recordings.RecordingFinalized, FinalizedAt: &finishedAt},
+		CanonicalSessionID: sessionID,
+	}
+	for index, event := range events {
+		event.Context.Sequence = index
+		event.Context.SessionID = &sessionID
+		snapshot.Events = append(snapshot.Events, canonical.CanonicalEventFromFactory(event, "generation"))
+	}
+	writer := NewReplayRecordingSnapshotWriter(storage.WriteFile, storage.AppendFile, nil)
+	if err := writer(path, snapshot); err != nil {
+		t.Fatalf("write replay-compatible snapshot: %v", err)
 	}
 
 	artifact, err := replayimpl.Load(
@@ -201,13 +190,20 @@ func newLifecycleRecorderWithIDForTest(
 // when the initial Factory snapshot append fails after Begin has already
 // started it, rather than leaking it.
 type stubRecordingLifecycle struct {
-	beginResult  recordings.RecordingLifecycleResult
-	beginErr     error
-	beginRequest recordings.BeginRecordingRequest
-	appendErr    error
-	appendCalls  int
-	stopCalls    int
-	stopErr      error
+	beginResult     recordings.RecordingLifecycleResult
+	beginErr        error
+	beginRequest    recordings.BeginRecordingRequest
+	appendErr       error
+	appendCalls     int
+	stopCalls       int
+	stopErr         error
+	appendRequests  []recordings.AppendLifecycleEventRequest
+	failureRequests []recordings.RecordLifecycleFailureRequest
+	flushRequest    recordings.FlushLifecycleRequest
+	flushCalls      int
+	finishRequest   recordings.FinishLifecycleRequest
+	finishCalls     int
+	finishErr       error
 }
 
 func (s *stubRecordingLifecycle) Begin(request recordings.BeginRecordingRequest) (recordings.RecordingLifecycleResult, error) {
@@ -219,16 +215,20 @@ func (s *stubRecordingLifecycle) Bind(recordings.BindLifecycleRequest) (recordin
 	return recordings.RecordingLifecycleResult{}, nil
 }
 
-func (s *stubRecordingLifecycle) AppendEvent(recordings.AppendLifecycleEventRequest) (recordings.RecordingLifecycleResult, error) {
+func (s *stubRecordingLifecycle) AppendEvent(request recordings.AppendLifecycleEventRequest) (recordings.RecordingLifecycleResult, error) {
 	s.appendCalls++
-	return recordings.RecordingLifecycleResult{}, s.appendErr
+	s.appendRequests = append(s.appendRequests, request)
+	return recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{AcceptedEvents: s.appendCalls}}, s.appendErr
 }
 
-func (s *stubRecordingLifecycle) RecordFailure(recordings.RecordLifecycleFailureRequest) (recordings.RecordingLifecycleResult, error) {
+func (s *stubRecordingLifecycle) RecordFailure(request recordings.RecordLifecycleFailureRequest) (recordings.RecordingLifecycleResult, error) {
+	s.failureRequests = append(s.failureRequests, request)
 	return recordings.RecordingLifecycleResult{}, nil
 }
 
-func (s *stubRecordingLifecycle) Flush(recordings.FlushLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+func (s *stubRecordingLifecycle) Flush(request recordings.FlushLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	s.flushRequest = request
+	s.flushCalls++
 	return recordings.RecordingLifecycleResult{}, nil
 }
 
@@ -237,8 +237,10 @@ func (s *stubRecordingLifecycle) Stop(recordings.StopLifecycleRequest) error {
 	return s.stopErr
 }
 
-func (s *stubRecordingLifecycle) Finish(recordings.FinishLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
-	return recordings.RecordingLifecycleResult{}, nil
+func (s *stubRecordingLifecycle) Finish(request recordings.FinishLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	s.finishRequest = request
+	s.finishCalls++
+	return recordings.RecordingLifecycleResult{}, s.finishErr
 }
 
 func (s *stubRecordingLifecycle) Status(recordings.LifecycleStatusRequest) (recordings.RecordingLifecycleResult, error) {
@@ -340,16 +342,10 @@ func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 7, 27, 16, 0, 0, 0, time.UTC)
-	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
-		nil,
-		nil,
-		nil,
-		runtimeRecorderTestClock{now: startedAt},
-	)
+	lifecycle := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "stop-recording"}}}
 	recorder := newLifecycleRecorderForTest(t, startedAt, "recording-stop.json")
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-stop"}
-	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 	event := factorydefinitions.FactoryEvent{
@@ -365,6 +361,12 @@ func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
 	recorder.RecordEvent(event)
 	recorder.Stop()
 	recorder.Finish(startedAt.Add(time.Minute))
+	if lifecycle.stopCalls != 1 || lifecycle.finishCalls != 1 || len(lifecycle.appendRequests) != 3 {
+		t.Fatalf("stop/finish/appends = %d/%d/%d, want 1/1/3", lifecycle.stopCalls, lifecycle.finishCalls, len(lifecycle.appendRequests))
+	}
+	if lifecycle.appendRequests[1].Event.ID != event.Id || lifecycle.appendRequests[1].Event.Sequence != 1 {
+		t.Fatalf("deduplicated event request = %#v", lifecycle.appendRequests[1])
+	}
 }
 
 const (
