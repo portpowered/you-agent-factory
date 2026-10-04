@@ -52,6 +52,7 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		inspectTestEngineLiterals(pass, file, unit)
 	}
 	called := testBoundaryCalls(file)
+	path := timingFile(unit, pass.Fset.Position(file.Pos()).Filename)
 	ast.Inspect(file, func(node ast.Node) bool {
 		id, ok := node.(*ast.Ident)
 		if !ok {
@@ -61,13 +62,11 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		if obj == nil || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() {
 			return true
 		}
+		reportTestComposition(pass, id, obj, unit, path, called[id])
 		fn, isFunction := obj.(*types.Func)
 		if isFunction && !under(strings.TrimSuffix(unit, "_test"), "pkg/services/work") &&
 			fn.Pkg().Path() == modulePrefix+"pkg/services/work" && fn.Name() == "NormalizeWorkRequest" {
 			pass.Reportf(id.Pos(), "test-work-normalization: %s -> pkg/services/work.NormalizeWorkRequest; assert the consumer owner's public contract, relocate normalization scenarios to pkg/services/work, or exercise root.BuildProcess", unit)
-		}
-		if under(unit, "tests/functional") && testBoundaryCallable(obj, called[id]) && functionalTransportComposition(obj.Pkg().Path(), obj.Name()) {
-			pass.Reportf(id.Pos(), "test-functional-transport-composition: %s -> %s.%s; exercise customer behavior through root.BuildProcess instead of constructing a handwritten transport", unit, strings.TrimPrefix(obj.Pkg().Path(), modulePrefix), obj.Name())
 		}
 		return true
 	})
@@ -165,4 +164,43 @@ func testBoundaryCalls(file *ast.File) map[*ast.Ident]bool {
 		return true
 	})
 	return called
+}
+
+// Reviewed command inventory/parity proofs retain their exact source allowance.
+// A neighboring file or descendant package is not the reviewed proof.
+var reviewedTransportRootProcessTests = map[string]bool{
+	"pkg/transports/cli/baseline/goal_failure_process_test.go":  true,
+	"pkg/transports/cli/baseline/root_process_external_test.go": true,
+	"pkg/transports/cli/baseline/root_process_test.go":          true,
+	"pkg/transports/cli/clicontract/root_process_test.go":       true,
+	"pkg/transports/cli/cliinputs/root_process_test.go":         true,
+	"pkg/transports/cli/commandidentity/root_process_test.go":   true,
+}
+
+func testProcessComposition(unit, path, importPath, symbol string) string {
+	unit = strings.TrimSuffix(unit, "_test")
+	if importPath == modulePrefix+"pkg/root" && symbol == "BuildProcess" {
+		if under(unit, "pkg/services") {
+			return "test-alternate-customer-composition"
+		}
+		if under(unit, "pkg/transports") && !reviewedTransportRootProcessTests[path] {
+			return "test-customer-process-under-transport"
+		}
+	}
+	if importPath == modulePrefix+"internal/builtcliacceptance" && symbol == "NewHarness" && under(unit, "pkg") {
+		return "test-alternate-customer-composition"
+	}
+	return ""
+}
+
+func reportTestComposition(pass *analysis.Pass, id *ast.Ident, obj types.Object, unit, path string, called bool) {
+	if !testBoundaryCallable(obj, called) {
+		return
+	}
+	if rule := testProcessComposition(unit, path, obj.Pkg().Path(), obj.Name()); rule != "" {
+		pass.Reportf(id.Pos(), "%s: %s -> %s.%s; move customer process scenarios to tests/functional and keep owner tests component-isolated", rule, unit, strings.TrimPrefix(obj.Pkg().Path(), modulePrefix), obj.Name())
+	}
+	if under(unit, "tests/functional") && functionalTransportComposition(obj.Pkg().Path(), obj.Name()) {
+		pass.Reportf(id.Pos(), "test-functional-transport-composition: %s -> %s.%s; exercise customer behavior through root.BuildProcess instead of constructing a handwritten transport", unit, strings.TrimPrefix(obj.Pkg().Path(), modulePrefix), obj.Name())
+	}
 }

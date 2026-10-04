@@ -254,6 +254,10 @@ authored response policy remain Work-owned.
 HTTP transport tests also reject internal engine literals for the five retired
 runtime types, resolving aliases and dot imports through compiler identities.
 Detached public results and tests outside HTTP transport retain their scope.
+Service tests cannot construct the customer process, and transport tests retain
+only the six exact reviewed command-inventory/parity source exceptions. Built
+CLI harness construction is prohibited throughout package tests. These checks
+resolve calls and captured function references without permitting debt.
 Compiler-resolved function references cover aliases, dot imports and captured
 values in test files and reusable test support. Work-owned tests remain allowed;
 generated files and ordinary production consumers are excluded.

@@ -9,17 +9,9 @@ import (
 	"testing"
 )
 
-func TestScanTestBehaviorBoundariesRejectsPolicyAndAlternateCompositionLoopholes(t *testing.T) {
+func TestScanTestBehaviorBoundariesRejectsCrossOwnerPolicy(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/services/example/process_helper_test.go", `package example
-import "github.com/portpowered/infinite-you/pkg/root"
-func startCustomerProcess() { root.BuildProcess() }
-`)
-	writeGoSourceFile(t, repoRoot, "pkg/services/example/built_cli_helper_test.go", `package example
-import builtcli "github.com/portpowered/infinite-you/internal/builtcliacceptance"
-func startChildCLI() { builtcli.NewHarness() }
-`)
 	writeGoSourceFile(t, repoRoot, "pkg/services/example/operator_policy_test.go", `package example
 import settings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 func expectedConfig() { settings.DefaultConfigPath("home") }
@@ -32,25 +24,18 @@ func NamedFactory() { definitions.MapDir("root", "name") }
 import workers "github.com/portpowered/infinite-you/pkg/services/workers"
 func ReadMockWorkers() { workers.LoadMockWorkersConfig("workers.json") }
 `)
-	writeGoSourceFile(t, repoRoot, "pkg/transports/cli/session/resume_smoke_test.go", `package session
-import "github.com/portpowered/infinite-you/pkg/root"
-func customerResumeRuntime() { root.BuildProcess() }
-`)
 	findings, err := scanTestBehaviorBoundaries(repoRoot)
 	if err != nil {
 		t.Fatalf("scanTestBehaviorBoundaries() error = %v", err)
 	}
-	if len(findings) != 6 {
-		t.Fatalf("finding count = %d, want 6: %#v", len(findings), findings)
+	if len(findings) != 3 {
+		t.Fatalf("finding count = %d, want 3: %#v", len(findings), findings)
 	}
 	joined := testBehaviorFindingSummary(findings)
 	for _, want := range []string{
-		"pkg/services/example/process_helper_test.go|alternate-customer-composition|pkg/root|BuildProcess|1",
-		"pkg/services/example/built_cli_helper_test.go|alternate-customer-composition|internal/builtcliacceptance|NewHarness|1",
 		"pkg/services/example/operator_policy_test.go|cross-owner-service-policy|pkg/services/operator_settings|DefaultConfigPath|1",
 		"internal/testutil/named_factory.go|cross-owner-service-policy|pkg/services/factory_definitions|MapDir|1",
 		"tests/functional/internal/support/workers.go|cross-owner-service-policy|pkg/services/workers|LoadMockWorkersConfig|1",
-		"pkg/transports/cli/session/resume_smoke_test.go|customer-process-under-transport|pkg/root|BuildProcess|1",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("findings = %q, want %q", joined, want)
@@ -80,11 +65,6 @@ func strictRole() { _ = sessions.RequestPreparationFunc(nil) }
 import sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 func invokeFocusedTransportOperation() { _ = sessions.RequestPreparationFunc(nil); Run(nil, RunConfig{}) }
 `)
-	writeGoSourceFile(t, repoRoot, "pkg/transports/cli/commandidentity/root_process_test.go", `package commandidentity
-import "github.com/portpowered/infinite-you/pkg/root"
-func commandInventoryParity() { root.BuildProcess() }
-`)
-
 	findings, err := scanTestBehaviorBoundaries(repoRoot)
 	if err != nil {
 		t.Fatalf("scanTestBehaviorBoundaries() error = %v", err)
@@ -140,7 +120,6 @@ func hiddenQueryImplementation() {
   sessions.ProjectWorkStopSummary()
 }
 `)
-
 	findings, err := scanTestBehaviorBoundaries(repoRoot)
 	if err != nil {
 		t.Fatalf("scanTestBehaviorBoundaries() error = %v", err)
@@ -188,7 +167,6 @@ type testProviderSessionService struct{}
 func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); cursor.LoadDetails(); workers.CanonicalProviderSessionProvider("agent") }
 func scriptedProviderSessionDetail() {}
 `)
-
 	findings, err := scanTestBehaviorBoundaries(repoRoot)
 	if err != nil {
 		t.Fatalf("scanTestBehaviorBoundaries: %v", err)

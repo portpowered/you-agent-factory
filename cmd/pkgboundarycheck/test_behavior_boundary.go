@@ -18,23 +18,8 @@ const (
 	testBehaviorBaselinePath         = "test-behavior-boundary-baseline.json"
 	testBehaviorBaselineStage        = "wire-injection-full-blow"
 	testBehaviorPolicyKind           = "cross-owner-service-policy"
-	testBehaviorCompositionKind      = "alternate-customer-composition"
-	testBehaviorTransportProcessKind = "customer-process-under-transport"
 	testBehaviorBaselineDeletionGate = "replace the test with an owner-local invariant, a strict public-root role, or root.BuildProcess customer coverage, then remove the exact entry"
 )
-
-// These exact tests exercise the generated command inventory or parity of the
-// canonical command surface. They need the real process graph to prove that
-// Wire exposes the same commands as the transport manifests. Customer runtime
-// scenarios do not belong here and must live under tests/functional instead.
-var reviewedTransportRootProcessTests = map[string]struct{}{
-	"pkg/transports/cli/baseline/goal_failure_process_test.go":  {},
-	"pkg/transports/cli/baseline/root_process_external_test.go": {},
-	"pkg/transports/cli/baseline/root_process_test.go":          {},
-	"pkg/transports/cli/clicontract/root_process_test.go":       {},
-	"pkg/transports/cli/cliinputs/root_process_test.go":         {},
-	"pkg/transports/cli/commandidentity/root_process_test.go":   {},
-}
 
 const (
 	factoryDefinitionsImportPath                  = repositoryImportPrefix + "pkg/services/factory_definitions"
@@ -50,8 +35,6 @@ const (
 	workImportPath                                = repositoryImportPrefix + "pkg/services/work"
 	factoryRuntimeRootImportPath                  = repositoryImportPrefix + "pkg/services/factory_runtime"
 	transportMappingImportPath                    = repositoryImportPrefix + "pkg/transports/mapping"
-	rootImportPath                                = repositoryImportPrefix + "pkg/root"
-	builtCLIHarnessImportPath                     = repositoryImportPrefix + "internal/builtcliacceptance"
 )
 
 type testBehaviorOperation struct {
@@ -208,8 +191,7 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 			}
 			_, crossOwnerPolicyImport := prohibitedCrossOwnerTestOperations[importPath]
 			_, transportPolicyImport := prohibitedTransportTestPolicyOperations[importPath]
-			if !crossOwnerPolicyImport && !transportPolicyImport &&
-				importPath != rootImportPath && importPath != builtCLIHarnessImportPath {
+			if !crossOwnerPolicyImport && !transportPolicyImport {
 				continue
 			}
 			if spec.Name != nil && spec.Name.Name == "." {
@@ -228,8 +210,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 				name = "operatorsettings"
 			} else if importPath == transportMappingImportPath {
 				name = "apisurface"
-			} else if importPath == builtCLIHarnessImportPath {
-				name = "builtcliacceptance"
 			}
 			importsByName[name] = importPath
 		}
@@ -256,8 +236,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 					return testBehaviorOperation{testBehaviorPolicyKind, owner, importPath, symbol}, true
 				}
 			}
-			insideServiceTest := strings.HasPrefix(rel, "pkg/services/")
-			insidePkgTest := strings.HasPrefix(rel, "pkg/")
 			insideTransportTest := strings.HasPrefix(rel, "pkg/transports/")
 			if insideTransportTest {
 				if symbols := prohibitedTransportTestPolicyOperations[importPath]; symbols != nil {
@@ -265,16 +243,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 						return testBehaviorOperation{testBehaviorPolicyKind, owner, importPath, symbol}, true
 					}
 				}
-			}
-			switch {
-			case importPath == rootImportPath && symbol == "BuildProcess" && insideServiceTest:
-				return testBehaviorOperation{testBehaviorCompositionKind, "", importPath, symbol}, true
-			case importPath == rootImportPath && symbol == "BuildProcess" && insideTransportTest:
-				if _, reviewed := reviewedTransportRootProcessTests[rel]; !reviewed {
-					return testBehaviorOperation{testBehaviorTransportProcessKind, "", importPath, symbol}, true
-				}
-			case importPath == builtCLIHarnessImportPath && symbol == "NewHarness" && insidePkgTest:
-				return testBehaviorOperation{testBehaviorCompositionKind, "", importPath, symbol}, true
 			}
 			return testBehaviorOperation{}, false
 		}
@@ -427,15 +395,6 @@ func validateTestBehaviorBaselineEntry(entry testBehaviorBaselineEntry) error {
 			!strings.HasPrefix(entry.FilePath, "pkg/transports/") {
 			return fmt.Errorf("test behavior baseline entry names transport-only policy outside pkg/transports: %#v", entry)
 		}
-	case testBehaviorCompositionKind:
-		if entry.Owner != "" || !isKnownCompositionOperation(entry.ImportPath, entry.Symbol) {
-			return fmt.Errorf("test behavior baseline entry names unknown composition operation: %#v", entry)
-		}
-	case testBehaviorTransportProcessKind:
-		if entry.Owner != "" || entry.ImportPath != rootImportPath || entry.Symbol != "BuildProcess" ||
-			!strings.HasPrefix(entry.FilePath, "pkg/transports/") {
-			return fmt.Errorf("test behavior baseline entry names unknown transport customer-process operation: %#v", entry)
-		}
 	default:
 		return fmt.Errorf("test behavior baseline entry kind = %q is not recognized", entry.Kind)
 	}
@@ -453,11 +412,6 @@ func testBehaviorPolicyOwner(importPath, symbol string) (string, bool) {
 func isTransportOnlyTestPolicy(importPath, symbol string) bool {
 	_, known := prohibitedTransportTestPolicyOperations[importPath][symbol]
 	return known
-}
-
-func isKnownCompositionOperation(importPath, symbol string) bool {
-	return (importPath == rootImportPath && symbol == "BuildProcess") ||
-		(importPath == builtCLIHarnessImportPath && symbol == "NewHarness")
 }
 
 func createTestBehaviorBaseline(cfg config) error {
