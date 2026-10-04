@@ -96,5 +96,4 @@ flowchart LR
 | [`pkg/services/providers/internal/testutil/execution`](../../../../pkg/services/providers/internal/testutil/execution) | 508 | 1 | 87.8% | XX% |
 | [`pkg/services/providers/transports/cli`](../../../../pkg/services/providers/transports/cli) | 775 | 4 | 83.0% | 59.4% |
 | [`pkg/services/providers/transports/http`](../../../../pkg/services/providers/transports/http) | 725 | 11 | 88.7% | XX% |
-| [`pkg/services/providers/transports/mcp`](../../../../pkg/services/providers/transports/mcp) | 774 | 9 | 94.0% | XX% |
 | [`pkg/services/providers/wire`](../../../../pkg/services/providers/wire) | 846 | 5 | XX% | 69.9% |
