@@ -380,23 +380,6 @@ func assertCatalogError(t *testing.T, operation string, err error, wantError str
 	}
 }
 
-func TestServiceInspectRuntimeProjectsHostReadiness(t *testing.T) {
-	t.Parallel()
-
-	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := mustConstructModelService(t, modelServiceFixture{
-		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
-		ModelHost:     installedCacheInspectHost{},
-	})
-	runtime, err := svc.InspectRuntime(context.Background(), "OMNIVOICE_Q4_K_M")
-	if err != nil {
-		t.Fatalf("InspectRuntime: %v", err)
-	}
-	if runtime.ReadinessState != managedruntime.ReadinessStateReady || runtime.LifecycleState != managedruntime.LifecycleStateInstalled {
-		t.Fatalf("InspectRuntime = %#v, want READY/INSTALLED", runtime)
-	}
-}
-
 type installedCacheFactsPuller struct{}
 
 func (installedCacheFactsPuller) PullModel(context.Context, *modelRuntimeConfig, string) (models.PullResult, error) {

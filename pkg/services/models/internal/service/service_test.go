@@ -13,6 +13,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
@@ -588,23 +589,58 @@ func (fixture *compatibilityParityFixture) markReady() {
 
 func assertCompatibilityReadinessParity(t *testing.T, fixture compatibilityParityFixture) {
 	t.Helper()
-	legacyReadiness, err := fixture.compatibility.InspectRuntime(context.Background(), "compatibility-model")
-	if err != nil {
-		t.Fatalf("compatibility InspectRuntime: %v", err)
-	}
+	want := fixture.currentReadiness.Clone()
 	scopedReadiness, err := fixture.root.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
 		Scope: fixture.opened.Scope, Name: "compatibility-model", Operation: "generate",
 	})
 	if err != nil {
 		t.Fatalf("GetModelReadiness: %v", err)
 	}
-	if !reflect.DeepEqual(legacyReadiness, scopedReadiness.Readiness) {
+	if !reflect.DeepEqual(want, scopedReadiness.Readiness) {
 		t.Fatalf(
-			"readiness parity = (legacy %#v, scoped %#v)",
-			legacyReadiness,
+			"current readiness = %#v, want %#v",
 			scopedReadiness.Readiness,
+			want,
 		)
 	}
+}
+
+func TestRootGetModelReadinessPreservesRequestResultAndFailure(t *testing.T) {
+	t.Parallel()
+	scope, err := (models.RuntimeScopeRef{}).Parse("root-readiness-boundary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := models.GetModelReadinessRequest{Scope: scope, Name: "selected-model", Operation: "generate"}
+	want := models.GetModelReadinessResult{Readiness: models.Runtime{
+		Identity: "selected-model", ReadinessState: models.ReadinessStateReady,
+		LifecycleState: models.LifecycleStateInstalled,
+	}}
+	failure := errors.New("readiness query failed")
+	for _, queryErr := range []error{nil, failure} {
+		ctx, cancel := context.WithCancel(context.Background())
+		boundary := rootReadinessBoundary{query: func(gotCtx context.Context, got models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+			if gotCtx != ctx || got != request {
+				t.Fatalf("readiness request/context = (%#v, %v), want selected request/context", got, gotCtx)
+			}
+			return want, queryErr
+		}}
+		root := &Root{catalog: boundary}
+		got, gotErr := root.GetModelReadiness(ctx, request)
+		cancel()
+		if !reflect.DeepEqual(got, want) || !errors.Is(gotErr, queryErr) {
+			t.Fatalf("GetModelReadiness = (%#v, %v), want (%#v, %v)", got, gotErr, want, queryErr)
+		}
+	}
+}
+
+type rootReadinessBoundary struct {
+	modelcatalog.Service
+	query func(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error)
+}
+
+func (b rootReadinessBoundary) GetModelReadiness(ctx context.Context, request models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+	return b.query(ctx, request)
 }
 
 func TestRootClosesScopeAndPreservesClosedClassification(t *testing.T) {
