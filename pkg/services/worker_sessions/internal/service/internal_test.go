@@ -936,6 +936,185 @@ func TestKeyedRuntime_OpeningFailureReleasesScopedReservation(t *testing.T) {
 	assertPerRuntimeAttemptState(t, fixture, workersessions.StateFailed)
 }
 
+func keyedRuntimeProgressFragment(fixture *perRuntimeAttemptFixture) workers.ProgressFragment {
+	return workers.ProgressFragment{
+		Correlation: workers.ExecutionCorrelation{
+			RuntimeID: fixture.request.Key.RuntimeID, DispatchID: fixture.request.Key.DispatchID,
+			AttemptID: fixture.request.AttemptID,
+		},
+		DispatchID: fixture.request.Key.DispatchID, Kind: workers.ProgressFragmentKind,
+		Type: "message.delta", Payload: "output-" + fixture.request.ID, Provider: "codex",
+		Continuation: &providers.ContinuationRef{
+			Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "provider-" + fixture.request.ID,
+		},
+	}
+}
+
+func assertKeyedRuntimeProgressCommitted(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, count int) {
+	t.Helper()
+	appends := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	if len(appends) != count+2 {
+		t.Fatalf("%s appends = %d, want opening, provider binding and %d records", fixture.request.ID, len(appends), count)
+	}
+	binding := decodePerRuntimeDraft(t, appends[1])
+	draft := decodePerRuntimeDraft(t, appends[len(appends)-1])
+	if binding.Kind != workers.KindSession || binding.Phase != workers.PhaseUpdated ||
+		draft.DispatchID != fixture.request.AttemptID || draft.Kind != workers.KindMessage ||
+		draft.Provenance.Provider != "codex" || !strings.Contains(string(draft.Payload), "output-"+fixture.request.ID) ||
+		appends[len(appends)-1].SourceSequence != events.SourceSequence(count) {
+		t.Fatalf("%s binding/progress = %#v / %#v / %#v", fixture.request.ID, binding, draft, appends[len(appends)-1])
+	}
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-" + fixture.request.ID}
+	session := getCharacterizationSession(t, fixture.service, fixture.request.ID)
+	want := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: fixture.request.ID, DispatchID: fixture.request.Key.DispatchID,
+		AttemptID: fixture.request.AttemptID, Reference: reference,
+	}
+	if !reflect.DeepEqual(session.ProviderSessionAssociation, &want) {
+		t.Fatalf("retained association = %#v, want %#v", session.ProviderSessionAssociation, want)
+	}
+}
+
+func TestKeyedRuntime_ProgressCommitsScopedAssociationBeforeForwarding(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	first := newPerRuntimeAttemptFixture(t, "a", sink)
+	peer := newPerRuntimeAttemptFixture(t, "b", sink, first)
+	counts := map[string]int{}
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		fixture := first
+		if fragment.Correlation.RuntimeID == peer.request.Key.RuntimeID {
+			fixture = peer
+		}
+		counts[fixture.request.ID]++
+		assertKeyedRuntimeProgressCommitted(t, fixture, sink, counts[fixture.request.ID])
+		if !reflect.DeepEqual(fragment, keyedRuntimeProgressFragment(fixture)) {
+			t.Fatal("downstream fragment changed")
+		}
+	})
+	publisher.Bind(first.service)
+	for _, fixture := range []*perRuntimeAttemptFixture{first, peer, first, peer} {
+		publisher.Publish(keyedRuntimeProgressFragment(fixture))
+	}
+	if counts[first.request.ID] != 2 || counts[peer.request.ID] != 2 {
+		t.Fatalf("forwarded counts = %#v", counts)
+	}
+	handoff := keyedRuntimeProgressFragment(first)
+	handoff.Kind = workers.ProviderSessionObservedFragmentKind
+	before := sink.requestsFor("")
+	publisher.Publish(handoff)
+	if !reflect.DeepEqual(before, sink.requestsFor("")) || counts[first.request.ID] != 2 {
+		t.Fatal("internal provider handoff appended or forwarded")
+	}
+	if err := first.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	publisher.Publish(keyedRuntimeProgressFragment(peer))
+	if counts[peer.request.ID] != 3 {
+		t.Fatal("peer progress stopped after target completion")
+	}
+}
+
+func TestKeyedRuntime_ProgressRejectsForeignIdentityBeforeEffects(t *testing.T) {
+	t.Parallel()
+	for _, mutation := range []string{"key", "physical", "missing-physical", "dispatch", "canonical", "provider"} {
+		t.Run(mutation, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			first := newPerRuntimeAttemptFixture(t, "a", sink)
+			peer := newPerRuntimeAttemptFixture(t, "b", sink, first)
+			fragment := keyedRuntimeProgressFragment(first)
+			key := first.request.Key
+			mutateKeyedRuntimeProgress(mutation, &key, &fragment)
+			before := sink.requestsFor("")
+			forwarded := false
+			err := first.service.PublishRuntimeProgress(context.Background(), key, fragment, func(workers.ProgressFragment) { forwarded = true })
+			wantErr := workersessions.ErrProviderBindingAttemptMismatch
+			if mutation == "provider" {
+				wantErr = workersessions.ErrProviderBindingConflict
+			}
+			if !errors.Is(err, wantErr) || forwarded || !reflect.DeepEqual(before, sink.requestsFor("")) {
+				t.Fatalf("rejected progress = %v, forwarded=%t, appends changed=%t", err, forwarded, !reflect.DeepEqual(before, sink.requestsFor("")))
+			}
+			for _, fixture := range []*perRuntimeAttemptFixture{first, peer} {
+				if session := assertPerRuntimeAttemptState(t, fixture, workersessions.StateRunning); session.ProviderSessionAssociation != nil {
+					t.Fatal("rejected progress changed provider association")
+				}
+			}
+			if err := first.service.PublishRuntimeProgress(context.Background(), peer.request.Key, keyedRuntimeProgressFragment(peer), nil); err != nil {
+				t.Fatalf("peer progress after rejection: %v", err)
+			}
+			assertKeyedRuntimeProgressCommitted(t, peer, sink, 1)
+		})
+	}
+}
+
+func mutateKeyedRuntimeProgress(mutation string, key *workersessions.RuntimeAttemptKey, fragment *workers.ProgressFragment) {
+	switch mutation {
+	case "key":
+		key.RuntimeID = "foreign-runtime"
+	case "physical":
+		fragment.Correlation.AttemptID = "physical-b"
+	case "missing-physical":
+		fragment.Correlation.AttemptID = ""
+	case "dispatch":
+		fragment.DispatchID = "foreign-dispatch"
+	case "canonical":
+		fragment.CanonicalDraft = workers.Draft{Kind: workers.KindMessage, DispatchID: "physical-b"}
+	case "provider":
+		fragment.Provider = "claude"
+	}
+}
+
+func TestKeyedRuntime_CompatibilityInvocationRetainsCorrelatedProgress(t *testing.T) {
+	t.Parallel()
+	for _, runtimeID := range []string{"", "compat-runtime"} {
+		t.Run(fmt.Sprintf("runtime=%q", runtimeID), func(t *testing.T) {
+			t.Parallel()
+			testKeyedRuntimeCompatibilityProgress(t, runtimeID)
+		})
+	}
+}
+
+func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string) {
+	t.Helper()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+		forwarded++
+		if records := sink.requestsFor(workersessions.Topic("compat-worker")); len(records) != 3 {
+			t.Fatalf("forwarding preceded opening/binding/output: %#v", records)
+		}
+	})
+	execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		publisher.Publish(workers.ProgressFragment{
+			Correlation: request.Correlation, DispatchID: request.Correlation.DispatchID,
+			Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "compatibility output", Provider: "codex",
+			Continuation: &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "compat-provider"},
+		})
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publisher.Bind(service)
+	request := validStartRequest("compat-worker", "compat-dispatch")
+	request.Execution.Execution.RuntimeID = runtimeID
+	result, err := service.InvokeSession(context.Background(), request)
+	if err != nil || result.Session.State != workersessions.StateCompleted || forwarded != 1 {
+		t.Fatalf("compatibility invocation = %#v, %v, forwarded=%d", result, err, forwarded)
+	}
+	session := getCharacterizationSession(t, service.(*registry), request.ID)
+	if association := session.ProviderSessionAssociation; association == nil || association.WorkerSessionID != request.ID ||
+		association.DispatchID != "compat-dispatch" || association.AttemptID != "compat-dispatch" || association.Reference.ID != "compat-provider" {
+		t.Fatalf("compatibility association = %#v", association)
+	}
+	if records := sink.requestsFor(workersessions.Topic(request.ID)); len(records) != 4 {
+		t.Fatalf("compatibility retained records = %d, want opening/binding/output/terminal", len(records))
+	}
+}
+
 func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{

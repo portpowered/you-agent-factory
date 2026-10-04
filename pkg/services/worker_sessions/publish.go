@@ -42,6 +42,11 @@ type ProviderSessionObservationPublisher struct {
 	logger    logging.Logger
 }
 
+// ErrRuntimeProgressDirectSupervision preserves the legacy InvokeSession
+// publication path until runtime compatibility invocation uses the keyed
+// opener. Its source sequence remains owned by the original progress bridge.
+var ErrRuntimeProgressDirectSupervision = errors.New("worker sessions: progress belongs to direct supervision")
+
 // NewProviderSessionObservationPublisher creates an unbound progress bridge.
 // Fragments without an exact typed reference remain non-resumable and continue
 // to the supplied publisher, while reference-bearing fragments wait for Bind
@@ -94,6 +99,9 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	if !providerFragmentAgrees(fragment) {
 		return
 	}
+	if p.publishRuntimeProgress(observer, next, fragment, forwardUnassociated) {
+		return
+	}
 	if err := p.associateProviderSession(observer, fragment); err != nil {
 		if forwardUnassociated && errors.Is(err, ErrProviderSessionAssociationAttemptMismatch) &&
 			fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
@@ -113,6 +121,26 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	if next != nil {
 		next(fragment)
 	}
+}
+
+func (p *ProviderSessionObservationPublisher) publishRuntimeProgress(observer Service, next workers.ProgressPublisher, fragment workers.ProgressFragment, forwardUnassociated bool) bool {
+	runtimeID := strings.TrimSpace(fragment.Correlation.RuntimeID)
+	publisher, ok := observer.(interface {
+		PublishRuntimeProgress(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error
+	})
+	if runtimeID == "" || !ok {
+		return false
+	}
+	key := RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: strings.TrimSpace(fragment.Correlation.DispatchID)}
+	err := publisher.PublishRuntimeProgress(context.Background(), key, fragment, next)
+	if errors.Is(err, ErrRuntimeProgressDirectSupervision) {
+		return false
+	}
+	if forwardUnassociated && errors.Is(err, ErrProviderSessionAssociationAttemptMismatch) &&
+		fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
+		next(fragment)
+	}
+	return true
 }
 
 func (p *ProviderSessionObservationPublisher) dependencies() (Service, workers.ProgressPublisher, bool) {
@@ -365,6 +393,15 @@ func (p *ProviderSessionObservationPublisher) publishWorkerDraft(
 	sessionID string,
 	draft workers.Draft,
 ) error {
+	return p.publishWorkerDraftContext(context.Background(), observer, sessionID, draft)
+}
+
+func (p *ProviderSessionObservationPublisher) publishWorkerDraftContext(
+	ctx context.Context,
+	observer Service,
+	sessionID string,
+	draft workers.Draft,
+) error {
 	if observer == nil || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
@@ -376,7 +413,7 @@ func (p *ProviderSessionObservationPublisher) publishWorkerDraft(
 	p.sequences[sessionID]++
 	sequence := p.sequences[sessionID]
 
-	_, err := observer.PublishRecord(context.Background(), PublishRecordRequest{
+	_, err := observer.PublishRecord(ctx, PublishRecordRequest{
 		SessionID:      sessionID,
 		Draft:          draft,
 		SourceType:     WorkerObservationSourceType,

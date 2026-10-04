@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ObservationService is retained as the public name for the Worker Sessions
@@ -824,3 +825,53 @@ var (
 	// could not project the normalized transcript source.
 	ErrObservationTranscriptProjectionUnavailable = errors.New("worker session transcript: projection unavailable")
 )
+
+// PublishWorkerSessionProgress commits progress to an already-resolved Worker
+// Session. The runtime owner validates the immutable key and physical attempt
+// first; this operation never resolves a bare dispatch or forwards output.
+// A zero-value publisher owns only this session's source sequence and lock.
+func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
+	ctx context.Context,
+	observer Service,
+	workerSessionID string,
+	fragment workers.ProgressFragment,
+) error {
+	if !providerFragmentAgrees(fragment) {
+		return ErrProviderBindingConflict
+	}
+	draft, canonical := canonicalDraftFromFragment(fragment)
+	if canonical && !providerIdentityAgrees(fragment, draft) {
+		return ErrProviderBindingConflict
+	}
+	if canonical && draft.DispatchID != "" && draft.DispatchID != fragment.Correlation.AttemptID && draft.DispatchID != fragment.Correlation.DispatchID {
+		return ErrProviderBindingAttemptMismatch
+	}
+	if reference := sessionRefFromContinuation(fragment.Continuation); reference != nil {
+		if _, err := observer.AssociateProviderSession(ctx, ProviderSessionAssociationRequest{
+			WorkerSessionID: workerSessionID, DispatchID: fragment.Correlation.DispatchID,
+			Reference: reference.Clone(),
+		}); err != nil {
+			return err
+		}
+	}
+	if fragment.Kind == workers.ProviderSessionObservedFragmentKind {
+		return nil
+	}
+	if !canonical {
+		if !isWorkerAuthoredFragment(fragment) {
+			return nil
+		}
+		var ok bool
+		draft, ok = draftFromProgressFragment(fragment)
+		if !ok {
+			return nil
+		}
+	}
+	// The registry supplied the physical attempt, while downstream consumers
+	// retain the original logical dispatch and correlation unchanged.
+	draft.DispatchID = fragment.Correlation.AttemptID
+	if draft.Provenance.Provider == "" {
+		draft.Provenance.Provider = providerIdentityForFragment(fragment, &draft)
+	}
+	return p.publishWorkerDraftContext(ctx, observer, workerSessionID, draft)
+}

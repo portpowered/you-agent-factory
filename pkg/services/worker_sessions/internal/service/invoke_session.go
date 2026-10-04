@@ -76,6 +76,79 @@ type runtimeAttempt struct {
 	controlHistory *controlHistoryReservation
 	completing     bool
 	completed      chan struct{}
+	progress       workersessions.ProviderSessionObservationPublisher
+}
+
+// PublishRuntimeProgress resolves only the explicit scoped owner before any
+// association, source-native append, or downstream publication. Sequence state
+// belongs to the immutable handle, so equal dispatches cannot share counters.
+func (r *registry) PublishRuntimeProgress(
+	ctx context.Context,
+	key workersessions.RuntimeAttemptKey,
+	fragment workers.ProgressFragment,
+	next workers.ProgressPublisher,
+) error {
+	ctx = runtimeAttemptContext(ctx)
+	key.RuntimeID = strings.TrimSpace(key.RuntimeID)
+	key.DispatchID = strings.TrimSpace(key.DispatchID)
+	if key.RuntimeID == "" || key.DispatchID == "" ||
+		key.RuntimeID != strings.TrimSpace(fragment.Correlation.RuntimeID) ||
+		key.DispatchID != strings.TrimSpace(fragment.Correlation.DispatchID) {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	progress, ownerID, attemptID, err := r.runtimeProgressOwner(key)
+	if err != nil {
+		return err
+	}
+	physicalID := strings.TrimSpace(fragment.Correlation.AttemptID)
+	if physicalID == "" {
+		physicalID = strings.TrimSpace(fragment.DispatchID)
+	}
+	if physicalID != attemptID {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	if dispatchID := strings.TrimSpace(fragment.DispatchID); dispatchID != "" && dispatchID != attemptID && dispatchID != key.DispatchID {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	// Preserve the original fragment for the downstream observer, including
+	// legacy blank physical IDs. Only the committed draft needs normalization.
+	committed := fragment
+	committed.Correlation.AttemptID = attemptID
+	if err := progress.PublishWorkerSessionProgress(ctx, r, ownerID, committed); err != nil {
+		r.logger.Warn("runtime Worker progress rejected", "workerSessionID", ownerID, "runtimeID", key.RuntimeID, "dispatchID", key.DispatchID, "outcome", "publication_rejected")
+		return err
+	}
+	if fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
+		next(fragment)
+	}
+	return nil
+}
+
+func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*workersessions.ProviderSessionObservationPublisher, string, string, error) {
+	r.mu.RLock()
+	ownerID := r.runtimeAttemptOwners[key]
+	attempt := r.runtimeAttemptControls[ownerID]
+	if attempt != nil {
+		r.mu.RUnlock()
+		return &attempt.progress, ownerID, attempt.attemptID, nil
+	}
+	// Compatibility InvokeSession still owns its directly supervised attempt
+	// until the atomic opener cutover. Check its supplied runtime correlation
+	// before allowing the historical dispatch index to resolve that route.
+	ownerID = r.dispatchOwners[key.DispatchID]
+	supervision := r.supervisions[ownerID]
+	r.mu.RUnlock()
+	if supervision != nil {
+		supervision.mu.Lock()
+		request := cloneWorkstationDispatchRequest(supervision.execution)
+		attemptID := supervision.dispatchID
+		supervision.mu.Unlock()
+		resolved, err := executeRequestFromSessionDispatch(request)
+		if err == nil && resolved.Correlation.RuntimeID == key.RuntimeID && attemptID == key.DispatchID {
+			return nil, "", "", workersessions.ErrRuntimeProgressDirectSupervision
+		}
+	}
+	return nil, "", "", workersessions.ErrProviderSessionAssociationAttemptMismatch
 }
 
 var errRuntimeAttemptControlUnavailable = errors.New("worker sessions: runtime attempt cancellation is unavailable")
