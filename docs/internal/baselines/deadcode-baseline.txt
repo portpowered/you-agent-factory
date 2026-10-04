@@ -541,6 +541,8 @@ internal/testutil/testdeps/capture.go: unreachable func: RecordingMetricsEmitter
 internal/testutil/testdeps/observability.go: unreachable func: Default
 internal/testutil/testdeps/observability.go: unreachable func: Observability.ApplyFactoryServiceConfig
 internal/testutil/testdeps/observability.go: unreachable func: QuietFactoryServiceConfig
+internal/testutil/testhome/home.go: unreachable func: IsolateHome
+internal/testutil/testhome/home.go: unreachable func: IsolateHomeMain
 internal/testutil/testutil.go: unreachable func: AppendFactoryInferenceThrottleGuard
 internal/testutil/testutil.go: unreachable func: CanonicalPath
 internal/testutil/testutil.go: unreachable func: CopyFixtureDir
