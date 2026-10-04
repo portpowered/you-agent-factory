@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 const (
@@ -71,16 +73,29 @@ func main() {
 }
 
 func run(cfg config, stdout, stderr io.Writer) error {
+	construction, err := contractguard.ScanRepositoryConstruction(cfg.root)
+	if err != nil {
+		return err
+	}
+	constructionCount := contractguard.CountBlockingConstructionFindings(construction)
 	findings, err := scan(cfg.root)
 	if err != nil {
 		return err
 	}
-	if len(findings) == 0 {
+	if constructionCount == 0 {
+		contractguard.WriteConstructionFindings(stdout, construction)
+	} else {
+		contractguard.WriteConstructionFindings(stderr, construction)
+	}
+	if len(findings) == 0 && constructionCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:durable-runtime-construction] direct construction is limited to approved composition owners")
 		return nil
 	}
 	for _, finding := range findings {
 		fmt.Fprintln(stderr, finding)
+	}
+	if constructionCount > 0 {
+		return fmt.Errorf("[agent-factory:construction] found %d prohibited construction(s) and %d existing violation(s)", constructionCount, len(findings))
 	}
 	return fmt.Errorf("[agent-factory:durable-runtime-construction] found %d prohibited constructor call(s)", len(findings))
 }
