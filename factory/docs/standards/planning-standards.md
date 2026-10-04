@@ -225,6 +225,8 @@ fidelity.
   inventory baselines) always win over a named artifact: place tests in
   existing files, delete dead exports rather than baselining them, and never
   raise a baseline.
+- Do not prescribe new production exports or new files in ratchet-counted
+  packages unless the change requires them.
 - Criteria assert the CURRENT documented behavior. When the literal text
   contradicts the docs, tests or contracts, assert what exists in the
   product-change PR and record the gap for the lead without blocking.
