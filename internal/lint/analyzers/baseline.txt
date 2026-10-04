@@ -2068,7 +2068,6 @@ testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/servic
 testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/services/models/internal/backends/localai/tts_protocol_test.go::TestPinnedTTSBackendPreservesCancellationAndReadinessClassification::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/services/models/internal/backends/localai/tts_protocol_test.go::TestPinnedTTSBackendPreservesCancellationAndReadinessClassification::deadline::2
 testsleep-deadline-test|pkg/services/models/internal/effects|pkg/services/models/internal/effects/asr_live_correlation_signals_test.go::testSignalContext::deadline::1
-testsleep-deadline-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/supervisor_test.go::TestCatalogHost_SupervisedBackend_UnloadRejectsLoadingRuntime::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_inference_test.go::awaitCloseRaceSignal::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_scoped_pull_test.go::TestRootRemoveModelAssetsSerializesCacheRemovalAgainstLeaseAcquisition::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_scoped_pull_test.go::TestRootRemoveModelAssetsSerializesCacheRemovalAgainstLeaseAcquisition::deadline::2
@@ -2511,13 +2510,6 @@ testsleep-sleep-test|pkg/services/factory_visualization/transports/http_test|pkg
 testsleep-sleep-test|pkg/services/factory_visualization/transports/http_test|pkg/services/factory_visualization/transports/http/request_context_test.go::TestHandleObserve_CanceledDuringRootCallCompletesWithoutHang::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go::TestNewRootConstructsInertRoot::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go::TestNewRootConstructsInertRoot::sleep::2
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/diagnostics_test.go::TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/diagnostics_test.go::TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric::sleep::2
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/lease_policy_test.go::TestCatalogHost_IdleUnloadDoesNotEvictActiveLease::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/lease_policy_test.go::TestCatalogHost_IdleUnloadStopsRuntimeAfterLastLeaseReleased::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/managed_runtime_compat_test.go::TestInspectReadiness_ReportsSupervisedRuntimeCrash::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/supervisor_test.go::TestCatalogHost_SupervisedBackend_CancellationStopsManagedProcess::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/supervisor_test.go::TestCatalogHost_SupervisedBackend_PostStartCrashSurfacesFailedReadiness::sleep::1
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric::sleep::1
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric::sleep::2
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostPostStartCrashSurfacesFailedReadinessOnInspect::sleep::1
