@@ -1,5 +1,5 @@
-// Package service decodes the packaged Providers catalog.
-package service
+// Package catalogdata validates and decodes detached packaged provider facts.
+package catalogdata
 
 import (
 	"encoding/json"

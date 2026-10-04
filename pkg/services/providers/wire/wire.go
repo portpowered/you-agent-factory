@@ -20,9 +20,9 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acpwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire"
-	builtinswire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -388,7 +388,7 @@ func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
 // able to validate and diagnose alternate generated documents without starting
 // any provider process.
 func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegration, error) {
-	return builtinswire.DecodeACPIntegrations(document)
+	return catalogdata.DecodeACPIntegrations(document)
 }
 
 func newRootWithOptions(

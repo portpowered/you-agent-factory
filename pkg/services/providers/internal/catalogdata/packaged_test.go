@@ -1,4 +1,4 @@
-package wire
+package catalogdata
 
 import (
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
