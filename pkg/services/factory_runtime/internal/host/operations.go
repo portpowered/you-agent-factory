@@ -39,9 +39,6 @@ func PublishFactoryChange(
 	replacement *Bundle,
 	clock factory.Clock,
 ) error {
-	if clock == nil {
-		return fmt.Errorf("publish Factory Runtime change: clock is required")
-	}
 	if replacement == nil || replacement.EventHistory == nil {
 		return nil
 	}
