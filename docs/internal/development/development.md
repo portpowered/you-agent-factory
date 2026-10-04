@@ -241,6 +241,11 @@ contract rules: no Models-wire imports (including tests and descendants), only
 Models' `service_contract.go:Service` interface. These checks consume compiler
 files, including generated production declarations. Package documentation is
 reviewed as architecture prose; literal documentation phrases are not gated.
+The `ProviderOwnership` analyzer owns zero-debt Providers leaf effect and
+catalog/execution ownership. Compiler-resolved types preserve the exact Workers
+request bridge and direct leaf aggregation allowances, rejecting redeclarations,
+wrappers and competing provider families. Generated production declarations are
+checked; test declarations are excluded.
 Other unmigrated boundary rules remain in `make pkg-boundary`.
 
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/baselines/frontend-deadcode-baseline.json`. The backend analyzer uses production entrypoints only, so production code referenced exclusively by tests remains a dead-code finding. It writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/baselines/deadcode-baseline.txt`. Review any drift before updating either baseline.

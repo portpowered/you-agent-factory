@@ -34,7 +34,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	writePetriPublicSurfaceFindings(writer, findings.petriPublicSurfaceFindings)
 	writePetriPublicSurfaceFindings(writer, findings.recordedPetriPublicSurfaceFindings)
 	writeStalePetriPublicSurfaceBaselineEntries(writer, findings.stalePetriPublicSurfaceEntries)
-	writeProviderEffectOwnershipFindings(writer, findings.providerEffectOwnershipFindings)
 }
 
 func writeBaselineSummaries(writer io.Writer, findings scanResult) {

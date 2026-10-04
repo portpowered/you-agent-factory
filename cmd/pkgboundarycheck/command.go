@@ -124,8 +124,7 @@ func countAlwaysBlockingViolations(findings scanResult) int {
 		len(findings.testBehaviorFindings) +
 		len(findings.staleTestBehaviorEntries) +
 		len(findings.petriPublicSurfaceFindings) +
-		len(findings.stalePetriPublicSurfaceEntries) +
-		len(findings.providerEffectOwnershipFindings)
+		len(findings.stalePetriPublicSurfaceEntries)
 }
 
 func countProductionBoundaryViolations(findings scanResult) int {

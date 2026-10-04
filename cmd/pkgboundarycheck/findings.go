@@ -28,7 +28,6 @@ type scanResult struct {
 	recordedPetriPublicSurfaceFindings  []petriPublicSurfaceFinding
 	stalePetriPublicSurfaceEntries      []petriPublicSurfaceBaselineEntry
 	petriPublicSurfaceBaselineCount     int
-	providerEffectOwnershipFindings     []providerEffectOwnershipFinding
 }
 
 type retiredPackageRoot struct {

@@ -277,9 +277,6 @@ func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recor
 	visible.petriPublicSurfaceFindings, recorded.petriPublicSurfaceFindings = splitRecordedFindings(visible.petriPublicSurfaceFindings, func(finding petriPublicSurfaceFinding) string {
 		return boundaryFindingFingerprint("petri-public-surface", finding)
 	}, baseline)
-	visible.providerEffectOwnershipFindings, recorded.providerEffectOwnershipFindings = splitRecordedFindings(visible.providerEffectOwnershipFindings, func(finding providerEffectOwnershipFinding) string {
-		return boundaryFindingFingerprint("provider-effect-ownership", finding)
-	}, baseline)
 }
 
 func clearVisibleRecordedFindings(visible *scanResult) {
@@ -343,7 +340,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	addBoundaryFindingFingerprints(fingerprints, "test-behavior", result.recordedTestBehaviorFindings)
 	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.petriPublicSurfaceFindings)
 	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.recordedPetriPublicSurfaceFindings)
-	addBoundaryFindingFingerprints(fingerprints, "provider-effect-ownership", result.providerEffectOwnershipFindings)
 	return fingerprints
 }
 

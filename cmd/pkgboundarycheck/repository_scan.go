@@ -55,7 +55,7 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err := scanRepositoryProductionDefaults(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
-	if err := scanRepositoryPetriAndProviderBoundaries(repoRoot, &result); err != nil {
+	if err := scanRepositoryPetriBoundaries(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
 	sortScanResult(&result)
@@ -244,7 +244,7 @@ func scanRepositoryProductionDefaults(repoRoot string, result *scanResult) error
 	return nil
 }
 
-func scanRepositoryPetriAndProviderBoundaries(repoRoot string, result *scanResult) error {
+func scanRepositoryPetriBoundaries(repoRoot string, result *scanResult) error {
 	findings, err := scanPetriPublicSurface(repoRoot)
 	if err != nil {
 		return err
@@ -266,8 +266,7 @@ func scanRepositoryPetriAndProviderBoundaries(repoRoot string, result *scanResul
 		},
 	)
 	result.petriPublicSurfaceBaselineCount = len(baseline.Entries)
-	result.providerEffectOwnershipFindings, err = scanProviderEffectOwnership(repoRoot)
-	return err
+	return nil
 }
 
 func sortScanResult(result *scanResult) {

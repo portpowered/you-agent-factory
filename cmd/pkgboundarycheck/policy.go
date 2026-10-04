@@ -112,7 +112,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 // exception.
 //
 // Provider inference/process effects belong to the Providers Execution leaf
-// (providersLeafEffectContractImport). Workers may retain only its
+// (pkg/services/providers/execution/inferencecontract). Workers may retain only its
 // request-scoped compatibility adapter and must not add a provider protocol,
 // catalog, adapter, session, or native execution owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
