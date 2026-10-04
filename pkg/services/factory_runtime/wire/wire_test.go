@@ -8,36 +8,10 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
-	t.Parallel()
-
-	valid := validNewServiceInputs()
-	tests := []struct {
-		name   string
-		mutate func(*newServiceInputs)
-	}{
-		{name: "ID generator", mutate: func(in *newServiceInputs) { in.newID = nil }},
-		{name: "clock", mutate: func(in *newServiceInputs) { in.clock = nil }},
-		{name: "Workers publisher", mutate: func(in *newServiceInputs) { in.workersPublisher = nil }},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			inputs := valid
-			test.mutate(&inputs)
-			service, err := inputs.callNewService()
-			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
-			}
-		})
-	}
-}
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
@@ -190,14 +164,15 @@ func validNewServiceInputs() newServiceInputs {
 }
 
 func (in newServiceInputs) callNewService() (factoryruntime.Service, error) {
-	return NewService(
-		in.newID,
-		in.workflows,
-		in.workflowRuntime,
-		in.clock,
-		in.workersPublisher,
-		in.workersCanceler,
-	)
+	lifecycle, err := NewLifecycle(in.clock, platformclock.Real{})
+	if err != nil {
+		return nil, err
+	}
+	host, err := NewInstanceHost(in.clock, platformclock.Real{}, lifecycle)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(NewOrchestration(in.newID, in.workflows, in.workflowRuntime), host, NewDispatchPlanning(in.workersPublisher, in.workersCanceler))
 }
 
 type recordingClock struct{ calls int }
