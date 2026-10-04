@@ -39,7 +39,7 @@ func TestNewServiceRetainsExplicitDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	if svc.runtimeConfig() != runtimeCfg || svc.modelHost() != host || svc.modelAssetPuller() != puller {
+	if svc.runtimeConfig() != runtimeCfg || svc.modelHost() != host || svc.assetPuller != puller {
 		t.Fatal("NewService did not retain required dependencies")
 	}
 	if svc.logger() != logger || svc.pullMetrics != modelseffects.PullMetricsRecorder(metrics) {
@@ -87,8 +87,6 @@ func TestServiceNilReceiverPreservesUnavailableRuntimeErrors(t *testing.T) {
 	assertUnavailable("ListModels", err)
 	_, err = svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	assertUnavailable("GetModel", err)
-	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
-	assertUnavailable("PullModel", err)
 	if svc.logger() != nil || svc.modelHost() != nil {
 		t.Fatal("nil service accessors returned configured collaborators")
 	}

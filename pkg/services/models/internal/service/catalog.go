@@ -67,7 +67,7 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 			return modelcatalog.List{}, err
 		}
 		summary.ManagedRuntime = overlayCatalogManagedRuntime(summary.ManagedRuntime, snapshot)
-		inspection, err := s.modelAssetPuller().InspectRuntimeCache(ctx, runtimeCfg, entry.Summary.Name)
+		inspection, err := s.assetPuller.InspectRuntimeCache(ctx, runtimeCfg, entry.Summary.Name)
 		if err != nil {
 			return modelcatalog.List{}, err
 		}
@@ -119,7 +119,7 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 	}
 	detail := entry.Detail
 	detail.ManagedRuntime = overlayCatalogManagedRuntime(detail.ManagedRuntime, snapshot)
-	inspection, err := s.modelAssetPuller().InspectRuntimeCache(ctx, runtimeCfg, entry.Summary.Name)
+	inspection, err := s.assetPuller.InspectRuntimeCache(ctx, runtimeCfg, entry.Summary.Name)
 	if err != nil {
 		return modelcatalog.Detail{}, err
 	}

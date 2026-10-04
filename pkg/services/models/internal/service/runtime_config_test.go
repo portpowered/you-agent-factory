@@ -954,7 +954,9 @@ func (s *localExecutionFixture) PullModelForScope(ctx context.Context, request m
 	if err := models.ValidatePullModelRequest(request); err != nil {
 		return models.PullResult{}, err
 	}
-	return s.PullModel(ctx, request.Name)
+	return localmodels.PullModelWithOptions(s.assetPuller, ctx, s.runtimeConfig(), request.Name, localmodels.PullOptions{
+		RuntimeCacheInspector: s.assetPuller, SourceResolver: localmodels.DefaultManagedRuntimeSourceResolver(),
+	})
 }
 
 func (s *localExecutionFixture) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {

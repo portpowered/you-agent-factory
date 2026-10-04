@@ -274,20 +274,6 @@ func TestService_GetModel_RejectsEmptyModelName(t *testing.T) {
 	}
 }
 
-func TestService_PullModel_RejectsEmptyModelName(t *testing.T) {
-	t.Parallel()
-
-	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := mustConstructModelService(t, modelServiceFixture{
-		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
-	})
-
-	_, err := svc.PullModel(context.Background(), "")
-	if !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("PullModel empty name = %v, want ErrNotFound", err)
-	}
-}
-
 type hostLeaseTestHost struct{}
 
 func (hostLeaseTestHost) ResolveIdentity(_ context.Context, _ *modelRuntimeConfig, modelName string) (modelhost.Identity, error) {
