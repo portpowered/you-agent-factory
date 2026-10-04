@@ -281,7 +281,7 @@ func waitDeliveredRetirementSession(t *testing.T, ctx context.Context, client *h
 	request := deliveredRetirementRequest(t, ctx, client, baseURL, requestID)
 	var result factoryapi.FactorySessionSyncExecutionResponse
 	deliveredRetirementPost(t, ctx, client, baseURL+"/factory-sessions/sync", request, &result)
-	if result.SessionId != sessionID || result.SyncOutcome != factoryapi.FactorySessionSyncOutcomeCompleted {
+	if result.SessionId != sessionID || result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
 		t.Fatalf("idempotent session wait = %#v", result)
 	}
 }
