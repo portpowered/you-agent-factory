@@ -198,6 +198,34 @@ Default review thresholds:
 - Files that accumulate multiple unrelated responsibilities **SHOULD** be split.
 - New package-level variables **SHOULD** be reviewed with extra scrutiny.
 
+Repository Go size and complexity enforcement:
+
+- `make golangci` runs pinned golangci-lint v2.11.4 and the shared `repolint`
+  analyzer. Its built-in size rules apply to handwritten Go under `cmd/`,
+  `internal/`, `pkg/`, and `tests/`, including `_test.go` files.
+- Revive `file-length-limit` allows 1000 lines after excluding comment and
+  blank lines. Revive `function-length` allows 100 physical lines inside a
+  function's braces (including comments and blanks); statement counting is
+  disabled. Gocyclo reports cyclomatic complexity greater than 15.
+- Generated files are excluded through the committed configuration. Only the
+  two named revive rules are enabled; revive's default rules are disabled.
+- The changed-line ratchet uses the merge base with `origin/main` and requires
+  fetched history. The canonical target checks that prerequisite explicitly,
+  including for clean input. It accepts unchanged debt and keeps
+  `whole-files: false`.
+  Function length and complexity report at the declaration, so body-only
+  growth can be filtered when that line is unchanged. In the pinned revive
+  version, file length reports at the file's final line. Moving or changing a
+  reported location can expose old debt again.
+- A necessary exemption **MUST** use a narrowly scoped `//nolint:revive` or
+  `//nolint:gocyclo` with an actionable reason. The former size checkers and
+  their exemption-budget ledger are retired; their old directives are inert.
+- `make lint-migration-smoke LINT_MIGRATION_COHORT=size` exercises the actual
+  pinned configuration in disposable modules and git histories, observing
+  accepted limits, deliberate violations, generated exclusions, narrow
+  suppression, ratchet behavior, and configuration/history errors. This is a
+  lint/static gate rather than an application functional test.
+
 Repository package-size policy:
 
 - Checked backend package directories under `pkg/` **MUST NOT** contain more than 15 counted Go files.
