@@ -412,6 +412,73 @@ func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 	}
 }
 
+func TestShutdownOtherLiveSessionsKeepsReplacementsPublishedDuringStop(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"same session", "later session", "stop failure"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			state := newRuntimeBindingState()
+			keep := registerTestSession(state, "keep")
+			first := registerTestSession(state, "a")
+			later := registerTestSession(state, "b")
+			firstRun := runtimebinding.HandleFromSession(first)
+			laterRun := runtimebinding.HandleFromSession(later)
+			keepRun := runtimebinding.HandleFromSession(keep)
+			stopErr := errors.New("owned stop failed")
+			var replacement *livesession.LiveSession
+			err := runtimebinding.ShutdownOtherLiveSessions(state, keepRun, func(run factory.RuntimeRun) error {
+				if run != firstRun && run != laterRun {
+					t.Fatal("shutdown stopped a replacement or the excluded peer")
+				}
+				if run == firstRun {
+					id := first.ID
+					if phase == "later session" {
+						id = later.ID
+					}
+					replacement = registerTestSession(state, id)
+				}
+				run.CancelRun()
+				if err := run.Wait(); err != nil {
+					return err
+				}
+				if run == firstRun && phase == "stop failure" {
+					return stopErr
+				}
+				return nil
+			})
+			if errors.Is(err, stopErr) != (phase == "stop failure") || (err != nil && phase != "stop failure") {
+				t.Fatalf("shutdown error = %v, want only the injected owned stop error", err)
+			}
+			if !firstRun.Completed() || !laterRun.Completed() {
+				t.Fatal("shutdown did not join both captured generations")
+			}
+			if state.Resolve(replacement.ID) != replacement || state.Resolve(keep.ID) != keep || state.Registry().Count() != 2 {
+				t.Fatal("shutdown retired a replacement or peer, or retained an old generation")
+			}
+			if keepRun.Completed() || runtimebinding.HandleFromSession(replacement).Completed() {
+				t.Fatal("surviving replacement or peer was canceled")
+			}
+			if _, err := state.ResponseStreams().Streams(replacement.ID).Subscribe("next", 0); err != nil {
+				t.Fatalf("replacement response stream is unusable: %v", err)
+			}
+			// A subsequent shutdown owns the replacement; the captured-generation
+			// fence must protect it only from the earlier shutdown window.
+			if err := runtimebinding.ShutdownOtherLiveSessions(state, keepRun, func(run factory.RuntimeRun) error {
+				if run != runtimebinding.HandleFromSession(replacement) {
+					t.Fatal("next shutdown selected a foreign generation")
+				}
+				run.CancelRun()
+				return run.Wait()
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if state.Resolve(replacement.ID) != nil || !runtimebinding.HandleFromSession(replacement).Completed() || state.Resolve(keep.ID) != keep {
+				t.Fatal("next shutdown did not retire only its owned replacement")
+			}
+		})
+	}
+}
+
 type replacementFactory struct {
 	factory.Service
 }

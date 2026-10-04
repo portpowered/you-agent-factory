@@ -840,11 +840,17 @@ func ShutdownOtherLiveSessions(
 		return nil
 	}
 	var errs []error
+	// Capture every generation before the first shutdown effect. A stop can
+	// publish a replacement for itself or for a later session in the traversal.
+	// Those newly admitted runs do not belong to this shutdown window.
+	sessions := make([]*livesession.LiveSession, 0, state.Registry().Count())
 	for _, sessionID := range state.Registry().IDs() {
 		session := state.Resolve(sessionID)
-		if session == nil {
-			continue
+		if session != nil {
+			sessions = append(sessions, session)
 		}
+	}
+	for _, session := range sessions {
 		handle := HandleFromSession(session)
 		if handle == except {
 			continue
@@ -858,7 +864,7 @@ func ShutdownOtherLiveSessions(
 		if err := deactivateRuntimeBinding(binding); err != nil {
 			errs = append(errs, err)
 		}
-		state.Unregister(sessionID)
+		state.UnregisterGeneration(session)
 	}
 	return errors.Join(errs...)
 }
