@@ -24,37 +24,57 @@ func TestServiceOwnsLeaseAndLocalModelInvocation(t *testing.T) {
 	worker := modelRuntimeWorker{
 		Name: "voice-local", Type: models.RuntimeWorkerTypeModel,
 		Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
-		Resources: []modelRuntimeResource{{Name: "voice-cache"}},
+		Resources: []modelRuntimeResource{{Name: "voice-cache", Capacity: 1}},
 	}
 	cfg := &testFactoryConfig{
 		Name: "test", Workers: []modelRuntimeWorker{worker},
 		Resources: []modelRuntimeResource{{
 			Name: "voice-cache", Type: models.RuntimeResourceTypeModel, Model: "voice",
-			Backend: "TEST", LoadPolicy: "ON_DEMAND",
+			Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1,
 		}},
 	}
 	loaded := projectTestModelsRuntimeConfig(t.TempDir(), cfg)
 	host := &leaseTestHost{}
 	runtime := &leaseTestRuntime{}
+	resources, err := localmodels.NewResourceLimiter(modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopeA, err := (models.RuntimeScopeRef{}).Parse("factory-session:executor:a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopeB, err := (models.RuntimeScopeRef{}).Parse("factory-session:executor:b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	releaseA, err := resources.Acquire(ctx, scopeA, loaded, &worker)
+	if err != nil || releaseA == nil {
+		t.Fatalf("reserve scope A: %v", err)
+	}
+	defer releaseA()
 	execution, err := newLocalExecutor(
 		func() *modelRuntimeConfig { return loaded },
-		host, leaseTestAssets{}, runtime, nil, nil, modelseffects.LocalRuntimeHooks{},
+		host, leaseTestAssets{}, runtime, nil, resources, modelseffects.LocalRuntimeHooks{},
 		time.Now,
 	)
 	if err != nil {
 		t.Fatalf("new local execution: %v", err)
 	}
 
-	result, err := execution.InvokeLocal(context.Background(), models.LocalInvocationRequest{
+	result, err := execution.InvokeLocal(ctx, models.LocalInvocationRequest{
+		Scope:  scopeB,
 		Holder: "dispatch-1",
 		Worker: models.LocalWorker{
 			Name: worker.Name, Type: worker.Type, Model: worker.Model,
 			ModelLocality: worker.ModelLocality,
-			Resources:     []models.LocalResource{{Name: "voice-cache"}},
+			Resources:     []models.LocalResource{{Name: "voice-cache", Capacity: 1}},
 		},
 		Resources: []models.LocalResource{{
 			Name: "voice-cache", Type: models.RuntimeResourceTypeModel, Model: "voice",
-			Backend: "TEST", LoadPolicy: "ON_DEMAND",
+			Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1,
 		}},
 		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
 	})
@@ -64,6 +84,12 @@ func TestServiceOwnsLeaseAndLocalModelInvocation(t *testing.T) {
 	if !result.Handled || result.Content != "local" || host.acquires != 1 || host.releases != 1 || runtime.loads != 1 {
 		t.Fatalf("result=%q acquire/release=%d/%d loads=%d", result.Content, host.acquires, host.releases, runtime.loads)
 	}
+	// Invocation reserved B, progressed while A was held, and released B.
+	releaseB, err := resources.Acquire(ctx, scopeB, loaded, &worker)
+	if err != nil || releaseB == nil {
+		t.Fatalf("capacity after invocation: %v", err)
+	}
+	releaseB()
 }
 
 func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {

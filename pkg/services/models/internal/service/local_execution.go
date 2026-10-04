@@ -77,7 +77,7 @@ func (e *localExecutor) InvokeLocal(
 	factoryConfig, worker := localExecutionConfiguration(request)
 
 	if e.resources != nil {
-		release, err := e.resources.Acquire(ctx, factoryConfig, worker)
+		release, err := e.resources.Acquire(ctx, request.Scope, factoryConfig, worker)
 		if err != nil {
 			return models.LocalInvocationResult{Handled: true}, err
 		}

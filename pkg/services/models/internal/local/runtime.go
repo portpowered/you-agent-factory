@@ -717,9 +717,16 @@ type localModelResourceReservation struct {
 
 type ResourceLimiter struct {
 	mu      sync.Mutex
-	entries map[string]*ResourceLimiterEntry
+	entries map[scopedResourceKey]*ResourceLimiterEntry
 	hooks   Hooks
 	now     func() time.Time
+}
+
+// Scopes used to own separate limiters. A shared limiter retains that capacity
+// boundary even when two scopes select the same model and backend.
+type scopedResourceKey struct {
+	scope    models.RuntimeScopeRef
+	resource string
 }
 
 type ResourceLimiterEntry struct {
@@ -734,7 +741,7 @@ func NewResourceLimiter(hooks Hooks, now func() time.Time) (*ResourceLimiter, er
 		return nil, missingDependencyError("resource limiter clock")
 	}
 	return &ResourceLimiter{
-		entries: make(map[string]*ResourceLimiterEntry),
+		entries: make(map[scopedResourceKey]*ResourceLimiterEntry),
 		hooks:   hooks,
 		now:     now,
 	}, nil
@@ -750,6 +757,7 @@ func newLocalModelResourceLimiterEntry(capacity int) *ResourceLimiterEntry {
 // release function. A nil release means the worker has no local reservations.
 func (l *ResourceLimiter) Acquire(
 	ctx context.Context,
+	scope models.RuntimeScopeRef,
 	factoryCfg *models.RuntimeConfig,
 	workerDef *models.RuntimeWorker,
 ) (func(), error) {
@@ -760,12 +768,12 @@ func (l *ResourceLimiter) Acquire(
 	if len(reservations) == 0 {
 		return nil, nil
 	}
-	if err := l.acquire(ctx, reservations); err != nil {
+	if err := l.acquire(ctx, scope, reservations); err != nil {
 		return nil, err
 	}
 	var once sync.Once
 	return func() {
-		once.Do(func() { l.release(reservations) })
+		once.Do(func() { l.release(scope, reservations) })
 	}, nil
 }
 
@@ -830,7 +838,7 @@ func localModelResourceKey(resource models.RuntimeResource) string {
 	return strings.Join([]string{model, backend, loadPolicy}, "|")
 }
 
-func (l *ResourceLimiter) acquire(ctx context.Context, reservations []localModelResourceReservation) error {
+func (l *ResourceLimiter) acquire(ctx context.Context, scope models.RuntimeScopeRef, reservations []localModelResourceReservation) error {
 	if l == nil || len(reservations) == 0 {
 		return nil
 	}
@@ -841,12 +849,12 @@ func (l *ResourceLimiter) acquire(ctx context.Context, reservations []localModel
 	}
 	acquired := make([]localModelResourceReservation, 0, len(reservations))
 	for _, reservation := range reservations {
-		entry := l.entry(reservation.key, reservation.capacity)
+		entry := l.entry(scopedResourceKey{scope: scope, resource: reservation.key}, reservation.capacity)
 		if err := entry.acquire(ctx, reservation.count); err != nil {
 			if l.hooks.MarkResourceWaitFinished != nil {
 				l.hooks.MarkResourceWaitFinished(ctx, l.now(), false)
 			}
-			l.release(acquired)
+			l.release(scope, acquired)
 			return err
 		}
 		acquired = append(acquired, reservation)
@@ -857,18 +865,18 @@ func (l *ResourceLimiter) acquire(ctx context.Context, reservations []localModel
 	return nil
 }
 
-func (l *ResourceLimiter) release(reservations []localModelResourceReservation) {
+func (l *ResourceLimiter) release(scope models.RuntimeScopeRef, reservations []localModelResourceReservation) {
 	if l == nil || len(reservations) == 0 {
 		return
 	}
 	for i := len(reservations) - 1; i >= 0; i-- {
 		reservation := reservations[i]
-		entry := l.entry(reservation.key, reservation.capacity)
+		entry := l.entry(scopedResourceKey{scope: scope, resource: reservation.key}, reservation.capacity)
 		entry.release(reservation.count)
 	}
 }
 
-func (l *ResourceLimiter) entry(key string, capacity int) *ResourceLimiterEntry {
+func (l *ResourceLimiter) entry(key scopedResourceKey, capacity int) *ResourceLimiterEntry {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
