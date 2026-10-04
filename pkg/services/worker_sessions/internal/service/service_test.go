@@ -873,10 +873,13 @@ func TestInterrupt_ConcurrentIdenticalRequestsReplayOneOperation(t *testing.T) {
 	if got := len(boundary.cancellations()); got != 1 {
 		t.Fatalf("concurrent interrupt cancellations = %d, want 1", got)
 	}
+	handoff := boundary.requestFor(t, successorDispatchID)
+	t.Cleanup(func() {
+		boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
+	})
 	if got := boundary.publishCount(); got != 2 {
 		t.Fatalf("concurrent interrupt publishes = %d, want source plus one successor", got)
 	}
-	handoff := boundary.requestFor(t, successorDispatchID)
 	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
 	if got := <-sourceResult; got.Session.State != workersessions.StateCanceled {
 		t.Fatalf("source cleanup InvokeSession() = %#v, want CANCELED", got.Session)

@@ -216,7 +216,9 @@ under `internal/testutil`.
 
 The package layout is guarded mechanically:
 
-- `make pkg-file-count` checks the per-package Go file budget.
+- `make golangci-lint-run` checks file length, function length, and complexity
+  with pinned built-in rules and changed-line filtering. The former fixed
+  per-package file-count gate and its ledger have been retired.
 - `make pkg-boundary` checks dependency and ownership boundaries.
 - `make pkg-structure` checks repository-specific package and functional-test
   shape.
