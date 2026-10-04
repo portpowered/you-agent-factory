@@ -14,6 +14,7 @@ import (
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const internalLeakProbePath = "pkg/services/factory_sessions/internal/sessionstore"
@@ -76,38 +77,53 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalGetSessionTool(t *testing.
 
 func TestBind_FakeRecordingsRootInvokedThroughCanonicalListDispatchesTool(t *testing.T) {
 	t.Parallel()
-
-	var invoked bool
-	fake := fakeRecordingsInspectionRoot{
-		invoked: &invoked,
-		queryHistorical: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
-			if request.Recording.RecordingID != recordings.RecordingID(successSessionID) ||
-				request.Recording.Scope.FactorySessionID != successSessionID {
-				t.Fatalf("historical request = %#v, want session scope", request)
+	for _, kind := range []recordings.FactoryDispatchKind{
+		recordings.FactoryDispatchKindPetriTransition,
+		recordings.FactoryDispatchKindJavaScriptScript,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			var invoked bool
+			fake := fakeRecordingsInspectionRoot{
+				invoked: &invoked,
+				queryHistorical: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+					if request.Recording.RecordingID != recordings.RecordingID(successSessionID) ||
+						request.Recording.Scope.FactorySessionID != successSessionID {
+						t.Fatalf("historical request = %#v, want selected session scope", request)
+					}
+					return recordings.HistoricalRecordingQueryResult{
+						Recording: request.Recording,
+						Dispatches: []recordings.HistoricalDispatch{
+							{ID: "dispatch-001", Status: recordings.FactoryDispatchStatusCompleted, DispatchKind: kind},
+							{ID: "dispatch-running", Status: recordings.FactoryDispatchStatusRunning, DispatchKind: kind},
+						},
+					}, nil
+				},
 			}
-			return recordings.HistoricalRecordingQueryResult{
-				Recording: request.Recording,
-				Dispatches: []recordings.HistoricalDispatch{{
-					ID: "dispatch-001", Status: recordings.FactoryDispatchStatusCompleted,
-					DispatchKind: recordings.FactoryDispatchKindPetriTransition,
-				}},
-			}, nil
-		},
-	}
-	operation := mcpfactorysession.BindToolOperation(fake, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{}, "", nil, nil)
-	raw, err := operation(
-		context.Background(),
-		mcpfactorysession.ToolListDispatches,
-		json.RawMessage(`{"sessionId":"`+successSessionID+`","status":"COMPLETED"}`),
-	)
-	if err != nil {
-		t.Fatalf("CallTool(list_dispatches) error = %v", err)
-	}
-	if !invoked {
-		t.Fatal("fake recordings root was not invoked")
-	}
-	if !strings.Contains(string(raw), `"id":"dispatch-001"`) || !strings.Contains(string(raw), `"sessionId":"`+successSessionID+`"`) {
-		t.Fatalf("CallTool(list_dispatches) = %s, want encoded dispatch list", raw)
+			operation := mcpfactorysession.BindToolOperation(fake, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{}, "", nil, nil)
+			raw, err := operation(context.Background(), mcpfactorysession.ToolListDispatches,
+				json.RawMessage(`{"sessionId":"`+successSessionID+`","status":"COMPLETED"}`))
+			if err != nil {
+				t.Fatalf("CallTool(list_dispatches) error = %v", err)
+			}
+			if !invoked {
+				t.Fatal("fake recordings root was not invoked")
+			}
+			var response mcpfactorysession.ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]
+			if err := json.Unmarshal(raw, &response); err != nil {
+				t.Fatalf("decode dispatch list: %v", err)
+			}
+			if response.Error != nil || response.Result == nil {
+				t.Fatalf("response = %#v, want dispatch list", response)
+			}
+			if response.Result.SessionId != successSessionID || len(response.Result.Dispatches) != 1 {
+				t.Fatalf("result = %#v, want one completed dispatch in selected session", response.Result)
+			}
+			dispatch := response.Result.Dispatches[0]
+			if dispatch.Id != "dispatch-001" || dispatch.Status != "COMPLETED" || dispatch.DispatchKind != factoryapi.FactoryDispatchKind(kind) {
+				t.Fatalf("dispatch = %#v, want dispatch-001 COMPLETED %s", dispatch, kind)
+			}
+		})
 	}
 }
 

@@ -680,10 +680,8 @@ func TestGeneratedLoaderAndConfigDocumentServiceAgreeOnEffectiveConfig(t *testin
 				t.Fatalf("LoadFileConfig() error = %v", err)
 			}
 			document, err := settingswire.NewConfigDocumentService(
-				files,
-				nil,
+				settingswire.NewDocumentService(files, nil, globalconfig.Decode, nil, nil, nil, nil),
 				globalconfig.Decode,
-				nil,
 				nil,
 				nil,
 			).Load(path)
@@ -705,7 +703,7 @@ func TestConfigDocumentUpdatePreservesUnknownGlobalConfigFields(t *testing.T) {
 		},
 		"futureTopLevel": {"enabled": true, "secret": "retain-me-too"}
 	}`)
-	service := settingswire.NewConfigDocumentServiceWithPreserver(
+	owner := settingswire.NewDocumentService(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
@@ -713,10 +711,10 @@ func TestConfigDocumentUpdatePreservesUnknownGlobalConfigFields(t *testing.T) {
 		globalconfig.Decode,
 		globalconfig.Encode,
 		func(string) (string, bool) { return "", false },
-		&sync.Mutex{},
 		globalconfig.PreserveUnknownFields,
 		globalconfig.DecodeWithDiagnostics,
 	)
+	service := settingswire.NewConfigDocumentService(owner, globalconfig.Decode, globalconfig.Encode, &sync.Mutex{})
 	model := "after"
 	if _, err := service.ConfigureProviderModel(context.Background(), path, operatorsettings.ProviderModelUpdate{Model: &model}); err != nil {
 		t.Fatalf("ConfigureProviderModel() error = %v", err)

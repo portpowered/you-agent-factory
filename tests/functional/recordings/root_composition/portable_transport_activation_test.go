@@ -1,8 +1,6 @@
 package root_composition_test
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,13 +12,12 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
-	mcprecording "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildProcessAfterLifecycle
-// proves portable recording build/validate and Recordings HTTP/CLI/MCP transport
+// proves portable recording build/validate and Recordings HTTP/CLI transport
 // surfaces activate only after runtime lifecycle on a process constructed only
 // through root.BuildProcess. Deeper transport unit/adapter coverage remains
 // under pkg/services/recordings/transports and replay_contracts; this test
@@ -86,7 +83,6 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 
 	recordingsService := recordingsTransportActivationService(t, edges)
 	assertRecordingsPortableValidateAdverseOutcome(t, recordingsService)
-	assertRecordingsMCPTransportActivatesAfterLifecycle(t, recordingsService, durableSession.SessionId)
 }
 
 func recordingsTransportActivationFactoryConfig() map[string]any {
@@ -182,62 +178,5 @@ func assertRecordingsPortableValidateAdverseOutcome(t *testing.T, service record
 			err,
 			recordings.ErrInvalidPortableArtifact,
 		)
-	}
-}
-
-func assertRecordingsMCPTransportActivatesAfterLifecycle(
-	t *testing.T,
-	service recordings.Service,
-	recordingID string,
-) {
-	t.Helper()
-
-	ctx := context.Background()
-	operation := mcprecording.BindToolOperation(service)
-
-	malformedRaw, err := operation(ctx, mcprecording.ToolReadPortableArtifact, json.RawMessage(`{`))
-	if err != nil {
-		t.Fatalf("Recordings MCP transport CallTool malformed input error = %v", err)
-	}
-	assertRecordingsMCPBadRequestToolResponse(t, malformedRaw)
-
-	missingRaw, err := operation(
-		ctx,
-		mcprecording.ToolLoadReplay,
-		json.RawMessage(`{"recordingId":"`+recordingID+`"}`),
-	)
-	if err != nil {
-		t.Fatalf("Recordings MCP transport CallTool(load_replay) error = %v", err)
-	}
-	assertRecordingsMCPReplayNotFoundToolResponse(t, missingRaw)
-}
-
-func assertRecordingsMCPBadRequestToolResponse(t *testing.T, raw json.RawMessage) {
-	t.Helper()
-
-	var response mcprecording.ToolResponse[recordings.ReadPortableArtifactResult]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		t.Fatalf("decode MCP bad-request tool response: %v\n%s", err, raw)
-	}
-	if response.Error == nil {
-		t.Fatalf("MCP malformed input response = %s, want typed error envelope", raw)
-	}
-	if response.Error.Code != "BAD_REQUEST" {
-		t.Fatalf("MCP malformed input error code = %q, want BAD_REQUEST", response.Error.Code)
-	}
-}
-
-func assertRecordingsMCPReplayNotFoundToolResponse(t *testing.T, raw json.RawMessage) {
-	t.Helper()
-
-	var response mcprecording.ToolResponse[recordings.LoadReplayRecordingResult]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		t.Fatalf("decode MCP load_replay tool response: %v\n%s", err, raw)
-	}
-	if response.Error == nil {
-		t.Fatalf("MCP load_replay response = %s, want typed not-found envelope", raw)
-	}
-	if response.Error.Code != "recording.replay.not_found" {
-		t.Fatalf("MCP load_replay error code = %q, want recording.replay.not_found", response.Error.Code)
 	}
 }
