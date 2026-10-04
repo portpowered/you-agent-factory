@@ -364,6 +364,7 @@ func TestQueryScopedSelectionAndDeterministicOutput(t *testing.T) {
 func TestQueryErrorsAreTypedAndLogsSafeTerminalOutcome(t *testing.T) {
 	t.Parallel()
 	assertSettingsReadFailureIsSafe(t)
+	assertOperatorSettingsFailureIsSafe(t)
 	assertMetricsFailureIsTyped(t)
 	assertInvalidRequestIsTyped(t)
 }
@@ -394,16 +395,38 @@ func assertSettingsReadFailureIsSafe(t *testing.T) {
 
 func assertMetricsFailureIsTyped(t *testing.T) {
 	t.Helper()
-	metricsErr := errors.New("metrics unavailable")
-	query, err := New(&priceReader{table: providers.PriceTable{Currency: providers.PriceTableCurrencyUSD}}, operatorSettingsStub(), metricsQueryStub(nil, metricsErr), logging.NoopLogger{})
+	metricsErr := errors.New("metrics unavailable: secret-token private-path")
+	logger := &captureLogger{}
+	query, err := New(&priceReader{table: providers.PriceTable{Currency: providers.PriceTableCurrencyUSD}}, operatorSettingsStub(), metricsQueryStub(nil, metricsErr), logger)
 	if err != nil {
 		t.Fatalf("New(metrics error) error = %v", err)
 	}
-	_, err = query.Query(context.Background(), validRequest())
+	request := validRequest()
+	request.FactorySessionID = "selected-session"
+	request.RuntimeInstanceID = "selected-runtime"
+	_, err = query.Query(context.Background(), request)
 	var queryErr *costs.QueryError
 	if !errors.As(err, &queryErr) || queryErr.Kind != costs.QueryErrorMetricsFailed || !errors.Is(err, metricsErr) {
 		t.Fatalf("metrics error = %v, want typed wrapped metrics failure", err)
 	}
+	if strings.Contains(logger.fieldsText(), metricsErr.Error()) || strings.Contains(err.Error(), "secret-token") {
+		t.Fatalf("dependency details leaked: error=%v fields=%v", err, logger.fields)
+	}
+	if !logger.hasMessage("runtime costs query started") || !logger.hasMessage("runtime costs query failed") {
+		t.Fatalf("missing terminal diagnostics: %v", logger.messages)
+	}
+	for key, want := range map[string]any{"scope_kind": costs.ScopeFactorySession, "factory_session_id": "selected-session", "runtime_instance_id": "selected-runtime", "status": "METRICS_ERROR", "error_kind": string(costs.QueryErrorMetricsFailed)} {
+		found := false
+		for i := 0; i+1 < len(logger.fields); i += 2 {
+			if logger.fields[i] == key && logger.fields[i+1] == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("missing attributed diagnostic %s=%v in %v", key, want, logger.fields)
+		}
+	}
+
 }
 
 func assertInvalidRequestIsTyped(t *testing.T) {
@@ -807,3 +830,37 @@ func assertUnpricedPairs(t *testing.T, got []costs.UnpricedPair, want []unpriced
 }
 
 var _ logging.Logger = (*captureLogger)(nil)
+
+func assertOperatorSettingsFailureIsSafe(t *testing.T) {
+	t.Helper()
+	want := errors.New("operator settings unavailable: secret-token private-path")
+	logger := &captureLogger{}
+	query, err := New(&priceReader{table: providers.PriceTable{Currency: providers.PriceTableCurrencyUSD}}, &operatorSettingsReaderStub{err: want}, metricsQueryStub(nil, nil), logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validRequest()
+	request.FactorySessionID = "selected-session"
+	_, err = query.Query(context.Background(), request)
+	var typed *costs.QueryError
+	if !errors.As(err, &typed) || typed.Kind != costs.QueryErrorSettingsReadFailed || !errors.Is(err, want) {
+		t.Fatalf("error=%v, want typed cause-preserving settings failure", err)
+	}
+	if !logger.hasMessage("runtime costs query started") || !logger.hasMessage("runtime costs query failed") {
+		t.Fatalf("logs=%v", logger.messages)
+	}
+	if strings.Contains(err.Error(), "secret-token") || strings.Contains(logger.fieldsText(), "secret-token") || strings.Contains(logger.fieldsText(), "private-path") {
+		t.Fatalf("unsafe diagnostic: %v fields=%v", err, logger.fields)
+	}
+	for key, want := range map[string]any{"scope_kind": costs.ScopeFactorySession, "factory_session_id": "selected-session", "status": "PRICING_ERROR", "error_kind": string(costs.QueryErrorSettingsReadFailed)} {
+		found := false
+		for i := 0; i+1 < len(logger.fields); i += 2 {
+			if logger.fields[i] == key && logger.fields[i+1] == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("missing attributed field %s=%v in %v", key, want, logger.fields)
+		}
+	}
+}
