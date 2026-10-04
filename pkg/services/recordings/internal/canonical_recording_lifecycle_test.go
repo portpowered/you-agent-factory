@@ -3,92 +3,66 @@ package internal
 import (
 	"context"
 	"errors"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
-func TestCombinedServiceCanonicalAppendCanRecordReplayAndExport(t *testing.T) {
+func TestLifecycleOwnerRejectsInvalidFactsWithoutMutatingAcceptedHistory(t *testing.T) {
 	t.Parallel()
-
-	svc := NewService(&stubLedger{}, NewProjectionService())
-	scope := recordings.CanonicalEventScope{FactorySessionID: "session-canonical"}
-	appended, err := svc.Append(recordings.AppendRecordedEventRequest{
-		Event: recordings.CanonicalEvent{
-			ID:          "canonical-lifecycle-event",
-			FactoryTick: 0,
-			Scope:       scope,
-			RecordedAt:  time.Unix(1_700_000_000, 0).UTC(),
-			Kind:        "FACTORY_STATE_RESPONSE",
-			Payload:     `{"state":"RUNNING"}`,
-		},
-	})
-	if err != nil {
-		t.Fatalf("Append canonical lifecycle event: %v", err)
+	svc := recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{})
+	event := recordings.CanonicalEvent{
+		ID: "canonical-lifecycle-event", FactoryTick: 0,
+		Scope:      recordings.CanonicalEventScope{FactorySessionID: "session-canonical"},
+		Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "gen-1", Sequence: 0},
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Kind:       "FACTORY_STATE_RESPONSE", Payload: `{"state":"RUNNING"}`,
 	}
 	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-canonical",
-		Artifact:    "artifact:canonical",
-		Scope:       scope,
+		RecordingID: "recording-canonical", Artifact: "artifact:canonical", Scope: event.Scope,
 	})
 	if err != nil {
-		t.Fatalf("BindRecording canonical lifecycle: %v", err)
+		t.Fatalf("BindRecording: %v", err)
 	}
-	assertInvalidCanonicalRecordingEventsDoNotMutate(
-		t,
-		svc,
-		bound.Status,
-		appended.Event,
-	)
+	assertInvalidCanonicalRecordingEventsDoNotMutate(t, svc, bound.Status, event)
 	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       appended.Event,
+		RecordingID: bound.Status.RecordingID, Event: event,
 	}); err != nil {
-		t.Fatalf("RecordRecordingEvent appended fact: %v", err)
+		t.Fatalf("RecordRecordingEvent valid fact after rejection: %v", err)
 	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording canonical lifecycle: %v", err)
-	}
-	loaded, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
+	finishedAt := time.Unix(1_700_000_001, 0).UTC()
+	finished, err := svc.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID, FinishedAt: finishedAt,
 	})
-	if err != nil {
-		t.Fatalf("LoadReplayRecording appended fact: %v", err)
+	if err != nil || finished.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("FinishRecording = (%#v, %v), want finalized", finished, err)
 	}
-	plan, err := svc.CreateReplayPlan(recordings.CreateReplayPlanRequest{
-		SchemaVersion: recordings.ReplayPlanSchemaV1,
-		Timing:        recordings.ReplayTimingOrderOnly,
-		Recording:     loaded.Recording,
-	})
-	if err != nil {
-		t.Fatalf("CreateReplayPlan appended fact: %v", err)
+	snapshot, err := svc.Snapshot(bound.Status.RecordingID)
+	if err != nil || !reflect.DeepEqual(snapshot.Events, []recordings.CanonicalEvent{event}) {
+		t.Fatalf("Snapshot = (%#v, %v), want only the admitted fact", snapshot, err)
 	}
-	observed, err := svc.ObserveReplay(recordings.ObserveReplayRequest{
-		Plan: plan.Plan.Handle,
-	})
-	if err != nil || observed.Observation.Kind != recordings.ReplayCompleted {
-		t.Fatalf("ObserveReplay appended fact = (%#v, %v)", observed, err)
-	}
-	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	})
-	if err != nil || len(built.Artifact.Events) != 1 ||
-		built.Artifact.Events[0] != appended.Event {
-		t.Fatalf("BuildPortableArtifact appended fact = (%#v, %v)", built, err)
+	if snapshot.Status.AcceptedEvents != 1 || snapshot.Status.LastEvent == nil ||
+		*snapshot.Status.LastEvent != event.Cursor || snapshot.Status.FinalizedAt == nil ||
+		!snapshot.Status.FinalizedAt.Equal(finishedAt) {
+		t.Fatalf("finalized status = %#v, want accepted cursor and exact finish time", snapshot.Status)
 	}
 }
 
 func assertInvalidCanonicalRecordingEventsDoNotMutate(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordinglifecycle.Service,
 	status recordings.RecordingStatusFacts,
 	valid recordings.CanonicalEvent,
 ) {
@@ -119,7 +93,7 @@ func assertInvalidCanonicalRecordingEventsDoNotMutate(
 	}
 }
 
-func TestCombinedServiceRejectsMalformedCanonicalReplayEvents(t *testing.T) {
+func TestReplayOwnerRejectsMalformedCanonicalEvents(t *testing.T) {
 	t.Parallel()
 
 	valid := recordings.ReplayRecordingFacts{
@@ -133,7 +107,7 @@ func TestCombinedServiceRejectsMalformedCanonicalReplayEvents(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := NewService(&stubLedger{}, NewProjectionService())
+			svc := replaywire.NewService(nil, &plainReplayProjection{}, nil, nil)
 			corrupt := cloneReplayRecording(valid)
 			mutate(&corrupt)
 			result, err := svc.CreateReplayPlan(replayPlanRequest(corrupt))
@@ -226,28 +200,68 @@ func replayPlanRequest(recording recordings.ReplayRecordingFacts) recordings.Cre
 func TestRecordingScopesBeginAppendFlushFinalizeAndClose(t *testing.T) {
 	t.Parallel()
 
-	ledger, root, scope, event := beginLifecycleScope(t)
-	assertInvalidScopeAppend(t, root, ledger, scope.Scope, event)
-	appended := appendLifecycleScopeEvent(t, root, ledger, scope, event)
+	owner, canonical, root, scope, event := beginLifecycleScope(t)
+	assertInvalidScopeAppend(t, root, owner, canonical, scope.Scope, event)
+	owner.status.AcceptedEvents = 1
+	appended := appendLifecycleScopeEvent(t, root, owner, canonical, scope, event)
+	canonical.outcomes = []recordings.CanonicalEvent{appended.Event}
 	assertLifecycleScopeSubscription(t, root, scope.Status.EventScope, event, appended)
 	finishedAt := time.Unix(1_700_000_100, 0).UTC()
+	owner.status.LastEvent = &event.Cursor
+	owner.status.FlushedThrough = &event.Cursor
+	owner.status.State = recordings.RecordingFinalized
+	owner.status.FinalizedAt = &finishedAt
 	assertLifecycleScopeFinalization(t, root, scope.Scope, finishedAt)
-	assertLifecycleScopeClose(t, root, scope.Scope, finishedAt)
+	wantFlush := recordings.FlushRecordingRequest{RecordingID: owner.status.RecordingID}
+	wantFinish := []recordings.FinishRecordingRequest{{RecordingID: owner.status.RecordingID, FinishedAt: finishedAt}}
+	if owner.flush != wantFlush || !reflect.DeepEqual(owner.finishes, wantFinish) {
+		t.Fatalf("selected flush/finish = %#v/%#v, want %#v/%#v", owner.flush, owner.finishes, wantFlush, wantFinish)
+	}
+	assertLifecycleScopeClose(t, root, owner, scope.Scope, finishedAt)
+	if len(owner.finishes) != 2 || owner.finishes[1] != (recordings.FinishRecordingRequest{RecordingID: "active-close", FinishedAt: finishedAt}) {
+		t.Fatalf("close finishes = %#v, want one finish per recording", owner.finishes)
+	}
 	assertClosedScopeRejectsAppend(t, root, scope)
 }
 
-func beginLifecycleScope(t *testing.T) (*stubLedger, recordings.Service, recordings.BeginRecordingScopeResult, recordings.CanonicalEvent) {
-	t.Helper()
-	ledger := &stubLedger{}
-	root := NewService(ledger, NewProjectionService())
-	if root == nil {
-		t.Fatal("NewService returned nil")
+type scopeAdapterLifecycle struct {
+	*activeRuntimeLifecycle
+	flush recordings.FlushRecordingRequest
+}
+
+func (owner *scopeAdapterLifecycle) FlushRecording(request recordings.FlushRecordingRequest) (recordings.FlushRecordingResult, error) {
+	owner.flush = request
+	return recordings.FlushRecordingResult{Status: owner.status}, nil
+}
+
+type scopeAdapterCanonical struct {
+	liveSubscriptionOwner
+	appends []recordings.AppendRecordedEventRequest
+}
+
+func (owner *scopeAdapterCanonical) AppendWithValidation(request recordings.AppendRecordedEventRequest, validate func(recordings.CanonicalEvent) error) (recordings.AppendRecordedEventResult, error) {
+	owner.appends = append(owner.appends, request)
+	if err := validate(request.Event); err != nil {
+		return recordings.AppendRecordedEventResult{}, err
 	}
-	scope, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-		Enabled: true,
-		Scope:   recordings.CanonicalEventScope{FactorySessionID: "scope-session"},
-		Target:  recordings.RecordingTargetRequest{Artifact: "recording://scope-session"},
-	})
+	return recordings.AppendRecordedEventResult{Event: request.Event}, nil
+}
+
+func beginLifecycleScope(t *testing.T) (*scopeAdapterLifecycle, *scopeAdapterCanonical, recordings.Service, recordings.BeginRecordingScopeResult, recordings.CanonicalEvent) {
+	t.Helper()
+	owner := &scopeAdapterLifecycle{activeRuntimeLifecycle: &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "scope-recording", Scope: recordings.CanonicalEventScope{FactorySessionID: "scope-session"}, State: recordings.RecordingActive,
+	}}}
+	canonical := &scopeAdapterCanonical{}
+	root := NewCombinedService(nil, nil, owner, nil, nil, canonical, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	request := recordings.BeginRecordingScopeRequest{
+		Enabled:       true,
+		Scope:         owner.status.Scope,
+		Target:        recordings.RecordingTargetRequest{Artifact: "recording://scope-session"},
+		FlushInterval: time.Second,
+	}
+	scope, err := root.BeginRecordingScope(context.Background(), request)
 	if err != nil {
 		t.Fatalf("BeginRecordingScope: %v", err)
 	}
@@ -257,13 +271,19 @@ func beginLifecycleScope(t *testing.T) (*stubLedger, recordings.Service, recordi
 	if scope.Status.State != recordings.RecordingActive {
 		t.Fatalf("begin status = %#v, want active", scope.Status)
 	}
-	return ledger, root, scope, scopedScopeEvent("scope-event-1", 0, scope.Status.EventScope)
+	want := recordings.StartRecordingRequest{Enabled: true, Scope: request.Scope, Target: request.Target,
+		FlushInterval: request.FlushInterval, RecordingID: scopeRecordingID(scope.Scope, request.RecordingID)}
+	if !reflect.DeepEqual(owner.started, want) {
+		t.Fatalf("start request = %#v, want %#v", owner.started, want)
+	}
+	return owner, canonical, root, scope, scopedScopeEvent("scope-event-1", 0, scope.Status.EventScope)
 }
 
 func assertInvalidScopeAppend(
 	t *testing.T,
 	root recordings.Service,
-	ledger *stubLedger,
+	owner *scopeAdapterLifecycle,
+	canonical *scopeAdapterCanonical,
 	ref recordings.RecordingScopeRef,
 	event recordings.CanonicalEvent,
 ) {
@@ -273,15 +293,16 @@ func assertInvalidScopeAppend(
 	if _, err := root.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{Scope: ref, Event: invalid}); !errors.Is(err, recordings.ErrInvalidRecordingEvent) {
 		t.Fatalf("invalid AppendRecordingScopeEvent error = %v, want ErrInvalidRecordingEvent", err)
 	}
-	if len(ledger.events) != 0 {
-		t.Fatalf("invalid scope append mutated canonical ledger: %#v", ledger.events)
+	if len(owner.events) != 0 || len(canonical.appends) != 0 {
+		t.Fatalf("invalid scope append delegated: lifecycle %#v, canonical %#v", owner.events, canonical.appends)
 	}
 }
 
 func appendLifecycleScopeEvent(
 	t *testing.T,
 	root recordings.Service,
-	ledger *stubLedger,
+	owner *scopeAdapterLifecycle,
+	canonical *scopeAdapterCanonical,
 	scope recordings.BeginRecordingScopeResult,
 	event recordings.CanonicalEvent,
 ) recordings.AppendRecordingScopeEventResult {
@@ -293,8 +314,9 @@ func appendLifecycleScopeEvent(
 	if appended.Event.ID != event.ID || appended.Event.Sequence != 0 || appended.Status.AcceptedEvents != 1 {
 		t.Fatalf("append result = %#v, want accepted first event", appended)
 	}
-	if len(ledger.events) != 1 || ledger.events[0].Id != string(event.ID) {
-		t.Fatalf("canonical ledger events = %#v, want the scope event", ledger.events)
+	want := []recordings.RecordRecordingEventRequest{{RecordingID: owner.status.RecordingID, Event: event}}
+	if !reflect.DeepEqual(owner.events, want) || !reflect.DeepEqual(canonical.appends, []recordings.AppendRecordedEventRequest{{Event: event}}) {
+		t.Fatalf("append requests = %#v/%#v, want selected recording and event %#v", owner.events, canonical.appends, want)
 	}
 	return appended
 }
@@ -307,12 +329,12 @@ func assertLifecycleScopeSubscription(
 	appended recordings.AppendRecordingScopeEventResult,
 ) {
 	t.Helper()
-	ledger := root.(*combinedService).Ledger.(*stubLedger)
-	ledger.subscribeStream = factorydefinitions.FactoryEventStream{StreamGenerationID: ledger.StreamGenerationID(), History: ledger.CanonicalEvents()}
 	subscription, err := root.SubscribeFrom(context.Background(), recordings.SubscribeRequest{Scope: eventScope})
 	if err != nil {
 		t.Fatalf("SubscribeFrom after scoped append: %v", err)
 	}
+	canonical := root.(*combinedService).canonicalLedger.(*scopeAdapterCanonical)
+	assertLiveSubscriptionRequest(t, &canonical.liveSubscriptionOwner, eventScope, nil)
 	observed := subscription.Subscription(context.Background())
 	if observed.Kind != recordings.SubscriptionEvent || observed.Event.ID != event.ID || observed.Event.Cursor != appended.Event.Cursor || observed.Event.Payload != event.Payload {
 		t.Fatalf("scoped subscription outcome = %#v, want appended event", observed)
@@ -335,7 +357,7 @@ func assertLifecycleScopeFinalization(t *testing.T, root recordings.Service, ref
 	}
 }
 
-func assertLifecycleScopeClose(t *testing.T, root recordings.Service, ref recordings.RecordingScopeRef, finishedAt time.Time) {
+func assertLifecycleScopeClose(t *testing.T, root recordings.Service, owner *scopeAdapterLifecycle, ref recordings.RecordingScopeRef, finishedAt time.Time) {
 	t.Helper()
 	closed, err := root.CloseRecordingScope(context.Background(), recordings.CloseRecordingScopeRequest{Scope: ref})
 	if err != nil || !closed.Closed || closed.Status.AcceptedEvents != 1 {
@@ -345,10 +367,13 @@ func assertLifecycleScopeClose(t *testing.T, root recordings.Service, ref record
 	if err != nil || !repeated.Closed || !reflect.DeepEqual(repeated.Status, closed.Status) {
 		t.Fatalf("repeated CloseRecordingScope = (%#v, %v), want same detached outcome", repeated, err)
 	}
-	active, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{Enabled: true, Scope: recordings.CanonicalEventScope{FactorySessionID: "scope-active-close"}, Target: recordings.RecordingTargetRequest{Artifact: "recording://active-close"}})
+	owner.status = recordings.RecordingStatusFacts{RecordingID: "active-close", Scope: recordings.CanonicalEventScope{FactorySessionID: "scope-active-close"}, State: recordings.RecordingActive}
+	active, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{Enabled: true, Scope: owner.status.Scope, Target: recordings.RecordingTargetRequest{Artifact: "recording://active-close"}})
 	if err != nil {
 		t.Fatalf("active Close BeginRecordingScope: %v", err)
 	}
+	owner.status.State = recordings.RecordingFinalized
+	owner.status.FinalizedAt = &finishedAt
 	activeClosed, err := root.CloseRecordingScope(context.Background(), recordings.CloseRecordingScopeRequest{Scope: active.Scope, FinishedAt: finishedAt})
 	if err != nil || !activeClosed.Closed || activeClosed.Status.State != recordings.RecordingFinalized {
 		t.Fatalf("active CloseRecordingScope = (%#v, %v), want implicit finalization", activeClosed, err)
@@ -362,99 +387,84 @@ func assertClosedScopeRejectsAppend(t *testing.T, root recordings.Service, scope
 	}
 }
 
+// Global event ordering belongs to the canonical owner. Scope adapters separately
+// prove selected lifecycle requests; functional tests retain composed isolation.
 func TestRecordingScopesPreserveGlobalCanonicalOrderAcrossScopes(t *testing.T) {
 	t.Parallel()
-
-	service := NewService(&stubLedger{}, NewProjectionService())
-	opened := make([]recordings.BeginRecordingScopeResult, 2)
-	for index, sessionID := range []string{"scope-order-a", "scope-order-b"} {
-		result, err := service.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-			Enabled: true,
-			Scope:   recordings.CanonicalEventScope{FactorySessionID: sessionID},
-			Target:  recordings.RecordingTargetRequest{Artifact: recordings.RecordingArtifactReference("recording://" + sessionID)},
-		})
+	ledger := &stubLedger{}
+	owner := canonicalledgerwire.NewService(ledger)
+	scopes := []recordings.CanonicalEventScope{{FactorySessionID: "scope-order-a"}, {FactorySessionID: "scope-order-b"}}
+	for index, selected := range []int{0, 1, 0} {
+		event := scopedScopeEvent(fmt.Sprintf("order-event-%d", index), 0, scopes[selected])
+		accepted, err := owner.Append(recordings.AppendRecordedEventRequest{Event: event})
 		if err != nil {
-			t.Fatalf("BeginRecordingScope(%s): %v", sessionID, err)
+			t.Fatalf("Append: %v", err)
 		}
-		opened[index] = result
+		if accepted.Event.Sequence != recordings.CanonicalEventSequence(index) || accepted.Event.Cursor.Sequence != recordings.CanonicalEventSequence(index) || accepted.Event.Scope != scopes[selected] || accepted.Event.ID != event.ID {
+			t.Fatalf("accepted event = %#v, want selected event at global position %d", accepted.Event, index)
+		}
 	}
-	appendEvent := func(scope recordings.BeginRecordingScopeResult, id string, sequence recordings.CanonicalEventSequence) recordings.AppendRecordingScopeEventResult {
-		t.Helper()
-		result, err := service.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
-			Scope: scope.Scope,
-			Event: scopedScopeEvent(id, sequence, scope.Status.EventScope),
-		})
-		if err != nil {
-			t.Fatalf("AppendRecordingScopeEvent(%s): %v", id, err)
+	counts := map[string]int{}
+	for _, event := range ledger.CanonicalEvents() {
+		if event.Context.SessionID == nil {
+			t.Fatalf("retained event lost session identity: %#v", event)
 		}
-		return result
+		counts[*event.Context.SessionID]++
 	}
-
-	first := appendEvent(opened[0], "order-a-1", 0)
-	second := appendEvent(opened[1], "order-b-1", 1)
-	third := appendEvent(opened[0], "order-a-2", 2)
-	if first.Event.Sequence != 0 || second.Event.Sequence != 1 || third.Event.Sequence != 2 {
-		t.Fatalf("global scope order = (%d, %d, %d), want (0, 1, 2)", first.Event.Sequence, second.Event.Sequence, third.Event.Sequence)
-	}
-	for index, want := range []int{2, 1} {
-		status, err := service.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{Scope: opened[index].Scope})
-		if err != nil {
-			t.Fatalf("QueryRecordingScope(%d): %v", index, err)
-		}
-		if status.Status.AcceptedEvents != want {
-			t.Fatalf("scope %d accepted events = %d, want %d", index, status.Status.AcceptedEvents, want)
-		}
+	if counts["scope-order-a"] != 2 || counts["scope-order-b"] != 1 {
+		t.Fatalf("retained scope counts = %#v, want 2/1", counts)
 	}
 }
 
 func TestRecordingScopesRejectMalformedForeignStaleAndFinalizedReferences(t *testing.T) {
 	t.Parallel()
 
-	first := NewService(&stubLedger{}, NewProjectionService())
-	second := NewService(&stubLedger{}, NewProjectionService())
-	opened, err := first.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-		Enabled: true,
-		Scope:   recordings.CanonicalEventScope{FactorySessionID: "scope-errors"},
-		Target:  recordings.RecordingTargetRequest{Artifact: "recording://errors"},
-	})
-	if err != nil {
-		t.Fatalf("BeginRecordingScope: %v", err)
-	}
-	foreign, err := second.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-		Enabled: true,
-		Scope:   recordings.CanonicalEventScope{FactorySessionID: "scope-foreign"},
-		Target:  recordings.RecordingTargetRequest{Artifact: "recording://foreign"},
-	})
-	if err != nil {
-		t.Fatalf("foreign BeginRecordingScope: %v", err)
-	}
+	eventScope := recordings.CanonicalEventScope{FactorySessionID: "scope-errors"}
+	first, ref, owner, _ := newActiveScopeAdapter(eventScope)
+	canonical := &activeRuntimeCanonical{}
+	first.canonicalLedger = canonical
+	_, foreign, _, _ := newActiveScopeAdapter(recordings.CanonicalEventScope{FactorySessionID: "scope-foreign"})
 	malformed, _ := (recordings.RecordingScopeRef{}).Parse("malformed")
-	issuer, _, _ := strings.Cut(opened.Scope.String(), ".")
+	issuer, _, _ := strings.Cut(ref.String(), ".")
 	stale, _ := (recordings.RecordingScopeRef{}).Parse(issuer + "." + strings.Repeat("a", 32))
 
 	assertScopeQueryError(t, first, recordings.RecordingScopeRef{}, recordings.ErrRecordingScopeInvalid)
 	assertScopeQueryError(t, first, malformed, recordings.ErrRecordingScopeInvalid)
 	assertScopeQueryError(t, first, stale, recordings.ErrRecordingScopeStale)
-	assertScopeQueryError(t, first, foreign.Scope, recordings.ErrRecordingScopeForeign)
+	assertScopeQueryError(t, first, foreign, recordings.ErrRecordingScopeForeign)
+	if owner.statusRequest.RecordingID != "" {
+		t.Fatalf("invalid reference delegated status request: %#v", owner.statusRequest)
+	}
 
 	if _, err := first.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
-		Scope: opened.Scope,
-		Event: scopedScopeEvent("bad", 0, opened.Status.EventScope),
+		Scope: ref,
+		Event: scopedScopeEvent("bad", 0, eventScope),
 	}); err != nil {
 		t.Fatalf("baseline append: %v", err)
 	}
+	finishedAt := time.Unix(1_700_000_200, 0).UTC()
+	owner.status.State = recordings.RecordingFinalized
+	owner.status.FinalizedAt = &finishedAt
 	if _, err := first.FinalizeRecordingScope(context.Background(), recordings.FinalizeRecordingScopeRequest{
-		Scope: opened.Scope, FinishedAt: time.Unix(1_700_000_200, 0).UTC(),
+		Scope: ref, FinishedAt: finishedAt,
 	}); err != nil {
 		t.Fatalf("FinalizeRecordingScope: %v", err)
 	}
-	_, err = first.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
-		Scope: opened.Scope,
-		Event: scopedScopeEvent("after-finalize", 1, opened.Status.EventScope),
+	_, err := first.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
+		Scope: ref,
+		Event: scopedScopeEvent("after-finalize", 1, eventScope),
 	})
 	if !errors.Is(err, recordings.ErrRecordingScopeFinalized) ||
 		!errors.Is(err, recordings.ErrRecordingWriteRejected) {
 		t.Fatalf("append after finalize error = %v, want finalized and terminal failures", err)
+	}
+	want := []recordings.RecordRecordingEventRequest{{RecordingID: owner.status.RecordingID, Event: scopedScopeEvent("bad", 0, eventScope)}}
+	if !reflect.DeepEqual(owner.events, want) || canonical.event != want[0].Event {
+		t.Fatalf("append requests = %#v/%#v, want only accepted request %#v", owner.events, canonical.event, want)
+	}
+	wantFinish := []recordings.FinishRecordingRequest{{RecordingID: owner.status.RecordingID, FinishedAt: finishedAt}}
+	if !reflect.DeepEqual(owner.finishes, wantFinish) {
+		t.Fatalf("finalize requests = %#v, want %#v", owner.finishes, wantFinish)
 	}
 
 	canceled, cancel := context.WithCancel(context.Background())
@@ -467,135 +477,103 @@ func TestRecordingScopesRejectMalformedForeignStaleAndFinalizedReferences(t *tes
 	if !errors.Is(err, context.Canceled) || !result.Scope.IsZero() {
 		t.Fatalf("cancelled BeginRecordingScope = (%#v, %v), want context cancellation", result, err)
 	}
-}
-
-func TestRecordingScopeAppendDoesNotPublishWhenLifecycleRejects(t *testing.T) {
-	t.Parallel()
-
-	ledger := &stubLedger{}
-	root := NewService(ledger, NewProjectionService()).(*combinedService)
-	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-		Enabled: true,
-		Scope:   recordings.CanonicalEventScope{FactorySessionID: "atomic-rejection"},
-		Target:  recordings.RecordingTargetRequest{Artifact: "recording://atomic-rejection"},
-	})
-	if err != nil {
-		t.Fatalf("BeginRecordingScope: %v", err)
-	}
-	original := root.Service
-	root.Service = rejectingRecordingEventLifecycle{Service: original}
-	_, err = root.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
-		Scope: started.Scope,
-		Event: scopedScopeEvent("rejected-event", 0, started.Status.EventScope),
-	})
-	if !errors.Is(err, recordings.ErrRecordingWriteRejected) {
-		t.Fatalf("rejected scoped append error = %v, want ErrRecordingWriteRejected", err)
-	}
-	if len(ledger.events) != 0 {
-		t.Fatalf("rejected scoped append published canonical events: %#v", ledger.events)
-	}
-	binding, ok := root.scopeByRef[started.Scope]
-	if !ok {
-		t.Fatal("scope binding disappeared after rejected append")
-	}
-	status, err := original.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: binding.recordingID,
-	})
-	if err != nil {
-		t.Fatalf("QueryRecordingStatus: %v", err)
-	}
-	if status.Status.AcceptedEvents != 0 {
-		t.Fatalf("rejected scoped append changed lifecycle events: %#v", status.Status)
+	if owner.started.Enabled {
+		t.Fatalf("pre-start cancellation delegated start: %#v", owner.started)
 	}
 }
 
-func TestRecordingScopeCancellationAfterTargetPlanningRemovesBinding(t *testing.T) {
+func TestRecordingScopeAppendForwardsLifecycleRejectionWithoutAcceptedResult(t *testing.T) {
 	t.Parallel()
 
-	planner := &blockingRecordingTargetPlanner{
-		started: make(chan struct{}),
-		release: make(chan struct{}),
+	scope := recordings.CanonicalEventScope{FactorySessionID: "atomic-rejection"}
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "rejected-recording", Scope: scope, State: recordings.RecordingActive,
+	}}
+	lifecycle := &rejectingRecordingEventLifecycle{activeRuntimeLifecycle: owner}
+	canonical := &activeRuntimeCanonical{}
+	root := NewCombinedService(nil, nil, lifecycle, nil, nil, canonical, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	ref := root.newRecordingScope()
+	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: owner.status.RecordingID, eventScope: scope}
+	event := scopedScopeEvent("rejected-event", 0, scope)
+	result, err := root.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
+		Scope: ref, Event: event,
+	})
+	if !errors.Is(err, recordings.ErrRecordingWriteRejected) || !reflect.DeepEqual(result, recordings.AppendRecordingScopeEventResult{}) {
+		t.Fatalf("rejected scoped append = (%#v, %v), want no accepted result and typed rejection", result, err)
 	}
-	root := NewServiceWithLifecycleEffects(
-		&stubLedger{},
-		NewProjectionService(),
-		planner,
-		nil,
-		nil,
-		nil,
-		staticRecordingClock{at: time.Unix(1_700_000_300, 0).UTC()},
-	).(*combinedService)
+	want := recordings.RecordRecordingEventRequest{RecordingID: owner.status.RecordingID, Event: event}
+	if !reflect.DeepEqual(lifecycle.request, want) || !reflect.DeepEqual(canonical.event, event) {
+		t.Fatalf("lifecycle request = %#v, canonical request = %#v, want selected event %#v", lifecycle.request, canonical.event, want)
+	}
+	status, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{Scope: ref})
+	if err != nil || status.Status.AcceptedEvents != 0 || status.Status.EventScope != scope {
+		t.Fatalf("scope after rejected append = (%#v, %v), want intact empty binding", status, err)
+	}
+}
+
+func TestRecordingScopeCancellationAfterStartRemovesBinding(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	result := make(chan error, 1)
-	go func() {
-		_, beginErr := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
-			Enabled: true,
-			Scope:   recordings.CanonicalEventScope{FactorySessionID: "cancel-after-start"},
-			Target:  recordings.RecordingTargetRequest{HomeDir: "home"},
-		})
-		result <- beginErr
-	}()
-	select {
-	case <-planner.started:
-	case <-time.After(time.Second):
-		t.Fatal("recording target planning did not start")
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "cancelled-recording", Scope: recordings.CanonicalEventScope{FactorySessionID: "cancel-after-start"},
+		State: recordings.RecordingActive,
+	}}
+	lifecycle := cancelAfterStartLifecycle{activeRuntimeLifecycle: owner, cancel: cancel}
+	finishedAt := time.Unix(1_700_000_300, 0).UTC()
+	root := NewCombinedService(nil, nil, lifecycle, nil, nil, nil, nil,
+		staticRecordingClock{at: finishedAt}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	request := recordings.BeginRecordingScopeRequest{
+		Enabled: true, Scope: owner.status.Scope,
+		Target: recordings.RecordingTargetRequest{HomeDir: "home"},
 	}
-	cancel()
-	close(planner.release)
-	if err := <-result; !errors.Is(err, context.Canceled) {
-		t.Fatalf("post-start canceled BeginRecordingScope error = %v, want context.Canceled", err)
+	result, err := root.BeginRecordingScope(ctx, request)
+	if !errors.Is(err, context.Canceled) || !result.Scope.IsZero() {
+		t.Fatalf("post-start canceled BeginRecordingScope = (%#v, %v), want no scope and context.Canceled", result, err)
 	}
-	root.scopeMu.RLock()
-	remaining := len(root.scopeByRef)
-	root.scopeMu.RUnlock()
-	if remaining != 0 {
-		t.Fatalf("post-start cancellation left %d scope bindings", remaining)
+	if !owner.started.Enabled || owner.started.Scope != request.Scope || owner.started.Target != request.Target || owner.started.RecordingID == "" {
+		t.Fatalf("start request = %#v, want selected scope and target", owner.started)
+	}
+	want := []recordings.FinishRecordingRequest{{RecordingID: owner.status.RecordingID, FinishedAt: finishedAt}}
+	if !reflect.DeepEqual(owner.finishes, want) {
+		t.Fatalf("abandoned scope cleanup = %#v, want one exact finish %#v", owner.finishes, want)
+	}
+	if len(root.scopeByRef) != 0 {
+		t.Fatalf("post-start cancellation left %d scope bindings", len(root.scopeByRef))
 	}
 }
 
 func TestRecordingScopesKeepConcurrentSessionsIsolated(t *testing.T) {
 	t.Parallel()
-
-	service := NewService(&stubLedger{}, NewProjectionService())
-	type openedScope struct {
-		ref   recordings.RecordingScopeRef
+	owner := recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{})
+	type openedRecording struct {
+		id    recordings.RecordingID
 		event recordings.CanonicalEvent
 	}
-	opened := make([]openedScope, 2)
+	opened := make([]openedRecording, 2)
 	for index, sessionID := range []string{"scope-a", "scope-b"} {
-		started, err := service.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
-			Enabled: true,
-			Scope:   recordings.CanonicalEventScope{FactorySessionID: sessionID},
-			Target: recordings.RecordingTargetRequest{
-				Artifact: recordings.RecordingArtifactReference("recording://" + sessionID),
-			},
-		})
+		scope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
+		bound, err := owner.BindRecording(recordings.BindRecordingRequest{RecordingID: recordings.RecordingID(sessionID), Scope: scope, Artifact: recordings.RecordingArtifactReference("recording://" + sessionID)})
 		if err != nil {
-			t.Fatalf("BeginRecordingScope(%s): %v", sessionID, err)
+			t.Fatalf("BindRecording(%s): %v", sessionID, err)
 		}
-		opened[index] = openedScope{
-			ref:   started.Scope,
-			event: scopedScopeEvent(sessionID+"-event", 0, started.Status.EventScope),
-		}
+		opened[index] = openedRecording{id: bound.Status.RecordingID, event: scopedScopeEvent(sessionID+"-event", 0, scope)}
 	}
-
 	var wait sync.WaitGroup
 	errs := make(chan error, len(opened))
-	for _, scope := range opened {
-		scope := scope
+	for _, selected := range opened {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			appended, err := service.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
-				Scope: scope.ref, Event: scope.event,
-			})
+			result, err := owner.RecordRecordingEvent(recordings.RecordRecordingEventRequest{RecordingID: selected.id, Event: selected.event})
 			if err != nil {
 				errs <- err
 				return
 			}
-			if appended.Status.EventScope != scope.event.Scope || appended.Status.AcceptedEvents != 1 {
-				errs <- errors.New("concurrent recording scope crossed its event boundary")
+			if result.Status.Scope != selected.event.Scope || result.Status.AcceptedEvents != 1 {
+				errs <- errors.New("concurrent lifecycle crossed its event boundary")
 			}
 		}()
 	}
@@ -604,15 +582,13 @@ func TestRecordingScopesKeepConcurrentSessionsIsolated(t *testing.T) {
 	for err := range errs {
 		t.Fatal(err)
 	}
-	for _, scope := range opened {
-		status, err := service.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
-			Scope: scope.ref,
-		})
+	for _, selected := range opened {
+		snapshot, err := owner.Snapshot(selected.id)
 		if err != nil {
-			t.Fatalf("QueryRecordingScope(%s): %v", scope.event.Scope.FactorySessionID, err)
+			t.Fatalf("Snapshot(%s): %v", selected.id, err)
 		}
-		if status.Status.EventScope != scope.event.Scope || status.Status.AcceptedEvents != 1 {
-			t.Fatalf("scope %s status = %#v, want one isolated event", scope.event.Scope.FactorySessionID, status.Status)
+		if snapshot.Status.Scope != selected.event.Scope || snapshot.Status.AcceptedEvents != 1 || !reflect.DeepEqual(snapshot.Events, []recordings.CanonicalEvent{selected.event}) {
+			t.Fatalf("recording %s = %#v, want exactly its own fact", selected.id, snapshot)
 		}
 	}
 }
@@ -649,29 +625,26 @@ func scopedScopeEvent(
 }
 
 type rejectingRecordingEventLifecycle struct {
-	recordinglifecycle.Service
+	*activeRuntimeLifecycle
+	request recordings.RecordRecordingEventRequest
 }
 
-func (rejectingRecordingEventLifecycle) RecordRecordingEvent(
-	recordings.RecordRecordingEventRequest,
+func (owner *rejectingRecordingEventLifecycle) RecordRecordingEvent(
+	request recordings.RecordRecordingEventRequest,
 ) (recordings.RecordRecordingEventResult, error) {
+	owner.request = request
 	return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
 }
 
-type blockingRecordingTargetPlanner struct {
-	started chan struct{}
-	release chan struct{}
+type cancelAfterStartLifecycle struct {
+	*activeRuntimeLifecycle
+	cancel context.CancelFunc
 }
 
-func (planner *blockingRecordingTargetPlanner) PlanLiveRecordingTarget(
-	recordings.LiveRecordingTargetRequest,
-) (recordings.LiveRecordingTarget, error) {
-	close(planner.started)
-	<-planner.release
-	return recordings.LiveRecordingTarget{
-		ServicePath:  "recording-target",
-		ReportedPath: "recording-target",
-	}, nil
+func (owner cancelAfterStartLifecycle) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
+	result, err := owner.activeRuntimeLifecycle.StartRecording(request)
+	owner.cancel()
+	return result, err
 }
 
 type staticRecordingClock struct {
@@ -680,19 +653,26 @@ type staticRecordingClock struct {
 
 func (clock staticRecordingClock) Now() time.Time { return clock.at }
 
-// TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess proves
-// canonical replay stays equivalent to the retained projection of the same
-// finalized recording scope, and that equivalence survives concurrent access:
-// several replays of two distinct scopes run at once and each one completes
-// with exactly its own scope's retained world state, never another scope's.
+// The native replay owner receives detached finalized facts and a stateless
+// projection double. Concurrent plans must retain their own identity, prefix,
+// terminal cursor and supplied projection; public journeys prove composition.
 func TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
-	root := newScopedQueryRoot(t)
+	projection := concurrentReplayProjection{}
 	scopes := []finalizedReplayScope{
-		newFinalizedReplayScope(t, root, "concurrent-replay-a"),
-		newFinalizedReplayScope(t, root, "concurrent-replay-b"),
+		newFinalizedReplayScope(t, projection, "concurrent-replay-a"),
+		newFinalizedReplayScope(t, projection, "concurrent-replay-b"),
 	}
+	snapshots := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{}}
+	for _, scope := range scopes {
+		finished := time.Unix(1_700_000_100, 0).UTC()
+		snapshots.byID[scope.id] = recordinglifecycle.Snapshot{
+			Status: recordings.RecordingStatusFacts{RecordingID: scope.id, Scope: scope.eventScope, State: recordings.RecordingFinalized, FinalizedAt: &finished},
+			Events: scope.events,
+		}
+	}
+	owner := replaywire.NewService(snapshots, projection, nil, nil)
 
 	var wait sync.WaitGroup
 	errs := make(chan error, len(scopes)*8)
@@ -701,7 +681,7 @@ func TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess(t *tes
 			wait.Add(1)
 			go func() {
 				defer wait.Done()
-				replayed, err := replayScopeWorldState(root, scope)
+				replayed, err := replayScopeWorldState(owner, scope)
 				if err != nil {
 					errs <- err
 					return
@@ -724,71 +704,50 @@ func TestRecordingScopeReplayIsEquivalentAndIsolatedUnderConcurrentAccess(t *tes
 }
 
 type finalizedReplayScope struct {
-	ref        recordings.RecordingScopeRef
+	id         recordings.RecordingID
 	eventScope recordings.CanonicalEventScope
 	events     []recordings.CanonicalEvent
 	retained   recordings.WorldStateView
 }
 
-// newFinalizedReplayScope records two canonical facts for one Factory Session,
-// finalizes the recording, opens its scope, and captures the retained
-// projection every concurrent replay of that scope must reproduce.
-func newFinalizedReplayScope(t *testing.T, root recordings.Service, sessionID string) finalizedReplayScope {
+// Detached facts avoid running ledger, lifecycle or projection policy here.
+func newFinalizedReplayScope(t *testing.T, projection recordings.ProjectionService, sessionID string) finalizedReplayScope {
 	t.Helper()
-	eventScope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
-	bound, err := root.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: recordings.RecordingID("recording-" + sessionID),
-		Artifact:    recordings.RecordingArtifactReference("recording://" + sessionID),
-		Scope:       eventScope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording(%s): %v", sessionID, err)
-	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
 	events := []recordings.CanonicalEvent{
-		scopedScopeEvent(sessionID+"-event-1", 0, eventScope),
-		scopedScopeEvent(sessionID+"-event-2", 1, eventScope),
-	}
-	for index, event := range events {
-		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID, Event: event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent(%s)[%d]: %v", sessionID, index, err)
-		}
-	}
-	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_100, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording(%s): %v", sessionID, err)
-	}
-	opened, err := root.OpenRecordingScope(context.Background(), recordings.OpenRecordingScopeRequest{
-		RecordingID: bound.Status.RecordingID, Scope: eventScope,
-	})
-	if err != nil {
-		t.Fatalf("OpenRecordingScope(%s): %v", sessionID, err)
-	}
-	retained, err := root.ReconstructRecordingScope(context.Background(), recordings.ReconstructRecordingScopeRequest{
-		Scope: opened.Scope, SelectedTick: 4,
-	})
-	if err != nil {
-		t.Fatalf("ReconstructRecordingScope(%s): %v", sessionID, err)
-	}
-	if retained.WorldState.Scope != eventScope {
-		t.Fatalf("retained projection scope = %#v, want %#v", retained.WorldState.Scope, eventScope)
+		scopedScopeEvent(sessionID+"-event-1", 0, scope),
+		scopedScopeEvent(sessionID+"-event-2", 1, scope),
 	}
 	return finalizedReplayScope{
-		ref: opened.Scope, eventScope: eventScope, events: events, retained: retained.WorldState,
+		id: recordings.RecordingID("recording-" + sessionID), eventScope: scope, events: events,
+		retained: reconstructProjectionView(t, projection, scope, events),
 	}
+}
+
+type concurrentReplayProjection struct{ recordings.ProjectionService }
+
+func (concurrentReplayProjection) ReconstructFactoryWorldState(events []recordings.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	// Echo input identity so an incorrect plan prefix is observable without
+	// executing real projection policy or sharing mutable fake state.
+	return recordings.FactoryWorldState{Tick: tick, FactoryStateReason: events[len(events)-1].Id}, nil
 }
 
 // replayScopeWorldState drives one complete canonical replay of a finalized
 // scope and returns the world state its terminal observation reports.
 func replayScopeWorldState(
-	root recordings.Service,
+	owner recordingsreplay.Service,
 	scope finalizedReplayScope,
 ) (recordings.WorldStateView, error) {
-	planned, err := root.CreateReplayPlanScope(context.Background(), recordings.CreateReplayPlanScopeRequest{
-		Scope:         scope.ref,
+	loaded, err := owner.LoadReplayRecording(recordings.LoadReplayRecordingRequest{RecordingID: scope.id})
+	if err != nil {
+		return recordings.WorldStateView{}, err
+	}
+	if loaded.Recording.RecordingID != scope.id || loaded.Recording.Scope != scope.eventScope || !reflect.DeepEqual(loaded.Recording.Events, scope.events) {
+		return recordings.WorldStateView{}, errors.New("loaded replay facts crossed recording identity")
+	}
+	through := scope.events[len(scope.events)-1].Cursor
+	planned, err := owner.CreateReplayPlan(recordings.CreateReplayPlanRequest{
+		Recording: loaded.Recording, ExpectedThrough: &through,
 		SchemaVersion: recordings.ReplayPlanSchemaV1,
 		Timing:        recordings.ReplayTimingOrderOnly,
 		SelectedTick:  4,
@@ -796,13 +755,20 @@ func replayScopeWorldState(
 	if err != nil {
 		return recordings.WorldStateView{}, err
 	}
-	var observed recordings.ObserveReplayScopeResult
-	for range scope.events {
-		observed, err = root.ObserveReplayScope(context.Background(), recordings.ObserveReplayScopeRequest{
-			Scope: scope.ref, Plan: planned.Plan.Handle,
-		})
+	if planned.Plan.RecordingID != scope.id || planned.Plan.Scope != scope.eventScope || planned.Plan.TotalEvents != len(scope.events) {
+		return recordings.WorldStateView{}, errors.New("replay plan crossed recording identity")
+	}
+	var observed recordings.ObserveReplayResult
+	for index, event := range scope.events {
+		observed, err = owner.ObserveReplay(recordings.ObserveReplayRequest{Plan: planned.Plan.Handle})
 		if err != nil {
 			return recordings.WorldStateView{}, err
+		}
+		if !replayObservationMatchesPrefix(observed.Observation, planned.Plan.Handle, scope, index, event) {
+			return recordings.WorldStateView{}, errors.New("replay observation crossed plan, prefix or scope")
+		}
+		if index < len(scope.events)-1 && observed.Observation.Kind != recordings.ReplayProgress {
+			return recordings.WorldStateView{}, errors.New("replay completed before its final fact")
 		}
 	}
 	if observed.Observation.Kind != recordings.ReplayCompleted {
@@ -810,4 +776,16 @@ func replayScopeWorldState(
 			" did not complete: " + string(observed.Observation.Kind))
 	}
 	return observed.Observation.WorldState, nil
+}
+
+func replayObservationMatchesPrefix(
+	observation recordings.ReplayObservation,
+	plan recordings.ReplayPlanHandle,
+	scope finalizedReplayScope,
+	index int,
+	event recordings.CanonicalEvent,
+) bool {
+	return observation.Plan == plan && observation.ProcessedEvents == index+1 &&
+		observation.TotalEvents == len(scope.events) && observation.Through != nil &&
+		*observation.Through == event.Cursor && observation.WorldState.Scope == scope.eventScope
 }

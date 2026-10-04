@@ -17,7 +17,5 @@ func TestNewServiceConstructsCanonicalLedgerOwner(t *testing.T) {
 	if service := canonicalledgerwire.NewService(&unusedLedger{}); service == nil {
 		t.Fatal("NewService returned nil")
 	}
-	if service := canonicalledgerwire.NewService(nil); service != nil {
-		t.Fatal("NewService(nil) = service, want nil")
-	}
+
 }

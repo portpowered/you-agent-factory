@@ -10,6 +10,8 @@ import (
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/internal/service"
 )
 
 type fixedRecordingClock struct {
@@ -224,16 +226,8 @@ func newFailureTestRoot(
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
 	clock recordings.RecordingClock,
-) recordings.Service {
-	return recordingsinternal.NewServiceWithLifecycleEffects(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-		nil,
-		writer,
-		tickers,
-		nil,
-		clock,
-	)
+) recordinglifecycle.Service {
+	return lifecycleservice.New(nil, writer, tickers, clock)
 }
 
 func assertErrorTextOrder(t *testing.T, err error, messages []string) {

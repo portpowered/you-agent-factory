@@ -3,19 +3,27 @@
 package internal
 
 import (
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
 type stubLedger struct {
@@ -68,94 +76,71 @@ func (ledger *stubLedger) AppendRecordedEventWithValidation(
 	return event, nil
 }
 
-func TestNewServiceRejectsNilDependencies(t *testing.T) {
+func TestCanonicalOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
 	t.Parallel()
-	if got := NewService(nil, NewProjectionService()); got != nil {
-		t.Fatalf("NewService(nil, projection) = %#v, want nil", got)
-	}
-	if got := NewService(&stubLedger{}, nil); got != nil {
-		t.Fatalf("NewService(ledger, nil) = %#v, want nil", got)
-	}
-}
-
-func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *testing.T) {
-	t.Parallel()
-
-	publication, err := NewPortableArtifactPublication(
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
-	planner := recordings.LiveRecordingTargetPlannerFunc(
-		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-			return recordings.LiveRecordingTarget{ServicePath: "service/path"}, nil
-		},
-	)
-	if got := NewService(&stubLedger{}, NewProjectionService(), planner); got == nil {
-		t.Fatal("NewService with planner returned nil")
-	}
-	if got := NewServiceWithLifecycleEffects(
-		&stubLedger{},
-		NewProjectionService(),
-		planner,
-		nil,
-		nil,
-		publication,
-	); got == nil {
-		t.Fatal("NewServiceWithLifecycleEffects with publication returned nil")
-	}
-}
-
-func TestCombinedServicePlainSlices_SuccessAndTypedFailures(t *testing.T) {
-	t.Parallel()
-
 	ledger := &stubLedger{}
-	svc := NewService(ledger, NewProjectionService())
-	if svc == nil {
-		t.Fatal("NewService returned nil")
-	}
-
-	assertAppendSubscribe(t, svc, ledger)
-	assertProjectionQuery(t, svc)
-	assertRecordingLifecycle(t, svc)
-	assertReplay(t, svc)
-	assertArtifactExport(t, svc)
+	assertAppendSubscribe(t, canonicalledgerwire.NewService(ledger), ledger)
 }
 
-func TestCombinedServiceRecordingLifecycleAdapterPreservesDetachedOutcomes(t *testing.T) {
+func TestLifecycleOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	assertRecordingLifecycle(t, recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{}))
+}
+
+func TestCombinedServiceProjectionPlainSlicesSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	projection := &plainReplayProjection{}
+	root := NewCombinedService(nil, projection, nil, nil, nil, nil, unavailableHistoricalOwner{},
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	assertProjectionQuery(t, root, projection)
+}
+
+func TestReplayOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	snapshots := &plainOwnerSnapshots{byID: make(map[recordings.RecordingID]recordinglifecycle.Snapshot)}
+	projection := &plainReplayProjection{}
+	svc := replaywire.NewService(snapshots, projection, nil, nil)
+	loaded := assertReplayLoadAndCompletion(t, svc, snapshots)
+	assertReplayTypedFailures(t, svc, loaded)
+	assertReplayDivergence(t, svc, loaded)
+	assertReplayOrderedProgress(t, svc)
+	if len(projection.events) != 2 || projection.events[1].Id != "state-1" {
+		t.Fatalf("replay projection prefix = %#v, want both ordered state events", projection.events)
+	}
+}
+
+func TestArtifactsOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	snapshots := &plainOwnerSnapshots{byID: make(map[recordings.RecordingID]recordinglifecycle.Snapshot)}
+	svc := artifactsexportwire.NewService(snapshots, nil)
+	artifact := buildServicePortableArtifact(t, svc, snapshots)
+	assertServicePortableRoundTrip(t, svc, artifact)
+	assertServicePortableFailures(t, svc, artifact)
+}
+
+func TestLifecycleOwnerPreservesDetachedOutcomes(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, NewProjectionService())
-	lifecycle, ok := svc.(recordings.RecordingLifecycle)
-	if !ok {
-		t.Fatal("Recordings root does not implement RecordingLifecycle")
-	}
-	scope := recordings.LifecycleScope{FactorySessionID: "lifecycle-adapter"}
-	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{}); err != nil {
+	lifecycle := recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{})
+	scope := recordings.CanonicalEventScope{FactorySessionID: "lifecycle-adapter"}
+	if _, err := lifecycle.StartRecording(recordings.StartRecordingRequest{}); err != nil {
 		t.Fatalf("Begin disabled: %v", err)
 	}
-	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+	if _, err := lifecycle.StartRecording(recordings.StartRecordingRequest{
 		Enabled:     true,
 		RecordingID: "lifecycle-adapter",
 		Scope:       scope,
-		Artifact:    "artifact://lifecycle-adapter",
+		Target:      recordings.RecordingTargetRequest{Artifact: "artifact://lifecycle-adapter"},
 	}); err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
-	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
+	if _, err := lifecycle.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
 		RecordingID: "lifecycle-adapter",
-		Event: recordings.LifecycleEvent{
+		Event: recordings.CanonicalEvent{
 			ID:         "lifecycle-adapter-event",
 			Sequence:   0,
 			Scope:      scope,
-			Cursor:     recordings.LifecycleEventCursor{StreamGenerationID: "generation-1"},
+			Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "generation-1"},
 			RecordedAt: time.Unix(1_700_000_600, 0).UTC(),
 			Kind:       "WORK_REQUEST",
 			Payload:    "{}",
@@ -163,53 +148,53 @@ func TestCombinedServiceRecordingLifecycleAdapterPreservesDetachedOutcomes(t *te
 	}); err != nil {
 		t.Fatalf("AppendEvent: %v", err)
 	}
-	if _, err := lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: "lifecycle-adapter"}); err != nil {
+	if _, err := lifecycle.FlushRecording(recordings.FlushRecordingRequest{RecordingID: "lifecycle-adapter"}); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
-	if _, err := lifecycle.Status(recordings.LifecycleStatusRequest{RecordingID: "lifecycle-adapter"}); err != nil {
+	if _, err := lifecycle.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: "lifecycle-adapter"}); err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	if err := lifecycle.Stop(recordings.StopLifecycleRequest{RecordingID: "lifecycle-adapter"}); err != nil {
+	if _, err := lifecycle.StopRecording(recordings.StopRecordingRequest{RecordingID: "lifecycle-adapter"}); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
+	finished, err := lifecycle.FinishRecording(recordings.FinishRecordingRequest{
 		RecordingID: "lifecycle-adapter",
 		FinishedAt:  time.Unix(1_700_000_601, 0).UTC(),
 	})
-	if err != nil || finished.Status.State != recordings.LifecycleStateFinalized {
+	if err != nil || finished.Status.State != recordings.RecordingFinalized {
 		t.Fatalf("Finish = (%#v, %v), want finalized detached status", finished, err)
 	}
 
-	if _, err := lifecycle.Bind(recordings.BindLifecycleRequest{
+	if _, err := lifecycle.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "lifecycle-failure",
 		Artifact:    "artifact://lifecycle-failure",
 		Scope:       scope,
 	}); err != nil {
 		t.Fatalf("Bind: %v", err)
 	}
-	failed, err := lifecycle.RecordFailure(recordings.RecordLifecycleFailureRequest{
+	failed, err := lifecycle.RecordRecordingError(recordings.RecordRecordingErrorRequest{
 		RecordingID: "lifecycle-failure",
-		Failure: recordings.LifecycleFailure{
+		Failure: recordings.RecordingFailure{
 			Code: "adapter-failure", Message: "adapter failure",
 		},
 	})
-	if err != nil || failed.Status.State != recordings.LifecycleStateFailed || len(failed.Status.Failures) != 1 {
+	if err != nil || failed.Status.State != recordings.RecordingFailed || len(failed.Status.Failures) != 1 {
 		t.Fatalf("RecordFailure = (%#v, %v), want detached failed status", failed, err)
 	}
-	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+	if _, err := lifecycle.StartRecording(recordings.StartRecordingRequest{
 		Enabled: true, RecordingID: "missing-adapter-target", Scope: scope,
 	}); !errors.Is(err, recordings.ErrMissingRecordingTarget) {
 		t.Fatalf("Begin missing target = %v, want ErrMissingRecordingTarget", err)
 	}
 }
 
-func assertAppendSubscribe(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertAppendSubscribe(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	assertOrderedAppend(t, svc, ledger)
 	assertReconnectSubscription(t, svc, ledger)
 }
 
-func assertOrderedAppend(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertOrderedAppend(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	event := recordings.CanonicalEvent{
 		ID:         "evt-1",
@@ -243,7 +228,7 @@ func assertOrderedAppend(t *testing.T, svc recordings.Service, ledger *stubLedge
 
 func assertInvalidAppendsDoNotMutate(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	ledger *stubLedger,
 	valid recordings.CanonicalEvent,
 ) {
@@ -278,7 +263,7 @@ func assertInvalidAppendsDoNotMutate(
 	}
 }
 
-func assertReconnectSubscription(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertReconnectSubscription(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	assertSubscribeFailures(t, svc, ledger)
 	first := assertScopedRetainedAndReconnect(t, svc, ledger)
@@ -286,7 +271,7 @@ func assertReconnectSubscription(t *testing.T, svc recordings.Service, ledger *s
 	assertScopedDeliveryGap(t, svc, ledger)
 }
 
-func assertSubscribeFailures(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertSubscribeFailures(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	if _, err := svc.SubscribeFrom(context.Background(), recordings.SubscribeRequest{
 		Scope: recordings.CanonicalEventScope{FactorySessionID: "   "},
@@ -306,7 +291,7 @@ func assertSubscribeFailures(t *testing.T, svc recordings.Service, ledger *stubL
 
 func assertScopedRetainedAndReconnect(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	ledger *stubLedger,
 ) recordings.SubscriptionOutcome {
 	t.Helper()
@@ -352,7 +337,7 @@ func assertScopedRetainedAndReconnect(
 
 func assertScopedLiveDelivery(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	ledger *stubLedger,
 	cursor recordings.CanonicalEventCursor,
 ) {
@@ -375,7 +360,7 @@ func assertScopedLiveDelivery(
 	}
 }
 
-func assertScopedDeliveryGap(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertScopedDeliveryGap(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	ledger.subscribeStream.Events = nil
 	ledger.subscribeStream.History = []factorydefinitions.FactoryEvent{
@@ -415,7 +400,7 @@ func scopedLegacyEvent(
 	}
 }
 
-func assertProjectionQuery(t *testing.T, svc recordings.Service) {
+func assertProjectionQuery(t *testing.T, svc recordings.Service, projection *plainReplayProjection) {
 	t.Helper()
 	historical, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
 		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "unavailable"},
@@ -461,10 +446,10 @@ func assertProjectionQuery(t *testing.T, svc recordings.Service) {
 	}); !errors.Is(err, recordings.ErrUnsupportedProjectionView) {
 		t.Fatalf("QueryWorkstationRequests unsupported view = %v, want ErrUnsupportedProjectionView", err)
 	}
-	assertReconnectReplayValidation(t, svc)
+	assertReconnectReplayValidation(t, svc, projection)
 }
 
-func assertReconnectReplayValidation(t *testing.T, svc recordings.Service) {
+func assertReconnectReplayValidation(t *testing.T, svc recordings.Service, projection *plainReplayProjection) {
 	t.Helper()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
 	history := []recordings.CanonicalEvent{
@@ -479,6 +464,13 @@ func assertReconnectReplayValidation(t *testing.T, svc recordings.Service) {
 	}); err != nil {
 		t.Fatalf("ValidateReconnectReplayFrom interleaved scoped history: %v", err)
 	}
+	if len(projection.reconnectEvents) != len(history) || projection.reconnectEvents[2].Id != string(history[2].ID) ||
+		projection.reconnectCursor.AfterSequence == nil || *projection.reconnectCursor.AfterSequence != 2 ||
+		projection.reconnectScope.SessionID != scope.FactorySessionID {
+		t.Fatalf("reconnect collaborator request = (%#v, %#v, %#v), want ordered scoped history and cursor 2",
+			projection.reconnectEvents, projection.reconnectCursor, projection.reconnectScope)
+	}
+	projection.reconnectErr = recordings.ErrReconnectCursorNotFound
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Events: history[1:],
 		Cursor: history[0].Cursor,
@@ -489,6 +481,7 @@ func assertReconnectReplayValidation(t *testing.T, svc recordings.Service) {
 			err,
 		)
 	}
+	projection.reconnectErr = nil
 	malformed := append([]recordings.CanonicalEvent(nil), history...)
 	malformed[1], malformed[2] = malformed[2], malformed[1]
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
@@ -532,14 +525,14 @@ func canonicalProjectionEvent(
 	}
 }
 
-func assertRecordingLifecycle(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycle(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	assertRecordingLifecycleBindingCollision(t, svc)
 	assertRecordingLifecycleHappyPath(t, svc)
 	assertRecordingLifecycleFlushFailure(t, svc)
 }
 
-func assertRecordingLifecycleHappyPath(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycleHappyPath(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	if _, err := svc.BindRecording(recordings.BindRecordingRequest{}); !errors.Is(err, recordings.ErrMissingRecordingTarget) {
 		t.Fatalf("BindRecording empty artifact = %v, want ErrMissingRecordingTarget", err)
@@ -603,7 +596,7 @@ func assertRecordingLifecycleHappyPath(t *testing.T, svc recordings.Service) {
 	}
 }
 
-func assertRecordingLifecycleFlushFailure(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycleFlushFailure(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	boundFail, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "flush-fail",
@@ -638,7 +631,7 @@ func assertRecordingLifecycleFlushFailure(t *testing.T, svc recordings.Service) 
 	}
 }
 
-func assertRecordingLifecycleBindingCollision(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycleBindingCollision(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	assertGeneratedServiceRecordingIDDoesNotCollide(t, svc)
 	request := recordings.BindRecordingRequest{
@@ -696,7 +689,7 @@ func assertRecordingLifecycleBindingCollision(t *testing.T, svc recordings.Servi
 	assertServiceBindingCollision(t, svc, request, terminal, "terminal")
 }
 
-func assertGeneratedServiceRecordingIDDoesNotCollide(t *testing.T, svc recordings.Service) {
+func assertGeneratedServiceRecordingIDDoesNotCollide(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	explicit, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-1",
@@ -722,7 +715,7 @@ func assertGeneratedServiceRecordingIDDoesNotCollide(t *testing.T, svc recording
 
 func assertServiceBindingCollision(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordinglifecycle.Service,
 	request recordings.BindRecordingRequest,
 	want recordings.RecordingStatusFacts,
 	phase string,
@@ -763,7 +756,9 @@ func assertServiceBindingCollision(
 
 func recordingLifecycleStatus(
 	t *testing.T,
-	svc recordings.Service,
+	svc interface {
+		QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
+	},
 	recordingID recordings.RecordingID,
 ) recordings.RecordingStatusFacts {
 	t.Helper()
@@ -776,17 +771,10 @@ func recordingLifecycleStatus(
 	return result.Status
 }
 
-func assertReplay(t *testing.T, svc recordings.Service) {
-	t.Helper()
-	loaded := assertReplayLoadAndCompletion(t, svc)
-	assertReplayTypedFailures(t, svc, loaded)
-	assertReplayDivergence(t, svc, loaded)
-	assertReplayOrderedProgress(t, svc)
-}
-
 func assertReplayLoadAndCompletion(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordingsreplay.Service,
+	snapshots *plainOwnerSnapshots,
 ) recordings.ReplayRecordingFacts {
 	t.Helper()
 	if _, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
@@ -794,25 +782,17 @@ func assertReplayLoadAndCompletion(
 	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
 		t.Fatalf("LoadReplayRecording missing = %v, want ErrReplayRecordingNotFound", err)
 	}
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		Artifact: "artifact:replay-service",
-	})
-	if err != nil {
-		t.Fatalf("BindRecording replay = %v", err)
-	}
-	if _, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
+	const recordingID recordings.RecordingID = "recording-replay-service"
+	snapshots.byID[recordingID] = recordinglifecycle.Snapshot{Status: recordings.RecordingStatusFacts{RecordingID: recordingID}}
+	if _, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{RecordingID: recordingID}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
 		t.Fatalf("LoadReplayRecording active = %v, want ErrReplayRecordingNotFinalized", err)
 	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_000, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording replay = %v", err)
-	}
+	finishedAt := time.Unix(1_700_000_000, 0).UTC()
+	snapshot := snapshots.byID[recordingID]
+	snapshot.Status.FinalizedAt = &finishedAt
+	snapshots.byID[recordingID] = snapshot
 	loaded, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: recordingID,
 	})
 	if err != nil {
 		t.Fatalf("LoadReplayRecording = %v", err)
@@ -834,7 +814,7 @@ func assertReplayLoadAndCompletion(
 
 func assertReplayTypedFailures(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordingsreplay.Service,
 	recording recordings.ReplayRecordingFacts,
 ) {
 	t.Helper()
@@ -861,7 +841,7 @@ func assertReplayTypedFailures(
 
 func assertReplayDivergence(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordingsreplay.Service,
 	recording recordings.ReplayRecordingFacts,
 ) {
 	t.Helper()
@@ -887,7 +867,7 @@ func assertReplayDivergence(
 	}
 }
 
-func assertReplayOrderedProgress(t *testing.T, svc recordings.Service) {
+func assertReplayOrderedProgress(t *testing.T, svc recordingsreplay.Service) {
 	t.Helper()
 	events := []recordings.CanonicalEvent{
 		replayStateEvent(0, `{"state":"RUNNING"}`),
@@ -931,57 +911,68 @@ func replayStateEvent(sequence recordings.CanonicalEventSequence, payload string
 	}
 }
 
-func assertArtifactExport(t *testing.T, svc recordings.Service) {
-	t.Helper()
-	artifact := buildServicePortableArtifact(t, svc)
-	assertServicePortableRoundTrip(t, svc, artifact)
-	assertServicePortableFailures(t, svc, artifact)
+// Snapshot doubles supply detached owner inputs without constructing a lifecycle.
+// Nil embedded methods fail unexpected collaborator calls.
+type plainOwnerSnapshots struct {
+	recordinglifecycle.Service
+	byID map[recordings.RecordingID]recordinglifecycle.Snapshot
 }
 
-func buildServicePortableArtifact(
-	t *testing.T,
-	svc recordings.Service,
-) recordings.PortableArtifact {
+func (snapshots *plainOwnerSnapshots) Snapshot(id recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
+	snapshot, ok := snapshots.byID[id]
+	if !ok {
+		return recordinglifecycle.Snapshot{}, recordings.ErrMissingRecordingTarget
+	}
+	return snapshot, nil
+}
+
+type plainReplayProjection struct {
+	recordings.ProjectionService
+	events          []recordings.FactoryEvent
+	reconnectErr    error
+	reconnectEvents []recordings.FactoryEvent
+	reconnectCursor recordings.FactoryEventReconnectCursor
+	reconnectScope  recordings.FactoryEventReconnectScope
+}
+
+func (projection *plainReplayProjection) ReconstructFactoryWorldState(events []recordings.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	projection.events = append([]recordings.FactoryEvent(nil), events...)
+	return recordings.FactoryWorldState{Tick: tick}, nil
+}
+
+func (*plainReplayProjection) SimpleDashboardRenderData(recordings.FactoryWorldState) recordings.SimpleDashboardRenderData {
+	return recordings.SimpleDashboardRenderData{}
+}
+
+func (*plainReplayProjection) ProjectWorkstationRequests(recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
+}
+
+func (projection *plainReplayProjection) ValidateReconnectReplay(events []recordings.FactoryEvent, cursor recordings.FactoryEventReconnectCursor, scope recordings.FactoryEventReconnectScope) error {
+	projection.reconnectEvents = append([]recordings.FactoryEvent(nil), events...)
+	projection.reconnectCursor = cursor
+	projection.reconnectScope = scope
+	return projection.reconnectErr
+}
+func buildServicePortableArtifact(t *testing.T, svc artifactsexport.Service, snapshots *plainOwnerSnapshots) recordings.PortableArtifact {
 	t.Helper()
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-export",
-		Artifact:    "artifact:export",
-		Scope: recordings.CanonicalEventScope{
-			FactorySessionID: "session-service-1",
-		},
-	})
-	if err != nil {
-		t.Fatalf("BindRecording portable artifact: %v", err)
+	const id recordings.RecordingID = "recording-export"
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-service-1"}
+	snapshot := recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{RecordingID: id, Artifact: "artifact:export", Scope: scope},
+		Events: []recordings.CanonicalEvent{{ID: "export-event", Kind: "WORK_REQUEST", Scope: scope,
+			RecordedAt: time.Unix(1_700_000_000, 0).UTC(), Payload: "{}",
+			Cursor: recordings.CanonicalEventCursor{StreamGenerationID: "generation-export"}}},
 	}
-	event := recordings.CanonicalEvent{
-		ID: "export-event", Kind: "WORK_REQUEST",
-		Scope:      bound.Status.Scope,
-		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
-		Payload:    "{}",
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: "generation-export",
-		},
-	}
-	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); err != nil {
-		t.Fatalf("RecordRecordingEvent portable artifact: %v", err)
-	}
-	if _, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+	snapshots.byID[id] = snapshot
+	if _, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: id}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
 		t.Fatalf("BuildPortableArtifact active = %v", err)
 	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording portable artifact: %v", err)
-	}
-	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	})
+	finishedAt := time.Unix(1_700_000_001, 0).UTC()
+	snapshot.Status.State = recordings.RecordingFinalized
+	snapshot.Status.FinalizedAt = &finishedAt
+	snapshots.byID[id] = snapshot
+	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: id})
 	if err != nil {
 		t.Fatalf("BuildPortableArtifact: %v", err)
 	}
@@ -990,7 +981,7 @@ func buildServicePortableArtifact(
 
 func assertServicePortableRoundTrip(
 	t *testing.T,
-	svc recordings.Service,
+	svc artifactsexport.Service,
 	artifact recordings.PortableArtifact,
 ) {
 	t.Helper()
@@ -1022,7 +1013,7 @@ func assertServicePortableRoundTrip(
 
 func assertServicePortableFailures(
 	t *testing.T,
-	svc recordings.Service,
+	svc artifactsexport.Service,
 	artifact recordings.PortableArtifact,
 ) {
 	t.Helper()
@@ -1042,81 +1033,55 @@ func assertServicePortableFailures(
 	}
 }
 
-func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
-	t.Parallel()
+type plainPublicationFailure struct {
+	destination string
+	published   bool
+	read        bool
+}
 
-	destination := filepath.Join(t.TempDir(), "destination-is-directory")
-	if err := os.Mkdir(destination, 0o700); err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
-	ledger := &stubLedger{}
-	publication, err := NewPortableArtifactPublication(
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
-	svc := NewServiceWithLifecycleEffects(
-		ledger,
-		NewProjectionService(),
-		nil,
-		nil,
-		nil,
-		publication,
-	)
+func (publication *plainPublicationFailure) Publish(_ context.Context, destination string, _ []byte) error {
+	publication.destination = destination
+	publication.published = true
+	return os.ErrPermission
+}
+func (publication *plainPublicationFailure) Read(_ context.Context, destination string) ([]byte, error) {
+	publication.destination = destination
+	publication.read = true
+	return nil, os.ErrPermission
+}
+
+func TestArtifactsOwnerPortablePublicationFailures(t *testing.T) {
+	t.Parallel()
+	const id recordings.RecordingID = "recording-export-delegate"
+	const destination recordings.RecordingArtifactReference = "artifact:export-delegate"
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-delegate"}
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-export-delegate",
-		Artifact:    recordings.RecordingArtifactReference(destination),
-		Scope:       scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
-	event := recordings.CanonicalEvent{
-		ID: "export-delegate-event", Kind: "WORK_REQUEST",
-		Scope:      scope,
-		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
-		Payload:    "{}",
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: "generation-export-delegate",
-		},
-	}
-	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); err != nil {
-		t.Fatalf("RecordRecordingEvent: %v", err)
-	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
-	if _, err := svc.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	}); !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
+	finishedAt := time.Unix(1_700_000_001, 0).UTC()
+	snapshots := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{
+		id: {Status: recordings.RecordingStatusFacts{RecordingID: id, Artifact: destination, Scope: scope,
+			State: recordings.RecordingFinalized, FinalizedAt: &finishedAt},
+			Events: []recordings.CanonicalEvent{{ID: "export-delegate-event", Kind: "WORK_REQUEST", Scope: scope,
+				RecordedAt: time.Unix(1_700_000_000, 0).UTC(), Payload: "{}",
+				Cursor: recordings.CanonicalEventCursor{StreamGenerationID: "generation-export-delegate"}}}},
+	}}
+	publication := &plainPublicationFailure{}
+	svc := artifactsexportwire.NewService(snapshots, publication)
+	if _, err := svc.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{RecordingID: id}); !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
 		t.Fatalf("ExportPortableArtifact = %v, want ErrPortableArtifactExportFailed", err)
 	}
-	if _, err := svc.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-		Reference:   recordings.RecordingArtifactReference(destination),
-	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) &&
-		!errors.Is(err, recordings.ErrInvalidPortableArtifact) {
-		t.Fatalf("ReadPortableArtifact = %v, want ErrPortableArtifactUnavailable or ErrInvalidPortableArtifact", err)
+	if !publication.published || publication.destination != string(destination) {
+		t.Fatalf("publication = %#v, want export to selected artifact", publication)
+	}
+	if _, err := svc.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{RecordingID: id, Reference: destination}); !errors.Is(err, recordings.ErrInvalidPortableArtifact) {
+		t.Fatalf("ReadPortableArtifact = %v, want ErrInvalidPortableArtifact", err)
+	}
+	if !publication.read || publication.destination != string(destination) {
+		t.Fatalf("publication = %#v, want read of selected artifact", publication)
 	}
 }
 
 func TestProjectionServiceDelegates(t *testing.T) {
 	t.Parallel()
-	projection := NewProjectionService()
+	projection := projectionquerywire.NewService()
 	state, err := projection.ReconstructFactoryWorldState(nil, 0)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
@@ -1139,197 +1104,10 @@ func TestNewReplayClockAndExecutionNilArtifact(t *testing.T) {
 	}
 }
 
-func TestCombinedServiceReplayArtifactCapabilityRoundTripsDetachedOutcomes(t *testing.T) {
+func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 	t.Parallel()
 
-	destination := filepath.Join(t.TempDir(), "portable", "recording.json")
-	publication, err := NewPortableArtifactPublication(
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
-	svc := NewServiceWithLifecycleEffects(
-		&stubLedger{},
-		NewProjectionService(),
-		nil,
-		nil,
-		nil,
-		publication,
-	)
-	capability, ok := svc.(recordings.RecordingReplayArtifacts)
-	if !ok {
-		t.Fatal("Recordings service does not expose RecordingReplayArtifacts")
-	}
-
-	const recordingID = recordings.ReplayRecordingID("recording-neutral-artifacts")
-	scope := recordings.CanonicalEventScope{FactorySessionID: "session-neutral-artifacts"}
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: recordings.RecordingID(recordingID),
-		Artifact:    recordings.RecordingArtifactReference(destination),
-		Scope:       scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
-	event := recordings.CanonicalEvent{
-		ID:         "neutral-artifact-event",
-		Sequence:   0,
-		Scope:      scope,
-		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
-		Kind:       "WORK_REQUEST",
-		Payload:    `{"work":"preserved"}`,
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: "generation-neutral-artifacts",
-			Sequence:           0,
-		},
-	}
-	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); err != nil {
-		t.Fatalf("RecordRecordingEvent: %v", err)
-	}
-
-	assertCombinedReplayArtifactActiveErrors(t, capability, recordingID)
-
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
-	loaded := loadCombinedReplayArtifact(t, capability, recordingID)
-	assertCombinedLoadedReplay(t, loaded, recordingID, scope, event)
-	built := buildCombinedReplayArtifact(t, capability, recordingID)
-	assertCombinedBuiltArtifact(t, built, recordingID, destination, event)
-	assertCombinedArtifactOperations(t, capability, built.Artifact, scope, event)
-	assertCombinedArtifactPublication(t, capability, recordingID, destination)
-}
-
-func assertCombinedReplayArtifactActiveErrors(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) {
-	t.Helper()
-	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorNotFinalized) {
-		t.Fatalf("LoadReplay active = %v, want NOT_FINALIZED", err)
-	}
-	if _, err := capability.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorUnavailable) {
-		t.Fatalf("BuildArtifact active = %v, want UNAVAILABLE", err)
-	}
-	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: "missing-neutral-artifacts"}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorNotFound) {
-		t.Fatalf("LoadReplay missing = %v, want NOT_FOUND", err)
-	}
-}
-
-func loadCombinedReplayArtifact(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) recordings.LoadReplayResult {
-	t.Helper()
-	loaded, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("LoadReplay: %v", err)
-	}
-	return loaded
-}
-
-func assertCombinedLoadedReplay(t *testing.T, loaded recordings.LoadReplayResult, recordingID recordings.ReplayRecordingID, scope recordings.CanonicalEventScope, event recordings.CanonicalEvent) {
-	t.Helper()
-	if loaded.Replay.RecordingID != recordingID || loaded.Replay.Scope.FactorySessionID != scope.FactorySessionID ||
-		len(loaded.Replay.Events) != 1 || loaded.Replay.Events[0].ID != string(event.ID) || loaded.Replay.Events[0].Payload != event.Payload {
-		t.Fatalf("LoadReplay = %#v, want detached recording facts", loaded)
-	}
-}
-
-func buildCombinedReplayArtifact(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) recordings.BuildArtifactResult {
-	t.Helper()
-	built, err := capability.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	return built
-}
-
-func assertCombinedBuiltArtifact(t *testing.T, built recordings.BuildArtifactResult, recordingID recordings.ReplayRecordingID, destination string, event recordings.CanonicalEvent) {
-	t.Helper()
-	if built.Artifact.SchemaVersion != recordings.ArtifactSchemaV1 || built.Artifact.Summary.RecordingID != recordingID ||
-		built.Artifact.Summary.Reference != recordings.ArtifactReference(destination) || built.Artifact.Summary.EventCount != 1 ||
-		len(built.Artifact.Events) != 1 || built.Artifact.Events[0].ID != string(event.ID) {
-		t.Fatalf("BuildArtifact = %#v, want finalized detached artifact", built)
-	}
-}
-
-func assertCombinedArtifactOperations(t *testing.T, capability recordings.RecordingReplayArtifacts, artifact recordings.ArtifactEnvelope, scope recordings.CanonicalEventScope, event recordings.CanonicalEvent) {
-	t.Helper()
-	validated, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: artifact})
-	if err != nil || validated.Summary.EventCount != 1 {
-		t.Fatalf("ValidateArtifact = (%#v, %v), want one-event summary", validated, err)
-	}
-	summarized, err := capability.SummarizeArtifact(recordings.SummarizeArtifactRequest{Artifact: artifact})
-	if err != nil || summarized.Summary.Scope.FactorySessionID != scope.FactorySessionID {
-		t.Fatalf("SummarizeArtifact = (%#v, %v), want session scope", summarized, err)
-	}
-	encoded, err := capability.EncodeArtifact(recordings.EncodeArtifactRequest{Artifact: artifact})
-	if err != nil || len(encoded.Payload) == 0 {
-		t.Fatalf("EncodeArtifact = (%d bytes, %v), want payload", len(encoded.Payload), err)
-	}
-	decoded, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: encoded.Payload})
-	if err != nil || decoded.Artifact.Events[0].Payload != event.Payload {
-		t.Fatalf("DecodeArtifact = (%#v, %v), want preserved event payload", decoded, err)
-	}
-	assertCombinedArtifactValidationFailures(t, capability, artifact)
-}
-
-func assertCombinedArtifactValidationFailures(t *testing.T, capability recordings.RecordingReplayArtifacts, artifact recordings.ArtifactEnvelope) {
-	t.Helper()
-	tampered := artifact
-	tampered.Events = append([]recordings.ReplayEvent(nil), artifact.Events...)
-	tampered.Events[0].Payload = `{"changed":true}`
-	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: tampered}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorInvalidIntegrity) {
-		t.Fatalf("ValidateArtifact tampered = %v, want INVALID_INTEGRITY", err)
-	}
-	unsupported := artifact
-	unsupported.SchemaVersion = "recordings.portable-artifact.v99"
-	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: unsupported}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorUnsupportedSchema) {
-		t.Fatalf("ValidateArtifact unsupported = %v, want UNSUPPORTED_SCHEMA", err)
-	}
-	if _, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorInvalid) {
-		t.Fatalf("DecodeArtifact empty = %v, want INVALID", err)
-	}
-}
-
-func assertCombinedArtifactPublication(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID, destination string) {
-	t.Helper()
-	exported, err := capability.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{RecordingID: recordingID})
-	if err != nil || exported.Reference != recordings.ArtifactReference(destination) {
-		t.Fatalf("ExportArtifact = (%#v, %v), want published destination", exported, err)
-	}
-	read, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{RecordingID: recordingID, Reference: exported.Reference})
-	if err != nil || read.Artifact.Integrity.Digest != exported.Artifact.Integrity.Digest {
-		t.Fatalf("ReadArtifact = (%#v, %v), want exported digest", read, err)
-	}
-	if _, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: recordingID, Reference: recordings.ArtifactReference(destination + ".other"),
-	}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorForeign) {
-		t.Fatalf("ReadArtifact foreign = %v, want FOREIGN", err)
-	}
-	canceled, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := capability.ReadArtifact(canceled, recordings.ReadArtifactRequest{RecordingID: recordingID, Reference: exported.Reference}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorCancelled) {
-		t.Fatalf("ReadArtifact canceled = %v, want CANCELLED", err)
-	}
-}
-
-func hasReplayArtifactErrorKind(err error, want recordings.ReplayArtifactErrorKind) bool {
-	var artifactErr *recordings.ReplayArtifactError
-	return errors.As(err, &artifactErr) && artifactErr.Kind == want
-}
-func TestCombinedServiceReadHelpersRejectUnavailableCapabilities(t *testing.T) {
-	t.Parallel()
-
-	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
 	_, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{})
 	var historicalErr *recordings.HistoricalRecordingQueryError
 	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable {
@@ -1344,7 +1122,7 @@ func TestCombinedServiceReadHelpersRejectUnavailableCapabilities(t *testing.T) {
 func TestCombinedServiceReadHelpersRejectMalformedReplayCursor(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-1"},
 		Cursor: recordings.CanonicalEventCursor{Sequence: -1},
@@ -1388,25 +1166,13 @@ func TestCombinedServiceReadHelpersValidateEventScopeCursor(t *testing.T) {
 
 func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
 	t.Parallel()
-
 	want := time.Date(2026, 8, 26, 12, 0, 0, 0, time.FixedZone("test", 2*60*60))
-	if recordingClockNow(nil) != nil {
-		t.Fatal("recordingClockNow without a clock returned a callback")
+	zero := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	if got := zero.recordingFinishedAt(); !got.IsZero() {
+		t.Fatalf("finished time from zero clock = %v, want zero", got)
 	}
-	clockNow := recordingClockNow(staticRecordingClock{at: want})
-	if clockNow == nil {
-		t.Fatal("recordingClockNow with a clock returned a nil callback")
-	}
-	if got := clockNow(); !got.Equal(want) {
-		t.Fatalf("recordingClockNow callback returned %v, want %v", got, want)
-	}
-	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
-	svc.clock = nil
-	if got := svc.recordingFinishedAt(); !got.IsZero() {
-		t.Fatalf("finished time without clock = %v, want zero", got)
-	}
-	svc.clock = staticRecordingClock{at: want}
-	if got := svc.recordingFinishedAt(); !got.Equal(want.UTC()) || got.Location() != time.UTC {
+	explicit := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{at: want}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	if got := explicit.recordingFinishedAt(); !got.Equal(want.UTC()) || got.Location() != time.UTC {
 		t.Fatalf("finished time = %v, want UTC %v", got, want.UTC())
 	}
 }
@@ -1414,166 +1180,125 @@ func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
 func TestCombinedServiceAbandonedScopeFinishesAtInjectedClock(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 10, 3, 5, 34, 56, 789, time.FixedZone("recording", -7*60*60))
-	snapshot, status, err := characterizeAbandonedRecording(t, staticRecordingClock{at: at})
-	for _, facts := range []recordings.RecordingStatusFacts{snapshot.Status, status} {
-		if facts.FinalizedAt == nil || !facts.FinalizedAt.Equal(at.UTC()) ||
-			facts.FinalizedAt.Location() != time.UTC {
-			t.Fatalf("abandoned final timestamp = %v, want UTC %v", facts.FinalizedAt, at.UTC())
-		}
-	}
-	if errors.Is(err, recordings.ErrInvalidRecordingTerminalMetadata) {
-		t.Fatalf("explicit clock produced invalid terminal metadata: %v", err)
+	finish := characterizeAbandonedRecording(t, staticRecordingClock{at: at}, errors.New("final writer failure"))
+	if !finish.FinishedAt.Equal(at.UTC()) || finish.FinishedAt.Location() != time.UTC {
+		t.Fatalf("abandoned finish timestamp = %v, want UTC %v", finish.FinishedAt, at.UTC())
 	}
 }
 
-func TestCombinedServiceAbandonedScopeWithoutClockRejectsZeroTimestamp(t *testing.T) {
+func TestCombinedServiceAbandonedScopeZeroClockPreservesOwnerRejection(t *testing.T) {
 	t.Parallel()
-	snapshot, status, err := characterizeAbandonedRecording(t)
-	if !errors.Is(err, recordings.ErrInvalidRecordingTerminalMetadata) {
-		t.Fatalf("abandonment without clock = %v, want ErrInvalidRecordingTerminalMetadata", err)
-	}
-	if snapshot.Status.FinalizedAt != nil || status.FinalizedAt != nil {
-		t.Fatalf("abandoned final timestamps without clock = (%v, %v), want unset", snapshot.Status.FinalizedAt, status.FinalizedAt)
+	finish := characterizeAbandonedRecording(t, staticRecordingClock{}, recordings.ErrInvalidRecordingTerminalMetadata)
+	if !finish.FinishedAt.IsZero() {
+		t.Fatalf("abandoned finish timestamp = %v, want zero for lifecycle validation", finish.FinishedAt)
 	}
 }
 
-// The decorator delegates to the real lifecycle owner before arming the writer
-// fault and canceling. The idle ticker cannot flush before abandonment.
-type cancelAfterRecordingStart struct {
+// This completed-owner double observes root cleanup and forwarding only. Native
+// lifecycle tests own terminal validation, final writes and durable status policy.
+type abandonedScopeLifecycle struct {
 	recordinglifecycle.Service
-	afterStart func(recordings.StartRecordingResult)
+	cancel    context.CancelFunc
+	started   recordings.StartRecordingRequest
+	finishes  []recordings.FinishRecordingRequest
+	finishErr error
 }
 
-func (service cancelAfterRecordingStart) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
-	result, err := service.Service.StartRecording(request)
-	if err == nil {
-		service.afterStart(result)
-	}
-	return result, err
+func (owner *abandonedScopeLifecycle) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
+	owner.started = request
+	owner.cancel()
+	return recordings.StartRecordingResult{Enabled: true, Status: recordings.RecordingStatusFacts{
+		RecordingID: request.RecordingID, Scope: request.Scope,
+	}}, nil
 }
 
-func assertSuccessfulRecordingStart(t *testing.T, ctx context.Context, result recordings.StartRecordingResult) {
-	t.Helper()
-	if ctx.Err() != nil || !result.Enabled || result.Status.RecordingID == "" {
-		t.Fatalf("StartRecording = %#v, context = %v, want success before cancellation", result, ctx.Err())
-	}
+func (owner *abandonedScopeLifecycle) FinishRecording(request recordings.FinishRecordingRequest) (recordings.FinishRecordingResult, error) {
+	owner.finishes = append(owner.finishes, request)
+	return recordings.FinishRecordingResult{}, owner.finishErr
 }
 
-func characterizeAbandonedRecording(t *testing.T, clocks ...recordings.RecordingClock) (recordings.RecordingSnapshot, recordings.RecordingStatusFacts, error) {
+func characterizeAbandonedRecording(t *testing.T, clock recordings.RecordingClock, finishErr error) recordings.FinishRecordingRequest {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	writeErr := errors.New("abandoned recording flush failed")
-	var observationsMu sync.Mutex
-	var started recordings.StartRecordingResult
-	var snapshot recordings.RecordingSnapshot
-	writes := 0
-	root := NewServiceWithLifecycleEffects(
-		&stubLedger{}, NewProjectionService(), nil,
-		func(_ string, value recordings.RecordingSnapshot) error {
-			observationsMu.Lock()
-			defer observationsMu.Unlock()
-			if !started.Enabled || started.Status.RecordingID == "" || value.Status.RecordingID != started.Status.RecordingID {
-				t.Errorf("final writer observed %#v after start %#v, want successfully started identity", value.Status, started)
-				return nil
-			}
-			writes++
-			snapshot = value
-			return writeErr
-		}, func(time.Duration) recordings.RecordingFlushTicker {
-			return recordings.RecordingFlushTicker{Ticks: make(chan time.Time), Stop: func() {}}
-		}, nil, clocks...,
-	).(*combinedService)
-	owner := root.Service
-	root.Service = cancelAfterRecordingStart{Service: owner, afterStart: func(result recordings.StartRecordingResult) {
-		assertSuccessfulRecordingStart(t, ctx, result)
-		observationsMu.Lock()
-		started = result
-		observationsMu.Unlock()
-		cancel()
-	}}
-	t.Cleanup(func() {
-		observationsMu.Lock()
-		id := started.Status.RecordingID
-		observationsMu.Unlock()
-		if id != "" {
-			if _, err := owner.StopRecording(recordings.StopRecordingRequest{RecordingID: id}); err != nil {
-				t.Errorf("StopRecording cleanup: %v", err)
-			}
-		}
-	})
-	result, err := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
+	owner := &abandonedScopeLifecycle{cancel: cancel, finishErr: finishErr}
+	root := NewCombinedService(nil, nil, owner, nil, nil, nil, nil, clock,
+		logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	request := recordings.BeginRecordingScopeRequest{
 		Enabled:       true,
 		Scope:         recordings.CanonicalEventScope{FactorySessionID: t.Name()},
 		Target:        recordings.RecordingTargetRequest{Artifact: recordings.RecordingArtifactReference("artifact:" + t.Name())},
 		FlushInterval: time.Hour,
-	})
-	if !errors.Is(err, context.Canceled) || !errors.Is(err, writeErr) {
-		t.Fatalf("BeginRecordingScope = %v, want cancellation and final writer cause", err)
 	}
-	observationsMu.Lock()
-	defer observationsMu.Unlock()
-	if !started.Enabled || started.Status.RecordingID == "" {
-		t.Fatalf("abandoned begin did not observe successful start: %#v", started)
+	result, err := root.BeginRecordingScope(ctx, request)
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, finishErr) {
+		t.Fatalf("BeginRecordingScope = %v, want cancellation and owner cause", err)
 	}
-	if !result.Scope.IsZero() || writes != 1 {
-		t.Fatalf("abandoned begin = %#v, writes = %d, want zero scope and one final write", result, writes)
+	if !result.Scope.IsZero() || len(owner.finishes) != 1 {
+		t.Fatalf("abandoned begin = %#v, finishes = %#v, want zero scope and one finish", result, owner.finishes)
 	}
-	status, statusErr := root.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: started.Status.RecordingID})
-	if statusErr != nil || status.Status.State != recordings.RecordingFailed || status.Status.FlushedThrough != nil {
-		t.Fatalf("abandoned status = %#v, %v, want failed with no durable cursor", status, statusErr)
+	if owner.started.RecordingID == "" || owner.finishes[0].RecordingID != owner.started.RecordingID ||
+		owner.started.Scope != request.Scope || owner.started.Target != request.Target ||
+		owner.started.FlushInterval != request.FlushInterval || !owner.started.Enabled {
+		t.Fatalf("abandoned start/finish = (%#v, %#v), want selected identity and request", owner.started, owner.finishes[0])
 	}
-	return snapshot, status.Status, err
+	// Root-local binding cleanup is distinct from the owner's persistence policy.
+	if len(root.scopeByRef) != 0 {
+		t.Fatalf("abandoned scope retained %d bindings", len(root.scopeByRef))
+	}
+	return owner.finishes[0]
 }
 
-func TestRecordingLifecycleAdapterRejectsDetachedInputs(t *testing.T) {
+func TestCombinedServiceResumeInputWithoutSource(t *testing.T) {
 	t.Parallel()
-
-	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
-	lifecycle := recordings.RecordingLifecycle(service)
-	if _, err := service.LoadResumeInput(recordings.LoadResumeInputRequest{Path: "missing.json"}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
+	root := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	if _, err := root.LoadResumeInput(recordings.LoadResumeInputRequest{Path: "missing.json"}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
 		t.Fatalf("LoadResumeInput without a replay source = %v, want ErrMissingReplayArtifact", err)
 	}
-	if result, err := lifecycle.Begin(recordings.BeginRecordingRequest{}); err != nil || !reflect.DeepEqual(result, recordings.RecordingLifecycleResult{}) {
+}
+
+func TestLifecycleOwnerRejectsDetachedInputs(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{})
+	if result, err := lifecycle.StartRecording(recordings.StartRecordingRequest{}); err != nil || !reflect.DeepEqual(result, recordings.StartRecordingResult{}) {
 		t.Fatalf("disabled lifecycle Begin = (%#v, %v), want zero result", result, err)
 	}
-	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{Enabled: true}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorInvalidTarget) {
+	if _, err := lifecycle.StartRecording(recordings.StartRecordingRequest{Enabled: true}); !errors.Is(err, recordings.ErrMissingRecordingTarget) {
 		t.Fatalf("lifecycle Begin without target = %v, want INVALID_TARGET", err)
 	}
-	if _, err := lifecycle.Bind(recordings.BindLifecycleRequest{RecordingID: "adapter-invalid"}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorInvalidTarget) {
+	if _, err := lifecycle.BindRecording(recordings.BindRecordingRequest{RecordingID: "adapter-invalid"}); !errors.Is(err, recordings.ErrMissingRecordingTarget) {
 		t.Fatalf("lifecycle Bind without target = %v, want INVALID_TARGET", err)
 	}
 }
 
-func TestRecordingLifecycleAdapterCompletesBeginStopFinish(t *testing.T) {
+func TestLifecycleOwnerCompletesBeginStopFinish(t *testing.T) {
 	t.Parallel()
 
 	var persisted recordings.RecordingSnapshot
-	service := NewServiceWithLifecycleEffects(&stubLedger{}, NewProjectionService(), nil,
+	lifecycle := recordinglifecyclewire.NewService(nil,
 		func(_ string, snapshot recordings.RecordingSnapshot) error {
 			persisted = snapshot
 			return nil
-		}, nil, nil,
-	).(*combinedService)
-	lifecycle := recordings.RecordingLifecycle(service)
-	begin, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+		}, nil, staticRecordingClock{})
+	begin, err := lifecycle.StartRecording(recordings.StartRecordingRequest{
 		Enabled:     true,
 		RecordingID: "adapter-begin",
-		Artifact:    "artifact:adapter-begin",
-		Scope:       recordings.LifecycleScope{FactorySessionID: "adapter-session"},
+		Target:      recordings.RecordingTargetRequest{Artifact: "artifact:adapter-begin"},
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: "adapter-session"},
 	})
 	if err != nil || begin.Status.RecordingID != "adapter-begin" {
 		t.Fatalf("lifecycle Begin success = (%#v, %v)", begin, err)
 	}
-	if err := lifecycle.Stop(recordings.StopLifecycleRequest{RecordingID: begin.Status.RecordingID}); err != nil {
+	if _, err := lifecycle.StopRecording(recordings.StopRecordingRequest{RecordingID: begin.Status.RecordingID}); err != nil {
 		t.Fatalf("lifecycle Stop after Begin: %v", err)
 	}
 	at := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
-	finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
+	finished, err := lifecycle.FinishRecording(recordings.FinishRecordingRequest{
 		RecordingID: begin.Status.RecordingID,
 		FinishedAt:  at,
 	})
-	if err != nil || finished.Status.State != recordings.LifecycleStateFinalized {
+	if err != nil || finished.Status.State != recordings.RecordingFinalized {
 		t.Fatalf("lifecycle Finish after Begin = (%#v, %v), want finalized", finished, err)
 	}
 	if finished.Status.FinalizedAt == nil || !finished.Status.FinalizedAt.Equal(at) ||
@@ -1583,21 +1308,20 @@ func TestRecordingLifecycleAdapterCompletesBeginStopFinish(t *testing.T) {
 	}
 }
 
-func TestRecordingLifecycleAdapterBindsAndReportsFailure(t *testing.T) {
+func TestLifecycleOwnerBindsAndReportsFailure(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
-	lifecycle := recordings.RecordingLifecycle(service)
-	bound, err := lifecycle.Bind(recordings.BindLifecycleRequest{
+	lifecycle := recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{})
+	bound, err := lifecycle.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "adapter-bind",
 		Artifact:    "artifact:adapter-bind",
-		Scope:       recordings.LifecycleScope{FactorySessionID: "adapter-session"},
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: "adapter-session"},
 	})
 	if err != nil || bound.Status.RecordingID != "adapter-bind" {
 		t.Fatalf("lifecycle Bind = (%#v, %v)", bound, err)
 	}
-	event := adapterLifecycleEvent()
-	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
+	event := nativeLifecycleEvent()
+	if _, err := lifecycle.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
 		RecordingID: bound.Status.RecordingID,
 		Event:       event,
 	}); err != nil {
@@ -1605,79 +1329,80 @@ func TestRecordingLifecycleAdapterBindsAndReportsFailure(t *testing.T) {
 	}
 	invalidEvent := event
 	invalidEvent.Payload = "not-json"
-	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
+	if _, err := lifecycle.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
 		RecordingID: bound.Status.RecordingID,
 		Event:       invalidEvent,
-	}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorInvalidEvent) {
+	}); !errors.Is(err, recordings.ErrInvalidRecordingEvent) {
 		t.Fatalf("lifecycle AppendEvent invalid payload = %v, want INVALID_EVENT", err)
 	}
-	if _, err := lifecycle.RecordFailure(recordings.RecordLifecycleFailureRequest{
+	if _, err := lifecycle.RecordRecordingError(recordings.RecordRecordingErrorRequest{
 		RecordingID: bound.Status.RecordingID,
-		Failure:     recordings.LifecycleFailure{Code: "", Message: ""},
-	}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorInvalidFailure) {
+		Failure:     recordings.RecordingFailure{Code: "", Message: ""},
+	}); !errors.Is(err, recordings.ErrInvalidRecordingFailure) {
 		t.Fatalf("lifecycle RecordFailure without facts = %v, want INVALID_FAILURE", err)
 	}
-	if _, err := lifecycle.RecordFailure(recordings.RecordLifecycleFailureRequest{
+	if _, err := lifecycle.RecordRecordingError(recordings.RecordRecordingErrorRequest{
 		RecordingID: bound.Status.RecordingID,
-		Failure: recordings.LifecycleFailure{
+		Failure: recordings.RecordingFailure{
 			Code:    "adapter_failed",
 			Message: "adapter failure",
 		},
 	}); err != nil {
 		t.Fatalf("lifecycle RecordFailure = %v", err)
 	}
-	if flushed, err := lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: bound.Status.RecordingID}); err != nil || flushed.Status.FlushedThrough == nil {
+	if flushed, err := lifecycle.FlushRecording(recordings.FlushRecordingRequest{RecordingID: bound.Status.RecordingID}); err != nil || flushed.Status.FlushedThrough == nil {
 		t.Fatalf("lifecycle Flush = (%#v, %v), want flushed cursor", flushed, err)
 	}
-	if status, err := lifecycle.Status(recordings.LifecycleStatusRequest{RecordingID: bound.Status.RecordingID}); err != nil || status.Status.State != recordings.LifecycleStateFailed {
+	if status, err := lifecycle.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: bound.Status.RecordingID}); err != nil || status.Status.State != recordings.RecordingFailed {
 		t.Fatalf("lifecycle Status before Finish = (%#v, %v), want failed", status, err)
 	}
 }
 
-func TestRecordingLifecycleAdapterRejectsTerminalAppendAfterFailedFinish(t *testing.T) {
+func TestLifecycleOwnerRejectsTerminalAppendAfterFailedFinish(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
-	lifecycle := recordings.RecordingLifecycle(service)
-	bound, err := lifecycle.Bind(recordings.BindLifecycleRequest{
+	lifecycle := recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{})
+	bound, err := lifecycle.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "adapter-terminal",
 		Artifact:    "artifact:adapter-terminal",
-		Scope:       recordings.LifecycleScope{FactorySessionID: "adapter-session"},
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: "adapter-session"},
 	})
 	if err != nil {
 		t.Fatalf("lifecycle Bind: %v", err)
 	}
-	event := adapterLifecycleEvent()
-	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{RecordingID: bound.Status.RecordingID, Event: event}); err != nil {
+	event := nativeLifecycleEvent()
+	cause := errors.New("adapter failure")
+	if _, err := lifecycle.RecordRecordingEvent(recordings.RecordRecordingEventRequest{RecordingID: bound.Status.RecordingID, Event: event}); err != nil {
 		t.Fatalf("lifecycle AppendEvent: %v", err)
 	}
-	if _, err := lifecycle.RecordFailure(recordings.RecordLifecycleFailureRequest{
+	if _, err := lifecycle.RecordRecordingError(recordings.RecordRecordingErrorRequest{
 		RecordingID: bound.Status.RecordingID,
-		Failure:     recordings.LifecycleFailure{Code: "adapter_failed", Message: "adapter failure"},
+		Failure:     recordings.RecordingFailure{Code: "adapter_failed", Message: "adapter failure"},
+		Cause:       cause,
 	}); err != nil {
 		t.Fatalf("lifecycle RecordFailure: %v", err)
 	}
-	finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
+	finished, err := lifecycle.FinishRecording(recordings.FinishRecordingRequest{
 		RecordingID: bound.Status.RecordingID,
 		FinishedAt:  time.Date(2026, 8, 26, 12, 2, 0, 0, time.UTC),
 	})
-	if err == nil || !hasLifecycleErrorKind(err, recordings.LifecycleErrorWriteFailed) || finished.Status.State != recordings.LifecycleStateFailed {
+	if err == nil || !errors.Is(err, cause) || finished.Status.State != recordings.RecordingFailed {
 		t.Fatalf("lifecycle Finish failed recording = (%#v, %v), want failed write outcome", finished, err)
 	}
-	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{RecordingID: bound.Status.RecordingID, Event: event}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorTerminal) {
+	if _, err := lifecycle.RecordRecordingEvent(recordings.RecordRecordingEventRequest{RecordingID: bound.Status.RecordingID, Event: event}); !errors.Is(err, recordings.ErrRecordingWriteRejected) {
 		t.Fatalf("lifecycle AppendEvent after Finish = %v, want TERMINAL", err)
 	}
-	if status, err := lifecycle.Status(recordings.LifecycleStatusRequest{RecordingID: bound.Status.RecordingID}); err != nil || status.Status.FinalizedAt == nil {
+	if status, err := lifecycle.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: bound.Status.RecordingID}); err != nil || status.Status.FinalizedAt == nil {
 		t.Fatalf("lifecycle Status after Finish = (%#v, %v), want finalized timestamp", status, err)
 	}
 }
 
-func adapterLifecycleEvent() recordings.LifecycleEvent {
-	return recordings.LifecycleEvent{
+func nativeLifecycleEvent() recordings.CanonicalEvent {
+	return recordings.CanonicalEvent{
 		ID:       "adapter-event",
 		Sequence: 0,
-		Scope:    recordings.LifecycleScope{FactorySessionID: "adapter-session"},
-		Cursor: recordings.LifecycleEventCursor{
+		Scope:    recordings.CanonicalEventScope{FactorySessionID: "adapter-session"},
+		Cursor: recordings.CanonicalEventCursor{
 			StreamGenerationID: "adapter-generation",
 			Sequence:           0,
 		},
@@ -1685,11 +1410,6 @@ func adapterLifecycleEvent() recordings.LifecycleEvent {
 		Kind:       "WORK_REQUEST",
 		Payload:    "{}",
 	}
-}
-
-func hasLifecycleErrorKind(err error, want recordings.LifecycleErrorKind) bool {
-	var lifecycleErr *recordings.LifecycleError
-	return errors.As(err, &lifecycleErr) && lifecycleErr.Kind == want
 }
 
 func TestRuntimeLedgerRouterPublishesCallbacksAndRoutesOptionalProvenance(t *testing.T) {
@@ -1732,5 +1452,82 @@ func TestRuntimeLedgerRouterPublishesCallbacksAndRoutesOptionalProvenance(t *tes
 	}
 	if generation := router.StreamGenerationID(); generation != "recordings-root" {
 		t.Fatalf("router stream generation = %q, want recordings-root", generation)
+	}
+}
+
+var _ recordings.Service = (*combinedService)(nil)
+var _ recordings.RuntimeScopeService = (*combinedService)(nil)
+
+type unavailableHistoricalOwner struct{}
+
+func (unavailableHistoricalOwner) QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorUnavailable}
+}
+
+type injectedCanonicalOwner struct {
+	canonicalledger.Service
+	err error
+}
+
+func (owner injectedCanonicalOwner) Append(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error) {
+	return recordings.AppendRecordedEventResult{}, owner.err
+}
+
+type injectedLifecycleOwner struct {
+	recordinglifecycle.Service
+	err error
+}
+
+func (owner injectedLifecycleOwner) StartRecording(recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
+	return recordings.StartRecordingResult{}, owner.err
+}
+
+type injectedArtifactsOwner struct {
+	artifactsexport.Service
+	err error
+}
+
+func (owner injectedArtifactsOwner) BuildPortableArtifact(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error) {
+	return recordings.BuildPortableArtifactResult{}, owner.err
+}
+
+type injectedReplayOwner struct {
+	recordingsreplay.Service
+	err error
+}
+
+func (owner injectedReplayOwner) CreateReplayPlan(recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
+	return recordings.CreateReplayPlanResult{}, owner.err
+}
+
+func TestCombinedServiceForwardsCompletedOwnerFailures(t *testing.T) {
+	t.Parallel()
+	canonicalErr := errors.New("injected canonical admission failure")
+	lifecycleErr := errors.New("injected lifecycle selection failure")
+	artifactsErr := errors.New("injected portable artifact failure")
+	replayErr := errors.New("injected replay plan failure")
+	service := NewCombinedService(nil, nil, injectedLifecycleOwner{err: lifecycleErr}, injectedArtifactsOwner{err: artifactsErr},
+		injectedReplayOwner{err: replayErr}, injectedCanonicalOwner{err: canonicalErr}, unavailableHistoricalOwner{},
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	_, err := service.Append(recordings.AppendRecordedEventRequest{})
+	if !errors.Is(err, canonicalErr) {
+		t.Fatalf("Append error = %v, want injected canonical cause", err)
+	}
+	_, err = service.StartRecording(recordings.StartRecordingRequest{})
+	if !errors.Is(err, lifecycleErr) {
+		t.Fatalf("StartRecording error = %v, want injected lifecycle cause", err)
+	}
+	_, err = service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{})
+	if !errors.Is(err, artifactsErr) {
+		t.Fatalf("BuildPortableArtifact error = %v, want injected artifacts cause", err)
+	}
+	_, err = service.CreateReplayPlan(recordings.CreateReplayPlanRequest{})
+	if !errors.Is(err, replayErr) {
+		t.Fatalf("CreateReplayPlan error = %v, want injected replay cause", err)
+	}
+	_, err = service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{})
+	var historicalErr *recordings.HistoricalRecordingQueryError
+	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable {
+		t.Fatalf("QueryHistoricalRecording error = %v, want owner unavailable cause", err)
 	}
 }

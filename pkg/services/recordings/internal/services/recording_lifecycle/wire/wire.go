@@ -23,7 +23,7 @@ func NewService(
 	targets recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
-	clocks ...recordings.RecordingClock,
+	clock recordings.RecordingClock,
 ) recordinglifecycle.Service {
-	return lifecycleservice.New(targets, writer, tickers, clocks...)
+	return lifecycleservice.New(targets, writer, tickers, clock)
 }

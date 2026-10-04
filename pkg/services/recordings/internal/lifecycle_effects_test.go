@@ -80,7 +80,7 @@ func TestNewRecordingSnapshotWriterWriteError(t *testing.T) {
 func TestNewReplayRecordingSnapshotWriterNilWriteReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	if writer := NewReplayRecordingSnapshotWriter(nil); writer != nil {
+	if writer := NewReplayRecordingSnapshotWriter(nil, nil, nil); writer != nil {
 		t.Fatalf("writer = %#v, want nil", writer)
 	}
 }
@@ -206,7 +206,7 @@ func TestNewReplayRecordingSnapshotWriterPinsReplayV1JSONBytes(t *testing.T) {
 	writer := NewReplayRecordingSnapshotWriter(func(_ string, payload []byte) error {
 		writtenPayload = append([]byte(nil), payload...)
 		return nil
-	})
+	}, nil, nil)
 	finalizedAt := finishedAt
 	if err := writer("recording.json", recordings.RecordingSnapshot{
 		Status: recordings.RecordingStatusFacts{
@@ -245,7 +245,7 @@ func TestNewReplayRecordingSnapshotWriterAppendsPendingV2Records(t *testing.T) {
 			appendCalls++
 			data = append(data, payload...)
 			return nil
-		},
+		}, nil,
 	)
 	first := v2LifecycleSnapshot(time.Date(2026, 8, 23, 14, 0, 0, 0, time.UTC), 1, false)
 	first.CanonicalSessionID = "550e8400-e29b-41d4-a716-446655440000"
@@ -294,7 +294,7 @@ func TestNewReplayRecordingSnapshotWriterDoesNotAdvanceAfterAppendFailure(t *tes
 			}
 			data = append(data, payload...)
 			return nil
-		},
+		}, nil,
 	)
 	startedAt := time.Date(2026, 8, 23, 15, 0, 0, 0, time.UTC)
 	if err := writer("failure.jsonl", v2LifecycleSnapshot(startedAt, 1, false)); err != nil {
@@ -323,26 +323,23 @@ func TestReplayRecordingSnapshotWriterRejectsNonEmptyV2Target(t *testing.T) {
 		data = append(data, payload...)
 		return nil
 	}
-	prepare := func(_ string) error {
-		if len(data) != 0 {
-			return errors.New("replay v2 target already contains data")
-		}
-		return nil
+	readFile := func(string) ([]byte, error) {
+		return append([]byte(nil), data...), nil
 	}
-	firstWriter := newReplayRecordingSnapshotWriter(
+	firstWriter := NewReplayRecordingSnapshotWriter(
 		func(string, []byte) error { return errors.New("replacement must not run") },
 		appendFile,
-		prepare,
+		readFile,
 	)
 	startedAt := time.Date(2026, 8, 23, 14, 30, 0, 0, time.UTC)
 	if err := firstWriter("explicit.jsonl", v2LifecycleSnapshot(startedAt, 1, true)); err != nil {
 		t.Fatalf("first explicit v2 recording: %v", err)
 	}
 	original := append([]byte(nil), data...)
-	secondWriter := newReplayRecordingSnapshotWriter(
+	secondWriter := NewReplayRecordingSnapshotWriter(
 		func(string, []byte) error { return errors.New("replacement must not run") },
 		appendFile,
-		prepare,
+		readFile,
 	)
 	if err := secondWriter("explicit.jsonl", v2LifecycleSnapshot(startedAt, 1, true)); err == nil || !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
 		t.Fatalf("second explicit v2 recording error = %v, want collision error", err)
@@ -363,16 +360,16 @@ func TestReplayRecordingSnapshotWriterRejectsWhitespaceV2Target(t *testing.T) {
 	original := []byte(" \n")
 	data := append([]byte(nil), original...)
 	appendCalled := false
-	writer := newReplayRecordingSnapshotWriter(
+	writer := NewReplayRecordingSnapshotWriter(
 		func(string, []byte) error { return errors.New("replacement must not run") },
 		func(_ string, payload []byte) error {
 			appendCalled = true
 			data = append(data, payload...)
 			return nil
 		},
-		replayV2TargetPreparation(func(string) ([]byte, error) {
+		func(string) ([]byte, error) {
 			return append([]byte(nil), data...), nil
-		}),
+		},
 	)
 
 	if err := writer("whitespace.jsonl", v2LifecycleSnapshot(time.Date(2026, 8, 23, 14, 45, 0, 0, time.UTC), 1, true)); err == nil || !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
@@ -393,7 +390,7 @@ func TestNewReplayRecordingSnapshotWriterWritesHeaderAndTerminalForEmptyRecordin
 		func(_ string, payload []byte) error {
 			data = append(data, payload...)
 			return nil
-		},
+		}, nil,
 	)
 	finishedAt := time.Date(2026, 8, 23, 16, 0, 0, 0, time.UTC)
 	if err := writer("empty.jsonl", recordings.RecordingSnapshot{
@@ -475,7 +472,7 @@ func TestRecordingSnapshotWritersRedactBeforeSerialization(t *testing.T) {
 				writer = NewReplayRecordingSnapshotWriter(func(_ string, payload []byte) error {
 					written = append([]byte(nil), payload...)
 					return nil
-				})
+				}, nil, nil)
 			}
 			if err := writer("recording.json", snapshot); err != nil {
 				t.Fatalf("write %s: %v", test.name, err)
@@ -733,7 +730,7 @@ func measureReplaySnapshotWrites(t *testing.T, eventCount int, v2 bool) successf
 			capture.bytes += int64(len(data))
 			capture.data = append(capture.data, data...)
 			return nil
-		},
+		}, nil,
 	)
 	path := fmt.Sprintf("measurement-%d", eventCount)
 	if v2 {
