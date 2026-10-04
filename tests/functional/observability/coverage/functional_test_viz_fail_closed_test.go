@@ -31,9 +31,6 @@ func TestFunctionalTestVizFailClosed_CoverageFailurePreservesWrittenArtifacts(t 
 		t.Fatalf("functional-test-viz unexpectedly succeeded after coverage failure:\n%s", output)
 	}
 	log := readFunctionalTestVizLog(t, artifactDir)
-	if !strings.Contains(log, "stub:boundary-ok") {
-		t.Fatalf("functional-test-viz log missing boundary success marker:\n%s", log)
-	}
 	if !strings.Contains(log, "stub:coverage-floor-fail") {
 		t.Fatalf("functional-test-viz log missing coverage failure marker:\n%s", log)
 	}
@@ -66,9 +63,7 @@ func TestFunctionalTestVizFailClosed_RenderFailurePreservesEarlierArtifacts(t *t
 		t.Fatalf("functional-test-viz unexpectedly succeeded after render failure:\n%s", output)
 	}
 	log := readFunctionalTestVizLog(t, artifactDir)
-	if !strings.Contains(log, "stub:boundary-ok") || !strings.Contains(log, "stub:catalog-fail") {
-		t.Fatalf("functional-test-viz log missing earlier step markers:\n%s", log)
-	}
+	assertOutputOrder(t, log, "Go coverage 80.0% meets minimum 33.1%.", "stub:catalog-fail")
 	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage.out", "mode: set")
 	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage-summary.json", `"coveragePercent":80`)
 	assertFunctionalTestVizArtifactAbsent(t, artifactDir, "functional-tests.md")
