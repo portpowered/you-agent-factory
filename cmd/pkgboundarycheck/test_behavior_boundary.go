@@ -24,8 +24,6 @@ const (
 const (
 	factoryDefinitionsImportPath                  = repositoryImportPrefix + "pkg/services/factory_definitions"
 	factoryDefinitionsInternalContractsImportPath = repositoryImportPrefix + "pkg/services/factory_definitions/internal/contracts"
-	factoryNamedPathsImportPath                   = repositoryImportPrefix + "pkg/services/factory_definitions/internal/services/catalog/namedpaths"
-	operatorSettingsImportPath                    = repositoryImportPrefix + "pkg/services/operator_settings"
 	workersImportPath                             = repositoryImportPrefix + "pkg/services/workers"
 	factorySessionsImportPath                     = repositoryImportPrefix + "pkg/services/factory_sessions"
 	providerSessionsImportPath                    = repositoryImportPrefix + "pkg/services/provider_sessions"
@@ -42,28 +40,6 @@ type testBehaviorOperation struct {
 	owner      string
 	importPath string
 	symbol     string
-}
-
-var prohibitedCrossOwnerTestOperations = map[string]map[string]string{
-	factoryDefinitionsImportPath: {
-		"MapDir":              "factory_definitions",
-		"NamedFactoriesRoot":  "factory_definitions",
-		"ResolveCurrentDir":   "factory_definitions",
-		"WriteCurrentPointer": "factory_definitions",
-	},
-	factoryNamedPathsImportPath: {
-		"MapDir":              "factory_definitions",
-		"NamedFactoriesRoot":  "factory_definitions",
-		"ResolveCurrentDir":   "factory_definitions",
-		"WriteCurrentPointer": "factory_definitions",
-	},
-	operatorSettingsImportPath: {
-		"DefaultConfigPath":              "operator_settings",
-		"ResolveFromHomeWithEnvironment": "operator_settings",
-	},
-	workersImportPath: {
-		"LoadMockWorkersConfig": "workers",
-	},
 }
 
 // These operations are migration debt specifically when a transport test calls
@@ -181,7 +157,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 			return fmt.Errorf("parse test behavior boundary file %s: %w", rel, err)
 		}
 
-		callerOwner, callerIsService := servicePackageOwner(rel)
 		importsByName := map[string]string{}
 		dotImports := map[string]struct{}{}
 		for _, spec := range parsed.Imports {
@@ -189,9 +164,8 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 			if unquoteErr != nil {
 				continue
 			}
-			_, crossOwnerPolicyImport := prohibitedCrossOwnerTestOperations[importPath]
 			_, transportPolicyImport := prohibitedTransportTestPolicyOperations[importPath]
-			if !crossOwnerPolicyImport && !transportPolicyImport {
+			if !transportPolicyImport {
 				continue
 			}
 			if spec.Name != nil && spec.Name.Name == "." {
@@ -206,8 +180,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 				name = spec.Name.Name
 			} else if importPath == factoryDefinitionsImportPath {
 				name = "factorydefinitions"
-			} else if importPath == operatorSettingsImportPath {
-				name = "operatorsettings"
 			} else if importPath == transportMappingImportPath {
 				name = "apisurface"
 			}
@@ -229,13 +201,6 @@ func scanTestBehaviorBoundaries(repoRoot string) ([]testBehaviorFinding, error) 
 		}
 
 		operationFor := func(importPath, symbol string) (testBehaviorOperation, bool) {
-			if symbols := prohibitedCrossOwnerTestOperations[importPath]; symbols != nil {
-				owner, prohibited := symbols[symbol]
-				if prohibited && !(callerIsService && callerOwner == owner) &&
-					!strings.HasPrefix(rel, "pkg/wire/") {
-					return testBehaviorOperation{testBehaviorPolicyKind, owner, importPath, symbol}, true
-				}
-			}
 			insideTransportTest := strings.HasPrefix(rel, "pkg/transports/")
 			if insideTransportTest {
 				if symbols := prohibitedTransportTestPolicyOperations[importPath]; symbols != nil {
@@ -402,9 +367,6 @@ func validateTestBehaviorBaselineEntry(entry testBehaviorBaselineEntry) error {
 }
 
 func testBehaviorPolicyOwner(importPath, symbol string) (string, bool) {
-	if owner, known := prohibitedCrossOwnerTestOperations[importPath][symbol]; known {
-		return owner, true
-	}
 	owner, known := prohibitedTransportTestPolicyOperations[importPath][symbol]
 	return owner, known
 }

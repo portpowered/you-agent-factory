@@ -9,40 +9,6 @@ import (
 	"testing"
 )
 
-func TestScanTestBehaviorBoundariesRejectsCrossOwnerPolicy(t *testing.T) {
-	t.Parallel()
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/services/example/operator_policy_test.go", `package example
-import settings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-func expectedConfig() { settings.DefaultConfigPath("home") }
-`)
-	writeGoSourceFile(t, repoRoot, "internal/testutil/named_factory.go", `package testutil
-import definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-func NamedFactory() { definitions.MapDir("root", "name") }
-`)
-	writeGoSourceFile(t, repoRoot, "tests/functional/internal/support/workers.go", `package support
-import workers "github.com/portpowered/infinite-you/pkg/services/workers"
-func ReadMockWorkers() { workers.LoadMockWorkersConfig("workers.json") }
-`)
-	findings, err := scanTestBehaviorBoundaries(repoRoot)
-	if err != nil {
-		t.Fatalf("scanTestBehaviorBoundaries() error = %v", err)
-	}
-	if len(findings) != 3 {
-		t.Fatalf("finding count = %d, want 3: %#v", len(findings), findings)
-	}
-	joined := testBehaviorFindingSummary(findings)
-	for _, want := range []string{
-		"pkg/services/example/operator_policy_test.go|cross-owner-service-policy|pkg/services/operator_settings|DefaultConfigPath|1",
-		"internal/testutil/named_factory.go|cross-owner-service-policy|pkg/services/factory_definitions|MapDir|1",
-		"tests/functional/internal/support/workers.go|cross-owner-service-policy|pkg/services/workers|LoadMockWorkersConfig|1",
-	} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("findings = %q, want %q", joined, want)
-		}
-	}
-}
-
 func TestScanTestBehaviorBoundariesAllowsOwnerPolicyPublicValuesAndCanonicalFunctionalProcess(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
@@ -210,8 +176,8 @@ func detachedContracts() {
 func TestPartitionTestBehaviorFindingsRejectsNewCountChangesAndStaleEntries(t *testing.T) {
 	t.Parallel()
 	finding := testBehaviorFinding{
-		Kind: testBehaviorPolicyKind, Owner: "workers", ImportPath: workersImportPath,
-		Symbol: "LoadMockWorkersConfig", FilePath: "tests/functional/workers_test.go", Count: 2,
+		Kind: testBehaviorPolicyKind, Owner: "factory_sessions", ImportPath: factorySessionsImportPath,
+		Symbol: "ApplySessionListScope", FilePath: "pkg/transports/cli/session/list_test.go", Count: 2,
 	}
 	entry := testBehaviorBaselineEntry{
 		Kind: finding.Kind, Owner: finding.Owner, ImportPath: finding.ImportPath,

@@ -62,6 +62,7 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		if obj == nil || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() {
 			return true
 		}
+		reportCrossOwnerTestPolicy(pass, id, obj, unit, called[id])
 		reportTestComposition(pass, id, obj, unit, path, called[id])
 		fn, isFunction := obj.(*types.Func)
 		if isFunction && !under(strings.TrimSuffix(unit, "_test"), "pkg/services/work") &&
@@ -70,6 +71,34 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		}
 		return true
 	})
+}
+
+// Exact service operations remain owned by their service even in reusable
+// test support. Wire is the canonical composition boundary.
+var crossOwnerTestPolicy = map[string]map[string]bool{
+	"pkg/services/factory_definitions": {
+		"MapDir": true, "NamedFactoriesRoot": true, "ResolveCurrentDir": true, "WriteCurrentPointer": true,
+	},
+	"pkg/services/factory_definitions/internal/services/catalog/namedpaths": {
+		"MapDir": true, "NamedFactoriesRoot": true, "ResolveCurrentDir": true, "WriteCurrentPointer": true,
+	},
+	"pkg/services/operator_settings": {
+		"DefaultConfigPath": true, "ResolveFromHomeWithEnvironment": true,
+	},
+	"pkg/services/workers": {"LoadMockWorkersConfig": true},
+}
+
+func reportCrossOwnerTestPolicy(pass *analysis.Pass, id *ast.Ident, obj types.Object, unit string, called bool) {
+	path := strings.TrimPrefix(obj.Pkg().Path(), modulePrefix)
+	if !crossOwnerTestPolicy[path][obj.Name()] || !testBoundaryCallable(obj, called) {
+		return
+	}
+	owner := strings.Split(path, "/")[2]
+	caller := strings.TrimSuffix(unit, "_test")
+	if under(caller, "pkg/services/"+owner) || under(caller, "pkg/wire") {
+		return
+	}
+	pass.Reportf(id.Pos(), "test-cross-owner-policy: %s -> %s.%s; move policy assertions to pkg/services/%s or exercise the customer process boundary", unit, path, obj.Name(), owner)
 }
 
 // HTTP tests consume detached service results instead of recreating engine
