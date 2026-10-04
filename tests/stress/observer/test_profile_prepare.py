@@ -55,12 +55,16 @@ class ProfilePreparationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = owned_paths(Path(tmp) / 'owned')
             with patch.dict('os.environ', {'HOME': 'shared', 'GOENV': 'shared-config',
-                                        'GOPROXY': 'https://example.com', 'GOFLAGS': '-overlay=shared'}):
+                                        'GOPROXY': 'https://example.com', 'GOFLAGS': '-overlay=shared',
+                                        'GOPRIVATE': '*', 'GONOPROXY': '*', 'GOCACHEPROG': 'shared-cache'}):
                 env = child_environment(paths)
             self.assertEqual(env['HOME'], paths['HOME'])
             for key in ('GOPROXY', 'GOSUMDB', 'GOWORK', 'GOENV', 'GOTELEMETRY'):
                 self.assertEqual(env[key], 'off')
             self.assertEqual(env['GOFLAGS'], '')
+            self.assertEqual(env['GOCACHEPROG'], '')
+            self.assertEqual(env['GOPRIVATE'], '')
+            self.assertEqual(env['GONOPROXY'], 'none')
             self.assertEqual(env['GOTOOLCHAIN'], 'auto')
             self.assertEqual(env['HOMEDRIVE'] + env['HOMEPATH'], env['HOME'])
 

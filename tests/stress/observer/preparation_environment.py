@@ -26,7 +26,8 @@ def child_environment(paths):
     # fallbacks. Cached inputs are copied by Python, never by a shared Go child.
     env = dict(os.environ, **paths)
     env.update(GOENV="off", GOWORK="off", GOFLAGS="", GOPROXY="off",
-               GOSUMDB="off", GOTOOLCHAIN="auto", GOTELEMETRY="off")
+               GOSUMDB="off", GOTOOLCHAIN="auto", GOTELEMETRY="off",
+               GOPRIVATE="", GONOPROXY="none", GONOSUMDB="none", GOCACHEPROG="")
     return env
 
 
