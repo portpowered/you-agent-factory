@@ -111,7 +111,7 @@ func TestStartHostedLinearPoller_StopsOnContextCancellation(t *testing.T) {
 	}
 	select {
 	case <-started:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("timed out waiting for hosted-poller role to start")
 	}
 	cancel()

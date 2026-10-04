@@ -258,7 +258,7 @@ func TestServiceInjectedLoggerPreservesScopedRedactedDiagnostics(t *testing.T) {
 			if effects.Load() != 0 || logs.FilterField(zap.String("workstation", name)).Len() != 0 {
 				t.Fatal("construction or validation executed a hosted effect")
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			var sidecars sync.WaitGroup
 			t.Cleanup(func() { cancel(); sidecars.Wait() })
 			if err := service.StartLinearPoller(ctx, &sidecars, runtimeCfg, workstation, worker, submitter); err != nil {

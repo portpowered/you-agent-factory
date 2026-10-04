@@ -376,7 +376,7 @@ func readAutomationCompletedWork(t *testing.T, baseURL, sessionID, state string,
 			}
 		}
 	}
-	listed, err := support.ReadWorkAtState(ctx, support.SessionWorkURL(baseURL, sessionID, "/work"), state, workIDs...)
+	listed, err := readWorkAtState(ctx, support.SessionWorkURL(baseURL, sessionID, "/work"), state, workIDs...)
 	if err != nil {
 		t.Fatalf("read completed automation Work: %v", err)
 	}

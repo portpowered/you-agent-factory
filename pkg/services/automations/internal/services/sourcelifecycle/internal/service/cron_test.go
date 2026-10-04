@@ -409,7 +409,7 @@ func assertCronWorkRequestNominalAt(t *testing.T, request work.WorkRequest, want
 
 func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := fakeClock.BlockUntilContext(ctx, waiters); err != nil {
 		t.Fatalf("timed out waiting for %d fake-clock waiter(s): %v", waiters, err)

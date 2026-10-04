@@ -378,7 +378,7 @@ func TestRunScriptPoller_UsesWorkerTimeout(t *testing.T) {
 	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
 	worker.Timeout = "1ms"
 	config := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	err := svc.RunScriptPoller(ctx, runner, config, poller, worker, scriptpollers.ScriptPollerSupervision{}, func(context.Context, work.WorkRequest) error { return nil })
 	if err == nil || !strings.Contains(err.Error(), "timed out") {

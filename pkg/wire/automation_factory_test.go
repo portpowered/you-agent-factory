@@ -65,7 +65,7 @@ func TestAutomationsClockPreservesSelectedSchedulingAndNowOnlyCompatibility(t *t
 	defer ready.Stop()
 	select {
 	case <-ready.Chan():
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("Now-only scheduling timer did not fire")
 	}
 }

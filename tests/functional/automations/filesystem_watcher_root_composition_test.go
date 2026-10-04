@@ -1,9 +1,15 @@
 package automations
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -237,4 +243,105 @@ func filesystemWatcherFactoryConfig() map[string]any {
 			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
 		}},
 	}
+}
+
+// readWorkAtState waits for all selected identities in one public Work snapshot.
+// A DispatchResponse can arrive while its tick still holds the engine lock;
+// Work reads then deliberately return the previous published snapshot. There is
+// no public tick-publication acknowledgement to await on the event stream.
+// Re-read through HTTP until the observable state arrives, using the caller's
+// existing context as a failure ceiling, without sleeps or a stability window.
+func readWorkAtState(ctx context.Context, endpoint, state string, workIDs ...string) (factoryapi.ListWorkResponse, error) {
+	for {
+		listed, err := readWorkSnapshot(ctx, endpoint)
+		if err != nil {
+			return listed, err
+		}
+		if allWorkAtState(listed, state, workIDs) {
+			return listed, nil
+		}
+	}
+}
+
+func readWorkSnapshot(ctx context.Context, endpoint string) (factoryapi.ListWorkResponse, error) {
+	var listed factoryapi.ListWorkResponse
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return listed, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return listed, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return listed, fmt.Errorf("GET Work status = %d, want 200", response.StatusCode)
+	}
+	err = json.NewDecoder(response.Body).Decode(&listed)
+	return listed, err
+}
+
+func allWorkAtState(listed factoryapi.ListWorkResponse, state string, workIDs []string) bool {
+	for _, id := range workIDs {
+		if !slices.ContainsFunc(listed.Results, func(item factoryapi.Work) bool {
+			return support.StringPointerValue(item.WorkId) == id && item.State != nil && item.State.Name == state
+		}) {
+			return false
+		}
+	}
+	return true
+}
+
+func TestReadWorkAtState_WaitsForOneSnapshotContainingAllCompletedIdentities(t *testing.T) {
+	t.Parallel()
+	var reads atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/owned/work" {
+			t.Errorf("read path = %q, want owned session Work", r.URL.Path)
+		}
+		read := reads.Add(1)
+		// Model successive published boundaries: no live Work, live still
+		// processing, live completed but peer still processing, then both done.
+		listed := factoryapi.ListWorkResponse{Results: []factoryapi.Work{{
+			WorkId: automationWorkIDPointer("preseed"), WorkTypeName: automationWorkIDPointer("task"),
+			State: &factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+		}}}
+		if read > 1 {
+			state := factoryapi.WorkState{Name: "init", Type: factoryapi.WorkStateTypeINITIAL}
+			if read > 2 {
+				state = factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL}
+			}
+			listed.Results = append(listed.Results, factoryapi.Work{WorkId: automationWorkIDPointer("live"), State: &state})
+		}
+		if read == 3 {
+			listed.Results[0].State = &factoryapi.WorkState{Name: "init", Type: factoryapi.WorkStateTypeINITIAL}
+		}
+		if err := json.NewEncoder(w).Encode(listed); err != nil {
+			t.Errorf("encode Work: %v", err)
+		}
+	}))
+	defer server.Close()
+	listed, err := readWorkAtState(t.Context(), server.URL+"/factory-sessions/owned/work", "complete", "preseed", "live")
+	if err != nil || reads.Load() != 4 || len(listed.Results) != 2 {
+		t.Fatalf("completed Work = %#v, reads = %d, error = %v; want fourth complete snapshot", listed, reads.Load(), err)
+	}
+}
+
+func TestReadWorkAtState_CancelsAnUnpublishedCompletion(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		cancel()
+		_, _ = w.Write([]byte(`{"results":[]}`))
+	}))
+	defer server.Close()
+	_, err := readWorkAtState(ctx, server.URL, "complete", "live")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("unpublished Work error = %v, want context cancellation", err)
+	}
+}
+
+func automationWorkIDPointer(value string) *string {
+	return &value
 }
