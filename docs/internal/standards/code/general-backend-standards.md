@@ -244,6 +244,12 @@ The expected testing layers are:
 
 Rules:
 
+- Tests **MUST NOT** read or write the real user profile (`~/.you-agent-factory`,
+  model cache, `os.UserHomeDir`). Call `testhome.IsolateHome(t)` or, per package,
+  `testhome.IsolateHomeMain()` from `TestMain` (`internal/testutil/testhome`).
+  `make test-home-isolation-check` ratchets this against
+  `docs/internal/baselines/test-home-isolation-baseline.txt`: new offending test
+  files fail; delete baseline lines as packages adopt the helper.
 - Most confidence **SHOULD** come from fast unit tests and targeted functional
   customer-behavior tests.
 - Functional tests **SHOULD** focus on high-value end-to-end behavior, not every branch.
