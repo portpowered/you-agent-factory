@@ -258,14 +258,21 @@ func TestCatalogReadinessFailuresAreSanitizedAcrossListAndDetail(t *testing.T) {
 	}
 	scope := publicScope(t, openCatalogScope(t, scopes, "failed-model", "generate"))
 
-	if _, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+	listed, err := service.ListCatalog(t.Context(), models.ListModelsRequest{Scope: scope})
+	if !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
 		t.Fatalf("ListCatalog error = %v, want sanitized ErrUnavailable", err)
 	}
-	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: scope, Name: "failed-model",
-	}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+	if !reflect.DeepEqual(listed, models.ListModelsResult{}) {
+		t.Fatalf("ListCatalog failure returned partial results: %#v", listed)
+	}
+	detail, err := service.GetCatalogModel(t.Context(), models.GetModelRequest{Scope: scope, Name: "failed-model"})
+	if !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
 		t.Fatalf("GetCatalogModel error = %v, want sanitized ErrUnavailable", err)
 	}
+	if !reflect.DeepEqual(detail, models.GetModelResult{}) {
+		t.Fatalf("GetCatalogModel failure returned partial detail: %#v", detail)
+	}
+
 }
 
 func TestBuiltInReadinessUsesStableDiscoveryBaseline(t *testing.T) {
@@ -299,4 +306,165 @@ func TestBuiltInReadinessUsesStableDiscoveryBaseline(t *testing.T) {
 	if queryCalls != 0 {
 		t.Fatalf("built-in readiness queried current state %d times, want zero", queryCalls)
 	}
+}
+
+type catalogAvailabilityCase struct {
+	name             string
+	readiness        models.ReadinessState
+	lifecycle        models.LifecycleState
+	snapshotLocality models.Locality
+	wantStatus       models.Status
+	wantLoadState    models.LoadState
+}
+
+func catalogAvailabilityCases() []catalogAvailabilityCase {
+	return []catalogAvailabilityCase{
+		{
+			name: "ready installed", readiness: models.ReadinessStateReady,
+			lifecycle:  models.LifecycleStateInstalled,
+			wantStatus: models.StatusReady, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "ready loaded", readiness: models.ReadinessStateReady,
+			lifecycle:  models.LifecycleStateLoaded,
+			wantStatus: models.StatusReady, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "missing", readiness: models.ReadinessStateMissing,
+			lifecycle:  models.LifecycleStateNotInstalled,
+			wantStatus: models.StatusUnavailable, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "loading", readiness: models.ReadinessStateLoading,
+			lifecycle:  models.LifecycleStateLoading,
+			wantStatus: models.StatusUnavailable, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "failed", readiness: models.ReadinessStateFailed,
+			lifecycle:  models.LifecycleStateInstalled,
+			wantStatus: models.StatusUnavailable, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "unsupported", readiness: models.ReadinessStateUnsupported,
+			lifecycle:  models.LifecycleStateNotApplicable,
+			wantStatus: models.StatusUnavailable, wantLoadState: models.LoadStateNotApplicable,
+		},
+		{
+			name: "ready not installed", readiness: models.ReadinessStateReady,
+			lifecycle:        models.LifecycleStateNotInstalled,
+			snapshotLocality: models.LocalityCloud,
+			wantStatus:       models.StatusUnavailable, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "ready installing", readiness: models.ReadinessStateReady,
+			lifecycle:        models.LifecycleStateInstalling,
+			snapshotLocality: models.LocalityCloud,
+			wantStatus:       models.StatusUnavailable, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "ready loading", readiness: models.ReadinessStateReady,
+			lifecycle:        models.LifecycleStateLoading,
+			snapshotLocality: models.LocalityCloud,
+			wantStatus:       models.StatusUnavailable, wantLoadState: models.LoadStateUnloaded,
+		},
+		{
+			name: "ready not applicable", readiness: models.ReadinessStateReady,
+			lifecycle:        models.LifecycleStateNotApplicable,
+			snapshotLocality: models.LocalityCloud,
+			wantStatus:       models.StatusUnavailable, wantLoadState: models.LoadStateNotApplicable,
+		},
+	}
+}
+
+// Retains the retired private catalog's availability and cache observations at
+// the scoped Catalog owner. Readiness is a controlled external observation.
+func TestCatalogAvailabilityAndCacheFactsRemainDetachedAcrossListAndDetail(t *testing.T) {
+	t.Parallel()
+	for _, test := range catalogAvailabilityCases() {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			scopes := newRuntimeScopes(t, "catalog-availability")
+			scope := publicScope(t, openReadinessScope(t, scopes))
+			revision, bytes := "rev-truth", int64(17)
+			locality := test.snapshotLocality
+			if locality == "" {
+				locality = models.LocalityLocal
+			}
+			current := models.Runtime{
+				ReadinessState: test.readiness, LifecycleState: test.lifecycle,
+				Locality: locality, Revision: &revision, CacheBytes: &bytes,
+				Diagnostics: map[string]string{"hostFact": "preserved"},
+			}
+			service, err := catalogwire.NewService(scopes,
+				func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+					return current, nil
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			list, err := service.ListCatalog(t.Context(), models.ListModelsRequest{Scope: scope})
+			if err != nil {
+				t.Fatal(err)
+			}
+			detail, err := service.GetCatalogModel(t.Context(), models.GetModelRequest{Scope: scope, Name: "scoped-model"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			listed := catalogNamedSummary(t, list, "scoped-model")
+			if !reflect.DeepEqual(listed, detail.Model.Summary) {
+				t.Fatalf("list/detail differ: %#v / %#v", listed, detail.Model.Summary)
+			}
+			assertCatalogCacheProjection(t, detail.Model, test)
+			// Mutating returned collections, cache pointers and maps cannot change the
+			// next observation or the readiness collaborator's owned snapshot.
+			*listed.ManagedRuntime.Revision = "mutated"
+			*listed.ManagedRuntime.CacheBytes = 999
+			listed.ManagedRuntime.Diagnostics["hostFact"] = "mutated"
+			detail.Model.Diagnostics["hostFact"] = "mutated"
+			detail.Model.Operations[0].Name = "mutated"
+			again, err := service.GetCatalogModel(t.Context(), models.GetModelRequest{Scope: scope, Name: "scoped-model"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertCatalogCacheProjection(t, again.Model, test)
+			if again.Model.Operations[0].Name != "generate" {
+				t.Fatal("caller mutation changed catalog operation")
+			}
+			listAgain, err := service.ListCatalog(t.Context(), models.ListModelsRequest{Scope: scope})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(catalogNamedSummary(t, listAgain, "scoped-model"), again.Model.Summary) {
+				t.Fatal("caller mutation changed collection")
+			}
+		})
+	}
+}
+
+func assertCatalogCacheProjection(t *testing.T, detail models.Detail, test catalogAvailabilityCase) {
+	t.Helper()
+	if detail.Status != test.wantStatus || detail.LoadState != test.wantLoadState {
+		t.Fatalf("availability = %s/%s, want %s/%s", detail.Status, detail.LoadState, test.wantStatus, test.wantLoadState)
+	}
+	runtime := detail.ManagedRuntime
+	if runtime.Revision == nil || *runtime.Revision != "rev-truth" || runtime.CacheBytes == nil || *runtime.CacheBytes != 17 {
+		t.Fatalf("cache facts = %#v, want rev-truth/17", runtime)
+	}
+	if runtime.Diagnostics["hostFact"] != "preserved" || detail.Diagnostics["hostFact"] != "preserved" {
+		t.Fatalf("diagnostics = %#v/%#v, want hostFact", runtime.Diagnostics, detail.Diagnostics)
+	}
+	if runtime.ReadinessState != test.readiness || runtime.LifecycleState != test.lifecycle {
+		t.Fatalf("runtime facts = %#v, want %s/%s", runtime, test.readiness, test.lifecycle)
+	}
+}
+
+func catalogNamedSummary(t *testing.T, list models.ListModelsResult, name string) models.Summary {
+	t.Helper()
+	for _, summary := range list.Models {
+		if summary.Name == name {
+			return summary
+		}
+	}
+	t.Fatalf("catalog has no model %q: %#v", name, list)
+	return models.Summary{}
 }

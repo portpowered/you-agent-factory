@@ -327,7 +327,7 @@ func TestWorkRequestEffectsUseExplicitEdgesOrProcessDefaults(t *testing.T) {
 func TestProvideWorkServiceConstructsThroughWorkWireBridge(t *testing.T) {
 	t.Parallel()
 
-	staging, err := provideWorkContentStagingService(serviceedges.Edges{})
+	staging, err := provideWorkContentStagingService(serviceedges.Edges{}, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("provideWorkContentStagingService() error = %v", err)
 	}

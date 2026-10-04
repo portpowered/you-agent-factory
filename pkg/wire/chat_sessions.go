@@ -1,7 +1,7 @@
 package wire
 
 import (
-	"time"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -34,6 +34,6 @@ func provideChatSessionsFactoryTargetCatalogService(
 // AcknowledgeAttachment operation's EventsReader dependency. It is the one
 // construction path to a Service value in production code: no alternate
 // constructor, dependency bag, or secondary injector exists.
-func provideChatSessionsService(eventsService events.Service, logger logging.Logger) (chatsessions.Service, error) {
-	return chatsessionswire.NewService(uuid.NewString, time.Now, eventsService, eventsService, logger)
+func provideChatSessionsService(eventsService events.Service, logger logging.Logger, source platformclock.Source) (chatsessions.Service, error) {
+	return chatsessionswire.NewService(uuid.NewString, source.Now, eventsService, eventsService, logger)
 }

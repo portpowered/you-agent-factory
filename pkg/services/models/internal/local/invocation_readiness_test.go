@@ -1,7 +1,6 @@
 package local
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -10,16 +9,20 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-func TestEnsureManagedRuntimeReadyForInvocation_BlocksMissingRuntime(t *testing.T) {
+func TestManagedRuntimeReadinessProjection_BlocksMissingRuntime(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	inspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
 		"OMNIVOICE_Q4_K_M": {Supported: true, Installed: false, MissingAssets: []string{"omnivoice-base-Q4_K_M.gguf"}},
 	}}
 
-	_, err := EnsureManagedRuntimeReadyForInvocation(
+	managed, err := ManagedRuntimeReadinessForFactory(
 		loaded, "OMNIVOICE_Q4_K_M", inspector, DefaultManagedRuntimeSourceResolver(),
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = managed.InvocationError()
 	if err == nil {
 		t.Fatalf("error = %v, want managed runtime invocation block", err)
 	}
@@ -28,15 +31,19 @@ func TestEnsureManagedRuntimeReadyForInvocation_BlocksMissingRuntime(t *testing.
 	}
 }
 
-func TestEnsureManagedRuntimeReadyForInvocation_BlocksLoadingAndFailedRuntimes(t *testing.T) {
+func TestManagedRuntimeReadinessProjection_BlocksLoadingAndFailedRuntimes(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	loadingInspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
 		"OMNIVOICE_Q4_K_M": {Supported: true, Installed: false, InstalledFileCount: 1},
 	}}
-	_, loadingErr := EnsureManagedRuntimeReadyForInvocation(
+	loading, loadingErr := ManagedRuntimeReadinessForFactory(
 		loaded, "OMNIVOICE_Q4_K_M", loadingInspector, nil,
 	)
+	if loadingErr != nil {
+		t.Fatal(loadingErr)
+	}
+	loadingErr = loading.InvocationError()
 	if loadingErr == nil {
 		t.Fatalf("loading error = %v, want blocked invocation", loadingErr)
 	}
@@ -47,9 +54,13 @@ func TestEnsureManagedRuntimeReadyForInvocation_BlocksLoadingAndFailedRuntimes(t
 	failedInspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
 		"OMNIVOICE_Q4_K_M": {Supported: true, Installed: false, PartialArtifacts: true},
 	}}
-	_, failedErr := EnsureManagedRuntimeReadyForInvocation(
+	failed, failedErr := ManagedRuntimeReadinessForFactory(
 		loaded, "OMNIVOICE_Q4_K_M", failedInspector, nil,
 	)
+	if failedErr != nil {
+		t.Fatal(failedErr)
+	}
+	failedErr = failed.InvocationError()
 	if failedErr == nil {
 		t.Fatalf("failed error = %v, want blocked invocation", failedErr)
 	}
@@ -58,98 +69,47 @@ func TestEnsureManagedRuntimeReadyForInvocation_BlocksLoadingAndFailedRuntimes(t
 	}
 }
 
-func TestEnsureManagedRuntimeReadyForInvocation_AllowsReadyRuntime(t *testing.T) {
+func TestManagedRuntimeReadinessProjection_AllowsReadyRuntime(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	inspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
 		"OMNIVOICE_Q4_K_M": {Supported: true, Installed: true, InstalledFileCount: 2},
 	}}
 
-	managed, err := EnsureManagedRuntimeReadyForInvocation(
+	managed, err := ManagedRuntimeReadinessForFactory(
 		loaded, "OMNIVOICE_Q4_K_M", inspector, DefaultManagedRuntimeSourceResolver(),
 	)
 	if err != nil {
-		t.Fatalf("EnsureManagedRuntimeReadyForInvocation: %v", err)
+		t.Fatalf("ManagedRuntimeReadinessForFactory: %v", err)
+	}
+	if err := managed.InvocationError(); err != nil {
+		t.Fatalf("ready projection refuses invocation: %v", err)
 	}
 	if managed.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
 	}
 }
 
-func TestEnsureManagedRuntimeReadyForInvocation_PackagedAndAuthoredFactoriesMatch(t *testing.T) {
+func TestManagedRuntimeReadinessProjection_EquivalentConfigurationsMatch(t *testing.T) {
 	t.Parallel()
 	authored := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	packaged := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	equivalent := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	inspector := stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
 		"OMNIVOICE_Q4_K_M": {Supported: true, Installed: true, InstalledFileCount: 2},
 	}}
 	resolver := DefaultManagedRuntimeSourceResolver()
 
-	authoredManaged, err := EnsureManagedRuntimeReadyForInvocation(authored, "OMNIVOICE_Q4_K_M", inspector, resolver)
+	authoredManaged, err := ManagedRuntimeReadinessForFactory(authored, "OMNIVOICE_Q4_K_M", inspector, resolver)
 	if err != nil {
 		t.Fatalf("authored readiness: %v", err)
 	}
-	packagedManaged, err := EnsureManagedRuntimeReadyForInvocation(packaged, "OMNIVOICE_Q4_K_M", inspector, resolver)
+	equivalentManaged, err := ManagedRuntimeReadinessForFactory(equivalent, "OMNIVOICE_Q4_K_M", inspector, resolver)
 	if err != nil {
-		t.Fatalf("packaged readiness: %v", err)
+		t.Fatalf("equivalent readiness: %v", err)
 	}
-	if authoredManaged.Identity != packagedManaged.Identity ||
-		authoredManaged.ReadinessState != packagedManaged.ReadinessState ||
-		authoredManaged.LifecycleState != packagedManaged.LifecycleState {
-		t.Fatalf("authored = %#v, packaged = %#v, want identical readiness", authoredManaged, packagedManaged)
+	if authoredManaged.Identity != equivalentManaged.Identity ||
+		authoredManaged.ReadinessState != equivalentManaged.ReadinessState ||
+		authoredManaged.LifecycleState != equivalentManaged.LifecycleState {
+		t.Fatalf("authored = %#v, equivalent = %#v, want identical readiness", authoredManaged, equivalentManaged)
 	}
-}
-
-func TestManager_BlocksInvocationWhenManagedRuntimeMissing(t *testing.T) {
-	t.Parallel()
-	runtime := &countingLocalRuntime{}
-	manager := mustNewManagedRuntime(t, stubInvocationReadinessAssetPuller{
-		inspection: RuntimeCacheInspection{
-			Supported:     true,
-			Installed:     false,
-			MissingAssets: []string{"omnivoice-base-Q4_K_M.gguf"},
-		},
-	}, runtime, Hooks{})
-
-	factoryCfg := managerTestFactoryConfig()
-	loaded := projectTestModelsRuntimeConfig(t.TempDir(), factoryCfg)
-	worker, ok := loaded.Worker("tts-worker")
-	if !ok || worker == nil {
-		t.Fatal("worker tts-worker not found in loaded config")
-	}
-
-	_, handled, err := manager.Invoke(context.Background(), loaded, loaded, worker, ModelInvocation{ModelOperation: "TTS"})
-	if !handled {
-		t.Fatal("Invoke handled = false, want true")
-	}
-	if err == nil || !errors.Is(err, apisurface.ErrMissing) {
-		t.Fatalf("Execute error = %v, want managed runtime missing", err)
-	}
-	if runtime.loadCount() != 0 {
-		t.Fatalf("load count = %d, want 0 when readiness blocks invocation", runtime.loadCount())
-	}
-}
-
-type stubInvocationReadinessAssetPuller struct {
-	inspection RuntimeCacheInspection
-	cache      CacheLayout
-}
-
-func (s stubInvocationReadinessAssetPuller) PullModel(_ context.Context, _ *modelRuntimeConfig, _ string) (apisurface.PullResult, error) {
-	return apisurface.PullResult{}, nil
-}
-
-func (s stubInvocationReadinessAssetPuller) EnsureModelAvailable(_ context.Context, _ *modelRuntimeConfig, _ *modelRuntimeWorker) error {
-	return nil
-}
-
-func (s stubInvocationReadinessAssetPuller) ResolveModelCache(_ context.Context, _ *modelRuntimeConfig, _ *modelRuntimeWorker) (CacheLayout, error) {
-	return s.cache, nil
-}
-
-func (s stubInvocationReadinessAssetPuller) InspectRuntimeCache(_ context.Context, _ *modelRuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
-	if CanonicalModelName(modelName) == CanonicalModelName("OMNIVOICE_Q4_K_M") {
-		return s.inspection, nil
-	}
-	return RuntimeCacheInspection{}, nil
 }

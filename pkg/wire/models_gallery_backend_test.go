@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -19,6 +20,47 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
 )
+
+func TestModelsCompositionSelectsDisabledRevisionEffect(t *testing.T) {
+	t.Parallel()
+	resolve := provideModelAssetRevision(serviceedges.Edges{})
+	if resolve == nil {
+		t.Fatal("revision selection must supply an explicit disabled effect")
+	}
+	result, err := resolve(t.Context(), "hf://selected/repository@main")
+	if result != "" || !errors.Is(err, models.ErrModelRevisionUnresolved) {
+		t.Fatalf("disabled revision = %q/%v, want unresolved", result, err)
+	}
+}
+
+func TestModelsCompositionSelectsRevisionEffectInertly(t *testing.T) {
+	t.Parallel()
+	for _, wantErr := range []error{nil, errors.New("selected revision failure")} {
+		t.Run(fmt.Sprint(wantErr), func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			const source = "hf://selected/repository@main"
+			calls := 0
+			edges := serviceedges.Edges{
+				ModelResolveHuggingFaceRevision: func(got context.Context, input string) (string, error) {
+					calls++
+					if got != ctx || input != source {
+						t.Fatalf("revision request = %v/%q, want selected context/source", got, input)
+					}
+					return "selected-revision", wantErr
+				},
+			}
+			resolve := provideModelAssetRevision(edges)
+			if resolve == nil || calls != 0 {
+				t.Fatal("revision selection must supply an inert effect")
+			}
+			result, err := resolve(ctx, source)
+			if result != "selected-revision" || err != wantErr || calls != 1 {
+				t.Fatalf("revision = %q/%v, calls=%d, want selected result/error once", result, err, calls)
+			}
+		})
+	}
+}
 
 func TestLinuxBackendPrefersPublishedCUDAAndKeepsGalleryFallback(t *testing.T) {
 	t.Parallel()

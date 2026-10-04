@@ -207,6 +207,53 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  backend-models-verification:
+    name: Backend Models Wire and Race
+    needs: classify
+    if: always() && needs.classify.outputs.run_backend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GOMAXPROCS: "2"
+      GOFLAGS: "-p=1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Keep generation and race compilation outside the five-minute unit
+      # coverage budget. Compare both generations and the committed graph.
+      - name: Verify Wire reproducibility and committed drift
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          make generate-wire
+          sha256sum pkg/wire/wire_gen.go > "$RUNNER_TEMP/models-wire-first.sha256"
+          make generate-wire
+          sha256sum pkg/wire/wire_gen.go > "$RUNNER_TEMP/models-wire-second.sha256"
+          diff -u "$RUNNER_TEMP/models-wire-first.sha256" "$RUNNER_TEMP/models-wire-second.sha256"
+          git diff --exit-code -- pkg/wire/wire_gen.go
+          cat "$RUNNER_TEMP/models-wire-second.sha256"
+      - name: Race-check scoped Models components
+        timeout-minutes: 10
+        run: |
+          go test -race -v -p 1 -count=1 -timeout 3m \
+            ./pkg/services/models/internal/service \
+            ./pkg/services/models/internal/local \
+            ./pkg/services/models/internal/services/inference/internal/service \
+            ./pkg/services/models/internal/services/runtime_host/internal/service \
+            ./pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service \
+            -run 'Test.*(Root|Scoped|Scope|ResourceLimiter|Invoke|Invocation|Cancel|Release|Lease|Deadline|Idle|Timer|Capacity)'
+      - name: Race-check composed scoped Models scenarios
+        timeout-minutes: 8
+        run: |
+          go test -race -v -p 1 -count=1 -timeout 3m \
+            ./tests/functional/models/root_composition \
+            -run 'TestModelsFixedLeaves|TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess'
+
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage
     needs: classify
@@ -1006,7 +1053,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1051,6 +1098,7 @@ jobs:
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
+          BACKEND_MODELS_RESULT: ${{ needs.backend-models-verification.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}

@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
@@ -26,6 +29,19 @@ func TestRootPullModelForScopeValidatesBeforeRuntimeResolution(t *testing.T) {
 	}
 	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Name: "voice"}); !errors.Is(err, models.ErrUnsupportedOperation) {
 		t.Fatalf("unavailable scoped runtime error = %v, want ErrUnsupportedOperation", err)
+	}
+	args := newRootConstructionArgs(t)
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Name: "voice"}); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
+		t.Fatalf("zero scope error = %v, want ErrRuntimeScopeInvalid", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: scopedHandleRequest(t, "cancelled").Scope, Name: "voice"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled pull error = %v, want context.Canceled", err)
 	}
 }
 
@@ -48,18 +64,6 @@ func TestIsRemovableCacheAbsenceClassifiesAssetAbsenceErrors(t *testing.T) {
 	}
 }
 
-func TestRuntimeServicePullModelForScopeValidatesAndDelegates(t *testing.T) {
-	t.Parallel()
-
-	runtime := &runtimeService{}
-	if _, err := runtime.PullModelForScope(context.Background(), models.PullModelRequest{}); !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("empty pull request error = %v, want ErrNotFound", err)
-	}
-	if _, err := runtime.PullModelForScope(context.Background(), models.PullModelRequest{Name: "voice"}); err == nil {
-		t.Fatal("delegated pull error = nil, want unavailable runtime failure")
-	}
-}
-
 func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T) {
 	t.Parallel()
 
@@ -69,7 +73,7 @@ func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			root, scope, assets := newPullFallbackRoot(t, name)
+			root, scope, assets, _ := newPullFallbackRoot(t, name)
 			result, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
 				Scope: scope,
 				Name:  name,
@@ -91,8 +95,7 @@ func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T
 func TestRootPullModelForScopePreservesUnknownCatalogMiss(t *testing.T) {
 	t.Parallel()
 
-	root, _, assets := newPullFallbackRoot(t, "")
-	scope := firstPullFallbackScope(t, root)
+	root, scope, assets, _ := newPullFallbackRoot(t, "")
 	_, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
 		Scope: scope,
 		Name:  "unknown-model",
@@ -108,8 +111,7 @@ func TestRootPullModelForScopePreservesUnknownCatalogMiss(t *testing.T) {
 func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
 	t.Parallel()
 
-	root, scope, assets := newPullFallbackRoot(t, "")
-	runtime := root.runtimeByScope[scope].(*pullCatalogMissRuntime)
+	root, scope, assets, runtime := newPullFallbackRoot(t, "")
 	runtime.result = models.PullResult{
 		ModelName:          "factory-model",
 		ProviderLocality:   string(models.LocalityLocal),
@@ -135,7 +137,7 @@ func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
 	}
 }
 
-func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]models.ModelOverlay) (*Root, models.RuntimeScopeRef, *preparationAssetService) {
+func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]models.ModelOverlay) (*Root, models.RuntimeScopeRef, *preparationAssetService, *pullCatalogMissRuntime) {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return "pull-fallback-test" })
 	if err != nil {
@@ -162,33 +164,24 @@ func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]
 			Readiness: models.AssetReadinessAvailable,
 		},
 	}}
+	runtime := &pullCatalogMissRuntime{err: models.ErrNotFound}
 	root := &Root{
 		runtimeScopes: scopes,
 		assets:        assets,
-		runtimeByScope: map[models.RuntimeScopeRef]models.Service{
-			scope: &pullCatalogMissRuntime{err: models.ErrNotFound},
-		},
+		pullModel:     runtime.PullModelForScope,
+		logger:        zap.NewNop(), now: time.Now,
 	}
-	return root, scope, assets
-}
-
-func firstPullFallbackScope(t *testing.T, root *Root) models.RuntimeScopeRef {
-	t.Helper()
-	for scope := range root.runtimeByScope {
-		return scope
-	}
-	t.Fatal("pull fallback root has no runtime scope")
-	return models.RuntimeScopeRef{}
+	return root, scope, assets, runtime
 }
 
 type pullCatalogMissRuntime struct {
-	models.Service
+	inertScopedLocalExecution
 	result    models.PullResult
 	err       error
 	pullCalls int
 }
 
-func (runtime *pullCatalogMissRuntime) PullModel(context.Context, string) (models.PullResult, error) {
+func (runtime *pullCatalogMissRuntime) PullModelForScope(context.Context, models.PullModelRequest) (models.PullResult, error) {
 	runtime.pullCalls++
 	return runtime.result, runtime.err
 }
@@ -295,10 +288,8 @@ func TestRootRemoveModelAssetsLogsStartAndTerminalOutcome(t *testing.T) {
 			},
 		},
 		runtimeHost: &removeGuardHost{},
-		process: modelseffects.ProcessDependencies{
-			Logger: zap.New(core),
-			Clock:  func() time.Time { return time.Unix(123, 0) },
-		},
+		logger:      zap.New(core),
+		now:         func() time.Time { return time.Unix(123, 0) },
 	}
 	if _, err := root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
 		Scope: scope,
@@ -336,10 +327,8 @@ func TestRootRemoveModelAssetsOmitsUnverifiedBytesFromFailureLog(t *testing.T) {
 			removeErr: errors.New("injected cache reclamation failure"),
 		},
 		runtimeHost: &removeGuardHost{},
-		process: modelseffects.ProcessDependencies{
-			Logger: zap.New(core),
-			Clock:  func() time.Time { return time.Unix(123, 0) },
-		},
+		logger:      zap.New(core),
+		now:         func() time.Time { return time.Unix(123, 0) },
 	}
 	result, err := root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
 		Scope: scope, Name: "managed-model", ReclaimUnusedCache: true,
@@ -470,7 +459,7 @@ func TestRootInvokeModelRecordsOneTerminalForInvocationFailure(t *testing.T) {
 	}
 	root, scope, _ := newJoinedInvocationRoot(t, &events, inference)
 	sink := &rootRuntimeEvidenceRecords{}
-	root.process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
+	root.runtimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
 
 	_, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
 	if !errors.Is(err, models.ErrInferenceTimeout) {
@@ -536,7 +525,7 @@ func TestJoinedAssetPreparationRequestCarriesModelAndBackendSources(t *testing.T
 		Source:  "hf://owner/repository/weights.gguf@revision-1",
 		Backend: "hf://owner/backend/backend.bin@backend-revision",
 	}}
-	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
+	prepared, err := prepareJoinedAssetFixture(request, "tts", resolved)
 	if err != nil {
 		t.Fatalf("joinedAssetPreparationRequest: %v", err)
 	}
@@ -564,7 +553,7 @@ func TestJoinedAssetPreparationRequestKeepsPrivateLocalSourceReference(t *testin
 			SourceKind: models.ModelReferenceSourceFileURI,
 		},
 	}
-	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
+	prepared, err := prepareJoinedAssetFixture(request, "tts", resolved)
 	if err != nil {
 		t.Fatalf("joinedAssetPreparationRequest: %v", err)
 	}
@@ -580,7 +569,7 @@ func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *te
 	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
 		Name: "llm", Source: "hf://owner/repository", Backend: "localai-llamacpp",
 	}}
-	prepared, err := joinedAssetPreparationRequest(request, "llm", resolved)
+	prepared, err := prepareJoinedAssetFixture(request, "llm", resolved)
 	if err != nil {
 		t.Fatalf("joinedAssetPreparationRequest: %v", err)
 	}
@@ -722,11 +711,10 @@ func newJoinedInvocationRootWithModel(
 	host := &joinedHostService{events: events}
 	assets := &joinedAssetsService{events: events, requests: assetRequests}
 	root := &Root{
-		runtimeScopes:  scopes,
-		assets:         assets,
-		runtimeHost:    host,
-		inference:      inference,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+		runtimeScopes: scopes,
+		assets:        assets,
+		runtimeHost:   host,
+		inference:     inference,
 	}
 	return root, scope, host
 }
@@ -948,4 +936,48 @@ func TestKnownRealtimeVoiceReferenceFailsBeforeBackendActivation(t *testing.T) {
 	if err != nil || prepared.Inputs[1].Content != "reference bytes" {
 		t.Fatalf("custom VibeVoice prepared reference = %#v, error = %v", prepared, err)
 	}
+}
+
+func newLocalExecutor(
+	host modelhost.Host,
+	runtime localmodels.Runtime,
+	resources *localmodels.ResourceLimiter,
+	hooks modelseffects.LocalRuntimeHooks,
+	now func() time.Time,
+) (*localExecutor, error) {
+	if isNilDependency(host) {
+		return nil, missingDependencyError("local executor model host")
+	}
+	return newLocalExecutorWithLeases(
+		func(ctx context.Context, _ models.RuntimeScopeRef, config *models.RuntimeConfig, name, holder string) (modelhost.Lease, error) {
+			return host.AcquireLease(ctx, config, name, modelhost.LeaseOptions{Holder: holder})
+		},
+		func(ctx context.Context, _ models.RuntimeScopeRef, id string) error {
+			return host.ReleaseLease(ctx, id)
+		},
+		runtime, resources, hooks, now,
+	)
+}
+
+func newLocalExecutionFixture(config models.RuntimeConfigLoader, host modelhost.Host,
+	assets localmodels.AssetPuller, runtime localmodels.Runtime, resources *localmodels.ResourceLimiter) (*localExecutionFixture, error) {
+	executor, err := newLocalExecutor(host, runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		return nil, err
+	}
+	return &localExecutionFixture{runtimeConfig: config, assetPuller: assets, local: executor}, nil
+}
+
+// prepareJoinedAssetFixture supplies selected operation data to the canonical asset planner.
+func prepareJoinedAssetFixture(
+	request models.InvokeModelRequest,
+	modelName string,
+	resolved models.ResolvedModelReference,
+) (models.PrepareModelAssetsRequest, error) {
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope: request.Scope, ModelName: modelName,
+		Source:  joinedAssetReference(request.Model, resolved),
+		Backend: strings.TrimSpace(resolved.Definition.Backend),
+	}
+	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
 }
