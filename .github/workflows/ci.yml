@@ -868,6 +868,7 @@ jobs:
           exit "$status"
         env:
           LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
+          LINT_FULL: "1"
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-
