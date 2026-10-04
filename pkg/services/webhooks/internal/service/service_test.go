@@ -23,22 +23,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 )
 
-func TestServiceRejectsMissingConstructionDependencies(t *testing.T) {
-	if got := NewWithDeadLetterAppender(nil, testSecretResolver, platformclock.Real{}, nil, logging.NoopLogger{}); got != nil {
-		t.Fatal("NewWithDeadLetterAppender(nil client) returned a service, want nil")
-	}
-
-	var service *Service
-	if _, err := service.Start(context.Background(), webhooks.StartRequest{}); err == nil {
-		t.Fatal("nil Service.Start() succeeded, want validation error")
-	}
-
-	subscription, err := New(http.DefaultClient, testSecretResolver, platformclock.Real{}, logging.NoopLogger{}).Start(nil, webhooks.StartRequest{})
+func TestServiceEmptyActivationAcceptsNilContext(t *testing.T) {
+	service := New(newRecordingRootStub(), http.DefaultClient, testSecretResolver, platformclock.Real{}, func(string, []byte) error { return nil }, logging.NoopLogger{})
+	subscription, err := service.Start(nil, webhooks.StartRequest{})
 	if err != nil {
-		t.Fatalf("Start(nil parent, no endpoints) error = %v", err)
+		t.Fatal(err)
 	}
-	if err := subscription(context.Background()); err != nil {
-		t.Fatalf("Close() after no-endpoint start: %v", err)
+	if err := subscription(nil); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -57,13 +49,13 @@ func TestServiceDeliversCanonicalWorkEventWithSignedBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := New(
+	service := New(root,
 		http.DefaultClient,
 		func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 			return secret, nil
 		},
 		newExactWebhookClock(when),
-		logging.NoopLogger{},
+		func(string, []byte) error { return nil }, logging.NoopLogger{},
 	)
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
@@ -75,7 +67,7 @@ func TestServiceDeliversCanonicalWorkEventWithSignedBody(t *testing.T) {
 				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange},
 			},
 		}},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 		Scope:         recordings.CanonicalEventScope{FactorySessionID: "~default"},
 	})
@@ -139,7 +131,7 @@ func TestServiceEvaluatesEnabledEndpointFiltersIndependently(t *testing.T) {
 	}))
 	defer nonMatchingServer.Close()
 
-	service := New(http.DefaultClient, testSecretResolver, platformclock.Real{}, logging.NoopLogger{})
+	service := New(root, http.DefaultClient, testSecretResolver, platformclock.Real{}, func(string, []byte) error { return nil }, logging.NoopLogger{})
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{
 			{
@@ -159,7 +151,7 @@ func TestServiceEvaluatesEnabledEndpointFiltersIndependently(t *testing.T) {
 				},
 			},
 		},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 	})
 	if err != nil {
@@ -193,7 +185,7 @@ func TestServiceDeliversOnlyMatchingCanonicalDispatchFailures(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := New(http.DefaultClient, testSecretResolver, platformclock.Real{}, logging.NoopLogger{})
+	service := New(root, http.DefaultClient, testSecretResolver, platformclock.Real{}, func(string, []byte) error { return nil }, logging.NoopLogger{})
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
 			Name:             "dispatch-failures",
@@ -212,7 +204,7 @@ func TestServiceDeliversOnlyMatchingCanonicalDispatchFailures(t *testing.T) {
 				},
 			},
 		}},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 	})
 	if err != nil {
@@ -276,7 +268,7 @@ func TestServiceDefaultsDispatchSelectionToFailureStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service := New(http.DefaultClient, testSecretResolver, platformclock.Real{}, logging.NoopLogger{})
+	service := New(root, http.DefaultClient, testSecretResolver, platformclock.Real{}, func(string, []byte) error { return nil }, logging.NoopLogger{})
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
 			Name:    "response-failures",
@@ -286,7 +278,7 @@ func TestServiceDefaultsDispatchSelectionToFailureStatus(t *testing.T) {
 				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeDispatchResponse},
 			},
 		}},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 	})
 	if err != nil {
@@ -340,7 +332,7 @@ func TestServiceReconnectsAfterBoundedSubscriptionOverflow(t *testing.T) {
 		requests <- receivedRequest{body: body, headers: request.Header.Clone()}
 		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("ok"))}, nil
 	})
-	service := New(client, testSecretResolver, platformclock.Real{}, logging.NoopLogger{})
+	service := New(root, client, testSecretResolver, platformclock.Real{}, func(string, []byte) error { return nil }, logging.NoopLogger{})
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
 			Name:             "overflow-reconnect",
@@ -351,7 +343,7 @@ func TestServiceReconnectsAfterBoundedSubscriptionOverflow(t *testing.T) {
 				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange},
 			},
 		}},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 		Scope:         recordings.CanonicalEventScope{FactorySessionID: "~default"},
 	})
@@ -419,21 +411,20 @@ func TestRetryableStatusRestrictsServerErrorsToFiveHundreds(t *testing.T) {
 func TestServiceDoesNotResolveOrSubscribeDisabledEndpoint(t *testing.T) {
 	root := newRecordingRootStub()
 	var resolved int
-	service := New(
+	service := New(root,
 		http.DefaultClient,
 		func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 			resolved++
 			return "secret", nil
 		},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		func(string, []byte) error { return nil }, logging.NoopLogger{},
 	)
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
 			Name:    "disabled",
 			Enabled: false,
 		}},
-		Events: root,
 	})
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -458,14 +449,14 @@ func TestServiceMissingSecretStopsEndpointWithoutReturningStartError(t *testing.
 		writer.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
-	service := New(
+	service := New(root,
 		http.DefaultClient,
 		func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 			resolved <- struct{}{}
 			return "", context.Canceled
 		},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		func(string, []byte) error { return nil }, logging.NoopLogger{},
 	)
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
@@ -476,7 +467,7 @@ func TestServiceMissingSecretStopsEndpointWithoutReturningStartError(t *testing.
 				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange},
 			},
 		}},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 	})
 	if err != nil {
@@ -503,13 +494,13 @@ func TestServiceBoundsReceiverResponseBodyReads(t *testing.T) {
 		remaining: webhooks.MaxResponseBodySize * 2,
 		closed:    make(chan struct{}),
 	}
-	service := New(
+	service := New(root,
 		roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusNoContent, Body: body}, nil
 		}),
 		testSecretResolver,
 		platformclock.Real{},
-		logging.NoopLogger{},
+		func(string, []byte) error { return nil }, logging.NoopLogger{},
 	)
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
@@ -520,7 +511,7 @@ func TestServiceBoundsReceiverResponseBodyReads(t *testing.T) {
 				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange},
 			},
 		}},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 	})
 	if err != nil {
@@ -562,16 +553,16 @@ func TestServiceRetriesWithBoundedRetryAfterAndFreshSignedTimestamp(t *testing.T
 		}
 		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("ok"))}, nil
 	})
-	service := New(client, func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
+	service := New(root, client, func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 		return secret, nil
-	}, clock, logging.NoopLogger{})
+	}, clock, func(string, []byte) error { return nil }, logging.NoopLogger{})
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition(
 			"retry-success",
 			"https://monitor.example/events",
 			webhookDeliveryPolicy(2, time.Second, 2*time.Second, 2),
 		)},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 	})
 	if err != nil {
@@ -634,14 +625,14 @@ func TestServiceUsesRetryAfterHTTPDateFromResponseReceipt(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("ok"))}, nil
 	})
-	service := New(client, testSecretResolver, clock, logging.NoopLogger{})
+	service := New(root, client, testSecretResolver, clock, func(string, []byte) error { return nil }, logging.NoopLogger{})
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition(
 			"retry-after-date",
 			"https://monitor.example/events",
 			webhookDeliveryPolicy(2, time.Second, 30*time.Second, 2),
 		)},
-		Events:        root,
+
 		RuntimeSource: testLoadedFactorySource{},
 	})
 	if err != nil {
@@ -680,7 +671,7 @@ func TestServiceExhaustionAppendsOneRedactedDeadLetter(t *testing.T) {
 		}, nil
 	})
 	deadLetters := make(chan []byte, 1)
-	service := NewWithDeadLetterAppender(
+	service := New(root,
 		client,
 		func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 			return secret, nil
@@ -701,7 +692,7 @@ func TestServiceExhaustionAppendsOneRedactedDeadLetter(t *testing.T) {
 			"https://monitor.example/events?token=secret",
 			webhookDeliveryPolicy(3, time.Second, 2*time.Second, 2),
 		)},
-		Events:         root,
+
 		RuntimeSource:  testLoadedFactorySource{},
 		DeadLetterPath: "runtime/.you-agent-factory/webhooks/dead-letter.jsonl",
 	})
@@ -766,7 +757,7 @@ func TestServiceNonRetryableResponseDeadLettersWithoutRetry(t *testing.T) {
 	root := newRecordingRootStub()
 	attempts := make(chan struct{}, 1)
 	deadLetters := make(chan []byte, 1)
-	service := NewWithDeadLetterAppender(
+	service := New(root,
 		roundTripFunc(func(*http.Request) (*http.Response, error) {
 			attempts <- struct{}{}
 			return &http.Response{
@@ -788,7 +779,7 @@ func TestServiceNonRetryableResponseDeadLettersWithoutRetry(t *testing.T) {
 			"https://monitor.example/events",
 			webhookDeliveryPolicy(5, time.Second, 30*time.Second, 2),
 		)},
-		Events:         root,
+
 		RuntimeSource:  testLoadedFactorySource{},
 		DeadLetterPath: "runtime/dead-letter.jsonl",
 	})
@@ -823,7 +814,7 @@ func TestServiceCancellationStopsRetryWithoutDeadLetter(t *testing.T) {
 	clock := newExactWebhookClock(time.Date(2026, time.August, 10, 15, 0, 0, 0, time.UTC))
 	attempts := make(chan struct{}, 2)
 	deadLetters := make(chan []byte, 1)
-	service := NewWithDeadLetterAppender(
+	service := New(root,
 		roundTripFunc(func(*http.Request) (*http.Response, error) {
 			attempts <- struct{}{}
 			return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(strings.NewReader("retry"))}, nil
@@ -843,7 +834,7 @@ func TestServiceCancellationStopsRetryWithoutDeadLetter(t *testing.T) {
 			"https://monitor.example/events",
 			webhookDeliveryPolicy(5, time.Hour, 2*time.Hour, 2),
 		)},
-		Events:         root,
+
 		RuntimeSource:  testLoadedFactorySource{},
 		DeadLetterPath: "runtime/dead-letter.jsonl",
 	})

@@ -24,6 +24,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -317,7 +318,8 @@ func TestFactoryWebhooksDefaultClientDoesNotFollowRedirects(t *testing.T) {
 	defer configured.Close()
 
 	deadLetters := make(chan []byte, 1)
-	service := provideFactoryWebhooksService(serviceedges.Edges{
+	events := &wireWebhookEvents{event: wireWebhookEvent()}
+	selected := serviceedges.Edges{
 		FactoryWebhookSecretResolver: func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 			return "redirect-secret", nil
 		},
@@ -325,8 +327,8 @@ func TestFactoryWebhooksDefaultClientDoesNotFollowRedirects(t *testing.T) {
 			deadLetters <- append([]byte(nil), line...)
 			return nil
 		},
-	}, logging.NoopLogger{})
-	events := &wireWebhookEvents{event: wireWebhookEvent()}
+	}
+	service := webhookswire.NewService(events, provideFactoryWebhookHTTPClient(selected), provideFactoryWebhookSecretResolver(selected), provideFactoryWebhookClock(selected), provideFactoryWebhookDeadLetterAppender(selected), logging.NoopLogger{})
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
 		Definitions: []factorydefinitions.FactoryWebhookConfig{{
 			Name:             "redirect-endpoint",
@@ -337,7 +339,6 @@ func TestFactoryWebhooksDefaultClientDoesNotFollowRedirects(t *testing.T) {
 				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange},
 			},
 		}},
-		Events:         events,
 		RuntimeSource:  wireLoadedFactorySource{},
 		DeadLetterPath: "runtime/dead-letter.jsonl",
 	})

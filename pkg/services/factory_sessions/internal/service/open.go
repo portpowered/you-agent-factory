@@ -449,7 +449,6 @@ func openRuntime(
 	webhookSubscription, err := startFactoryWebhookSubscription(
 		ctx,
 		webhooksService,
-		recordingsService,
 		startupRuntime.RecordingLedger(),
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
@@ -616,7 +615,6 @@ func openRuntime(
 func startFactoryWebhookSubscription(
 	ctx context.Context,
 	webhooksService webhooks.Service,
-	recordingsService recordings.Service,
 	ledger recordings.Ledger,
 	loaded factorydefinitions.MutableLoadedFactorySource,
 	active bool,
@@ -625,19 +623,12 @@ func startFactoryWebhookSubscription(
 	if !active || loaded == nil || !hasEnabledWebhooks(loaded.FactoryConfig()) {
 		return nil, nil
 	}
-	if webhooksService == nil {
-		return nil, fmt.Errorf("construct runtime scope: Webhooks service is required")
-	}
-	if recordingsService == nil {
-		return nil, fmt.Errorf("construct runtime scope: Recordings service is required for Webhooks")
-	}
 	if strings.TrimSpace(sessionID) == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
 	scope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
 	return webhooksService.Start(ctx, webhooks.StartRequest{
 		Definitions:      loaded.FactoryConfig().Webhooks,
-		Events:           recordingsService,
 		Scope:            scope,
 		ActivationCursor: lastCanonicalCursor(ledger, scope),
 		RuntimeSource:    loaded,
