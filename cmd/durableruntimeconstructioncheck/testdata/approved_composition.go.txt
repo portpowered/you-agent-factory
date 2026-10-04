@@ -1,6 +1,0 @@
-package factorysessionexecution
-
-func build(root string) {
-	store := NewLazyProjectStore(DirForProjectRoot(root))
-	NewJavaScriptRuntimeService(Config{Persistence: store})
-}

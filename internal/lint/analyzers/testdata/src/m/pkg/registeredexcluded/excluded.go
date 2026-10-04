@@ -1,0 +1,3 @@
+package registeredexcluded
+
+func Clean() {}

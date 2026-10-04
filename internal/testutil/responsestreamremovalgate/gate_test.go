@@ -237,3 +237,55 @@ func TestPrivateContractRemovalGate_NoRetiredPrivateContractSymbolsInProductionS
 		t.Fatal(err)
 	}
 }
+
+func TestDirectorySkips(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		dir  string
+		skip bool
+	}{
+		{"root stays visible", ".", false},
+		{"hidden root child", ".claude", true},
+		{"nested hidden metadata", "interfaces/.worktrees", true},
+		{"generated subtree", "generated", true},
+		{"normal package", "config", false},
+		{"hidden git metadata", ".git", true},
+		{"handwritten source", "pkg/petri", false},
+	}
+	guards := []struct {
+		name   string
+		root   string
+		run    func(string) error
+		marker string
+	}{
+		{"private records", "pkg/transports/cli/run", removalgate.AssertNoPrivateNDJSONInProductionSurfaces, "private NDJSON literal"},
+		{"public imports", "pkg/transports/cli/run", removalgate.AssertPublicTransportLayersDoNotImportLegacyCompat, "legacy compat mapper"},
+		{"retired symbols", "pkg/transports/cli/run", removalgate.AssertNoRetiredPrivateContractSymbolsInProductionSurfaces, "retired private-contract symbol"},
+		{"legacy imports", "pkg", removalgate.AssertLegacyCompatMapperDeleted, "retired legacy compat mapper marker"},
+	}
+	for _, guard := range guards {
+		for _, tc := range cases {
+			t.Run(guard.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				repoRoot := t.TempDir()
+				writeTempProductionSurface(t, repoRoot, "pkg/transports/cli/run/clean.go", "package run\n")
+				probe := filepath.Join(repoRoot, guard.root, tc.dir, "probe.go")
+				if err := os.MkdirAll(filepath.Dir(probe), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				content := "package probe\n// responsestream/compat\n// " + `"recordType":"progress"` + "\n"
+				if err := os.WriteFile(probe, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				err := guard.run(repoRoot)
+				if tc.skip && err != nil {
+					t.Fatalf("expected ignored directory %q, got %v", tc.dir, err)
+				}
+				if !tc.skip && (err == nil || !strings.Contains(err.Error(), guard.marker)) {
+					t.Fatalf("expected %q for visible directory %q, got %v", guard.marker, tc.dir, err)
+				}
+			})
+		}
+	}
+}

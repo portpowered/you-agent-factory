@@ -96,9 +96,9 @@ def repository_payload(name_with_owner=TEST_REPOSITORY, url=TEST_REPOSITORY_URL)
     return {"nameWithOwner": name_with_owner, "url": url}
 
 
-def lifecycle_payload(number=100, state="OPEN", head=TEST_HEAD, queue=None, auto=False):
+def lifecycle_payload(number=100, state="OPEN", head=TEST_HEAD, queue=None, auto=False, draft=False):
     return {"data": {"repository": {"pullRequest": {
-        "number": number, "state": state, "headRefOid": head,
+        "number": number, "state": state, "headRefOid": head, "isDraft": draft,
         "mergeQueueEntry": queue,
         "autoMergeRequest": {"enabledAt": "2026-10-04T06:29:00Z"} if auto else None,
     }}}}
@@ -210,7 +210,7 @@ if command == "api" and not responses:
     views = fixture.get("view", [])
     view = json.loads(views[min(max(0, view_count - 1), len(views) - 1)]["stdout"])
     number = int(next(arg.split("=", 1)[1] for arg in args if arg.startswith("number=")))
-    pr = {"number": number, "state": "OPEN", "headRefOid": view.get("headRefOid", "0123456789abcdef0123456789abcdef01234567"),
+    pr = {"number": number, "state": "OPEN", "isDraft": False, "headRefOid": view.get("headRefOid", "0123456789abcdef0123456789abcdef01234567"),
           "mergeQueueEntry": None, "autoMergeRequest": None}
     responses = [{"stdout": json.dumps({"data": {"repository": {"pullRequest": pr}}})}]
 if not responses:
@@ -1876,7 +1876,9 @@ class MergeWaitTest(unittest.TestCase):
         for change in ({"number": 101}, {"number": True}, {"headRefOid": "secret\n"},
                        {"state": "UNKNOWN"}, {"mergeQueueEntry": {}},
                        {"mergeQueueEntry": {"id": "MQE", "state": "QUEUED", "position": True}},
-                       {"autoMergeRequest": {}}, {"autoMergeRequest": False}):
+                       {"autoMergeRequest": {}}, {"autoMergeRequest": False},
+                       {"isDraft": None}, {"isDraft": "secret"},
+                       {"isDraft": 0}, {"isDraft": 1}):
             cases.append({"data": {"repository": {"pullRequest": {**pr, **change}}}})
         reads = [self.module.JSONRead(self.module.JSONReadStatus.OK, value) for value in cases]
         reads.extend(self.module.JSONRead(status) for status in (
@@ -1915,6 +1917,62 @@ class MergeWaitTest(unittest.TestCase):
               redirect_stdout(stdout), redirect_stderr(stderr)):
             self.module.main()
         return json.loads(stdout.getvalue()), stderr.getvalue(), sleeps, lifecycle_calls, checks.call_count
+
+    def test_main_open_draft_releases_without_check_reads_or_sleep(self):
+        result, _, sleeps, calls, checks = self.invoke_poll([self.lifecycle(draft=True)])
+        self.assertEqual(result, {
+            "status": "ready", "pr": 100, "prState": "OPEN", "reason": "draft",
+            "headRefOid": TEST_HEAD, "mergeQueueEntry": None,
+            "autoMergeArmed": False, "wasQueued": False,
+        })
+        self.assertEqual((sleeps, calls, checks), ([], [0], 0))
+
+    def test_draft_precedes_checks_queue_auto_merge_and_ejection(self):
+        entry = {"id": "MQE", "state": "QUEUED", "position": 1}
+        for queue, history in ((None, False), (None, True), (entry, False)):
+            for state in ("IN_PROGRESS", "SUCCESS", "FAILURE"):
+                with self.subTest(queue=queue, history=history, state=state):
+                    lifecycle = self.lifecycle(draft=True, queue=queue, auto=True)
+                    decision = self.module.merge_wait_decision(
+                        lifecycle, self.snapshot(state), history)
+                    self.assertEqual((decision.outcome, decision.reason, decision.was_queued),
+                                     ("terminal", "draft", history or queue is not None))
+        result, _, sleeps, _, checks = self.invoke_poll([
+            self.lifecycle(queue=entry), self.lifecycle(draft=True, auto=True)])
+        self.assertEqual(result["reason"], "draft")
+        self.assertTrue(result["wasQueued"])
+        self.assertTrue(result["autoMergeArmed"])
+        self.assertEqual((sleeps, checks), ([120], 0))
+        result, _, sleeps, _, checks = self.invoke_poll([
+            self.lifecycle(draft=True, queue=entry, auto=True)])
+        self.assertEqual(result["mergeQueueEntry"], entry)
+        self.assertTrue(result["wasQueued"])
+        self.assertEqual((sleeps, checks), ([], 0))
+
+    def test_terminal_pr_state_precedes_draft(self):
+        for state in ("MERGED", "CLOSED"):
+            with self.subTest(state=state):
+                result, _, sleeps, _, checks = self.invoke_poll([
+                    self.lifecycle(state=state, draft=True)])
+                self.assertEqual(result["reason"], f"pr-{state.lower()}")
+                self.assertEqual((sleeps, checks), ([], 0))
+
+    def test_invalid_draft_flag_remains_bounded_sanitized_uncertainty(self):
+        lifecycle = self.lifecycle(draft="secret")
+        result, stderr, sleeps, _, checks = self.invoke_poll([lifecycle], deadline=250)
+        self.assertEqual(result["reason"], "deadline-requeue")
+        self.assertEqual(result["uncertainty"]["reason"], "lifecycle-invalid-draft-flag")
+        self.assertNotIn("secret", json.dumps(result) + stderr)
+        self.assertEqual((sum(sleeps), checks), (250, 0))
+
+    def test_draft_refresh_discards_terminal_candidate_and_uses_current_head(self):
+        plain = self.lifecycle()
+        result, _, sleeps, calls, checks = self.invoke_poll(
+            [plain, plain, plain, self.lifecycle(draft=True, head=TEST_HEAD_NEXT)],
+            [self.snapshot(), self.snapshot()])
+        self.assertEqual(result["reason"], "draft")
+        self.assertEqual(result["headRefOid"], TEST_HEAD_NEXT)
+        self.assertEqual((sleeps, len(calls), checks), ([120], 4, 2))
 
     def test_main_queue_waits_30_and_90_minutes_then_merges(self):
         queued = self.lifecycle(queue={"id": "MQE", "state": "AWAITING_CHECKS", "position": 1})

@@ -21,28 +21,19 @@ func newRuntimeBuildService(
 	logger *zap.Logger,
 	build runtimebuild.BundleBuilder,
 	recorder factory.PetriMutationRecorder,
-) (*runtimebuild.Service, error) {
-	return runtimebuild.New(
-		"",
-		"",
-		false,
-		"",
-		"",
-		nil,
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, errors.New("unused test loader")
-		},
+) (*runtimebuild.CompatibilityBuild, error) {
+	return runtimebuild.BindCompatibility(runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return nil, errors.New("unused test loader")
+	}, testRuntimeID, logger), runtimebuild.BuildDefaults{},
 		nil,
 		nil,
 		nil,
 		nil,
 		nil,
 		clock,
-		testRuntimeID,
 		logger,
 		build,
-		recorder,
-	)
+		recorder)
 }
 
 func TestService_BuildReplacementAndBuildShareBuilder(t *testing.T) {
@@ -125,25 +116,16 @@ func TestNewRejectsMissingConstructionDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := runtimebuild.New(
-				"",
-				"",
-				false,
-				"",
-				"",
-				nil,
-				test.loadFactory,
+			service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, test.loadFactory, test.newID, test.logger), runtimebuild.BuildDefaults{},
 				nil,
 				nil,
 				nil,
 				nil,
 				nil,
 				test.clock,
-				test.newID,
 				test.logger,
 				test.build,
-				nil,
-			)
+				nil)
 			if service != nil || err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("New() = (%v, %v), want nil error containing %q", service, err, test.want)
 			}
@@ -159,5 +141,27 @@ func TestSessionScopedRecordPath_PreservesDefaultAndSuffixesNonDefaultSessions(t
 	}
 	if got := runtimebuild.SessionScopedRecordPath("/tmp/recording.json", "session-b"); got != "/tmp/recording.session-b.json" {
 		t.Fatalf("suffix path = %q", got)
+	}
+}
+
+func TestPrepareSharedServiceKeepsParallelSessionValuesIndependent(t *testing.T) {
+	t.Parallel()
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop())
+	for _, id := range []string{"session-a", "session-b"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			candidate := &runtimeBuildLoadedSource{factoryDir: "/factory/" + id, config: &factorydefinitions.FactoryConfig{}}
+			result, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{RecordPath: "/recording.json", WorkflowID: "workflow-" + id},
+				runtimebuild.SessionBuildValues{SessionID: id, FolderPath: "/folder/" + id, ExecutionBaseDir: "/runtime/" + id,
+					RuntimeInstanceID: " runtime-" + id + " ", LoadedFactoryCfg: candidate})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.SessionID != id || result.RuntimeInstanceID != "runtime-"+id || result.FolderPath != "/folder/"+id ||
+				result.ExecutionBaseDir != "/runtime/"+id || result.RecordPath != "/recording."+id+".json" ||
+				result.WorkflowID != "workflow-"+id || result.LoadedFactoryCfg != candidate || candidate.RuntimeBaseDir() != "/runtime/"+id {
+				t.Fatalf("session values = %#v", result)
+			}
+		})
 	}
 }

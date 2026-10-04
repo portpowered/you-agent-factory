@@ -79,6 +79,8 @@ type runtimePromptRenderer interface {
 	RenderPrompt(string, []workers.Token, *workers.Context) (string, error)
 }
 type runtimeConfig struct {
+	requestFactoryDirectory            string
+	requestRuntimeBaseDir              string
 	net                                *state.Net
 	scheduler                          scheduler.Scheduler
 	executeService                     executeCapability

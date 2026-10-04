@@ -34,27 +34,18 @@ func TestConstructionRejectsMissingOwnedDependencies(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := runtimebuild.New(
-				"",
-				"",
-				false,
-				"",
-				"",
-				nil,
-				func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-					return nil, errors.New("unused test loader")
-				},
+			service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				return nil, errors.New("unused test loader")
+			}, testRuntimeID, test.logger), runtimebuild.BuildDefaults{},
 				nil,
 				nil,
 				nil,
 				nil,
 				nil,
 				test.clock,
-				testRuntimeID,
 				test.logger,
 				test.build,
-				nil,
-			)
+				nil)
 			if service != nil || err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("New() = (%v, %v), want nil service and error containing %q", service, err, test.want)
 			}

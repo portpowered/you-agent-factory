@@ -38,6 +38,8 @@ Special cases:
     the review workstation's merged-PR short-circuit handles the rest.
   - Only CLOSED PRs: exit 0 immediately; the reviewer decides what a closed,
     unmerged PR means for the lane.
+  - OPEN draft: exit 0 immediately with reason draft so review can ready and
+    arm it; this receipt does not claim PR readiness or terminal checks.
   - No checks reported: tolerated for NO_CHECKS_GRACE_SECONDS (checks can
     lag a fresh push), then released with an explicit no-checks reason so the
     reviewer sees reality. It is never treated as checks-terminal.
@@ -45,7 +47,7 @@ Special cases:
 Stdlib-only; shells out to the `gh` CLI like setup-workspace.py does for git.
 
 Once queue membership is observed, keep this invocation pending until MERGED,
-CLOSED, confirmed ejection, or the bounded deadline. Auto-merge with pending
+CLOSED, an OPEN draft, confirmed ejection, or the bounded deadline. Auto-merge with pending
 checks also waits. Queue history is invocation-local; restart cannot prove an
 earlier ejection. Lifecycle uncertainty never establishes queue absence.
 """
@@ -79,6 +81,7 @@ MERGE_WAIT_QUERY = """query PRMergeWait($owner: String!, $name: String!, $number
     pullRequest(number: $number) {
       number
       state
+      isDraft
       headRefOid
       mergeQueueEntry { id state position }
       autoMergeRequest { enabledAt }
@@ -856,6 +859,7 @@ class MergeLifecycle:
     head_ref_oid: str = ""
     queue_entry: object = None
     auto_merge_armed: bool = False
+    is_draft: bool = False
 
 
 @dataclass(frozen=True)
@@ -875,11 +879,13 @@ def parse_merge_lifecycle(read, pr_number):
     data = payload.get("data")
     repository = data.get("repository") if isinstance(data, dict) else None
     pr = repository.get("pullRequest") if isinstance(repository, dict) else None
-    required = {"number", "state", "headRefOid", "mergeQueueEntry", "autoMergeRequest"}
+    required = {"number", "state", "isDraft", "headRefOid", "mergeQueueEntry", "autoMergeRequest"}
     if not isinstance(pr, dict) or not required.issubset(pr):
         return MergeLifecycle(reason="lifecycle-missing-fields")
     if type(pr["number"]) is not int or pr["number"] != pr_number:
         return MergeLifecycle(reason="lifecycle-pr-number-mismatch")
+    if type(pr["isDraft"]) is not bool:
+        return MergeLifecycle(reason="lifecycle-invalid-draft-flag")
     head = pr["headRefOid"]
     if (pr["state"] not in PR_STATE_PREFERENCE
             or not isinstance(head, str)
@@ -900,7 +906,8 @@ def parse_merge_lifecycle(read, pr_number):
             not isinstance(auto, dict) or not _non_empty_text(auto.get("enabledAt"))):
         return MergeLifecycle(reason="lifecycle-invalid-auto-merge")
     return MergeLifecycle(state=pr["state"], head_ref_oid=head,
-                          queue_entry=entry, auto_merge_armed=auto is not None)
+                          queue_entry=entry, auto_merge_armed=auto is not None,
+                          is_draft=pr["isDraft"])
 
 
 def fetch_merge_lifecycle(pr_number, repository, deadline):
@@ -926,6 +933,9 @@ def merge_wait_decision(lifecycle, snapshot=None, was_queued=False):
         return MergeWaitDecision("uncertain", lifecycle.reason, was_queued)
     if lifecycle.state in {"MERGED", "CLOSED"}:
         return MergeWaitDecision("terminal", f"pr-{lifecycle.state.lower()}", was_queued)
+    if lifecycle.is_draft:
+        return MergeWaitDecision("terminal", "draft",
+                                 was_queued or lifecycle.queue_entry is not None)
     if lifecycle.queue_entry is not None:
         return MergeWaitDecision("pending", "merge-queue-pending", True)
     if was_queued:

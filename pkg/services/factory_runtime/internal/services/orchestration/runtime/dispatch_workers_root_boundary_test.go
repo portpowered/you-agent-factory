@@ -11,7 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -805,125 +804,193 @@ func TestAttemptShutdownDrainsRejectedPreparation(t *testing.T) {
 	}
 }
 
-func TestInvokeWorkerRuntimeAttemptUsesSelectedEffectsAndResumeIdentity(t *testing.T) {
+// requestWorkers observes only the injected Workers boundary.
+type requestWorkers struct {
+	workers.Service
+	calls   atomic.Int32
+	execute func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
+func (service *requestWorkers) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	service.calls.Add(1)
+	if service.execute != nil {
+		return service.execute(ctx, request)
+	}
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+}
+
+func TestWorkstationRequestConcurrentBindingsKeepDetachedCorrelation(t *testing.T) {
 	t.Parallel()
-	for _, outcome := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateCanceled} {
-		t.Run(string(outcome), func(t *testing.T) {
+	service := &requestWorkers{}
+	var publications atomic.Int32
+	resolver := NewWorkstationRequestExecutor(service, invocationInterpolationTestService{}, nil,
+		func() string { return "attempt-selected" }, runtimePromptRendererFunc(func(_ string, tokens []workers.Token, ctx *workers.Context) (string, error) {
+			return ctx.SessionID + ":" + tokens[0].Color.Content[0].Text, nil
+		}), nil, nil, func(workers.ProgressFragment) { publications.Add(1) }, nil, nil)
+	for _, session := range []string{"session-a", "session-b"} {
+		t.Run(session, func(t *testing.T) {
 			t.Parallel()
-			clock := platformclock.NewDeterministic(time.Date(2035, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
-			scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-			execution := &testWorkstationBoundary{}
-			probe := &runtimeInvocationProbe{Service: &fakeWorkerSessionsService{}, outcome: outcome}
-			ledger := &recordingfixtures.ScriptedRuntimeLedger{}
-			f := &factoryImpl{cfg: &runtimeConfig{workerSessions: struct{ workersessions.Service }{probe}, workerAttempts: probe, workerExecution: execution,
-				clock: clock, workerAttemptScheduler: scheduler, runtimeID: "runtime-selected", publicSessionID: "factory-selected"}, eventHistory: ledger}
-			result, err := f.InvokeWorker(context.Background(), factory.InvokeWorkerRequest{DispatchID: "child", Prompt: "run", MaxAttempts: 3, RecordingID: "recording-selected"})
+			cfg, dispatch, _ := directInputPromptRuntimeFixture(t)
+			values := WorkstationRequestValues{RuntimeDefinitions: cfg.runtimeConfig,
+				WorkflowContext:  &workers.Context{SessionID: session, EnvVars: map[string]string{"session": session}},
+				FactorySessionID: session, RuntimeID: "runtime-" + session, RecordingID: "recording-" + session,
+				GenerationID: "generation-" + session, FactoryDirectory: "factory-" + session, RuntimeBaseDir: "base-" + session,
+				MockWorkers: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: session}}},
+			}
+			binding := BindWorkstationRequests(resolver, values)
+			values.WorkflowContext.EnvVars["session"] = "caller-mutated"
+			values.MockWorkers.MockWorkers[0].ID = "caller-mutated"
+			request := dispatch.Execution
+			request.FactorySessionID, request.RuntimeID, request.GenerationID = "", "", ""
+			result, err := binding.ResolveExecutionRequest(request)
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertRuntimeInvocationIdentity(t, probe.request)
-			if probe.execution != execution || probe.clock != clock || probe.scheduler != scheduler || probe.retry.MaxAttempts != 3 {
-				t.Fatal("runtime invocation did not receive selected execution, facts, deadlines and retry budget")
+			assertRequestBindingSelection(t, session, result)
+			result.Input.WorkflowContext.EnvVars["session"] = "result-mutated"
+			result.Input.MockWorkers.MockWorkers[0].ID = "result-mutated"
+			result.Input.Work[0].Content[0].Text = "result-mutated"
+			again, err := binding.ResolveExecutionRequest(request)
+			if err != nil {
+				t.Fatal(err)
 			}
-			want := map[workersessions.State]factory.InvokeWorkerOutcome{workersessions.StateCompleted: factory.InvokeWorkerOutcomeCompleted,
-				workersessions.StateFailed: factory.InvokeWorkerOutcomeFailed, workersessions.StateCanceled: factory.InvokeWorkerOutcomeCanceled}[outcome]
-			if result.DispatchID != "child" || result.WorkerSessionID != "child/resume/1" || result.Outcome != want {
-				t.Fatalf("mapped result = %#v, want %s with retained identities", result, want)
+			if again.Input.WorkflowContext.EnvVars["session"] != session || again.Input.MockWorkers.MockWorkers[0].ID != session ||
+				again.Input.Work[0].Content[0].Text != "The release is ready." {
+				t.Fatalf("binding/request mutated: %#v", again.Input)
 			}
-			associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
-			if len(associations) != 1 || associations[0].DispatchID != "child" || associations[0].WorkerSessionID != "child/resume/1" {
-				t.Fatalf("associations = %#v", associations)
+			request.FactorySessionID, request.RuntimeID, request.GenerationID, request.RecordingID = "explicit-session", "explicit-runtime", "explicit-generation", "explicit-recording"
+			explicit, err := binding.ResolveExecutionRequest(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertExplicitRequestCorrelation(t, explicit)
+			if service.calls.Load() != 0 || publications.Load() != 0 {
+				t.Fatal("Resolve executed or published")
 			}
 		})
 	}
 }
 
-func assertRuntimeInvocationIdentity(t *testing.T, request workersessions.RuntimeAttemptRequest) {
-	t.Helper()
-	if request.Key != (workersessions.RuntimeAttemptKey{RuntimeID: "runtime-selected", DispatchID: "child"}) ||
-		request.ID != "child/resume/1" || request.AttemptID != "child/resume/1" ||
-		request.Execution.Execution.Dispatch.DispatchID != "child" {
-		t.Fatalf("runtime admission lost logical/physical identity: %#v", request)
-	}
-	if request.Execution.Execution.FactorySessionID != "factory-selected" || request.Execution.Execution.RecordingID != "recording-selected" {
-		t.Fatalf("runtime invocation lost session/recording: %#v", request.Execution.Execution)
-	}
-}
-
-func TestInvokeWorkerRuntimeAttemptMissingCapabilityDoesNotReserve(t *testing.T) {
+func TestWorkstationRequestExecutePreservesResultsAndProgress(t *testing.T) {
 	t.Parallel()
-	probe := &runtimeInvocationProbe{Service: &fakeWorkerSessionsService{}}
-	// Embedding only the public service intentionally omits the runtime capability.
-	sessions := struct{ workersessions.Service }{probe}
-	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
-	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions}, eventHistory: ledger}
-	if _, err := f.InvokeWorker(context.Background(), factory.InvokeWorkerRequest{DispatchID: "child", Prompt: "run"}); !errors.Is(err, factory.ErrNotRunning) {
-		t.Fatalf("missing runtime capability = %v", err)
+	for _, outcome := range []string{"success", "failure", "canceled"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			var published bool
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if outcome == "canceled" {
+				cancel()
+			}
+			service := &requestWorkers{execute: func(received context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				if received != ctx {
+					t.Fatal("context replaced")
+				}
+				assertExecutedRequestCorrelation(t, request)
+				request.Input.ProgressPublisher(workers.ProgressFragment{})
+				if outcome == "canceled" {
+					return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled}, context.Canceled
+				}
+				if outcome == "failure" {
+					return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed}, errors.New("selected-worker-error")
+				}
+				return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil
+			}}
+			resolver := NewWorkstationRequestExecutor(service, nil, nil, func() string { return "selected-attempt" }, nil, nil, nil,
+				func(workers.ProgressFragment) { published = true }, nil, nil)
+			values := WorkstationRequestValues{FactorySessionID: "selected-session", RuntimeID: "selected-runtime",
+				RecordingID: "selected-recording", GenerationID: "selected-generation"}
+			result, err := BindWorkstationRequests(resolver, values).Execute(ctx, workers.WorkstationExecutionRequest{RunnerID: "script", Command: "selected-command",
+				Dispatch: work.WorkDispatch{DispatchID: "selected-dispatch", TransitionID: "selected-transition"}})
+			if service.calls.Load() != 1 || !published || result.DispatchID != "selected-dispatch" || result.TransitionID != "selected-transition" {
+				t.Fatalf("result = %#v, err = %v", result, err)
+			}
+			assertRequestExecutionOutcome(t, outcome, result, err)
+		})
 	}
-	if probe.reservations != 0 || len(ledger.DispatchWorkerSessionAssociationsSnapshot()) != 0 {
-		t.Fatal("missing capability reserved identity or published an association")
+}
+
+func TestWorkstationRequestResolutionFailureDoesNotExecute(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"dispatch", "script-definition", "prompt"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			service := &requestWorkers{}
+			resolver := NewWorkstationRequestExecutor(service, nil, nil, func() string { return "attempt" },
+				runtimePromptRendererFunc(func(string, []workers.Token, *workers.Context) (string, error) {
+					return "", errors.New("selected prompt error")
+				}), nil, nil, nil, nil, nil)
+			cfg, dispatch, _ := directInputPromptRuntimeFixture(t)
+			values := WorkstationRequestValues{RuntimeDefinitions: cfg.runtimeConfig, FactorySessionID: "session", RuntimeID: "runtime", GenerationID: "generation"}
+			request := dispatch.Execution
+			if failure == "dispatch" {
+				request.Dispatch.DispatchID = ""
+			}
+			if failure == "script-definition" {
+				values.RuntimeDefinitions = nil
+				request.RunnerID = "script"
+				request.Command = ""
+			}
+			result, err := BindWorkstationRequests(resolver, values).Execute(context.Background(), request)
+			if service.calls.Load() != 0 || result.Outcome != workers.OutcomeFailed {
+				t.Fatalf("unexpected execution/result: %d %#v", service.calls.Load(), result)
+			}
+			if failure == "prompt" {
+				if err != nil || result.Error != "prompt render failed: render workstation prompt: selected prompt error" {
+					t.Fatalf("prompt result = %#v, err = %v", result, err)
+				}
+			} else if err == nil {
+				t.Fatal("want resolution error")
+			}
+		})
 	}
 }
 
-type runtimeInvocationProbe struct {
-	factory.WorkerAttemptOpener
-	workersessions.Service
-	request      workersessions.RuntimeAttemptRequest
-	retry        workersessions.RetryPolicy
-	execution    workers.Service
-	clock        platformclock.Source
-	scheduler    platformclock.TimerSource
-	outcome      workersessions.State
-	reservations int
-}
-
-func (p *runtimeInvocationProbe) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
-	p.reservations++
-	if req.ID == "child" {
-		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
-	}
-	return workersessions.Session{ID: req.ID, State: workersessions.StateReserved}, nil
-}
-
-func (p *runtimeInvocationProbe) InvokeRuntimeSession(_ context.Context, req workersessions.RuntimeAttemptRequest, retry workersessions.RetryPolicy, execution workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource) (workersessions.InvokeSessionResult, error) {
-	p.request, p.retry, p.execution, p.clock, p.scheduler = req, retry, execution, clock, scheduler
-	return workersessions.InvokeSessionResult{Session: workersessions.Session{ID: req.ID, State: p.outcome}}, nil
-}
-
-// This boundary supplies a canceled admission result; Worker Sessions' own
-// component tests prove the control/command race. Here the observer is Runtime's
-// reservation/association/invocation order and outward result mapping.
-type associationWindowSessions struct {
-	factory.WorkerAttemptOpener
-	workersessions.Service
-	reserved chan workersessions.ReserveRequest
-	invoked  chan workersessions.RuntimeAttemptRequest
-}
-
-func (s *associationWindowSessions) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
-	s.reserved <- req
-	return workersessions.Session{ID: req.ID, State: workersessions.StateReserved}, nil
-}
-
-func (s *associationWindowSessions) InvokeRuntimeSession(_ context.Context, req workersessions.RuntimeAttemptRequest, _ workersessions.RetryPolicy, _ workers.Service, _ platformclock.Source, _ platformclock.TimerSource) (workersessions.InvokeSessionResult, error) {
-	s.invoked <- req
-	return workersessions.InvokeSessionResult{Session: workersessions.Session{ID: req.ID, State: workersessions.StateCanceled}}, nil
-}
-
-func assertInvokeWorkerReservationWindow(t *testing.T, sessions *associationWindowSessions, ledger *blockingAssociationLedger) {
+func assertRequestBindingSelection(t *testing.T, session string, result workers.ExecuteRequest) {
 	t.Helper()
-	select {
-	case reserved := <-sessions.reserved:
-		associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
-		if reserved.ID != "dispatch-1" || len(associations) != 1 || associations[0].DispatchID != "dispatch-1" || associations[0].WorkerSessionID != reserved.ID {
-			t.Fatalf("association did not retain the already-reserved identity: %#v, %#v", reserved, associations)
-		}
-	default:
-		t.Fatal("association published before identity reservation")
+	correlation := result.Correlation
+	if correlation.FactorySessionID != session || correlation.RuntimeID != "runtime-"+session ||
+		correlation.GenerationID != "generation-"+session || correlation.DispatchID != "dispatch-1" ||
+		correlation.RequestID != "request-1" || correlation.AttemptID != "attempt-selected" || result.Input.RecordingID != "recording-"+session {
+		t.Fatalf("correlation/input = %#v / %#v", correlation, result.Input)
 	}
-	select {
-	case invoked := <-sessions.invoked:
-		t.Fatalf("invocation began before association publication returned: %#v", invoked)
-	default:
+	if result.Input.WorkflowContext.EnvVars["session"] != session || result.Input.MockWorkers.MockWorkers[0].ID != session ||
+		result.Target.Prompt.UserMessage != session+":The release is ready." || result.Target.FactoryDirectory != "factory-"+session ||
+		result.Target.Environment.WorkingDirectory != "base-"+session {
+		t.Fatalf("selected target/input = %#v / %#v", result.Target, result.Input)
+	}
+}
+
+func assertExplicitRequestCorrelation(t *testing.T, explicit workers.ExecuteRequest) {
+	t.Helper()
+	if explicit.Correlation.FactorySessionID != "explicit-session" || explicit.Correlation.RuntimeID != "explicit-runtime" ||
+		explicit.Correlation.GenerationID != "explicit-generation" || explicit.Input.RecordingID != "explicit-recording" {
+		t.Fatalf("explicit correlation lost: %#v", explicit)
+	}
+}
+
+func assertExecutedRequestCorrelation(t *testing.T, request workers.ExecuteRequest) {
+	t.Helper()
+	if request.Correlation.FactorySessionID != "selected-session" || request.Correlation.GenerationID != "selected-generation" ||
+		request.Input.RecordingID != "selected-recording" || request.Correlation.AttemptID != "selected-attempt" {
+		t.Fatalf("request = %#v", request)
+	}
+}
+
+func assertRequestExecutionOutcome(t *testing.T, outcome string, result workers.WorkResult, err error) {
+	t.Helper()
+	switch outcome {
+	case "success":
+		if err != nil || result.Outcome != workers.OutcomeAccepted {
+			t.Fatalf("result = %#v, err = %v", result, err)
+		}
+	case "failure":
+		if err == nil || result.Outcome != workers.OutcomeFailed {
+			t.Fatalf("result = %#v, err = %v", result, err)
+		}
+	case "canceled":
+		if !errors.Is(err, context.Canceled) || result.Outcome != workers.OutcomeCanceled {
+			t.Fatalf("result = %#v, err = %v", result, err)
+		}
 	}
 }
