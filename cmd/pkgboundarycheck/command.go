@@ -15,7 +15,6 @@ type config struct {
 	baselineCacheDir                string
 	writeTransportBehaviorBaseline  bool
 	writeProductionDefaultBaseline  bool
-	writeTestBehaviorBaseline       bool
 	writePetriPublicSurfaceBaseline bool
 }
 
@@ -37,12 +36,6 @@ func parseConfig() config {
 		"create-transport-behavior-baseline",
 		false,
 		"create the deletion-only transport behavior baseline; fails when the file already exists",
-	)
-	flag.BoolVar(
-		&cfg.writeTestBehaviorBaseline,
-		"create-test-behavior-boundary-baseline",
-		false,
-		"create the exact deletion-only test behavior baseline; fails when the file exists or no debt exists",
 	)
 	flag.BoolVar(
 		&cfg.writePetriPublicSurfaceBaseline,
@@ -120,8 +113,6 @@ func countAlwaysBlockingViolations(findings scanResult) int {
 		len(findings.constructedServiceEdgesFindings) +
 		len(findings.productionDefaultFindings) +
 		len(findings.staleProductionDefaultEntries) +
-		len(findings.testBehaviorFindings) +
-		len(findings.staleTestBehaviorEntries) +
 		len(findings.petriPublicSurfaceFindings) +
 		len(findings.stalePetriPublicSurfaceEntries)
 }

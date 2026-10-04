@@ -19,10 +19,6 @@ type scanResult struct {
 	recordedProductionDefaultFindings   []productionDefaultFinding
 	staleProductionDefaultEntries       []productionDefaultBaselineEntry
 	productionDefaultBaselineCount      int
-	testBehaviorFindings                []testBehaviorFinding
-	recordedTestBehaviorFindings        []testBehaviorFinding
-	staleTestBehaviorEntries            []testBehaviorBaselineEntry
-	testBehaviorBaselineCount           int
 	petriPublicSurfaceFindings          []petriPublicSurfaceFinding
 	recordedPetriPublicSurfaceFindings  []petriPublicSurfaceFinding
 	stalePetriPublicSurfaceEntries      []petriPublicSurfaceBaselineEntry

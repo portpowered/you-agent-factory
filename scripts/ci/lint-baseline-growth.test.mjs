@@ -79,3 +79,12 @@ test('cross-owner policy debt requires its exact compiler source and owner', () 
   assert.deepEqual(orphanTimingKeys(key, metadata.replace('policy_test.go', 'other_test.go'), 'm/'), [key]);
   assert.deepEqual(orphanTimingKeys(key, 'm/pkg/a', 'm/'), [key]);
 });
+
+
+test('transport policy debt requires its exact compiler source and owner', () => {
+  const key = 'test-transport-owner-policy|pkg/transports/a_test|pkg/transports/a/policy_test.go#pkg/services/work.NormalizeList::count=2';
+  const metadata = 'm/pkg/transports/a_test [m/pkg/transports/a.test]||policy_test.go||';
+  assert.deepEqual(orphanTimingKeys(key, metadata, 'm/'), []);
+  assert.deepEqual(orphanTimingKeys(key, metadata.replace('policy_test.go', 'other_test.go'), 'm/'), [key]);
+  assert.deepEqual(orphanTimingKeys(key, 'm/pkg/transports/a', 'm/'), [key]);
+});

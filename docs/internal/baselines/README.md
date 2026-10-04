@@ -643,3 +643,9 @@ Go-doc description. `internal/functionaltestmetadata` compares the current
 undocumented customer set against that baseline: removals succeed, newly
 undocumented customer tests and baseline expansions fail. Harness/internal
 helpers are excluded from the ledger.
+
+The lint migration retired the optional `test-behavior-boundary-baseline.json`
+loader and writer with the test-behavior walker. `TestBoundary` now uses only
+compiler-observed exact file/symbol/count keys in the shared analyzer baseline.
+Transport policy rules had no observed debt in either compiler configuration
+when migrated. The audit paragraph above describes historical paths.

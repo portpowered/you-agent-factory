@@ -28,13 +28,6 @@ func main() {
 		}
 		return
 	}
-	if cfg.writeTestBehaviorBaseline {
-		if err := createTestBehaviorBaseline(cfg); err != nil {
-			fmt.Fprintln(stderrWriter, err)
-			exitFunc(1)
-		}
-		return
-	}
 	if cfg.writePetriPublicSurfaceBaseline {
 		if err := createPetriPublicSurfaceBaseline(cfg); err != nil {
 			fmt.Fprintln(stderrWriter, err)

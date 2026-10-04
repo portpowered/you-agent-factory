@@ -49,9 +49,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err := scanRepositoryProcessBoundaries(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
-	if err := scanRepositoryTestBehavior(repoRoot, &result); err != nil {
-		return scanResult{}, err
-	}
 	if err := scanRepositoryProductionDefaults(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
@@ -190,31 +187,6 @@ func scanRepositoryProcessBoundaries(repoRoot string, result *scanResult) error 
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-func scanRepositoryTestBehavior(repoRoot string, result *scanResult) error {
-	findings, err := scanTestBehaviorBoundaries(repoRoot)
-	if err != nil {
-		return err
-	}
-	baseline, err := loadTestBehaviorBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
-	result.testBehaviorFindings, result.staleTestBehaviorEntries, err =
-		partitionTestBehaviorFindings(findings, baseline)
-	if err != nil {
-		return err
-	}
-	result.recordedTestBehaviorFindings = recordedFindingsFromPartition(
-		findings,
-		result.testBehaviorFindings,
-		func(finding testBehaviorFinding) string {
-			return testBehaviorKey(finding.FilePath, finding.Kind, finding.ImportPath, finding.Symbol)
-		},
-	)
-	result.testBehaviorBaselineCount = len(baseline.Entries)
 	return nil
 }
 

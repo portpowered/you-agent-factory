@@ -31,7 +31,7 @@ func runTestBoundary(pass *analysis.Pass) (any, error) {
 		}
 		found = append(found, inspectTestBoundary(pass, file, unit)...)
 	}
-	reportWithBaseline(pass, unit, setOf("test-cross-owner-policy"), countedTestPolicy(found), true, testPolicyBaseline(pass, unit))
+	reportWithBaseline(pass, unit, setOf("test-cross-owner-policy", "test-transport-owner-policy"), countedTestPolicy(found), true, testPolicyBaseline(pass, unit))
 	return nil, nil
 }
 
@@ -51,6 +51,7 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) []vio
 	var found []violation
 	if under(unit, "pkg/transports") {
 		inspectTestWorkCallbacks(pass, file, unit)
+		found = append(found, transportTestPolicyDeclarations(pass, file, unit)...)
 	}
 	if under(unit, "pkg/transports/http") {
 		inspectTestEngineLiterals(pass, file, unit)
@@ -67,6 +68,9 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) []vio
 			return true
 		}
 		if v := crossOwnerTestPolicyViolation(pass, id, obj, unit, called[id]); v != nil {
+			found = append(found, *v)
+		}
+		if v := transportTestPolicyViolation(pass, id, obj, unit, called[id]); v != nil {
 			found = append(found, *v)
 		}
 		reportTestComposition(pass, id, obj, unit, path, called[id])
@@ -134,7 +138,7 @@ func testPolicyBaseline(pass *analysis.Pass, unit string) map[string]struct{} {
 	}
 	for key := range listed {
 		parts := strings.SplitN(key, "|", 3)
-		if len(parts) != 3 || parts[0] != "test-cross-owner-policy" || parts[1] != unit {
+		if len(parts) != 3 || (parts[0] != "test-cross-owner-policy" && parts[0] != "test-transport-owner-policy") || parts[1] != unit {
 			continue
 		}
 		name, _, _ := strings.Cut(parts[2], "#")

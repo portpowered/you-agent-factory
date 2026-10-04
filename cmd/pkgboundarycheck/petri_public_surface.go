@@ -15,6 +15,12 @@ import (
 )
 
 const (
+	factoryDefinitionsInternalContractsImportPath = repositoryImportPrefix + "pkg/services/factory_definitions/internal/contracts"
+	factoryRuntimeRootImportPath                  = repositoryImportPrefix + "pkg/services/factory_runtime"
+	factoryDefinitionsImportPath                  = repositoryImportPrefix + "pkg/services/factory_definitions"
+)
+
+const (
 	petriPublicSurfaceRequiredOwner  = "Factory Runtime internals"
 	petriPublicSurfaceInternalPrefix = "pkg/services/factory_runtime/internal/"
 	petriPublicSurfaceBaselinePath   = "docs/internal/baselines/petri-public-surface-baseline.json"
