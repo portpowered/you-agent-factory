@@ -183,6 +183,9 @@ func reconcileWorkerRecording(projection WorkerRecordingProjection, terminal *Wo
 	}
 	projection.Status = classifyWorkerRecordingStatus(projection, terminal != nil)
 	projection.Complete = projection.Status == WorkerRecordingStatusComplete
+	if projection.Status != WorkerRecordingStatusIncomplete {
+		projection.InterruptionReason = ""
+	}
 	if projection.Status == WorkerRecordingStatusDegraded && projection.Degradation == "" {
 		projection.Degradation = "DURABLE_CAPTURE_LOSS"
 	}

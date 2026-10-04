@@ -234,9 +234,12 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, id string) (r
 		}
 		snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
 			WorkerSessionID: sessionID, Topic: p.Topic, Status: p.Status, LastPosition: p.LastPosition, Failure: p.Degradation,
-			InterruptionReason: session.projection.InterruptionReason, ExecutionTerminal: cloneWorkerRecordingTerminal(p.ExecutionTerminal), Records: p.Records})
-		if p.Status == recordings.WorkerRecordingStatusIncomplete && snapshot.Sessions[len(snapshot.Sessions)-1].InterruptionReason == "" {
-			reason := p.Degradation
+			ExecutionTerminal: cloneWorkerRecordingTerminal(p.ExecutionTerminal), Records: p.Records})
+		if p.Status == recordings.WorkerRecordingStatusIncomplete {
+			reason := session.projection.InterruptionReason
+			if reason == "" {
+				reason = p.Degradation
+			}
 			if reason == "" {
 				reason = recordings.WorkerRecordingInterruptionProcessStopped
 			}

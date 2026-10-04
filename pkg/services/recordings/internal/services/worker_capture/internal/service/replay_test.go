@@ -931,7 +931,7 @@ func TestFileWriterLegacyBaselineAndDamagedJournal(t *testing.T) {
 	record := journalRecord(t, "legacy", "legacy-session")
 	// Fixed legacy bytes keep this compatibility witness independent of the
 	// current snapshot encoder.
-	data := []byte(`{"recordingId":"legacy","sessions":[{"workerSessionId":"legacy-session","records":[{"ID":{"Topic":"worker-session/legacy-session/events","Position":1},"SourceType":"worker_session_lifecycle","SourceID":"legacy-session","SourceSequence":1,"SourceEventID":"started","SchemaID":"workers.draft.v1","Payload":{"kind":"SESSION","phase":"STARTED","provenance":{"delivery":"SYNTHESIZED","fidelity":"LIFECYCLE_ONLY","nativeEventType":"worker_session_lifecycle","provider":"","representation":"NOTIFICATION"},"payload":{"status":"STARTING","workerSessionId":"legacy-session"}}}]}]}`)
+	data := []byte(legacyWorkerOpeningFixture)
 	if err := local.WriteFile(writer.path("legacy"), data); err != nil {
 		t.Fatal(err)
 	}
