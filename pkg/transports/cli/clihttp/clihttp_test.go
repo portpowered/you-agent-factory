@@ -31,11 +31,18 @@ func (b *trackedBody) Close() error { b.closed = true; return nil }
 func (c *clockSequence) Now() time.Time { value := c.values[c.index]; c.index++; return value }
 
 func TestProtocolGetJSONReturnsResponseMetadata(t *testing.T) {
+	t.Parallel()
+	deadline := time.Now().Add(time.Hour)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
 	start := time.Unix(10, 0)
 	clock := &clockSequence{values: []time.Time{start, start.Add(37 * time.Millisecond)}}
 	protocol, err := NewProtocol(doerFunc(func(request *http.Request) (*http.Response, error) {
 		if request.Method != http.MethodGet {
 			t.Fatalf("method = %s", request.Method)
+		}
+		if got, ok := request.Context().Deadline(); !ok || !got.Equal(deadline) {
+			t.Fatalf("request deadline = %v, present = %v, want %v", got, ok, deadline)
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"sessions":["~default"]}`))}, nil
 	}), clock)
@@ -45,7 +52,7 @@ func TestProtocolGetJSONReturnsResponseMetadata(t *testing.T) {
 	var response struct {
 		Sessions []string `json:"sessions"`
 	}
-	result, err := protocol.GetJSON(context.Background(), "http://factory.test/factory-sessions", &response)
+	result, err := protocol.GetJSON(ctx, "http://factory.test/factory-sessions", &response)
 	if err != nil {
 		t.Fatalf("GetJSON: %v", err)
 	}

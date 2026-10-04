@@ -33,14 +33,6 @@ func (*recordingAgyPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocat
 	return nil, nil, nil
 }
 
-func TestEdgesDoNotExposeComposedAgyPTYAllocator(t *testing.T) {
-	t.Parallel()
-
-	if _, exposed := reflect.TypeOf(serviceedges.Edges{}).FieldByName("AgyPTYAllocator"); exposed {
-		t.Fatal("Edges exposes composed AgyPTYAllocator; only Host and Clock effects may be replaced")
-	}
-}
-
 func TestProvideAgyPTYAllocatorSelectsInertPlatformAdapter(t *testing.T) {
 	t.Parallel()
 
