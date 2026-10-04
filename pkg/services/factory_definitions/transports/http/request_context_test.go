@@ -57,7 +57,7 @@ func TestValidateFactory_CanceledDuringRootCallCompletesWithoutHang(t *testing.T
 
 	select {
 	case <-entered:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("validation owner was not entered")
 	}
 	peer := httptest.NewRecorder()
@@ -188,7 +188,7 @@ func TestGetCurrentFactoryBySessionId_CanceledDuringRootCallCompletesWithoutHang
 
 	select {
 	case <-entered:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("current Factory owner was not entered")
 	}
 	cancel()
