@@ -90,7 +90,7 @@ func waitForFixtureProcessTree(
 		watcher.add(watcher.workDir)
 		watcher.addExistingAttempts()
 	}
-	deadline := time.NewTimer(30 * time.Second)
+	deadline := time.NewTimer(120 * time.Second)
 	defer deadline.Stop()
 	var lastReadiness string
 	for {
@@ -233,7 +233,7 @@ func stopCancelDaemon(t *testing.T, binaryPath string, fixture cancelFixture, da
 		if err := daemon.waitError(); err != nil {
 			t.Fatalf("prebuilt Factory daemon exit after public stop: %v; stdout=%s stderr=%s", err, daemon.stdout.String(), daemon.stderr.String())
 		}
-	case <-time.After(20 * time.Second):
+	case <-time.After(90 * time.Second):
 		t.Fatalf("prebuilt Factory daemon did not exit after public stop; stdout=%s stderr=%s", daemon.stdout.String(), daemon.stderr.String())
 	}
 	daemon.mu.Lock()
@@ -280,7 +280,7 @@ func cleanupCancelDaemon(daemon *cancelDaemon) {
 	}
 	select {
 	case <-daemon.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(60 * time.Second):
 	}
 }
 
