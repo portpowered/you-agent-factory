@@ -722,11 +722,15 @@ func dispatchCanceled(result workers.WorkstationDispatchResult, dispatchErr erro
 		errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled)
 }
 
-func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attemptID string) bool {
-	r.mu.RLock()
-	ownerID, owned := r.dispatchOwners[logicalDispatchID]
-	r.mu.RUnlock()
-	return owned && ownerID != workerID && attemptID == logicalDispatchID
+// runtimeAttemptDispatchConflictLocked preserves the direct dispatch fence
+// while allowing equal physical defaults in distinct runtime scopes.
+func (r *registry) runtimeAttemptDispatchConflictLocked(key workersessions.RuntimeAttemptKey, workerID, attemptID string) bool {
+	ownerID, owned := r.dispatchOwners[key.DispatchID]
+	if !owned || ownerID == workerID || attemptID != key.DispatchID {
+		return false
+	}
+	peer := r.runtimeAttemptControls[ownerID]
+	return peer == nil || peer.key == key
 }
 
 // BeginRuntimeAttempt opens the Worker Session observation and recording
@@ -746,10 +750,13 @@ func (r *registry) BeginRuntimeAttempt(
 	}
 	ctx = runtimeAttemptContext(ctx)
 	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
-	if r.runtimeAttemptOwnedByOther(logicalDispatchID, req.ID, attemptID) {
+	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalDispatchID}
+	r.mu.RLock()
+	conflict := r.runtimeAttemptDispatchConflictLocked(key, req.ID, attemptID)
+	r.mu.RUnlock()
+	if conflict {
 		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
-	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalDispatchID}
 	if !r.reserveRuntimeAttemptKey(key, req.ID) {
 		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
@@ -814,7 +821,7 @@ func (r *registry) releaseRuntimeAttemptKey(key workersessions.RuntimeAttemptKey
 	}
 }
 
-func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handles ...*runtimeAttempt) bool {
+func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handle *runtimeAttempt) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.runtimeAttempts == nil {
@@ -826,17 +833,15 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 	if r.latestRuntimeDispatchIDs == nil {
 		r.latestRuntimeDispatchIDs = make(map[string]string)
 	}
-	if ownerID, exists := r.dispatchOwners[logicalDispatchID]; exists && ownerID != workerID && attemptID == logicalDispatchID {
+	if r.runtimeAttemptOwners[handle.key] != workerID || r.runtimeAttemptDispatchConflictLocked(handle.key, workerID, attemptID) {
 		return false
 	}
 	r.dispatchOwners[logicalDispatchID] = workerID
 	r.runtimeAttempts[workerID] = struct{}{}
 	r.latestRuntimeDispatchIDs[workerID] = logicalDispatchID
-	if len(handles) > 0 && handles[0] != nil {
-		if r.runtimeAttemptControls == nil {
-			r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
-		}
-		r.runtimeAttemptControls[workerID] = handles[0]
+	if r.runtimeAttemptControls == nil {
+		r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
 	}
+	r.runtimeAttemptControls[workerID] = handle
 	return true
 }

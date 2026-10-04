@@ -1417,13 +1417,45 @@ func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing
 	}
 }
 
-func TestRuntimeAttemptClaim_RaceGuardRejectsConflictingOwner(t *testing.T) {
-	r := newTestRegistry(t)
-	r.mu.Lock()
-	r.dispatchOwners["dispatch-race"] = "worker-owner"
-	r.mu.Unlock()
-	if r.claimRuntimeAttempt("dispatch-race", "worker-other", "dispatch-race") {
-		t.Fatal("claimRuntimeAttempt() accepted a conflicting owner")
+func TestKeyedRuntime_EqualPhysicalDefaultsKeepOwnedTopicsAndCompletion(t *testing.T) {
+	t.Parallel()
+	for _, physicalID := range []string{"", perRuntimeLogicalDispatchID} {
+		t.Run("physical="+physicalID, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			a := preparePerRuntimeAttemptFixture(t, "a", sink)
+			b := preparePerRuntimeAttemptFixture(t, "b", sink, a)
+			for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+				fixture.request.AttemptID = physicalID
+				var err error
+				fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+				if err != nil || fixture.attempt == nil {
+					t.Fatalf("BeginRuntimeAttempt(%s): %v", fixture.request.ID, err)
+				}
+				t.Cleanup(func() {
+					if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+						t.Error(err)
+					}
+				})
+				// Observers expect the resolved physical identity, including the
+				// unchanged dispatch default when the input AttemptID was empty.
+				fixture.request.AttemptID = perRuntimeLogicalDispatchID
+				assertPerRuntimeOpeningAttribution(t, fixture, sink)
+			}
+			controlA := bindPerRuntimeCancellation(t, a, nil)
+			controlB := bindPerRuntimeCancellation(t, b, nil)
+			publishPerRuntimeProgress(t, a, sink)
+			cancelEqualPhysicalAttempt(t, a, controlA)
+			assertPerRuntimeCancellationCalls(t, controlA, 1)
+			assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+			publishPerRuntimeProgress(t, b, sink)
+			if err := b.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeCancellationCalls(t, controlB, 0)
+			assertPerRuntimeFirstTerminal(t, a, sink, workersessions.StateCanceled)
+			assertPerRuntimeFirstTerminal(t, b, sink, workersessions.StateCompleted)
+		})
 	}
 }
 
@@ -8106,5 +8138,31 @@ func TestInterruptSuccessorMatchesAcceptsAdmittedStatesIncludingFastCompletion(t
 		if got := interruptSuccessorMatches(session, reference, sourceDispatch); got != tc.want {
 			t.Errorf("state %s: interruptSuccessorMatches = %v, want %v", tc.state, got, tc.want)
 		}
+	}
+}
+
+func cancelEqualPhysicalAttempt(t *testing.T, a *perRuntimeAttemptFixture, controlA *perRuntimeCancellation) {
+	t.Helper()
+	controlled := make(chan error, 1)
+	go func() {
+		result, err := a.service.Cancel(context.Background(), workersessions.ControlRequest{ID: a.request.ID})
+		if err == nil && (result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled || result.DispatchID != perRuntimeLogicalDispatchID) {
+			err = fmt.Errorf("Cancel(A) = %#v, want APPLIED/CANCELED with logical dispatch", result)
+		}
+		controlled <- err
+	}()
+	if err := waitControlledSignal(controlA.invoked, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.attempt.Complete(context.Background(), runtimeAttemptCanceledDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-controlled:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("targeted cancellation did not join its completion")
 	}
 }
