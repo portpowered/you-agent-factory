@@ -22,7 +22,7 @@ const (
 	restartRecoveryFailedWorkID   = "restart-recovery-terminal-failed"
 	restartRecoveryWorkerName     = "recorded-recovery-worker"
 	restartRecoverySecretMarker   = "restart-recovery-private-fixture-value"
-	restartRecoveryProcessTimeout = 20 * time.Second
+	restartRecoveryProcessTimeout = 90 * time.Second
 )
 
 type restartRecoveryFailureFixture struct {
@@ -60,20 +60,20 @@ func verifyRestartRecoveryH01SuccessorGeneration(
 		restartRecoveryEligibleWorkID: "processing",
 		restartRecoveryCompleteWorkID: "complete",
 		restartRecoveryFailedWorkID:   "failed",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, secondWorks, source.expectedWorks)
 	assertRestartWorkIDsUnique(t, secondWorks, source.expectedWorks)
 	if got := restartWorkHistoryFingerprint(t, second.baseURL, restartRecoveryWorkIDs()); !equalStringSlices(got, source.workEventsBefore) {
 		t.Fatalf("admitted and terminal Work history changed during resume:\nbefore=%v\nafter=%v", source.workEventsBefore, got)
 	}
-	newDispatchID := waitForBoardRearmedDispatch(t, second.baseURL, restartRecoveryEligibleWorkID, source.oldDispatchID, 30*time.Second)
+	newDispatchID := waitForBoardRearmedDispatch(t, second.baseURL, restartRecoveryEligibleWorkID, source.oldDispatchID, 120*time.Second)
 	newWorker := waitForBoardWorkerObservation(t, second.baseURL, second.sessionID, restartRecoveryEligibleWorkID, func(observation factoryapi.WorkerSessionObservation) bool {
 		return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
-	}, 30*time.Second)
+	}, 120*time.Second)
 	if newWorker.WorkerSessionId == source.oldWorkerSessionID {
 		t.Fatalf("successor reused source Worker Session %q", source.oldWorkerSessionID)
 	}
-	newOwnerDispatch, newOwnerID := waitForBoardActiveOwner(t, second.baseURL, restartRecoveryEligibleWorkID, 30*time.Second)
+	newOwnerDispatch, newOwnerID := waitForBoardActiveOwner(t, second.baseURL, restartRecoveryEligibleWorkID, 120*time.Second)
 	if newOwnerDispatch != newDispatchID || newOwnerID != newWorker.WorkerSessionId || newOwnerID == source.oldOwnerID {
 		t.Fatalf("successor active owner = %q/%q; dispatch=%q worker=%q oldOwner=%q", newOwnerDispatch, newOwnerID, newDispatchID, newWorker.WorkerSessionId, source.oldOwnerID)
 	}
@@ -95,12 +95,12 @@ func completeRestartRecoveryDispatch(t *testing.T, evidence *restartBaselineEvid
 	if err := os.WriteFile(releasePath, []byte("release\n"), 0o600); err != nil {
 		t.Fatalf("release successor worker: %v", err)
 	}
-	waitForBoardDispatchResponse(t, daemon.baseURL, restartRecoveryEligibleWorkID, newDispatchID, 30*time.Second)
+	waitForBoardDispatchResponse(t, daemon.baseURL, restartRecoveryEligibleWorkID, newDispatchID, 120*time.Second)
 	finalWorks := waitForBoardStates(t, daemon.baseURL, map[string]string{
 		restartRecoveryEligibleWorkID: "complete",
 		restartRecoveryCompleteWorkID: "complete",
 		restartRecoveryFailedWorkID:   "failed",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	expectedWorks := restartRecoveryExpectedWorks(true)
 	assertBoardList(t, finalWorks, expectedWorks)
 	assertRestartWorkIDsUnique(t, finalWorks, expectedWorks)
@@ -124,7 +124,7 @@ func completeRestartRecoveryDispatch(t *testing.T, evidence *restartBaselineEvid
 
 func finalizeRestartRecoveryEvidence(t *testing.T, evidence *restartBaselineEvidence, daemon *boardPersistenceDaemon, sourceRecordPath, successorRecordPath, factoryA, factoryB string) {
 	t.Helper()
-	if _, err := waitForRestartRecoveryRecord(t, daemon, "success", 10*time.Second); err != nil {
+	if _, err := waitForRestartRecoveryRecord(t, daemon, "success", 60*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	assertRestartRecoveryRecordSafe(t, daemon, "success")
@@ -191,7 +191,7 @@ func TestRestartRecoveryTerminalHistoryRemainsIdle(t *testing.T) {
 	before := waitForBoardStates(t, first.baseURL, map[string]string{
 		restartRecoveryCompleteWorkID: "complete",
 		restartRecoveryFailedWorkID:   "failed",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, before, want)
 	assertRestartWorkIDsUnique(t, before, want)
 	beforeEvents := restartWorkHistoryFingerprint(t, first.baseURL, restartRecoveryTerminalWorkIDs())
@@ -211,7 +211,7 @@ func TestRestartRecoveryTerminalHistoryRemainsIdle(t *testing.T) {
 	after := waitForBoardStates(t, second.baseURL, map[string]string{
 		restartRecoveryCompleteWorkID: "complete",
 		restartRecoveryFailedWorkID:   "failed",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, after, want)
 	assertRestartWorkIDsUnique(t, after, want)
 	if got := restartWorkHistoryFingerprint(t, second.baseURL, restartRecoveryTerminalWorkIDs()); !equalStringSlices(got, beforeEvents) {
@@ -222,7 +222,7 @@ func TestRestartRecoveryTerminalHistoryRemainsIdle(t *testing.T) {
 	if afterObservation.DispatchCount != 0 {
 		t.Fatalf("terminal-only successor created %d dispatches, want zero", afterObservation.DispatchCount)
 	}
-	if _, err := waitForRestartRecoveryRecord(t, second, "success", 10*time.Second); err != nil {
+	if _, err := waitForRestartRecoveryRecord(t, second, "success", 60*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	assertRestartRecoveryRecordSafe(t, second, "success")

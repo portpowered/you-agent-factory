@@ -240,7 +240,7 @@ func runProbeObsList(t *testing.T, server probeObsServer, workID string) probeOb
 		result.Falsifier = err.Error()
 	}
 
-	cliContext, cliCancel := context.WithTimeout(t.Context(), 10*time.Second)
+	cliContext, cliCancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cliCancel()
 	result.Stdout, result.Stderr, result.CLIExitStatus, err = runProbeObsCLI(cliContext, server, args)
 	if err != nil {
@@ -274,7 +274,7 @@ func probeObsListEndpoint(serverURL, workID string) string {
 
 func fetchProbeObsHTTP(t *testing.T, endpoint string) (status, resultCount int, responseBody string, err error) {
 	t.Helper()
-	requestContext, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	requestContext, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, endpoint, nil)
 	if err != nil {

@@ -1,143 +1,92 @@
 // Package wire is the Automations service composition boundary.
 //
-// Wire performs construction only, returns the singular automations.Root, and
-// starts no lifecycle components. Parent-private
-// reconciliation/cron/script-pollers/filesystem-watchers assembly and the
-// accepted hosted-sources construction port stay inside the owner boundary;
-// peers depend on Service rather than owner internals or construction ports.
+// Focused providers construct one inert implementation each. Canonical Wire
+// supplies completed behaviors to the operation owner; runtime activation
+// allocates scoped state and resources through those already-injected owners.
 package wire
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
+	"github.com/jonboulle/clockwork"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
+	sourcelifecyclewire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-// HostedSourceInputs is the cohesive set of external effects needed to
-// compose Automations-owned hosted-source and cursor-persistence
-// implementations. The application graph selects these effects once; it
-// never constructs or passes a hosted-source service into Runtime opening.
-type HostedSourceInputs struct {
-	Clock            automations.HostedLinearClock
-	HTTPClient       automations.HostedLinearHTTPDoer
-	SecretResolver   automations.HostedLinearSecretResolver
-	LinearEndpoint   string
-	CheckpointStore  automations.HostedLinearCheckpointStore
-	CursorFileSystem scriptpollerswire.CursorPersistenceFileSystem
+// CursorScopes exposes the private recovery owner to canonical composition.
+type CursorScopes = cursorscopes.CursorScopes
+
+type SourceLifecycle = sourcelifecycle.SourceLifecycle
+type Reconciliation = reconciliation.Service
+type ScriptPollers = scriptpollers.Service
+type Cron = cron.Service
+type FilesystemWatchers = filesystemwatchers.Service
+type Clock = clockwork.Clock
+
+// NewSourceLifecycle constructs one independent owner from completed behaviors.
+// C08 includes the operator-authorized canonical cron execution-policy input.
+func NewSourceLifecycle(logger *zap.Logger, clock Clock, scriptPollers ScriptPollers,
+	cronService Cron, filesystemWatchers FilesystemWatchers, hostedPollers automations.HostedPollers,
+	cursors CursorScopes, executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+) SourceLifecycle {
+	return sourcelifecyclewire.NewService(logger, clock, scriptPollers, cronService,
+		filesystemWatchers, hostedPollers, cursors, executionPolicy)
 }
 
-// NewRoot constructs the singular Automations root. Hosted-source mechanics
-// are composed here, behind the owning service boundary, before the root is
-// published to peer services.
-func NewRoot(
-	logger *zap.Logger,
-	clock automations.Clock,
-	commandRunner platformprocess.CommandRunner,
-	workflowID string,
-	defaultFactoryDir string,
-	hosted HostedSourceInputs,
+func NewReconciliation(lifecycle SourceLifecycle) Reconciliation {
+	return reconciliationwire.NewService(lifecycle)
+}
+
+// CursorPersistenceFileSystem is the cursor owner's exact external effect.
+type CursorPersistenceFileSystem = cursorscopeswire.CursorPersistenceFileSystem
+
+// NewCursorScopes constructs the scoped recovery owner without filesystem IO.
+func NewCursorScopes(files CursorPersistenceFileSystem) CursorScopes {
+	return cursorscopeswire.NewService(files)
+}
+
+// Owner is the completed Automations operation implementation.
+type Owner = automationinternal.Service
+
+func NewScriptPollers(logger *zap.Logger, clock Clock, commandRunner platformprocess.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-) (automations.Root, error) {
-	if hosted.CursorFileSystem == nil {
-		return automations.Root{}, fmt.Errorf("construct Automations: script poller cursor filesystem is required")
-	}
-	service, err := newService(
-		logger,
-		clock,
-		commandRunner,
-		workflowID,
-		defaultFactoryDir,
-		composeHostedPollers(logger, hosted),
-		resolveTemplates,
-		executionPolicy,
-		hosted.CursorFileSystem,
-	)
-	if err != nil {
-		return automations.Root{}, err
-	}
-	return service.Root(), nil
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService, cursors CursorScopes) ScriptPollers {
+	return scriptpollerswire.NewService(logger, clock, commandRunner, resolveTemplates, executionPolicy, cursors)
+}
+func NewCron() Cron                             { return cronwire.NewService() }
+func NewFilesystemWatchers() FilesystemWatchers { return fswire.NewService() }
+
+// NewService stores already-completed owners and selected persistence behavior.
+func NewService(logger *zap.Logger, clock Clock, lifecycle SourceLifecycle,
+	reconciler Reconciliation, scriptPollers ScriptPollers, cronService Cron,
+	filesystemWatchers FilesystemWatchers, hostedPollers automations.HostedPollers,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService, cursors CursorScopes,
+	persistRuntimeCursors bool, workflowID, defaultFactoryDir, cursorBaseDir string) *Owner {
+	return automationinternal.New(logger, clock, lifecycle, reconciler, scriptPollers,
+		cronService, filesystemWatchers, hostedPollers, executionPolicy, cursors, persistRuntimeCursors, workflowID, defaultFactoryDir, cursorBaseDir)
 }
 
-// NewService constructs an inert owner from explicit construction ports. It is
-// retained for owner-local composition tests and focused callers; canonical
-// process composition uses NewRoot so hosted-source construction and runtime
-// capabilities are published together.
-func NewService(
-	logger *zap.Logger,
-	clock automations.Clock,
-	commandRunner platformprocess.CommandRunner,
-	workflowID string,
-	defaultFactoryDir string,
-	hostedPollers automations.HostedPollers,
-	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-) (automations.Service, error) {
-	service, err := newService(
-		logger,
-		clock,
-		commandRunner,
-		workflowID,
-		defaultFactoryDir,
-		hostedPollers,
-		resolveTemplates,
-		executionPolicy,
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return service, nil
-}
-
-func newService(
-	logger *zap.Logger,
-	clock automations.Clock,
-	commandRunner platformprocess.CommandRunner,
-	workflowID string,
-	defaultFactoryDir string,
-	hostedPollers automations.HostedPollers,
-	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
-) (*automationinternal.Service, error) {
-	if err := validateDirectDependencies(
-		logger,
-		clock,
-		commandRunner,
-		hostedPollers,
-		resolveTemplates,
-		executionPolicy,
-	); err != nil {
-		return nil, err
-	}
-
-	service := automationinternal.NewWithCursorFileSystem(
-		logger,
-		clock,
-		commandRunner,
-		workflowID,
-		defaultFactoryDir,
-		hostedPollers,
-		resolveTemplates,
-		executionPolicy,
-		cursorFileSystem,
-	)
-	if service == nil {
-		return nil, fmt.Errorf("construct Automations: implementation rejected its dependencies")
-	}
-	return service, nil
-}
+// NewRoot projects the already-constructed owner without assembly or effects.
+func NewRoot(service *Owner) automations.Root { return service.Root() }
 
 type hostedPollersRootAdapter struct {
 	inner hostedsources.HostedPollers
@@ -175,17 +124,22 @@ func (h hostedPollersRootAdapter) ValidateLinearPoller(
 	)
 }
 
-func composeHostedPollers(
+// NewHostedPollers constructs one inert hosted-source owner from selected effects.
+func NewHostedPollers(
 	logger *zap.Logger,
-	inputs HostedSourceInputs,
+	clock automations.HostedLinearClock,
+	httpClient automations.HostedLinearHTTPDoer,
+	secretResolver automations.HostedLinearSecretResolver,
+	linearEndpoint string,
+	checkpointStore automations.HostedLinearCheckpointStore,
 ) automations.HostedPollers {
 	return hostedPollersRootAdapter{inner: hostedsourceswire.NewHostedPollers(
 		logger,
-		inputs.Clock,
-		inputs.HTTPClient,
-		adaptSecretResolver(inputs.SecretResolver),
-		inputs.LinearEndpoint,
-		inputs.CheckpointStore,
+		clock,
+		httpClient,
+		adaptSecretResolver(secretResolver),
+		linearEndpoint,
+		checkpointStore,
 	)}
 }
 
@@ -202,33 +156,4 @@ func adaptSecretResolver(
 	) (string, error) {
 		return resolver(ctx, runtimePaths, secretRef)
 	}
-}
-
-func validateDirectDependencies(
-	logger *zap.Logger,
-	clock automations.Clock,
-	commandRunner platformprocess.CommandRunner,
-	hostedPollers automations.HostedPollers,
-	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-) error {
-	if logger == nil {
-		return fmt.Errorf("construct Automations: logger is required")
-	}
-	if clock == nil {
-		return fmt.Errorf("construct Automations: clock is required")
-	}
-	if commandRunner == nil {
-		return fmt.Errorf("construct Automations: command runner is required")
-	}
-	if hostedPollers == nil {
-		return fmt.Errorf("construct Automations: hosted pollers are required")
-	}
-	if resolveTemplates == nil {
-		return fmt.Errorf("construct Automations: template field resolver is required")
-	}
-	if executionPolicy == nil {
-		return fmt.Errorf("construct Automations: workstation execution policy is required")
-	}
-	return nil
 }

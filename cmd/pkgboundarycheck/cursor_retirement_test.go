@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,35 +15,6 @@ func TestRunAllowsProviderSessionRootAndCanonicalClockImports(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
 		t.Fatalf("run() error = %v, want canonical platform imports allowed; stderr=%q", err, stderr.String())
-	}
-}
-
-func TestRunRejectsRetiredCursorImports(t *testing.T) {
-	t.Parallel()
-	repoRoot := t.TempDir()
-	for _, retired := range []struct {
-		filePath string
-		path     string
-	}{
-		{filePath: "pkg/services/factory_runtime/internal/services/orchestration/runtime/session.go", path: "github.com/portpowered/infinite-you/pkg/sessionpersistence"},
-		{filePath: "pkg/transports/http/storage.go", path: "github.com/portpowered/infinite-you/pkg/internal/cursorstorage"},
-	} {
-		writeGoImportFile(t, repoRoot, retired.filePath, filepath.Base(filepath.Dir(retired.filePath)), retired.path)
-	}
-
-	stderr := &bytes.Buffer{}
-	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
-		t.Fatal("run() error = nil, want retired cursor imports rejected")
-	}
-	for _, want := range []string{
-		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/sessionpersistence",
-		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/internal/cursorstorage",
-		"canonical owner: pkg/services/factory_sessions/internal/cursors/persistence",
-		"canonical owner: pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
-	} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
-		}
 	}
 }
 

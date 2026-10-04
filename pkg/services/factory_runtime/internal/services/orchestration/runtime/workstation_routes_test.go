@@ -17,6 +17,7 @@ import (
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -956,4 +957,25 @@ func containsExpectedArtifactMessage(message, value string) bool {
 		}
 	}
 	return false
+}
+
+func TestPreAdmissionOpeningPublicationFailureIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "ci-wait",
+		Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+			DispatchID:   "dispatch-opening",
+			TransitionID: "ci-wait",
+		}},
+	}
+	result, err := failedWorkstationDispatchResult(request, workersessions.ErrStartOpeningPublication)
+	if !errors.Is(err, workersessions.ErrStartOpeningPublication) {
+		t.Fatalf("error = %v, want opening publication failure", err)
+	}
+	markPreAdmissionInfrastructureFailure(&result)
+	decision := workers.FailureDecisionFromMetadata(result.Result.FailureMetadata)
+	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
+		t.Fatalf("failure decision = %#v, want retryable without throttle pause", decision)
+	}
 }

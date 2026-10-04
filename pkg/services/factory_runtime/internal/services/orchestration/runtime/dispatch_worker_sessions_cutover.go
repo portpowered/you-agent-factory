@@ -319,9 +319,10 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 	}
 
 	completed := recordedDispatchStateMaps(world)
+	index := newRecordedDispatchEventIndex(ordered)
 	result := make([]workersessions.Observation, 0, len(associations))
 	for dispatchID, association := range associations {
-		fact := s.annotateRecordedFact(recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, ordered))
+		fact := s.annotateRecordedFact(recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, index))
 		if !containsRecordedWorkID(fact.workIDs, workID) {
 			continue
 		}
@@ -375,12 +376,12 @@ func recordedDispatchStateMaps(
 
 func recordedDispatchEnd(
 	dispatch interfaces.FactoryWorldDispatchCompletion,
-	events []interfaces.FactoryEvent,
+	index recordedDispatchEventIndex,
 	dispatchID string,
 ) *time.Time {
 	ended := dispatch.CompletedAt
 	if ended.IsZero() {
-		ended = eventTimeForDispatch(events, dispatchID)
+		ended = index.responseTimes[dispatchID]
 	}
 	if ended.IsZero() {
 		return nil

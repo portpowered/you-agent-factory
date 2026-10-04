@@ -3,18 +3,19 @@ package process_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -117,20 +118,6 @@ func writeStdinRunFactory(t testing.TB, workDir string) string {
 	}
 
 	return factoryPath
-}
-
-func writeStdinRunDefaultMockWorkers(t testing.TB) string {
-	t.Helper()
-
-	data, err := json.MarshalIndent(workers.NewEmptyMockWorkersConfig(), "", "  ")
-	if err != nil {
-		t.Fatalf("marshal stdin run mock workers: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "stdin-run-mock-workers.json")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatalf("write stdin run mock workers: %v", err)
-	}
-	return path
 }
 
 const idleCurrentFactoryJSON = `{
@@ -260,4 +247,32 @@ func startRootProcessServerCommand(
 		scanErr <- scanner.Err()
 	}()
 	return command, lines, scanErr, &stderr
+}
+
+func runBuiltYouBinary(
+	ctx context.Context,
+	binaryPath string,
+	session *builtcliacceptance.Session,
+	args ...string,
+) (builtcliacceptance.RunResult, error) {
+	var stdout, stderr strings.Builder
+	command := exec.CommandContext(ctx, binaryPath, args...)
+	command.Dir = session.WorkDir
+	command.Env = session.ProcessEnv()
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	err := command.Run()
+	exitCode := 0
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return builtcliacceptance.RunResult{Stdout: stdout.String(), Stderr: stderr.String()}, err
+		}
+		exitCode = exitErr.ExitCode()
+	}
+	return builtcliacceptance.RunResult{
+		ExitCode: exitCode,
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+	}, err
 }

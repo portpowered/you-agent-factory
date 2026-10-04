@@ -913,7 +913,7 @@ func requireRecordedCancellationProjection(t *testing.T, base time.Time, complet
 			Reason: workers.DispatchCancellationReasonCanceled,
 		},
 	}
-	canceledFact := recordedDispatchFact(
+	canceledFact := recordedDispatchFactForTest(
 		"dispatch-canceled",
 		recordedDispatchAssociation{workerSessionID: "worker-canceled", eventTime: base},
 		nil,
@@ -936,7 +936,7 @@ func requireRecordedCancellationProjection(t *testing.T, base time.Time, complet
 	supersededCompletion.Result.Cancellation = &workers.DispatchCancellation{
 		Reason: workers.DispatchCancellationReasonSuperseded,
 	}
-	supersededFact := recordedDispatchFact(
+	supersededFact := recordedDispatchFactForTest(
 		"dispatch-superseded",
 		recordedDispatchAssociation{workerSessionID: "worker-superseded", eventTime: base},
 		nil,

@@ -82,8 +82,9 @@ type Config struct {
 	WorkRequestIDs    work.RequestIDGenerator
 	Submitter         WorkRequestSubmitter
 	HandledIdentities HandledIdentities
-	Clock             clockwork.Clock
-	DebounceWindow    time.Duration
+	// Clock is required and supplies both debounce and empty-file retry time.
+	Clock          clockwork.Clock
+	DebounceWindow time.Duration
 }
 
 // Watcher supervises one configured input root. Construction is inert; Watch and

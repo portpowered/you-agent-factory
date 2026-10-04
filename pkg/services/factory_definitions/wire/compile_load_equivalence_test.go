@@ -11,6 +11,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
@@ -90,10 +91,13 @@ func newWireRootWithCompileLoader(t *testing.T) (factorydefinitions.Service, *fa
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+		runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 		ports.clock,
 		ports.versionFileSystem,
 		ports.listEffective,
@@ -406,4 +410,25 @@ Implement {{ .WorkID }}.
 	if err := os.WriteFile(filepath.Join(workstationDir, "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
 		t.Fatalf("write prompt.md: %v", err)
 	}
+}
+
+// compilationForLoader supplies a completed owner without loading a Factory.
+func compilationForLoader(loader *compilationloading.Loader) factorydefinitionswire.Compilation {
+	return factorydefinitionswire.NewCompilationService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		factorydefinitionswire.FactoryConfigJSONEncoder(),
+	)
+}
+
+// validationForLoader supplies real validation operations with the fixture loader.
+func validationForLoader(loader *compilationloading.Loader, checker factorydefinitions.RequiredToolChecker, orchestrator factorydefinitions.OrchestratorDefinitionValidator) factorydefinitionswire.Validation {
+	operations := factorydefinitionswire.NewValidationOperations(orchestrator, loader.LoadSourceFromCanonicalJSON)
+	return factorydefinitionswire.NewValidationService(operations, operations, loader.LoadSourceFromCanonicalJSON, checker, orchestrator)
+}
+
+// runtimeSnapshotForLoader preserves each fixture's session query and source effects.
+func runtimeSnapshotForLoader(loader *compilationloading.Loader, host factorydefinitions.SessionHost) factorydefinitionswire.RuntimeSnapshot {
+	return factorydefinitionswire.NewRuntimeSnapshot(loader.LoadSourceFromCanonicalJSON, loader.LoadSourceFromFactoryDir,
+		func() factorydefinitions.WorkstationLoader { return host.WorkstationLoader() }, factorydefinitions.FileReader(loader.ReadFile))
 }

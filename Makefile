@@ -242,7 +242,7 @@ endif
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check test-sleep-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode fmt-check contracts-check
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint test-sleep-check compatibility-alias-check retired-surface-check deadcode fmt-check contracts-check
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -282,6 +282,7 @@ define run_timed_step
 endef
 
 
+.PHONY: golangci golangci-lint-run repolint lint-baseline-growth
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
@@ -313,7 +314,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check test-functional-resumed-successor-artifact
+.PHONY: test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -587,7 +588,6 @@ test-unit-latency-budget:
 
 regenerate-shared-ci-baselines:
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget -mode regenerate -skip-unit-latency -root . $(if $(strip $(BASELINE_REGEN_DEADCODE_REPORT)),-deadcode-report "$(BASELINE_REGEN_DEADCODE_REPORT)",)
-	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze
 	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run "^TestWriteProductionInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run "^TestWriteProductionInputsInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .
@@ -605,7 +605,7 @@ test-localai-runner-v2-component:
 test-localai-runner-v2-prebuilt: export YOU_OMNI_PREFLIGHT_REQUIRED := 1
 test-localai-runner-v2-prebuilt: export INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT := 1
 test-localai-runner-v2-prebuilt:
-	$(GO) test ./tests/integration/models/omni_media_probe -run '^TestProbeRunnerV2PrebuiltCLIHandoff$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/internal/localai/omni_media_probe -run '^TestProbeRunnerV2PrebuiltCLIHandoff$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/tts_clean_install ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/cancel ./tests/integration/workers/interrupt -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -1009,16 +1009,12 @@ pkg-file-count:
 
 pkg-boundary:
 	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
-	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 pkg-structure:
 	$(call run_lint_checker,./cmd/pkgstructurecheck,-root "$(PACKAGE_STRUCTURE_ROOT)")
 
 service-cycle-check:
 	$(call run_lint_checker,./cmd/servicecyclecheck,-root ".")
-
-package-target-manifest-check:
-	$(call run_lint_checker,./cmd/packagetargetmanifestcheck,-root ".")
 
 packaged-factory-source-check:
 	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
@@ -1044,17 +1040,42 @@ model-provider-package-generate:
 model-provider-package-check:
 	node scripts/model-provider-package.mjs check
 
-ownership-boundary-check:
-	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
-
-ownership-inventory-check:
-	$(call run_lint_checker,./cmd/ownershipinventorycheck,)
-
 durable-runtime-construction-check:
 	$(call run_lint_checker,./cmd/durableruntimeconstructioncheck,-root ".")
 
-logging-boundary-check:
-	$(call run_lint_checker,./cmd/loggingboundarycheck,-root ".")
+# golangci-lint is pinned to an exact version and run with go run, like the
+# deadcode tool. v2.11.4 is the newest release whose go.mod needs go 1.25.0.
+# Ratchet: issues.new-from-merge-base in .golangci.yml, so origin/main must be
+# fetched (Backend Lint checks out with fetch-depth 0).
+GOLANGCI_LINT_VERSION ?= v2.11.4
+GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+# Tag union under which the repolint analyzers see every Go file once.
+REPOLINT_TAGS ?= functionallong,backendconformance,factoryartifact,managed_process_integration
+REPOLINT_DIR ?= .artifacts/repolint
+REPOLINT_BASELINE := internal/lint/analyzers/baseline.txt
+ifeq ($(OS),Windows_NT)
+REPOLINT_BIN := $(REPOLINT_DIR)/repolint.exe
+else
+REPOLINT_BIN := $(REPOLINT_DIR)/repolint
+endif
+
+# golangci runs both halves: the built-in golangci-lint linters and the
+# repository's go/analysis analyzers (cmd/repolint) through go vet -vettool.
+golangci: golangci-lint-run repolint
+
+golangci-lint-run:
+	$(GOLANGCI_LINT) run ./...
+
+repolint:
+	@mkdir -p $(REPOLINT_DIR)
+	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
+	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
+	$(MAKE) lint-baseline-growth
+
+# lint-baseline-growth compares the one baseline object with its merge-base
+# copy: every current entry must already exist there, so the list only shrinks.
+lint-baseline-growth:
+	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; 	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then 		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; 	git show "$$base:$(REPOLINT_BASELINE)" | grep -v '^#' | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.base"; 	grep -v '^#' "$(REPOLINT_BASELINE)" | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.head"; 	added=$$(comm -13 "$(REPOLINT_DIR)/baseline.base" "$(REPOLINT_DIR)/baseline.head"); 	if [ -n "$$added" ]; then echo "lint-baseline-growth: $(REPOLINT_BASELINE) gained entries versus merge-base; fix the violation instead:"; echo "$$added"; exit 1; fi; 	echo "lint-baseline-growth: $(REPOLINT_BASELINE) did not grow"
 
 test-sleep-check:
 	$(call run_lint_checker,./cmd/testsleepcheck,-root ".")

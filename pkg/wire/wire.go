@@ -8,8 +8,8 @@ import (
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -19,6 +19,7 @@ import (
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
@@ -28,8 +29,7 @@ import (
 )
 
 var platformSet = wire.NewSet(
-	// TODO: remove this when we figure out how to appropriately inject the logging.
-	logging.NewDefaultLogger,
+	provideProcessLogger,
 )
 
 var apiSet = wire.NewSet(
@@ -51,6 +51,8 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
 	factorysessionwire.NewLiveChangeCoordinator,
+	factorysessionwire.NewIdentity,
+	factorysessionwire.NewResponseStreams,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
@@ -190,7 +192,20 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
-	provideAutomationHostedSourceInputs,
+	provideAutomationHostedClock,
+	provideAutomationHostedHTTPClient,
+	provideAutomationHostedSecretResolver,
+	provideAutomationHostedCheckpointStore,
+	provideAutomationsCursorFileSystem,
+	provideAutomationsHostedPollers,
+	provideAutomationsClock,
+	provideAutomationsScriptPollers,
+	provideAutomationsOwner,
+	automationswire.NewCursorScopes,
+	automationswire.NewSourceLifecycle,
+	automationswire.NewReconciliation,
+	automationswire.NewCron,
+	automationswire.NewFilesystemWatchers,
 	provideAutomationsCommandRunner,
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
@@ -208,6 +223,20 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
+	provideRecordingClock,
+	provideRecordingSnapshotWriter,
+	provideRecordingPublication,
+	provideRecordingReadFile,
+	recordingswire.NewRuntimeLedgerRouter,
+	recordingswire.RuntimeLedger,
+	recordingswire.NewProjectionService,
+	recordingswire.NewRecordingLifecycleOwner,
+	recordingswire.NewCanonicalLedgerOwner,
+	recordingswire.NewArtifactsExportOwner,
+	recordingswire.NewReplayOwner,
+	recordingswire.NewHistoricalQueryOwner,
+	recordingswire.NewRecordingFlushTickerFactory,
+	factorydefinitionswire.FactorySnapshotJSONDecoder,
 	provideRecordingsRoot,
 	provideRecordingsRuntimeScopeService,
 	provideReplayArtifactStorage,
@@ -273,6 +302,10 @@ var servicesSet = wire.NewSet(
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewAssembly,
 	provideFactoryRuntimeRoot,
+	provideRuntimeOrchestration,
+	provideRuntimeDispatchPlanning,
+	factoryruntimewire.NewLifecycle,
+	factoryruntimewire.NewInstanceHost,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.ProviderSessionsPorts), "*"),
 	wire.Struct(new(factorysessionwire.FactoryRuntimePorts), "*"),
@@ -302,6 +335,9 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionCompilation,
+	provideFactoryDefinitionRuntimeSnapshot,
+	provideFactoryDefinitionValidationOwner,
 	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
@@ -320,6 +356,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryCatalogOperation,
 	provideEffectiveFactoryDefinitionsService,
 	factorydefinitionswire.NewCatalogPathsService,
+	factorydefinitionswire.NewCatalogService,
 )
 
 var workerServiceSet = wire.NewSet(

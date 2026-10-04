@@ -870,15 +870,6 @@ func closeRuntimeEventSubscriptions(ledger recordings.RuntimeLedger) {
 	closer.CloseLiveSubscriptions()
 }
 
-func eventTimeForDispatch(events []interfaces.FactoryEvent, dispatchID string) time.Time {
-	for index := len(events) - 1; index >= 0; index-- {
-		if stringPointerValue(events[index].Context.DispatchID) == dispatchID && events[index].Type == interfaces.FactoryEventTypeDispatchResponse {
-			return events[index].Context.EventTime.UTC()
-		}
-	}
-	return time.Time{}
-}
-
 func firstRecordedTime(primary, fallback time.Time) time.Time {
 	if !primary.IsZero() {
 		return primary.UTC()

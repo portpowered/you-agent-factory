@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -98,11 +99,7 @@ func list(config ListConfig) error {
 			workerSessionsListFailureStage(requestErr),
 			response.Duration.Milliseconds(),
 		)
-		return emitCLIError(config, jsonOutput, newCLIError(
-			"FACTORY_UNREACHABLE",
-			fmt.Sprintf("factory not reachable at %s", endpoint.String()),
-			requestErr,
-		))
+		return emitCLIError(config, jsonOutput, workerSessionsListTransportError(endpoint.String(), requestErr))
 	}
 	if response.HTTP == nil {
 		return emitCLIError(config, jsonOutput, newCLIError("WORKER_SESSION_LIST_FAILED", "worker session list returned no HTTP response", nil))
@@ -267,6 +264,25 @@ func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsRespo
 		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session list", err)
 	}
 	return nil
+}
+
+// WorkerSessionListRequestTimeoutCode identifies a client-side deadline on the
+// Worker Session list request. The factory answered nothing within the bound,
+// which is a different fact from the factory being unreachable.
+const WorkerSessionListRequestTimeoutCode = "WORKER_SESSION_LIST_REQUEST_TIMEOUT"
+
+// workerSessionsListTransportError classifies a failure that produced no HTTP
+// response: a client deadline reports a timeout, anything else stays unreachable.
+func workerSessionsListTransportError(endpoint string, cause error) *CLIError {
+	var networkError net.Error
+	if errors.Is(cause, context.DeadlineExceeded) || (errors.As(cause, &networkError) && networkError.Timeout()) {
+		return newCLIError(
+			WorkerSessionListRequestTimeoutCode,
+			fmt.Sprintf("no response from %s before the client request timeout; the factory may still be working, retry or narrow the request", endpoint),
+			cause,
+		)
+	}
+	return newCLIError("FACTORY_UNREACHABLE", fmt.Sprintf("factory not reachable at %s", endpoint), cause)
 }
 
 func workerSessionsListFailureStage(err error) string {

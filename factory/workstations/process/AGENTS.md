@@ -106,11 +106,13 @@ a valid decision.
   there break package discovery); run them in your worktree. A lane that must
   stop on a contract conflict still pushes its verified commits and opens a
   draft PR naming the blocker; never end FAILED holding unpushed verified work.
-- Keep CI green: fix failures your diff caused. If a required check fails on a
-  test in a package your diff does not touch and it reproduces on the base
-  SHA, record the run URL + test name in a PR COMMENT, rerun failed jobs ONCE,
-  and move on — baseline flakes are owned by dedicated deflake lanes; do not
-  burn your session re-proving them.
+- Keep CI green: fix failures your diff caused. Untouched-package required-CI
+  failures are review-owned recovery: review reruns failed jobs once, merges
+  current origin/main if still red, pushes, and re-arms squash merge.
+  Record any observed run URL and test name in a PR COMMENT; never wait for,
+  poll, or re-check terminal CI after the implementation finish line.
+  Finish once the final head is pushed, the PR is open, CI has started, and
+  all blocking review feedback is addressed. MERGED belongs to review.
 - This worker starts without the Playwright MCP, the Chrome DevTools MCP, or the computer-use tooling, to save host memory. When a story needs live browser evidence, run a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. It loads the full browser tooling for that step only. That nested session is the supported browser tool for the check below. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 - Browser/screenshot verification: attempt the required browser tool (dev-browser skill, Playwright MCP, or whichever the PRD names) using its single supported connection/availability check ONCE per session. If it returns no available instance, record that exact result in progress.txt ONE time and mark the affected PRD item's evidence as "live browser verification unavailable in this environment" rather than passes:true. Do NOT retry the same connection/availability check within the session, and do NOT spend a subsequent session re-attempting a check that already returned unavailable in a prior session unless the PRD or an operator note explicitly asks you to recheck. An unavailable browser tool is a system limitation, not a task to solve; use other permitted automated evidence when the PRD allows it, and continue only with actionable remaining stories or acceptance criteria.
 
@@ -125,9 +127,12 @@ a valid decision.
   loop. One rerun of failed jobs per unchanged head, maximum. Never wait for
   CI to FINISH before ending `ACCEPTED`: after your final push, the
   `ci-wait` gate between process and review owns waiting for terminal CI.
-- Sync with origin/main ONLY when GitHub reports a real conflict, or when the
-  reviewer asks for one because of a real conflict. New commits on main are
-  not by themselves a reason for another sync pass.
+- Sync with origin/main when GitHub reports a real conflict or when review
+  requests conflict reconciliation. Review also owns the explicit
+  untouched-required-check recovery exception: after one failed-job rerun
+  remains red solely in untouched packages, review merges origin/main,
+  pushes, and re-arms squash merge without needing a conflict.
+  New commits on main alone remain no reason for another sync pass.
 - prd.json and progress.txt are untracked worktree scaffolding and must NEVER
   appear in your PR diff. Never `git add -f` them. If your branch already
   tracks them from an old base, `git rm` them during your next rebase.
@@ -181,8 +186,10 @@ Only add patterns that are **general and reusable**, not story-specific details.
 
 Before asking, check whether the standing rules already answer the question.
 Questions about evidence, authority, or untouched-package CI are answered by
-the rules: merge on green, and failures in untouched packages are
-operator-owned. Decide for yourself; do not ask the mailbox about them. Also:
+the rules: merge on green; review owns the one-rerun, merge-main, push and
+squash-re-arm recovery for proven untouched-package failures. Process stops
+at its implementation finish line. Do not ask the mailbox for permission
+to perform that recovery. Also:
 if the packet contradicts repository reality and a
 conservative reading exists that weakens no acceptance criterion, raises no
 baseline and widens no scope, take it, record it (in `progress.txt` and the PR body), and

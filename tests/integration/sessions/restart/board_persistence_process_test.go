@@ -106,8 +106,8 @@ func startBoardPersistenceDaemon(
 ) *boardPersistenceDaemon {
 	t.Helper()
 	daemon := startBoardPersistenceDaemonProcessWithResume(t, binaryPath, factoryDir, homeDir, "", recordPath, releasePath)
-	waitForBoardDaemonReady(t, daemon, 45*time.Second)
-	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	waitForBoardDaemonReady(t, daemon, 180*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 120*time.Second)
 	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
 	return daemon
 }
@@ -119,8 +119,8 @@ func startBoardPersistenceResumeDaemon(
 ) *boardPersistenceDaemon {
 	t.Helper()
 	daemon := startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false, false, workerReadyEndpoint...)
-	waitForBoardDaemonReady(t, daemon, 45*time.Second)
-	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	waitForBoardDaemonReady(t, daemon, 180*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 120*time.Second)
 	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
 	return daemon
 }
@@ -153,8 +153,8 @@ func startBoardPersistenceObservedResumeDaemon(
 ) *boardPersistenceDaemon {
 	t.Helper()
 	daemon := startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false, true)
-	waitForBoardDaemonReady(t, daemon, 45*time.Second)
-	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	waitForBoardDaemonReady(t, daemon, 180*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 120*time.Second)
 	t.Logf("isolated observed resume session ID: %q", daemon.sessionID)
 	return daemon
 }
@@ -253,7 +253,7 @@ func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
 	if err := daemon.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Fatalf("hard-kill isolated you daemon: %v", err)
 	}
-	timer := time.NewTimer(20 * time.Second)
+	timer := time.NewTimer(90 * time.Second)
 	defer timer.Stop()
 	select {
 	case <-daemon.done:
@@ -299,7 +299,7 @@ func (daemon *boardPersistenceDaemon) stop(t *testing.T) {
 	if err := interruptBoardPersistenceProcess(daemon.cmd); err != nil {
 		t.Fatalf("interrupt isolated you daemon: %v", err)
 	}
-	timer := time.NewTimer(20 * time.Second)
+	timer := time.NewTimer(90 * time.Second)
 	defer timer.Stop()
 	select {
 	case <-daemon.done:

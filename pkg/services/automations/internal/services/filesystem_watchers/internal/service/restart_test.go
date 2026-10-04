@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jonboulle/clockwork"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	"go.uber.org/zap"
 )
@@ -38,6 +39,7 @@ func restartRequest(
 			WalkDirectory:  filepath.WalkDir,
 			WorkRequestIDs: testWorkRequestIDGenerator,
 			Submitter:      submitter.Submit,
+			Clock:          clockwork.NewRealClock(),
 		},
 		Identity:      watchIdentityForDir(dir),
 		Authoritative: authoritative,

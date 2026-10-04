@@ -10,8 +10,5 @@ import (
 // NewService constructs the private canonical ledger owner from the runtime
 // ledger seam selected by the application graph.
 func NewService(ledger recordings.Ledger) canonicalledger.Service {
-	if ledger == nil {
-		return nil
-	}
 	return ledgerservice.New(ledger)
 }

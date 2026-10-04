@@ -43,7 +43,7 @@ func NewHostedPollers(
 	httpClient hostedsources.HTTPDoer,
 	secretResolver hostedsources.SecretResolver,
 	linearEndpoint string,
-	checkpointStores ...hostedsources.CheckpointStore,
+	checkpoints hostedsources.CheckpointStore,
 ) hostedsources.HostedPollers {
 	return hostedPollers{inner: hostedservice.New(
 		logger,
@@ -52,7 +52,7 @@ func NewHostedPollers(
 		secretResolver,
 		linearEndpoint,
 		platformrandom.CryptoSource{},
-		checkpointStores...,
+		checkpoints,
 	)}
 }
 

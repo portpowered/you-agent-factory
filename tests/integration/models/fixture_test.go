@@ -28,9 +28,7 @@ var (
 )
 
 type characterizationOriginOptions struct {
-	failManifest bool
-	failBackend  bool
-	blockModel   bool
+	blockModel bool
 }
 
 type characterizationOrigin struct {
@@ -42,6 +40,10 @@ type characterizationOrigin struct {
 	modelStarts int
 
 	modelStarted chan struct{}
+	// modelAborted receives one signal for every blocked model transfer whose
+	// client disconnected before the release, so a test can wait for the
+	// disconnect instead of racing it against the release.
+	modelAborted chan struct{}
 	releaseModel chan struct{}
 	releaseOnce  sync.Once
 }
@@ -60,6 +62,7 @@ func newCharacterizationOrigin(t testing.TB, options characterizationOriginOptio
 	origin := &characterizationOrigin{
 		options:      options,
 		modelStarted: make(chan struct{}, 16),
+		modelAborted: make(chan struct{}, 16),
 		releaseModel: make(chan struct{}),
 	}
 	origin.server = httptest.NewServer(origin)
@@ -90,10 +93,6 @@ func (origin *characterizationOrigin) ServeHTTP(writer http.ResponseWriter, requ
 	case request.URL.Path == story001ModelResolvePath():
 		origin.serveModel(index, writer, request)
 	case strings.HasSuffix(request.URL.Path, "/"+story001BackendAsset):
-		if origin.options.failBackend {
-			origin.respond(index, writer, http.StatusServiceUnavailable, "text/plain", []byte("story-002 backend unavailable\n"))
-			return
-		}
 		origin.respond(index, writer, http.StatusOK, "application/octet-stream", story001BackendBody)
 	case request.URL.Path == "/embed":
 		origin.respondJSON(index, writer, http.StatusOK, map[string]any{
@@ -105,10 +104,6 @@ func (origin *characterizationOrigin) ServeHTTP(writer http.ResponseWriter, requ
 }
 
 func (origin *characterizationOrigin) serveManifest(index int, writer http.ResponseWriter) {
-	if origin.options.failManifest {
-		origin.respond(index, writer, http.StatusServiceUnavailable, "text/plain", []byte("story-001 controlled origin failure\n"))
-		return
-	}
 	manifest := map[string]any{
 		"sha": story001ModelRevision,
 		"siblings": []map[string]any{{
@@ -134,6 +129,10 @@ func (origin *characterizationOrigin) serveModel(index int, writer http.Response
 		select {
 		case <-origin.releaseModel:
 		case <-request.Context().Done():
+			select {
+			case origin.modelAborted <- struct{}{}:
+			default:
+			}
 			return
 		}
 	}
@@ -212,16 +211,6 @@ func (origin *characterizationOrigin) assetExchanges() []originExchange {
 		}
 	}
 	return assets
-}
-
-func (origin *characterizationOrigin) modelContentResponseBytes() int64 {
-	var total int64
-	for _, exchange := range origin.assetExchanges() {
-		if exchange.Method == http.MethodGet && exchange.Path == story001ModelResolvePath() {
-			total += exchange.ResponseBodyBytes
-		}
-	}
-	return total
 }
 
 func (origin *characterizationOrigin) modelStartCount() int {

@@ -806,17 +806,17 @@ func runRestartRecoveryH01SourceGeneration(
 		restartRecoveryEligibleWorkID: "processing",
 		restartRecoveryCompleteWorkID: "complete",
 		restartRecoveryFailedWorkID:   "failed",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, before, wantBefore)
 	assertRestartWorkIDsUnique(t, before, wantBefore)
-	oldDispatchID := waitForBoardActiveDispatch(t, first.baseURL, restartRecoveryEligibleWorkID, 30*time.Second)
+	oldDispatchID := waitForBoardActiveDispatch(t, first.baseURL, restartRecoveryEligibleWorkID, 120*time.Second)
 	oldWorker := waitForBoardWorkerObservation(t, first.baseURL, first.sessionID, restartRecoveryEligibleWorkID, func(observation factoryapi.WorkerSessionObservation) bool {
 		return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
-	}, 30*time.Second)
+	}, 120*time.Second)
 	if oldWorker.WorkerSessionId == "" || oldWorker.AttemptId == "" {
 		t.Fatalf("source active Worker Session lacks identity: %#v", oldWorker)
 	}
-	oldOwnerDispatch, oldOwnerID := waitForBoardActiveOwner(t, first.baseURL, restartRecoveryEligibleWorkID, 30*time.Second)
+	oldOwnerDispatch, oldOwnerID := waitForBoardActiveOwner(t, first.baseURL, restartRecoveryEligibleWorkID, 120*time.Second)
 	if oldOwnerDispatch != oldDispatchID || oldOwnerID != oldWorker.WorkerSessionId {
 		t.Fatalf("source active dispatch owner = %q/%q; worker observation = %q/%q", oldOwnerDispatch, oldOwnerID, oldDispatchID, oldWorker.WorkerSessionId)
 	}

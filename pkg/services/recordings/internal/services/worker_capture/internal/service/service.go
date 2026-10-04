@@ -332,7 +332,7 @@ func (capture *capture) fail(err error) {
 	}
 	capture.mu.Unlock()
 	capture.persistFailureMarker()
-	capture.logger.Info("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code)
+	capture.logger.Warn("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code, "error", err.Error())
 }
 
 // persistFailureMarker writes the safe capture-loss fact at most once for a
@@ -381,7 +381,7 @@ func (capture *capture) persistFailureMarker() {
 		if terminal != nil {
 			fields = append(fields, "executionOutcome", terminal.Status)
 		}
-		capture.logger.Info("Worker recording failure persistence failed", fields...)
+		capture.logger.Warn("Worker recording failure persistence failed", fields...)
 	}
 }
 

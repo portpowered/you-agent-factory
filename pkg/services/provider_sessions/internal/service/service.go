@@ -75,12 +75,7 @@ func newForRoots(files providersessionsinternal.FileSystem, codexWalkDirectory p
 		return nil, err
 	}
 	codexRoot = filepath.Clean(codexRoot)
-	codexService, err := codexreaderwire.NewService(codexreader.Dependencies{
-		Files:           files,
-		WalkDirectory:   codexWalkDirectory,
-		ResolveSymlinks: codexResolveSymlinks,
-		SessionsRoot:    codexRoot,
-	})
+	codexService, err := codexreaderwire.NewService(files, codexWalkDirectory, codexResolveSymlinks, codexRoot)
 	if err != nil {
 		return nil, err
 	}

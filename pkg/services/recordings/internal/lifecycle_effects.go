@@ -46,13 +46,10 @@ func NewRecordingSnapshotWriter(
 // replay-compatible artifact format consumed by existing recording readers.
 func NewReplayRecordingSnapshotWriter(
 	write func(string, []byte) error,
-	appendFiles ...func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
 ) recordings.RecordingSnapshotWriter {
-	var appendFile func(string, []byte) error
-	if len(appendFiles) > 0 && appendFiles[0] != nil {
-		appendFile = appendFiles[0]
-	}
-	return newReplayRecordingSnapshotWriter(write, appendFile, nil)
+	return newReplayRecordingSnapshotWriter(write, appendFile, replayV2TargetPreparation(readFile))
 }
 
 func newReplayRecordingSnapshotWriter(

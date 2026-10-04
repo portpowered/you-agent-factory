@@ -157,14 +157,11 @@ func newCompilationServiceFromComposition(
 	t.Helper()
 
 	loader := composition.Loader()
-	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
-		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
-	})
-	if err != nil {
-		t.Fatalf("compilationwire.NewService: %v", err)
-	}
+	compilation := compilationwire.NewService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		compilationcanonical.EncodeFactoryPort(),
+	)
 	return compilation
 }
 

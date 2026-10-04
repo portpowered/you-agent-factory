@@ -30,9 +30,6 @@ var _ canonicalledger.Service = (*Service)(nil)
 
 // New constructs the canonical ledger owner over the runtime ledger seam.
 func New(ledger recordings.Ledger) *Service {
-	if ledger == nil {
-		return nil
-	}
 	return &Service{ledger: ledger}
 }
 

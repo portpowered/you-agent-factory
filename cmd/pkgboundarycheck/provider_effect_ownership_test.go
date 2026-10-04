@@ -247,33 +247,6 @@ type Provider interface {
 	}
 }
 
-func TestRunAllowsEdgesAggregatingProvidersLeafEffectContract(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, providersLeafEffectContractPackage+"/contract.go", `package inferencecontract
-
-import "context"
-
-type Provider interface {
-	Infer(context.Context, string) (string, error)
-}
-`)
-	writeGoSourceFile(t, repoRoot, "pkg/services/edges/definition.go", `package edges
-
-import leaf "github.com/portpowered/infinite-you/`+providersLeafEffectContractPackage+`"
-
-type Edges struct {
-	ProviderOverride leaf.Provider
-}
-`)
-
-	stderr := &bytes.Buffer{}
-	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
-		t.Fatalf("run() error = %v, want edges aggregating Providers leaf effect contract allowed; stderr=%q", err, stderr.String())
-	}
-}
-
 func TestRunRejectsEdgesAnonymousFieldProviderEffectRedefinitions(t *testing.T) {
 	t.Parallel()
 

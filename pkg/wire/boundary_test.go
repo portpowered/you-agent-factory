@@ -23,6 +23,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
@@ -106,21 +107,28 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 		t.Fatalf("construct events service: %v", err)
 	}
 
+	identity, err := factorysessionwire.NewIdentity(func(path string) (string, error) { return path, nil }, func() (string, error) { return t.TempDir(), nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses, err := factorysessionwire.NewResponseStreams(func() string { return "response-event-test-id" }, nil, eventsService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	assembly, err := provideFactorySessionsAssembly(
 		factoryruntime.NewSessionResultProjectionOperation(),
 		nil,
 		nil,
 		nil,
 		func() string { return "response-event-test-id" },
-		nil,
 		func() string { return "session-test-id" },
 		func() (string, error) { return t.TempDir(), nil },
 		platformfilesystem.Local{},
 		namedPathResolver,
 		factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
-		func(path string) (string, error) { return path, nil },
-		eventsService,
+		identity,
+		responses,
 		&wireTestClock{},
 		factorysessionwire.NewLiveChangeCoordinator(),
 		nil,

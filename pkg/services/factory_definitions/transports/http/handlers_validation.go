@@ -9,7 +9,7 @@ import (
 )
 
 // ValidateFactory handles POST /factory-validations by decoding the request and
-// invoking the injected Definitions validation operation or root adapter.
+// invoking the injected Definitions validation operation.
 func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	decoded, err := decodeJSONWithDiagnostics[factoryapi.Factory](r.Body)
 	if err != nil {
@@ -22,15 +22,11 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	}
 	req := decoded.Value
 
-	validation, ok := s.requireSubmittedDefinitionValidation(w)
-	if !ok {
-		return
-	}
 	if s.guardDefinitionsRequestContext(w, r) {
 		return
 	}
 
-	result, err := validationentry.ValidateFactoryAPI(r.Context(), req, validation)
+	result, err := validationentry.ValidateFactoryAPI(r.Context(), req, s.validation)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
