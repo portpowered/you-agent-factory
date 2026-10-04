@@ -60,8 +60,8 @@ func TestBundledPiBridgeUsesCurrentExecutableWithoutYouOnPATH(t *testing.T) {
 		launched, arguments = name, append([]string(nil), args...)
 		return exec.Command(current, "-test.run=^TestACPArgumentRoundTripHelperProcess$")
 	}
-	daemon := newTestAttempt(t, "pi", Command{Name: "you", Args: []string{"pi-acp"}}, commandFactory, locator)
-	_, _ = daemon.start(context.Background(), t.TempDir(),
+	owner, daemon := newTestAttempt(t, "pi", Command{Name: "you", Args: []string{"pi-acp"}}, commandFactory, locator)
+	_, _ = owner.startAttempt(context.Background(), daemon, t.TempDir(),
 		append(os.Environ(), argumentRoundTripHelperEnvironment+"=1"))
 	if launched != current {
 		t.Fatalf("launch executable = %q, want %q", launched, current)
@@ -81,8 +81,8 @@ func TestOtherACPCommandStillUsesConfiguredExecutable(t *testing.T) {
 		launched = name
 		return exec.Command(os.Args[0], "-test.run=^TestACPArgumentRoundTripHelperProcess$")
 	}
-	daemon := newTestAttempt(t, "other", Command{Name: "other-agent", Args: []string{"acp"}}, commandFactory, locator)
-	_, _ = daemon.start(context.Background(), t.TempDir(),
+	owner, daemon := newTestAttempt(t, "other", Command{Name: "other-agent", Args: []string{"acp"}}, commandFactory, locator)
+	_, _ = owner.startAttempt(context.Background(), daemon, t.TempDir(),
 		append(os.Environ(), argumentRoundTripHelperEnvironment+"=1"))
 	if launched != "other-agent" || len(locator.looked) != 1 || locator.looked[0] != "other-agent" {
 		t.Fatalf("other launch = %q, PATH lookups = %q", launched, locator.looked)
@@ -99,12 +99,13 @@ func newTestAttempt(
 	command Command,
 	commandFactory platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
-) *attempt {
+) (*Service, *attempt) {
 	t.Helper()
-	target := newProvider(id, providers.ACPIntegration{Name: id, Transport: "stdio"}, command, commandFactory, locator, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
+	owner := &Service{newCommand: commandFactory, locator: locator, stdioPipes: platformprocess.NewParentOwnedStdio, scheduler: platformclock.Real{}, logger: logging.NoopLogger{}}
+	target := newProvider(id, providers.ACPIntegration{Name: id, Transport: "stdio"}, command)
 	owned := target.newAttempt(providers.ExecuteRequest{AttemptID: "launch-argument-attempt"})
-	t.Cleanup(owned.release)
-	return owned
+	t.Cleanup(func() { owner.releaseAttempt(owned) })
+	return owner, owned
 }
 
 func TestExecuteUsesLosslessQuotedLaunch(t *testing.T) {
@@ -192,7 +193,7 @@ func TestConfigureRetainsUnchangedProviderAndReplacesChangedCommand(t *testing.T
 	// survive one that replaces the provider.
 	original.recordNegotiated(acpsdk.AgentCapabilities{LoadSession: true})
 	active := original.newAttempt(providers.ExecuteRequest{AttemptID: "active-attempt"})
-	t.Cleanup(active.release)
+	t.Cleanup(func() { service.releaseAttempt(active) })
 
 	unchanged := providers.ACPIntegration{
 		ID: "entry-1", Name: "custom-acp", Aliases: []string{"custom"}, Transport: "stdio",
@@ -223,7 +224,7 @@ func TestConfigureRetainsUnchangedProviderAndReplacesChangedCommand(t *testing.T
 		t.Run(changed.name, func(t *testing.T) {
 			before := service.providers["custom-acp"]
 			attempt := before.newAttempt(providers.ExecuteRequest{AttemptID: "replaced-attempt"})
-			t.Cleanup(attempt.release)
+			t.Cleanup(func() { service.releaseAttempt(attempt) })
 			if err := service.Configure(context.Background(), []providers.ACPIntegration{changed.integration}); err != nil {
 				t.Fatalf("Configure(%s) error = %v", changed.name, err)
 			}
@@ -274,7 +275,7 @@ func TestConfigureStopsAttemptsOfRemovedIntegration(t *testing.T) {
 	service := serviceValue.(*Service)
 	removed := service.providers["custom-acp"].newAttempt(providers.ExecuteRequest{AttemptID: "removed-attempt"})
 	kept := service.providers["other-acp"].newAttempt(providers.ExecuteRequest{AttemptID: "kept-attempt"})
-	t.Cleanup(kept.release)
+	t.Cleanup(func() { service.releaseAttempt(kept) })
 
 	if err := service.Configure(context.Background(), []providers.ACPIntegration{{
 		ID: "entry-2", Name: "other-acp", Transport: "stdio", Command: "other acp",
@@ -329,14 +330,14 @@ func TestRetiredAttemptRefusesToLaunch(t *testing.T) {
 		started++
 		return exec.Command(os.Args[0], "-test.run=^TestACPArgumentRoundTripHelperProcess$")
 	})
-	owned := newTestAttempt(t, "custom-acp", Command{Name: "agent", Args: []string{"acp"}}, factory, availableLocator{})
+	owner, owned := newTestAttempt(t, "custom-acp", Command{Name: "agent", Args: []string{"acp"}}, factory, availableLocator{})
 	if !owned.retire() {
 		t.Fatal("retire() = false on a live attempt, want true")
 	}
-	if _, err := owned.start(context.Background(), t.TempDir(), os.Environ()); err == nil {
+	if _, err := owner.startAttempt(context.Background(), owned, t.TempDir(), os.Environ()); err == nil {
 		t.Fatal("start() error = nil, want the retired attempt to refuse to launch")
 	}
-	if err := owned.stop(context.Background()); err != nil {
+	if err := owner.stopAttempt(context.Background(), owned); err != nil {
 		t.Fatalf("stop() after a refused launch error = %v, want nil: nothing was owned", err)
 	}
 	if started != 0 {
@@ -468,6 +469,63 @@ func TestConfigureRejectsMalformedReplacementWithoutChangingLiveSet(t *testing.T
 	if service.providers["custom-acp"] != original {
 		t.Fatal("malformed replacement mutated the live provider set")
 	}
+}
+
+// Configuration allocates detached state without invoking an effect. A failed
+// launch releases only its own registration, even when a peer uses the same ID.
+// No OS process participates; delivered protocol behavior is covered by IR01.
+func TestConfiguredProviderStateAndLaunchEffectsRemainOwnerScoped(t *testing.T) {
+	t.Parallel()
+	integration := providers.ACPIntegration{Name: "custom-acp", Transport: "stdio", Command: "agent acp", Arguments: []string{"acp"}}
+	owner, calls := newScopedLaunchOwner(t, integration)
+	peer, peerCalls := newScopedLaunchOwner(t, integration)
+	integration.Arguments[0] = "mutated"
+	if *calls != 0 || *peerCalls != 0 {
+		t.Fatal("configuration invoked a launch effect")
+	}
+	peerAttempt, _, ok := peer.beginAttempt("custom-acp", providers.ExecuteRequest{AttemptID: "peer"})
+	if !ok {
+		t.Fatal("peer registration failed")
+	}
+	t.Cleanup(func() { peer.releaseAttempt(peerAttempt) })
+	_, err := owner.Execute(t.Context(), "custom-acp", providers.ExecuteRequest{WorkingDirectory: t.TempDir()})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency || failure.Message != "ACP command factory returned nil" {
+		t.Fatalf("Execute = %v, want command-resource dependency failure", err)
+	}
+	if *calls != 1 || *peerCalls != 0 {
+		t.Fatalf("owner/peer launch calls = %d/%d, want 1/0", *calls, *peerCalls)
+	}
+	if err := owner.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if peerAttempt.retiredState() {
+		t.Fatal("failed owner launch or Close retired the peer attempt")
+	}
+	if err := peer.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !peerAttempt.retiredState() {
+		t.Fatal("peer Close did not retire its own attempt")
+	}
+}
+
+func newScopedLaunchOwner(t *testing.T, integration providers.ACPIntegration) (*Service, *int) {
+	t.Helper()
+	calls := new(int)
+	value, err := New([]providers.ACPIntegration{integration}, func(name string, args ...string) *exec.Cmd {
+		*calls++
+		if name != "agent" || !reflect.DeepEqual(args, []string{"acp"}) {
+			t.Errorf("launch = %q %q, want detached configured command", name, args)
+		}
+		return nil
+	}, availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := value.(*Service)
+	t.Cleanup(func() { _ = owner.Close(context.Background()) })
+	return owner, calls
 }
 
 // retiredState reports whether this attempt has been retired. It is a pure

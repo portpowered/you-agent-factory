@@ -31,12 +31,13 @@ func TestAttemptTeardownUsesInjectedScheduler(t *testing.T) {
 			stdin, stdout := &teardownStream{}, &teardownStream{}
 			logger := &teardownLogger{}
 			handles := &attemptHandles{
-				stdin: stdin, stdout: stdout, finished: make(chan error, 1), scheduler: scheduler, logger: logger,
+				stdin: stdin, stdout: stdout, finished: make(chan error, 1),
 			}
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			done := make(chan error, 1)
-			go func() { done <- handles.terminate(ctx) }()
+			owner := &Service{scheduler: scheduler, logger: logger}
+			go func() { done <- owner.terminate(ctx, handles) }()
 			grace := awaitTeardownTimer(t, scheduler, 500*time.Millisecond)
 			timers := []*teardownTimer{grace}
 			if outcome == "graceful" {
@@ -188,7 +189,7 @@ func TestServiceClaimAndTryCancelResolveAliasAndDelegateToAttempt(t *testing.T) 
 	svc := serviceValue.(*Service)
 	target := svc.providers["custom-acp"]
 	attempt := target.newAttempt(providers.ExecuteRequest{AttemptID: "attempt-1"})
-	t.Cleanup(attempt.release)
+	t.Cleanup(func() { svc.releaseAttempt(attempt) })
 
 	peer := newFakeSessionPeer()
 	connection := newPipedConnection(t, peer)
@@ -223,7 +224,7 @@ func TestServiceClaimAndTryCancelResolveAliasAndDelegateToAttempt(t *testing.T) 
 	// session, and not a replacement attempt that reuses the identical
 	// canonical provider and attempt ID while the control is still in flight.
 	replacement := target.newAttempt(providers.ExecuteRequest{AttemptID: "attempt-1"})
-	t.Cleanup(replacement.release)
+	t.Cleanup(func() { svc.releaseAttempt(replacement) })
 	replacementPeer := newFakeSessionPeer()
 	replacementConnection := newPipedConnection(t, replacementPeer)
 	replacementSession := replacement.window.Begin("attempt-1", acpsdk.SessionId("session-2"), replacementConnection)
