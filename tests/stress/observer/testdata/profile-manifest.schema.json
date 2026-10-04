@@ -11,7 +11,8 @@
     "methodSHA256",
     "instrumentation",
     "profileCommand",
-    "capabilityCommand"
+    "capabilityCommand",
+    "preparation"
   ],
   "properties": {
     "schemaVersion": {
@@ -290,6 +291,122 @@
     "capabilityCommand": {
       "type": "string",
       "minLength": 1
+    },
+    "preparation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "childPaths",
+        "goCommand",
+        "inputManifestPath",
+        "inputManifestSHA256",
+        "offline",
+        "cachePolicy"
+      ],
+      "properties": {
+        "childPaths": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "HOME",
+            "USERPROFILE",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "XDG_CONFIG_HOME",
+            "XDG_CACHE_HOME",
+            "GOCACHE",
+            "GOPATH",
+            "GOMODCACHE",
+            "GOTMPDIR",
+            "TEMP",
+            "TMP",
+            "GOROOT"
+          ],
+          "properties": {
+            "HOME": {
+              "type": "string",
+              "minLength": 1
+            },
+            "USERPROFILE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "HOMEDRIVE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "HOMEPATH": {
+              "type": "string",
+              "minLength": 1
+            },
+            "APPDATA": {
+              "type": "string",
+              "minLength": 1
+            },
+            "LOCALAPPDATA": {
+              "type": "string",
+              "minLength": 1
+            },
+            "XDG_CONFIG_HOME": {
+              "type": "string",
+              "minLength": 1
+            },
+            "XDG_CACHE_HOME": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOCACHE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOPATH": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOMODCACHE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOTMPDIR": {
+              "type": "string",
+              "minLength": 1
+            },
+            "TEMP": {
+              "type": "string",
+              "minLength": 1
+            },
+            "TMP": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOROOT": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "goCommand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputManifestPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputManifestSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "offline": {
+          "const": true
+        },
+        "cachePolicy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   }
 }

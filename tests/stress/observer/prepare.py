@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 from profile_prepare import build_profile
+from preparation_environment import owned_paths, child_environment, seed_inputs
 
 PIN = "95e213cfb35b50236fd7a34ad66c797d2ee7b5b6"
 HOST = "pkg/services/factory_runtime/internal/services/instance_host/internal/service"
@@ -12,8 +13,8 @@ LEASES = "pkg/services/models/internal/services/runtime_host/internal/services/l
 IMPORT = '"github.com/portpowered/infinite-you/pkg/platform/baselineobservation"'
 
 
-def git(source, *args):
-    return subprocess.check_output(["git", "-C", str(source), *args], text=True).strip()
+def git(source, *args, env=None):
+    return subprocess.check_output(["git", "-C", str(source), *args], text=True, env=env).strip()
 
 
 def instrument(text, concrete, hook, template):
@@ -49,14 +50,20 @@ def prepare(args):
         raise ValueError("output must be outside source or under its ignored .artifacts directory")
     if args.build_profile:
         (output / "profile-manifest.json").unlink(missing_ok=True)
-    head = git(source, "rev-parse", "HEAD")
+    preparation_paths = owned_paths(output / "preparation/environment") if args.build_profile else None
+    env = child_environment(preparation_paths) if preparation_paths else None
+    go_command, gofmt_command, seed_records = "go", "gofmt", []
+    head = git(source, "rev-parse", "HEAD", env=env)
     if args.mode == "pin" and head != PIN:
         raise ValueError("pin mode requires original pin " + PIN)
     templates = tool / "testdata"
     if args.build_profile:
         # Never leave an old qualified handoff after a failed new preparation.
-        if git(source, "status", "--porcelain") or git(tool, "status", "--porcelain"):
+        if git(source, "status", "--porcelain", env=env) or git(tool, "status", "--porcelain", env=env):
             raise ValueError("--build-profile requires clean source and committed clean tooling")
+        env, go_command, seed_records = seed_inputs(source, output, preparation_paths,
+            getattr(args, "cached_module_cache", None), getattr(args, "cached_go_root", None))
+        gofmt_command = str(Path(go_command).with_name("gofmt" + Path(go_command).suffix))
     replacements = {}
     files = []
 
@@ -67,7 +74,7 @@ def prepare(args):
         backing = output / "backing" / virtual
         backing.parent.mkdir(parents=True, exist_ok=True)
         backing.write_text(content, encoding="utf-8", newline="\n")
-        subprocess.run(["gofmt", "-w", str(backing)], check=True)
+        subprocess.run([gofmt_command, "-w", str(backing)], check=True, env=env)
         replacements[str(source / virtual)] = str(backing)
         files.append({"virtual": virtual, "backing": str(backing), "sha256": hashlib.sha256(backing.read_bytes()).hexdigest()})
 
@@ -104,10 +111,11 @@ def prepare(args):
         add(virtual, (templates / template).read_text())
     overlay = output / "overlay.json"
     overlay.write_text(json.dumps({"Replace": replacements}, indent=2) + "\n")
-    manifest = {"sourceCommit": head, "sourceStatus": git(source, "status", "--porcelain"), "toolSourceCommit": git(tool, "rev-parse", "HEAD"), "mode": args.mode, "files": files, "overlaySHA256": hashlib.sha256(overlay.read_bytes()).hexdigest(), "goVersion": subprocess.check_output(["go", "version"], text=True).strip(), "protocol": "owner-unit-and-Q0/Q1/Q2; terminal-session replacement", "buildCommand": f'go test -c -overlay "{overlay}" -p 1 -o "{output / "observer.test.exe"}" ./tests/stress/observer', "fixture": "one root process; controlled Codex command edge; idle bootstrap; explicit session Work/terminal replacement/close; no model or remote calls"}
+    manifest = {"sourceCommit": head, "sourceStatus": git(source, "status", "--porcelain", env=env), "toolSourceCommit": git(tool, "rev-parse", "HEAD", env=env), "mode": args.mode, "files": files, "overlaySHA256": hashlib.sha256(overlay.read_bytes()).hexdigest(), "goVersion": subprocess.check_output([go_command, "version"], text=True, env=env).strip(), "protocol": "owner-unit-and-Q0/Q1/Q2; terminal-session replacement", "buildCommand": f'go test -c -overlay "{overlay}" -p 1 -o "{output / "observer.test.exe"}" ./tests/stress/observer', "fixture": "one root process; controlled Codex command edge; idle bootstrap; explicit session Work/terminal replacement/close; no model or remote calls"}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if args.build_profile:
-        build_profile(source, output, tool, manifest, files, args.mode)
+        build_profile(source, output, tool, manifest, files, args.mode,
+                      env, go_command, preparation_paths, seed_records)
     print(overlay)
 
 
@@ -117,6 +125,8 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True)
     parser.add_argument("--mode", choices=["pin", "candidate"], required=True)
     parser.add_argument("--build-profile", action="store_true", help="compile and attest a prebuilt profile artifact; requires clean committed tooling")
+    parser.add_argument("--cached-module-cache", help="read-only expanded module input cache (defaults to inherited GOMODCACHE/GOPATH)")
+    parser.add_argument("--cached-go-root", help="read-only already cached Go root (defaults to exact go.mod cached auto toolchain)")
     try:
         prepare(parser.parse_args())
     except (ValueError, OSError, subprocess.CalledProcessError) as error:

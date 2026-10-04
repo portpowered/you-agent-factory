@@ -202,7 +202,21 @@ Use clean committed tooling and clean source. Compilation is optional and occurs
 only in preparation, using cached Go 1.25 with GOPROXY=off. Preparation retains
 build stdout, stderr and exit status and writes an absolute artifact path and
 SHA256, source/tree/tool identities, all overlay/backing hashes, toolchain/build
-information and owned runtime environment paths in profile-manifest.json.
+information and owned preparation/runtime environment paths in profile-manifest.json.
+Before any Go child runs, Python copies the already cached exact go.mod toolchain,
+expanded required modules and .mod/.info/.ziphash metadata into preparation/.
+Each copied input has source/path/SHA256 attribution in preparation-inputs.json;
+the profile manifest records its hash. Copies use separate bytes, with no shared
+cache writes, hardlinks or downloads. Preparation starts with an empty owned
+build cache; repeated preparation can reuse that same owned cache. Its preflight
+reserves 512MiB for build cache, artifact and temporary files within the 2GiB
+output budget. Also account for other lane-owned output directories before running.
+Missing cached inputs or unsupported replace/exclude directives fail actionably.
+Use --cached-module-cache and --cached-go-root for explicit read-only input paths
+when default GOMODCACHE/GOPATH and exact cached auto-toolchain discovery do not fit.
+All preparation children receive owned HOME/USERPROFILE, AppData, XDG config/cache,
+Go cache/module/temp and TEMP/TMP paths. GOENV/GOWORK/GOPROXY/GOSUMDB/telemetry are
+off, GOFLAGS is empty, and GOTOOLCHAIN remains auto with the copied exact toolchain.
 Wrong pins, dirty sources/tooling, unsupported transforms and failed builds
 remove any previous profile handoff and exit nonzero. Existing preparation
 without --build-profile remains available for provisional development checks.
@@ -227,7 +241,7 @@ Repeat preparation with --mode candidate and the lane worktree as source for
 candidate compatibility. Tests do not build artifacts. The running artifact
 verifies its own hash and the supplied preparation/overlay/backing hashes before
 construction. It applies the manifest's owned home, profile, AppData, config,
-cache and temporary directories. Preparation uses existing cached build inputs;
+cache and temporary directories. Preparation uses detached cached build inputs;
 runtime uses fresh owned cache paths and never invokes Go or downloads assets.
 
 Inert timing starts immediately before BuildProcess and ends when Process.Close
