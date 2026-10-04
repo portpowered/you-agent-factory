@@ -16,6 +16,11 @@ input.on("line", (line) => {
   } else if (request.method === "session/new") {
     process.stdout.write(result(request.id, { sessionId: "eof-fixture-session", configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "fixture", options: [{ value: "fixture", name: "Fixture" }] }] }));
   } else if (request.method === "session/prompt") {
+    if (mode === "prompt-disconnect") {
+      // A real pipe EOF before any result must remain a failed attempt.
+      process.exit(0);
+      return;
+    }
     const notification = JSON.stringify({
       jsonrpc: "2.0", method: "session/update", params: {
         sessionId: "eof-fixture-session", update: {

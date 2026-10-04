@@ -28,7 +28,7 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"initialize-version", "prompt-result", "custom-prompt-result"} {
+	for _, mode := range []string{"initialize-version", "prompt-result", "custom-prompt-result", "prompt-disconnect"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 			defer cancel()
@@ -51,6 +51,10 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 				assertDeliveredUnsupportedVersion(t, stdout, stderr, err)
 				return
 			}
+			if mode == "prompt-disconnect" {
+				assertDeliveredDisconnect(t, stdout, stderr, err)
+				return
+			}
 			if err != nil {
 				t.Fatalf("delivered Prompt failed after peer exit: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 			}
@@ -58,6 +62,21 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 				t.Fatalf("primary result was lost after peer exit: stdout=%q stderr=%q", stdout, stderr)
 			}
 		})
+	}
+}
+
+// This is the real EOF failure boundary only. Same-daemon recovery, redaction
+// and cancellation with a live peer remain separate integration criteria.
+func assertDeliveredDisconnect(t *testing.T, stdout, stderr string, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("prompt disconnect succeeded: stdout=%q stderr=%q", stdout, stderr)
+	}
+	if !strings.Contains(stdout+stderr, `ACP provider "opencode" disconnected before responding; retry the request`) {
+		t.Fatalf("prompt disconnect lost its diagnostic: error=%v stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if strings.Contains(stdout, "status: SUCCESS") || strings.Contains(stdout, "delivered EOF primary result") {
+		t.Fatalf("prompt disconnect returned a success: stdout=%q stderr=%q", stdout, stderr)
 	}
 }
 
