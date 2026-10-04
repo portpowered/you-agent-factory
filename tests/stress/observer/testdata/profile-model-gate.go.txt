@@ -250,3 +250,19 @@ func TestLifecycleProfileDriverControlledHostJoin(t *testing.T){
  if _,err=(profileRejectModelNetwork{}).Do(request);err==nil{t.Fatal("download permitted")}
 }
 
+func TestLifecycleProfileDriverModelFixtureEffects(t *testing.T){
+ t.Parallel();gate,err:=newProfileModelGate(map[string]error{"work":nil});if err!=nil{t.Fatal(err)}
+ effect:=profileModelEdges(t,t.TempDir(),gate)
+ selected,err:=effect.ModelResolveBackendArtifact(t.Context(),edges.ModelBackendArtifactSelectionRequest{Backend:"localai-llamacpp",ProtocolVersion:"localai-backend-v1"});if err!=nil{t.Fatal(err)}
+ if selected.Bytes<1 || len(selected.SHA256)!=64{t.Fatal("missing cached fixture identity")}
+ if _,err=effect.ModelResolveBackendArtifact(t.Context(),edges.ModelBackendArtifactSelectionRequest{Backend:"foreign"});err==nil{t.Fatal("foreign backend accepted")}
+ canceled,stop:=context.WithCancel(t.Context());stop()
+ if _,err=effect.ModelResolveBackendArtifact(canceled,edges.ModelBackendArtifactSelectionRequest{Backend:"localai-llamacpp",ProtocolVersion:"localai-backend-v1"});!errors.Is(err,context.Canceled){t.Fatal("lost selection cancellation",err)}
+ home,err:=effect.ModelAssetResolveHomeDirectory();if err!=nil{t.Fatal(err)}
+ folder,err:=profileModelCache(home,"model","fixture://owned","weights.bin",[]byte("inert"));if err!=nil{t.Fatal(err)}
+ data,err:=effect.ModelAssetReadFile(filepath.Join(folder,"weights.bin"));if err!=nil || string(data)!="inert"{t.Fatal("cached bytes unavailable",err)}
+ metadata,err:=effect.ModelAssetReadFile(filepath.Join(folder,".you-assets.json"));if err!=nil{t.Fatal(err)}
+ var decoded struct{Identity string;Artifacts []struct{Name,SHA256 string;Bytes int}}
+ if err=json.Unmarshal(metadata,&decoded);err!=nil{t.Fatal(err)}
+ if decoded.Identity=="" || len(decoded.Artifacts)!=1 || decoded.Artifacts[0].Bytes!=5 || decoded.Artifacts[0].SHA256!=fmt.Sprintf("%x",sha256.Sum256(data)){t.Fatal("cache lost content attribution")}
+}
