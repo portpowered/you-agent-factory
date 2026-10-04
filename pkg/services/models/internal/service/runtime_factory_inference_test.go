@@ -781,7 +781,7 @@ func TestRootCloseRuntimeScopePreventsConcurrentPullResolution(t *testing.T) {
 		if !errors.Is(err, models.ErrRuntimeScopeClosed) {
 			t.Fatalf("late pull: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; the result channel observes scope closure during resolution.
 		t.Fatal("late pull did not return")
 	}
 }

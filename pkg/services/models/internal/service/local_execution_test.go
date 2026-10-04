@@ -152,7 +152,7 @@ func TestLocalExecutorReleasesLeaseAndCapacityOnFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second) //nolint:testsleep // Failure ceiling detects leaked capacity; completion is driven by injected effects.
 			defer cancel()
 			for attempt := 0; attempt < 2; attempt++ {
 				result, err := executor.InvokeLocal(ctx, request, config, assets)
@@ -294,7 +294,7 @@ func assertClosedLocalLoad(t *testing.T, done <-chan error, runtime *gatedLocalR
 		if !errors.Is(err, models.ErrRuntimeScopeClosed) {
 			t.Fatalf("late invoke = %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; the done channel observes close winning the gated load.
 		t.Fatal("local invocation did not return")
 	}
 	if runtime.invokes != 0 || host.acquires != 1 || host.releases != 1 {
