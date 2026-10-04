@@ -481,12 +481,12 @@ func TestResolveProviderIDUsesStaticCanonicalAuthority(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	service, err := internalservice.New(internalservice.NewProbeOperation(func(
+	service, err := internalservice.New(catalog.ProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{}, nil
+		return providers.Descriptor{}, nil
 	}), nil, nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -528,12 +528,12 @@ func TestRegistrationProviderReturnsStaticDetachedCatalogFacts(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	service, err := internalservice.New(internalservice.NewProbeOperation(func(
+	service, err := internalservice.New(catalog.ProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{}, nil
+		return providers.Descriptor{}, nil
 	}), nil, nil)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
@@ -662,25 +662,21 @@ func TestGetProviderTypedFailures(t *testing.T) {
 func TestGetProviderBlocksOnMissingPrerequisiteProbeFacts(t *testing.T) {
 	t.Parallel()
 
-	service, err := internalservice.New(internalservice.NewProbeOperation(func(
+	service, err := internalservice.New(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		if descriptor.ID != providers.IDCodex {
-			return catalog.ProbeFacts{
-				Readiness:     descriptor.Readiness,
-				Prerequisites: descriptor.Prerequisites,
-			}, nil
+			return descriptor, nil
 		}
-		return catalog.ProbeFacts{
-			Readiness: providers.ReadinessUnavailable,
-			Prerequisites: []providers.Prerequisite{{
-				Kind:        providers.PrerequisiteDependency,
-				Name:        "codex",
-				Status:      providers.PrerequisiteMissing,
-				Description: "install codex CLI",
-			}},
-		}, nil
+		descriptor.Readiness = providers.ReadinessUnavailable
+		descriptor.Prerequisites = []providers.Prerequisite{{
+			Kind:        providers.PrerequisiteDependency,
+			Name:        "codex",
+			Status:      providers.PrerequisiteMissing,
+			Description: "install codex CLI",
+		}}
+		return descriptor, nil
 	}), nil, nil)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
@@ -702,20 +698,24 @@ func TestGetProviderBlocksOnMissingPrerequisiteProbeFacts(t *testing.T) {
 	}
 }
 
-func TestProbeFailureSurfacesUnavailableCatalogFacts(t *testing.T) {
+func TestSuppliedUnavailableProjectionSurfacesCatalogFacts(t *testing.T) {
 	t.Parallel()
 
-	service, err := internalservice.New(internalservice.NewProbeOperation(func(
+	service, err := internalservice.New(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		if descriptor.ID == providers.IDCodex {
-			return catalog.ProbeFacts{}, errors.New("native probe stderr: /Users/customer/.codex/output")
+			descriptor.Readiness = providers.ReadinessUnavailable
+			descriptor.Prerequisites = []providers.Prerequisite{{
+				Kind:        providers.PrerequisiteDependency,
+				Name:        "readiness-probe",
+				Status:      providers.PrerequisiteMissing,
+				Description: "Codex readiness probe failed.",
+			}}
+			return descriptor, nil
 		}
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
+		return descriptor, nil
 	}), nil, nil)
 	if err != nil {
 		t.Fatalf("New() = %v", err)
@@ -763,9 +763,55 @@ func TestCatalogUsesCompletedProbeWithoutChangingStaticFacts(t *testing.T) {
 	if !errors.Is(err, sentinel) || calls != 1 {
 		t.Fatalf("GetProvider error = %v, probe calls = %d", err, calls)
 	}
+	_, err = service.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if !errors.Is(err, sentinel) || calls != 2 {
+		t.Fatalf("ListProviders error = %v, probe calls = %d", err, calls)
+	}
 	after, err := service.RegistrationProvider(providers.IDCodex)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("static descriptor changed after probe: (%#v, %v), want %#v", after, err, before)
+	}
+}
+
+func TestCatalogPreservesCompletedReadyProjection(t *testing.T) {
+	t.Parallel()
+
+	probe := func(_ context.Context, descriptor providers.Descriptor) (providers.Descriptor, error) {
+		if descriptor.ID == providers.IDCodex {
+			descriptor.Readiness = providers.ReadinessReady
+			descriptor.Prerequisites = []providers.Prerequisite{{
+				Kind:        providers.PrerequisiteDependency,
+				Name:        "codex",
+				Status:      providers.PrerequisiteSatisfied,
+				Description: "Codex available.",
+			}}
+		}
+		return descriptor, nil
+	}
+	service, err := internalservice.New(probe, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Provider.Readiness != providers.ReadinessReady || len(got.Provider.Prerequisites) != 1 ||
+		got.Provider.Prerequisites[0].Status != providers.PrerequisiteSatisfied {
+		t.Fatalf("supplied ready projection = %#v", got.Provider)
+	}
+	list, err := service.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil || !reflect.DeepEqual(indexProviders(list.Providers)[providers.IDCodex], got.Provider) {
+		t.Fatalf("listed projection = (%#v, %v), want %#v", list, err, got.Provider)
+	}
+	got.Provider.Prerequisites[0].Description = "mutated"
+	again, err := service.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
+	if err != nil || again.Provider.Prerequisites[0].Description != "Codex available." {
+		t.Fatalf("repeated supplied projection = (%#v, %v)", again, err)
+	}
+	static, err := service.RegistrationProvider(providers.IDCodex)
+	if err != nil || static.Readiness != providers.ReadinessUnverified {
+		t.Fatalf("static registration after supplied readiness = (%#v, %v)", static, err)
 	}
 }
 
@@ -780,10 +826,10 @@ func TestCatalogProbeCancellationPreservesContextIdentity(t *testing.T) {
 			probe := catalog.ProbeOperation(internalservice.IdentityProbe)
 			calls := 0
 			if probing {
-				probe = internalservice.NewProbeOperation(func(context.Context, providers.Descriptor) (catalog.ProbeFacts, error) {
+				probe = catalog.ProbeOperation(func(context.Context, providers.Descriptor) (providers.Descriptor, error) {
 					calls++
 					cancel()
-					return catalog.ProbeFacts{}, errors.New("private probe failure")
+					return providers.Descriptor{}, ctx.Err()
 				})
 			} else {
 				cancel()

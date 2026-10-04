@@ -21,7 +21,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -474,15 +473,12 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	service, err := newTestProvidersService(catalogwire.NewProbeOperation(func(
+	service, err := newTestProvidersService(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
+		return descriptor, nil
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{}),
@@ -629,15 +625,12 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := newTestProvidersService(catalogwire.NewProbeOperation(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
+		return descriptor, nil
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
@@ -727,15 +720,12 @@ func TestNewServiceBindsCodexAndClaudeWithDisabledCommandEdges(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := newTestProvidersService(catalogwire.NewProbeOperation(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
+		return descriptor, nil
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,

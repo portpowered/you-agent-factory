@@ -586,20 +586,24 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 	}
 }
 
-func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
+func TestRootCatalogPreservesSuppliedUnavailableProjection(t *testing.T) {
 	t.Parallel()
 
-	root, err := newTestProvidersService(catalogwire.NewProbeOperation(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		if descriptor.ID == providers.IDCodex {
-			return catalog.ProbeFacts{}, errors.New("native probe stderr: /Users/customer/.codex/output")
+			descriptor.Readiness = providers.ReadinessUnavailable
+			descriptor.Prerequisites = []providers.Prerequisite{{
+				Kind:        providers.PrerequisiteDependency,
+				Name:        "readiness-probe",
+				Status:      providers.PrerequisiteMissing,
+				Description: "Codex readiness probe failed.",
+			}}
+			return descriptor, nil
 		}
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
+		return descriptor, nil
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
@@ -654,12 +658,12 @@ func TestRootConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := newTestProvidersService(catalogwire.NewProbeOperation(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{}, nil
+		return providers.Descriptor{}, nil
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
@@ -683,12 +687,12 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 
 	probeCalls := 0
 	adapterCalls := 0
-	catalogService, err := catalogwire.NewService(catalogwire.NewProbeOperation(func(
+	catalogService, err := catalogwire.NewService(catalog.ProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{}, nil
+		return providers.Descriptor{}, nil
 	}), nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)

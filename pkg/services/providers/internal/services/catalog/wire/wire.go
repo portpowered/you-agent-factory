@@ -14,11 +14,6 @@ func IdentityProbe(ctx context.Context, descriptor providers.Descriptor) (provid
 	return catalogservice.IdentityProbe(ctx, descriptor)
 }
 
-// NewProbeOperation completes the bounded readiness projection over a query.
-func NewProbeOperation(query catalog.ProbeQuery) catalog.ProbeOperation {
-	return catalogservice.NewProbeOperation(query)
-}
-
 // NewService constructs an inert catalog over the accepted standardized
 // provider catalog publication.
 func NewService(probe catalog.ProbeOperation, descriptors []providers.Descriptor, overrides []catalog.CapabilityOverride) (catalog.Service, error) {

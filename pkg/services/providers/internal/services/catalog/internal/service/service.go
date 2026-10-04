@@ -174,43 +174,6 @@ func (s *service) applyProbe(
 	return s.probe(ctx, descriptor.Clone())
 }
 
-func mergeProbeFacts(
-	base providers.Descriptor,
-	facts catalog.ProbeFacts,
-) providers.Descriptor {
-	merged := base.Clone()
-	merged.Readiness = facts.Readiness
-	if facts.Prerequisites != nil {
-		merged.Prerequisites = clonePrerequisites(facts.Prerequisites)
-	}
-	return merged
-}
-
-func probeFailureFacts(descriptor providers.Descriptor) catalog.ProbeFacts {
-	name := descriptor.DisplayName
-	if strings.TrimSpace(name) == "" {
-		name = descriptor.ID.String()
-	}
-	return catalog.ProbeFacts{
-		Readiness: providers.ReadinessUnavailable,
-		Prerequisites: []providers.Prerequisite{{
-			Kind:        providers.PrerequisiteDependency,
-			Name:        "readiness-probe",
-			Status:      providers.PrerequisiteMissing,
-			Description: name + " readiness probe failed.",
-		}},
-	}
-}
-
-func clonePrerequisites(prerequisites []providers.Prerequisite) []providers.Prerequisite {
-	if prerequisites == nil {
-		return nil
-	}
-	cloned := make([]providers.Prerequisite, len(prerequisites))
-	copy(cloned, prerequisites)
-	return cloned
-}
-
 func isProviderSelectable(descriptor providers.Descriptor) bool {
 	if descriptor.Availability != providers.AvailabilitySelectable ||
 		hasMissingPrerequisite(descriptor.Prerequisites) {
