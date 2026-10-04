@@ -2,6 +2,7 @@
 package wire
 
 import (
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -13,6 +14,7 @@ func NewService(
 	commandFactory platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
+	scheduler platformclock.TimerSource,
 ) (acp.ContinuationService, error) {
-	return acpservice.New(integrations, commandFactory, locator, stdioPipes)
+	return acpservice.New(integrations, commandFactory, locator, stdioPipes, scheduler)
 }

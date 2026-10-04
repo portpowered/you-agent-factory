@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -52,6 +53,7 @@ type Service struct {
 	newCommand   platformprocess.CommandFactory
 	locator      platformprocess.ExecutableLocator
 	stdioPipes   platformprocess.StdioPipeFactory
+	scheduler    platformclock.TimerSource
 }
 
 var _ acp.ContinuationService = (*Service)(nil)
@@ -66,12 +68,14 @@ func New(
 	newCommand platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
+	scheduler platformclock.TimerSource,
 ) (acp.ContinuationService, error) {
 	service := &Service{
 		providers:  map[providers.ID]*provider{},
 		newCommand: newCommand,
 		locator:    locator,
 		stdioPipes: stdioPipes,
+		scheduler:  scheduler,
 	}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
@@ -284,7 +288,7 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 			next[id] = current
 			continue
 		}
-		next[id] = newProvider(id, values[id], command, service.newCommand, service.locator, service.stdioPipes)
+		next[id] = newProvider(id, values[id], command, service.newCommand, service.locator, service.stdioPipes, service.scheduler)
 		if current := service.providers[id]; current != nil {
 			retired = append(retired, current)
 		}
@@ -344,6 +348,7 @@ type provider struct {
 	newCommand  platformprocess.CommandFactory
 	locator     platformprocess.ExecutableLocator
 	stdioPipes  platformprocess.StdioPipeFactory
+	scheduler   platformclock.TimerSource
 
 	mu sync.Mutex
 	// attempts is registration-ordered so Claim resolves an ambiguous
@@ -363,6 +368,7 @@ func newProvider(
 	newCommand platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
+	scheduler platformclock.TimerSource,
 ) *provider {
 	return &provider{
 		id:          id,
@@ -371,6 +377,7 @@ func newProvider(
 		newCommand:  newCommand,
 		locator:     locator,
 		stdioPipes:  stdioPipes,
+		scheduler:   scheduler,
 	}
 }
 
@@ -547,6 +554,7 @@ type attemptHandles struct {
 	client     *client
 	finished   chan error
 	tree       platformprocess.SubprocessTree
+	scheduler  platformclock.TimerSource
 }
 
 // release unregisters this attempt and completes the teardown of the process it
@@ -770,7 +778,7 @@ func (target *provider) preflight(ctx context.Context, cwd string, environment [
 	if target.id != providers.IDPi {
 		return nil
 	}
-	return piPreflight(ctx, target.newCommand, target.locator, cwd, environment)
+	return piPreflight(ctx, target.newCommand, target.locator, cwd, environment, target.scheduler)
 }
 
 // pi-acp replays this session metadata as an agent message outside the prompt
@@ -992,6 +1000,7 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 	a.publish(&attemptHandles{
 		cmd: cmd, stdin: requests, stdout: responses,
 		connection: connection, client: client, finished: finished, tree: tree,
+		scheduler: a.provider.scheduler,
 	})
 	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
 		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
@@ -1142,19 +1151,23 @@ func (h *attemptHandles) terminate(ctx context.Context) error {
 	_ = h.stdin.Close()
 	var stopErr error
 	exited := false
+	grace := h.scheduler.NewTimer(500 * time.Millisecond)
+	defer grace.Stop()
 	select {
 	case <-h.finished:
 		exited = true
 	case <-ctx.Done():
 		stopErr = ctx.Err()
 		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
-	case <-time.After(500 * time.Millisecond):
+	case <-grace.C():
 		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
 	}
 	if !exited {
+		kill := h.scheduler.NewTimer(2 * time.Second)
+		defer kill.Stop()
 		select {
 		case <-h.finished:
-		case <-time.After(2 * time.Second):
+		case <-kill.C():
 			if stopErr == nil {
 				stopErr = errors.New("ACP process did not exit after termination")
 			}

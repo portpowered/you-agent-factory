@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -29,6 +30,7 @@ func piPreflight(
 	locator platformprocess.ExecutableLocator,
 	cwd string,
 	environment []string,
+	scheduler platformclock.TimerSource,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return nativeFailure(err)
@@ -41,7 +43,7 @@ func piPreflight(
 			return piMissingExecutableFailure()
 		}
 	}
-	output, err := probePiVersion(ctx, newCommand, cwd, environment)
+	output, err := probePiVersion(ctx, newCommand, cwd, environment, scheduler)
 	if ctx.Err() != nil {
 		return nativeFailure(ctx.Err())
 	}
@@ -115,6 +117,7 @@ func probePiVersion(
 	newCommand platformprocess.CommandFactory,
 	cwd string,
 	environment []string,
+	scheduler platformclock.TimerSource,
 ) (string, error) {
 	command := newCommand("pi", "--version")
 	if command == nil {
@@ -138,7 +141,7 @@ func probePiVersion(
 	}
 	finished := make(chan error, 1)
 	go func() { finished <- command.Wait() }()
-	timer := time.NewTimer(3 * time.Second)
+	timer := scheduler.NewTimer(3 * time.Second)
 	defer timer.Stop()
 	select {
 	case err := <-finished:
@@ -148,7 +151,7 @@ func probePiVersion(
 		}
 		return output.String(), nil
 	case <-ctx.Done():
-	case <-timer.C:
+	case <-timer.C():
 	}
 	_ = platformprocess.TerminateSubprocessTree(command, tree)
 	<-finished

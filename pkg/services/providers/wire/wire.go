@@ -394,7 +394,11 @@ func newRootWithOptions(
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
 	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, agyCommandClock, agyPTYPlatform)
-	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes)
+	scheduler, ok := agyCommandClock.(platformclock.TimerSource)
+	if !ok {
+		scheduler = platformclock.Real{}
+	}
+	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes, scheduler)
 	if err != nil {
 		return nil, err
 	}
