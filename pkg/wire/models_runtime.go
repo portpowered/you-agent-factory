@@ -350,14 +350,13 @@ func provideModelScopedLocalExecution(scopes modelswire.RuntimeScopes, assets mo
 }
 func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	catalog modelswire.Catalog, host modelswire.RuntimeHost, inference modelswire.Inference,
-	launcher modelswire.HostProcessLauncher, hostHTTP modelswire.HostHTTPDoer, clock modelswire.HostClock,
-	localRuntime modelswire.LocalRuntime, resources *modelswire.ResourceLimiter, now modelNow,
+	resources *modelswire.ResourceLimiter, now modelNow,
 	localExecution modelswire.ScopedLocalExecution,
-	logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder, evidence modelswire.RuntimeEvidenceRecorder,
+	evidence modelswire.RuntimeEvidenceRecorder,
 	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform, backend *zap.Logger) (models.Service, error) {
-	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime, resources, localExecution,
+	return modelswire.NewService(scopes, assets, catalog, host, inference, resources, localExecution,
 		backend, now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
-		logger, metrics, modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), evidence,
+		evidence,
 		edges.ModelResolveHuggingFaceRevision, resolver, platform)
 }
 func provideModelHostCompatibilityChecker(

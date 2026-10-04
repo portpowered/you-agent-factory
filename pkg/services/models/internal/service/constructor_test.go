@@ -484,8 +484,8 @@ func newScopedLocalRoot(t *testing.T, started, resume chan struct{}) (*modelsser
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := modelsservice.NewRoot(struct{ modelhost.ProcessLauncher }{}, struct{ modelhost.HTTPDoer }{}, struct{ modelhost.Clock }{}, runtime, resources, execution,
-		scopes, struct{ modelcatalog.Service }{}, assets, host, struct{ inference.Service }{}, zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
+	root, err := modelsservice.NewRoot(resources, execution,
+		scopes, struct{ modelcatalog.Service }{}, assets, host, struct{ inference.Service }{}, zap.NewNop(), time.Now, nil, nil,
 		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{})
 	if err != nil {
 		t.Fatal(err)

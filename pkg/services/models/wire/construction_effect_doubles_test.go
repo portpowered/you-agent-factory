@@ -765,8 +765,8 @@ func composeModelsService(
 		return nil, err
 	}
 	return NewService(runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
-		processLauncher, hostHTTP, hostClock, localRuntime, resources, execution, logger, now, pullMetrics,
-		hostLogger, hostMetrics, localHooks, runtimeEvidence, firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform)
+		resources, execution, logger, now, pullMetrics,
+		runtimeEvidence, firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform)
 }
 
 func firstRevisionResolver(

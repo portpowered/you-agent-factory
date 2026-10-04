@@ -100,9 +100,8 @@ func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return provideModelsService(edges, scopes, assets, catalog, host, inference, provideModelHostLauncher(edges, source),
-		provideModelHostHTTP(edges), provideModelHostClock(edges), localRuntime, resources,
-		now, execution, provideModelHostLogger(processLogger), provideModelHostMetrics(edges), evidence, resolver, provideModelAssetHostPlatform(edges), processLogger)
+	return provideModelsService(edges, scopes, assets, catalog, host, inference, resources,
+		now, execution, evidence, resolver, provideModelAssetHostPlatform(edges), processLogger)
 }
 func newModelAssetsFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes) (modelswire.Assets, error) {
 	coordination, err := provideModelAssetCoordination(edges)

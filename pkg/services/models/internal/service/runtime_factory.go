@@ -12,7 +12,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
@@ -22,13 +21,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// Root retains the process-wide external effect ports of the injected Models
-// service. It is inert until it is bound to a Factory Session runtime.
+// Root composes completed Models collaborators and scoped resources.
+// It is inert until a customer operation activates the selected scope.
 type Root struct {
-	processLauncher            modelhost.ProcessLauncher
-	hostHTTP                   modelhost.HTTPDoer
-	hostClock                  modelhost.Clock
-	localRuntime               localmodels.Runtime
 	resources                  *localmodels.ResourceLimiter
 	localExecution             ScopedLocalExecution
 	runtimeScopes              runtimescopes.Service
@@ -45,20 +40,12 @@ type Root struct {
 	now                        func() time.Time
 	pullMetrics                modelseffects.PullMetricsRecorder
 	runtimeEvidence            modelseffects.RuntimeEvidenceRecorder
-	hostLogger                 modelseffects.HostDiagnosticLogger
-	hostMetrics                modelseffects.HostMetricsRecorder
-	localHooks                 modelseffects.LocalRuntimeHooks
 	backendArtifactPlatform    models.AssetHostPlatform
 }
 
 var _ models.Service = (*Root)(nil)
 
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func NewRoot(
-	processLauncher modelhost.ProcessLauncher,
-	hostHTTP modelhost.HTTPDoer,
-	hostClock modelhost.Clock,
-	localRuntime localmodels.Runtime,
 	resources *localmodels.ResourceLimiter,
 	localExecution ScopedLocalExecution,
 	runtimeScopes runtimescopes.Service,
@@ -70,25 +57,10 @@ func NewRoot(
 	now func() time.Time,
 	pullMetrics modelseffects.PullMetricsRecorder,
 	runtimeEvidence modelseffects.RuntimeEvidenceRecorder,
-	hostLogger modelseffects.HostDiagnosticLogger,
-	hostMetrics modelseffects.HostMetricsRecorder,
-	localHooks modelseffects.LocalRuntimeHooks,
 	resolveRevision func(context.Context, string) (string, error),
 	resolveBackend modelseffects.BackendArtifactResolver,
 	platform models.AssetHostPlatform,
 ) (*Root, error) {
-	if processLauncher == nil {
-		return nil, missingDependencyError("model host process launcher")
-	}
-	if hostHTTP == nil {
-		return nil, missingDependencyError("model host HTTP client")
-	}
-	if hostClock == nil {
-		return nil, missingDependencyError("model host clock")
-	}
-	if isNilDependency(localRuntime) {
-		return nil, missingDependencyError("local model runtime")
-	}
 	if resources == nil {
 		return nil, missingDependencyError("local model resource limiter")
 	}
@@ -120,14 +92,12 @@ func NewRoot(
 		return nil, missingDependencyError("Models revision resolver")
 	}
 	return &Root{
-		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
-		localRuntime: localRuntime, resources: resources, localExecution: localExecution,
+		resources: resources, localExecution: localExecution,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
 		resolveBackendArtifact:     resolveBackend,
 		logger:                     logger, now: now, pullMetrics: pullMetrics, runtimeEvidence: runtimeEvidence,
-		hostLogger: hostLogger, hostMetrics: hostMetrics, localHooks: localHooks,
 		backendArtifactPlatform: platform,
 	}, nil
 }

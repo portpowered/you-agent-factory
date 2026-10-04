@@ -21,7 +21,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -122,22 +121,19 @@ type invocationRuntime interface {
 // NewService supplies completed leaves and individually selected effects to Root.
 func NewService(
 	runtimeScopes RuntimeScopes, assets Assets, catalog Catalog, runtimeHost RuntimeHost, inference Inference,
-	processLauncher HostProcessLauncher, hostHTTP HostHTTPDoer, hostClock HostClock,
-	localRuntime LocalRuntime, resources *ResourceLimiter,
+	resources *ResourceLimiter,
 	localExecution ScopedLocalExecution,
 	logger *zap.Logger, now func() time.Time, pullMetrics PullMetricsRecorder,
-	hostLogger HostDiagnosticLogger, hostMetrics HostMetricsRecorder, localHooks LocalRuntimeHooks,
 	runtimeEvidence RuntimeEvidenceRecorder, legacyRevisionOverride func(context.Context, string) (string, error),
 	backendResolver BackendArtifactResolver, assetPlatform models.AssetHostPlatform,
 ) (models.Service, error) {
 	if legacyRevisionOverride == nil {
 		legacyRevisionOverride = NewUnresolvedAssetRevisionResolver()
 	}
-	launcher, clock := adaptConstructionPorts(processLauncher, hostClock)
 	return modelsservice.NewRoot(
-		launcher, hostHTTP, clock, localRuntime, resources, localExecution,
+		resources, localExecution,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
-		logger, now, pullMetrics, runtimeEvidence, hostLogger, hostMetrics, localHooks,
+		logger, now, pullMetrics, runtimeEvidence,
 		legacyRevisionOverride, backendResolver, assetPlatform,
 	)
 }
@@ -189,21 +185,6 @@ func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.Runtim
 		resolved.APIBaseURL = overrides.APIBaseURL
 	}
 	return resolved
-}
-
-func adaptConstructionPorts(
-	processLauncher HostProcessLauncher,
-	hostClock HostClock,
-) (modelhost.ProcessLauncher, modelhost.Clock) {
-	var launcher modelhost.ProcessLauncher
-	if processLauncher != nil {
-		launcher = hostProcessLauncher{next: processLauncher}
-	}
-	var clock modelhost.Clock
-	if hostClock != nil {
-		clock = hostClockAdapter{next: hostClock}
-	}
-	return launcher, clock
 }
 
 // NewCatalogReadinessQuery connects readiness to the selected Assets role.
@@ -267,27 +248,6 @@ func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
 // NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.
 func NewInvocationArtifactExporter(fileSystem InvocationArtifactFileSystem) (InvocationArtifactExporter, error) {
 	return inferencewire.NewInvocationArtifactExporter(fileSystem)
-}
-
-type hostProcessLauncher struct {
-	next modelseffects.HostProcessLauncher
-}
-
-func (a hostProcessLauncher) Start(ctx context.Context, spec modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
-	process, err := a.next.Start(ctx, modelseffects.HostProcessStartSpec{
-		Command: spec.Command, Args: spec.Args, Env: spec.Env, WorkDir: spec.WorkDir, HealthEndpoint: spec.HealthEndpoint,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return process, nil
-}
-
-type hostClockAdapter struct{ next modelseffects.HostClock }
-
-func (a hostClockAdapter) Now() time.Time { return a.next.Now() }
-func (a hostClockAdapter) NewTimer(duration time.Duration) modelhost.Timer {
-	return a.next.NewTimer(duration)
 }
 
 type runtimeTempFileAdapter struct {

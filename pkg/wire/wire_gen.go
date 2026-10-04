@@ -325,16 +325,16 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v75 := provideModelRuntimeHTTP(edges2)
-	v76, err := provideModelLocalRuntime(wireModelRuntimeRunner, v75, v69, v67, v68)
+	v75, err := provideModelResourceLimiter(wireModelNow)
 	if err != nil {
 		return nil, err
 	}
-	v77, err := provideModelResourceLimiter(wireModelNow)
+	v76 := provideModelRuntimeHTTP(edges2)
+	v77, err := provideModelLocalRuntime(wireModelRuntimeRunner, v76, v69, v67, v68)
 	if err != nil {
 		return nil, err
 	}
-	v78, err := provideModelScopedLocalExecution(v36, v50, v66, v76, v77, wireModelNow)
+	v78, err := provideModelScopedLocalExecution(v36, v50, v66, v77, v75, wireModelNow)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	modelsService, err := provideModelsService(edges2, v36, v50, v52, v66, v74, v60, v61, v53, v76, v77, wireModelNow, v78, v56, v57, v65, v79, assetHostPlatform, logger)
+	modelsService, err := provideModelsService(edges2, v36, v50, v52, v66, v74, v75, wireModelNow, v78, v65, v79, assetHostPlatform, logger)
 	if err != nil {
 		return nil, err
 	}
