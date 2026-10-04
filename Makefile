@@ -1057,9 +1057,7 @@ repolint:
 	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
 	$(GO) vet -testsleep -vettool=$(abspath $(REPOLINT_BIN)) ./...
 	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
-	$(GO) list -test -f '{{.ImportPath}}|{{join .TestGoFiles ","}}|{{join .XTestGoFiles ","}}|{{join .IgnoredGoFiles ","}}|{{join .GoFiles ","}}' ./... > "$(REPOLINT_DIR)/units.txt"
-	$(GO) list -test -tags=$(REPOLINT_TAGS) -f '{{.ImportPath}}|{{join .TestGoFiles ","}}|{{join .XTestGoFiles ","}}|{{join .IgnoredGoFiles ","}}|{{join .GoFiles ","}}' ./... >> "$(REPOLINT_DIR)/units.txt"
-	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt"
+	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt" --collect-tags "$(REPOLINT_TAGS)" --go "$(GO)"
 	$(MAKE) lint-baseline-growth
 
 # New rule IDs may seed existing debt once; established IDs only shrink.

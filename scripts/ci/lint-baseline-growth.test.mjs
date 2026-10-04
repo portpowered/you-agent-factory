@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { compareBaselines, orphanTimingKeys, parseBaseline } from './lint-baseline-growth.mjs';
+import { collectTimingUnits, compareBaselines, orphanTimingKeys, parseBaseline } from './lint-baseline-growth.mjs';
 
 test('new rules seed once; established rules cannot grow even in a mixed seed', () => {
   assert.deepEqual(compareBaselines('', 'new|a|b\nnew|a|c'), []);
@@ -42,4 +42,39 @@ test('command fails closed on unreadable input', () => {
     '--base', 'missing-lint-baseline-file', '--head', 'internal/lint/analyzers/baseline.txt'], { encoding: 'utf8' });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /ENOENT/u);
+});
+
+test('platform metadata resolves inactive external units and whole packages without accepting deleted owners', () => {
+  const prefix = 'github.com/portpowered/infinite-you/';
+  const external = 'testsleep-deadline-test|tests/process_test|tests/process/windows_test.go::Run::deadline::1';
+  const inactive = 'testsleep-deadline-test|tests/omni|tests/omni/windows_test.go::Run::deadline::1';
+  const deleted = 'testsleep-sleep-test|tests/gone|tests/gone/gone_test.go::Run::sleep::1';
+  const head = [external, inactive, deleted].join('\n');
+  const calls = [];
+  const metadata = collectTimingUnits(head, 'tagunion', 'go', (_go, args, options) => {
+    calls.push({ args, goos: options.env.GOOS });
+    const stdout = options.env.GOOS === 'windows'
+      ? `${prefix}tests/process||windows_test.go||\n${prefix}tests/process_test [${prefix}tests/process.test]||||windows_test.go\n${prefix}tests/omni|windows_test.go|||\n`
+      : `${prefix}tests/process|||windows_test.go|\n`;
+    return { status: 0, stdout };
+  }, 'linux');
+  assert.deepEqual(orphanTimingKeys(head, metadata, prefix), [deleted]);
+  assert.deepEqual(calls.map(call => call.goos), ['linux', 'windows', 'darwin']);
+  assert.deepEqual(calls.at(-1).args.slice(6), ['./tests/gone']);
+  assert.ok(calls.every(call => !call.args.includes('./...')));
+  assert.deepEqual(orphanTimingKeys(external, metadata.replaceAll('windows_test.go', 'other_test.go'), prefix), [external]);
+});
+
+test('metadata stops after resolution, preserves literal _test directories and fails on compiler errors', () => {
+  const key = 'testsleep-sleep-test|tests/real_test|tests/real_test/a_test.go::Run::sleep::1';
+  let calls = 0;
+  collectTimingUnits(key, 'tagunion', 'go', (_go, args) => {
+    calls++;
+    assert.equal(args.at(-1), './tests/real_test');
+    return { status: 0, stdout: 'github.com/portpowered/infinite-you/tests/real_test|a_test.go|||' };
+  }, 'linux');
+  assert.equal(calls, 1);
+  assert.throws(() => collectTimingUnits(key, 'tagunion', 'go', () => ({ status: 1, stderr: 'bad metadata' }), 'linux'), /bad metadata/u);
+  assert.equal(collectTimingUnits('', 'tagunion'), '');
+  assert.deepEqual(orphanTimingKeys('', '', 'm/'), []);
 });

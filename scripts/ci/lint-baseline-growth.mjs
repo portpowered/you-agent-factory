@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 export function parseBaseline(text) {
@@ -34,6 +35,8 @@ export function compareBaselines(baseText, headText) {
 
 // Compiler metadata alone identifies vanished units; no source inventory is read.
 export function orphanTimingKeys(headText, unitText, prefix) {
+  const timingKeys = [...parseBaseline(headText)].filter(key => key.startsWith('testsleep-'));
+  if (!timingKeys.length) return [];
   const units = new Map();
   const files = new Map();
   for (const line of unitText.split(/\r?\n/u)) {
@@ -54,7 +57,7 @@ export function orphanTimingKeys(headText, unitText, prefix) {
     }
   }
   if (!units.size) throw new Error('compiler unit metadata contains no repository units');
-  return [...parseBaseline(headText)].filter(key => {
+  return timingKeys.filter(key => {
     const [rule, unit, site] = key.split('|');
     const file = site.split('::')[0].split('/').at(-1);
     return rule.startsWith('testsleep-') &&
@@ -63,12 +66,42 @@ export function orphanTimingKeys(headText, unitText, prefix) {
   }).sort();
 }
 
+// Query only debt-owning directories, then resolve platform-inactive owners on
+// the other supported GOOS values. IgnoredGoFiles includes default-only files,
+// so tagged metadata suffices for ownership (both vet configurations still run).
+export function collectTimingUnits(headText, tags, go = 'go', run = spawnSync, host = process.platform) {
+  const keys = [...parseBaseline(headText)].filter(key => key.startsWith('testsleep-'));
+  const platforms = [...new Set([host === 'win32' ? 'windows' : host, 'linux', 'windows', 'darwin'])];
+  const template = '{{.ImportPath}}|{{join .TestGoFiles ","}}|{{join .XTestGoFiles ","}}|{{join .IgnoredGoFiles ","}}|{{join .GoFiles ","}}';
+  let metadata = '';
+  let unresolved = keys;
+  for (const goos of platforms) {
+    if (!unresolved.length) break;
+    // Use the repository-file directory, not a guessed _test suffix removal:
+    // real directory names may also end in _test.
+    const packages = [...new Set(unresolved.map(key => './' + key.split('|')[2].split('::')[0].split('/').slice(0, -1).join('/')))];
+    const result = run(go, ['list', '-e', '-test', `-tags=${tags}`, '-f', template, ...packages], {
+      encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+      env: { ...process.env, GOOS: goos },
+    });
+    if (result.error || result.status !== 0) {
+      throw new Error(`compiler metadata (${goos}) failed: ${result.error?.message ?? result.stderr}`);
+    }
+    metadata += result.stdout + '\n';
+    unresolved = orphanTimingKeys(headText, metadata, 'github.com/portpowered/infinite-you/');
+  }
+  return metadata;
+}
+
 function main(args) {
   const options = Object.fromEntries(Array.from({ length: args.length / 2 }, (_, i) => [args[2 * i], args[2 * i + 1]]));
   if (args.length % 2 || !options['--head'] || (!options['--base'] && !options['--units'])) {
-    throw new Error('usage: --head FILE --base FILE, or --head FILE --units FILE --module-prefix PREFIX');
+    throw new Error('usage: --head FILE --base FILE, or --head FILE --units FILE [--collect-tags TAGS --go EXECUTABLE]');
   }
   const head = readFileSync(options['--head'], 'utf8');
+  if (options['--collect-tags']) {
+    writeFileSync(options['--units'], collectTimingUnits(head, options['--collect-tags'], options['--go']));
+  }
   const failures = options['--units']
     ? orphanTimingKeys(head, readFileSync(options['--units'], 'utf8'), options['--module-prefix'] ?? 'github.com/portpowered/infinite-you/')
     : compareBaselines(readFileSync(options['--base'], 'utf8'), head);
