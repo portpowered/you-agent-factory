@@ -65,6 +65,12 @@ def prepare(args):
         original = (source / path / existing).read_text()
         imports = '\n "fmt"\n ' + IMPORT
         calibration = (templates / template).read_text()
+        if path == HOST and head == PIN:
+            # Only the original pin lacks the testing.T cleanup argument.
+            # Current candidates retain their helper's fixture cleanup.
+            calibration = calibration.replace(
+                "newLifecycleControlFactory(t, ", "newLifecycleControlFactory("
+            )
         if path == LEASES:
             imports += '\n "sync"'
             if head == PIN:

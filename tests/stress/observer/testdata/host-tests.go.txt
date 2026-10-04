@@ -4,7 +4,7 @@ func TestInProcessObserverHostLifecycle(t *testing.T) {
 	host := newTestHost(t)
 	identity := fmt.Sprintf("instance_host:%p", host)
 	t.Cleanup(func() { baselineobservation.Unregister(identity) })
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	current := startReadyHostedHandle(t, host, currentFactory, "observer-current")
 	t.Cleanup(func() {
 		if !current.Completed() {
@@ -16,7 +16,7 @@ func TestInProcessObserverHostLifecycle(t *testing.T) {
 		t.Fatalf("current snapshot: %#v, %v", snapshot, err)
 	}
 	snapshot.Host.Handles[0].Key = "mutated-copy"
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacement, err := host.Replace(instancehost.ReplaceRequest{Current: current, Replacement: testBundle(replacementFactory, "observer-replacement"), ServiceContext: t.Context(), ReadinessContext: t.Context()})
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestInProcessObserverHostConcurrentReads(t *testing.T) {
 		}
 	}()
 	for i := 0; i < 12; i++ {
-		handle, err := host.Start(t.Context(), testBundle(newLifecycleControlFactory(interfaces.FactoryStateRunning), fmt.Sprintf("observer-%d", i)))
+		handle, err := host.Start(t.Context(), testBundle(newLifecycleControlFactory(t, interfaces.FactoryStateRunning), fmt.Sprintf("observer-%d", i)))
 		if err != nil {
 			t.Error(err)
 			break

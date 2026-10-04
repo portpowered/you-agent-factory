@@ -117,7 +117,10 @@ with no claim that this scenario proves real provider delivery or leak absence.
 
 At the original pin, leases calibration uses the existing two-argument
 constructor and coordinator binder; candidate calibration uses its existing
-three-argument constructor. Preparation adapts only test setup for that exact
+three-argument constructor. Host calibration passes `t` to the candidate's
+lifecycle-control helper so its fixture cleanup remains registered; preparation
+removes that argument only for the original pin's one-argument helper.
+Preparation adapts only test setup for that exact
 pin. The synchronized owner snapshots and lifecycle fixture are identical in
 meaning; neither constructor nor binding policy is changed in production.
 
