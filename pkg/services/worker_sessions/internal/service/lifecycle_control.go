@@ -20,7 +20,7 @@ import (
 // execution remains truthfully unsupported rather than becoming a fabricated
 // resumable session.
 func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
-	if err := req.Validate(); err != nil {
+	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	reservation, err := r.beginControlHistory(ctx, req.ID, workersessions.ControlActionPause, req.RequestID)
@@ -311,7 +311,7 @@ func (r *registry) terminateForShutdown(ctx context.Context, id string) (workers
 }
 
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
-	if err := req.Validate(); err != nil {
+	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	if attempt := r.runtimeAttemptFor(req.ID); attempt != nil {
@@ -499,12 +499,26 @@ func cancelAlreadyCanceled(result workers.WorkstationDispatchCancelResult, err e
 	return result.Outcome == workers.WorkstationDispatchCancelOutcomeAlreadyCanceled && err == nil
 }
 
-func (r *registry) controlTarget(id string) (workersessions.Session, *supervision, error) {
+// validateControlTarget rejects a foreign owner before history publication or
+// any attempt control effect. Admitted ownership is immutable for its lifetime.
+func (r *registry) validateControlTarget(req workersessions.ControlRequest) error {
+	if err := req.Validate(); err != nil {
+		return err
+	}
+	if req.FactorySessionID == "" {
+		return nil
+	}
+	_, _, err := r.controlTarget(req.ID, req.FactorySessionID)
+	return err
+}
+
+func (r *registry) controlTarget(id string, factorySessionIDs ...string) (workersessions.Session, *supervision, error) {
 	r.mu.RLock()
 	session, exists := r.sessions[id]
 	supervision := r.supervisions[id]
+	scopeMatches := observationFactoryScopeMatches(r.observations[id], factorySessionIDs...)
 	r.mu.RUnlock()
-	if !exists {
+	if !exists || !scopeMatches {
 		return workersessions.Session{}, nil, workersessions.ErrSessionNotFound
 	}
 	return cloneSession(session), supervision, nil

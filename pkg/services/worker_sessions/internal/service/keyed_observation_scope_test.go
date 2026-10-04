@@ -3,11 +3,84 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+func TestKeyedRuntimeControlsRejectForeignFactoryScopeBeforeEffects(t *testing.T) {
+	t.Parallel()
+	for _, action := range []workersessions.ControlAction{workersessions.ControlActionPause, workersessions.ControlActionResume, workersessions.ControlActionCancel, workersessions.ControlActionTerminate} {
+		for _, scope := range []string{"foreign-session", "   "} {
+			t.Run(fmt.Sprintf("%s/%q", action, scope), func(t *testing.T) {
+				t.Parallel()
+				sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+				owner := newPerRuntimeAttemptFixture(t, "scoped-control", sink)
+				before := assertPerRuntimeAttemptState(t, owner, workersessions.StateRunning)
+				appends := sink.requestsFor("")
+				request := workersessions.ControlRequest{ID: owner.request.ID, FactorySessionID: scope, RequestID: "foreign-control"}
+				control := scopedRuntimeControl(owner.service, action)
+				result, err := control(context.Background(), request)
+				wantErr := workersessions.ErrSessionNotFound
+				if scope == "   " {
+					wantErr = workersessions.ErrInvalidSessionID
+				}
+				if !errors.Is(err, wantErr) || result.Action != action || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.ID != "" {
+					t.Fatalf("foreign control = %+v, %v; want FAILED/%v", result, err, wantErr)
+				}
+				_, getErr := owner.service.Get(context.Background(), workersessions.GetRequest{ID: owner.request.ID, FactorySessionID: scope})
+				if !errors.Is(getErr, wantErr) {
+					t.Fatalf("foreign Get = %v, want %v", getErr, wantErr)
+				}
+				select {
+				case <-owner.control.invoked:
+					t.Fatal("foreign control invoked cancellation")
+				default:
+				}
+				after := assertPerRuntimeAttemptState(t, owner, workersessions.StateRunning)
+				if !reflect.DeepEqual(before, after) || !reflect.DeepEqual(appends, sink.requestsFor("")) {
+					t.Fatal("foreign control changed owner state or published history")
+				}
+			})
+		}
+	}
+}
+
+func scopedRuntimeControl(registry *registry, action workersessions.ControlAction) func(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	switch action {
+	case workersessions.ControlActionPause:
+		return registry.Pause
+	case workersessions.ControlActionResume:
+		return registry.Resume
+	case workersessions.ControlActionTerminate:
+		return registry.Terminate
+	default:
+		return registry.Cancel
+	}
+}
+
+func TestKeyedRuntimeControlsRetainSelectedFactoryScopeAndDirectCompatibility(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []string{"", "factory-scoped-control", " factory-scoped-control "} {
+		t.Run(fmt.Sprintf("%q", scope), func(t *testing.T) {
+			t.Parallel()
+			owner := newPerRuntimeAttemptFixture(t, "scoped-control", newEventsAppender())
+			if err := owner.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			before, err := owner.service.Get(context.Background(), workersessions.GetRequest{ID: owner.request.ID, FactorySessionID: scope})
+			if err != nil || before.ID != owner.request.ID || before.State != workersessions.StateCompleted {
+				t.Fatalf("selected Get = %+v, %v", before, err)
+			}
+			result, err := owner.service.Cancel(context.Background(), workersessions.ControlRequest{ID: owner.request.ID, FactorySessionID: scope})
+			if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || !reflect.DeepEqual(result.Session, before) || result.DispatchID != perRuntimeLogicalDispatchID {
+				t.Fatalf("selected terminal control = %+v, %v; before=%+v", result, err, before)
+			}
+		})
+	}
+}
 
 func TestKeyedRuntimeObservationReadsRejectForeignFactoryScopeBeforeEffects(t *testing.T) {
 	t.Parallel()

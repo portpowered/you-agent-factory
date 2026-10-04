@@ -23,6 +23,50 @@ type scopedWorkerReadProbe struct {
 	err    error
 }
 
+type scopedWorkerControlProbe struct {
+	workersessions.Service
+	requests []workersessions.ControlRequest
+	gets     []workersessions.GetRequest
+}
+
+func (probe *scopedWorkerControlProbe) Get(_ context.Context, req workersessions.GetRequest) (workersessions.Session, error) {
+	probe.gets = append(probe.gets, req)
+	return workersessions.Session{ID: req.ID, State: workersessions.StateCompleted}, nil
+}
+
+func TestWorkerSessionRetrySelectionCarriesOwningFactoryScope(t *testing.T) {
+	t.Parallel()
+	probe := &scopedWorkerControlProbe{}
+	if !terminalWorkerSessionRequiresRetry(context.Background(), probe, "recorded-worker", " replay-session ") {
+		t.Fatal("selected terminal worker was not recognized")
+	}
+	if len(probe.gets) != 1 || probe.gets[0].ID != "recorded-worker" || probe.gets[0].FactorySessionID != "replay-session" {
+		t.Fatalf("retry selection lost owning scope: %+v", probe.gets)
+	}
+}
+
+func (probe *scopedWorkerControlProbe) Cancel(_ context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	probe.requests = append(probe.requests, req)
+	return workersessions.ControlResult{Outcome: workersessions.ControlOutcomeNoop}, nil
+}
+
+func TestWorkerSessionControlFanoutCarriesCapturedFactoryScope(t *testing.T) {
+	t.Parallel()
+	probe := &scopedWorkerControlProbe{}
+	captured := capturedWorkerSessionControlTargets{
+		turnID: "turn-1", factorySessionID: "replay-session", workerSessionIDs: []string{"worker-original", "worker-peer"},
+	}
+	result := fanOutWorkerSessionControl(context.Background(), probe, captured, factory.WorkerSessionControlActionCancel, "control-1")
+	if result.Outcome != factory.WorkerSessionControlAggregateOutcomeNoOp || len(probe.requests) != 2 {
+		t.Fatalf("fanout = %+v, requests=%+v", result, probe.requests)
+	}
+	for index, request := range probe.requests {
+		if request.FactorySessionID != "replay-session" || request.ID != captured.workerSessionIDs[index] || request.RequestID != "control-1" {
+			t.Fatalf("child request lost captured owner: %+v", request)
+		}
+	}
+}
+
 func (probe *scopedWorkerReadProbe) GetObservationByWorkerSessionID(_ context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
 	probe.scopes = append(probe.scopes, req.FactorySessionID)
 	return workersessions.Observation{}, probe.err

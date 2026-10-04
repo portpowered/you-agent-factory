@@ -55,6 +55,7 @@ func (f *factoryImpl) controlAssociatedWorkerSessions(
 	}
 
 	captured := selectAssociatedWorkerSessionTargets(f.canonicalWorkerSessionControlEvents(), turnID)
+	captured.factorySessionID = sessionIDFromFactoryConfig(f.cfg)
 	result := fanOutWorkerSessionControl(ctx, f.cfg.workerSessions, captured, action, controlID)
 	f.workerSessionControlResults[key] = cloneWorkerSessionControlResult(result)
 	f.logWorkerSessionControlFanout(result)
@@ -106,7 +107,7 @@ func fanOutWorkerSessionControl(
 			continue
 		}
 		controlResult, err := callWorkerSessionControl(
-			controlCtx, service, action, workersessions.ControlRequest{ID: workerSessionID, RequestID: controlID},
+			controlCtx, service, action, workersessions.ControlRequest{ID: workerSessionID, RequestID: controlID, FactorySessionID: captured.factorySessionID},
 		)
 		child.DispatchID = controlResult.DispatchID
 		child.Outcome = workerSessionControlChildOutcome(controlResult.Outcome, err)

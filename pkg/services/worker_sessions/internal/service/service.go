@@ -362,9 +362,10 @@ func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (worker
 
 	r.mu.RLock()
 	session, exists := r.sessions[req.ID]
+	scopeMatches := observationFactoryScopeMatches(r.observations[req.ID], req.FactorySessionID)
 	r.mu.RUnlock()
 
-	if !exists {
+	if !exists || !scopeMatches {
 		r.logger.Info("worker session get", "sessionID", req.ID, "outcome", "not_found")
 		return workersessions.Session{}, workersessions.ErrSessionNotFound
 	}

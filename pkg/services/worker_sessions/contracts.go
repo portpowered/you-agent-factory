@@ -302,12 +302,14 @@ func (req ReserveRequest) Validate() error {
 // GetRequest asks Service to inspect one Worker Session identity.
 type GetRequest struct {
 	ID string
+	// FactorySessionID optionally narrows the identity to its owning Factory Session.
+	FactorySessionID string
 }
 
 // Validate reports whether req carries a non-empty stable identity. Validate
 // is pure and does not mutate req.
 func (req GetRequest) Validate() error {
-	if !validSessionID(req.ID) {
+	if !validSessionID(req.ID) || (req.FactorySessionID != "" && strings.TrimSpace(req.FactorySessionID) == "") {
 		return ErrInvalidSessionID
 	}
 	return nil
