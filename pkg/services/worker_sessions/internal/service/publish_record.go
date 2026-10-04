@@ -188,14 +188,15 @@ func (r *registry) waitForSupervisionDriver(ctx context.Context, id string) erro
 // readiness barrier and server-owned lifecycle admission around this same
 // preparation and supervision state machine.
 type invocationPreparationOptions struct {
-	serverOwned      bool
-	direct           bool
-	continuation     bool
-	runtimeOwned     bool
-	runtimeKey       workersessions.RuntimeAttemptKey
-	requestID        string
-	verifyTopicReady bool
-	lineage          *workers.SessionLineage
+	serverOwned          bool
+	direct               bool
+	continuation         bool
+	runtimeOwned         bool
+	runtimeKey           workersessions.RuntimeAttemptKey
+	observationRuntimeID string
+	requestID            string
+	verifyTopicReady     bool
+	lineage              *workers.SessionLineage
 }
 
 type invocationPreparation struct {
@@ -236,7 +237,7 @@ func (r *registry) prepareInvocation(
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	r.reserveIfAbsent(req.ID)
 	acceptedFields := []any{
-		"sessionID", req.ID,
+		"sessionID", publicWorkerID(req.ID),
 		"attemptID", attemptID,
 		"outcome", "reserved",
 		"state", string(workersessions.StateReserved),
@@ -256,7 +257,7 @@ func (r *registry) prepareInvocation(
 				failure:      workersessions.ErrStartAdmissionFailed,
 			}, nil
 		}
-		fields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable"}
+		fields := []any{"sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "not_startable"}
 		if options.requestID != "" {
 			fields = append(fields, "requestID", options.requestID)
 		}
@@ -271,6 +272,7 @@ func (r *registry) prepareInvocation(
 		options.direct,
 		req.Execution.Execution.FactorySessionID,
 		clock,
+		firstNonEmpty(options.observationRuntimeID, req.Execution.Execution.RuntimeID),
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
@@ -314,7 +316,7 @@ func (r *registry) rejectOpening(
 ) invocationPreparation {
 	r.logger.Warn(
 		"worker session opening publication rejected",
-		"sessionID", id,
+		"sessionID", publicWorkerID(id),
 		"attemptID", attemptID,
 		"outcome", "failed",
 		"stage", stage,
@@ -443,9 +445,10 @@ func (r *registry) ensureOpeningTopicReady(ctx context.Context, id string) error
 }
 
 func openingRecordMatches(record events.Record, id string, topic events.Topic) bool {
+	id = publicWorkerID(id)
 	return record.ID.Topic == topic &&
 		record.SourceType == lifecycleSourceType &&
-		record.SourceID == events.SourceID(id) &&
+		record.SourceID == events.SourceID(publicWorkerID(id)) &&
 		record.SourceSequence == openingSourceSequence &&
 		record.SourceEventID == openingSourceEventID &&
 		record.SchemaID == workerDraftSchemaID
@@ -549,13 +552,14 @@ func (r *registry) publicationFor(id string) *publication {
 // is committed.
 func (r *registry) PublishRecord(ctx context.Context, req workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "invalid")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "invalid")
 		return workersessions.PublishRecordResult{}, err
 	}
 
+	req.SessionID = r.workerAddress(req.SessionID, req.FactorySessionID)
 	pub := r.publicationFor(req.SessionID)
 	if pub == nil {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "not_found")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "not_found")
 		return workersessions.PublishRecordResult{}, workersessions.ErrSessionNotFound
 	}
 
@@ -563,7 +567,7 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	defer pub.mu.Unlock()
 
 	if !pub.open {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "publication_not_open")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "publication_not_open")
 		return workersessions.PublishRecordResult{}, workersessions.ErrPublicationNotOpen
 	}
 	if err := r.ensurePublishRecordProvider(ctx, req, pub); err != nil {
@@ -579,13 +583,13 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	}
 	_, alreadyAccepted := pub.accepted[identity]
 	if last := pub.lastSequence[key]; !alreadyAccepted && req.SourceSequence < last {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "out_of_order")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "out_of_order")
 		return workersessions.PublishRecordResult{}, workersessions.ErrOutOfOrderPublication
 	}
 
 	appendResult, err := r.appendDraft(ctx, r.observationTopic(req.SessionID), identity, req.SchemaID, req.Draft)
 	if err != nil {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "append_failed")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "append_failed")
 		return workersessions.PublishRecordResult{}, err
 	}
 	r.updateUsageProjection(req.SessionID, req.Draft)
@@ -599,12 +603,12 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	}
 	r.logger.Info(
 		"worker session publish record",
-		"sessionID", req.SessionID,
+		"sessionID", publicWorkerID(req.SessionID),
 		"outcome", publishOutcomeLabel(outcome),
 		"aggregate_sequence", uint64(appendResult.Record.ID.Position),
 	)
 	return workersessions.PublishRecordResult{
-		SessionID:         req.SessionID,
+		SessionID:         publicWorkerID(req.SessionID),
 		AggregateSequence: appendResult.Record.ID.Position,
 		Outcome:           outcome,
 	}, nil
@@ -711,7 +715,7 @@ func (r *registry) publishProviderBindingLocked(
 ) (workersessions.ProviderBindingResult, error) {
 	provider = providers.ID(provider).CanonicalSessionProvider()
 	if !pub.open {
-		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "publication_not_open")
+		r.logger.Info("worker session provider binding rejected", "sessionID", publicWorkerID(ownerID), "attemptID", dispatchID, "outcome", "publication_not_open")
 		return workersessions.ProviderBindingResult{}, workersessions.ErrPublicationNotOpen
 	}
 	if pub.provider != "" {
@@ -719,7 +723,7 @@ func (r *registry) publishProviderBindingLocked(
 			return workersessions.ProviderBindingResult{}, workersessions.ErrProviderBindingConflict
 		}
 		return workersessions.ProviderBindingResult{
-			WorkerSessionID: ownerID,
+			WorkerSessionID: publicWorkerID(ownerID),
 			DispatchID:      dispatchID,
 			Provider:        pub.provider,
 			Outcome:         workersessions.ProviderBindingOutcomeDuplicate,
@@ -729,7 +733,7 @@ func (r *registry) publishProviderBindingLocked(
 	selection := workers.SessionProviderSelection{RunnerID: provider}
 	payload := workers.SessionPayload{
 		Status:            string(workersessions.StateStarting),
-		WorkerSessionID:   ownerID,
+		WorkerSessionID:   publicWorkerID(ownerID),
 		DispatchID:        dispatchID,
 		TurnID:            pub.turnID,
 		AttemptID:         dispatchID,
@@ -752,7 +756,7 @@ func (r *registry) publishProviderBindingLocked(
 	}
 	appendResult, err := r.appendDraft(ctx, r.observationTopic(ownerID), identity, workerDraftSchemaID, draft)
 	if err != nil {
-		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "append_failed")
+		r.logger.Info("worker session provider binding rejected", "sessionID", publicWorkerID(ownerID), "attemptID", dispatchID, "outcome", "append_failed")
 		return workersessions.ProviderBindingResult{}, err
 	}
 	pub.provider = provider
@@ -760,9 +764,9 @@ func (r *registry) publishProviderBindingLocked(
 	if appendResult.Outcome == events.AppendOutcomeDuplicate {
 		outcome = workersessions.ProviderBindingOutcomeDuplicate
 	}
-	r.logger.Info("worker session provider binding", "sessionID", ownerID, "attemptID", dispatchID, "provider", provider, "outcome", string(outcome))
+	r.logger.Info("worker session provider binding", "sessionID", publicWorkerID(ownerID), "attemptID", dispatchID, "provider", provider, "outcome", string(outcome))
 	return workersessions.ProviderBindingResult{
-		WorkerSessionID: ownerID,
+		WorkerSessionID: publicWorkerID(ownerID),
 		DispatchID:      dispatchID,
 		Provider:        provider,
 		Outcome:         outcome,
@@ -824,7 +828,7 @@ func (r *registry) streamObservationTopic(
 	replayOnly bool,
 	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, error) {
-	if err := validateObservationCursorWorkerSessionID(cursor, workerSessionID); err != nil {
+	if err := validateObservationCursorWorkerSessionID(cursor, publicWorkerID(workerSessionID)); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
 	if !replayOnly && r.eventReader == nil {
@@ -878,11 +882,12 @@ func (r *registry) observationStreamSession(ref providers.SessionRef) (string, b
 
 func (r *registry) observationStreamSessionByID(id string, factorySessionIDs ...string) (string, bool, workersessions.State, error) {
 	r.mu.RLock()
+	id = r.workerAddressLocked(id, factorySessionIDs...)
 	session, exists := r.sessions[id]
 	scopeMatches := observationFactoryScopeMatches(r.observations[id], factorySessionIDs...)
 	r.mu.RUnlock()
 	if !exists || !scopeMatches {
-		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
+		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", publicWorkerID(id), "outcome", "not_found")
 		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
 	}
 	return id, session.Terminal(), session.State, nil
@@ -932,7 +937,7 @@ func (r *registry) logTerminal(id, attemptID string, session workersessions.Sess
 	if session.Result != nil {
 		cause = causeKindString(session.Result.Cause)
 	}
-	r.logger.Info("worker session start terminal", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
+	r.logger.Info("worker session start terminal", "sessionID", publicWorkerID(id), "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
 }
 
 func (r *registry) sessionState(id string) workersessions.State {

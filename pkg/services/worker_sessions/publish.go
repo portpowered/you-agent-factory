@@ -149,6 +149,7 @@ func (p *ProviderSessionObservationPublisher) publishWorkerDraftContext(
 	observer Service,
 	sessionID string,
 	draft workers.Draft,
+	factorySessionID string,
 ) error {
 	p.records.Lock()
 	defer p.records.Unlock()
@@ -159,13 +160,14 @@ func (p *ProviderSessionObservationPublisher) publishWorkerDraftContext(
 	sequence := p.sequences[sessionID]
 
 	_, err := observer.PublishRecord(ctx, PublishRecordRequest{
-		SessionID:      sessionID,
-		Draft:          draft,
-		SourceType:     WorkerObservationSourceType,
-		SourceID:       events.SourceID(sessionID),
-		SourceSequence: events.SourceSequence(sequence),
-		SourceEventID:  events.SourceEventID(sessionID + "/" + strconv.FormatUint(sequence, 10)),
-		SchemaID:       WorkerObservationSchemaID,
+		SessionID:        sessionID,
+		FactorySessionID: factorySessionID,
+		Draft:            draft,
+		SourceType:       WorkerObservationSourceType,
+		SourceID:         events.SourceID(sessionID),
+		SourceSequence:   events.SourceSequence(sequence),
+		SourceEventID:    events.SourceEventID(sessionID + "/" + strconv.FormatUint(sequence, 10)),
+		SchemaID:         WorkerObservationSchemaID,
 	})
 	if err != nil {
 		return err
@@ -210,13 +212,15 @@ const (
 // Phase, Payload, and Provenance are preserved verbatim on the committed
 // record.
 type PublishRecordRequest struct {
-	SessionID      string
-	Draft          workers.Draft
-	SourceType     events.SourceType
-	SourceID       events.SourceID
-	SourceSequence events.SourceSequence
-	SourceEventID  events.SourceEventID
-	SchemaID       events.SchemaID
+	// FactorySessionID optionally selects the immutable owning Factory Session.
+	FactorySessionID string
+	SessionID        string
+	Draft            workers.Draft
+	SourceType       events.SourceType
+	SourceID         events.SourceID
+	SourceSequence   events.SourceSequence
+	SourceEventID    events.SourceEventID
+	SchemaID         events.SchemaID
 }
 
 // Validate reports whether req is well-formed enough to attempt publication:
@@ -225,6 +229,9 @@ type PublishRecordRequest struct {
 // Workers draft validation rules (workers.ValidateDraft). Validate is pure
 // and does not mutate req or call Events.
 func (req PublishRecordRequest) Validate() error {
+	if req.FactorySessionID != "" && strings.TrimSpace(req.FactorySessionID) == "" {
+		return ErrInvalidSessionID
+	}
 	if !validSessionID(req.SessionID) {
 		return ErrInvalidSessionID
 	}
@@ -257,6 +264,8 @@ type PublishRecordResult struct {
 // canonical draft or trusted provider metadata; Worker Sessions never derives
 // it from a Provider Session's opaque ID.
 type ProviderBindingRequest struct {
+	// FactorySessionID optionally selects the immutable owning Factory Session.
+	FactorySessionID string
 	// WorkerSessionID selects an already-resolved owner. Runtime progress must
 	// not repeat a bare-dispatch lookup after validating its scoped key.
 	WorkerSessionID string
@@ -267,6 +276,9 @@ type ProviderBindingRequest struct {
 // Validate reports whether the dispatch and provider identities are present.
 // The registry resolves the dispatch to its owning Worker Session.
 func (req ProviderBindingRequest) Validate() error {
+	if req.FactorySessionID != "" && strings.TrimSpace(req.FactorySessionID) == "" {
+		return ErrInvalidProviderBinding
+	}
 	if req.WorkerSessionID != "" && !validSessionID(req.WorkerSessionID) {
 		return ErrInvalidSessionID
 	}

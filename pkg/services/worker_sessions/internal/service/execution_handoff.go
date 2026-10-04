@@ -51,7 +51,7 @@ func (r *registry) logReconciliation(
 		configuredTimeoutMS = deadlineAt.Sub(startedAt).Milliseconds()
 	}
 	fields := []any{
-		"sessionID", id,
+		"sessionID", publicWorkerID(id),
 		"attemptID", attemptID,
 		"dispatchID", result.DispatchID,
 		"reason", string(result.ReconciliationReason),
@@ -604,7 +604,7 @@ func (r *registry) reconcileContinuationResult(id string, snapshot completionSna
 		return result
 	}
 	result = invalidContinuationResult(result)
-	r.logger.Info("worker session continuation result rejected", "sessionID", id, "attemptID", snapshot.dispatchID, "outcome", "reference_mismatch")
+	r.logger.Info("worker session continuation result rejected", "sessionID", publicWorkerID(id), "attemptID", snapshot.dispatchID, "outcome", "reference_mismatch")
 	return result
 }
 
@@ -620,7 +620,7 @@ func (r *registry) completePausedSupervision(
 	}
 	r.finishControlHistory(controlReservationFor(supervision), workersessions.ControlOutcomeApplied, snapshot.dispatchID, workersessions.StatePaused)
 	supervision.clearRequestedAction()
-	r.logger.Info("worker session control", "sessionID", id, "attemptID", snapshot.dispatchID, "action", string(snapshot.action), "outcome", string(workersessions.ControlOutcomeApplied))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(id), "attemptID", snapshot.dispatchID, "action", string(snapshot.action), "outcome", string(workersessions.ControlOutcomeApplied))
 	supervision.signalPaused()
 	return true
 }
@@ -641,7 +641,7 @@ func (r *registry) completeRetryableSupervision(
 		return false
 	}
 	r.logReconciliationIfNeeded(id, snapshot.dispatchID, result, priorState, workersessions.StateRunning, snapshot.startedAt, snapshot.deadlineAt)
-	r.logger.Info("worker session attempt", "sessionID", id, "attemptID", snapshot.dispatchID, "outcome", "retryable_failure")
+	r.logger.Info("worker session attempt", "sessionID", publicWorkerID(id), "attemptID", snapshot.dispatchID, "outcome", "retryable_failure")
 	supervision.finishAttempt()
 	return true
 }
@@ -787,6 +787,7 @@ func (r *registry) BeginRuntimeAttempt(
 	if cancel == nil {
 		return nil, errRuntimeAttemptControlUnavailable
 	}
+	req.ID = scopedWorkerAddress(req.ID, req.Execution.Execution.FactorySessionID)
 	ctx = runtimeAttemptContext(ctx)
 	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
 	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalDispatchID}
@@ -813,7 +814,7 @@ func (r *registry) BeginRuntimeAttempt(
 	prepared, err := r.prepareInvocation(
 		context.WithoutCancel(ctx),
 		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
-		invocationPreparationOptions{runtimeOwned: true},
+		invocationPreparationOptions{runtimeOwned: true, observationRuntimeID: req.ObservationRuntimeID},
 		executor,
 		clock,
 		scheduler,
@@ -976,7 +977,7 @@ func (r *registry) prepareRuntimeInvocation(
 	execution.Execution.Dispatch.DispatchID = attemptID
 	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry}
 	prepared, err := r.prepareInvocation(context.WithoutCancel(ctx), invoke,
-		invocationPreparationOptions{runtimeKey: key}, executor, clock, scheduler)
+		invocationPreparationOptions{runtimeKey: key, observationRuntimeID: req.ObservationRuntimeID}, executor, clock, scheduler)
 	if err != nil {
 		r.releaseRuntimeAttemptKey(key, req.ID)
 	}

@@ -23,6 +23,7 @@ func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest)
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	req.ID = r.workerAddress(req.ID, req.FactorySessionID)
 	reservation, err := r.beginControlHistory(ctx, req.ID, workersessions.ControlActionPause, req.RequestID)
 	if err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -97,7 +98,7 @@ func (r *registry) pauseBoundary(
 	if cancelErr != nil {
 		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}
-		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", attempt.dispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+		r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", attempt.dispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 		return result, false, cancelErr
 	}
 	if alreadyTerminal || cancelResult.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
@@ -114,7 +115,7 @@ func (r *registry) pauseBoundary(
 	if current.State == workersessions.StatePaused {
 		result.Outcome = workersessions.ControlOutcomeApplied
 	}
-	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", attempt.dispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", attempt.dispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 	return result, false, nil
 }
 
@@ -294,7 +295,7 @@ func (r *registry) unsupportedControl(_ context.Context, req workersessions.Cont
 	if session.Terminal() {
 		result.Outcome = workersessions.ControlOutcomeNoop
 	}
-	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result, nil
 }
 
@@ -314,6 +315,7 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	req.ID = r.workerAddress(req.ID, req.FactorySessionID)
 	if attempt := r.runtimeAttemptFor(req.ID); attempt != nil {
 		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, attempt)
 	}
@@ -357,7 +359,7 @@ func (r *registry) cancelControlIteration(
 	attempt := supervision.beginCancellation(action)
 	r.logger.Info(
 		"worker session control claimed",
-		"sessionID", req.ID,
+		"sessionID", publicWorkerID(req.ID),
 		"attemptID", supervision.dispatchID,
 		"action", string(action),
 		"attempt", cancellationAttemptName(attempt.kind),
@@ -428,7 +430,7 @@ func (r *registry) cancelBoundary(
 		<-supervision.done
 		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		result := workersessions.ControlResult{Session: current, Action: action, Outcome: workersessions.ControlOutcomeNoop, DispatchID: attempt.dispatchID}
-		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", attempt.dispatchID, "action", string(action), "outcome", string(result.Outcome))
+		r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", attempt.dispatchID, "action", string(action), "outcome", string(result.Outcome))
 		return result, false, nil
 	}
 
@@ -436,7 +438,7 @@ func (r *registry) cancelBoundary(
 	result := workersessions.ControlResult{Session: current, Action: action, DispatchID: attempt.dispatchID}
 	if cancelErr != nil {
 		result.Outcome = workersessions.ControlOutcomeFailed
-		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", attempt.dispatchID, "action", string(action), "outcome", string(result.Outcome))
+		r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", attempt.dispatchID, "action", string(action), "outcome", string(result.Outcome))
 		return result, false, cancelErr
 	}
 	if cancelResult.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
@@ -446,7 +448,7 @@ func (r *registry) cancelBoundary(
 	<-supervision.done
 	result.Session, _ = r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 	result.Outcome = workersessions.ControlOutcomeApplied
-	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", attempt.dispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", attempt.dispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result, false, nil
 }
 
@@ -471,7 +473,7 @@ func (r *registry) preAdmissionControlTerminal(id, attemptID string) (workersess
 	if err != nil || (session.State != workersessions.StateCanceled && session.State != workersessions.StateTerminated) {
 		return workersessions.Session{}, false
 	}
-	r.logger.Info("worker session start skipped", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State))
+	r.logger.Info("worker session start skipped", "sessionID", publicWorkerID(id), "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State))
 	return session, true
 }
 
@@ -514,6 +516,7 @@ func (r *registry) validateControlTarget(req workersessions.ControlRequest) erro
 
 func (r *registry) controlTarget(id string, factorySessionIDs ...string) (workersessions.Session, *supervision, error) {
 	r.mu.RLock()
+	id = r.workerAddressLocked(id, factorySessionIDs...)
 	session, exists := r.sessions[id]
 	supervision := r.supervisions[id]
 	scopeMatches := observationFactoryScopeMatches(r.observations[id], factorySessionIDs...)
@@ -535,14 +538,14 @@ func (r *registry) controlNoop(id string, action workersessions.ControlAction, s
 	}
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeNoop}
 	result.DispatchID = r.controlDispatchID(id, supervision)
-	r.logger.Info("worker session control", "sessionID", id, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(id), "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result
 }
 
 func (r *registry) controlApplied(id string, action workersessions.ControlAction, session workersessions.Session, supervision *supervision) workersessions.ControlResult {
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeApplied}
 	result.DispatchID = r.controlDispatchID(id, supervision)
-	r.logger.Info("worker session control", "sessionID", id, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(id), "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result
 }
 
@@ -953,7 +956,7 @@ func (r *registry) acceptSupervision(id string, supervision *supervision) {
 	}
 	if running && serverOwned && !preAdmissionControl {
 		supervision.signalAdmitted()
-		r.logger.Info("worker session start", "sessionID", id, "attemptID", supervision.dispatchID, "outcome", "admitted", "state", string(workersessions.StateRunning))
+		r.logger.Info("worker session start", "sessionID", publicWorkerID(id), "attemptID", supervision.dispatchID, "outcome", "admitted", "state", string(workersessions.StateRunning))
 	}
 }
 
@@ -995,13 +998,13 @@ func (r *registry) directAttemptProgress(
 			(fragment.Correlation.AttemptID != "" && fragment.Correlation.AttemptID != attemptID) ||
 			(fragment.Correlation.RuntimeID != "" && fragment.Correlation.RuntimeID != correlation.RuntimeID) ||
 			!runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
-			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "correlation_mismatch")
+			r.logger.Warn("direct Worker progress rejected", "workerSessionID", publicWorkerID(sessionID), "attemptID", attemptID, "outcome", "correlation_mismatch")
 			return
 		}
 		fragment.Correlation.DispatchID = attemptID
 		fragment.Correlation.AttemptID = attemptID
 		if err := supervision.progress.PublishWorkerSessionProgress(context.Background(), r, sessionID, fragment); err != nil {
-			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "publication_rejected")
+			r.logger.Warn("direct Worker progress rejected", "workerSessionID", publicWorkerID(sessionID), "attemptID", attemptID, "outcome", "publication_rejected")
 		}
 	}
 }

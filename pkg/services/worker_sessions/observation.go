@@ -87,13 +87,20 @@ const DefaultWorkerSessionObservationListMaxResults = 50
 // ListWorkerSessionObservationsRequest is the bounded top-level observation
 // query. NextToken is an opaque base64 cursor returned by the previous page.
 type ListWorkerSessionObservationsRequest struct {
-	Scope      ObservationScope
-	States     []State
-	MaxResults int
-	NextToken  string
+	// RuntimeID optionally bounds a runtime-owned fleet source.
+	RuntimeID string
+	// FactorySessionID optionally bounds a runtime-owned source of the fleet.
+	FactorySessionID string
+	Scope            ObservationScope
+	States           []State
+	MaxResults       int
+	NextToken        string
 }
 
 func (r ListWorkerSessionObservationsRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	if !r.Scope.Valid() {
 		return ErrInvalidObservationScope
 	}
@@ -851,7 +858,9 @@ func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
 	observer Service,
 	workerSessionID string,
 	fragment workers.ProgressFragment,
+	factorySessionIDs ...string,
 ) error {
+	factorySessionID := observationFactorySessionID(factorySessionIDs)
 	if !providerFragmentAgrees(fragment) {
 		return ErrProviderBindingConflict
 	}
@@ -864,7 +873,7 @@ func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
 	}
 	if reference := sessionRefFromContinuation(fragment.Continuation); reference != nil {
 		if _, err := observer.AssociateProviderSession(ctx, ProviderSessionAssociationRequest{
-			WorkerSessionID: workerSessionID, DispatchID: fragment.Correlation.DispatchID,
+			WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID, DispatchID: fragment.Correlation.DispatchID,
 			Reference: reference.Clone(),
 		}); err != nil {
 			return err
@@ -890,10 +899,17 @@ func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
 	}
 	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
 		if _, err := observer.EnsureProviderBinding(ctx, ProviderBindingRequest{
-			WorkerSessionID: workerSessionID, DispatchID: fragment.Correlation.AttemptID, Provider: provider,
+			WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID, DispatchID: fragment.Correlation.AttemptID, Provider: provider,
 		}); err != nil {
 			return err
 		}
 	}
-	return p.publishWorkerDraftContext(ctx, observer, workerSessionID, draft)
+	return p.publishWorkerDraftContext(ctx, observer, workerSessionID, draft, factorySessionID)
+}
+
+func observationFactorySessionID(scopes []string) string {
+	if len(scopes) == 0 {
+		return ""
+	}
+	return scopes[0]
 }

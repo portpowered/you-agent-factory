@@ -221,7 +221,7 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 	}
 	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
 		RecordingID: recordingID, FactorySessionID: req.Execution.Execution.FactorySessionID,
-		WorkerSessionID: req.ID, Topic: r.observationTopic(req.ID),
+		WorkerSessionID: publicWorkerID(req.ID), Topic: r.observationTopic(req.ID),
 	})
 }
 
@@ -246,7 +246,7 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.StartResult{}, err
 	}
 	if executor == nil {
@@ -261,7 +261,7 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 	req = normalizeStartRequest(req)
 	replay, owner, err := r.reserveStart(req)
 	if err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))
+		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))
 		return workersessions.StartResult{}, err
 	}
 	if !owner {
@@ -286,7 +286,7 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 			return outcome.result, outcome.err
 		default:
 		}
-		r.logger.Info("worker session start wait canceled", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "caller_canceled")
+		r.logger.Info("worker session start wait canceled", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "requestID", req.RequestID, "outcome", "caller_canceled")
 		return workersessions.StartResult{}, callerCtx.Err()
 	}
 }
@@ -331,45 +331,46 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.publications[req.ID] = &publication{}
 	r.startReplays[req.RequestID] = replay
-	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
+	r.logger.Info("worker session start", "sessionID", publicWorkerID(req.ID), "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
 	return replay, true, nil
 }
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session reserve rejected", "sessionID", req.ID, "outcome", "invalid")
+		r.logger.Info("worker session reserve rejected", "sessionID", publicWorkerID(req.ID), "outcome", "invalid")
 		return workersessions.Session{}, err
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.sessions[req.ID]; exists {
-		r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "duplicate")
+	if r.workerIdentityExistsLocked(req.ID) {
+		r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "duplicate")
 		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
 	}
 	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.sessions[req.ID] = session
 	r.publications[req.ID] = &publication{}
-	r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "reserved")
+	r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "reserved")
 	return session, nil
 }
 
 func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (workersessions.Session, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session get rejected", "sessionID", req.ID, "outcome", "invalid")
+		r.logger.Info("worker session get rejected", "sessionID", publicWorkerID(req.ID), "outcome", "invalid")
 		return workersessions.Session{}, err
 	}
 
 	r.mu.RLock()
-	session, exists := r.sessions[req.ID]
-	scopeMatches := observationFactoryScopeMatches(r.observations[req.ID], req.FactorySessionID)
+	id := r.workerAddressLocked(req.ID, req.FactorySessionID)
+	session, exists := r.sessions[id]
+	scopeMatches := observationFactoryScopeMatches(r.observations[id], req.FactorySessionID)
 	r.mu.RUnlock()
 
 	if !exists || !scopeMatches {
-		r.logger.Info("worker session get", "sessionID", req.ID, "outcome", "not_found")
+		r.logger.Info("worker session get", "sessionID", publicWorkerID(req.ID), "outcome", "not_found")
 		return workersessions.Session{}, workersessions.ErrSessionNotFound
 	}
-	r.logger.Info("worker session get", "sessionID", req.ID, "outcome", "found", "state", string(session.State))
+	r.logger.Info("worker session get", "sessionID", publicWorkerID(req.ID), "outcome", "found", "state", string(session.State))
 	return cloneSession(session), nil
 }
 
@@ -410,7 +411,7 @@ func (r *registry) reserveIfAbsent(id string) {
 	if _, exists := r.sessions[id]; exists {
 		return
 	}
-	r.sessions[id] = workersessions.Session{ID: id, State: workersessions.StateReserved}
+	r.sessions[id] = workersessions.Session{ID: publicWorkerID(id), State: workersessions.StateReserved}
 	r.publications[id] = &publication{}
 }
 
@@ -486,16 +487,16 @@ func (r *registry) AssociateProviderSession(
 	req workersessions.ProviderSessionAssociationRequest,
 ) (workersessions.ProviderSessionAssociationResult, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session provider session association rejected", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", "invalid")
+		r.logger.Info("worker session provider session association rejected", "sessionID", publicWorkerID(req.WorkerSessionID), "attemptID", req.DispatchID, "outcome", "invalid")
 		return workersessions.ProviderSessionAssociationResult{}, err
 	}
 
 	result, err := r.associateProviderSession(req)
 	if err != nil {
-		r.logger.Info("worker session provider session association rejected", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session association rejected", "sessionID", publicWorkerID(req.WorkerSessionID), "attemptID", req.DispatchID, "outcome", "rejected")
 		return workersessions.ProviderSessionAssociationResult{}, err
 	}
-	r.logger.Info("worker session provider session association", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", string(result.Outcome))
+	r.logger.Info("worker session provider session association", "sessionID", publicWorkerID(req.WorkerSessionID), "attemptID", req.DispatchID, "outcome", string(result.Outcome))
 	return result, nil
 }
 
@@ -520,16 +521,16 @@ func (r *registry) ObserveProviderSession(
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 	result, err := r.associateProviderSessionLocked(workersessions.ProviderSessionAssociationRequest{
-		WorkerSessionID: ownerID,
+		WorkerSessionID: publicWorkerID(ownerID),
 		DispatchID:      req.DispatchID,
 		Reference:       req.Reference.Clone(),
 	})
 	r.mu.Unlock()
 	if err != nil {
-		r.logger.Info("worker session provider session observation rejected", "sessionID", ownerID, "attemptID", req.DispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session observation rejected", "sessionID", publicWorkerID(ownerID), "attemptID", req.DispatchID, "outcome", "rejected")
 		return workersessions.ProviderSessionAssociationResult{}, err
 	}
-	r.logger.Info("worker session provider session observation", "sessionID", ownerID, "attemptID", req.DispatchID, "outcome", string(result.Outcome))
+	r.logger.Info("worker session provider session observation", "sessionID", publicWorkerID(ownerID), "attemptID", req.DispatchID, "outcome", string(result.Outcome))
 	return result, nil
 }
 
@@ -996,4 +997,79 @@ func (r *registry) runtimeAdmissionClosed(runtimeID string) bool {
 	defer r.mu.RUnlock()
 	admission := r.runtimeAdmissions[strings.TrimSpace(runtimeID)]
 	return admission != nil && admission.closed
+}
+
+// scopedWorkerAddress is a private registry address, never a Worker identity.
+// Factory Session scope and the supplied Worker ID are retained separately in
+// observations and Session. All runtime-owned maps use this address together.
+func scopedWorkerAddress(id, factorySessionID string) string {
+	if factorySessionID = strings.TrimSpace(factorySessionID); factorySessionID != "" {
+		return "\x00" + factorySessionID + "\x00" + id
+	}
+	return id
+}
+
+func publicWorkerID(address string) string {
+	if strings.HasPrefix(address, "\x00") {
+		if _, id, ok := strings.Cut(address[1:], "\x00"); ok {
+			return id
+		}
+	}
+	return address
+}
+
+func (r *registry) workerAddress(id string, scopes ...string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.workerAddressLocked(id, scopes...)
+}
+
+// workerAddressLocked rejects ambiguous public IDs. Internal operations already
+// carry the captured address and never rediscover an owner during a retry.
+func (r *registry) workerAddressLocked(id string, scopes ...string) string {
+	scope := ""
+	if len(scopes) > 0 {
+		scope = strings.TrimSpace(scopes[0])
+	}
+	if strings.HasPrefix(id, "\x00") {
+		return id
+	}
+	if scope != "" {
+		address := scopedWorkerAddress(id, scope)
+		if _, exists := r.sessions[address]; exists {
+			return address
+		}
+		if observationFactoryScopeMatches(r.observations[id], scope) {
+			return id
+		}
+		return address
+	}
+	address := ""
+	for candidate, session := range r.sessions {
+		if session.ID != id {
+			continue
+		}
+		if address != "" {
+			return ""
+		}
+		address = candidate
+	}
+	return address
+}
+
+func workerAddressScope(address string) string {
+	if strings.HasPrefix(address, "\x00") {
+		scope, _, _ := strings.Cut(address[1:], "\x00")
+		return scope
+	}
+	return ""
+}
+
+func (r *registry) workerIdentityExistsLocked(id string) bool {
+	for _, session := range r.sessions {
+		if session.ID == id {
+			return true
+		}
+	}
+	return false
 }

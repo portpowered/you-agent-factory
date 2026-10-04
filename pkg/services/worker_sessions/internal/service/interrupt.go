@@ -364,7 +364,7 @@ func (r *registry) appendControlRecordLocked(
 		Outcome:         outcome,
 		RequestID:       reservation.requestID,
 		CorrelationID:   reservation.correlation,
-		WorkerSessionID: reservation.sessionID,
+		WorkerSessionID: publicWorkerID(reservation.sessionID),
 		DispatchID:      strings.TrimSpace(dispatchID),
 		AttemptID:       strings.TrimSpace(dispatchID),
 		State:           state,
@@ -843,6 +843,7 @@ func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	req.ID = r.workerAddress(req.ID, req.FactorySessionID)
 	reservation, err := r.beginControlHistory(ctx, req.ID, workersessions.ControlActionResume, req.RequestID)
 	if err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -937,7 +938,7 @@ func (r *registry) resumePublicationFailure(
 		DispatchID: continuation.Execution.Dispatch.DispatchID,
 	}
 	r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
-	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 	return result, publicationErr
 }
 
@@ -966,7 +967,7 @@ func (r *registry) resumeAdmissionResult(
 			DispatchID: continuation.Execution.Dispatch.DispatchID,
 		}
 		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
-		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", continuation.Execution.Dispatch.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+		r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", continuation.Execution.Dispatch.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 		return result, workersessions.ErrStartAdmissionFailed
 	}
 	result := workersessions.ControlResult{
@@ -976,7 +977,7 @@ func (r *registry) resumeAdmissionResult(
 		DispatchID: continuation.Execution.Dispatch.DispatchID,
 	}
 	r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
-	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 	return result, nil
 }
 

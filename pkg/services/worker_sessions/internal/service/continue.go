@@ -49,7 +49,7 @@ func (r *registry) reconcileOverdueAttempt(
 	supervision.clearDeadlineExceeded()
 	r.logger.Info(
 		"worker session reconciliation failed",
-		"sessionID", id,
+		"sessionID", publicWorkerID(id),
 		"attemptID", attemptID,
 		"dispatchID", attemptID,
 		"reason", string(workers.WorkstationDispatchReconciliationReasonTimeout),
@@ -591,14 +591,14 @@ func (r *registry) persistClosedLineageRecord(ctx context.Context, recordingID, 
 	if !ok || writer == nil {
 		r.logger.Info(
 			"worker session continuation lineage recording unavailable",
-			"sessionID", sessionID,
+			"sessionID", publicWorkerID(sessionID),
 			"outcome", "unavailable",
 		)
 		return
 	}
 	err := writer.PersistWorkerRecord(context.WithoutCancel(ctx), recordings.WorkerRecordingRecord{
 		RecordingID:     recordingID,
-		WorkerSessionID: sessionID,
+		WorkerSessionID: publicWorkerID(sessionID),
 		Record:          record.Detached(),
 	})
 	if err == nil {
@@ -606,13 +606,13 @@ func (r *registry) persistClosedLineageRecord(ctx context.Context, recordingID, 
 	}
 	r.logger.Info(
 		"worker session continuation lineage recording failed",
-		"sessionID", sessionID,
+		"sessionID", publicWorkerID(sessionID),
 		"outcome", "degraded",
 	)
 	if failureWriter, ok := r.recording.(recordings.WorkerRecordingFailureWriter); ok && failureWriter != nil {
 		_ = failureWriter.PersistWorkerRecordingFailure(context.WithoutCancel(ctx), recordings.WorkerRecordingFailure{
 			RecordingID:     recordingID,
-			WorkerSessionID: sessionID,
+			WorkerSessionID: publicWorkerID(sessionID),
 			Topic:           r.observationTopic(sessionID),
 			Code:            "CONTINUATION_LINEAGE_PERSISTENCE_FAILED",
 		})
@@ -766,12 +766,14 @@ func (r *registry) associateProviderSession(
 ) (workersessions.ProviderSessionAssociationResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	req.WorkerSessionID = r.workerAddressLocked(req.WorkerSessionID, req.FactorySessionID)
 	return r.associateProviderSessionLocked(req)
 }
 
 func (r *registry) providerBindingOwner(req workersessions.ProviderBindingRequest) (string, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	req.WorkerSessionID = r.workerAddressLocked(req.WorkerSessionID, req.FactorySessionID)
 	dispatchID := strings.TrimSpace(req.DispatchID)
 	if req.WorkerSessionID != "" {
 		if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
@@ -824,7 +826,7 @@ func (r *registry) associateProviderSessionLocked(
 		}
 	}
 	association := workersessions.ProviderSessionAssociation{
-		WorkerSessionID: req.WorkerSessionID,
+		WorkerSessionID: publicWorkerID(req.WorkerSessionID),
 		TurnID:          turnID,
 		DispatchID:      dispatchID,
 		AttemptID:       attemptID,
@@ -936,7 +938,7 @@ func (r *registry) registerInvocationSupervision(
 ) (invocationPreparation, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if options.verifyTopicReady {
-		eventReadyFields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting)}
+		eventReadyFields := []any{"sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting)}
 		if options.requestID != "" {
 			eventReadyFields = append(eventReadyFields, "requestID", options.requestID)
 		}

@@ -572,3 +572,13 @@ func (boundary runtimeWorkerSessionBoundary) Start(ctx context.Context, request 
 	}
 	return boundary.opener.AdmitRuntimeAttemptAsync(ctx, request, boundary.execution, boundary.clock, boundary.scheduler)
 }
+
+// LoadWorkerRecording preserves the composed Recordings read capability across
+// selected admission binding; it does not construct or select another source.
+func (boundary runtimeWorkerSessionBoundary) LoadWorkerRecording(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
+	reader, ok := boundary.Service.(recordings.WorkerRecordingReader)
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
+}

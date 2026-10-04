@@ -47,10 +47,11 @@ func runtimeAttemptPreparation(
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
-				Key:       workersessions.RuntimeAttemptKey{RuntimeID: executeRequest.Correlation.RuntimeID, DispatchID: executeRequest.Correlation.DispatchID},
-				ID:        sessionID,
-				AttemptID: executeRequest.Correlation.AttemptID,
-				Execution: admissionRequest,
+				Key:                  workersessions.RuntimeAttemptKey{RuntimeID: executeRequest.Correlation.RuntimeID, DispatchID: executeRequest.Correlation.DispatchID},
+				ObservationRuntimeID: cfg.runtimeID,
+				ID:                   sessionID,
+				AttemptID:            executeRequest.Correlation.AttemptID,
+				Execution:            admissionRequest,
 			},
 			execution,
 			clock,
@@ -183,7 +184,7 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 	if reader, ok := f.cfg.workerSessions.(recordings.WorkerRecordingReader); ok {
 		workerRecordingReader = reader
 	}
-	return newRecordedWorkerSessionObservationWithRestoredState(
+	view := newRecordedWorkerSessionObservationWithRestoredState(
 		f.cfg.workerSessions,
 		f.eventHistory,
 		f.cfg.worldStateProjector,
@@ -196,6 +197,8 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 		f.cfg.restoredEventPrefix,
 		factorySessionID,
 	)
+	view.runtimeID = strings.TrimSpace(f.cfg.runtimeID)
+	return view
 }
 
 // recordedWorkerSessionObservation adapts the runtime ledger and projector to
@@ -213,6 +216,7 @@ type recordedWorkerSessionObservation struct {
 	recordingID         string
 	recordingReader     recordings.WorkerRecordingReader
 	factorySessionID    string
+	runtimeID           string
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
@@ -461,6 +465,7 @@ func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
 	if s == nil || s.Service == nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
+	req.RuntimeID = s.runtimeID
 	result, err := s.Service.ListWorkerSessionObservations(ctx, req)
 	if err == nil {
 		s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())

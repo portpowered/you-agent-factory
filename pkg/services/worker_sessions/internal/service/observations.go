@@ -31,7 +31,7 @@ func (r *registry) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	idCollectionStartedAt := r.clock.Now()
-	ids := r.observationListIDs(query.cursor, query.scope, req.States)
+	ids := r.observationListIDs(query.cursor, query.scope, req.States, req.FactorySessionID, req.RuntimeID)
 	idCollectionDuration := r.clock.Now().Sub(idCollectionStartedAt)
 	pageIDs := observationListPage(ids, query.limit)
 	projectionStartedAt := r.clock.Now()
@@ -102,12 +102,15 @@ func decodeObservationListCursor(value string) (string, error) {
 	return string(decoded), nil
 }
 
-func (r *registry) observationListIDs(cursor string, scope workersessions.ObservationScope, states []workersessions.State) []string {
+func (r *registry) observationListIDs(cursor string, scope workersessions.ObservationScope, states []workersessions.State, factorySessionID, runtimeID string) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ids := make([]string, 0, len(r.observations))
 	for id, metadata := range r.observations {
-		if metadata == nil || id <= cursor || !observationScopeMatches(metadata.direct, scope) {
+		if runtimeID != "" && (metadata == nil || metadata.runtimeID != runtimeID) {
+			continue
+		}
+		if metadata == nil || !observationFactoryScopeMatches(metadata, factorySessionID) || publicWorkerID(id) <= cursor || !observationScopeMatches(metadata.direct, scope) {
 			continue
 		}
 		session, exists := r.sessions[id]
@@ -116,8 +119,14 @@ func (r *registry) observationListIDs(cursor string, scope workersessions.Observ
 		}
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
-	return ids
+	sort.Slice(ids, func(i, j int) bool {
+		left, right := publicWorkerID(ids[i]), publicWorkerID(ids[j])
+		if left == right {
+			return ids[i] < ids[j]
+		}
+		return left < right
+	})
+	return slices.CompactFunc(ids, func(left, right string) bool { return publicWorkerID(left) == publicWorkerID(right) })
 }
 
 func observationListPage(ids []string, limit int) []string {
@@ -149,7 +158,7 @@ func observationListNextToken(allIDs, pageIDs []string) string {
 	if len(allIDs) <= len(pageIDs) || len(pageIDs) == 0 {
 		return ""
 	}
-	return base64.StdEncoding.EncodeToString([]byte(pageIDs[len(pageIDs)-1]))
+	return base64.StdEncoding.EncodeToString([]byte(publicWorkerID(pageIDs[len(pageIDs)-1])))
 }
 
 func observationScopeMatches(direct bool, scope workersessions.ObservationScope) bool {
@@ -188,7 +197,7 @@ func (r *registry) ReadTranscriptByWorkerSessionID(
 	}
 	session, metadata, ok := r.loadObservationState(req.WorkerSessionID, req.FactorySessionID)
 	if !ok {
-		r.logger.Info("worker session identity transcript read", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		r.logger.Info("worker session identity transcript read", "workerSessionID", publicWorkerID(req.WorkerSessionID), "outcome", "not_found")
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
 	}
 	providerSession := providers.SessionRef{}
@@ -282,7 +291,7 @@ func (r *registry) transcriptSession(req workersessions.ReadTranscriptRequest) (
 	defer r.mu.RUnlock()
 	ids := make([]string, 0, 1)
 	for id, session := range r.sessions {
-		matches := id == req.WorkerSessionID
+		matches := session.ID == req.WorkerSessionID
 		if req.WorkerSessionID == "" {
 			matches = session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == req.ProviderSession
 		}
@@ -290,7 +299,7 @@ func (r *registry) transcriptSession(req workersessions.ReadTranscriptRequest) (
 			ids = append(ids, id)
 		}
 	}
-	if len(ids) == 0 {
+	if len(ids) == 0 || (req.WorkerSessionID != "" && len(ids) > 1) {
 		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
 	}
 	sortStrings(ids)
@@ -410,7 +419,7 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	// canonical lifecycle/output records without a readable provider transcript.
 	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
-		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", publicWorkerID(req.WorkerSessionID), "outcome", "not_found")
 		return workersessions.Observation{}, err
 	}
 	r.logger.Info("worker session observation get by Worker Session", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
@@ -494,6 +503,7 @@ func observedTerminalCause(session workersessions.Session) *workersessions.Failu
 func (r *registry) loadObservationState(id string, factorySessionIDs ...string) (workersessions.Session, *observation, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	id = r.workerAddressLocked(id, factorySessionIDs...)
 	session, exists := r.sessions[id]
 	metadata := r.observations[id]
 	if !observationFactoryScopeMatches(metadata, factorySessionIDs...) {
@@ -522,7 +532,7 @@ func observationFactoryScopeMatches(metadata *observation, factorySessionIDs ...
 // lifecycle facts that never require the Provider Sessions root.
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
-		WorkerSessionID:            id,
+		WorkerSessionID:            publicWorkerID(id),
 		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
 		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
 		Model:                      cloneOptionalExecutionFact(session.Model),

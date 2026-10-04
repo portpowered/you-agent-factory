@@ -122,8 +122,8 @@ func (r *registry) PublishRuntimeProgress(
 	// legacy blank physical IDs. Only the committed draft needs normalization.
 	committed := fragment
 	committed.Correlation.AttemptID = attemptID
-	if err := progress.PublishWorkerSessionProgress(ctx, r, ownerID, committed); err != nil {
-		r.logger.Warn("runtime Worker progress rejected", "workerSessionID", ownerID, "runtimeID", key.RuntimeID, "dispatchID", key.DispatchID, "outcome", "publication_rejected")
+	if err := progress.PublishWorkerSessionProgress(ctx, r, publicWorkerID(ownerID), committed, workerAddressScope(ownerID)); err != nil {
+		r.logger.Warn("runtime Worker progress rejected", "workerSessionID", publicWorkerID(ownerID), "runtimeID", key.RuntimeID, "dispatchID", key.DispatchID, "outcome", "publication_rejected")
 		return err
 	}
 	if fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
@@ -354,7 +354,7 @@ func (r *registry) finishRuntimeAttemptControl(
 		resultOutcome = workersessions.ControlOutcomeApplied
 	}
 	result := r.runtimeAttemptControlResult(current, action, resultOutcome, attempt)
-	r.logger.Info("worker session control", "sessionID", workerSessionID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(workerSessionID), "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result, nil
 }
 
@@ -372,7 +372,7 @@ func (r *registry) failRuntimeAttemptControl(
 	}
 	r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, attempt.dispatchID, current.State)
 	result := r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeFailed, attempt)
-	r.logger.Info("worker session control", "sessionID", workerSessionID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(workerSessionID), "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	if getErr != nil {
 		return result, errors.Join(controlErr, getErr)
 	}
@@ -380,7 +380,7 @@ func (r *registry) failRuntimeAttemptControl(
 }
 
 func controlFallbackRequestID(action workersessions.ControlAction, sessionID, dispatchID string) string {
-	return strings.Join([]string{string(action), sessionID, dispatchID}, "/")
+	return strings.Join([]string{string(action), publicWorkerID(sessionID), dispatchID}, "/")
 }
 
 func (r *registry) controlDispatchID(workerSessionID string, supervision *supervision) string {
@@ -418,7 +418,7 @@ func runtimeAttemptPreparationError(prepared invocationPreparation) error {
 func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.InvokeSessionResult{}, err
 	}
 
@@ -461,6 +461,7 @@ func (r *registry) InvokeRuntimeSession(
 	if scheduler == nil {
 		return workersessions.InvokeSessionResult{}, ErrMissingScheduler
 	}
+	req.ID = scopedWorkerAddress(req.ID, req.Execution.Execution.FactorySessionID)
 	ctx = runtimeAttemptContext(ctx)
 	logicalID, attemptID := runtimeAttemptIDs(req)
 	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalID}
@@ -556,7 +557,7 @@ func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersess
 		handoff = next
 		r.logger.Info(
 			"worker session retry",
-			"sessionID", req.ID,
+			"sessionID", publicWorkerID(req.ID),
 			"attemptID", handoff.Execution.Dispatch.DispatchID,
 			"outcome", "retrying",
 			"attempt", supervision.attemptCount()+1,
@@ -587,7 +588,7 @@ func (r *registry) publishRegisteredAttempt(
 		return workersessions.InvokeSessionResult{Session: final}, false
 	}
 
-	r.logger.Info("worker session start", "sessionID", sessionID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
+	r.logger.Info("worker session start", "sessionID", publicWorkerID(sessionID), "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
 	attemptDone := supervision.beginAttempt()
 	publishErr := r.publishExecution(
 		context.WithoutCancel(ctx),
@@ -732,6 +733,7 @@ type observation struct {
 	attemptID        string
 	direct           bool
 	factorySessionID string
+	runtimeID        string
 	startedAt        time.Time
 	endedAt          *time.Time
 	tokenUsage       *workersessions.TokenUsage
@@ -749,6 +751,7 @@ func (r *registry) ensureObservationWithClock(
 	direct bool,
 	factorySessionID string,
 	clock platformclock.Source,
+	runtimeIDs ...string,
 ) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -765,6 +768,9 @@ func (r *registry) ensureObservationWithClock(
 		factorySessionID: strings.TrimSpace(factorySessionID),
 		startedAt:        startedAt,
 	}
+	if len(runtimeIDs) > 0 {
+		r.observations[id].runtimeID = strings.TrimSpace(runtimeIDs[0])
+	}
 	r.indexObservationBySessionWorkLocked(id, r.observations[id])
 	return startedAt
 }
@@ -780,7 +786,7 @@ func openingSessionPayload(
 	payload := workers.SessionPayload{
 		Status:           string(workersessions.StateStarting),
 		StartedAt:        timeValue(startedAt),
-		WorkerSessionID:  id,
+		WorkerSessionID:  publicWorkerID(id),
 		FactorySessionID: strings.TrimSpace(request.FactorySessionID),
 		RecordingID:      strings.TrimSpace(request.RecordingID),
 		ProjectID:        strings.TrimSpace(request.ProjectID),

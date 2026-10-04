@@ -8,6 +8,8 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -136,4 +138,44 @@ type selectionCommandRunner struct{ marker byte }
 
 func (*selectionCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return platformprocess.CommandResult{}, errors.New("component test must only observe the selected effect")
+}
+
+func TestRuntimeWorkerSessionBoundaryPreservesRecordingReader(t *testing.T) {
+	t.Parallel()
+	for _, failed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "failure"}[failed], func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			failure := errors.New("owned recording read failure")
+			source := &selectedWorkerRecordingReader{load: func(actual context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
+				if actual != ctx || id != "owned-recording" {
+					t.Fatalf("recording read correlation = %v, %s", actual, id)
+				}
+				if failed {
+					return recordings.WorkerRecordingSnapshot{}, failure
+				}
+				return recordings.WorkerRecordingSnapshot{RecordingID: id}, nil
+			}}
+			boundary := runtimeWorkerSessionBoundary{Service: source}
+			snapshot, err := boundary.LoadWorkerRecording(ctx, "owned-recording")
+			if failed {
+				if !errors.Is(err, failure) {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err != nil || snapshot.RecordingID != "owned-recording" {
+				t.Fatalf("selected recording = %#v, %v", snapshot, err)
+			}
+		})
+	}
+}
+
+type selectedWorkerRecordingReader struct {
+	workersessions.Service
+	load func(context.Context, string) (recordings.WorkerRecordingSnapshot, error)
+}
+
+func (reader *selectedWorkerRecordingReader) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
+	return reader.load(ctx, id)
 }

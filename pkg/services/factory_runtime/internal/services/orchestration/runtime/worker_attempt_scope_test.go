@@ -259,3 +259,24 @@ func assertInvokeWorkerReservationWindow(t *testing.T, sessions *associationWind
 	default:
 	}
 }
+
+func TestWorkerSessionFleetSourceUsesCanonicalExecutionOwner(t *testing.T) {
+	t.Parallel()
+	probe := &scopedWorkerListProbe{}
+	runtime := &factoryImpl{cfg: &runtimeConfig{workerSessions: probe, publicSessionID: "public-durable-session", runtimeID: "execution-runtime", workflowContext: &factory_context.FactoryContext{SessionID: "execution-owner"}}}
+	view := runtime.WorkerSessionsObservationForSession("public-durable-session")
+	_, err := view.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{Scope: workersessions.ObservationScopeFactory, MaxResults: 2, NextToken: "cursor"})
+	if err != nil || probe.request.RuntimeID != "execution-runtime" || probe.request.MaxResults != 2 || probe.request.NextToken != "cursor" || probe.request.Scope != workersessions.ObservationScopeFactory {
+		t.Fatalf("scoped fleet request = %#v, %v", probe.request, err)
+	}
+}
+
+type scopedWorkerListProbe struct {
+	workersessions.Service
+	request workersessions.ListWorkerSessionObservationsRequest
+}
+
+func (probe *scopedWorkerListProbe) ListWorkerSessionObservations(_ context.Context, req workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+	probe.request = req
+	return workersessions.ListWorkerSessionObservationsResult{}, nil
+}

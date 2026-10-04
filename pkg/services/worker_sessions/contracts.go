@@ -43,10 +43,13 @@ type RuntimeAttemptKey struct {
 // physical attempt identity written into lifecycle records. An empty
 // AttemptID uses the request dispatch ID.
 type RuntimeAttemptRequest struct {
-	Key       RuntimeAttemptKey
-	ID        string
-	AttemptID string
-	Execution workers.WorkstationDispatchRequest
+	// ObservationRuntimeID identifies the runtime owning this attempt's fleet source.
+	// Routed child correlation may name a distinct execution runtime.
+	ObservationRuntimeID string
+	Key                  RuntimeAttemptKey
+	ID                   string
+	AttemptID            string
+	Execution            workers.WorkstationDispatchRequest
 }
 
 // Validate rejects contradictory routing before opening a topic or capture.
@@ -617,14 +620,19 @@ func (association ProviderSessionAssociation) Clone() ProviderSessionAssociation
 // session and dispatch against its own supervision state before it records
 // the association.
 type ProviderSessionAssociationRequest struct {
-	WorkerSessionID string
-	DispatchID      string
-	Reference       providers.SessionRef
+	// FactorySessionID optionally selects the immutable owning Factory Session.
+	FactorySessionID string
+	WorkerSessionID  string
+	DispatchID       string
+	Reference        providers.SessionRef
 }
 
 // Validate checks only caller-owned request fields. Registry-owned attempt,
 // turn, and Worker Session correlation is checked by AssociateProviderSession.
 func (request ProviderSessionAssociationRequest) Validate() error {
+	if request.FactorySessionID != "" && strings.TrimSpace(request.FactorySessionID) == "" {
+		return ErrInvalidProviderSessionAssociation
+	}
 	if !validSessionID(request.WorkerSessionID) {
 		return ErrInvalidSessionID
 	}

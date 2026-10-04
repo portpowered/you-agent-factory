@@ -772,7 +772,7 @@ const (
 )
 
 func providerBindingSourceID(id string) events.SourceID {
-	return events.SourceID(id + "/provider-binding")
+	return events.SourceID(publicWorkerID(id) + "/provider-binding")
 }
 
 func lifecycleProvenance(provider string) workers.Provenance {
@@ -826,7 +826,7 @@ func (r *registry) publishOpeningRecord(
 	}
 	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,
-		SourceID:       events.SourceID(id),
+		SourceID:       events.SourceID(publicWorkerID(id)),
 		SourceSequence: openingSourceSequence,
 		SourceEventID:  openingSourceEventID,
 	}
@@ -836,7 +836,7 @@ func (r *registry) publishOpeningRecord(
 			if abortErr := recording.Abort(context.WithoutCancel(ctx), openingErr); abortErr != nil {
 				r.logger.Warn(
 					"worker session recording opening cleanup failed",
-					"sessionID", id,
+					"sessionID", publicWorkerID(id),
 					"attemptID", attemptID,
 					"outcome", "cleanup_failed",
 					"error", abortErr.Error(),
@@ -851,7 +851,7 @@ func (r *registry) publishOpeningRecord(
 			if abortErr := recording.Abort(context.WithoutCancel(ctx), err); abortErr != nil {
 				r.logger.Warn(
 					"worker session recording opening cleanup failed",
-					"sessionID", id,
+					"sessionID", publicWorkerID(id),
 					"attemptID", attemptID,
 					"outcome", "cleanup_failed",
 					"error", abortErr.Error(),
@@ -912,7 +912,7 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 
 	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,
-		SourceID:       events.SourceID(id),
+		SourceID:       events.SourceID(publicWorkerID(id)),
 		SourceSequence: terminalSourceSequence,
 		SourceEventID:  terminalSourceEventID,
 	}
@@ -944,7 +944,7 @@ func (r *registry) publishTerminalRecordOrLog(ctx context.Context, id, attemptID
 	if err := r.publishTerminalRecord(ctx, id, attemptID, state, result); err != nil {
 		r.logger.Info(
 			"worker session terminal record publication failed",
-			"sessionID", id,
+			"sessionID", publicWorkerID(id),
 			"attemptID", attemptID,
 			"state", string(state),
 			"outcome", "publish_failed",
@@ -967,16 +967,17 @@ func (r *registry) associateProviderSessionFromResult(
 	}
 	reference, err := continuation.ToSessionRef()
 	if err != nil {
-		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session association from result rejected", "sessionID", publicWorkerID(id), "attemptID", dispatchID, "outcome", "rejected")
 		return
 	}
 	_, err = r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
-		WorkerSessionID: id,
-		DispatchID:      dispatchID,
-		Reference:       reference,
+		WorkerSessionID:  publicWorkerID(id),
+		FactorySessionID: workerAddressScope(id),
+		DispatchID:       dispatchID,
+		Reference:        reference,
 	})
 	if err != nil {
-		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session association from result rejected", "sessionID", publicWorkerID(id), "attemptID", dispatchID, "outcome", "rejected")
 	}
 }
 
@@ -989,11 +990,14 @@ var reconciliationFailureCause = map[workers.WorkstationDispatchReconciliationRe
 // Payloads and public cursors continue to carry the supplied Worker identity.
 func (r *registry) observationTopic(id string) events.Topic {
 	r.mu.RLock()
+	if address := r.workerAddressLocked(id); address != "" {
+		id = address
+	}
 	metadata := r.observations[id]
 	factorySessionID := ""
 	if metadata != nil && !metadata.direct {
 		factorySessionID = metadata.factorySessionID
 	}
 	r.mu.RUnlock()
-	return workersessions.Topic(id, factorySessionID)
+	return workersessions.Topic(publicWorkerID(id), factorySessionID)
 }

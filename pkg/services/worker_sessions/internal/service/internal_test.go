@@ -5600,13 +5600,13 @@ func TestAwaitContinuationReplayAndObservationListIDsRemainDetachedAndDeterminis
 			"nil-meta":  nil,
 		},
 	}
-	if got := r.observationListIDs("", workersessions.ObservationScopeAll, nil); !reflect.DeepEqual(got, []string{"direct-a", "factory-a"}) {
+	if got := r.observationListIDs("", workersessions.ObservationScopeAll, nil, "", ""); !reflect.DeepEqual(got, []string{"direct-a", "factory-a"}) {
 		t.Fatalf("observationListIDs(all) = %#v, want deterministic IDs", got)
 	}
-	if got := r.observationListIDs("direct-a", workersessions.ObservationScopeDirect, nil); !reflect.DeepEqual(got, []string{}) {
+	if got := r.observationListIDs("direct-a", workersessions.ObservationScopeDirect, nil, "", ""); !reflect.DeepEqual(got, []string{}) {
 		t.Fatalf("observationListIDs(cursor) = %#v, want empty after direct-a", got)
 	}
-	if got := r.observationListIDs("", workersessions.ObservationScopeFactory, []workersessions.State{workersessions.StateRunning}); len(got) != 0 {
+	if got := r.observationListIDs("", workersessions.ObservationScopeFactory, []workersessions.State{workersessions.StateRunning}, "", ""); len(got) != 0 {
 		t.Fatalf("observationListIDs(state mismatch) = %#v, want empty", got)
 	}
 }

@@ -316,3 +316,110 @@ func assertAsyncClosedOpeningRetained(t *testing.T, r *registry, req workersessi
 		t.Fatalf("rejected admission replay: %#v, %v", replay, err)
 	}
 }
+
+// Replay preserves its recorded Worker ID while each Factory Session retains
+// its own observation, provider association, controls and source history.
+func TestKeyedRuntimeEqualWorkerIdentityAcrossFactorySessions(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	eventStore := newEventsAppender()
+	sink := &perRuntimeAppendCapture{EventsAppender: eventStore}
+	owner := preparePerRuntimeAttemptFixture(t, "recording-owner", sink)
+	owner.service.retainedReader = eventStore
+	replay := preparePerRuntimeAttemptFixture(t, "replay-owner", sink, owner)
+	replay.request.ID = owner.request.ID
+	for _, fixture := range []*perRuntimeAttemptFixture{owner, replay} {
+		fixture.request.Execution.Execution.RecordingID = ""
+		fixture.request.ObservationRuntimeID = "fleet-" + fixture.request.Execution.Execution.FactorySessionID
+		var err error
+		fixture.attempt, err = fixture.service.BeginRuntimeAttempt(ctx, fixture.request, fixture.service.execution,
+			coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = fixture.attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+		})
+		fragment := keyedRuntimeProgressFragment(fixture)
+		fragment.Continuation.ProviderSessionID = "provider-" + fixture.request.Execution.Execution.FactorySessionID
+		if err := fixture.service.PublishRuntimeProgress(ctx, fixture.request.Key, fragment, nil); err != nil {
+			t.Fatal(err)
+		}
+		assertScopedWorkerIdentity(t, fixture, workersessions.StateRunning)
+	}
+	if _, err := owner.service.Reserve(ctx, workersessions.ReserveRequest{ID: owner.request.ID}); !errors.Is(err, workersessions.ErrSessionAlreadyExists) {
+		t.Fatalf("unscoped duplicate reserve = %v", err)
+	}
+	if _, err := owner.service.Get(ctx, workersessions.GetRequest{ID: owner.request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("ambiguous unscoped Get = %v", err)
+	}
+	if _, err := owner.service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: owner.request.ID}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("ambiguous unscoped observation = %v", err)
+	}
+	cancelScopedWorker(t, replay)
+	assertScopedWorkerIdentity(t, owner, workersessions.StateRunning)
+	if err := owner.attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	assertScopedWorkerIdentity(t, owner, workersessions.StateCompleted)
+	assertScopedWorkerIdentity(t, replay, workersessions.StateCanceled)
+}
+
+func assertScopedWorkerIdentity(t *testing.T, fixture *perRuntimeAttemptFixture, state workersessions.State) {
+	t.Helper()
+	ctx := context.Background()
+	scope := fixture.request.Execution.Execution.FactorySessionID
+	assertScopedWorkerList(t, fixture, scope)
+	session, err := fixture.service.Get(ctx, workersessions.GetRequest{ID: fixture.request.ID, FactorySessionID: scope})
+	if err != nil || session.ID != fixture.request.ID || session.State != state || session.ProviderSessionAssociation == nil || session.ProviderSessionAssociation.Reference.ID != "provider-"+scope {
+		t.Fatalf("scoped session = %#v, %v", session, err)
+	}
+	observation, err := fixture.service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.request.ID, FactorySessionID: scope})
+	if err != nil || observation.WorkerSessionID != fixture.request.ID || observation.FactorySessionID != scope || observation.State != state || observation.AttemptID != fixture.request.AttemptID {
+		t.Fatalf("scoped observation = %#v, %v", observation, err)
+	}
+	subscription, err := fixture.service.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: fixture.request.ID, FactorySessionID: scope, ReplayOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	opening := subscription.Next(ctx)
+	if opening.Kind != workersessions.ObservationDeliveryRecord || opening.Event.Cursor.WorkerSessionID != fixture.request.ID {
+		t.Fatalf("scoped opening = %#v", opening)
+	}
+}
+
+func cancelScopedWorker(t *testing.T, fixture *perRuntimeAttemptFixture) {
+	t.Helper()
+	controlled := make(chan error, 1)
+	go func() {
+		result, err := fixture.service.Cancel(context.Background(), workersessions.ControlRequest{ID: fixture.request.ID, FactorySessionID: fixture.request.Execution.Execution.FactorySessionID})
+		if err == nil && (result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled || result.Session.ID != fixture.request.ID) {
+			err = fmt.Errorf("scoped Cancel = %#v", result)
+		}
+		controlled <- err
+	}()
+	if err := waitControlledSignal(fixture.control.invoked, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCanceledDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-controlled:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("scoped cancellation did not join")
+	}
+}
+
+func assertScopedWorkerList(t *testing.T, fixture *perRuntimeAttemptFixture, scope string) {
+	t.Helper()
+	ctx := context.Background()
+	listed, listErr := fixture.service.ListWorkerSessionObservations(ctx, workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: scope, RuntimeID: fixture.request.ObservationRuntimeID})
+	if (listErr != nil && !errors.Is(listErr, workersessions.ErrObservationProjectionUnavailable)) || len(listed.Observations) != 1 || listed.Observations[0].WorkerSessionID != fixture.request.ID || listed.Observations[0].FactorySessionID != scope {
+		t.Fatalf("scoped list = %#v, %v", listed, listErr)
+	}
+}
