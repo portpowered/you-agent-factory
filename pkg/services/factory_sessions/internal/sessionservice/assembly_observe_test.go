@@ -250,11 +250,15 @@ type scopedControlRuntime struct {
 	status          string
 	failure         error
 	observedFailure error
+	onObserve       func()
 	last            factoryruntime.TerminateRequest
 	controls        int
 }
 
 func (r *scopedControlRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	if r.onObserve != nil {
+		r.onObserve()
+	}
 	return factoryruntime.ObserveResult{Observation: factoryruntime.Observation{Health: factoryruntime.ObservationHealth{FactoryState: r.status}}}, r.observedFailure
 }
 func (r *scopedControlRuntime) ControlTerminate(ctx context.Context, req factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
@@ -366,5 +370,22 @@ func TestSessionScopeControlPreservesErrorsAndAllowsRetry(t *testing.T) {
 	}
 	if state.Resolve("a") == nil {
 		t.Fatal("cancel removed inspection history")
+	}
+}
+
+func TestSessionScopeControlKeepsSelectedGenerationDuringReplacement(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	first := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
+	replacement := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
+	firstMetrics := registerScopeControlRuntime(state, "a", first, zap.NewNop())
+	var replacementMetrics *scopeControlMetrics
+	first.onObserve = func() { replacementMetrics = registerScopeControlRuntime(state, "a", replacement, zap.NewNop()) }
+	result, err := NewScopeControl(state).CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "first-cancel"})
+	if err != nil || result.Status != factorysessions.LifecycleStatusSucceeded || first.controls != 1 || replacement.controls != 0 || replacement.status != string(interfaces.FactoryStateRunning) {
+		t.Fatalf("generation control = %#v, %v; first=%d replacement=%d", result, err, first.controls, replacement.controls)
+	}
+	if len(firstMetrics.outcomes) != 1 || len(replacementMetrics.outcomes) != 0 {
+		t.Fatalf("generation metrics: first=%v replacement=%v", firstMetrics.outcomes, replacementMetrics.outcomes)
 	}
 }

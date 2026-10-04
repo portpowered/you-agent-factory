@@ -12,6 +12,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
@@ -24,7 +25,7 @@ func (fs *SessionRuntime) ApplyOwnedControl(ctx context.Context, sessionID strin
 	return applyScopedOwnedControl(ctx, fs.sessionState, fs.logger, sessionID, operation, request)
 }
 
-func applyScopedOwnedControl(ctx context.Context, state *sessionruntime.Service, logger *zap.Logger, sessionID string, operation factorysessions.LifecycleControlKind, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+func applyScopedOwnedControl(ctx context.Context, state runtimebinding.LiveSessionResolver, logger *zap.Logger, sessionID string, operation factorysessions.LifecycleControlKind, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
 	if err := ctx.Err(); err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -125,7 +126,7 @@ func (c *scopeControl) CancelLiveFactorySession(ctx context.Context, sessionID s
 		key = string(factorysessions.SessionControlCancel) + ":" + control.RequestID + ":" + control.TurnID
 	}
 	result, err := bound.ApplyControlOnce(key, func() (factorysessions.SessionControlResult, error) {
-		applied, err := applyScopedOwnedControl(ctx, c.state, bound.Logger, id, factorysessions.LifecycleControlCancel, control)
+		applied, err := applyScopedOwnedControl(ctx, addressedControlSession{id: id, session: session}, bound.Logger, id, factorysessions.LifecycleControlCancel, control)
 		if err != nil {
 			return factorysessions.SessionControlResult{}, err
 		}
@@ -141,4 +142,18 @@ func (c *scopeControl) CancelLiveFactorySession(ctx context.Context, sessionID s
 		SessionID: result.SessionID, Operation: factorysessions.LifecycleControlCancel,
 		Outcome: result.Outcome, Status: result.Status, Links: result.Links,
 	}, nil
+}
+
+// Keep control and its metrics on the generation selected before the record's
+// control fence, even if a replacement is published while Runtime is handling it.
+type addressedControlSession struct {
+	id      string
+	session *livesession.LiveSession
+}
+
+func (s addressedControlSession) Resolve(id string) *livesession.LiveSession {
+	if id == s.id {
+		return s.session
+	}
+	return nil
 }
