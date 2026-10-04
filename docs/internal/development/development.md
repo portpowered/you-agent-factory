@@ -264,7 +264,8 @@ generated files and ordinary production consumers are excluded.
 Test policy for named Factory paths, Operator Settings paths/environment, and
 mock Worker configuration also remains service-owned. Exact service owners and
 Wire composition are allowed; other tests and reusable support cannot call or
-capture those policy functions. These rules have no baseline debt.
+capture those policy functions. Exact compiler-observed file/symbol/count debt
+is recorded in the shared baseline; count changes and stale entries fail.
 Other unmigrated boundary rules remain in `make pkg-boundary`.
 
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/baselines/frontend-deadcode-baseline.json`. The backend analyzer uses production entrypoints only, so production code referenced exclusively by tests remains a dead-code finding. It writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/baselines/deadcode-baseline.txt`. Review any drift before updating either baseline.

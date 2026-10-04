@@ -71,3 +71,11 @@ test('metadata stops after resolution, preserves literal _test directories and f
   assert.equal(collectTimingUnits('', 'tagunion'), '');
   assert.deepEqual(orphanTimingKeys('', '', 'm/'), []);
 });
+
+test('cross-owner policy debt requires its exact compiler source and owner', () => {
+  const key = 'test-cross-owner-policy|pkg/a_test|pkg/a/policy_test.go#pkg/services/workers.LoadMockWorkersConfig::count=2';
+  const metadata = 'm/pkg/a_test [m/pkg/a.test]||policy_test.go||';
+  assert.deepEqual(orphanTimingKeys(key, metadata, 'm/'), []);
+  assert.deepEqual(orphanTimingKeys(key, metadata.replace('policy_test.go', 'other_test.go'), 'm/'), [key]);
+  assert.deepEqual(orphanTimingKeys(key, 'm/pkg/a', 'm/'), [key]);
+});

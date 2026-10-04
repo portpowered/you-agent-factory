@@ -419,23 +419,29 @@ func TestTestBoundaryCrossOwnerPolicyTable(t *testing.T) {
 				pkg := types.NewPackage(modulePrefix+path, "policy")
 				fn := types.NewFunc(token.Pos(1), pkg, symbol, types.NewSignatureType(nil, nil, nil, nil, nil, false))
 				id := &ast.Ident{Name: symbol, NamePos: token.Pos(1)}
-				var diagnostics []analysis.Diagnostic
-				pass := &analysis.Pass{Report: func(d analysis.Diagnostic) { diagnostics = append(diagnostics, d) }}
+				var diagnostics []violation
+				fset := token.NewFileSet()
+				fset.AddFile("policy_test.go", 1, 100)
+				pass := &analysis.Pass{Fset: fset}
 				owner := strings.Split(path, "/")[2]
 				for _, unit := range []string{"pkg/services/" + owner, "pkg/services/" + owner + "_test", "pkg/services/" + owner + "/child", "pkg/wire", "pkg/wire/child_test"} {
-					reportCrossOwnerTestPolicy(pass, id, fn, unit, false)
+					if v := crossOwnerTestPolicyViolation(pass, id, fn, unit, false); v != nil {
+						diagnostics = append(diagnostics, *v)
+					}
 				}
 				if len(diagnostics) != 0 {
 					t.Fatalf("owner/composition diagnostics: %v", diagnostics)
 				}
 				for _, unit := range []string{"pkg/services/" + owner + "other", "pkg/wireother", "internal/testutil", "tests/functional/internal/support", "pkg/transports/http_test"} {
-					reportCrossOwnerTestPolicy(pass, id, fn, unit, false)
+					if v := crossOwnerTestPolicyViolation(pass, id, fn, unit, false); v != nil {
+						diagnostics = append(diagnostics, *v)
+					}
 				}
 				if len(diagnostics) != 5 {
 					t.Fatalf("diagnostics = %v, want five rejected consumers", diagnostics)
 				}
 				for _, d := range diagnostics {
-					if d.Pos != id.Pos() || !strings.Contains(d.Message, path+"."+symbol) {
+					if d.pos != id.Pos() || !strings.Contains(d.importee, path+"."+symbol) {
 						t.Fatalf("wrong diagnostic: %v", d)
 					}
 				}
@@ -476,7 +482,7 @@ func policy() {
  DefaultConfigPath() // want "test-cross-owner-policy.*operator_settings.DefaultConfigPath"
  ResolveFromHomeWithEnvironment() // want "test-cross-owner-policy.*ResolveFromHomeWithEnvironment"
  workers.LoadMockWorkersConfig() // want "test-cross-owner-policy.*workers.LoadMockWorkersConfig"
- f := renamed.MapDir // want "test-cross-owner-policy.*factory_definitions.MapDir"
+ f := renamed.MapDir
  f()
  renamed.Lookalike{}.MapDir()
  renamed := struct { MapDir func() }{func(){}}
@@ -515,4 +521,38 @@ func policy() {
 	}
 	defer cleanup()
 	analysistest.Run(t, dir, TestBoundary, "m/pkg/transports/http", "m/internal/testutil", "m/tests/functional/internal/support", "m/pkg/wire", "m/pkg/services/.../policy")
+}
+
+func TestTestBoundaryCrossOwnerPolicyDebt(t *testing.T) {
+	useFixtures(t)
+	baseline = func() map[string]struct{} {
+		keys := map[string]struct{}{}
+		for _, pkg := range []string{"debt", "growth", "stale"} {
+			keys["test-cross-owner-policy|pkg/transports/"+pkg+"|pkg/transports/"+pkg+"/policy_test.go#pkg/services/workers.LoadMockWorkersConfig::count=2"] = struct{}{}
+		}
+		return keys
+	}
+	files := map[string]string{
+		"m/pkg/services/workers/workers.go": "package workers\nfunc LoadMockWorkersConfig() {}\n",
+		"m/pkg/transports/debt/policy_test.go": `package debt
+import "m/pkg/services/workers"
+func policy() {workers.LoadMockWorkersConfig(); workers.LoadMockWorkersConfig()}
+`,
+		"m/pkg/transports/growth/policy_test.go": `package growth // want "stale baseline entry"
+import "m/pkg/services/workers"
+func policy() {
+ workers.LoadMockWorkersConfig() // want "test-cross-owner-policy.*count=3"
+ workers.LoadMockWorkersConfig()
+ workers.LoadMockWorkersConfig()
+}
+`,
+		"m/pkg/transports/stale/policy_test.go": `package stale // want "stale baseline entry"
+`,
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	analysistest.Run(t, dir, TestBoundary, "m/pkg/transports/...")
 }

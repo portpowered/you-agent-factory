@@ -1,6 +1,7 @@
 package analyzers
 
 import (
+	"fmt"
 	"go/ast"
 	"go/types"
 	"strings"
@@ -22,13 +23,15 @@ func runTestBoundary(pass *analysis.Pass) (any, error) {
 	if !ok {
 		return nil, nil
 	}
+	var found []violation
 	support := under(unit, "internal/testutil") || under(unit, "tests/functional/internal/support")
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) || (!support && !strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go")) {
 			continue
 		}
-		inspectTestBoundary(pass, file, unit)
+		found = append(found, inspectTestBoundary(pass, file, unit)...)
 	}
+	reportWithBaseline(pass, unit, setOf("test-cross-owner-policy"), countedTestPolicy(found), true, testPolicyBaseline(pass, unit))
 	return nil, nil
 }
 
@@ -44,7 +47,8 @@ func functionalTransportComposition(importPath, symbol string) bool {
 	return strings.HasPrefix(symbol, "New") || strings.HasPrefix(symbol, "Build") || strings.HasPrefix(symbol, "Create")
 }
 
-func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
+func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) []violation {
+	var found []violation
 	if under(unit, "pkg/transports") {
 		inspectTestWorkCallbacks(pass, file, unit)
 	}
@@ -62,7 +66,9 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		if obj == nil || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() {
 			return true
 		}
-		reportCrossOwnerTestPolicy(pass, id, obj, unit, called[id])
+		if v := crossOwnerTestPolicyViolation(pass, id, obj, unit, called[id]); v != nil {
+			found = append(found, *v)
+		}
 		reportTestComposition(pass, id, obj, unit, path, called[id])
 		fn, isFunction := obj.(*types.Func)
 		if isFunction && !under(strings.TrimSuffix(unit, "_test"), "pkg/services/work") &&
@@ -71,6 +77,7 @@ func inspectTestBoundary(pass *analysis.Pass, file *ast.File, unit string) {
 		}
 		return true
 	})
+	return found
 }
 
 // Exact service operations remain owned by their service even in reusable
@@ -88,17 +95,54 @@ var crossOwnerTestPolicy = map[string]map[string]bool{
 	"pkg/services/workers": {"LoadMockWorkersConfig": true},
 }
 
-func reportCrossOwnerTestPolicy(pass *analysis.Pass, id *ast.Ident, obj types.Object, unit string, called bool) {
+func crossOwnerTestPolicyViolation(pass *analysis.Pass, id *ast.Ident, obj types.Object, unit string, called bool) *violation {
 	path := strings.TrimPrefix(obj.Pkg().Path(), modulePrefix)
 	if !crossOwnerTestPolicy[path][obj.Name()] || !testBoundaryCallable(obj, called) {
-		return
+		return nil
 	}
 	owner := strings.Split(path, "/")[2]
 	caller := strings.TrimSuffix(unit, "_test")
 	if under(caller, "pkg/services/"+owner) || under(caller, "pkg/wire") {
-		return
+		return nil
 	}
-	pass.Reportf(id.Pos(), "test-cross-owner-policy: %s -> %s.%s; move policy assertions to pkg/services/%s or exercise the customer process boundary", unit, path, obj.Name(), owner)
+	return &violation{rule: "test-cross-owner-policy", importer: unit, importee: timingFile(unit, pass.Fset.Position(id.Pos()).Filename) + "#" + path + "." + obj.Name(), pos: id.Pos(), hint: "move policy assertions to pkg/services/" + owner + " or exercise the customer process boundary"}
+}
+
+// Counts preserve exact source/symbol debt: another call changes the key.
+func countedTestPolicy(found []violation) []violation {
+	counts := map[string]int{}
+	for _, v := range found {
+		counts[v.key()]++
+	}
+	for i := range found {
+		found[i].importee += fmt.Sprintf("::count=%d", counts[found[i].key()])
+	}
+	return found
+}
+
+func testPolicyBaseline(pass *analysis.Pass, unit string) map[string]struct{} {
+	listed := baseline()
+	selected, ignored := map[string]bool{}, map[string]bool{}
+	hasTests := false
+	for _, file := range pass.Files {
+		name := serviceSource(pass, unit, file)
+		selected[name] = true
+		hasTests = hasTests || strings.HasSuffix(name, "_test.go")
+	}
+	for _, name := range pass.IgnoredFiles {
+		ignored[sourceName(unit, name)] = true
+	}
+	for key := range listed {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) != 3 || parts[0] != "test-cross-owner-policy" || parts[1] != unit {
+			continue
+		}
+		name, _, _ := strings.Cut(parts[2], "#")
+		if !selected[name] && (ignored[name] || (strings.HasSuffix(name, "_test.go") && !hasTests)) {
+			delete(listed, key)
+		}
+	}
+	return listed
 }
 
 // HTTP tests consume detached service results instead of recreating engine
