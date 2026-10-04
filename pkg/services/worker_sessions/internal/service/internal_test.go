@@ -3753,8 +3753,10 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	noProvider := newObservationRegistry(nil, nil)
 	noProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	noProvider.observations["worker-1"] = observationMetadata()
-	if _, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("GetObservation(without provider service) error = %v", err)
+	gotProvider, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref})
+	if err != nil || gotProvider.WorkerSessionID != "worker-1" || gotProvider.State != workersessions.StateRunning ||
+		!gotProvider.ProviderSessionAvailable || gotProvider.ProviderSession != ref || gotProvider.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("GetObservation(without provider service) = %#v, %v, want retained running identity", gotProvider, err)
 	}
 	noReference := newObservationRegistry(nil, nil)
 	noReference.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}

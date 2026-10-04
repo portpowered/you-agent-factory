@@ -630,8 +630,10 @@ func TestObservationContract_MissingAndUnavailableIdentitiesAreTyped(t *testing.
 	if _, err := projectedRegistry.InvokeSession(ctx, startRequest("unavailable-worker", "unavailable-dispatch", "unavailable-work")); err != nil {
 		t.Fatalf("Start(unavailable projection) error = %v", err)
 	}
-	if _, err := projectedRegistry.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("GetObservation(unavailable projection) error = %v, want ErrObservationProjectionUnavailable", err)
+	got, err := projectedRegistry.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: ref})
+	if err != nil || got.WorkerSessionID != "unavailable-worker" || got.State != workersessions.StateCompleted ||
+		!got.ProviderSessionAvailable || got.ProviderSession != ref || got.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("GetObservation(unavailable projection) = %#v, %v, want retained completed identity", got, err)
 	}
 }
 

@@ -880,14 +880,6 @@ func cloneProviderMetadata(metadata *providers.SessionMetadata) *providers.Sessi
 	return &clone
 }
 
-func isObservationNotFound(err error) bool {
-	return err == workersessions.ErrObservationWorkNotFound
-}
-
-func isObservationProjectionUnavailable(err error) bool {
-	return err == workersessions.ErrObservationProjectionUnavailable
-}
-
 func observationContextError(ctx context.Context) error {
 	if ctx == nil {
 		return nil

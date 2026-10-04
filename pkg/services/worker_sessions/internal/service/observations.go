@@ -395,7 +395,9 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	// still makes the result stable without exposing both as one observation.
 	sortStrings(ids)
 	projected, err := r.projectObservation(ctx, ids[0])
-	if err != nil {
+	// Native transcript detail is optional; the retained association and
+	// lifecycle remain available when provider storage cannot be projected.
+	if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		return workersessions.Observation{}, err
 	}
 	r.logger.Info("worker session observation get", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
