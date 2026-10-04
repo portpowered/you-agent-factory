@@ -133,6 +133,13 @@ func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*
 		r.mu.RUnlock()
 		return &attempt.progress, ownerID, attempt.attemptID, nil
 	}
+	if supervision := r.supervisions[ownerID]; supervision != nil && supervision.runtimeKey == key {
+		supervision.mu.Lock()
+		attemptID := supervision.dispatchID
+		supervision.mu.Unlock()
+		r.mu.RUnlock()
+		return &supervision.progress, ownerID, attemptID, nil
+	}
 	// Compatibility InvokeSession still owns its directly supervised attempt
 	// until the atomic opener cutover. Check its supplied runtime correlation
 	// before allowing the historical dispatch index to resolve that route.
@@ -159,15 +166,6 @@ func runtimeAttemptContext(ctx context.Context) context.Context {
 		return context.Background()
 	}
 	return ctx
-}
-
-func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
-	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
-	attemptID := strings.TrimSpace(req.AttemptID)
-	if attemptID == "" {
-		attemptID = logicalDispatchID
-	}
-	return logicalDispatchID, attemptID
 }
 
 func (r *registry) runtimeAttemptFor(id string) *runtimeAttempt {
@@ -444,6 +442,46 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 	return r.driveRegisteredInvocation(ctx, req, prepared.supervision)
 }
 
+// InvokeRuntimeSession shares the invocation driver while retaining a scoped
+// logical route independently of its physical retry attempts and direct routes.
+func (r *registry) InvokeRuntimeSession(
+	ctx context.Context,
+	req workersessions.RuntimeAttemptRequest,
+	retry workersessions.RetryPolicy,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+) (workersessions.InvokeSessionResult, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.InvokeSessionResult{}, err
+	}
+	if executor == nil {
+		return workersessions.InvokeSessionResult{}, ErrMissingExecution
+	}
+	if clock == nil {
+		return workersessions.InvokeSessionResult{}, ErrMissingClock
+	}
+	if scheduler == nil {
+		return workersessions.InvokeSessionResult{}, ErrMissingScheduler
+	}
+	ctx = runtimeAttemptContext(ctx)
+	logicalID, attemptID := runtimeAttemptIDs(req)
+	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalID}
+	if !r.beginRuntimeOpening(key.RuntimeID) {
+		return workersessions.InvokeSessionResult{}, workersessions.ErrStartAdmissionFailed
+	}
+	prepared, invoke, err := r.prepareRuntimeInvocation(ctx, req, retry, key, attemptID, executor, clock, scheduler)
+	r.finishRuntimeOpening(key.RuntimeID)
+	if err != nil {
+		return workersessions.InvokeSessionResult{}, err
+	}
+	defer r.releaseRuntimeAttemptKey(key, req.ID)
+	if prepared.terminal {
+		return workersessions.InvokeSessionResult{Session: prepared.session}, nil
+	}
+	return r.driveRegisteredInvocation(ctx, invoke, prepared.supervision)
+}
+
 // driveInvocation begins execution supervision only after the opening Worker
 // Session record committed, then runs attempts until one is terminal or the
 // attempt budget is spent. Controls that win before boundary admission
@@ -626,8 +664,10 @@ func (r *registry) prepareRetryAttempt(id string, supervision *supervision) (wor
 	next := cloneWorkstationDispatchRequest(supervision.execution)
 	next.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/attempt/%d", supervision.baseDispatchID(), supervision.attemptsMade+1)
 	supervision.dispatchID = next.Execution.Dispatch.DispatchID
-	delete(r.dispatchOwners, previousDispatchID)
-	r.dispatchOwners[supervision.dispatchID] = id
+	if supervision.runtimeKey.RuntimeID == "" {
+		delete(r.dispatchOwners, previousDispatchID)
+		r.dispatchOwners[supervision.dispatchID] = id
+	}
 	supervision.publishing = true
 	supervision.accepted = false
 	supervision.result = workers.WorkstationDispatchResult{}

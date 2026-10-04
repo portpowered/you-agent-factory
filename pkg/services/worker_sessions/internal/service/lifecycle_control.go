@@ -555,6 +555,8 @@ type supervision struct {
 	executor   workers.Service
 	clock      platformclock.Source
 	scheduler  platformclock.TimerSource
+	runtimeKey workersessions.RuntimeAttemptKey
+	progress   workersessions.ProviderSessionObservationPublisher
 	dispatchID string
 	turnID     string
 	execution  workers.WorkstationDispatchRequest

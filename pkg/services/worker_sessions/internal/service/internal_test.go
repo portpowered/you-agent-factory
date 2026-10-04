@@ -1376,7 +1376,12 @@ func TestKeyedRuntime_CanonicalProgressPreservesDraftBeforeForwarding(t *testing
 	}
 }
 
-func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string) {
+func TestKeyedRuntimeCompatibilityInvocationPublishesBeforeForwarding(t *testing.T) {
+	t.Parallel()
+	testKeyedRuntimeCompatibilityProgress(t, "keyed-compat-runtime", true)
+}
+
+func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string, keyed ...bool) {
 	t.Helper()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 	forwarded := 0
@@ -1401,13 +1406,25 @@ func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string) {
 	publisher.Bind(service)
 	request := validStartRequest("compat-worker", "compat-dispatch")
 	request.Execution.Execution.RuntimeID = runtimeID
-	result, err := service.InvokeSession(context.Background(), request)
+	var result workersessions.InvokeSessionResult
+	if len(keyed) > 0 {
+		result, err = service.(*registry).InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key: workersessions.RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: "compat-dispatch"},
+			ID:  request.ID, AttemptID: "compat-physical", Execution: request.Execution,
+		}, request.Retry, execution, coverageClock{}, platformclock.Real{})
+	} else {
+		result, err = service.InvokeSession(context.Background(), request)
+	}
 	if err != nil || result.Session.State != workersessions.StateCompleted || forwarded != 1 {
 		t.Fatalf("compatibility invocation = %#v, %v, forwarded=%d", result, err, forwarded)
 	}
 	session := getCharacterizationSession(t, service.(*registry), request.ID)
+	attemptID := "compat-dispatch"
+	if len(keyed) > 0 {
+		attemptID = "compat-physical"
+	}
 	if association := session.ProviderSessionAssociation; association == nil || association.WorkerSessionID != request.ID ||
-		association.DispatchID != "compat-dispatch" || association.AttemptID != "compat-dispatch" || association.Reference.ID != "compat-provider" {
+		association.DispatchID != "compat-dispatch" || association.AttemptID != attemptID || association.Reference.ID != "compat-provider" {
 		t.Fatalf("compatibility association = %#v", association)
 	}
 	if records := sink.requestsFor(workersessions.Topic(request.ID)); len(records) != 4 {
@@ -6402,6 +6419,106 @@ func TestKeyedRuntimeInvocationRetainsSelectedEffects(t *testing.T) {
 	}
 }
 
+func TestKeyedRuntimeCompatibilityInvocationRetainsSelectedEffects(t *testing.T) {
+	for _, outcome := range []string{"success", "failure", "timeout", "cancel", "close"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			r := newRuntimeIdentityRegistry(t)
+			target := startSelectedEffectsInvocation(t, r, "compat-target", outcome, 2035, "runtime-target")
+			peer := startSelectedEffectsInvocation(t, r, "compat-peer", "success", 2040, "runtime-peer")
+			target.facts.SetTick(10)
+			assertSelectedEffectsObservation(t, r, target, workersessions.StateRunning)
+			state := workersessions.StateCompleted
+			switch outcome {
+			case "success", "failure":
+				close(target.release)
+				if outcome == "failure" {
+					state = workersessions.StateFailed
+				}
+			case "timeout":
+				state = workersessions.StateFailed
+				target.scheduler.SetTick(5)
+			case "cancel", "close":
+				state = workersessions.StateCanceled
+				if outcome == "close" {
+					if err := r.CloseRuntimeAttempts(context.Background(), "runtime-target"); err != nil {
+						t.Fatal(err)
+					}
+				} else if control, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: target.id}); err != nil || control.Outcome != workersessions.ControlOutcomeApplied {
+					t.Fatalf("compatibility cancel: %#v, %v", control, err)
+				}
+			}
+			result := awaitSelectedEffectsInvocation(t, target)
+			if result.Session.State != state {
+				t.Fatalf("compatibility %s: %#v, want %s", outcome, result, state)
+			}
+			assertSelectedEffectsResult(t, outcome, result)
+			assertSelectedEffectsObservation(t, r, target, state)
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			close(peer.release)
+			if result := awaitSelectedEffectsInvocation(t, peer); result.Session.State != workersessions.StateCompleted || result.Dispatch.Result.Output != peer.id {
+				t.Fatalf("compatibility peer: %#v", result)
+			}
+		})
+	}
+}
+
+func TestKeyedRuntimeCompatibilityRejectionPreservesLivePeer(t *testing.T) {
+	for _, invalid := range []string{"key", "identity", "correlation", "execution", "clock", "scheduler", "closed"} {
+		t.Run(invalid, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+			svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := svc.(*registry)
+			peer := startSelectedEffectsInvocation(t, r, "compat-peer", "success", 2040, "runtime-peer")
+			before := sink.requestsFor("")
+			request := workersessions.RuntimeAttemptRequest{
+				Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-rejected", DispatchID: perRuntimeLogicalDispatchID},
+				ID:  "compat-rejected", AttemptID: "rejected-physical", Execution: runtimeAttemptHandoff(perRuntimeLogicalDispatchID),
+			}
+			request.Execution.Execution.RuntimeID = request.Key.RuntimeID
+			var executor workers.Service = unusedExecution{t: t}
+			var clock platformclock.Source = facts
+			var scheduler platformclock.TimerSource = facts
+			want := workersessions.ErrProviderSessionAssociationAttemptMismatch
+			switch invalid {
+			case "key":
+				request.Key.RuntimeID, request.Execution.Execution.RuntimeID = "runtime-peer", "runtime-peer"
+			case "identity":
+				request.ID, want = peer.id, workersessions.ErrSessionNotStartable
+			case "correlation":
+				request.Execution.Execution.RuntimeID = "foreign-runtime"
+			case "execution":
+				executor, want = nil, ErrMissingExecution
+			case "clock":
+				clock, want = nil, ErrMissingClock
+			case "scheduler":
+				scheduler, want = nil, ErrMissingScheduler
+			case "closed":
+				if err := r.CloseRuntimeAttempts(context.Background(), request.Key.RuntimeID); err != nil {
+					t.Fatal(err)
+				}
+				want = workersessions.ErrStartAdmissionFailed
+			}
+			if _, err := r.InvokeRuntimeSession(context.Background(), request, workersessions.RetryPolicy{}, executor, clock, scheduler); !errors.Is(err, want) {
+				t.Fatalf("rejected %s: %v, want %v", invalid, err, want)
+			}
+			if after := sink.requestsFor(""); !reflect.DeepEqual(before, after) {
+				t.Fatalf("rejected invocation published: %#v", after)
+			}
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			close(peer.release)
+			if result := awaitSelectedEffectsInvocation(t, peer); result.Session.State != workersessions.StateCompleted {
+				t.Fatalf("peer completion: %#v", result)
+			}
+		})
+	}
+}
+
 type selectedEffectsInvocation struct {
 	id        string
 	facts     *platformclock.Deterministic
@@ -6410,7 +6527,7 @@ type selectedEffectsInvocation struct {
 	results   chan workersessions.InvokeSessionResult
 }
 
-func startSelectedEffectsInvocation(t *testing.T, r *registry, id, outcome string, year int) selectedEffectsInvocation {
+func startSelectedEffectsInvocation(t *testing.T, r *registry, id, outcome string, year int, runtimeIDs ...string) selectedEffectsInvocation {
 	t.Helper()
 	f := selectedEffectsInvocation{
 		id: id, facts: platformclock.NewDeterministic(time.Date(year, 1, 2, 3, 4, 5, 0, time.UTC), time.Second),
@@ -6436,9 +6553,24 @@ func startSelectedEffectsInvocation(t *testing.T, r *registry, id, outcome strin
 	request := validStartRequest(id, id+"-dispatch")
 	request.Execution.Execution.Timeout = 5 * time.Second
 	request.Execution.Execution.Model = id + "-model"
-	prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, f.facts, f.scheduler)
-	if err != nil || prepared.terminal {
-		t.Fatalf("prepare selected invocation: %#v, %v", prepared, err)
+	dispatchID := id + "-dispatch"
+	invoke := func() (workersessions.InvokeSessionResult, error) {
+		prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, f.facts, f.scheduler)
+		if err != nil || prepared.terminal {
+			return workersessions.InvokeSessionResult{Session: prepared.session}, err
+		}
+		return r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+	}
+	if len(runtimeIDs) > 0 {
+		dispatchID = perRuntimeLogicalDispatchID
+		request.Execution.Execution.RuntimeID = runtimeIDs[0]
+		request.Execution.Execution.Dispatch.DispatchID = dispatchID
+		invoke = func() (workersessions.InvokeSessionResult, error) {
+			return r.InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+				Key: workersessions.RuntimeAttemptKey{RuntimeID: runtimeIDs[0], DispatchID: dispatchID},
+				ID:  id, AttemptID: id + "-dispatch", Execution: request.Execution,
+			}, request.Retry, execution, f.facts, f.scheduler)
+		}
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -6449,7 +6581,7 @@ func startSelectedEffectsInvocation(t *testing.T, r *registry, id, outcome strin
 		}
 	})
 	go func() {
-		result, invokeErr := r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+		result, invokeErr := invoke()
 		if invokeErr != nil {
 			t.Errorf("drive selected invocation: %v", invokeErr)
 		}
@@ -6457,7 +6589,7 @@ func startSelectedEffectsInvocation(t *testing.T, r *registry, id, outcome strin
 	}()
 	select {
 	case executed := <-started:
-		if executed.Correlation.DispatchID != id+"-dispatch" || executed.Target.Model.Name != id+"-model" {
+		if executed.Correlation.DispatchID != dispatchID || executed.Correlation.AttemptID != id+"-dispatch" || executed.Target.Model.Name != id+"-model" {
 			t.Fatalf("selected execution received wrong request: %#v", executed)
 		}
 	case <-time.After(30 * time.Second):
@@ -6523,7 +6655,11 @@ func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 	calls := 0
 	execution := coverageExecution{execute: func(_ context.Context, executed workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		calls++
-		if executed.Target.Model.Name != "selected-retry-model" {
+		attemptID := "selected-retry-physical"
+		if calls > 1 {
+			attemptID += "/attempt/2"
+		}
+		if executed.Target.Model.Name != "selected-retry-model" || executed.Correlation.RuntimeID != "selected-retry-runtime" || executed.Correlation.DispatchID != "selected-retry-dispatch" || executed.Correlation.AttemptID != attemptID {
 			t.Errorf("retry lost selected request: %#v", executed)
 		}
 		facts.SetTick(calls)
@@ -6538,11 +6674,11 @@ func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
 	request.Execution.Execution.Timeout = 5 * time.Second
 	request.Execution.Execution.Model = "selected-retry-model"
-	prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, facts, scheduler)
-	if err != nil || prepared.terminal {
-		t.Fatalf("prepare retry: %#v, %v", prepared, err)
-	}
-	result, err := r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+	request.Execution.Execution.RuntimeID = "selected-retry-runtime"
+	result, err := r.InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "selected-retry-runtime", DispatchID: "selected-retry-dispatch"},
+		ID:  request.ID, AttemptID: "selected-retry-physical", Execution: request.Execution,
+	}, request.Retry, execution, facts, scheduler)
 	if err != nil || result.Session.State != workersessions.StateCompleted || result.Attempts != 2 || calls != 2 {
 		t.Fatalf("selected retry: %#v, %v, calls=%d", result, err, calls)
 	}

@@ -761,6 +761,12 @@ func (r *registry) providerBindingOwner(req workersessions.ProviderBindingReques
 		if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
 			return req.WorkerSessionID, attempt.attemptID == dispatchID && r.runtimeAttemptOwners[attempt.key] == req.WorkerSessionID
 		}
+		if supervision := r.supervisions[req.WorkerSessionID]; supervision != nil && supervision.runtimeKey.RuntimeID != "" {
+			supervision.mu.Lock()
+			owned := supervision.dispatchID == dispatchID && r.runtimeAttemptOwners[supervision.runtimeKey] == req.WorkerSessionID
+			supervision.mu.Unlock()
+			return req.WorkerSessionID, owned
+		}
 		return req.WorkerSessionID, r.dispatchOwners[dispatchID] == req.WorkerSessionID
 	}
 	ownerID, exists := r.dispatchOwners[dispatchID]
@@ -775,15 +781,8 @@ func (r *registry) associateProviderSessionLocked(
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
 	}
 	supervision := r.supervisions[req.WorkerSessionID]
-	_, runtimeOwned := r.runtimeAttempts[req.WorkerSessionID]
 	attempt := r.runtimeAttemptControls[req.WorkerSessionID]
-	owned := r.dispatchOwners[req.DispatchID] == req.WorkerSessionID
-	if runtimeOwned {
-		// An explicit Worker Session identity resolves its own scoped attempt;
-		// a peer's equal logical dispatch must not redirect this association.
-		owned = attempt != nil && attempt.dispatchID == req.DispatchID && r.runtimeAttemptOwners[attempt.key] == req.WorkerSessionID
-	}
-	if (supervision == nil && !runtimeOwned) || !owned {
+	if !r.providerAssociationOwnedLocked(req) {
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 
@@ -791,9 +790,14 @@ func (r *registry) associateProviderSessionLocked(
 	dispatchID := req.DispatchID
 	attemptID := dispatchID
 	if supervision != nil {
+		supervision.mu.Lock()
 		turnID = supervision.turnID
 		dispatchID = supervision.dispatchID
 		attemptID = dispatchID
+		if supervision.runtimeKey.RuntimeID != "" {
+			dispatchID = supervision.runtimeKey.DispatchID
+		}
+		supervision.mu.Unlock()
 	} else if attempt != nil {
 		// Runtime owns execution, but its immutable handle still identifies the
 		// physical attempt. A logical dispatch may survive several attempts.
@@ -837,44 +841,6 @@ type runtimeAdmission struct {
 	drained  chan struct{}
 }
 
-// runtimeAdmissionLocked returns scope-owned admission state under r.mu.
-func (r *registry) runtimeAdmissionLocked(runtimeID string) *runtimeAdmission {
-	if r.runtimeAdmissions == nil {
-		r.runtimeAdmissions = make(map[string]*runtimeAdmission)
-	}
-	admission := r.runtimeAdmissions[runtimeID]
-	if admission == nil {
-		admission = &runtimeAdmission{drained: make(chan struct{})}
-		close(admission.drained)
-		r.runtimeAdmissions[runtimeID] = admission
-	}
-	return admission
-}
-
-func (r *registry) beginRuntimeOpening(runtimeID string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	admission := r.runtimeAdmissionLocked(runtimeID)
-	if admission.closed {
-		return false
-	}
-	if admission.openings == 0 {
-		admission.drained = make(chan struct{})
-	}
-	admission.openings++
-	return true
-}
-
-func (r *registry) finishRuntimeOpening(runtimeID string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	admission := r.runtimeAdmissions[runtimeID]
-	admission.openings--
-	if admission.openings == 0 {
-		close(admission.drained)
-	}
-}
-
 func (r *registry) closeRuntimeAdmission(ctx context.Context, runtimeID string) error {
 	r.mu.Lock()
 	admission := r.runtimeAdmissionLocked(runtimeID)
@@ -907,24 +873,30 @@ func (r *registry) CloseRuntimeAttempts(ctx context.Context, runtimeID string) e
 		return err
 	}
 	r.mu.RLock()
-	var attempts []*runtimeAttempt
+	var ids []string
 	for _, attempt := range r.runtimeAttemptControls {
 		if attempt.key.RuntimeID == runtimeID {
-			attempts = append(attempts, attempt)
+			ids = append(ids, attempt.workerID)
+		}
+	}
+	for id, supervision := range r.supervisions {
+		if supervision.runtimeKey.RuntimeID == runtimeID {
+			ids = append(ids, id)
 		}
 	}
 	r.mu.RUnlock()
-	results := make(chan error, len(attempts))
-	for _, attempt := range attempts {
+	results := make(chan error, len(ids))
+	for _, id := range ids {
 		go func() {
-			_, err := r.cancelRuntimeAttemptControl(ctx,
-				workersessions.ControlRequest{ID: attempt.workerID},
-				workersessions.ControlActionCancel, false, attempt)
+			_, err := r.Cancel(ctx, workersessions.ControlRequest{ID: id})
+			if err == nil {
+				err = r.waitForSupervisionDriver(ctx, id)
+			}
 			results <- err
 		}()
 	}
 	var closeErr error
-	for range attempts {
+	for range ids {
 		select {
 		case err := <-results:
 			closeErr = errors.Join(closeErr, err)
@@ -959,9 +931,14 @@ func (r *registry) registerInvocationSupervision(
 		executor,
 		clock,
 		scheduler,
+		options.runtimeKey,
 		req.Execution,
 	)
 	if !canStart {
+		if options.runtimeKey.RuntimeID != "" {
+			final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+			return invocationPreparation{session: final, terminal: true, preAdmission: true, failure: workersessions.ErrStartAdmissionFailed}, nil
+		}
 		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		if options.serverOwned && r.isStopping() && !final.Terminal() {
 			final = r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)

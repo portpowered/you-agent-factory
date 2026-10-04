@@ -192,6 +192,7 @@ type invocationPreparationOptions struct {
 	direct           bool
 	continuation     bool
 	runtimeOwned     bool
+	runtimeKey       workersessions.RuntimeAttemptKey
 	requestID        string
 	verifyTopicReady bool
 	lineage          *workers.SessionLineage
@@ -607,6 +608,24 @@ func sameProviderIdentity(left, right string) bool {
 	)
 }
 
+// The caller holds r.mu. Explicit Worker identity resolves its scoped attempt;
+// a peer's equal logical dispatch cannot redirect a provider association.
+func (r *registry) providerAssociationOwnedLocked(req workersessions.ProviderSessionAssociationRequest) bool {
+	if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
+		return attempt.dispatchID == req.DispatchID && r.runtimeAttemptOwners[attempt.key] == req.WorkerSessionID
+	}
+	supervision := r.supervisions[req.WorkerSessionID]
+	if supervision == nil {
+		return false
+	}
+	if supervision.runtimeKey.RuntimeID == "" {
+		return r.dispatchOwners[req.DispatchID] == req.WorkerSessionID
+	}
+	supervision.mu.Lock()
+	defer supervision.mu.Unlock()
+	return (req.DispatchID == supervision.runtimeKey.DispatchID || req.DispatchID == supervision.dispatchID) && r.runtimeAttemptOwners[supervision.runtimeKey] == req.WorkerSessionID
+}
+
 func (r *registry) ensurePublishRecordProvider(
 	ctx context.Context,
 	req workersessions.PublishRecordRequest,
@@ -630,6 +649,11 @@ func (r *registry) ensurePublishRecordProvider(
 	owned := r.dispatchOwners[dispatchID] == req.SessionID
 	if attempt := r.runtimeAttemptControls[req.SessionID]; attempt != nil {
 		owned = attempt.attemptID == dispatchID && r.runtimeAttemptOwners[attempt.key] == req.SessionID
+	}
+	if supervision := r.supervisions[req.SessionID]; supervision != nil && supervision.runtimeKey.RuntimeID != "" {
+		supervision.mu.Lock()
+		owned = supervision.dispatchID == dispatchID && r.runtimeAttemptOwners[supervision.runtimeKey] == req.SessionID
+		supervision.mu.Unlock()
 	}
 	r.mu.RUnlock()
 	if !owned {

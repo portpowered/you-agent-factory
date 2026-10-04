@@ -932,3 +932,41 @@ func resolvedHardExecutionTimeout(execution workers.WorkstationExecutionRequest)
 	}
 	return 0
 }
+
+// runtimeAdmissionLocked returns scope-owned admission state under r.mu.
+func (r *registry) runtimeAdmissionLocked(runtimeID string) *runtimeAdmission {
+	if r.runtimeAdmissions == nil {
+		r.runtimeAdmissions = make(map[string]*runtimeAdmission)
+	}
+	admission := r.runtimeAdmissions[runtimeID]
+	if admission == nil {
+		admission = &runtimeAdmission{drained: make(chan struct{})}
+		close(admission.drained)
+		r.runtimeAdmissions[runtimeID] = admission
+	}
+	return admission
+}
+
+func (r *registry) beginRuntimeOpening(runtimeID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	admission := r.runtimeAdmissionLocked(runtimeID)
+	if admission.closed {
+		return false
+	}
+	if admission.openings == 0 {
+		admission.drained = make(chan struct{})
+	}
+	admission.openings++
+	return true
+}
+
+func (r *registry) finishRuntimeOpening(runtimeID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	admission := r.runtimeAdmissions[runtimeID]
+	admission.openings--
+	if admission.openings == 0 {
+		close(admission.drained)
+	}
+}

@@ -146,6 +146,9 @@ func executeWithService(
 	if conversionErr != nil {
 		return failedDispatchResult(request, conversionErr)
 	}
+	if supervision.runtimeKey.RuntimeID != "" {
+		executeRequest.Correlation.DispatchID = supervision.runtimeKey.DispatchID
+	}
 	if !supervision.admissionAllowed() {
 		return canceledDispatchResult(request)
 	}
@@ -899,14 +902,14 @@ func (r *registry) registerSupervision(
 	id, dispatchID, turnID string,
 	executions ...workers.WorkstationDispatchRequest,
 ) (*supervision, bool) {
-	return r.registerSupervisionOwned(false, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, executions...)
+	return r.registerSupervisionOwned(false, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, workersessions.RuntimeAttemptKey{}, executions...)
 }
 
 func (r *registry) registerServerOwnedSupervision(
 	id, dispatchID, turnID string,
 	executions ...workers.WorkstationDispatchRequest,
 ) (*supervision, bool) {
-	return r.registerSupervisionOwned(true, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, executions...)
+	return r.registerSupervisionOwned(true, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, workersessions.RuntimeAttemptKey{}, executions...)
 }
 
 func (r *registry) registerSupervisionOwned(
@@ -915,6 +918,7 @@ func (r *registry) registerSupervisionOwned(
 	executor workers.Service,
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
+	runtimeKey workersessions.RuntimeAttemptKey,
 	executions ...workers.WorkstationDispatchRequest,
 ) (*supervision, bool) {
 	r.mu.Lock()
@@ -925,13 +929,50 @@ func (r *registry) registerSupervisionOwned(
 	if session, exists := r.sessions[id]; !exists || session.State != workersessions.StateStarting {
 		return nil, false
 	}
+	if runtimeKey.RuntimeID != "" && r.runtimeAdmissions[runtimeKey.RuntimeID].closed {
+		return nil, false
+	}
 	supervision := newSupervision(dispatchID, turnID, executions...)
+	supervision.runtimeKey = runtimeKey
 	supervision.executor = executor
 	supervision.clock = clock
 	supervision.scheduler = scheduler
 	supervision.serverOwned = serverOwned
 	supervision.startedAt = clock.Now()
 	r.supervisions[id] = supervision
-	r.dispatchOwners[dispatchID] = id
+	if runtimeKey.RuntimeID == "" {
+		r.dispatchOwners[dispatchID] = id
+	}
 	return supervision, true
+}
+
+func (r *registry) prepareRuntimeInvocation(
+	ctx context.Context, req workersessions.RuntimeAttemptRequest, retry workersessions.RetryPolicy,
+	key workersessions.RuntimeAttemptKey, attemptID string,
+	executor workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource,
+) (invocationPreparation, workersessions.InvokeSessionRequest, error) {
+	r.mu.RLock()
+	conflict := r.runtimeAttemptDispatchConflictLocked(key, req.ID, attemptID)
+	r.mu.RUnlock()
+	if conflict || !r.reserveRuntimeAttemptKey(key, req.ID) {
+		return invocationPreparation{}, workersessions.InvokeSessionRequest{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	execution := cloneWorkstationDispatchRequest(req.Execution)
+	execution.Execution.Dispatch.DispatchID = attemptID
+	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry}
+	prepared, err := r.prepareInvocation(context.WithoutCancel(ctx), invoke,
+		invocationPreparationOptions{runtimeKey: key}, executor, clock, scheduler)
+	if err != nil {
+		r.releaseRuntimeAttemptKey(key, req.ID)
+	}
+	return prepared, invoke, err
+}
+
+func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
+	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
+	attemptID := strings.TrimSpace(req.AttemptID)
+	if attemptID == "" {
+		attemptID = logicalDispatchID
+	}
+	return logicalDispatchID, attemptID
 }
