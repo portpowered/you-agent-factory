@@ -23,21 +23,7 @@ func TestRuntimeWorkerAttemptReplaySelectionPreservesLivePeer(t *testing.T) {
 			admitted := make(chan workers.ExecuteRequest, 3)
 			release := make(chan struct{})
 			failure := errors.New("selected replay failure")
-			execution := selectionWorkers{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
-				admitted <- request
-				if request.Correlation.RuntimeID == "live" {
-					select {
-					case <-release:
-					case <-ctx.Done():
-						return workers.ExecuteResult{}, ctx.Err()
-					}
-				}
-				result := workers.ExecuteResult{Correlation: request.Correlation, StructuredResult: request.Correlation.RuntimeID}
-				if failed && request.Correlation.RuntimeID == "replay" {
-					return result, failure
-				}
-				return result, nil
-			}}
+			execution := selectedReplayWorkers(admitted, release, failure, failed)
 			production, replay, live, original := &selectionCommandRunner{}, &selectionCommandRunner{}, &selectionCommandRunner{}, &selectionCommandRunner{}
 			peer := runtimeWorkersServiceWithProgress{Service: execution, commandRunnerOverride: live}
 			selected := runtimeWorkersServiceWithProgress{Service: execution, commandRunnerOverride: production, replayCommandRunner: replay}
@@ -83,6 +69,24 @@ func TestRuntimeWorkerAttemptReplaySelectionPreservesLivePeer(t *testing.T) {
 			}
 		})
 	}
+}
+
+func selectedReplayWorkers(admitted chan<- workers.ExecuteRequest, release <-chan struct{}, failure error, failed bool) selectionWorkers {
+	return selectionWorkers{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		admitted <- request
+		if request.Correlation.RuntimeID == "live" {
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return workers.ExecuteResult{}, ctx.Err()
+			}
+		}
+		result := workers.ExecuteResult{Correlation: request.Correlation, StructuredResult: request.Correlation.RuntimeID}
+		if failed && request.Correlation.RuntimeID == "replay" {
+			return result, failure
+		}
+		return result, nil
+	}}
 }
 
 func selectionRequest(runtimeID string, runner platformprocess.CommandRunner) workers.ExecuteRequest {

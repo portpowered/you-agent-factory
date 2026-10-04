@@ -90,10 +90,17 @@ func assertJavaScriptAdmittedProviderFailure(t *testing.T, fixture *javascriptSh
 	if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].Status != factoryapi.FactoryDispatchStatusFAILED {
 		t.Fatalf("failed dispatches=%+v", dispatches.Dispatches)
 	}
+	worker := readJavaScriptFailedWorker(t, fixture, response.SessionId)
+	assertJavaScriptEventsDoNotContain(t, support.GetFactoryEventsForSessionAt(t, fixture.baseURL, response.SessionId), "failure witness live peer")
+	t.Logf("F16-14 failed Worker=%s attempt=%s failure=%+v", worker.WorkerSessionId, worker.AttemptId, worker.Failure)
+}
+
+func readJavaScriptFailedWorker(t *testing.T, fixture *javascriptSharedProcessFixture, sessionID string) factoryapi.WorkerSessionObservation {
+	t.Helper()
 	observations := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, fixture.baseURL+"/worker-sessions")
 	var owned []factoryapi.WorkerSessionObservation
 	for _, observation := range observations.Sessions {
-		if observation.FactorySessionId != nil && *observation.FactorySessionId == response.SessionId {
+		if observation.FactorySessionId != nil && *observation.FactorySessionId == sessionID {
 			owned = append(owned, observation)
 		}
 	}
@@ -101,9 +108,13 @@ func assertJavaScriptAdmittedProviderFailure(t *testing.T, fixture *javascriptSh
 		t.Fatalf("failed Worker observations=%+v", owned)
 	}
 	worker := owned[0]
-	if worker.Direct || worker.WorkerSessionId != response.SessionId+"/dispatch-1" || worker.AttemptId != worker.WorkerSessionId+"/attempt/1" || worker.Model == nil || *worker.Model != "live-child-model" || worker.Failure.Kind != "WORKERS_EXECUTION_FAILURE" {
+	assertJavaScriptFailedWorkerIdentity(t, worker, sessionID)
+	return worker
+}
+
+func assertJavaScriptFailedWorkerIdentity(t *testing.T, worker factoryapi.WorkerSessionObservation, sessionID string) {
+	t.Helper()
+	if worker.Direct || worker.WorkerSessionId != sessionID+"/dispatch-1" || worker.AttemptId != worker.WorkerSessionId+"/attempt/1" || worker.Model == nil || *worker.Model != "live-child-model" || worker.Failure.Kind != "WORKERS_EXECUTION_FAILURE" {
 		t.Fatalf("failed Worker identity/selection/classification=%+v", worker)
 	}
-	assertJavaScriptEventsDoNotContain(t, support.GetFactoryEventsForSessionAt(t, fixture.baseURL, response.SessionId), "failure witness live peer")
-	t.Logf("F16-14 failed Worker=%s attempt=%s failure=%+v", owned[0].WorkerSessionId, owned[0].AttemptId, owned[0].Failure)
 }

@@ -220,20 +220,7 @@ func runJavaScriptRuntimeChildren(t *testing.T, fixture *javascriptSharedProcess
 		t.Fatal(err)
 	}
 	firstWorker := assertRuntimeJavaScriptChild(t, fixture, first, runners[0].marker, runners[1].marker)
-	// A customer retry of the same normalized public request returns its
-	// retained session/result while the other child's command is still live.
-	// This proves request replay, separately from workflow child resume.
-	replayed, replayErr := postOverridesWorkflow(ctx, fixture.baseURL, requestIDs[0], workflows[0])
-	if replayErr != nil {
-		t.Fatal(replayErr)
-	}
-	if replayed.SessionId != first.response.SessionId || replayed.Status != first.response.Status {
-		t.Fatalf("request replay changed session/outcome: first=%+v replay=%+v", first.response, replayed)
-	}
-	assertSucceededPrimaryContains(t, replayed, runners[0].marker+" output")
-	if runners[0].calls.Load() != 1 {
-		t.Fatalf("request replay started another child command: calls=%d", runners[0].calls.Load())
-	}
+	assertJavaScriptRetainedRequest(t, ctx, fixture, requestIDs[0], workflows[0], first.response, runners[0])
 	select {
 	case peer := <-results[1]:
 		t.Fatalf("peer completed before its own command release: %#v", peer)
@@ -252,6 +239,24 @@ func runJavaScriptRuntimeChildren(t *testing.T, fixture *javascriptSharedProcess
 		if runner.calls.Load() != 1 {
 			t.Fatalf("child %q command calls = %d, want one", runner.marker, runner.calls.Load())
 		}
+	}
+}
+
+func assertJavaScriptRetainedRequest(t *testing.T, ctx context.Context, fixture *javascriptSharedProcessFixture, requestID, workflow string, first factoryapi.FactorySessionSyncExecutionResponse, runner *runtimeJavaScriptCommandRunner) {
+	t.Helper()
+	// A customer retry of the same normalized public request returns its
+	// retained session/result while the other child's command is still live.
+	// This proves request replay, separately from workflow child resume.
+	replayed, replayErr := postOverridesWorkflow(ctx, fixture.baseURL, requestID, workflow)
+	if replayErr != nil {
+		t.Fatal(replayErr)
+	}
+	if replayed.SessionId != first.SessionId || replayed.Status != first.Status {
+		t.Fatalf("request replay changed session/outcome: first=%+v replay=%+v", first, replayed)
+	}
+	assertSucceededPrimaryContains(t, replayed, runner.marker+" output")
+	if runner.calls.Load() != 1 {
+		t.Fatalf("request replay started another child command: calls=%d", runner.calls.Load())
 	}
 }
 
