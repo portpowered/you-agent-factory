@@ -19,7 +19,7 @@ const (
 )
 
 // TestFunctionalTestVizContract_DefaultWiringDryRun proves make functional-test-viz
-// wires boundary → one functional coverage run with the planned default profile and
+// wires one functional coverage run with the planned default profile and
 // -json-output paths → Markdown generator, without executing the full suite.
 func TestFunctionalTestVizContract_DefaultWiringDryRun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
@@ -47,11 +47,11 @@ func TestFunctionalTestVizContract_DefaultWiringDryRun(t *testing.T) {
 	}
 }
 
-// TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown proves the
-// live Make composition runs boundary, exactly one stubbed coverage invocation with
+// TestFunctionalTestVizContract_WiresSingleCoverageThenMarkdown proves the
+// live Make composition runs exactly one stubbed coverage invocation with
 // the planned artifact env paths, then the Markdown generator—without the full
 // functional suite.
-func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *testing.T) {
+func TestFunctionalTestVizContract_WiresSingleCoverageThenMarkdown(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := filepath.ToSlash(filepath.Join(repoRoot, "Makefile"))
 	artifactDir := t.TempDir()
@@ -78,7 +78,7 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 			t.Fatalf("functional-test-viz console summary missing %q:\n%s", expected, output)
 		}
 	}
-	for _, noisy := range []string{"stub:boundary-ok", "stub:coverage-once", "stub-go:", "outcome=pass", "TestSubmit"} {
+	for _, noisy := range []string{"stub:coverage-once", "stub-go:", "outcome=pass", "TestSubmit"} {
 		if strings.Contains(output, noisy) {
 			t.Fatalf("functional-test-viz console summary contains noisy output %q:\n%s", noisy, output)
 		}
@@ -89,7 +89,7 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 		t.Fatalf("read functional-test-viz command log: %v", readErr)
 	}
 	log := string(logBody)
-	assertOutputOrder(t, log, "stub:boundary-ok", "Functional suite inventory:", "stub:catalog-ok")
+	assertOutputOrder(t, log, "Functional suite inventory:", "stub:catalog-ok")
 	jobSummary, readErr := os.ReadFile(jobSummaryPath)
 	if readErr != nil {
 		t.Fatalf("read integrated functional job summary: %v", readErr)
@@ -104,10 +104,6 @@ func writeFunctionalTestGoStub(t *testing.T, outcome string) string {
 	path := filepath.Join(t.TempDir(), "functional-go-stub")
 	body := `#!/bin/sh
 case "$*" in
-  *functionalboundarycheck*)
-    printf '%s\n' 'stub:boundary-ok'
-    exit 0
-    ;;
   *gocoveragecheck*)
     while [ "$#" -gt 0 ]; do
       case "$1" in
@@ -140,9 +136,6 @@ esac
 printf '%s\n' 'unexpected Go command' >&2
 exit 99
 `
-	if outcome == "boundary-fail" {
-		body = strings.Replace(body, "printf '%s\\n' 'stub:boundary-ok'\n    exit 0", "printf '%s\\n' 'stub:boundary-"+outcome+"'\n    exit 23", 1)
-	}
 	if outcome == "coverage-fail" {
 		body = strings.Replace(body, "printf '%s\\n' 'Go coverage 80.0% meets minimum 33.1%.'\n    exit 0", "printf '%s\\n' 'stub:coverage-floor-fail'\n    exit 17", 1)
 	}
