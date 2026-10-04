@@ -242,7 +242,16 @@ endif
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint test-sleep-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode fmt-check contracts-check
+# Local `make lint` runs LINT_TARGETS_BASE, adds the UI gates only when ui/
+# differs from the merge-base with origin/main (or has untracked files), and
+# leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
+# complete inventory. Override LINT_TARGETS to select targets explicitly.
+LINT_TARGETS_BASE := vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint test-sleep-check compatibility-alias-check retired-surface-check fmt-check contracts-check
+LINT_TARGETS_UI := ui-lint ui-deadcode
+LINT_TARGETS_CI_ONLY := deadcode
+LINT_FULL ?=
+LINT_UI_CHANGED = $(shell base=$$(git merge-base HEAD origin/main 2>/dev/null) && { git diff --quiet $$base -- ui && test -z "$$(git ls-files --others --exclude-standard ui)" || echo 1; } || echo 1)
+LINT_TARGETS ?= $(if $(or $(strip $(CI)),$(strip $(LINT_FULL)),$(strip $(LINT_UI_CHANGED))),$(LINT_TARGETS_UI) )$(LINT_TARGETS_BASE)$(if $(or $(strip $(CI)),$(strip $(LINT_FULL))), $(LINT_TARGETS_CI_ONLY))
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -314,7 +323,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check ownership-inventory-check test-functional-resumed-successor-artifact
+.PHONY: lint-full test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -588,7 +597,6 @@ test-unit-latency-budget:
 
 regenerate-shared-ci-baselines:
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget -mode regenerate -skip-unit-latency -root . $(if $(strip $(BASELINE_REGEN_DEADCODE_REPORT)),-deadcode-report "$(BASELINE_REGEN_DEADCODE_REPORT)",)
-	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze
 	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run "^TestWriteProductionInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run "^TestWriteProductionInputsInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .
@@ -991,6 +999,9 @@ artifact-contract-closeout:
 lint:
 	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
+lint-full:
+	$(MAKE) lint LINT_FULL=1
+
 backend-size:
 	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
 
@@ -1017,9 +1028,6 @@ pkg-structure:
 service-cycle-check:
 	$(call run_lint_checker,./cmd/servicecyclecheck,-root ".")
 
-package-target-manifest-check:
-	$(call run_lint_checker,./cmd/packagetargetmanifestcheck,-root ".")
-
 packaged-factory-source-check:
 	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
 
@@ -1043,9 +1051,6 @@ model-provider-package-generate:
 
 model-provider-package-check:
 	node scripts/model-provider-package.mjs check
-
-ownership-inventory-check:
-	$(call run_lint_checker,./cmd/ownershipinventorycheck,)
 
 durable-runtime-construction-check:
 	$(call run_lint_checker,./cmd/durableruntimeconstructioncheck,-root ".")

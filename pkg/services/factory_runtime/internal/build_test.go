@@ -3,6 +3,7 @@ package internal_test
 import (
 	"context"
 	"errors"
+	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -451,7 +452,7 @@ func loadedFactoryFixture(dir string) (interfaces.MutableLoadedFactorySource, er
 }
 
 func testOrchestrationCompilation() factory.OrchestrationCompilation {
-	return factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, nil, nil)
+	return factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, nil, nil))
 }
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {

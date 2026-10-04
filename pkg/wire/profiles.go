@@ -42,7 +42,6 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
@@ -302,31 +301,8 @@ func provideOperatorSettingsLogger(logger *zap.Logger) logging.Logger {
 	return logging.NewZapLogger(logger, false)
 }
 
-func provideOperatorSettingsService(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	providerCatalog operatorsettings.ProviderCatalog,
-	decode operatorsettings.ConfigDecoder,
-	diagnosticDecode operatorsettings.ConfigDiagnosticsDecoder,
-	encode operatorsettings.ConfigEncoder,
-	idGenerator operatorsettings.IDGenerator,
-	providersRoot providers.Service,
-	logger logging.Logger,
-) (operatorsettings.Service, error) {
-	return settingswire.NewServiceFromConfigDocument(
-		operatorsettings.ConfigDocumentService{
-			Files:                 files,
-			CreateTemp:            createTemp,
-			Providers:             providerCatalog,
-			Decoder:               decode,
-			DiagnosticDecoder:     diagnosticDecode,
-			Encoder:               encode,
-			PreserveUnknownFields: globalconfigmapping.PreserveUnknownFields,
-		},
-		providersRoot,
-		idGenerator,
-		logger,
-	)
+func provideOperatorSettingsDocumentPreserver() operatorsettings.ConfigDocumentPreserver {
+	return globalconfigmapping.PreserveUnknownFields
 }
 
 func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettings.IDGenerator {
@@ -382,16 +358,12 @@ func provideSystemInitializationService(
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
 	packagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	loadOperatorConfig operatorsettings.ConfigLoader,
-	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
+	settings operatorsettings.Service,
 	inspectPath systeminitializationwire.InspectPath,
 	logger logging.Logger,
 ) (systeminitialization.Service, error) {
 	return systeminitializationwire.NewService(
-		systeminitializationwire.OperatorSettingsFunctions{
-			Load:   loadOperatorConfig,
-			Ensure: ensureOperatorBackendScope,
-		},
+		settings,
 		packagedCatalog,
 		factorydefinitionswire.NewPackagedFactoryInstaller(
 			persistence,

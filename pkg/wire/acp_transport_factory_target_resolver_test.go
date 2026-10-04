@@ -35,7 +35,7 @@ func operatorDefaultsResolverForTest(t *testing.T) operatorsettings.DefaultsReso
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	service, err := provideOperatorSettingsService(
+	service, err := newOperatorSettingsTestService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
@@ -47,7 +47,7 @@ func operatorDefaultsResolverForTest(t *testing.T) operatorsettings.DefaultsReso
 		logging.NoopLogger{},
 	)
 	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+		t.Fatalf("newOperatorSettingsTestService() error = %v", err)
 	}
 	return provideOperatorDefaultsResolver(service)
 }
