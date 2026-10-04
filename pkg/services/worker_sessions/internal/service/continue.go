@@ -402,6 +402,7 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 			verifyTopicReady: true,
 			lineage:          plan.lineage,
 		},
+		r.clock,
 	)
 	if err != nil {
 		r.releaseContinuationReservation(plan)

@@ -839,3 +839,21 @@ func TestWorkerSessionRuntimeShutdownClosesExactRuntimeAndRetainsFailure(t *test
 		t.Fatalf("closed runtime = %q, want owned-runtime", sessions.closedRuntime)
 	}
 }
+
+func TestWorkerAttemptPreparationCapturesSelectedFactClock(t *testing.T) {
+	t.Parallel()
+	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
+	selected := platformclock.NewDeterministic(time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
+	cfg := &runtimeConfig{workerSessions: sessions, clock: selected}
+	request := workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{RuntimeID: "runtime-clock"}}
+	execution := workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{RuntimeID: "runtime-clock", DispatchID: "dispatch-clock", AttemptID: "physical-clock"}}
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+	cfg.clock = platformclock.Real{}
+	terminal, err := prepare(context.Background(), &execution)
+	if err != nil || terminal == nil {
+		t.Fatalf("preparation = %v, %v", terminal, err)
+	}
+	if sessions.clock != selected {
+		t.Fatalf("opener clock = %v, want captured source", sessions.clock)
+	}
+}

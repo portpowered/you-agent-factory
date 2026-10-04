@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -739,9 +740,12 @@ func (r *registry) runtimeAttemptDispatchConflictLocked(key workersessions.Runti
 // has already admitted the detached attempt and remains responsible for its
 // execution, cancellation, and terminal race. The exact cancellation resource
 // is required before opening effects and installed with the RUNNING state.
+// The supplied fact clock is retained for opening, active duration and terminal
+// timing even after the live attempt handle is released.
 func (r *registry) BeginRuntimeAttempt(
 	ctx context.Context,
 	req workersessions.RuntimeAttemptRequest,
+	clock platformclock.Source,
 	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	if r == nil {
@@ -749,6 +753,9 @@ func (r *registry) BeginRuntimeAttempt(
 	}
 	if err := req.Validate(); err != nil {
 		return nil, err
+	}
+	if clock == nil {
+		return nil, ErrMissingClock
 	}
 	if cancel == nil {
 		return nil, errRuntimeAttemptControlUnavailable
@@ -783,6 +790,7 @@ func (r *registry) BeginRuntimeAttempt(
 		context.WithoutCancel(ctx),
 		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
 		invocationPreparationOptions{runtimeOwned: true},
+		clock,
 	)
 	if err != nil {
 		return nil, err
@@ -864,4 +872,15 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 	session.State = workersessions.StateRunning
 	r.sessions[workerID] = session
 	return nil
+}
+
+func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
+	switch outcome {
+	case workersessions.PublishOutcomeAccepted:
+		return "accepted"
+	case workersessions.PublishOutcomeDuplicate:
+		return "duplicate"
+	default:
+		return "unspecified"
+	}
 }

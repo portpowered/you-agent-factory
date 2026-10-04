@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -15,7 +16,7 @@ import (
 // InvokeSession and its attempt loop live beside the controls they race with.
 
 var _ interface {
-	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
+	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, platformclock.Source, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 } = (*registry)(nil)
 
 // transitionToStarting atomically moves id from StateReserved to
@@ -426,7 +427,7 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		return workersessions.InvokeSessionResult{}, err
 	}
 
-	prepared, err := r.prepareInvocation(ctx, req, invocationPreparationOptions{})
+	prepared, err := r.prepareInvocation(ctx, req, invocationPreparationOptions{}, r.clock)
 	if err != nil {
 		return workersessions.InvokeSessionResult{}, err
 	}
@@ -683,10 +684,12 @@ func retryableDispatchResult(result workers.WorkstationDispatchResult) bool {
 }
 
 // observation is the registry-owned timing and Work correlation captured at
-// the Worker Sessions lifecycle boundary. Provider Session association remains
+// the Worker Sessions lifecycle boundary, including its selected fact clock.
+// Provider Session association remains
 // its own exact resumability fact; resolved provider identity is carried by
 // the lifecycle record's provenance instead.
 type observation struct {
+	clock            platformclock.Source
 	workIDs          []string
 	turnID           string
 	attemptID        string
@@ -709,13 +712,24 @@ func (r *registry) ensureObservationWithFactorySession(
 	direct bool,
 	factorySessionID string,
 ) time.Time {
+	return r.ensureObservationWithClock(id, attemptID, turnID, workIDs, direct, factorySessionID, r.clock)
+}
+
+func (r *registry) ensureObservationWithClock(
+	id, attemptID, turnID string,
+	workIDs []string,
+	direct bool,
+	factorySessionID string,
+	clock platformclock.Source,
+) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if current, exists := r.observations[id]; exists {
 		return current.startedAt
 	}
-	startedAt := r.clock.Now()
+	startedAt := clock.Now()
 	r.observations[id] = &observation{
+		clock:            clock,
 		workIDs:          append([]string(nil), workIDs...),
 		turnID:           turnID,
 		attemptID:        attemptID,

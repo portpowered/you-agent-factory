@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -85,12 +86,13 @@ func runtimeAttemptPreparation(
 		return nil
 	}
 	recorder, ok := cfg.workerSessions.(interface {
-		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
+		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, platformclock.Source, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 	})
 	if !ok || recorder == nil {
 		return nil
 	}
 	lifecycle := cfg.attempts
+	clock := cfg.clock
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
 	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
@@ -109,6 +111,7 @@ func runtimeAttemptPreparation(
 				AttemptID: executeRequest.Correlation.AttemptID,
 				Execution: admissionRequest,
 			},
+			clock,
 			func(cancelCtx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
 				if lifecycle == nil {
 					return "", ErrAttemptLifecycleUnavailable

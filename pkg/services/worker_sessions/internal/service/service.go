@@ -436,8 +436,18 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 	session.State = state
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
-	r.finishObservationLocked(id, r.clock.Now())
+	r.finishObservationLocked(id, r.observationClockLocked(id).Now())
 	return cloneSession(session), true
+}
+
+// observationClockLocked retains an admitted attempt's fact source after its
+// live control handle is released. Legacy identities without timing metadata
+// use the directly supplied process clock. Caller holds r.mu.
+func (r *registry) observationClockLocked(id string) platformclock.Source {
+	if metadata := r.observations[id]; metadata != nil && metadata.clock != nil {
+		return metadata.clock
+	}
+	return r.clock
 }
 
 // commitControlTerminal terminalizes an unstarted or explicitly canceled
@@ -458,7 +468,7 @@ func (r *registry) commitControlTerminal(id string, state workersessions.State) 
 	existing.State = state
 	existing.Result = nil
 	r.sessions[id] = existing
-	r.finishObservationLocked(id, r.clock.Now())
+	r.finishObservationLocked(id, r.observationClockLocked(id).Now())
 	return cloneSession(existing), true
 }
 

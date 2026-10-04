@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -216,6 +217,7 @@ func (r *registry) prepareInvocation(
 	ctx context.Context,
 	req workersessions.InvokeSessionRequest,
 	options invocationPreparationOptions,
+	clock platformclock.Source,
 ) (invocationPreparation, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	r.reserveIfAbsent(req.ID)
@@ -247,13 +249,14 @@ func (r *registry) prepareInvocation(
 		r.logger.Info("worker session start rejected", fields...)
 		return invocationPreparation{}, err
 	}
-	startedAt := r.ensureObservationWithFactorySession(
+	startedAt := r.ensureObservationWithClock(
 		req.ID,
 		attemptID,
 		req.Execution.Execution.Dispatch.Execution.RequestID,
 		req.Execution.Execution.Dispatch.Execution.WorkIDs,
 		options.direct,
 		req.Execution.Execution.FactorySessionID,
+		clock,
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
@@ -370,6 +373,7 @@ func (r *registry) startReserved(ctx context.Context, req workersessions.StartRe
 			requestID:        req.RequestID,
 			verifyTopicReady: true,
 		},
+		r.clock,
 	)
 	if err != nil {
 		return workersessions.StartResult{}, err
@@ -626,17 +630,6 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 		AggregateSequence: appendResult.Record.ID.Position,
 		Outcome:           outcome,
 	}, nil
-}
-
-func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
-	switch outcome {
-	case workersessions.PublishOutcomeAccepted:
-		return "accepted"
-	case workersessions.PublishOutcomeDuplicate:
-		return "duplicate"
-	default:
-		return "unspecified"
-	}
 }
 
 func sameProviderIdentity(left, right string) bool {

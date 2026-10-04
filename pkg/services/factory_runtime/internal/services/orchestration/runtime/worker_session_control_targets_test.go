@@ -310,6 +310,7 @@ type beginRuntimeAttemptService struct {
 	getErr        error
 	closedRuntime string
 	closeErr      error
+	clock         platformclock.Source
 	cancel        func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
 }
 
@@ -328,9 +329,11 @@ func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.G
 func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 	_ context.Context,
 	request workersessions.RuntimeAttemptRequest,
+	clock platformclock.Source,
 	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	service.request = request
+	service.clock = clock
 	service.cancel = cancel
 	if service.beginErr != nil {
 		return nil, service.beginErr

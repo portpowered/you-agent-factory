@@ -562,6 +562,9 @@ func applyObservationTiming(projected *workersessions.Observation, session worke
 		projected.Duration = nonNegativeDuration(ended.Sub(started))
 		projected.DurationBasis = workersessions.DurationBasisRecordedTimestamps
 	case !session.Terminal():
+		if metadata.clock != nil {
+			clock = metadata.clock
+		}
 		projected.Duration = nonNegativeDuration(clock.Now().Sub(started))
 		projected.DurationBasis = workersessions.DurationBasisActiveClock
 	}
