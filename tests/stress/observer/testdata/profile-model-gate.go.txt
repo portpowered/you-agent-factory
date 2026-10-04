@@ -102,6 +102,12 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
   for _,lease:=range owner.Leases.LeaseRecords{if lease.Scope==scope && lease.ModelName=="embed" && lease.Status=="ACTIVE" && lease.Claimed{if leaseIDs[lease.Key]{t.Fatal("duplicate active lease")};leaseIDs[lease.Key]=true}}
  }}
  if len(leaseIDs)!=2 || ownerID==""{t.Fatal("missing two real same-slot Models capacity holders")}
+ leaseList:=[]string{};for key:=range leaseIDs{leaseList=append(leaseList,key)};sort.Strings(leaseList)
+ // Retain the acquired witness before releasing. An unexpected terminal or
+ // cleanup failure must leave the active snapshot with release still false.
+ witnessIndex:=len(r.CapacityWitnesses)
+ r.CapacityWitnesses=append(r.CapacityWitnesses,profileCapacityWitness{Origin:"composed_public_models",Scenario:mode,SessionID:id,ScopeID:scope,ModelName:"embed",OwnerIdentity:ownerID,Slot:slot,Holders:2,PublicCapacity:2,InvocationIDs:append([]string{},routes...),LeaseIDs:leaseList,Multiplicity:"exercised",Checkpoints:[]profileCheckpoint{active}})
+
  if mode=="model_cancel_diagnostic" {
   if err=gate.release(routes[0]);err!=nil{t.Fatal(err)}
   select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
@@ -114,10 +120,10 @@ func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service
  found:=0
  for _,owner:=range released.Report.Owners{if owner.OwnerIdentity!=ownerID{continue};if owner.Leases.CapacityHolders[slot]!=0{t.Fatal("capacity remained held after terminal Works")};for _,lease:=range owner.Leases.LeaseRecords{if leaseIDs[lease.Key] && (lease.Status=="RELEASED" || lease.Status=="EXPIRED"){found++}}}
  if found!=2{t.Fatal("released lease records missing or active")}
- leaseList:=[]string{};for key:=range leaseIDs{leaseList=append(leaseList,key)};sort.Strings(leaseList)
- witness:=profileCapacityWitness{Origin:"composed_public_models",Scenario:mode,SessionID:id,ScopeID:scope,ModelName:"embed",OwnerIdentity:ownerID,Slot:slot,Holders:2,PublicCapacity:2,InvocationIDs:append([]string{},routes...),LeaseIDs:leaseList,Released:true,Multiplicity:"exercised",Checkpoints:[]profileCheckpoint{active,released}}
- if err:=validateProfileCapacityWitness(witness);err!=nil{t.Fatal(err)}
- r.CapacityWitnesses=append(r.CapacityWitnesses,witness)
+ witness:=&r.CapacityWitnesses[witnessIndex]
+ witness.Checkpoints=append(witness.Checkpoints,released)
+ witness.Released=true
+ if err:=validateProfileCapacityWitness(*witness);err!=nil{witness.Released=false;t.Fatal(err)}
  t.Logf("composed public acquisition session=%s scope=%s owner=%s slot=%s leases=%v; two holders, public capacity=2",id,scope,ownerID,slot,leaseIDs)
 }
 

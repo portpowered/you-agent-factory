@@ -402,7 +402,7 @@ zero holders and both retained RELEASED/EXPIRED records. It closes the session
 and joins the host and process. Public configured capacity is 2; this narrow
 selector proves same-slot multiplicity but does not prove fault/cancellation composition
 or the complete capability. Its report uses mode `model_diagnostic` and stays
-`complete:false`, with empty samples and capacityWitnesses; raw checkpoints and
+`complete:false`, with empty samples and an attributed capacityWitness; raw checkpoints and
 attribution remain available. It skips before construction under `-short`.
 
 `TestLifecycleProfileModelFaultDiagnostic` uses the same two-holder public
