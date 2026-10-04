@@ -1,0 +1,168 @@
+package observer_test
+
+import (
+ "context"
+ "errors"
+ "fmt"
+ "sync"
+ "testing"
+
+ models "github.com/portpowered/infinite-you/pkg/services/models"
+)
+
+// Installed only at ModelInvocationBackend, after the real Models owner has
+// acquired capacity. Calling this component directly is synthetic calibration,
+// never a composed capacity witness. Routes are immutable after construction.
+type profileModelGate struct {
+ mu sync.Mutex
+ routes map[string]*profileModelRoute
+ scope string
+}
+
+type profileModelRoute struct {
+ observed chan models.InvokeModelRequest
+ release chan struct{}
+ returned chan struct{}
+ once sync.Once
+ entered bool // guarded by profileModelGate.mu
+ failure error
+}
+
+func newProfileModelGate(failures map[string]error)(*profileModelGate,error) {
+ if len(failures)==0{return nil,fmt.Errorf("model gate requires declared Work routes")}
+ gate:=&profileModelGate{routes:map[string]*profileModelRoute{}}
+ for text,failure:=range failures {
+  if text==""{return nil,fmt.Errorf("empty model Work route")}
+  gate.routes[text]=&profileModelRoute{observed:make(chan models.InvokeModelRequest,1),release:make(chan struct{}),returned:make(chan struct{}),failure:failure}
+ }
+ return gate,nil
+}
+
+func detachedModelGateRequest(request models.InvokeModelRequest) models.InvokeModelRequest {
+ request.Inputs=append([]models.InferenceInput(nil),request.Inputs...)
+ for i:=range request.Inputs{if ref:=request.Inputs[i].Artifact;ref!=nil{copy:=*ref;request.Inputs[i].Artifact=&copy}}
+ if request.Input.Artifact!=nil{copy:=*request.Input.Artifact;request.Input.Artifact=&copy}
+ request.Parameters=append([]models.OperationParameter(nil),request.Parameters...)
+ for i:=range request.Parameters{request.Parameters[i]=request.Parameters[i].Clone()}
+ return request
+}
+
+func (g *profileModelGate) invoke(ctx context.Context,request models.InvokeModelRequest)([]models.InferenceContent,[]models.InferenceArtifact,error) {
+ if err:=ctx.Err();err!=nil{return nil,nil,err}
+ if request.Scope.IsZero() || request.ModelName!="embed" || request.Operation!=models.OperationEMBED || len(request.Inputs)!=1 || request.Inputs[0].Name!="text" {
+  return nil,nil,fmt.Errorf("unexpected scoped EMBED effect")
+ }
+ g.mu.Lock()
+ route:=g.routes[request.Inputs[0].Content]
+ if route==nil || route.entered {g.mu.Unlock();return nil,nil,fmt.Errorf("unexpected or repeated model Work route")}
+ scope:=request.Scope.String()
+ if g.scope!="" && g.scope!=scope {g.mu.Unlock();return nil,nil,fmt.Errorf("model Work routes changed explicit session scope")}
+ g.scope=scope;route.entered=true
+ g.mu.Unlock()
+ defer close(route.returned)
+ // Buffered observation cannot prevent cancellation or cleanup. Copy all
+ // reference-bearing input/parameter values before publishing the observation.
+ route.observed<-detachedModelGateRequest(request)
+ select{case <-route.release:case <-ctx.Done():return nil,nil,ctx.Err()}
+ if err:=ctx.Err();err!=nil{return nil,nil,err}
+ if route.failure!=nil{return nil,nil,route.failure}
+ return []models.InferenceContent{{Name:"embedding",Modality:models.ModalityJSON,ContentType:"application/json",MediaType:"application/json",Content:"[101]"}},nil,nil
+}
+
+func (g *profileModelGate) accepted(ctx context.Context,text string)(models.InvokeModelRequest,error) {
+ route:=g.routes[text]
+ if route==nil{return models.InvokeModelRequest{},fmt.Errorf("undeclared model Work route")}
+ select{case request:=<-route.observed:return request,nil;case <-ctx.Done():return models.InvokeModelRequest{},ctx.Err()}
+}
+
+func (g *profileModelGate) release(text string)error {
+ route:=g.routes[text];if route==nil{return fmt.Errorf("undeclared model Work route")}
+ route.once.Do(func(){close(route.release)})
+ return nil
+}
+
+// The backend-return barrier precedes the public terminal Work barrier. A
+// caller must join both before CAPACITY_RELEASED; this alone proves no release.
+func (g *profileModelGate) join(ctx context.Context,text string)error {
+ route:=g.routes[text];if route==nil{return fmt.Errorf("undeclared model Work route")}
+ select{case <-route.returned:return nil;case <-ctx.Done():return ctx.Err()}
+}
+
+func modelGateUnitRequest(t *testing.T,text,scope string) models.InvokeModelRequest {
+ t.Helper();ref,err:=(models.RuntimeScopeRef{}).Parse(scope);if err!=nil{t.Fatal(err)}
+ return models.InvokeModelRequest{Scope:ref,ModelName:"embed",Operation:models.OperationEMBED,Inputs:[]models.InferenceInput{{Name:"text",Content:text}},Parameters:[]models.OperationParameter{{Name:"nested",Value:map[string]any{"values":[]any{"original"}}}}}
+}
+
+func TestLifecycleProfileDriverModelGateHeldMultiplicity(t *testing.T) {
+ t.Parallel()
+ gate,err:=newProfileModelGate(map[string]error{"first":nil,"second":nil});if err!=nil{t.Fatal(err)}
+ // These are component callbacks, not Models acquisitions or a public journey.
+ ctx,cancel:=context.WithCancel(t.Context());defer cancel()
+ done:=make(chan error,2)
+ for _,text:=range []string{"first","second"} {
+  request:=modelGateUnitRequest(t,text,"synthetic-scope")
+  go func(){content,artifacts,err:=gate.invoke(ctx,request);if err==nil && (len(content)!=1 || content[0].Content!="[101]" || len(artifacts)!=0){err=errors.New("wrong controlled output")};done<-err}()
+  observed,err:=gate.accepted(ctx,text);if err!=nil{t.Fatal(err)}
+  if observed.Scope.String()!="synthetic-scope" || observed.Inputs[0].Content!=text{t.Fatal("lost route attribution")}
+  select{case <-done:t.Fatal("held effect returned before release");default:}
+ }
+ for _,text:=range []string{"first","second"}{if err=gate.release(text);err!=nil{t.Fatal(err)};if err=gate.release(text);err!=nil{t.Fatal(err)}}
+ for range 2{if err=<-done;err!=nil{t.Fatal(err)}}
+ for _,text:=range []string{"first","second"}{if err=gate.join(ctx,text);err!=nil{t.Fatal(err)}}
+}
+
+func TestLifecycleProfileDriverModelGateFaultAndCancellation(t *testing.T) {
+ t.Parallel()
+ fault:=models.ErrInferenceTimeout
+ for _,mode:=range []string{"fault","cancel"}{t.Run(mode,func(t *testing.T){
+  gate,err:=newProfileModelGate(map[string]error{"work":fault});if err!=nil{t.Fatal(err)}
+  ctx,cancel:=context.WithCancel(t.Context());defer cancel()
+  done:=make(chan error,1);request:=modelGateUnitRequest(t,"work","synthetic-scope")
+  go func(){_,_,err:=gate.invoke(ctx,request);done<-err}()
+  if _,err=gate.accepted(ctx,"work");err!=nil{t.Fatal(err)}
+  want:=fault;if mode=="cancel"{cancel();want=context.Canceled}else{if err=gate.release("work");err!=nil{t.Fatal(err)}}
+  if err=<-done;!errors.Is(err,want){t.Fatalf("lost cause: %v, want %v",err,want)}
+  if err=gate.join(t.Context(),"work");err!=nil{t.Fatal(err)}
+ })}
+}
+
+func TestLifecycleProfileDriverModelGateRejectsInvalidEffects(t *testing.T) {
+ t.Parallel()
+ for _,change:=range []func(*models.InvokeModelRequest){
+  func(r *models.InvokeModelRequest){r.Scope=models.RuntimeScopeRef{}},
+  func(r *models.InvokeModelRequest){r.ModelName="peer"},func(r *models.InvokeModelRequest){r.Operation="TTS"},
+  func(r *models.InvokeModelRequest){r.Inputs=nil},func(r *models.InvokeModelRequest){r.Inputs[0].Name="audio"},
+  func(r *models.InvokeModelRequest){r.Inputs[0].Content="undeclared"},
+ }{
+  gate,err:=newProfileModelGate(map[string]error{"work":nil});if err!=nil{t.Fatal(err)}
+  request:=modelGateUnitRequest(t,"work","synthetic-scope");change(&request)
+  if _,_,err=gate.invoke(t.Context(),request);err==nil{t.Fatal("invalid effect accepted")}
+  select{case <-gate.routes["work"].observed:t.Fatal("invalid request published acquisition");default:}
+ }
+ gate,err:=newProfileModelGate(map[string]error{"work":nil,"peer":nil});if err!=nil{t.Fatal(err)}
+ if err=gate.release("work");err!=nil{t.Fatal(err)}
+ if _,_,err=gate.invoke(t.Context(),modelGateUnitRequest(t,"work","synthetic-scope"));err!=nil{t.Fatal(err)}
+ for _,request:=range []models.InvokeModelRequest{modelGateUnitRequest(t,"work","synthetic-scope"),modelGateUnitRequest(t,"peer","other-scope")} {
+  if _,_,err=gate.invoke(t.Context(),request);err==nil{t.Fatal("duplicate/foreign-scope effect accepted")}
+ }
+ for _,routes:=range []map[string]error{nil,{"":nil}}{if _,err=newProfileModelGate(routes);err==nil{t.Fatal("invalid route declaration accepted")}}
+ for _,operation:=range []func()error{func()error{return gate.release("absent")},func()error{return gate.join(t.Context(),"absent")},func()error{_,err:=gate.accepted(t.Context(),"absent");return err}}{if operation()==nil{t.Fatal("unknown route accepted")}}
+ canceled,stop:=context.WithCancel(t.Context());stop()
+ if _,_,err=gate.invoke(canceled,modelGateUnitRequest(t,"peer","synthetic-scope"));!errors.Is(err,context.Canceled){t.Fatal("lost pre-admission cancellation",err)}
+ if _,err=gate.accepted(canceled,"peer");!errors.Is(err,context.Canceled){t.Fatal("canceled acceptance wait",err)}
+ if err=gate.join(canceled,"peer");!errors.Is(err,context.Canceled){t.Fatal("missing return barrier guessed joined",err)}
+}
+
+func TestLifecycleProfileDriverModelGateDetachedObservation(t *testing.T) {
+ t.Parallel()
+ gate,err:=newProfileModelGate(map[string]error{"work":nil});if err!=nil{t.Fatal(err)}
+ request:=modelGateUnitRequest(t,"work","synthetic-scope")
+ ctx,cancel:=context.WithCancel(t.Context());defer cancel()
+ done:=make(chan error,1);go func(){_,_,err:=gate.invoke(ctx,request);done<-err}()
+ observed,err:=gate.accepted(ctx,"work");if err!=nil{t.Fatal(err)}
+ request.Inputs[0].Content="changed"
+ request.Parameters[0].Value.(map[string]any)["values"].([]any)[0]="changed"
+ if observed.Inputs[0].Content!="work" || observed.Parameters[0].Value.(map[string]any)["values"].([]any)[0]!="original"{t.Fatal("observation aliases caller data")}
+ if err=gate.release("work");err!=nil{t.Fatal(err)}
+ if err=<-done;err!=nil{t.Fatal(err)}
+}

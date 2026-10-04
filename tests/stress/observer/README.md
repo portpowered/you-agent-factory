@@ -346,3 +346,19 @@ RELEASED or EXPIRED. Existing owner policy retains the claimed flag on terminal
 records; validation does not rewrite it. Synthetic calibration cannot satisfy
 this completeness check. The public acquisition fixture and full selector remain
 unfinished; these accounting tests alone do not prove composed Models activity.
+
+
+The controlled Models gate is supplied in `profile-model-gate.go.txt`. Install
+its `invoke` callback at the existing `ModelInvocationBackend` edge after
+Models owner acquisition. Declare each Work input before construction; accepted
+observations preserve the real request scope and detached inputs/parameters.
+Two routes can remain held concurrently, and every route must keep the same
+explicit-session model scope. Unexpected models, operations, inputs, duplicate
+routes and changed scopes fail closed. Release is idempotent; controlled inference
+faults and cancellation retain their original error causes. Join the callback's
+return **and** the public terminal Work before taking CAPACITY_RELEASED: a
+callback-return barrier alone cannot prove lease release. Gate tests run under
+the focused `TestLifecycleProfileDriver` selector and are synthetic component
+calibration, never composed public capacity evidence. This gate is not yet wired
+into the public capability; story 003 remains incomplete. The method hash also
+includes the gate template after the sample, cycle and report templates.
