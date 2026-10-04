@@ -2,12 +2,14 @@
 //
 // Wire performs construction only, returns the singular factorysessions.Service
 // root interface, and starts no lifecycle components. Parent-private identity
-// and response-stream owner wiring stays inside the owner service assembly path;
+// and response-stream collaborators are supplied through focused owner providers;
 // peers depend on Service rather than owner internals or construction ports.
 package wire
 
 import (
 	"fmt"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -54,6 +56,22 @@ func NewLiveChangeCoordinator() factorysessioncontracts.LiveChangeCoordinator {
 	return livechange.NewCoordinator()
 }
 
+// Identity is the owner-private normalization capability supplied by canonical Wire.
+type Identity = identity.Service
+
+// ResponseStreams allocates session-owned stores using the selected effects.
+type ResponseStreams = responsestreamservice.Service
+
+// NewIdentity constructs reusable identity behavior without allocating session state.
+func NewIdentity(resolveSymlinks factorysessions.LogicalTargetResolveSymlinks, resolveHome factorysessions.HomeDirectoryResolver) (Identity, error) {
+	return identitywire.NewService(resolveSymlinks, resolveHome)
+}
+
+// NewResponseStreams constructs reusable response behavior with the selected logger.
+func NewResponseStreams(eventIDs factorysessions.ResponseEventIDGenerator, limits *factorysessions.ResponseEventRetentionLimits, eventsService events.Service, logger logging.Logger) (ResponseStreams, error) {
+	return responsestreamwire.NewService(eventIDs, limits, eventsService, logger)
+}
+
 // NewRuntimeAssembly builds the one owner-private Factory Sessions assembly
 // used by peer roots while canonical Wire completes the rest of the process
 // graph. It is an assembly capability, not a second published Service root.
@@ -64,37 +82,18 @@ func NewRuntimeAssembly(
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
 	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
-	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
-	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-	eventsService events.Service,
+	identityService Identity,
+	responseStreams ResponseStreams,
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (RuntimeAssembly, error) {
-	identityService, responseStreams, err := newOwnerServices(
-		eventIDs,
-		responseEventRetentionLimits,
-		resolveHome,
-		directoryInspection,
-		resolveSymlinks,
-		eventsService,
-		sessionResultProjection,
-		sessionIDs,
-		namedPaths,
-		invocationInputFiles,
-		initialWorkFiles,
-		clock,
-		liveChangeCoordinator,
-	)
-	if err != nil {
-		return nil, err
-	}
 	assembly, err := factorysessionroot.NewAssembly(
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
@@ -144,62 +143,6 @@ func NewServiceFromAssembly(
 	return service, nil
 }
 
-func newOwnerServices(
-	eventIDs factorysessions.ResponseEventIDGenerator,
-	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	directoryInspection DirectoryInspection,
-	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-	eventsService events.Service,
-	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	sessionIDs factorysessions.SessionIDGenerator,
-	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
-	initialWorkFiles fileeffects.InitialWorkReader,
-	clock factoryruntime.Clock,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (identity.Service, responsestreamservice.Service, error) {
-	if sessionResultProjection == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
-	}
-	if eventIDs == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: response event ID generator is required")
-	}
-	if sessionIDs == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: session ID generator is required")
-	}
-	if resolveHome == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: home directory resolver is required")
-	}
-	if directoryInspection == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: directory inspection is required")
-	}
-	if namedPaths == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: named path resolver is required")
-	}
-	if invocationInputFiles == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: invocation input reader is required")
-	}
-	if initialWorkFiles == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
-	}
-	if clock == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: clock is required")
-	}
-	if liveChangeCoordinator == nil {
-		return nil, nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
-	}
-	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome)
-	if err != nil {
-		return nil, nil, err
-	}
-	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits, eventsService)
-	if err != nil {
-		return nil, nil, err
-	}
-	return identityService, responseStreams, nil
-}
-
 func NewDurableExecution(
 	projectRoot string,
 	persistencePolicy factorysessions.PersistencePolicy,
@@ -215,14 +158,9 @@ func NewDurableExecution(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
-	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
-	eventsService events.Service,
+	responseStreams ResponseStreams,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
-	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
-	if err != nil {
-		return nil, err
-	}
 	return durableexecutionwire.NewDurable(
 		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
 		checkpointSummaries, workflows, orchestration, workflows,
