@@ -401,7 +401,7 @@ func TestResolvedHostConfigurationDoesNotCarryOfflinePolicy(t *testing.T) {
 	if _, ok := reflect.TypeOf(modelseffects.ResolvedHostConfiguration{}).FieldByName("Offline"); ok {
 		t.Fatal("ResolvedHostConfiguration carries offline policy")
 	}
-	request, err := joinedAssetPreparationRequest(
+	request, err := prepareJoinedAssetFixture(
 		models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "llm"}, Offline: true},
 		"llm",
 		models.ResolvedModelReference{Definition: models.ModelDefinition{
@@ -539,7 +539,7 @@ func TestCustomAudioCPPFileTTSReachesAssetPreparation(t *testing.T) {
 		prepared.Reference.NameOrURI != "custom-voice" || len(prepared.Artifacts) != 0 {
 		t.Fatalf("asset preparation = %#v, want private local source without VibeVoice roles", prepared)
 	}
-	visible, err := joinedAssetPreparationRequest(request, "custom-voice", models.ResolvedModelReference{
+	visible, err := prepareJoinedAssetFixture(request, "custom-voice", models.ResolvedModelReference{
 		Definition: models.ModelDefinition{Name: "custom-voice", Source: source, Backend: backend},
 	})
 	if err != nil {

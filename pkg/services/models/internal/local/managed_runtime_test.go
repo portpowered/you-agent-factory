@@ -18,7 +18,7 @@ func TestBuildManagedRuntime_MapsCompatibilityFieldsToManagedContract(t *testing
 	}
 	diagnostics := map[string]string{"statusReason": "ready"}
 
-	managed := buildManagedRuntime(summary, diagnostics)
+	managed := buildManagedRuntimeProjection(managedRuntimeProjection{summary: summary, baseDiagnostics: diagnostics})
 
 	if managed.Identity != summary.name {
 		t.Fatalf("identity = %q, want %q", managed.Identity, summary.name)
@@ -43,12 +43,12 @@ func TestBuildManagedRuntime_MapsCompatibilityFieldsToManagedContract(t *testing
 func TestBuildManagedRuntimeProjection_RejectsReadyNotInstalledForManagedLocal(t *testing.T) {
 	t.Parallel()
 
-	runtime := buildManagedRuntime(managedRuntimeSummary{
+	runtime := buildManagedRuntimeProjection(managedRuntimeProjection{summary: managedRuntimeSummary{
 		name:      "OMNIVOICE_Q4_K_M",
 		locality:  managedruntime.LocalityLocal,
 		readiness: managedruntime.ReadinessStateReady,
 		lifecycle: managedruntime.LifecycleStateNotInstalled,
-	}, nil)
+	}})
 
 	if runtime.ReadinessState != managedruntime.ReadinessStateMissing ||
 		runtime.LifecycleState != managedruntime.LifecycleStateNotInstalled {
@@ -61,7 +61,7 @@ func TestListModels_PopulatesManagedRuntimeContract(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 
-	models, err := ListModels(loaded)
+	models, err := ListModelsWithRuntime(loaded, nil, nil)
 	if err != nil {
 		t.Fatalf("ListModels: %v", err)
 	}

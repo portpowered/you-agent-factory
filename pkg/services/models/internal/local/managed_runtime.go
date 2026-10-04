@@ -27,13 +27,6 @@ type managedRuntimeSummary struct {
 	operations []managedruntime.Operation
 }
 
-func buildManagedRuntime(summary managedRuntimeSummary, diagnostics map[string]string) managedruntime.Runtime {
-	return buildManagedRuntimeProjection(managedRuntimeProjection{
-		summary:         summary,
-		baseDiagnostics: diagnostics,
-	})
-}
-
 func buildManagedRuntimeProjection(input managedRuntimeProjection) managedruntime.Runtime {
 	readiness, lifecycle := managedRuntimeStates(input)
 	managedDiagnostics := managedRuntimeDiagnostics(input.summary, input.baseDiagnostics, readiness, lifecycle)

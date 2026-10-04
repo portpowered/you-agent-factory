@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -536,7 +537,7 @@ func TestJoinedAssetPreparationRequestCarriesModelAndBackendSources(t *testing.T
 		Source:  "hf://owner/repository/weights.gguf@revision-1",
 		Backend: "hf://owner/backend/backend.bin@backend-revision",
 	}}
-	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
+	prepared, err := prepareJoinedAssetFixture(request, "tts", resolved)
 	if err != nil {
 		t.Fatalf("joinedAssetPreparationRequest: %v", err)
 	}
@@ -564,7 +565,7 @@ func TestJoinedAssetPreparationRequestKeepsPrivateLocalSourceReference(t *testin
 			SourceKind: models.ModelReferenceSourceFileURI,
 		},
 	}
-	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
+	prepared, err := prepareJoinedAssetFixture(request, "tts", resolved)
 	if err != nil {
 		t.Fatalf("joinedAssetPreparationRequest: %v", err)
 	}
@@ -580,7 +581,7 @@ func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *te
 	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
 		Name: "llm", Source: "hf://owner/repository", Backend: "localai-llamacpp",
 	}}
-	prepared, err := joinedAssetPreparationRequest(request, "llm", resolved)
+	prepared, err := prepareJoinedAssetFixture(request, "llm", resolved)
 	if err != nil {
 		t.Fatalf("joinedAssetPreparationRequest: %v", err)
 	}
@@ -981,4 +982,18 @@ func newLocalExecutionFixture(config models.RuntimeConfigLoader, host modelhost.
 		return nil, err
 	}
 	return &localExecutionFixture{Service: service, local: executor}, nil
+}
+
+// prepareJoinedAssetFixture supplies selected operation data to the canonical asset planner.
+func prepareJoinedAssetFixture(
+	request models.InvokeModelRequest,
+	modelName string,
+	resolved models.ResolvedModelReference,
+) (models.PrepareModelAssetsRequest, error) {
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope: request.Scope, ModelName: modelName,
+		Source:  joinedAssetReference(request.Model, resolved),
+		Backend: strings.TrimSpace(resolved.Definition.Backend),
+	}
+	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
 }

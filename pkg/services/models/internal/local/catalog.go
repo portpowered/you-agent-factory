@@ -671,11 +671,6 @@ func mergeInspectDiagnostics(base map[string]string, managed managedruntime.Runt
 	return merged
 }
 
-// ListModels returns the model-owned discovery projection from runtime config.
-func ListModels(runtimeCfg *models.RuntimeConfig) (modelcatalog.List, error) {
-	return ListModelsWithRuntime(runtimeCfg, nil, nil)
-}
-
 // ListModelsWithRuntime returns runtime-aware model-owned discovery projections.
 func ListModelsWithRuntime(
 	runtimeCfg *models.RuntimeConfig,
@@ -692,11 +687,6 @@ func ListModelsWithRuntime(
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Name < results[j].Name })
 	return modelcatalog.List{Results: results}, nil
-}
-
-// GetModel returns the model-owned detail projection for a catalog name.
-func GetModel(runtimeCfg *models.RuntimeConfig, modelName string) (modelcatalog.Detail, error) {
-	return GetModelWithRuntime(runtimeCfg, modelName, nil, nil)
 }
 
 // GetModelWithRuntime returns runtime-aware model-owned detail.
@@ -735,16 +725,6 @@ type PullOptions struct {
 	// Factory-scoped catalog. It lets the existing pull projection continue
 	// without turning the lower-level Factory catalog into a second resolver.
 	ResolvedReference *models.ResolvedModelReference
-}
-
-// PullModel validates catalog locality and delegates asset pull to the injected puller.
-func PullModel(
-	puller AssetPuller,
-	ctx context.Context,
-	runtimeCfg *models.RuntimeConfig,
-	modelName string,
-) (models.PullResult, error) {
-	return PullModelWithOptions(puller, ctx, runtimeCfg, modelName, PullOptions{})
 }
 
 // PullModelWithOptions validates catalog locality, resolves backend source
@@ -952,45 +932,4 @@ func modelScopedResource(factoryCfg *models.RuntimeConfig, modelName string) *mo
 		return &copied
 	}
 	return nil
-}
-
-// SelectInvocationWorker resolves the model worker and operation for direct invocation.
-func SelectInvocationWorker(
-	runtimeCfg *models.RuntimeConfig,
-	modelName, operationName string,
-) (*models.RuntimeWorker, models.RuntimeOperation, error) {
-	if runtimeCfg == nil {
-		return nil, models.RuntimeOperation{}, fmt.Errorf("runtime config is not available")
-	}
-	modelKey := CanonicalModelName(modelName)
-	operationName = strings.TrimSpace(operationName)
-	if modelKey == "" {
-		return nil, models.RuntimeOperation{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
-	}
-	if operationName == "" {
-		return nil, models.RuntimeOperation{}, fmt.Errorf("operation is required")
-	}
-
-	var modelMatched bool
-	var matchedWorkerName string
-	for _, worker := range runtimeCfg.Workers {
-		workerDef, ok := runtimeCfg.Worker(worker.Name)
-		if !ok || workerDef == nil || !workerDef.IsInference() {
-			continue
-		}
-		if CanonicalModelName(workerDef.Model) != modelKey {
-			continue
-		}
-		modelMatched = true
-		matchedWorkerName = workerDef.Name
-		for _, operation := range workerDef.Operations {
-			if strings.TrimSpace(operation.Name) == operationName {
-				return workerDef, operation, nil
-			}
-		}
-	}
-	if modelMatched {
-		return nil, models.RuntimeOperation{}, fmt.Errorf("%w: worker %q for model %q does not support operation %q", modelcatalog.ErrUnsupportedOperation, matchedWorkerName, modelName, operationName)
-	}
-	return nil, models.RuntimeOperation{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
 }

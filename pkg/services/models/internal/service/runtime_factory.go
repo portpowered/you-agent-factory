@@ -885,19 +885,6 @@ func joinedInvocationFailureResult(result models.InvokeModelResult) models.Invok
 	return result
 }
 
-func joinedAssetPreparationRequest(
-	request models.InvokeModelRequest,
-	modelName string,
-	resolved models.ResolvedModelReference,
-) (models.PrepareModelAssetsRequest, error) {
-	configuration := modelseffects.ResolvedHostConfiguration{
-		Scope: request.Scope, ModelName: modelName,
-		Source:  joinedAssetReference(request.Model, resolved),
-		Backend: strings.TrimSpace(resolved.Definition.Backend),
-	}
-	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
-}
-
 func (o *Root) CancelInvocation(
 	ctx context.Context,
 	request models.CancelInvocationRequest,

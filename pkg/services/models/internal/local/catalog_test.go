@@ -24,7 +24,7 @@ func TestListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 
-	list, err := ListModels(loaded)
+	list, err := ListModelsWithRuntime(loaded, nil, nil)
 	if err != nil {
 		t.Fatalf("ListModels: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestGetModel_ReturnsUnavailableWithoutMatchingLocalModelResource(t *testing
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(false))
 
-	model, err := GetModel(loaded, "OMNIVOICE_Q4_K_M")
+	model, err := GetModelWithRuntime(loaded, "OMNIVOICE_Q4_K_M", nil, nil)
 	if err != nil {
 		t.Fatalf("GetModel: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestGetModel_ReturnsNotFoundForUnknownModel(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, &testFactoryConfig{Name: "factory"})
 
-	_, err := GetModel(loaded, "missing")
+	_, err := GetModelWithRuntime(loaded, "missing", nil, nil)
 	if !errors.Is(err, apisurface.ErrNotFound) {
 		t.Fatalf("GetModel error = %v, want ErrModelNotFound", err)
 	}
@@ -141,7 +141,7 @@ func TestPullModel_DelegatesToAssetPullerForLocalCatalogModel(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	puller := &recordingCatalogAssetPuller{}
 
-	result, err := PullModel(puller, context.Background(), loaded, "OMNIVOICE_Q4_K_M")
+	result, err := PullModelWithOptions(puller, context.Background(), loaded, "OMNIVOICE_Q4_K_M", PullOptions{})
 	if err != nil {
 		t.Fatalf("PullModel: %v", err)
 	}
@@ -158,40 +158,12 @@ func TestPullModel_ReturnsNotFoundForUnknownModel(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, &testFactoryConfig{Name: "factory"})
 	puller := &recordingCatalogAssetPuller{}
 
-	_, err := PullModel(puller, context.Background(), loaded, "missing")
+	_, err := PullModelWithOptions(puller, context.Background(), loaded, "missing", PullOptions{})
 	if !errors.Is(err, apisurface.ErrNotFound) {
 		t.Fatalf("PullModel error = %v, want ErrModelNotFound", err)
 	}
 	if puller.calls != 0 {
 		t.Fatalf("puller calls = %d, want 0 before delegation", puller.calls)
-	}
-}
-
-func TestSelectInvocationWorker_ResolvesModelWorkerAndOperation(t *testing.T) {
-	t.Parallel()
-	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-
-	worker, operation, err := SelectInvocationWorker(loaded, "OMNIVOICE_Q4_K_M", "TTS")
-	if err != nil {
-		t.Fatalf("SelectInvocationWorker: %v", err)
-	}
-	if worker.Name != "voice-local" || operation.Name != "TTS" {
-		t.Fatalf("worker/operation = (%q, %q), want (voice-local, TTS)", worker.Name, operation.Name)
-	}
-}
-
-func TestSelectInvocationWorker_ResolvesInferenceWorkerTaxonomyAlias(t *testing.T) {
-	t.Parallel()
-	factoryCfg := catalogFactoryConfig(true)
-	factoryCfg.Workers[0].Type = apisurface.RuntimeWorkerTypeInference
-	loaded := mustLoadedCatalogConfig(t, factoryCfg)
-
-	worker, operation, err := SelectInvocationWorker(loaded, "OMNIVOICE_Q4_K_M", "TTS")
-	if err != nil {
-		t.Fatalf("SelectInvocationWorker: %v", err)
-	}
-	if worker.Type != apisurface.RuntimeWorkerTypeInference || operation.Name != "TTS" {
-		t.Fatalf("worker/operation = (%#v, %q), want inference worker with TTS", worker, operation.Name)
 	}
 }
 
