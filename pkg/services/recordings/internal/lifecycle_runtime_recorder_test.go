@@ -70,6 +70,10 @@ func assertRuntimeRecorderLifecycleRequests(t *testing.T, lifecycle *stubRecordi
 	id recordings.LifecycleRecordingID, producerErr error, startedAt, finishedAt time.Time,
 ) {
 	t.Helper()
+	if len(lifecycle.appendRequests) != 3 || lifecycle.appendRequests[1].Event.ID != "runtime-event" ||
+		lifecycle.appendRequests[1].Event.Payload != `{"workId":"work-1"}` {
+		t.Fatalf("pending runtime event requests = %#v, want initial, pending work, and terminal", lifecycle.appendRequests)
+	}
 	if len(lifecycle.failureRequests) != 1 {
 		t.Fatalf("failure requests = %#v, want one pending producer failure", lifecycle.failureRequests)
 	}
