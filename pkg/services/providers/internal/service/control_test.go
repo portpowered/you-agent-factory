@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
@@ -257,6 +258,50 @@ func TestControlAttempt_LogsSafeAcceptedIntentAndTerminalOutcome(t *testing.T) {
 		t.Fatalf("outcome log = %#v", outcome)
 	}
 	assertNoUnsafeControlLogFields(t, outcome[0].fields)
+}
+
+func TestControlAttempt_InjectedLoggersStayIsolated(t *testing.T) {
+	t.Parallel()
+	// ControlAttempt owns its registry and does not consult either collaborator.
+	// Supplying inert ports keeps this proof inside the root component.
+	for _, attemptID := range []string{"first-root", "peer-root"} {
+		t.Run(attemptID, func(t *testing.T) {
+			t.Parallel()
+			logger := &recordingControlLogger{}
+			root, err := providerservice.NewWithACP(
+				struct{ catalog.Service }{}, struct{ execution.Service }{},
+				&stubACPService{}, nil, logger,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			quietPeer, err := providerservice.NewWithACP(
+				struct{ catalog.Service }{}, struct{ execution.Service }{},
+				&stubACPService{}, nil, logging.NoopLogger{},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := providers.ControlAttemptRequest{
+				Provider: providers.IDCodex, AttemptID: attemptID,
+				Action: providers.ControlActionCancel,
+			}
+			if _, err := root.ControlAttempt(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+			request.AttemptID = "quiet-peer"
+			if _, err := quietPeer.ControlAttempt(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+			for _, message := range []string{"provider control attempt accepted", "provider control attempt outcome"} {
+				entries := logger.entriesFor(message)
+				if len(entries) != 1 || entries[0].fields["attemptID"] != attemptID {
+					t.Fatalf("selected sink contains peer output: %s = %#v", message, entries)
+				}
+				assertNoUnsafeControlLogFields(t, entries[0].fields)
+			}
+		})
+	}
 }
 
 func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *testing.T) {

@@ -81,7 +81,7 @@ func newService(
 		acp:         acpService,
 		packagedACP: cloneACPIntegrations(packagedACP),
 		lifecycles:  append([]providerLifecycle(nil), lifecycles...),
-		logger:      logging.EnsureLogger(logger),
+		logger:      logger,
 		attempts:    newLiveAttemptRegistry(),
 	}, nil
 }
