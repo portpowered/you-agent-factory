@@ -793,6 +793,139 @@ func TestKeyedRuntime_RejectsContradictoryAdmissionBeforeOpening(t *testing.T) {
 	}
 }
 
+// keyedOpeningGate holds the opening append so a competing admission can be
+// checked while the first key is reserved, without relying on scheduling.
+type keyedOpeningGate struct {
+	EventsAppender
+	topic   events.Topic
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (g *keyedOpeningGate) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	if req.Topic == g.topic {
+		g.once.Do(func() {
+			close(g.entered)
+			<-g.release
+		})
+	}
+	return g.EventsAppender.Append(ctx, req)
+}
+
+func assertKeyedRuntimeCollisionNoEffects(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture) workersessions.RuntimeAttemptRequest {
+	t.Helper()
+	before := sink.requestsFor("")
+	ownerBefore := getCharacterizationSession(t, fixture.service, fixture.request.ID)
+	request := fixture.request
+	request.ID = "competing-worker"
+	request.AttemptID = "different-physical-attempt"
+	request.Key.RuntimeID = " " + request.Key.RuntimeID + " "
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+	if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("collision Begin = %v, %v; want nil/attempt mismatch", attempt, err)
+	}
+	if _, err := fixture.service.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("collision reserved Worker: %v", err)
+	}
+	if after := sink.requestsFor(""); !reflect.DeepEqual(before, after) {
+		t.Fatal("collision appended records")
+	}
+	if after := getCharacterizationSession(t, fixture.service, fixture.request.ID); !reflect.DeepEqual(ownerBefore, after) {
+		t.Fatal("collision changed owner")
+	}
+	return request
+}
+
+func TestKeyedRuntime_RejectsKeyCollisionBeforeOpeningEffects(t *testing.T) {
+	t.Parallel()
+	for _, duringOpening := range []bool{false, true} {
+		t.Run(fmt.Sprintf("during-opening=%t", duringOpening), func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			fixture := preparePerRuntimeAttemptFixture(t, "owner", sink)
+			gate := &keyedOpeningGate{EventsAppender: sink, topic: workersessions.Topic(fixture.request.ID), entered: make(chan struct{}), release: make(chan struct{})}
+			var release sync.Once
+			unblock := func() { release.Do(func() { close(gate.release) }) }
+			t.Cleanup(unblock)
+			if !duringOpening {
+				unblock()
+			}
+			fixture.service.events = gate
+			done := make(chan struct{})
+			var openingErr error
+			go func() {
+				defer close(done)
+				fixture.attempt, openingErr = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+			}()
+			t.Cleanup(func() {
+				unblock()
+				if err := waitControlledSignal(done, 30*time.Second); err != nil {
+					t.Errorf("opening join: %v", err)
+					return
+				}
+				if fixture.attempt != nil {
+					_ = fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+				}
+			})
+			if err := waitControlledSignal(gate.entered, 30*time.Second); err != nil {
+				t.Fatal(err)
+			}
+			if !duringOpening {
+				if err := waitControlledSignal(done, 30*time.Second); err != nil {
+					t.Fatal(err)
+				}
+				if openingErr != nil {
+					t.Fatal(openingErr)
+				}
+			}
+			request := assertKeyedRuntimeCollisionNoEffects(t, fixture, sink)
+			unblock()
+			if err := waitControlledSignal(done, 30*time.Second); err != nil {
+				t.Fatal(err)
+			}
+			if openingErr != nil {
+				t.Fatal(openingErr)
+			}
+			publishPerRuntimeProgress(t, fixture, sink)
+			if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			// Terminal completion releases only this key; a later physical attempt
+			// can open a distinct stable Worker while the old topic remains retained.
+			next, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+			if err != nil {
+				t.Fatalf("Begin after completion: %v", err)
+			}
+			if err := next.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeFirstTerminal(t, fixture, sink, workersessions.StateCompleted)
+		})
+	}
+}
+
+func TestKeyedRuntime_OpeningFailureReleasesScopedReservation(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "failed-opening", newEventsAppender())
+	fixture.service.events = &runtimeAttemptBrokenAppender{err: errors.New("opening failed")}
+	if attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request); attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
+		t.Fatalf("failed Begin = %v, %v", attempt, err)
+	}
+	fixture.service.events = newEventsAppender()
+	request := fixture.request
+	request.ID = "replacement-worker"
+	request.AttemptID = "replacement-physical"
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Begin after opening failure: %v", err)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	assertPerRuntimeAttemptState(t, fixture, workersessions.StateFailed)
+}
+
 func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{

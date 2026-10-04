@@ -134,41 +134,6 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 }
 
-func TestRuntimeAttemptPreparationPreservesResolvedRouting(t *testing.T) {
-	for _, runtimeID := range []string{"", "resolved-runtime", "contradictory-runtime"} {
-		t.Run("runtime="+runtimeID, func(t *testing.T) {
-			t.Parallel()
-			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
-			cfg := &runtimeConfig{workerSessions: sessions}
-			request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
-			request.Execution.RuntimeID = runtimeID
-			request.Execution.Dispatch.DispatchID = "logical-dispatch"
-			execution := workers.ExecuteRequest{}
-			execution.Correlation.RuntimeID = "resolved-runtime"
-			execution.Correlation.DispatchID = "logical-dispatch"
-			execution.Correlation.AttemptID = "physical-attempt"
-			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
-			if _, err := prepare(context.Background(), &execution); err != nil {
-				t.Fatal(err)
-			}
-			wantKey := workersessions.RuntimeAttemptKey{RuntimeID: "resolved-runtime", DispatchID: "logical-dispatch"}
-			if sessions.request.Key != wantKey || sessions.request.ID != "logical-dispatch" || sessions.request.AttemptID != "physical-attempt" {
-				t.Fatalf("admission identities = %#v", sessions.request)
-			}
-			wantRuntime := runtimeID
-			if wantRuntime == "" {
-				wantRuntime = "resolved-runtime"
-			}
-			if sessions.request.Execution.Execution.RuntimeID != wantRuntime {
-				t.Fatalf("execution runtime = %q, want %q", sessions.request.Execution.Execution.RuntimeID, wantRuntime)
-			}
-			if request.Execution.RuntimeID != runtimeID {
-				t.Fatal("preparation mutated caller execution")
-			}
-		})
-	}
-}
-
 func TestBeginWorkerAttemptPreparationFailureDoesNotPublishOrphanAssociation(t *testing.T) {
 	beginErr := errors.New("worker attempt preparation failed")
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{}

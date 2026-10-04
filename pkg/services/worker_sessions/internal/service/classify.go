@@ -90,6 +90,7 @@ func (a *runtimeAttempt) Complete(
 		delete(r.runtimeAttempts, a.workerID)
 		delete(r.runtimeAttemptControls, a.workerID)
 		r.mu.Unlock()
+		r.releaseRuntimeAttemptKey(a.key, a.workerID)
 	})
 	return nil
 }

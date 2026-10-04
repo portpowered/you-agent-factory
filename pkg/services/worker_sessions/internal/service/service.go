@@ -87,6 +87,8 @@ type registry struct {
 	// remains the sole admission, cancellation, and execution owner.
 	runtimeAttempts        map[string]struct{}
 	runtimeAttemptControls map[string]*runtimeAttempt
+	// runtimeAttemptOwners reserves a scoped key before any opening effects.
+	runtimeAttemptOwners map[workersessions.RuntimeAttemptKey]string
 	// latestRuntimeDispatchIDs retains the last exact dispatch identity per
 	// Runtime-owned Worker Session after its live cancellation handle completes,
 	// so terminal NOOP controls can still return the admitted identity.
@@ -510,71 +512,6 @@ func (r *registry) ObserveProviderSession(
 	}
 	r.logger.Info("worker session provider session observation", "sessionID", ownerID, "attemptID", req.DispatchID, "outcome", string(result.Outcome))
 	return result, nil
-}
-
-func (r *registry) associateProviderSession(
-	req workersessions.ProviderSessionAssociationRequest,
-) (workersessions.ProviderSessionAssociationResult, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.associateProviderSessionLocked(req)
-}
-
-func (r *registry) associateProviderSessionLocked(
-	req workersessions.ProviderSessionAssociationRequest,
-) (workersessions.ProviderSessionAssociationResult, error) {
-	session, exists := r.sessions[req.WorkerSessionID]
-	if !exists {
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
-	}
-	supervision := r.supervisions[req.WorkerSessionID]
-	_, runtimeOwned := r.runtimeAttempts[req.WorkerSessionID]
-	if (supervision == nil && !runtimeOwned) || r.dispatchOwners[req.DispatchID] != req.WorkerSessionID {
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
-	}
-
-	turnID := ""
-	dispatchID := req.DispatchID
-	attemptID := dispatchID
-	if supervision != nil {
-		turnID = supervision.turnID
-		dispatchID = supervision.dispatchID
-		attemptID = dispatchID
-	} else if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
-		// Runtime owns execution, but its immutable handle still identifies the
-		// physical attempt. A logical dispatch may survive several attempts.
-		dispatchID = attempt.dispatchID
-		attemptID = attempt.attemptID
-		if observation := r.observations[req.WorkerSessionID]; observation != nil {
-			turnID = observation.turnID
-		}
-	}
-	association := workersessions.ProviderSessionAssociation{
-		WorkerSessionID: req.WorkerSessionID,
-		TurnID:          turnID,
-		DispatchID:      dispatchID,
-		AttemptID:       attemptID,
-		Reference:       req.Reference.Clone(),
-	}
-	if existing := session.ProviderSessionAssociation; existing != nil {
-		if existing.Reference == association.Reference {
-			return workersessions.ProviderSessionAssociationResult{
-				Association: existing.Clone(),
-				Outcome:     workersessions.ProviderSessionAssociationOutcomeDuplicate,
-			}, nil
-		}
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationConflict
-	}
-	if session.Terminal() {
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationNotAvailable
-	}
-
-	session.ProviderSessionAssociation = &association
-	r.sessions[req.WorkerSessionID] = session
-	return workersessions.ProviderSessionAssociationResult{
-		Association: association.Clone(),
-		Outcome:     workersessions.ProviderSessionAssociationOutcomeAccepted,
-	}, nil
 }
 
 // replayObservationSubscription drains one retained Events snapshot. It never

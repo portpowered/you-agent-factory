@@ -737,3 +737,68 @@ func interruptSuccessorAdmittedState(state workersessions.State) bool {
 		return false
 	}
 }
+
+func (r *registry) associateProviderSession(
+	req workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.associateProviderSessionLocked(req)
+}
+
+func (r *registry) associateProviderSessionLocked(
+	req workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	session, exists := r.sessions[req.WorkerSessionID]
+	if !exists {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
+	}
+	supervision := r.supervisions[req.WorkerSessionID]
+	_, runtimeOwned := r.runtimeAttempts[req.WorkerSessionID]
+	if (supervision == nil && !runtimeOwned) || r.dispatchOwners[req.DispatchID] != req.WorkerSessionID {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+
+	turnID := ""
+	dispatchID := req.DispatchID
+	attemptID := dispatchID
+	if supervision != nil {
+		turnID = supervision.turnID
+		dispatchID = supervision.dispatchID
+		attemptID = dispatchID
+	} else if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
+		// Runtime owns execution, but its immutable handle still identifies the
+		// physical attempt. A logical dispatch may survive several attempts.
+		dispatchID = attempt.dispatchID
+		attemptID = attempt.attemptID
+		if observation := r.observations[req.WorkerSessionID]; observation != nil {
+			turnID = observation.turnID
+		}
+	}
+	association := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: req.WorkerSessionID,
+		TurnID:          turnID,
+		DispatchID:      dispatchID,
+		AttemptID:       attemptID,
+		Reference:       req.Reference.Clone(),
+	}
+	if existing := session.ProviderSessionAssociation; existing != nil {
+		if existing.Reference == association.Reference {
+			return workersessions.ProviderSessionAssociationResult{
+				Association: existing.Clone(),
+				Outcome:     workersessions.ProviderSessionAssociationOutcomeDuplicate,
+			}, nil
+		}
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationConflict
+	}
+	if session.Terminal() {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationNotAvailable
+	}
+
+	session.ProviderSessionAssociation = &association
+	r.sessions[req.WorkerSessionID] = session
+	return workersessions.ProviderSessionAssociationResult{
+		Association: association.Clone(),
+		Outcome:     workersessions.ProviderSessionAssociationOutcomeAccepted,
+	}, nil
+}

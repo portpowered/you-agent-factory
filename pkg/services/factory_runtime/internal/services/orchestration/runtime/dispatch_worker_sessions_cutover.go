@@ -102,10 +102,7 @@ func runtimeAttemptPreparation(
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
-				Key: workersessions.RuntimeAttemptKey{
-					RuntimeID:  executeRequest.Correlation.RuntimeID,
-					DispatchID: executeRequest.Correlation.DispatchID,
-				},
+				Key:       workersessions.RuntimeAttemptKey{RuntimeID: executeRequest.Correlation.RuntimeID, DispatchID: executeRequest.Correlation.DispatchID},
 				ID:        sessionID,
 				AttemptID: executeRequest.Correlation.AttemptID,
 				Execution: admissionRequest,

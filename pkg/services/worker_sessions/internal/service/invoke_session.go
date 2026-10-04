@@ -62,6 +62,7 @@ func cloneOptionalExecutionFact(value *string) *string {
 
 type runtimeAttempt struct {
 	registry       *registry
+	key            workersessions.RuntimeAttemptKey
 	workerID       string
 	dispatchID     string
 	attemptID      string
@@ -93,13 +94,6 @@ func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string
 		attemptID = logicalDispatchID
 	}
 	return logicalDispatchID, attemptID
-}
-
-func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attemptID string) bool {
-	r.mu.RLock()
-	ownerID, owned := r.dispatchOwners[logicalDispatchID]
-	r.mu.RUnlock()
-	return owned && ownerID != workerID && attemptID == logicalDispatchID
 }
 
 // BindRuntimeAttemptCancellation connects the Worker Session identity to the
@@ -230,85 +224,6 @@ func (a *runtimeAttempt) completionState() (workersessions.ControlAction, worker
 	}
 	a.completing = true
 	return a.controlAction, a.controlOutcome, a.controlHistory
-}
-
-// BeginRuntimeAttempt opens the Worker Session observation and recording
-// window, then returns control to Factory Runtime. It intentionally stops
-// before registerInvocationSupervision or any Workers boundary call: Runtime
-// has already admitted the detached attempt and remains responsible for its
-// execution, cancellation, and terminal race.
-func (r *registry) BeginRuntimeAttempt(
-	ctx context.Context,
-	req workersessions.RuntimeAttemptRequest,
-) (workersessions.RuntimeAttempt, error) {
-	if r == nil {
-		return nil, workersessions.ErrStartAdmissionFailed
-	}
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
-	ctx = runtimeAttemptContext(ctx)
-	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
-	if r.runtimeAttemptOwnedByOther(logicalDispatchID, req.ID, attemptID) {
-		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
-	}
-
-	execution := req.Execution
-	execution.Execution = workers.CloneWorkstationExecutionRequest(req.Execution.Execution)
-	execution.Execution.Dispatch.DispatchID = attemptID
-	prepared, err := r.prepareInvocation(
-		context.WithoutCancel(ctx),
-		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
-		invocationPreparationOptions{runtimeOwned: true},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if preparationErr := runtimeAttemptPreparationError(prepared); preparationErr != nil {
-		return nil, preparationErr
-	}
-	if !r.transitionToRunning(req.ID) {
-		return nil, workersessions.ErrStartAdmissionFailed
-	}
-	handle := &runtimeAttempt{
-		registry:   r,
-		workerID:   req.ID,
-		dispatchID: logicalDispatchID,
-		attemptID:  attemptID,
-		completed:  make(chan struct{}),
-	}
-	if !r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle) {
-		r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
-		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
-	}
-	return workersessions.RuntimeAttempt(handle.Complete), nil
-}
-
-func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handles ...*runtimeAttempt) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.runtimeAttempts == nil {
-		r.runtimeAttempts = make(map[string]struct{})
-	}
-	if r.dispatchOwners == nil {
-		r.dispatchOwners = make(map[string]string)
-	}
-	if r.latestRuntimeDispatchIDs == nil {
-		r.latestRuntimeDispatchIDs = make(map[string]string)
-	}
-	if ownerID, exists := r.dispatchOwners[logicalDispatchID]; exists && ownerID != workerID && attemptID == logicalDispatchID {
-		return false
-	}
-	r.dispatchOwners[logicalDispatchID] = workerID
-	r.runtimeAttempts[workerID] = struct{}{}
-	r.latestRuntimeDispatchIDs[workerID] = logicalDispatchID
-	if len(handles) > 0 && handles[0] != nil {
-		if r.runtimeAttemptControls == nil {
-			r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
-		}
-		r.runtimeAttemptControls[workerID] = handles[0]
-	}
-	return true
 }
 
 func (r *registry) cancelRuntimeAttemptControl(
