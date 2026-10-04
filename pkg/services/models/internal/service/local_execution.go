@@ -47,6 +47,9 @@ func newLocalExecutor(
 	if runtimeConfig == nil {
 		return nil, missingDependencyError("local executor runtime configuration lookup")
 	}
+	if resources == nil {
+		return nil, missingDependencyError("local executor resource limiter")
+	}
 	if now == nil {
 		return nil, missingDependencyError("local executor clock")
 	}
@@ -76,14 +79,12 @@ func (e *localExecutor) InvokeLocal(
 	}
 	factoryConfig, worker := localExecutionConfiguration(request)
 
-	if e.resources != nil {
-		release, err := e.resources.Acquire(ctx, request.Scope, factoryConfig, worker)
-		if err != nil {
-			return models.LocalInvocationResult{Handled: true}, err
-		}
-		if release != nil {
-			defer release()
-		}
+	release, err := e.resources.Acquire(ctx, request.Scope, factoryConfig, worker)
+	if err != nil {
+		return models.LocalInvocationResult{Handled: true}, err
+	}
+	if release != nil {
+		defer release()
 	}
 
 	invocation := localmodels.ModelInvocation{

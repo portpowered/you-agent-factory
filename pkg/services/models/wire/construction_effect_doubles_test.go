@@ -760,12 +760,13 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	return NewService(
-		runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
-		processLauncher, hostHTTP, hostClock, localRuntime,
-		logger, now, pullMetrics, hostLogger, hostMetrics, localHooks, runtimeEvidence,
-		firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform,
-	)
+	resources, err := NewResourceLimiter(localHooks, now)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
+		processLauncher, hostHTTP, hostClock, localRuntime, resources, logger, now, pullMetrics,
+		hostLogger, hostMetrics, localHooks, runtimeEvidence, firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform)
 }
 
 func firstRevisionResolver(

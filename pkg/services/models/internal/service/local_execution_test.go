@@ -115,7 +115,7 @@ func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
 		models.RuntimeScopeRef{},
 		func() *modelRuntimeConfig { return loaded },
 		zap.NewNop(), time.Now, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
-		assets, runtime, nil, host,
+		assets, runtime, mustResourceLimiter(t), nil, host,
 	)
 	if err != nil {
 		t.Fatalf("new bound runtime: %v", err)
@@ -584,4 +584,57 @@ func (r *decliningScopedRuntime) Supports(_ models.RuntimeResource, worker *mode
 }
 func (*decliningScopedRuntime) Load(context.Context, localmodels.LoadRequest) (localmodels.Handle, error) {
 	panic("declined runtime must not load")
+}
+
+func mustResourceLimiter(t *testing.T) *localmodels.ResourceLimiter {
+	t.Helper()
+	resources, err := localmodels.NewResourceLimiter(modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resources
+}
+
+func TestRootCloseRuntimeScopeRetiresSharedResourcesAndPreservesPeer(t *testing.T) {
+	t.Parallel()
+	args := newRootConstructionArgs(t)
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := models.RuntimeConfig{Resources: []models.RuntimeResource{{
+		Name: "voice", Type: models.RuntimeResourceTypeModel, Model: "voice", Capacity: 1,
+		Backend: "TEST", LoadPolicy: "ON_DEMAND",
+	}}}
+	worker := models.RuntimeWorker{ModelLocality: models.RuntimeModelLocalityLocal,
+		Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}}
+	open := func() models.RuntimeScopeRef {
+		result, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{
+			Config: models.RuntimeScopeConfig{Runtime: config},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.Scope
+	}
+	scopeA, scopeB := open(), open()
+	releaseA, err := args.resources.Acquire(t.Context(), scopeA, &config, &worker)
+	if err != nil || releaseA == nil {
+		t.Fatalf("reserve A: %v", err)
+	}
+	closed, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{Scope: scopeA})
+	if err != nil || !closed.Closed {
+		t.Fatalf("close A: %#v, %v", closed, err)
+	}
+	releaseA()
+	if release, err := args.resources.Acquire(t.Context(), scopeA, &config, &worker); release != nil || !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("reserve closed A: %v, has release=%t", err, release != nil)
+	}
+	for range 3 {
+		release, err := args.resources.Acquire(t.Context(), scopeB, &config, &worker)
+		if err != nil || release == nil {
+			t.Fatalf("reserve peer B: %v", err)
+		}
+		release()
+	}
 }

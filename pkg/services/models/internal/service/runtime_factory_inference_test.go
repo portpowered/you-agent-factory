@@ -55,6 +55,7 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 		{name: "host HTTP client", mutate: func(args *rootConstructionArgs) { args.hostHTTP = nil }, message: "model host HTTP client"},
 		{name: "host clock", mutate: func(args *rootConstructionArgs) { args.hostClock = nil }, message: "model host clock"},
 		{name: "local runtime", mutate: func(args *rootConstructionArgs) { args.localRuntime = nil }, message: "local model runtime"},
+		{name: "resource limiter", mutate: func(args *rootConstructionArgs) { args.resources = nil }, message: "local model resource limiter"},
 		{name: "runtime scopes", mutate: func(args *rootConstructionArgs) { args.runtimeScopes = nil }, message: "Models Runtime Scopes service"},
 		{name: "catalog", mutate: func(args *rootConstructionArgs) { args.catalog = nil }, message: "Models Catalog service"},
 		{name: "assets", mutate: func(args *rootConstructionArgs) { args.assets = nil }, message: "Models Assets service"},
@@ -81,6 +82,7 @@ type rootConstructionArgs struct {
 	hostHTTP         modelhost.HTTPDoer
 	hostClock        modelhost.Clock
 	localRuntime     localmodels.Runtime
+	resources        *localmodels.ResourceLimiter
 	runtimeScopes    runtimescopes.Service
 	catalog          modelcatalog.Service
 	assets           scopedassets.Service
@@ -97,6 +99,7 @@ func (args rootConstructionArgs) build() (*Root, error) {
 		args.hostHTTP,
 		args.hostClock,
 		args.localRuntime,
+		args.resources,
 		args.runtimeScopes,
 		args.catalog,
 		args.assets,
@@ -129,6 +132,7 @@ func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
 		hostHTTP:        http.DefaultClient,
 		hostClock:       rootConstructionClock{},
 		localRuntime:    &leaseTestRuntime{},
+		resources:       mustResourceLimiter(t),
 		runtimeScopes:   scopes,
 		catalog:         catalog,
 		assets:          inferenceRecordingAssetsService{},
@@ -235,7 +239,7 @@ func TestRootCloseShutsDownRuntimeHost(t *testing.T) {
 	t.Parallel()
 
 	host := &shutdownTrackingRuntimeHost{}
-	root := &Root{runtimeHost: host}
+	root := &Root{runtimeHost: host, resources: mustResourceLimiter(t)}
 	if err := root.Close(context.Background()); err != nil {
 		t.Fatalf("Root.Close() error = %v, want nil", err)
 	}
@@ -376,7 +380,7 @@ func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 	}
 	root, err := NewRoot(
 		rootConstructionProcessLauncher{}, http.DefaultClient, rootConstructionClock{}, &leaseTestRuntime{},
-		scopes, catalog, assets, runtimeHost, inferenceService,
+		mustResourceLimiter(t), scopes, catalog, assets, runtimeHost, inferenceService,
 		zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
 		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
 	)
@@ -781,7 +785,7 @@ func TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion(t *testin
 	scopes := newCloseRaceRuntimeScopes()
 	runtime := &closeRaceRuntime{}
 	root := &Root{
-		runtimeScopes:  scopes,
+		runtimeScopes: scopes, resources: mustResourceLimiter(t),
 		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
 	}
 	invokeResult := make(chan error, 1)

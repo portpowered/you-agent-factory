@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
@@ -745,5 +746,18 @@ func TestNewLocalRuntimeRequiresSelectedEffectsAndConstructsInertly(t *testing.T
 	runtime, err := NewLocalRuntime(effects.runtimeRunner, effects.runtimeHTTP, effects.runtimeInspect, effects.runtimeTempDir, effects.runtimeTempFile)
 	if runtime == nil || err != nil {
 		t.Fatalf("inert construction: runtime=%T error=%v", runtime, err)
+	}
+}
+
+func TestNewResourceLimiterRequiresClockAndConstructsInertly(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	hooks := LocalRuntimeHooks{MarkResourceWaitStarted: func(context.Context, time.Time) { calls++ }}
+	if limiter, err := NewResourceLimiter(hooks, nil); limiter != nil || err == nil {
+		t.Fatalf("missing clock = %v, %v", limiter, err)
+	}
+	limiter, err := NewResourceLimiter(hooks, func() time.Time { calls++; return time.Time{} })
+	if limiter == nil || err != nil || calls != 0 {
+		t.Fatalf("inert construction = %v, %v, calls=%d", limiter, err, calls)
 	}
 }

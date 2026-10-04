@@ -144,6 +144,78 @@ func TestResourceLimiterScopeWaitingAcquisitionResumesAfterRelease(t *testing.T)
 	}
 }
 
+func TestResourceLimiterCloseScopeRejectsWaiterAndLateAcquirePreservesPeer(t *testing.T) {
+	t.Parallel()
+	started := make(chan struct{}, 2)
+	limiter, err := NewResourceLimiter(Hooks{
+		MarkResourceWaitStarted: func(_ context.Context, _ time.Time) { started <- struct{}{} },
+	}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopeA := resourceTestScope(t, "factory-session:capacity:close-a")
+	scopeB := resourceTestScope(t, "factory-session:capacity:close-b")
+	config, worker := resourceTestConfiguration(1)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	releaseA := acquireTestResources(t, limiter, ctx, scopeA, config, worker)
+	defer releaseA()
+	<-started
+	finished := make(chan error, 1)
+	go func() {
+		release, err := limiter.Acquire(ctx, scopeA, config, worker)
+		if release != nil {
+			release()
+		}
+		finished <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("waiting acquisition did not start")
+	}
+	limiter.CloseScope(scopeA)
+	select {
+	case err := <-finished:
+		if !errors.Is(err, apisurface.ErrRuntimeScopeClosed) {
+			t.Fatalf("closed waiter = %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("close did not wake waiting acquisition")
+	}
+	// A late, repeated release must not recreate scope capacity.
+	releaseA()
+	releaseA()
+	if release, err := limiter.Acquire(ctx, scopeA, config, worker); release != nil || !errors.Is(err, apisurface.ErrRuntimeScopeClosed) {
+		t.Fatalf("closed acquisition = %v, has release=%t", err, release != nil)
+	}
+	releaseB := acquireTestResources(t, limiter, ctx, scopeB, config, worker)
+	<-started
+	releaseB()
+	limiter.CloseScope(scopeA)
+	limiter.Close()
+	limiter.Close()
+	if release, err := limiter.Acquire(ctx, scopeB, config, worker); release != nil || !errors.Is(err, apisurface.ErrRuntimeScopeClosed) {
+		t.Fatalf("shutdown acquisition = %v, has release=%t", err, release != nil)
+	}
+}
+
+func TestResourceLimiterCloseBeforeResolutionRejectsLateAcquisition(t *testing.T) {
+	t.Parallel()
+	limiter, err := NewResourceLimiter(Hooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := resourceTestScope(t, "factory-session:capacity:close-race")
+	config, worker := resourceTestConfiguration(1)
+	// The injected observation closes the scope before entry resolution. No
+	// sleeps or scheduler timing determine which side wins this race.
+	limiter.hooks.MarkResourceWaitStarted = func(_ context.Context, _ time.Time) { limiter.CloseScope(scope) }
+	if release, err := limiter.Acquire(t.Context(), scope, config, worker); release != nil || !errors.Is(err, apisurface.ErrRuntimeScopeClosed) {
+		t.Fatalf("close-winning acquisition = %v, has release=%t", err, release != nil)
+	}
+}
+
 func resourceTestScope(t *testing.T, value string) apisurface.RuntimeScopeRef {
 	t.Helper()
 	scope, err := (apisurface.RuntimeScopeRef{}).Parse(value)

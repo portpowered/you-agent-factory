@@ -354,24 +354,25 @@ func provideModelInvocationRuntime(edges serviceedges.Edges, runner modelRuntime
 		adaptModelASRBackend(edges.ModelASRBackend), adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
 		edges.ModelInvocationProtocolClient, edges.ModelInvocationGRPCDialer, runner, temp, create, write, inspect, read, remove)
 }
-
 func provideModelInference(scopes modelswire.RuntimeScopes, assets modelswire.Assets, catalog modelswire.Catalog,
 	host modelswire.RuntimeHost, runtime modelswire.InvocationRuntime, registrar *modelswire.InvocationArtifactRegistrar,
 	now modelNow, executionDeadline func() time.Duration) (modelswire.Inference, error) {
 	return modelswire.NewInference(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
 }
-
 func provideModelLocalRuntime(runner modelRuntimeRunner, client modelswire.RuntimeHTTPDoer, inspect modelswire.RuntimeInspectFile,
 	temp modelswire.RuntimeTempDirectory, create modelswire.RuntimeCreateTempFile) (modelswire.LocalRuntime, error) {
 	return modelswire.NewLocalRuntime(runner, client, inspect, temp, create)
 }
+func provideModelResourceLimiter(now modelNow) (*modelswire.ResourceLimiter, error) {
+	return modelswire.NewResourceLimiter(modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), now)
+}
 func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	catalog modelswire.Catalog, host modelswire.RuntimeHost, inference modelswire.Inference,
 	launcher modelswire.HostProcessLauncher, hostHTTP modelswire.HostHTTPDoer, clock modelswire.HostClock,
-	localRuntime modelswire.LocalRuntime, now modelNow,
+	localRuntime modelswire.LocalRuntime, resources *modelswire.ResourceLimiter, now modelNow,
 	logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder, evidence modelswire.RuntimeEvidenceRecorder,
 	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform) (models.Service, error) {
-	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime,
+	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime, resources,
 		zap.NewNop(), now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		logger, metrics, modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), evidence,
 		edges.ModelResolveHuggingFaceRevision, resolver, platform)

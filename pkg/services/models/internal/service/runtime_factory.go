@@ -29,6 +29,7 @@ type Root struct {
 	hostHTTP                   modelhost.HTTPDoer
 	hostClock                  modelhost.Clock
 	localRuntime               localmodels.Runtime
+	resources                  *localmodels.ResourceLimiter
 	runtimeScopes              runtimescopes.Service
 	assets                     scopedassets.Service
 	runtimeHost                runtimehost.Service
@@ -58,6 +59,7 @@ func NewRoot(
 	hostHTTP modelhost.HTTPDoer,
 	hostClock modelhost.Clock,
 	localRuntime localmodels.Runtime,
+	resources *localmodels.ResourceLimiter,
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
@@ -86,6 +88,9 @@ func NewRoot(
 	if isNilDependency(localRuntime) {
 		return nil, missingDependencyError("local model runtime")
 	}
+	if resources == nil {
+		return nil, missingDependencyError("local model resource limiter")
+	}
 	if runtimeScopes == nil {
 		return nil, missingDependencyError("Models Runtime Scopes service")
 	}
@@ -112,7 +117,7 @@ func NewRoot(
 	}
 	return &Root{
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
-		localRuntime:  localRuntime,
+		localRuntime: localRuntime, resources: resources,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
@@ -140,6 +145,7 @@ func (o *Root) runtimeForBindingWithAssets(
 		o.localHooks,
 		assets,
 		o.localRuntime,
+		o.resources,
 		o.runtimeHost,
 		nil,
 	)
@@ -194,6 +200,7 @@ func (o *Root) Close(ctx context.Context) error {
 	if err := shutdown.Shutdown(ctx); err != nil {
 		return err
 	}
+	o.resources.Close()
 	o.runtimeMu.Lock()
 	o.runtimeByScope = make(map[models.RuntimeScopeRef]models.Service)
 	o.runtimeMu.Unlock()

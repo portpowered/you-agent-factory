@@ -89,8 +89,12 @@ func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	resources, err := provideModelResourceLimiter(now)
+	if err != nil {
+		return nil, err
+	}
 	return provideModelsService(edges, scopes, assets, catalog, host, inference, provideModelHostLauncher(edges, source),
-		provideModelHostHTTP(edges), provideModelHostClock(edges), localRuntime,
+		provideModelHostHTTP(edges), provideModelHostClock(edges), localRuntime, resources,
 		now, provideModelHostLogger(), provideModelHostMetrics(edges), evidence, resolver, provideModelAssetHostPlatform(edges))
 }
 

@@ -123,7 +123,7 @@ type invocationRuntime interface {
 func NewService(
 	runtimeScopes RuntimeScopes, assets Assets, catalog Catalog, runtimeHost RuntimeHost, inference Inference,
 	processLauncher HostProcessLauncher, hostHTTP HostHTTPDoer, hostClock HostClock,
-	localRuntime LocalRuntime,
+	localRuntime LocalRuntime, resources *ResourceLimiter,
 	logger *zap.Logger, now func() time.Time, pullMetrics PullMetricsRecorder,
 	hostLogger HostDiagnosticLogger, hostMetrics HostMetricsRecorder, localHooks LocalRuntimeHooks,
 	runtimeEvidence RuntimeEvidenceRecorder, legacyRevisionOverride func(context.Context, string) (string, error),
@@ -134,7 +134,7 @@ func NewService(
 	}
 	launcher, clock := adaptConstructionPorts(processLauncher, hostClock)
 	return modelsservice.NewRoot(
-		launcher, hostHTTP, clock, localRuntime,
+		launcher, hostHTTP, clock, localRuntime, resources,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
 		logger, now, pullMetrics, runtimeEvidence, hostLogger, hostMetrics, localHooks,
 		legacyRevisionOverride, backendResolver, assetPlatform,
@@ -143,6 +143,13 @@ func NewService(
 
 // LocalRuntime is the completed, inert local execution adapter shared by scopes.
 type LocalRuntime = localmodels.Runtime
+
+// ResourceLimiter retains only scoped reservation state, independently of execution behavior.
+type ResourceLimiter = localmodels.ResourceLimiter
+
+func NewResourceLimiter(hooks LocalRuntimeHooks, now func() time.Time) (*ResourceLimiter, error) {
+	return localmodels.NewResourceLimiter(hooks, now)
+}
 
 func NewLocalRuntime(runner platformprocess.CommandRunner, client RuntimeHTTPDoer,
 	inspect RuntimeInspectFile, temp RuntimeTempDirectory, create RuntimeCreateTempFile) (LocalRuntime, error) {

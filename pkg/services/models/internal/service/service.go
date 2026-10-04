@@ -104,6 +104,7 @@ func (o *Root) CloseRuntimeScope(
 	if err != nil {
 		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
 	}
+	o.resources.CloseScope(request.Scope)
 	o.runtimeMu.Lock()
 	delete(o.runtimeByScope, request.Scope)
 	o.runtimeMu.Unlock()
@@ -833,6 +834,7 @@ func newRuntimeWithHostEdges(
 	hooks modelseffects.LocalRuntimeHooks,
 	assetPuller localmodels.AssetPuller,
 	localRuntime localmodels.Runtime,
+	resources *localmodels.ResourceLimiter,
 	runtimeHost runtimehost.Service,
 	host modelhost.Host,
 ) (models.Service, error) {
@@ -846,9 +848,8 @@ func newRuntimeWithHostEdges(
 	if err != nil {
 		return nil, err
 	}
-	resources, err := localmodels.NewResourceLimiter(hooks, now)
-	if err != nil {
-		return nil, err
+	if resources == nil {
+		return nil, missingDependencyError("local model resource limiter")
 	}
 	modelHost := host
 	if modelHost == nil {

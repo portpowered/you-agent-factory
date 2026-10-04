@@ -64,7 +64,11 @@ func NewModelsServiceForManagedProcessIntegration(edges serviceedges.Edges) (mod
 	if err != nil {
 		return nil, err
 	}
-	return provideModelsService(edges, scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime,
+	resources, err := provideModelResourceLimiter(now)
+	if err != nil {
+		return nil, err
+	}
+	return provideModelsService(edges, scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime, resources,
 		now, logger, metrics, evidence, resolver, platform)
 }
 
