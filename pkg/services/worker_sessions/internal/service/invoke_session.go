@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -976,4 +978,22 @@ func (r *registry) observationCandidatesForWork(req workersessions.ListObservati
 		ids = append(ids, observationOrder{id: id, startedAt: metadata.startedAt, attemptID: metadata.attemptID})
 	}
 	return ids
+}
+
+func observationWorkerSessionIDFromTopic(topic events.Topic) string {
+	value := strings.TrimSpace(string(topic))
+	if strings.HasPrefix(value, "factory-worker-session/") {
+		parts := strings.Split(value, "/")
+		if len(parts) != 4 || parts[3] != "events" {
+			return ""
+		}
+		decoded, err := base64.RawURLEncoding.DecodeString(parts[2])
+		if err != nil {
+			return ""
+		}
+		return string(decoded)
+	}
+	value = strings.TrimPrefix(value, "worker-session/")
+	value = strings.TrimSuffix(value, "/events")
+	return value
 }

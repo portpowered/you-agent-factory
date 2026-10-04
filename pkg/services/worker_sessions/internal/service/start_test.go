@@ -2258,7 +2258,7 @@ func decodeSessionPayload(t *testing.T, draft workers.Draft) workers.SessionPayl
 // Workers boundary and replay returns the same lifecycle facts.
 func TestStart_OpeningRecordCarriesCanonicalExecutionCorrelation(t *testing.T) {
 	eventsSvc := newEventsAppender()
-	topic := workersessions.Topic("worker-1")
+	topic := workersessions.Topic("worker-1", "factory-session-1")
 	startedAt := time.Date(2035, time.March, 4, 5, 6, 7, 123000000, time.UTC)
 	clock := platformclock.NewDeterministic(startedAt, time.Second)
 

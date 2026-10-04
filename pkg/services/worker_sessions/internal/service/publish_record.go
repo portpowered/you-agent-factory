@@ -414,13 +414,13 @@ func (r *registry) ensureOpeningTopicReady(ctx context.Context, id string) error
 	if r.retainedReader == nil || r.eventReader == nil {
 		return workersessions.ErrEventTopicUnavailable
 	}
-	topic := workersessions.Topic(id)
+	topic := r.observationTopic(id)
 	readResult, err := r.retainedReader.Read(ctx, events.ReadRequest{
 		Topic: topic,
 		From:  events.Cursor{Topic: topic},
 		Limit: 1,
 	})
-	if err != nil || readResult.Validate() != nil || readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) == 0 || !openingRecordMatches(readResult.Records[0], id) {
+	if err != nil || readResult.Validate() != nil || readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) == 0 || !openingRecordMatches(readResult.Records[0], id, topic) {
 		return workersessions.ErrEventTopicUnavailable
 	}
 
@@ -436,14 +436,14 @@ func (r *registry) ensureOpeningTopicReady(ctx context.Context, id string) error
 	cleanupCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_ = subscription.Next(cleanupCtx)
-	if delivery.Validate() != nil || delivery.Kind != events.DeliveryRecord || !openingRecordMatches(delivery.Record, id) {
+	if delivery.Validate() != nil || delivery.Kind != events.DeliveryRecord || !openingRecordMatches(delivery.Record, id, topic) {
 		return workersessions.ErrEventTopicUnavailable
 	}
 	return nil
 }
 
-func openingRecordMatches(record events.Record, id string) bool {
-	return record.ID.Topic == workersessions.Topic(id) &&
+func openingRecordMatches(record events.Record, id string, topic events.Topic) bool {
+	return record.ID.Topic == topic &&
 		record.SourceType == lifecycleSourceType &&
 		record.SourceID == events.SourceID(id) &&
 		record.SourceSequence == openingSourceSequence &&
@@ -532,7 +532,7 @@ func (r *registry) publicationFor(id string) *publication {
 }
 
 // PublishRecord validates req, then appends req.Draft, detached, as a
-// source-native Worker record onto workersessions.Topic(req.SessionID) using
+// source-native Worker record onto r.observationTopic(req.SessionID) using
 // req's complete Events idempotency identity, through the same appendDraft
 // helper publishOpeningRecord uses. PublishRecord requires an established
 // publication window: req.SessionID must have committed its opening record
@@ -583,7 +583,7 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 		return workersessions.PublishRecordResult{}, workersessions.ErrOutOfOrderPublication
 	}
 
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(req.SessionID), identity, req.SchemaID, req.Draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(req.SessionID), identity, req.SchemaID, req.Draft)
 	if err != nil {
 		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "append_failed")
 		return workersessions.PublishRecordResult{}, err
@@ -750,7 +750,7 @@ func (r *registry) publishProviderBindingLocked(
 		SourceSequence: providerBindingSourceSequence,
 		SourceEventID:  providerBindingSourceEventID,
 	}
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(ownerID), identity, workerDraftSchemaID, draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(ownerID), identity, workerDraftSchemaID, draft)
 	if err != nil {
 		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "append_failed")
 		return workersessions.ProviderBindingResult{}, err
@@ -834,7 +834,7 @@ func (r *registry) streamObservationTopic(
 	if limit == 0 {
 		limit = workersessions.DefaultObservationStreamLimit
 	}
-	topic := workersessions.Topic(workerSessionID)
+	topic := r.observationTopic(workerSessionID)
 	if replayOnly {
 		return r.replayObservationStream(ctx, topic, workerSessionState, limit, cursor)
 	}

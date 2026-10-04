@@ -997,3 +997,50 @@ func TestFileWriterSameRecordingDuplicateIsExactlyOnce(t *testing.T) {
 		t.Fatalf("duplicate durable records: %v", err)
 	}
 }
+
+func TestFileWriterRetainsScopedTopicAcrossReload(t *testing.T) {
+	t.Parallel()
+	const recordingID = "scoped-recording"
+	const workerID = "recorded-worker"
+	const topic events.Topic = "factory-worker-session/ZmFjdG9yeS1zZXNzaW9u/cmVjb3JkZWQtd29ya2Vy/events"
+	root := t.TempDir()
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	writer, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opening := mustRecord(t, openingAppend(topic, workerID), 1)
+	terminal := mustRecord(t, terminalAppend(topic, workerID), 2)
+	persistWorkerRecoveryPrefix(t, writer, recordingID, workerID, opening, terminal)
+	reloaded, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := reloaded.(recordings.WorkerRecordingReader).LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil || replay.Projection.Topic != topic || replay.Projection.WorkerSessionID != workerID || !replay.Projection.Complete {
+		t.Fatalf("scoped replay = %+v, %v", replay, err)
+	}
+	codec := recordings.WorkerRecordingCodec{}
+	portable, err := codec.BuildWorkerPortableRecording(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portableReplay, err := codec.ReplayWorkerPortableRecording(portable)
+	if err != nil || portableReplay.Projection.Topic != topic || portableReplay.Projection.WorkerSessionID != workerID {
+		t.Fatalf("portable scoped replay = %+v, %v", portableReplay, err)
+	}
+	foreign := mustRecord(t, terminalAppend("factory-worker-session/b3RoZXItc2Vzc2lvbg/cmVjb3JkZWQtd29ya2Vy/events", workerID), 3)
+	foreign.SourceEventID = "foreign-terminal"
+	err = reloaded.PersistWorkerRecord(context.Background(), recordings.WorkerRecordingRecord{RecordingID: recordingID, WorkerSessionID: workerID, Record: foreign})
+	if !errors.Is(err, recordings.ErrWorkerRecordingOrder) {
+		t.Fatalf("foreign topic append = %v", err)
+	}
+	after, err := reloaded.(recordings.WorkerRecordingReader).LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil || !reflect.DeepEqual(snapshot, after) {
+		t.Fatalf("foreign topic changed retained recording: %v", err)
+	}
+}

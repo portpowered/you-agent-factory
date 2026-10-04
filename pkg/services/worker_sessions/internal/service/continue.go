@@ -567,7 +567,7 @@ func (r *registry) publishSessionLineageRecord(
 		pub.mu.Unlock()
 		return workersessions.ErrOutOfOrderPublication
 	}
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(sessionID), identity, workerDraftSchemaID, draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(sessionID), identity, workerDraftSchemaID, draft)
 	if err != nil {
 		pub.mu.Unlock()
 		return err
@@ -613,7 +613,7 @@ func (r *registry) persistClosedLineageRecord(ctx context.Context, recordingID, 
 		_ = failureWriter.PersistWorkerRecordingFailure(context.WithoutCancel(ctx), recordings.WorkerRecordingFailure{
 			RecordingID:     recordingID,
 			WorkerSessionID: sessionID,
-			Topic:           workersessions.Topic(sessionID),
+			Topic:           r.observationTopic(sessionID),
 			Code:            "CONTINUATION_LINEAGE_PERSISTENCE_FAILED",
 		})
 	}

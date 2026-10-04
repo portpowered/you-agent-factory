@@ -322,13 +322,6 @@ func projectObservationEvent(record events.Record, workerSessionIDArgs ...string
 	}
 }
 
-func observationWorkerSessionIDFromTopic(topic events.Topic) string {
-	value := strings.TrimSpace(string(topic))
-	value = strings.TrimPrefix(value, "worker-session/")
-	value = strings.TrimSuffix(value, "/events")
-	return value
-}
-
 func (r *registry) ListObservations(ctx context.Context, req workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
 	listStartedAt := r.clock.Now()
 	if err := req.Validate(); err != nil {

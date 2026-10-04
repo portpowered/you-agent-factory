@@ -392,7 +392,7 @@ func (r *registry) appendControlRecordLocked(
 		SourceSequence: sequence,
 		SourceEventID:  eventID,
 	}
-	_, err := r.appendDraft(ctx, workersessions.Topic(reservation.sessionID), identity, workerDraftSchemaID, draft)
+	_, err := r.appendDraft(ctx, r.observationTopic(reservation.sessionID), identity, workerDraftSchemaID, draft)
 	return err
 }
 

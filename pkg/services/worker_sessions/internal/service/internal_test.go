@@ -264,7 +264,7 @@ func assertPerRuntimeOpeningAttribution(t *testing.T, fixture *perRuntimeAttempt
 	execution := fixture.request.Execution.Execution
 	wantCapture := recordings.WorkerSessionRecordingRequest{
 		RecordingID: execution.RecordingID, FactorySessionID: execution.FactorySessionID,
-		WorkerSessionID: fixture.request.ID, Topic: workersessions.Topic(fixture.request.ID),
+		WorkerSessionID: fixture.request.ID, Topic: workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID),
 	}
 	fixture.capture.mu.Lock()
 	var requests []recordings.WorkerSessionRecordingRequest
@@ -321,7 +321,7 @@ func publishPerRuntimeProgress(t *testing.T, fixture *perRuntimeAttemptFixture, 
 		t.Fatalf("PublishRecord(%s) = %#v, %v", fixture.request.ID, result, err)
 	}
 	after := sink.requestsFor("")
-	if len(after) != len(before)+1 || !reflect.DeepEqual(before, after[:len(before)]) || after[len(before)].Topic != workersessions.Topic(fixture.request.ID) {
+	if len(after) != len(before)+1 || !reflect.DeepEqual(before, after[:len(before)]) || after[len(before)].Topic != workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID) {
 		t.Fatalf("PublishRecord(%s) did not append exactly once to its own topic: %#v", fixture.request.ID, after)
 	}
 }
@@ -329,7 +329,7 @@ func publishPerRuntimeProgress(t *testing.T, fixture *perRuntimeAttemptFixture, 
 func assertPerRuntimeTerminalAppends(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, state workersessions.State) {
 	t.Helper()
 	var terminals, progress int
-	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID)) {
+	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)) {
 		draft := decodePerRuntimeDraft(t, request)
 		if request.SourceEventID == "progress" {
 			progress++
@@ -370,7 +370,7 @@ func assertPerRuntimeFirstTerminal(t *testing.T, fixture *perRuntimeAttemptFixtu
 	t.Helper()
 	first := assertPerRuntimeAttemptState(t, fixture, state)
 	observation := assertPerRuntimeObservation(t, fixture, state)
-	before := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	before := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
 	if err := fixture.attempt.Complete(context.Background(), runtimeAttemptFailedDispatch(perRuntimeLogicalDispatchID), errors.New("late contradictory failure")); err != nil {
 		t.Fatalf("duplicate Complete(%s): %v", fixture.request.ID, err)
 	}
@@ -389,7 +389,7 @@ func assertPerRuntimeFirstTerminal(t *testing.T, fixture *perRuntimeAttemptFixtu
 	if retained := assertPerRuntimeAttemptState(t, fixture, state); !reflect.DeepEqual(first, retained) {
 		t.Fatalf("caller mutation changed retained terminal: %#v", retained)
 	}
-	if after := sink.requestsFor(workersessions.Topic(fixture.request.ID)); !reflect.DeepEqual(before, after) {
+	if after := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)); !reflect.DeepEqual(before, after) {
 		t.Fatalf("duplicate Complete appended again: %#v", after)
 	}
 	assertPerRuntimeTerminalAppends(t, fixture, sink, state)
@@ -625,9 +625,9 @@ func verifyRuntimeCloseDuringOpening(t *testing.T, failOpening bool) {
 	a := preparePerRuntimeAttemptFixture(t, "a", sink, b)
 	boundary := EventsAppender(sink)
 	if failOpening {
-		boundary = &perRuntimeRejectOpeningAppender{EventsAppender: sink, topic: workersessions.Topic(a.request.ID), err: errors.New("owned opening failed")}
+		boundary = &perRuntimeRejectOpeningAppender{EventsAppender: sink, topic: workersessions.Topic(a.request.ID, a.request.Execution.Execution.FactorySessionID), err: errors.New("owned opening failed")}
 	}
-	gate := &keyedOpeningGate{EventsAppender: boundary, topic: workersessions.Topic(a.request.ID), entered: make(chan struct{}), release: make(chan struct{})}
+	gate := &keyedOpeningGate{EventsAppender: boundary, topic: workersessions.Topic(a.request.ID, a.request.Execution.Execution.FactorySessionID), entered: make(chan struct{}), release: make(chan struct{})}
 	var release sync.Once
 	unblock := func() { release.Do(func() { close(gate.release) }) }
 	a.service.events = gate
@@ -699,7 +699,7 @@ func assertRuntimeClosedOpeningRecords(t *testing.T, fixture *perRuntimeAttemptF
 		}
 		return
 	}
-	appends := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	appends := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
 	if len(appends) != 2 || appends[0].SourceEventID != "started" || appends[1].SourceEventID != "terminal" {
 		t.Fatalf("close during opening records = %#v", appends)
 	}
@@ -864,7 +864,7 @@ func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T
 	before := sink.requestsFor("")
 	reads := make(map[events.Topic]events.ReadResult)
 	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
-		topic := workersessions.Topic(fixture.request.ID)
+		topic := workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)
 		reads[topic] = readPerRuntimeTopic(t, eventStore, topic)
 	}
 	if _, err := a.service.Reserve(context.Background(), workersessions.ReserveRequest{ID: a.request.ID}); !errors.Is(err, workersessions.ErrSessionAlreadyExists) {
@@ -930,23 +930,23 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 			controlB := configurePerRuntimeCancellation(t, b, nil)
 			beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
 			observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
-			before := sink.requestsFor(workersessions.Topic(b.request.ID))
-			beforeRead := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID))
+			before := sink.requestsFor(workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID))
+			beforeRead := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID))
 			a := preparePerRuntimeAttemptFixture(t, "a", sink, b)
 			switch failure {
 			case "append":
-				boundary.topic, boundary.err = workersessions.Topic(a.request.ID), cause
+				boundary.topic, boundary.err = workersessions.Topic(a.request.ID, a.request.Execution.Execution.FactorySessionID), cause
 			case "capture-start":
 				a.capture.startErr = cause
 			case "capture-await":
 				a.capture.awaitErr = cause
 			}
 			assertPerRuntimeRejectedOpening(t, a, sink, failure)
-			if after := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID)); !reflect.DeepEqual(beforeRead, after) {
+			if after := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID)); !reflect.DeepEqual(beforeRead, after) {
 				t.Fatalf("A opening failure changed retained B topic: %#v", after)
 			}
 			assertPerRuntimeFailedOpeningHistory(t, a, eventStore, failure)
-			assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, workersessions.Topic(b.request.ID), before)
+			assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID), before)
 			assertPerRuntimeCancellationCalls(t, controlB, 0)
 			assertPerRuntimeCaptureNotAborted(t, b)
 			publishPerRuntimeProgress(t, b, sink)
@@ -971,7 +971,7 @@ func readPerRuntimeTopic(t *testing.T, eventStore events.Service, topic events.T
 
 func assertPerRuntimeFailedOpeningHistory(t *testing.T, fixture *perRuntimeAttemptFixture, eventStore events.Service, failure string) {
 	t.Helper()
-	read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(fixture.request.ID))
+	read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
 	want := 0
 	if failure == "capture-await" {
 		want = 1
@@ -1007,7 +1007,7 @@ func assertPerRuntimeRejectedOpening(t *testing.T, fixture *perRuntimeAttemptFix
 		t.Fatalf("PublishRecord(A) = %v, want ErrPublicationNotOpen", err)
 	}
 	assertPerRuntimeCancellationCalls(t, controlA, 0)
-	requests := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	requests := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
 	if failure == "capture-start" {
 		if len(requests) != 0 {
 			t.Fatalf("capture start failure appended history: %#v", requests)
@@ -1058,7 +1058,7 @@ func TestKeyedRuntime_RejectsContradictoryAdmissionBeforeOpening(t *testing.T) {
 				t.Fatalf("rejected admission appended records: %#v", after)
 			}
 			assertPerRuntimePeerUnchanged(t, peer, sink, before, observation, "", appends)
-			read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(request.ID))
+			read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID))
 			if len(read.Records) != 0 {
 				t.Fatalf("rejected admission opened a retained topic: %#v", read.Records)
 			}
@@ -1122,7 +1122,7 @@ func TestKeyedRuntime_RejectsKeyCollisionBeforeOpeningEffects(t *testing.T) {
 			t.Parallel()
 			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 			fixture := preparePerRuntimeAttemptFixture(t, "owner", sink)
-			gate := &keyedOpeningGate{EventsAppender: sink, topic: workersessions.Topic(fixture.request.ID), entered: make(chan struct{}), release: make(chan struct{})}
+			gate := &keyedOpeningGate{EventsAppender: sink, topic: workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID), entered: make(chan struct{}), release: make(chan struct{})}
 			var release sync.Once
 			unblock := func() { release.Do(func() { close(gate.release) }) }
 			t.Cleanup(unblock)
@@ -1220,7 +1220,7 @@ func keyedRuntimeProgressFragment(fixture *perRuntimeAttemptFixture) workers.Pro
 
 func assertKeyedRuntimeProgressCommitted(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, count int) {
 	t.Helper()
-	appends := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	appends := sink.requestsFor(fixture.service.observationTopic(fixture.request.ID))
 	if len(appends) != count+2 {
 		t.Fatalf("%s appends = %d, want opening, provider binding and %d records", fixture.request.ID, len(appends), count)
 	}
@@ -1510,7 +1510,7 @@ func TestKeyedRuntimeCompatibilityProgressRejectsForeignMetadataBeforeEffects(t 
 	if err != nil || result.Session.State != workersessions.StateCompleted || result.Session.ProviderSessionAssociation == nil {
 		t.Fatalf("retained compatibility result: %#v, %v", result, err)
 	}
-	if records := sink.requestsFor(workersessions.Topic(request.ID)); len(records) != 4 {
+	if records := sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID)); len(records) != 4 {
 		t.Fatalf("retained opening/binding/output/terminal records: %d", len(records))
 	}
 }
@@ -1543,7 +1543,7 @@ func TestKeyedRuntime_CanonicalProgressPreservesDraftBeforeForwarding(t *testing
 			forwarded := 0
 			publisher := workersessions.RuntimeProgressPublisher(first.service.PublishRuntimeProgress).ForRuntime(first.request.Key.RuntimeID, func(got workers.ProgressFragment) {
 				forwarded++
-				records := sink.requestsFor(workersessions.Topic(first.request.ID))
+				records := sink.requestsFor(workersessions.Topic(first.request.ID, first.request.Execution.Execution.FactorySessionID))
 				if len(records) != 3 || !reflect.DeepEqual(decodePerRuntimeDraft(t, records[2]), draft) || !reflect.DeepEqual(got, fragment) {
 					t.Fatalf("canonical publication changed draft/fragment or preceded binding: %#v", records)
 				}
@@ -1616,7 +1616,7 @@ func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string, keyed
 		association.DispatchID != "compat-dispatch" || association.AttemptID != attemptID || association.Reference.ID != "compat-provider" {
 		t.Fatalf("compatibility association = %#v", association)
 	}
-	if records := sink.requestsFor(workersessions.Topic(request.ID)); len(records) != 4 {
+	if records := sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID)); len(records) != 4 {
 		t.Fatalf("compatibility retained records = %d, want opening/binding/output/terminal", len(records))
 	}
 }
@@ -1838,7 +1838,7 @@ func TestKeyedRuntime_FirstProviderRecordUsesOwnedPhysicalAttempt(t *testing.T) 
 
 func assertRuntimeProviderBindingBeforeOutput(t *testing.T, fixture *perRuntimeAttemptFixture, want workers.Draft, binding, output events.AppendRequest) {
 	t.Helper()
-	if binding.Topic != workersessions.Topic(fixture.request.ID) || output.Topic != binding.Topic {
+	if binding.Topic != workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID) || output.Topic != binding.Topic {
 		t.Fatalf("binding/output routed to foreign topic: %#v / %#v", binding, output)
 	}
 	var payload workers.SessionPayload
@@ -1922,7 +1922,7 @@ func assertSelectedRuntimeTiming(t *testing.T, fixture *perRuntimeAttemptFixture
 		t.Fatalf("selected timing for %s = %#v; want %v/%v/%v", fixture.request.ID, observation, started, ended, duration)
 	}
 	openings := 0
-	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID)) {
+	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)) {
 		var payload workers.SessionPayload
 		draft := decodePerRuntimeDraft(t, request)
 		if request.SourceEventID != openingSourceEventID {
@@ -7042,12 +7042,12 @@ func TestKeyedRuntimeDirectExecutionPublishesThroughOwnedAttempt(t *testing.T) {
 			if association == nil || association.WorkerSessionID != request.ID || association.DispatchID != "direct-progress-dispatch" || association.AttemptID != "direct-progress-dispatch" || association.Reference.ID != "direct-progress-provider" {
 				t.Fatalf("direct association: %#v", association)
 			}
-			records := sink.requestsFor(workersessions.Topic(request.ID))
+			records := sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID))
 			if len(records) != 4 || decodePerRuntimeDraft(t, records[2]).DispatchID != "direct-progress-dispatch" {
 				t.Fatalf("direct retained opening/binding/output/terminal: %#v", records)
 			}
 			publish(fragment)
-			if !reflect.DeepEqual(records, sink.requestsFor(workersessions.Topic(request.ID))) {
+			if !reflect.DeepEqual(records, sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID))) {
 				t.Fatal("late direct progress mutated terminal retention")
 			}
 		})

@@ -61,7 +61,7 @@ func TestKeyedRuntimeWorkerIdentityDuplicateWithinFactorySession(t *testing.T) {
 			before := assertPerRuntimeAttemptState(t, owner, state)
 			observation := assertPerRuntimeObservation(t, owner, state)
 			appends := sink.requestsFor("")
-			topic := workersessions.Topic(owner.request.ID)
+			topic := workersessions.Topic(owner.request.ID, owner.request.Execution.Execution.FactorySessionID)
 			records := readPerRuntimeTopic(t, eventStore, topic)
 			duplicate := owner.request
 			duplicate.Key = workersessions.RuntimeAttemptKey{RuntimeID: "duplicate-runtime", DispatchID: "duplicate-dispatch"}
@@ -91,7 +91,7 @@ func assertDuplicateWorkerHistoryUnchanged(t *testing.T, owner *perRuntimeAttemp
 	if after := assertPerRuntimeObservation(t, owner, before.State); !reflect.DeepEqual(observation, after) {
 		t.Fatalf("duplicate changed retained observation: %#v", after)
 	}
-	if !reflect.DeepEqual(appends, sink.requestsFor("")) || !reflect.DeepEqual(records, readPerRuntimeTopic(t, eventStore, workersessions.Topic(owner.request.ID))) {
+	if !reflect.DeepEqual(appends, sink.requestsFor("")) || !reflect.DeepEqual(records, readPerRuntimeTopic(t, eventStore, workersessions.Topic(owner.request.ID, owner.request.Execution.Execution.FactorySessionID))) {
 		t.Fatal("duplicate changed source-native publications or retained owner topic")
 	}
 }
@@ -197,7 +197,7 @@ func TestKeyedRuntimeAsyncDeadlineUsesSelectedSchedulerAndRetainsFacts(t *testin
 	req.Execution.Execution.Timeout = 5 * time.Second
 	facts := platformclock.NewDeterministic(time.Date(2042, 1, 2, 3, 4, 5, 0, time.UTC), time.Second)
 	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-	observer := newTerminalAppendObserver(r.events.(events.Service), workersessions.Topic(req.ID))
+	observer := newTerminalAppendObserver(r.events.(events.Service), workersessions.Topic(req.ID, req.Execution.Execution.FactorySessionID))
 	r.events = observer
 	started := make(chan struct{})
 	execution := coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
@@ -217,7 +217,7 @@ func TestKeyedRuntimeAsyncDeadlineUsesSelectedSchedulerAndRetainsFacts(t *testin
 		t.Fatalf("fact advance changed lifecycle: %#v", session)
 	}
 	scheduler.SetTick(5)
-	if err := waitControlledSignal(observer.signals[workersessions.Topic(req.ID)], 30*time.Second); err != nil {
+	if err := waitControlledSignal(observer.signals[workersessions.Topic(req.ID, req.Execution.Execution.FactorySessionID)], 30*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	session := getCharacterizationSession(t, r, req.ID)
@@ -246,7 +246,7 @@ func TestKeyedRuntimeAsyncCloseDuringOpeningRejectsAdmissionAndJoinsCapture(t *t
 	req.Execution.Execution.RuntimeID = "opening-runtime"
 	req.Execution.Execution.RecordingID = "opening-recording"
 	sink := &perRuntimeAppendCapture{EventsAppender: r.events}
-	gate := &keyedOpeningGate{EventsAppender: sink, topic: workersessions.Topic(req.ID), entered: make(chan struct{}), release: make(chan struct{})}
+	gate := &keyedOpeningGate{EventsAppender: sink, topic: workersessions.Topic(req.ID, req.Execution.Execution.FactorySessionID), entered: make(chan struct{}), release: make(chan struct{})}
 	r.events = gate
 	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{}), message: "runtime Worker admission closed"}
 	close(logger.release)
@@ -304,7 +304,7 @@ func TestKeyedRuntimeAsyncCloseDuringOpeningRejectsAdmissionAndJoinsCapture(t *t
 
 func assertAsyncClosedOpeningRetained(t *testing.T, r *registry, req workersessions.StartRequest, sink *perRuntimeAppendCapture, recording *interruptRecordingService) {
 	t.Helper()
-	appends := sink.requestsFor(workersessions.Topic(req.ID))
+	appends := sink.requestsFor(workersessions.Topic(req.ID, req.Execution.Execution.FactorySessionID))
 	if len(appends) != 2 || appends[0].SourceEventID != "started" || appends[1].SourceEventID != "terminal" {
 		t.Fatalf("closed opening history: %#v", appends)
 	}
@@ -312,7 +312,7 @@ func assertAsyncClosedOpeningRetained(t *testing.T, r *registry, req workersessi
 		t.Fatalf("capture cleanup: close=%d terminal=%d", closeCalls, terminalCalls)
 	}
 	replay, err := r.AdmitRuntimeAttemptAsync(context.Background(), req, unusedExecution{t: t}, r.clock, r.scheduler)
-	if !errors.Is(err, workersessions.ErrStartNotAccepted) || replay.Session.State != workersessions.StateCanceled || !reflect.DeepEqual(appends, sink.requestsFor(workersessions.Topic(req.ID))) {
+	if !errors.Is(err, workersessions.ErrStartNotAccepted) || replay.Session.State != workersessions.StateCanceled || !reflect.DeepEqual(appends, sink.requestsFor(workersessions.Topic(req.ID, req.Execution.Execution.FactorySessionID))) {
 		t.Fatalf("rejected admission replay: %#v, %v", replay, err)
 	}
 }

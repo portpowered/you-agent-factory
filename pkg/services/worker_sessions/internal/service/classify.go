@@ -792,7 +792,7 @@ func isTerminalLifecycleRecord(record events.Record) bool {
 }
 
 // publishOpeningRecord commits the one opening KindSession/PhaseStarted
-// workers.Draft onto workersessions.Topic(id), detached from any
+// workers.Draft onto r.observationTopic(id), detached from any
 // caller-owned backing array, before Start ever calls the injected
 // workers.Service. It runs under
 // id's publication lock, the same lock PublishRecord and
@@ -830,7 +830,7 @@ func (r *registry) publishOpeningRecord(
 		SourceSequence: openingSourceSequence,
 		SourceEventID:  openingSourceEventID,
 	}
-	if _, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft); err != nil {
+	if _, err := r.appendDraft(ctx, r.observationTopic(id), identity, workerDraftSchemaID, draft); err != nil {
 		openingErr := fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingOpening, err)
 		if recording != nil {
 			if abortErr := recording.Abort(context.WithoutCancel(ctx), openingErr); abortErr != nil {
@@ -880,7 +880,7 @@ func firstWorkerRecording(recordingsForSession []recordings.WorkerSessionRecordi
 }
 
 // publishTerminalRecord commits the one terminal KindSession workers.Draft
-// onto workersessions.Topic(id), derived from state+result, through the same
+// onto r.observationTopic(id), derived from state+result, through the same
 // appendDraft helper publishOpeningRecord and PublishRecord already share.
 // It runs under id's publication lock and closes id's publication window
 // before attempting the append: once this call starts, no concurrent or
@@ -916,7 +916,7 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		SourceSequence: terminalSourceSequence,
 		SourceEventID:  terminalSourceEventID,
 	}
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(id), identity, workerDraftSchemaID, draft)
 	pub.mu.Unlock()
 	if recording != nil {
 		closeErr := r.closeWorkerRecording(
@@ -983,4 +983,17 @@ func (r *registry) associateProviderSessionFromResult(
 var reconciliationFailureCause = map[workers.WorkstationDispatchReconciliationReason]workersessions.FailureCauseKind{
 	workers.WorkstationDispatchReconciliationReasonProcessGone: workersessions.FailureCauseProcessGone,
 	workers.WorkstationDispatchReconciliationReasonTimeout:     workersessions.FailureCauseTimeout,
+}
+
+// observationTopic uses the immutable admitted owner for source-native Events.
+// Payloads and public cursors continue to carry the supplied Worker identity.
+func (r *registry) observationTopic(id string) events.Topic {
+	r.mu.RLock()
+	metadata := r.observations[id]
+	factorySessionID := ""
+	if metadata != nil && !metadata.direct {
+		factorySessionID = metadata.factorySessionID
+	}
+	r.mu.RUnlock()
+	return workersessions.Topic(id, factorySessionID)
 }

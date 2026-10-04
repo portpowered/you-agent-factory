@@ -561,7 +561,7 @@ func TestFactorySessionsEqualFirstDispatchDefaultWorkerIdentityCharacterization(
 		t.Fatal("A completed before its provider gate was released")
 	}
 	w4AssertDispatch(t, entryB, "trace-identity-B", "identity-B COMPLETE")
-	t.Logf("overlap A=%s B=%s dispatchA=%s dispatchB=%s workerA=%s workerB=%s topicA=%s topicB=%s", a, b, entryA.dispatchID, entryB.dispatchID, entryA.sessionID, entryB.sessionID, workersessions.Topic(entryA.sessionID), workersessions.Topic(entryB.sessionID))
+	t.Logf("overlap A=%s B=%s dispatchA=%s dispatchB=%s workerA=%s workerB=%s topicA=%s topicB=%s", a, b, entryA.dispatchID, entryB.dispatchID, entryA.sessionID, entryB.sessionID, workersessions.Topic(entryA.sessionID, a), workersessions.Topic(entryB.sessionID, b))
 	runner.unblock()
 	identityAwaitResponse(t, streamA)
 	entryA = identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, a)))
@@ -797,7 +797,7 @@ func (w *identityRecordingWriter) LoadWorkerRecording(ctx context.Context, id st
 	for _, record := range owned {
 		history, exists := histories[record.WorkerSessionID]
 		if !exists {
-			history = recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: record.WorkerSessionID}
+			history = recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: record.WorkerSessionID, Topic: record.Record.ID.Topic}
 			workerIDs = append(workerIDs, record.WorkerSessionID)
 		}
 		history.Records = append(history.Records, record.Record)
@@ -845,14 +845,14 @@ func identityInspectRecording(t *testing.T, server *identityFixture, writer *ide
 	}
 	encoded, _ := json.Marshal(snapshot)
 	t.Logf("Factory=%s Worker=%s Recording=%s snapshot=%s", factoryID, workerID, recordingID, encoded)
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].WorkerSessionID != workerID || snapshot.Sessions[0].Topic != workersessions.Topic(workerID) || len(snapshot.Sessions[0].Records) != count || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete {
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].WorkerSessionID != workerID || snapshot.Sessions[0].Topic != workersessions.Topic(workerID, factoryID) || len(snapshot.Sessions[0].Records) != count || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete {
 		t.Fatalf("recording read does not preserve source association: %+v", snapshot)
 	}
 	if !strings.Contains(string(encoded), ownMarker+" COMPLETE") || strings.Contains(string(encoded), peerMarker) {
 		t.Fatalf("recording output attribution incorrect: %s", encoded)
 	}
 	for _, record := range snapshot.Sessions[0].Records {
-		if record.ID.Topic != workersessions.Topic(workerID) || (string(record.SourceID) != workerID && string(record.SourceID) != workerID+"/provider-binding") {
+		if record.ID.Topic != workersessions.Topic(workerID, factoryID) || (string(record.SourceID) != workerID && string(record.SourceID) != workerID+"/provider-binding") {
 			t.Fatalf("source record escaped Worker topic: %+v", record)
 		}
 	}

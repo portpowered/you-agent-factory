@@ -221,7 +221,7 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 	}
 	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
 		RecordingID: recordingID, FactorySessionID: req.Execution.Execution.FactorySessionID,
-		WorkerSessionID: req.ID, Topic: workersessions.Topic(req.ID),
+		WorkerSessionID: req.ID, Topic: r.observationTopic(req.ID),
 	})
 }
 

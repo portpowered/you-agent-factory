@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -165,5 +166,60 @@ func TestKeyedRuntimeObservationReadsRetainSelectedScopeAndDirectCompatibility(t
 				t.Fatalf("selected transcript = %+v, %v; provider calls=%d request=%+v", result, err, projector.calls, projector.request)
 			}
 		})
+	}
+}
+
+// Topic addressing is component evidence, not proof of shared-registry replay
+// admission. Each case observes the retained-reader effect and public cursor.
+func TestKeyedRuntimeScopedTopicReplayPreservesWorkerIdentity(t *testing.T) {
+	t.Parallel()
+	const workerID = "recorded/worker"
+	for _, owner := range []string{"recording/session", "replay/session"} {
+		t.Run(owner, func(t *testing.T) {
+			t.Parallel()
+			topic := workersessions.Topic(workerID, owner)
+			other := workersessions.Topic(workerID, "other/session")
+			if topic == other || topic == workersessions.Topic(workerID) {
+				t.Fatal("Factory ownership did not separate source topics")
+			}
+			record := replayObservationRecord(topic, 1, "message")
+			reader := &observationEventReaderFake{readResults: []events.ReadResult{{
+				Outcome:  events.ReadOutcomeProgress,
+				Records:  []events.Record{record},
+				Next:     events.Cursor{Topic: topic, Position: 1},
+				Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 1},
+			}}}
+			registry := newObservationRegistry(nil, reader)
+			registry.sessions[workerID] = observationSession(workerID, workersessions.StateRunning)
+			metadata := observationMetadata()
+			metadata.factorySessionID = owner
+			registry.observations[workerID] = metadata
+			subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+				WorkerSessionID: workerID, FactorySessionID: owner, ReplayOnly: true,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer subscription.Close()
+			delivery := subscription.Next(context.Background())
+			if delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.Cursor.WorkerSessionID != workerID || delivery.Event.Position != 1 {
+				t.Fatalf("scoped delivery changed recorded identity: %+v", delivery)
+			}
+			if reader.readCalls != 1 || reader.readRequests[0].Topic != topic || reader.readRequests[0].From.Topic != topic {
+				t.Fatalf("retained read selected foreign topic: %+v", reader.readRequests)
+			}
+			if got := observationWorkerSessionIDFromTopic(topic); got != workerID {
+				t.Fatalf("scoped topic Worker identity = %q", got)
+			}
+		})
+	}
+}
+
+func TestKeyedRuntimeDirectTopicKeepsCompatibility(t *testing.T) {
+	t.Parallel()
+	registry := newObservationRegistry(nil, nil)
+	registry.observations["direct-worker"] = &observation{direct: true, factorySessionID: "direct-context"}
+	if got := registry.observationTopic("direct-worker"); got != workersessions.Topic("direct-worker") {
+		t.Fatalf("direct topic = %s", got)
 	}
 }
