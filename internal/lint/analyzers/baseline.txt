@@ -111,7 +111,6 @@ service-subpackage-test|pkg/services/workers/internal/services/runners/internal/
 service-subpackage-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire
 service-subpackage-test|tests/functional/operator_settings/configcore|pkg/services/operator_settings/wire
 service-subpackage-test|tests/functional/operator_settings/root_composition_test|pkg/services/operator_settings/wire
-service-subpackage-test|tests/functional/runtime_api|pkg/services/work/wire
 service-subpackage-test|tests/functional/sessions_test|pkg/services/factory_sessions/wire
 service-subpackage-test|tests/functional/workers/inference_test|pkg/services/recordings/wire
 service-subpackage|tests/functional/internal/support|pkg/services/factory_sessions/transports/http
