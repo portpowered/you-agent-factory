@@ -67,8 +67,8 @@ func TestAssemblyWorkerSessionsObservationUsesSelectedSession(t *testing.T) {
 	assembly := &Assembly{state: state, registry: state.Registry()}
 	first := &workerSessionsObservationMarker{}
 	second := &workerSessionsObservationMarker{}
-	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", Handle: &runtimebinding.SessionState{WorkerSessions: first}}, true)
-	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", Handle: &runtimebinding.SessionState{WorkerSessions: second}}, false)
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", Handle: workerSessionsState(first)}, true)
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", Handle: workerSessionsState(second)}, false)
 
 	if got := assembly.WorkerSessionsObservationForSession("second"); got != second {
 		t.Fatalf("second session observation = %T(%[1]v), want second session", got)
@@ -79,6 +79,39 @@ func TestAssemblyWorkerSessionsObservationUsesSelectedSession(t *testing.T) {
 	if got := assembly.WorkerSessionsObservationForSession("missing"); got != nil {
 		t.Fatalf("missing session observation = %T(%[1]v), want nil", got)
 	}
+}
+
+func TestAssemblyWorkerSessionsObservationIsSafeAgainstConcurrentStartBinding(t *testing.T) {
+	t.Parallel()
+
+	state := newWorkResolverSessionState()
+	assembly := &Assembly{state: state, registry: state.Registry()}
+	bound := &runtimebinding.SessionState{}
+	// Start binds Worker Sessions after the session is already resolvable, so
+	// fleet observation reads can run concurrently with the bind.
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "starting", Handle: bound}, true)
+	observation := &workerSessionsObservationMarker{}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 200 {
+			bound.SetWorkerSessions(observation)
+		}
+	}()
+	for range 200 {
+		_ = assembly.WorkerSessionsObservationForSession("starting")
+	}
+	<-done
+
+	if got := assembly.WorkerSessionsObservationForSession("starting"); got != observation {
+		t.Fatalf("bound session observation = %T(%[1]v), want bound observation", got)
+	}
+}
+
+func workerSessionsState(observation workersessions.ObservationService) *runtimebinding.SessionState {
+	state := &runtimebinding.SessionState{}
+	state.SetWorkerSessions(observation)
+	return state
 }
 
 func TestAssemblyRuntimeScopeRecognizesExplicitDefaultSessionID(t *testing.T) {

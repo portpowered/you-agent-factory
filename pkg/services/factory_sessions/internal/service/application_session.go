@@ -148,7 +148,7 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		FactoryRuntime:       bound.FactoryRuntime,
 		ModelsScope:          bound.ModelsScope,
 		ModelInvoker:         bound.ModelInvoker,
-		WorkerSessions:       bound.WorkerSessions,
+		WorkerSessions:       bound.WorkerSessionsObservation(),
 		Logger:               bound.Logger,
 		Reader:               bound.Reader,
 		Projections:          bound.Projections,
