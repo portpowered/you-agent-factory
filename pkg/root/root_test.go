@@ -118,7 +118,7 @@ func TestNormalizeProcessTimeRejectsTypedNil(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			clock, scheduler, err := normalizeProcessTime(test.clock, test.scheduler)
-			if err == nil || !strings.Contains(err.Error(), test.field+" must not be typed-nil") {
+			if err == nil || err.Error() != test.field+" must not be typed-nil; omit it to select the default" {
 				t.Fatalf("expected actionable %s error, got %v", test.field, err)
 			}
 			if clock != nil || scheduler != nil {
@@ -133,6 +133,7 @@ func TestBuildProcessRejectsInvalidContextAndTimeBeforeComposition(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var typedNil *platformclock.Deterministic
+	var nilFunction nowOnlyProcessClock
 	for _, test := range []struct {
 		name    string
 		ctx     context.Context
@@ -141,14 +142,15 @@ func TestBuildProcessRejectsInvalidContextAndTimeBeforeComposition(t *testing.T)
 	}{
 		{"nil-context", nil, serviceedges.Edges{}, "context is required"},
 		{"cancelled-context", ctx, serviceedges.Edges{Clock: typedNil}, "context canceled"},
-		{"invalid-clock", context.Background(), serviceedges.Edges{Clock: typedNil}, "Clock must not be typed-nil"},
-		{"invalid-scheduler", context.Background(), serviceedges.Edges{ProcessScheduler: typedNil}, "ProcessScheduler must not be typed-nil"},
+		{"invalid-clock", context.Background(), serviceedges.Edges{Clock: typedNil}, "Clock must not be typed-nil; omit it to select the default"},
+		{"invalid-clock-function", context.Background(), serviceedges.Edges{Clock: nilFunction}, "Clock must not be typed-nil; omit it to select the default"},
+		{"invalid-scheduler", context.Background(), serviceedges.Edges{ProcessScheduler: typedNil}, "ProcessScheduler must not be typed-nil; omit it to select the default"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			test.edges.RecordingsRootObserver = func(recordings.Service) { panic("constructor observed rejected time override") }
 			process, err := BuildProcess(test.ctx, test.edges)
-			if process != nil || err == nil || !strings.Contains(err.Error(), test.message) {
+			if process != nil || err == nil || err.Error() != "build application process: "+test.message {
 				t.Fatalf("BuildProcess invalid input = %v, %v", process, err)
 			}
 			if test.name == "cancelled-context" && !errors.Is(err, context.Canceled) {
@@ -253,7 +255,7 @@ func TestBuildProcessRejectsInvalidOverridesBeforeEffects(t *testing.T) {
 	}{
 		{"early", serviceedges.Edges{ProviderCommandRunner: (*uncalledRunner)(nil)}, "Edges.ProviderCommandRunner"},
 		{"middle", serviceedges.Edges{FactorySessionsWorkingDirectory: (*uncalledDirectory)(nil)}, "Edges.FactorySessionsWorkingDirectory"},
-		{"clock", serviceedges.Edges{Clock: (*uncalledClock)(nil)}, "construct Recordings: clock is required"},
+		{"clock", serviceedges.Edges{Clock: (*uncalledClock)(nil)}, "Clock must not be typed-nil; omit it to select the default"},
 		{"scheduler", serviceedges.Edges{ProcessScheduler: (*platformclock.Deterministic)(nil)}, "ProcessScheduler must not be typed-nil"},
 		{"late", serviceedges.Edges{FactoryVisualizationSink: factoryvisualization.SinkFunc(nil)}, "Edges.FactoryVisualizationSink"},
 		{"first error", serviceedges.Edges{ProviderCommandRunner: (*uncalledRunner)(nil), Clock: (*uncalledClock)(nil)}, "Edges.ProviderCommandRunner"},

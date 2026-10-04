@@ -50,8 +50,15 @@ func TestBuildProcessRejectsEverySuppliedInterface(t *testing.T) {
 		t.Run(test.field, func(t *testing.T) {
 			test.edges.RecordingsRootObserver = func(recordings.Service) { panic("constructor observed rejected override") }
 			process, err := BuildProcess(context.Background(), test.edges)
-			if process != nil || err == nil || !strings.Contains(err.Error(), "Edges."+test.field) {
+			if process != nil || err == nil {
 				t.Fatalf("BuildProcess = (%v, %v), want invalid %s", process, err, test.field)
+			}
+			if test.field == "Clock" {
+				if err.Error() != "build application process: Clock must not be typed-nil; omit it to select the default" {
+					t.Fatalf("Clock diagnostic = %q", err)
+				}
+			} else if !strings.Contains(err.Error(), "Edges."+test.field) {
+				t.Fatalf("BuildProcess error = %v, want invalid %s", err, test.field)
 			}
 		})
 	}

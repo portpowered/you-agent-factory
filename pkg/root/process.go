@@ -80,6 +80,9 @@ func validateConstructionOverrides(edges serviceedges.Edges) error {
 func invalidConstructionOverride(field string) error {
 	// Keep diagnostics already exposed by the selected providers while moving
 	// their admission ahead of graph construction. Other ports name the override.
+	if field == "Clock" || field == "ProcessScheduler" {
+		return fmt.Errorf("%s must not be typed-nil; omit it to select the default", field)
+	}
 	message := map[string]string{
 		"PlatformProcessClock":          "platform process clock is required",
 		"PlatformProcessCommandFactory": "platform process command factory is required",
@@ -89,8 +92,6 @@ func invalidConstructionOverride(field string) error {
 		"ModelHostClock":                "construct Models: model host clock is required",
 		"ModelRuntimeCommandRunner":     "construct Models: model runtime command runner is required",
 		"ModelRuntimeHTTPClient":        "construct Models: model runtime HTTP client is required",
-		"Clock":                         "Clock must not be typed-nil; omit it to select the default; construct Recordings: clock is required",
-		"ProcessScheduler":              "ProcessScheduler must not be typed-nil; omit it to select the default",
 	}[field]
 	if message != "" {
 		return fmt.Errorf("Edges.%s: %s", field, message)
@@ -120,10 +121,10 @@ func normalizeProcessTime(
 	scheduler platformclock.TimerSource,
 ) (platformclock.Source, platformclock.TimerSource, error) {
 	if isTypedNilProcessTime(clock) {
-		return nil, nil, fmt.Errorf("Clock must not be typed-nil; omit it to select the default")
+		return nil, nil, invalidConstructionOverride("Clock")
 	}
 	if isTypedNilProcessTime(scheduler) {
-		return nil, nil, fmt.Errorf("ProcessScheduler must not be typed-nil; omit it to select the default")
+		return nil, nil, invalidConstructionOverride("ProcessScheduler")
 	}
 	if clock == nil {
 		clock = platformclock.Real{}
