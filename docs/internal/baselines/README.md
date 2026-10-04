@@ -563,9 +563,12 @@ They had zero duplicate rows and zero unclassified active comparison files.
 No active consumer was unreadable or ambiguous.
 Future comparison files must be added to exactly one inventory row before their check is treated as reconciled.
 
-`backend-package-file-count.json` is an exact deletion-only ratchet. The package
-file-count gate rejects new oversized packages, count increases, and entries
-that were not lowered or removed when the corresponding package shrank.
+The golangci migration retired `backend-package-file-count.json` and its
+`pkg-file-count` consumer. There is no replacement per-package file-count rule.
+The audit tables above retain the historical R-02 identity and measurements;
+they do not require recreating that ledger. Current file length, function
+length, and complexity policy lives in the general backend standard and
+`.golangci.yml`.
 
 For Packaged Service Structure FND-12, the maintainer-runnable public behavior
 baseline suite map (CLI, HTTP, MCP, replay, visualization activation) lives in
