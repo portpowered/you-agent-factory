@@ -92,11 +92,14 @@ func testDeliveredACPFactoryCancelPeer(t *testing.T) {
 	client := &http.Client{Timeout: 20 * time.Second}
 	defer client.CloseIdleConnections()
 	sessions := make(map[string]string)
+	requests := make(map[string]factoryapi.FactorySessionExecutionRequest)
 	connections := make(map[string]net.Conn)
 	readers := make(map[string]*bufio.Reader)
 	pids := make(map[string]int)
 	for _, id := range []string{"cancelled", "survivor"} {
-		sessionID, connection, reader, pid := admitDeliveredRetirementPeer(t, ctx, client, baseURL, id, listener, deadline)
+		request := deliveredRetirementRequest(t, ctx, client, baseURL, id)
+		requests[id] = request
+		sessionID, connection, reader, pid := admitDeliveredRetirementPeer(t, ctx, client, baseURL, request, listener, deadline)
 		sessions[id] = sessionID
 		connections[id], readers[id], pids[id] = connection, reader, pid
 	}
@@ -116,13 +119,13 @@ func testDeliveredACPFactoryCancelPeer(t *testing.T) {
 		t.Fatalf("selected process exit while B stays active = %q, error=%v", line, err)
 	}
 	assertDeliveredSessionStatus(t, ctx, client, baseURL, sessions["survivor"], factoryapi.FactorySessionDurableLifecycleStatusRunning)
-	waitDeliveredRetirementSession(t, ctx, client, baseURL, "cancelled", sessions["cancelled"])
+	waitDeliveredRetirementSession(t, ctx, client, baseURL, requests["cancelled"], sessions["cancelled"])
 	readDeliveredSessionEvents(t, ctx, client, baseURL, sessions["cancelled"])
 	assertDeliveredSessionStatus(t, ctx, client, baseURL, sessions["cancelled"], factoryapi.FactorySessionDurableLifecycleStatusCanceled)
 	if _, err := io.WriteString(connections["survivor"], "release\n"); err != nil {
 		t.Fatal(err)
 	}
-	waitDeliveredRetirementSession(t, ctx, client, baseURL, "survivor", sessions["survivor"])
+	waitDeliveredRetirementSession(t, ctx, client, baseURL, requests["survivor"], sessions["survivor"])
 	events := readDeliveredSessionEvents(t, ctx, client, baseURL, sessions["survivor"])
 	if strings.Contains(events, "delivered EOF primary result cancelled") {
 		t.Fatal("B received A's result events")
@@ -247,9 +250,9 @@ func readDeliveredSessionEvents(t *testing.T, ctx context.Context, client *http.
 	return ""
 }
 
-func admitDeliveredRetirementPeer(t *testing.T, ctx context.Context, client *http.Client, baseURL, id string, listener net.Listener, deadline time.Time) (string, net.Conn, *bufio.Reader, int) {
+func admitDeliveredRetirementPeer(t *testing.T, ctx context.Context, client *http.Client, baseURL string, request factoryapi.FactorySessionExecutionRequest, listener net.Listener, deadline time.Time) (string, net.Conn, *bufio.Reader, int) {
 	t.Helper()
-	request := deliveredRetirementRequest(t, ctx, client, baseURL, id)
+	id := request.RequestId
 	var admission factoryapi.FactorySessionExecutionResponse
 	deliveredRetirementPost(t, ctx, client, baseURL+"/factory-sessions/async", request, &admission)
 	if admission.SessionId == "" {
@@ -276,9 +279,8 @@ func admitDeliveredRetirementPeer(t *testing.T, ctx context.Context, client *htt
 
 // Replaying the normalized request on the supported sync route waits for the
 // existing session. Durable event reads are finite history, not a live waiter.
-func waitDeliveredRetirementSession(t *testing.T, ctx context.Context, client *http.Client, baseURL, requestID, sessionID string) {
+func waitDeliveredRetirementSession(t *testing.T, ctx context.Context, client *http.Client, baseURL string, request factoryapi.FactorySessionExecutionRequest, sessionID string) {
 	t.Helper()
-	request := deliveredRetirementRequest(t, ctx, client, baseURL, requestID)
 	var result factoryapi.FactorySessionSyncExecutionResponse
 	deliveredRetirementPost(t, ctx, client, baseURL+"/factory-sessions/sync", request, &result)
 	if result.SessionId != sessionID || result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
