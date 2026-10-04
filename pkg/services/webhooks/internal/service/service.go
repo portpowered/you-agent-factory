@@ -3,11 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -16,68 +13,34 @@ import (
 )
 
 type Service struct {
-	httpClient interface {
-		Do(*http.Request) (*http.Response, error)
-	}
+	events        recordings.Service
+	httpClient    webhooks.HTTPClient
 	secretResolve webhooks.SecretResolver
-	clock         interface {
-		Now() time.Time
-		After(time.Duration) <-chan time.Time
-	}
-	deadLetters  webhooks.DeadLetterAppender
+	clock         webhooks.Clock
+	deadLetters   webhooks.DeadLetterAppender
+	logger        logging.Logger
+}
+
+// activation owns serialization of dead-letter writes for one subscription.
+type activation struct {
+	webhooks.StartRequest
 	deadLetterMu sync.Mutex
-	logger       logging.Logger
 }
 
 var _ webhooks.Service = (*Service)(nil)
 
-func New(
-	httpClient interface {
-		Do(*http.Request) (*http.Response, error)
-	},
-	secretResolve webhooks.SecretResolver,
-	clock interface {
-		Now() time.Time
-		After(time.Duration) <-chan time.Time
-	},
-	logger logging.Logger,
-) *Service {
-	return NewWithDeadLetterAppender(httpClient, secretResolve, clock, nil, logger)
-}
-
-// NewWithDeadLetterAppender constructs the Webhooks service with the exact
-// runtime-storage effect used for terminal delivery records.
-func NewWithDeadLetterAppender(
-	httpClient interface {
-		Do(*http.Request) (*http.Response, error)
-	},
-	secretResolve webhooks.SecretResolver,
-	clock interface {
-		Now() time.Time
-		After(time.Duration) <-chan time.Time
-	},
-	deadLetters webhooks.DeadLetterAppender,
-	logger logging.Logger,
-) *Service {
-	if httpClient == nil || clock == nil {
-		return nil
-	}
-	return &Service{
-		httpClient:    httpClient,
-		secretResolve: secretResolve,
-		clock:         clock,
-		deadLetters:   deadLetters,
-		logger:        logging.EnsureLogger(logger),
-	}
+// New constructs an inert service from individually selected required effects.
+func New(events recordings.Service, httpClient webhooks.HTTPClient,
+	secretResolve webhooks.SecretResolver, clock webhooks.Clock,
+	deadLetters webhooks.DeadLetterAppender, logger logging.Logger) *Service {
+	return &Service{events: events, httpClient: httpClient, secretResolve: secretResolve,
+		clock: clock, deadLetters: deadLetters, logger: logger}
 }
 
 func (service *Service) Start(
 	parent context.Context,
 	request webhooks.StartRequest,
 ) (webhooks.Subscription, error) {
-	if service == nil {
-		return nil, fmt.Errorf("start Factory Webhooks: service is nil")
-	}
 	if parent == nil {
 		parent = context.Background()
 	}
@@ -85,18 +48,16 @@ func (service *Service) Start(
 	if len(configs) == 0 {
 		return webhooks.Subscription(func(context.Context) error { return nil }), nil
 	}
-	if request.Events == nil {
-		return nil, fmt.Errorf("start Factory Webhooks: Recordings service is required")
-	}
 
 	ctx, cancel := context.WithCancel(parent)
 	subscription := newSubscription(cancel, make(chan struct{}))
+	state := &activation{StartRequest: request}
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(len(configs))
 	for _, config := range configs {
 		go func(config factorydefinitions.FactoryWebhookConfig) {
 			defer waitGroup.Done()
-			service.runEndpoint(ctx, request, config)
+			service.runEndpoint(ctx, state, config)
 		}(config)
 	}
 	go func() {
@@ -120,10 +81,10 @@ func enabledDefinitions(
 
 func (service *Service) runEndpoint(
 	ctx context.Context,
-	request webhooks.StartRequest,
+	request *activation,
 	definition factorydefinitions.FactoryWebhookConfig,
 ) {
-	subscribed, err := request.Events.SubscribeFrom(ctx, recordings.SubscribeRequest{
+	subscribed, err := service.events.SubscribeFrom(ctx, recordings.SubscribeRequest{
 		// A webhook remains a live subscriber after activation. The generic
 		// reconnect contract may close immediately when a cursor is exactly at
 		// the retained tail, so activation filtering is applied below while the
@@ -132,10 +93,6 @@ func (service *Service) runEndpoint(
 	})
 	if err != nil {
 		service.logger.Error("factory webhook subscription failed", "endpoint", definition.Name, "error", err)
-		return
-	}
-	if service.secretResolve == nil {
-		service.logger.Error("factory webhook secret resolver is unavailable", "endpoint", definition.Name)
 		return
 	}
 	if request.RuntimeSource == nil {
@@ -169,7 +126,7 @@ func (service *Service) runEndpoint(
 				return
 			}
 			reconnectFrom := outcome.Gap.ReconnectFrom
-			reconnected, reconnectErr := request.Events.SubscribeFrom(ctx, recordings.SubscribeRequest{
+			reconnected, reconnectErr := service.events.SubscribeFrom(ctx, recordings.SubscribeRequest{
 				Cursor: &reconnectFrom,
 				Scope:  request.Scope,
 			})

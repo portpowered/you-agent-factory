@@ -8,7 +8,6 @@ import (
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
@@ -16,7 +15,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
-	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
@@ -78,40 +76,36 @@ func provideAutomationsOwner(logger *zap.Logger, clock automationswire.Clock,
 		hosted, policy, cursors, true, "", "", "")
 }
 
-func provideFactoryWebhooksService(
-	edges serviceedges.Edges,
-	logger logging.Logger,
-) webhooks.Service {
-	httpClient := edges.FactoryWebhookHTTPClient
-	if httpClient == nil {
-		httpClient = newFactoryWebhookHTTPClient()
+func provideFactoryWebhookHTTPClient(edges serviceedges.Edges) webhooks.HTTPClient {
+	if edges.FactoryWebhookHTTPClient != nil {
+		return edges.FactoryWebhookHTTPClient
 	}
-	secretResolver := edges.FactoryWebhookSecretResolver
-	if secretResolver == nil {
-		hostedResolver := automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
-		secretResolver = func(
-			ctx context.Context,
-			source factorydefinitions.LoadedFactorySource,
-			secretRef string,
-		) (string, error) {
-			return hostedResolver(ctx, source, secretRef)
-		}
+	return newFactoryWebhookHTTPClient()
+}
+
+func provideFactoryWebhookSecretResolver(edges serviceedges.Edges) webhooks.SecretResolver {
+	if edges.FactoryWebhookSecretResolver != nil {
+		return edges.FactoryWebhookSecretResolver
 	}
-	clockSource := edges.FactoryWebhookClock
-	if clockSource == nil {
-		clockSource = platformclock.Real{}
+	resolver := automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
+	return func(ctx context.Context, source factorydefinitions.LoadedFactorySource, ref string) (string, error) {
+		return resolver(ctx, source, ref)
 	}
-	deadLetterAppender := edges.FactoryWebhookDeadLetterAppender
-	if deadLetterAppender == nil {
-		deadLetterAppender = platformfilesystem.Local{}.AppendDurable
+}
+
+// T21 owns adoption of the canonical process clock; preserve current selection.
+func provideFactoryWebhookClock(edges serviceedges.Edges) webhooks.Clock {
+	if edges.FactoryWebhookClock != nil {
+		return edges.FactoryWebhookClock
 	}
-	return webhookswire.NewService(
-		httpClient,
-		secretResolver,
-		clockSource,
-		deadLetterAppender,
-		logger,
-	)
+	return platformclock.Real{}
+}
+
+func provideFactoryWebhookDeadLetterAppender(edges serviceedges.Edges) webhooks.DeadLetterAppender {
+	if edges.FactoryWebhookDeadLetterAppender != nil {
+		return edges.FactoryWebhookDeadLetterAppender
+	}
+	return platformfilesystem.Local{}.AppendDurable
 }
 
 func newFactoryWebhookHTTPClient() *http.Client {
