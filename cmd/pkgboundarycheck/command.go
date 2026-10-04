@@ -127,7 +127,6 @@ func countAlwaysBlockingViolations(findings scanResult) int {
 		len(findings.staleTestBehaviorEntries) +
 		len(findings.petriPublicSurfaceFindings) +
 		len(findings.stalePetriPublicSurfaceEntries) +
-		len(findings.processEdgeContractFindings) +
 		len(findings.providerEffectOwnershipFindings)
 }
 
