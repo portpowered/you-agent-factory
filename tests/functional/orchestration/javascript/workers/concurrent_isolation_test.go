@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -165,4 +167,145 @@ func assertJavaScriptEventsDoNotContain(t *testing.T, events []factoryapi.Factor
 	if strings.Contains(string(encoded), forbidden) {
 		t.Fatalf("Factory Events contain foreign content %q: %s", forbidden, encoded)
 	}
+}
+
+// Both first children are held at the command edge before either completes.
+// Public Worker observations prove actual scoped admission; collector strings
+// alone do not establish Worker identity or canonical recording association.
+func runJavaScriptRuntimeChildren(t *testing.T, fixture *javascriptSharedProcessFixture) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	var runners [2]*runtimeJavaScriptCommandRunner
+	var results [2]chan concurrentJavaScriptResult
+	for i := range runners {
+		marker := fmt.Sprintf("runtime javascript child %d", i)
+		runner := &runtimeJavaScriptCommandRunner{
+			marker: marker, started: make(chan struct{}), release: make(chan struct{}),
+		}
+		runners[i] = runner
+		if err := fixture.router.register(marker, runner); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			runner.unblock()
+			if err := fixture.router.unregister(marker); err != nil {
+				t.Error(err)
+			}
+		})
+		workflow := strings.ReplaceAll(liveProviderChildWorkflow, "use the live provider command edge", marker)
+		requestID := fmt.Sprintf("runtime-javascript-%d", fixture.requestSequence.Add(1))
+		result := make(chan concurrentJavaScriptResult, 1)
+		results[i] = result
+		go func() {
+			response, err := postOverridesWorkflow(ctx, fixture.baseURL, requestID, workflow)
+			result <- concurrentJavaScriptResult{response: response, err: err}
+		}()
+	}
+	for _, runner := range runners {
+		select {
+		case <-runner.started:
+		case <-ctx.Done():
+			t.Fatalf("first children did not overlap: %v", ctx.Err())
+		}
+	}
+	// Release one child while its peer remains admitted at the selected edge.
+	runners[0].unblock()
+	first, err := awaitConcurrentJavaScriptResult(ctx, results[0], "first runtime child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstWorker := assertRuntimeJavaScriptChild(t, fixture, first, runners[0].marker, runners[1].marker)
+	select {
+	case peer := <-results[1]:
+		t.Fatalf("peer completed before its own command release: %#v", peer)
+	default:
+	}
+	runners[1].unblock()
+	second, err := awaitConcurrentJavaScriptResult(ctx, results[1], "second runtime child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondWorker := assertRuntimeJavaScriptChild(t, fixture, second, runners[1].marker, runners[0].marker)
+	if first.response.SessionId == second.response.SessionId || firstWorker == secondWorker {
+		t.Fatalf("children reused identities: Factory %q/%q Worker %q/%q", first.response.SessionId, second.response.SessionId, firstWorker, secondWorker)
+	}
+	for _, runner := range runners {
+		if runner.calls.Load() != 1 {
+			t.Fatalf("child %q command calls = %d, want one", runner.marker, runner.calls.Load())
+		}
+	}
+}
+
+type runtimeJavaScriptCommandRunner struct {
+	marker  string
+	started chan struct{}
+	release chan struct{}
+	calls   atomic.Int32
+}
+
+func (r *runtimeJavaScriptCommandRunner) unblock() {
+	select {
+	case <-r.release:
+	default:
+		close(r.release)
+	}
+}
+
+func (r *runtimeJavaScriptCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if r.calls.Add(1) != 1 {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected repeat child command %q", r.marker)
+	}
+	if request.Command != "codex" || !bytes.Contains(request.Stdin, []byte(r.marker)) {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected selected command %q", request.Command)
+	}
+	close(r.started)
+	select {
+	case <-r.release:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	stdout := append([]byte(fmt.Sprintf("{\"type\":\"thread.started\",\"thread_id\":%q}\n", "provider-"+r.marker)), support.CodexSuccessStdout(r.marker+" output")...)
+	return platformprocess.CommandResult{Stdout: stdout}, nil
+}
+
+func assertRuntimeJavaScriptChild(t *testing.T, fixture *javascriptSharedProcessFixture, result concurrentJavaScriptResult, own, foreign string) string {
+	t.Helper()
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	assertSucceededPrimaryContains(t, result.response, own+" output")
+	sessionID := result.response.SessionId
+	fixture.trackSession(t, sessionID)
+	assertJavaScriptSharedCompletedDispatch(t, fixture, sessionID, "codex", "live-child-model", "live-provider-child")
+	factoryEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
+	for _, event := range factoryEvents {
+		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+			t.Fatalf("foreign Factory event: %#v", event)
+		}
+	}
+	assertJavaScriptEventsDoNotContain(t, factoryEvents, foreign)
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](t,
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+sessionID+"/dispatches")
+	dispatch := dispatches.Dispatches[0]
+	if dispatch.Id != "dispatch-1" || dispatch.ProviderSessionRefs == nil || len(*dispatch.ProviderSessionRefs) != 1 || (*dispatch.ProviderSessionRefs)[0].Id != "provider-"+own {
+		t.Fatalf("runtime first-child dispatch = %#v", dispatch)
+	}
+	observations := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t,
+		strings.TrimSuffix(fixture.baseURL, "/")+"/worker-sessions")
+	var owned []factoryapi.WorkerSessionObservation
+	for _, observation := range observations.Sessions {
+		if observation.FactorySessionId != nil && *observation.FactorySessionId == sessionID {
+			owned = append(owned, observation)
+		}
+	}
+	if len(owned) != 1 {
+		t.Fatalf("runtime child observations = %#v, want one", owned)
+	}
+	worker := owned[0]
+	if worker.Direct || worker.WorkerSessionId != sessionID+"/"+dispatch.Id || worker.AttemptId != worker.WorkerSessionId+"/attempt/1" || worker.State != "COMPLETED" || worker.ProviderSession == nil || worker.ProviderSession.Id != "provider-"+own {
+		t.Fatalf("runtime child identity/outcome = %#v", worker)
+	}
+	t.Logf("F16-08 public observation: Factory=%s collector=%s Worker=%s physical=%s provider=%s", sessionID, dispatch.Id, worker.WorkerSessionId, worker.AttemptId, worker.ProviderSession.Id)
+	return worker.WorkerSessionId
 }
