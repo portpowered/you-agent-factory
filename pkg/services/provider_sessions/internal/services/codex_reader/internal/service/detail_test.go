@@ -1,13 +1,16 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestLoadDetailsResolvesExactRollout(t *testing.T) {
@@ -32,6 +35,29 @@ func TestLoadDetailsResolvesExactRollout(t *testing.T) {
 		detail.ProviderSession.ID != "session_123" ||
 		detail.Source.RelativePath != "2026/07/16/rollout-session_123.jsonl" {
 		t.Fatalf("detail = %#v, want resolved codex rollout", detail)
+	}
+}
+
+func TestReaderDetailsRejectsUnsupportedIdentityWithoutStorageEffects(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		ref  providers.SessionRef
+		want error
+	}{
+		{"provider", providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "session"}, providersessions.ErrUnsupportedProvider},
+		{"kind", providers.SessionRef{Provider: providers.IDCodex, Kind: "path", ID: "session"}, providersessions.ErrUnsupportedKind},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			files := &trackingFileSystem{base: testFiles}
+			reader := newTestReader(t, files,
+				func(string, fs.WalkDirFunc) error { t.Fatal("unexpected walk"); return nil },
+				func(string) (string, error) { t.Fatal("unexpected symlink resolution"); return "", nil },
+				t.TempDir())
+			_, err := reader.Details(context.Background(), test.ref)
+			if !errors.Is(err, test.want) || files.statCalls != 0 || files.openCalls != 0 {
+				t.Fatalf("Details = %v, stat=%d open=%d; want %v without storage effects", err, files.statCalls, files.openCalls, test.want)
+			}
+		})
 	}
 }
 
