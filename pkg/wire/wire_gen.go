@@ -381,7 +381,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	clockResolver := provideFactoryRuntimeClockResolver()
+	clockResolver := provideFactoryRuntimeClockResolver(clock)
 	sessionLoggerFactory := provideFactoryRuntimeSessionLoggerFactory()
 	v89 := provideFactoryRuntimeSubmissionRecorder(edges2)
 	v90 := provideFactoryRuntimeDispatchRecorder(edges2)

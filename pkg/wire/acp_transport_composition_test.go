@@ -63,7 +63,7 @@ func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t
 	seedInstalledPackagedFactories(t, home, "@you/goal", "@you/review")
 	seedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal", "factory:@you/review"})
 
-	process, err := InjectBundle(context.Background(), serviceedges.Edges{})
+	process, err := InjectBundle(context.Background(), selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
