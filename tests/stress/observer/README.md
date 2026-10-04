@@ -209,8 +209,10 @@ Each copied input has source/path/SHA256 attribution in preparation-inputs.json;
 the profile manifest records its hash. Copies use separate bytes, with no shared
 cache writes, hardlinks or downloads. Preparation starts with an empty owned
 build cache; repeated preparation can reuse that same owned cache. Its preflight
-reserves 512MiB for build cache, artifact and temporary files within the 2GiB
-output budget. Also account for other lane-owned output directories before running.
+reserves 512MiB for a cold build within the 2GiB output budget. On repeated
+preparation, already counted cache/artifact bytes reduce the 384MiB cache/artifact
+allowance; a 128MiB temporary-file floor remains. Also account for other lane-owned
+output directories before running.
 Missing cached inputs or unsupported replace/exclude directives fail actionably.
 Use --cached-module-cache and --cached-go-root for explicit read-only input paths
 when default GOMODCACHE/GOPATH and exact cached auto-toolchain discovery do not fit.

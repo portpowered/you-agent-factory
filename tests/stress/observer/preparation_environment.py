@@ -82,9 +82,13 @@ def seed_inputs(source, output, paths, module_cache=None, go_root=None,
             copies.append((origin, target))
     existing = sum(p.stat().st_size for p in output.rglob("*") if p.is_file())
     additional = sum(p.stat().st_size for p, target in copies if not target.exists())
-    # Reserve space for build cache, artifact and temporary compilation files.
-    if existing + additional + 512 * 1024**2 > budget_bytes:
-        raise ValueError("owned preparation exceeds disk budget including 512MiB build reserve")
+    # Existing owned cache/artifact bytes are already counted in `existing`.
+    # Retain a temporary floor and reserve only the unused cold-build allowance.
+    cache_bytes = sum(p.stat().st_size for p in Path(paths["GOCACHE"]).rglob("*") if p.is_file())
+    artifact_bytes = sum(p.stat().st_size for p in output.glob("observer.test*") if p.is_file())
+    reserve = 128 * 1024**2 + max(0, 384 * 1024**2 - cache_bytes - artifact_bytes)
+    if existing + additional + reserve > budget_bytes:
+        raise ValueError("owned preparation exceeds disk budget including remaining build reserve")
     records = []
     for origin, target in copies:
         if origin.is_symlink():
