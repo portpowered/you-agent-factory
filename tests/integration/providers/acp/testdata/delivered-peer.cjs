@@ -3,7 +3,7 @@ const readline = require("node:readline");
 const mode = process.argv[2];
 const fs = require("node:fs");
 const attempts = process.argv[3];
-let disconnect = mode === "prompt-disconnect";
+let disconnect = mode === "prompt-disconnect" || mode === "prompt-secret-disconnect";
 if (mode === "disconnect-once") {
   // Observe real launches, including an accidental retry of the failed request.
   disconnect = !fs.existsSync(attempts);
@@ -26,7 +26,13 @@ input.on("line", (line) => {
   } else if (request.method === "session/prompt") {
     if (disconnect) {
       // A real pipe EOF before any result must remain a failed attempt.
-      process.exit(0);
+      const secret = process.env.ACP_TEST_API_TOKEN;
+      if (mode === "prompt-secret-disconnect" && !secret) {
+        // Fail loudly if the authored workstation did not supply its secret.
+        process.stderr.write("missing configured token\n", () => process.exit(1));
+      } else if (secret) {
+        process.stderr.write("agent diagnostic token=" + secret + "\n", () => process.exit(0));
+      } else process.exit(0);
       return;
     }
     const notification = JSON.stringify({

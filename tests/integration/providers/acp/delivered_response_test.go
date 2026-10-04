@@ -32,7 +32,7 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"initialize-version", "prompt-result", "custom-prompt-result", "prompt-disconnect"} {
+	for _, mode := range []string{"initialize-version", "prompt-result", "custom-prompt-result", "prompt-disconnect", "prompt-secret-disconnect"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 			defer cancel()
@@ -48,15 +48,23 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("register external peer: %v\n%s", err, diagnostic)
 			}
-			stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
-				"run", "--named", "@you/subagent", "--worker-provider", provider,
-				"--worker-model", "fixture", "--working-root", directory, "Return the fixture result")
+			args := []string{"run", "--named", "@you/subagent", "--worker-provider", provider,
+				"--worker-model", "fixture", "--working-root", directory, "Return the fixture result"}
+			if mode == "prompt-secret-disconnect" {
+				args = []string{"run", "--factory", writeDeliveredSecretFactory(t, directory), "Return the fixture result"}
+			}
+			stdout, stderr, err := invokeCLI(ctx, binary, directory, env, args...)
 			if mode == "initialize-version" {
 				assertDeliveredUnsupportedVersion(t, stdout, stderr, err)
 				return
 			}
-			if mode == "prompt-disconnect" {
+			if mode == "prompt-disconnect" || mode == "prompt-secret-disconnect" {
 				assertDeliveredDisconnect(t, stdout, stderr, err)
+				if mode == "prompt-secret-disconnect" {
+					if strings.Contains(stdout+stderr, deliveredACPSecret) || !strings.Contains(stdout+stderr, "agent diagnostic token=<redacted>") {
+						t.Fatalf("prompt disconnect lost safe configured diagnostic: stdout=%q stderr=%q", stdout, stderr)
+					}
+				}
 				return
 			}
 			if err != nil {
@@ -67,12 +75,51 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 			}
 		})
 	}
+	// The hosted prebuilt target selects this parent by exact name. Keep the
+	// same-daemon witness in that selection, sharing the upstream artifact.
+	t.Run("daemon-recovery", testDeliveredACPDaemonRecoversAfterDisconnect)
+}
+
+const deliveredACPSecret = "delivered-acp-configured-secret-token"
+
+func writeDeliveredSecretFactory(t *testing.T, directory string) string {
+	t.Helper()
+	path := filepath.Join(directory, "redaction.yaml")
+	source := `name: delivered-redaction
+workTypes:
+  - name: task
+    handlingBehavior: [DEFAULT]
+    states:
+      - {name: init, type: INITIAL}
+      - {name: done, type: TERMINAL}
+      - {name: failed, type: FAILED}
+workers:
+  - name: worker
+    type: MODEL_WORKER
+    modelProvider: opencode
+    model: fixture
+    body: Complete one turn.
+workstations:
+  - name: process
+    type: MODEL_WORKSTATION
+    worker: worker
+    env:
+      ACP_TEST_API_TOKEN: ` + deliveredACPSecret + `
+    inputs: [{workType: task, state: init}]
+    outputs: [{workType: task, state: done}]
+    onFailure: [{workType: task, state: failed}]
+    body: Complete one turn.
+`
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // One delivered daemon owns both attempts. The real external peer disconnects
 // on its first launch and succeeds on the next customer request; its launch
 // journal also detects an unwanted retry of the failed request.
-func TestPrebuiltACPDaemonRecoversAfterDisconnect(t *testing.T) {
+func testDeliveredACPDaemonRecoversAfterDisconnect(t *testing.T) {
 	binary := prebuiltCLI(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
@@ -171,7 +218,7 @@ func startDeliveredACPDaemon(t *testing.T, ctx context.Context, binary, director
 		_ = command.Process.Kill()
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
+		case <-time.After(5 * time.Second): //nolint:testsleep // Failure ceiling for joining the killed real OS process; completion comes from command.Wait, not elapsed time.
 			t.Error("delivered daemon did not join after kill")
 		}
 		_ = log.Close()
@@ -266,8 +313,8 @@ func deliveredACPRead(t *testing.T, ctx context.Context, client *http.Client, ur
 	return data
 }
 
-// This is the real EOF failure boundary only. Same-daemon recovery, redaction
-// and cancellation with a live peer remain separate integration criteria.
+// This pins the real EOF failure boundary. Configured redaction is asserted
+// by its selected caller; live peer cancellation remains separate evidence.
 func assertDeliveredDisconnect(t *testing.T, stdout, stderr string, err error) {
 	t.Helper()
 	if err == nil {
