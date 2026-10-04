@@ -161,14 +161,25 @@ func serviceFileDeclarations(unit, name string, file *ast.File) ([]string, []vio
 // is parsed. The configuration selecting that source judges it instead.
 func serviceShapeBaseline(pass *analysis.Pass, unit string) map[string]struct{} {
 	ignored := map[string]bool{}
+	hasTests := false
+	for _, file := range pass.Files {
+		hasTests = hasTests || strings.HasSuffix(serviceSource(pass, unit, file), "_test.go")
+	}
 	for _, name := range pass.IgnoredFiles {
 		ignored[strings.TrimSuffix(unit, "_test")+"/"+filepath.Base(name)] = true
 	}
 	listed := map[string]struct{}{}
 	for key := range baseline() {
 		parts := strings.SplitN(key, "|", 3)
-		if len(parts) == 3 && parts[1] == unit && serviceExcludedTarget(parts[0], parts[2], ignored) {
-			continue
+		if len(parts) == 3 && parts[1] == unit {
+			// The ordinary unit omits tests without listing them in IgnoredFiles.
+			// Only a test-containing unit can judge test container debt stale.
+			if parts[0] == "service-container-go-file" && strings.HasSuffix(parts[2], "_test.go") && !hasTests {
+				continue
+			}
+			if serviceExcludedTarget(parts[0], parts[2], ignored) {
+				continue
+			}
 		}
 		listed[key] = struct{}{}
 	}

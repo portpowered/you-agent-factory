@@ -131,6 +131,59 @@ func TestServiceShapeStaleInterfaceCount(t *testing.T) {
 	}
 }
 
+func TestServiceShapeContainerTestBaseline(t *testing.T) {
+	const unit = "pkg/services/shape/internal/services"
+	const production = "service-container-go-file|" + unit + "|" + unit + "/container.go"
+	const test = "service-container-go-file|" + unit + "|" + unit + "/container_test.go"
+	useFixtures(t, production, test)
+	for _, tc := range []struct {
+		name, testFile string
+		stale          bool
+	}{
+		{"ordinary-unit", "", false},
+		{"test-unit", "container_test.go", false},
+		{"deleted-test-in-test-unit", "remaining_test.go", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sources := map[string]string{"container.go": "package services\n"}
+			if tc.testFile != "" {
+				sources[tc.testFile] = "package services\n"
+			}
+			pass, diagnostics := shapePass(t, unit, sources)
+			ServiceShape.Run(pass)
+			if !tc.stale {
+				if len(*diagnostics) != 0 {
+					t.Fatalf("exact container debt must pass in each applicable unit: %v", *diagnostics)
+				}
+				return
+			}
+			if len(*diagnostics) != 2 ||
+				!strings.Contains((*diagnostics)[0].Message, unit+"/remaining_test.go") ||
+				!strings.Contains((*diagnostics)[1].Message, "stale baseline entry `"+test+"`") {
+				t.Fatalf("test unit must report new and deleted test container debt: %v", *diagnostics)
+			}
+		})
+	}
+}
+
+func TestServiceShapeCompiledContainerTestBaseline(t *testing.T) {
+	const unit = "pkg/services/shapecontainer/internal/services"
+	useFixtures(t,
+		"service-container-go-file|"+unit+"|"+unit+"/container.go",
+		"service-container-go-file|"+unit+"|"+unit+"/container_test.go")
+	results := analysistest.Run(t, analysistest.TestData(), ServiceShape, "m/"+unit)
+	ordinary, tests := false, false
+	for _, result := range results {
+		if result.Pass.Pkg.Path() == "m/"+unit {
+			ordinary = ordinary || len(result.Pass.Files) == 1
+			tests = tests || len(result.Pass.Files) == 2
+		}
+	}
+	if !ordinary || !tests {
+		t.Fatalf("want ordinary and test-containing compiler units: ordinary=%v tests=%v", ordinary, tests)
+	}
+}
+
 func TestServiceShapeBuildConfigurations(t *testing.T) {
 	const unit = "pkg/services/shapetagged"
 	useFixtures(t, "service-root-exported-function|"+unit+"|"+unit+"/tagged.go#New")
