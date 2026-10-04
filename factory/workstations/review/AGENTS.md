@@ -66,10 +66,13 @@ operator-owned (see Step 2.1) and never blocks the PR.
 If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md. This worker starts without the Playwright MCP, so run the browser check in a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. The nested session loads the full browser tooling for that step only. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 
 ### Step 2.1 — Reconcile CI state before commenting
-- CI is guaranteed TERMINAL on arrival: this work item reached you through the
+After merge has been armed or enqueued, Step 6 owns the bounded in-visit wait.
+Queue progress must not take the ordinary pending-CI CONTINUE route below.
+
+- For a never-queued PR, CI is normally terminal on arrival: this work item reached you through the
   `ci-wait` gate, a script workstation that only releases a task into review
   once every required check on the current head is finished (pass or fail).
-  You never need to watch, poll, or wait for CI in this session — read the
+  For ordinary head CI, do not watch or manually poll in this session — read the
   final check states with `gh pr view --json headRefOid,mergeStateStatus,statusCheckRollup`
   and `gh pr checks` and review against them.
 - If you somehow observe required checks that are still `PENDING`, `QUEUED`,
@@ -228,6 +231,9 @@ operator to file separately. From the third review pass onward the decision
 bar is: MERGE unless an unfixed previously-flagged blocker or red required CI
 remains.
 
+After enqueue or auto-merge arming, follow Step 6 inside this visit; do not
+route queue waiting through another review visit.
+
 Route a converged repeat review as a HOLD. If the head has not moved since
 your last pass and you have no NEW independent finding — including the case
 where you are only re-confirming a blocker set the executor was already told
@@ -261,16 +267,27 @@ stuck lane still surfaces without you forcing a rejection.
 
 Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.
 
-### Step 6 - merge if correct. 
+### Step 6 - merge if correct.
 
-If the PR has passing required checks, no content blocker, and GitHub
-mergeable state `MERGEABLE`, merge it with `gh pr merge <n> --squash`, even if
-the head is behind main. Do NOT rebase, and do NOT require checks to re-run
-after a sync, before merging. A merge queue is being enabled; the same command
-enqueues the PR.
+If required checks pass and no content blocker remains, inspect mergeability.
+For `MERGEABLE`, run `gh pr merge <n> --squash`, even when the head is behind main.
+Do not rebase or require checks to rerun merely because the head is behind main.
+The merge command can enqueue the PR or arm auto-merge instead of merging immediately.
 
-Only a real merge conflict (mergeable state `CONFLICTING`) sends the PR back:
-tell the processor to resolve the conflicts, rebase, and push.
+After enqueue or auto-merge arming, hand waiting to ci-wait inside this review visit.
+Run `python factory/scripts/ci-wait.py <lane-name> "PR #<n>"` from this lane's checkout.
+Keep that script invocation running and collect its final JSON and exit status.
+The script owns polling. Do not repeat review or emit CONTINUE solely to await the queue.
+When ci-wait reports `prState: MERGED` and `reason: pr-merged`, follow Step 0 and finish with ACCEPTED.
+Never infer merge from a successful enqueue command, terminal checks, or exit zero alone.
+
+For `pr-ejected`, inspect current queue, checks, and mergeability evidence before deciding the existing failure or rework route.
+For an OPEN terminal-check result during handoff, reconcile merge state before continuing the bounded wait.
+Keep this exceptional reconciliation inside the remaining worker budget. Never mark an OPEN PR ACCEPTED.
+For deadline or dependency uncertainty, report the diagnostic and use the existing external-hold route.
+Do not restart a full polling budget repeatedly inside one review visit.
+
+Only `CONFLICTING` requires conflict resolution, rebase, and a pushed correction from the processor.
 
 #### Required-check routing
 
@@ -292,7 +309,9 @@ field. Set `decision` to:
 
 - `ACCEPTED` only when the PR is complete, approved, and merged;
 - `CONTINUE` = waiting on CI or on external state, with no author change
-  needed. This includes a repeat pass on an unchanged head with no new
+  needed. After enqueue/arming, keep the Step 6 script wait inside this visit;
+  queue waiting alone never emits CONTINUE. Deadline/dependency uncertainty
+  permits an explicit exceptional hold. This includes a repeat pass on an unchanged head with no new
   independent findings, and INCLUDES a red required check whose failing test is
   untouched by the PR diff: rerun the failed jobs once with
   `gh run rerun <id> --failed`, then return `CONTINUE`. If it fails identically
