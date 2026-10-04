@@ -252,8 +252,14 @@ and successful Process.Close. Cleanup uses fresh bounded contexts; failures
 remain incomplete. Owners, retained lease records and per-slot integer holders
 are observed under their existing locks without expiration or state mutation.
 The report records retained constructor callbacks, snapshot count and elapsed
-capture outside spans. Serialization overhead currently records the first
-encoding pass; final encoding and file I/O are additional outside-span costs.
+capture outside spans. The report's serialization field records the first
+encoding pass. The required `<report>.overhead.json` receipt records both
+encoding passes, the final report write, and their total, with the exact report
+SHA256. Retain both files and require the receipt hash to match the report;
+an encoding or write failure fails the selector and leaves the report incomplete.
+Receipt encoding/write and raw test logging are additional outside-span costs,
+explicitly excluded from the receipt's measured span. They must also use the
+same procedure in later baseline/final runs.
 Match this method, instrumented bytes, fixture, cache/environment and barriers
 between later baseline/final runs; do not subtract guessed instrumentation cost.
 
