@@ -3,6 +3,7 @@ package script
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -81,9 +82,11 @@ func (edge *streamingCommandEdge) Request() workerprocess.CommandRequest {
 }
 
 type observationLog struct {
-	mu       sync.Mutex
-	values   []string
-	terminal workers.ScriptResponseEventPayload
+	mu        sync.Mutex
+	values    []string
+	terminal  workers.ScriptResponseEventPayload
+	fragments []workers.ProgressFragment
+	events    []workers.ScriptEvent
 }
 
 func (log *observationLog) Append(value string) {
@@ -225,5 +228,95 @@ func assertEnvCount(t *testing.T, env []string, name string, want int) {
 	}
 	if count != want {
 		t.Fatalf("environment %s count = %d, want %d in %#v", name, count, want, env)
+	}
+}
+
+// Capture before callbacks mutate their arguments, so assertions see emitted facts.
+func (log *observationLog) CaptureProgress(fragment workers.ProgressFragment) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	fragment.Metadata = cloneStringMap(fragment.Metadata)
+	log.fragments = append(log.fragments, fragment)
+}
+
+func (log *observationLog) CaptureEvent(event workers.ScriptEvent) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	event.TraceIDs = append([]string(nil), event.TraceIDs...)
+	event.WorkIDs = append([]string(nil), event.WorkIDs...)
+	if event.Request != nil {
+		payload := *event.Request
+		payload.Args = append([]string(nil), payload.Args...)
+		event.Request = &payload
+	}
+	if event.Response != nil {
+		payload := *event.Response
+		event.Response = &payload
+	}
+	log.events = append(log.events, event)
+}
+
+func observedRequest() workers.RunnerExecutionRequest {
+	request := validRequest()
+	request.Dispatch.Execution.CurrentTick = 23
+	request.Dispatch.Execution.DispatchCreatedTick = 19
+	request.Correlation = workers.ExecutionCorrelation{
+		FactorySessionID: "session-1", RuntimeID: "runtime-1", GenerationID: "generation-1",
+		DispatchID: "dispatch-1", AttemptID: "attempt-1", RequestID: "request-1", TraceID: "trace-1",
+	}
+	return request
+}
+
+func assertObservedValue(t *testing.T, field string, got, want any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s = %#v, want %#v", field, got, want)
+	}
+}
+
+func assertAttributedObservations(t *testing.T, log *observationLog, request workers.RunnerExecutionRequest,
+	started, finished time.Time, command string, args []string, chunks []outputChunk) {
+	t.Helper()
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	assertObservedValue(t, "progress count", len(log.fragments), len(chunks))
+	for i, fragment := range log.fragments {
+		assertObservedValue(t, "progress kind", fragment.Kind, workers.ProgressFragmentKind)
+		assertObservedValue(t, "progress dispatch", fragment.DispatchID, "dispatch-1")
+		assertObservedValue(t, "progress correlation", fragment.Correlation, request.Correlation)
+		assertObservedValue(t, "progress stream", fragment.Type, chunks[i].stream)
+		assertObservedValue(t, "progress payload", fragment.Payload, chunks[i].payload)
+		assertObservedValue(t, "progress metadata", fragment.Metadata, map[string]string{"stream": chunks[i].stream})
+	}
+	assertObservedValue(t, "event count", len(log.events), 2)
+	for i, event := range log.events {
+		assertObservedValue(t, "event dispatch", event.DispatchID, "dispatch-1")
+		assertObservedValue(t, "event request", event.RequestID, "request-1")
+		assertObservedValue(t, "event trace", event.TraceIDs, []string{"trace-1"})
+		assertObservedValue(t, "event work", event.WorkIDs, []string{"work-1"})
+		assertObservedValue(t, "event tick", event.Tick, 23)
+		assertObservedValue(t, "event UTC location", event.EventTime.Location(), time.UTC)
+		if i == 0 {
+			assertObservedValue(t, "request event ID", event.ID, "factory-event/script-request/dispatch-1/script-request/1")
+			assertObservedValue(t, "request event kind", event.Kind, workers.ScriptEventKindRequest)
+			assertObservedValue(t, "request time", event.EventTime, started.UTC())
+			assertObservedValue(t, "request response payload", event.Response, (*workers.ScriptResponseEventPayload)(nil))
+			assertObservedValue(t, "request payload", event.Request, &workers.ScriptRequestEventPayload{
+				Args: args, Attempt: 1, Command: command, DispatchID: "dispatch-1",
+				ScriptRequestID: "dispatch-1/script-request/1", TransitionID: "transition-1",
+			})
+		} else {
+			assertObservedValue(t, "response event ID", event.ID, "factory-event/script-response/dispatch-1/1")
+			assertObservedValue(t, "response event kind", event.Kind, workers.ScriptEventKindResponse)
+			assertObservedValue(t, "response time", event.EventTime, finished.UTC())
+			assertObservedValue(t, "response request payload", event.Request, (*workers.ScriptRequestEventPayload)(nil))
+			if event.Response == nil {
+				t.Fatal("response payload missing")
+			}
+			assertObservedValue(t, "response attempt", event.Response.Attempt, 1)
+			assertObservedValue(t, "response dispatch", event.Response.DispatchID, "dispatch-1")
+			assertObservedValue(t, "response script request", event.Response.ScriptRequestID, "dispatch-1/script-request/1")
+			assertObservedValue(t, "response transition", event.Response.TransitionID, "transition-1")
+		}
 	}
 }

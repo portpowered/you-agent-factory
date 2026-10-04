@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -245,17 +246,19 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 			ExitCode: 0,
 		},
 	}
-	started := time.Date(2026, 7, 26, 20, 0, 0, 0, time.UTC)
+	started := time.Date(2026, 7, 26, 20, 0, 0, 0, time.FixedZone("selected", 3600))
 	clock := &sequenceClock{times: []time.Time{started, started.Add(1500 * time.Millisecond)}}
 	dependencies := Dependencies{
 		CommandRunner: commandEdge,
 		FactoryDocs:   emptyDocs,
 		Now:           clock.Now,
 		Publish: func(fragment workers.ProgressFragment) {
+			observations.CaptureProgress(fragment)
 			observations.Append(fragment.Type + ":" + fragment.Payload)
 			fragment.Metadata["stream"] = "mutated"
 		},
 		Record: func(event workers.ScriptEvent) {
+			observations.CaptureEvent(event)
 			switch event.Kind {
 			case workers.ScriptEventKindRequest:
 				observations.Append("request")
@@ -271,7 +274,7 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	request := validRequest()
+	request := observedRequest()
 	request.EnvVars["CI"] = "true"
 	request.EnvVars["SCRIPT_API_TOKEN"] = "fixture-secret"
 
@@ -295,15 +298,15 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 		t.Fatalf("observation order = %#v, want %#v", got, wantOrder)
 	}
 	assertSuccessfulDiagnostics(t, result, 1500*time.Millisecond)
+	assertAttributedObservations(t, observations, request, started, started.Add(1500*time.Millisecond), "echo", []string{"safe-arg"}, commandEdge.chunks)
 	terminal := observations.Terminal()
 	if terminal.Stdout != "firstsecond\n" || terminal.Stderr != "warn-1warn-2" {
 		t.Fatalf("terminal output = stdout %q stderr %q", terminal.Stdout, terminal.Stderr)
 	}
-	if terminal.ExitCode == nil || *terminal.ExitCode != 0 ||
-		terminal.Outcome != workers.ScriptExecutionOutcomeSucceeded ||
-		terminal.DurationMillis != 1500 {
-		t.Fatalf("terminal response = %#v", terminal)
-	}
+	assertObservedValue(t, "success exit code", terminal.ExitCode, intPointer(0))
+	assertObservedValue(t, "success outcome", terminal.Outcome, workers.ScriptExecutionOutcomeSucceeded)
+	assertObservedValue(t, "success duration", terminal.DurationMillis, int64(1500))
+	assertObservedValue(t, "success failure type", terminal.FailureType, (*workers.ScriptFailureType)(nil))
 	if captured := commandEdge.Request(); !reflect.DeepEqual(captured.Args, []string{"safe-arg"}) {
 		t.Fatalf("command args = %#v, want recorder mutation isolated", captured.Args)
 	}
@@ -403,6 +406,15 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 			wantWorkFailure: workers.WorkFailureTypeInternalServerError,
 		},
 		{
+			name:            "command deadline without context cancellation",
+			result:          workerprocess.CommandResult{Stdout: []byte("partial stdout"), Stderr: []byte("partial stderr")},
+			commandErr:      context.DeadlineExceeded,
+			wantMessage:     "execution timeout",
+			wantOutcome:     workers.ScriptExecutionOutcomeTimedOut,
+			wantFailureType: scriptFailureTypePointer(workers.ScriptFailureTypeTimeout),
+			wantWorkFailure: workers.WorkFailureTypeTimeout,
+		},
+		{
 			name: "missing executable",
 			result: workerprocess.CommandResult{
 				Stdout: []byte("partial stdout"),
@@ -456,15 +468,17 @@ func runCommandFailureCase(
 		result: commandResult,
 		err:    commandErr,
 	}
-	started := time.Date(2026, 7, 26, 21, 0, 0, 0, time.UTC)
+	started := time.Date(2026, 7, 26, 21, 0, 0, 0, time.FixedZone("selected", -7200))
 	scriptRunner, err := New(Config{Command: "missing-tool"}, Dependencies{
 		CommandRunner: commandEdge,
 		FactoryDocs:   emptyDocs,
 		Now:           (&sequenceClock{times: []time.Time{started, started.Add(2 * time.Second)}}).Now,
 		Publish: func(fragment workers.ProgressFragment) {
+			observations.CaptureProgress(fragment)
 			observations.Append(fragment.Type + ":" + fragment.Payload)
 		},
 		Record: func(event workers.ScriptEvent) {
+			observations.CaptureEvent(event)
 			if event.Request != nil {
 				observations.Append("request")
 			}
@@ -478,7 +492,8 @@ func runCommandFailureCase(
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, executeErr := scriptRunner.Execute(t.Context(), validRequest())
+	request := observedRequest()
+	result, executeErr := scriptRunner.Execute(t.Context(), request)
 	var failure *workers.ProviderError
 	if !errors.As(executeErr, &failure) ||
 		failure.Type != wantWorkFailure ||
@@ -490,6 +505,9 @@ func runCommandFailureCase(
 	}
 	assertFailureDiagnostics(t, result.Diagnostics, commandResult, 2*time.Second)
 	assertFailureDiagnostics(t, failure.Diagnostics, commandResult, 2*time.Second)
+	assertObservedValue(t, "failure content", result.Content, strings.TrimSpace(string(commandResult.Stdout)))
+	assertObservedValue(t, "failure timed out", result.Diagnostics.Command.TimedOut, errors.Is(commandErr, context.DeadlineExceeded))
+	assertAttributedObservations(t, observations, request, started, started.Add(2*time.Second), "missing-tool", nil, commandEdge.chunks)
 	assertFailureObservation(t, observations, commandResult, wantOutcome, wantFailureType, wantExitCode)
 
 	result.Diagnostics.Command.Stdout = "mutated"
@@ -518,14 +536,12 @@ func assertFailureObservation(
 		t.Fatalf("observation order = %#v, want %#v", got, wantOrder)
 	}
 	terminal := observations.Terminal()
-	if terminal.Outcome != wantOutcome ||
-		terminal.DurationMillis != 2000 ||
-		!reflect.DeepEqual(terminal.ExitCode, wantExitCode) ||
-		!reflect.DeepEqual(terminal.FailureType, wantFailureType) ||
-		terminal.Stdout != string(result.Stdout) ||
-		terminal.Stderr != string(result.Stderr) {
-		t.Fatalf("terminal response = %#v", terminal)
-	}
+	assertObservedValue(t, "failure outcome", terminal.Outcome, wantOutcome)
+	assertObservedValue(t, "failure duration", terminal.DurationMillis, int64(2000))
+	assertObservedValue(t, "failure exit code", terminal.ExitCode, wantExitCode)
+	assertObservedValue(t, "failure type", terminal.FailureType, wantFailureType)
+	assertObservedValue(t, "failure stdout", terminal.Stdout, string(result.Stdout))
+	assertObservedValue(t, "failure stderr", terminal.Stderr, string(result.Stderr))
 }
 
 func TestRunnerValidationFailureDoesNotRecordOrStartCommand(t *testing.T) {
@@ -715,7 +731,18 @@ func TestRunnerRejectsInvalidInputBeforeCommandExecution(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			commandEdge := &captureCommandRunner{}
-			scriptRunner := newTestRunner(t, test.config, commandEdge)
+			var effects []string
+			deps := testDependencies(commandEdge, func(string) (map[string]string, error) {
+				effects = append(effects, "docs")
+				return nil, nil
+			})
+			deps.Now = func() time.Time { effects = append(effects, "clock"); return time.Time{} }
+			deps.Publish = func(workers.ProgressFragment) { effects = append(effects, "progress") }
+			deps.Record = func(workers.ScriptEvent) { effects = append(effects, "record") }
+			scriptRunner, newErr := New(test.config, deps)
+			if newErr != nil {
+				t.Fatalf("New() error = %v", newErr)
+			}
 			request := validRequest()
 			if test.mutate != nil {
 				test.mutate(&request)
@@ -730,6 +757,11 @@ func TestRunnerRejectsInvalidInputBeforeCommandExecution(t *testing.T) {
 			}
 			if commandEdge.Calls() != 0 {
 				t.Fatalf("command calls = %d, want 0", commandEdge.Calls())
+			}
+			for _, effect := range effects {
+				if effect != "docs" || test.name != "invalid argument template" {
+					t.Fatalf("unexpected effect before input rejection: %s", effect)
+				}
 			}
 		})
 	}
@@ -830,26 +862,26 @@ func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 
 func TestRunnerPreservesPreCanceledContextWithoutCallingEffects(t *testing.T) {
 	commandEdge := &captureCommandRunner{}
-	docsCalls := 0
-	scriptRunner, err := New(
-		Config{Command: "echo"},
-		testDependencies(commandEdge, func(string) (map[string]string, error) {
-			docsCalls++
-			return nil, nil
-		}),
-	)
+	var effects []string
+	scriptRunner, err := New(Config{Command: "echo"}, Dependencies{
+		CommandRunner: commandEdge,
+		FactoryDocs:   func(string) (map[string]string, error) { effects = append(effects, "docs"); return nil, nil },
+		Now:           func() time.Time { effects = append(effects, "clock"); return time.Time{} },
+		Publish:       func(workers.ProgressFragment) { effects = append(effects, "progress") },
+		Record:        func(workers.ScriptEvent) { effects = append(effects, "record") },
+	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = scriptRunner.Execute(ctx, validRequest())
+	result, err := scriptRunner.Execute(ctx, validRequest())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
-	if commandEdge.Calls() != 0 || docsCalls != 0 {
-		t.Fatalf("effects called after pre-cancellation: command=%d docs=%d", commandEdge.Calls(), docsCalls)
-	}
+	assertObservedValue(t, "pre-canceled result", result, workers.RunnerExecutionResult{})
+	assertObservedValue(t, "pre-canceled command calls", commandEdge.Calls(), 0)
+	assertObservedValue(t, "pre-canceled effects", effects, []string(nil))
 }
 
 func TestEngineNeutralInputAndScriptEventHelpersPreserveBoundaryFacts(t *testing.T) {
