@@ -39,7 +39,7 @@ func testDeliveredACPEarlyFailureRecovery(t *testing.T) {
 	client := &http.Client{Timeout: 20 * time.Second}
 	defer client.CloseIdleConnections()
 	first := invokeDeliveredACPWorkflow(t, ctx, client, baseURL, "early-failure")
-	if first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+	if first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed || (first.Result != nil && first.Result.PrimaryResult != nil && len(*first.Result.PrimaryResult) != 0) {
 		t.Fatalf("early failure = %#v", first)
 	}
 	assertDeliveredLaunchJournal(t, journal, "initialize-failure\n")
@@ -118,7 +118,8 @@ func testDeliveredACPFactoryCancelPeer(t *testing.T) {
 	}
 	assertDeliveredSessionStatus(t, ctx, client, baseURL, sessions["survivor"], factoryapi.FactorySessionDurableLifecycleStatusRunning)
 	waitDeliveredRetirementSession(t, ctx, client, baseURL, sessions["cancelled"], factoryapi.FactorySessionDurableLifecycleStatusCanceled)
-	readDeliveredSessionEvents(t, ctx, client, baseURL, sessions["cancelled"])
+	cancelledEvents := readDeliveredSessionEvents(t, ctx, client, baseURL, sessions["cancelled"])
+	assertDeliveredCanceledSession(t, ctx, client, baseURL, sessions["cancelled"], cancelledEvents)
 	assertDeliveredSessionStatus(t, ctx, client, baseURL, sessions["cancelled"], factoryapi.FactorySessionDurableLifecycleStatusCanceled)
 	if _, err := io.WriteString(connections["survivor"], "release\n"); err != nil {
 		t.Fatal(err)
@@ -294,5 +295,19 @@ func waitDeliveredRetirementSession(t *testing.T, ctx context.Context, client *h
 		default:
 			t.Fatalf("selected session = %#v, want terminal %s", session, want)
 		}
+	}
+}
+
+func assertDeliveredCanceledSession(t *testing.T, ctx context.Context, client *http.Client, baseURL, id, events string) {
+	t.Helper()
+	if strings.Contains(events, `"label":"survivor"`) {
+		t.Fatal("A received B's dispatch events")
+	}
+	var result factoryapi.FactorySessionResult
+	if err := json.Unmarshal(deliveredACPRead(t, ctx, client, baseURL+"/factory-sessions/"+id+"/results"), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.SessionId != id || result.SessionStatus == nil || *result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusCanceled || result.ResultStatus == factoryapi.FactorySessionResultStatusFinal || (result.PrimaryResult != nil && len(*result.PrimaryResult) != 0) {
+		t.Fatalf("canceled result = %#v", result)
 	}
 }

@@ -378,11 +378,18 @@ func assertTeardownLogs(t *testing.T, outcome string, logger *teardownLogger) {
 }
 
 // One test-owned channel records all parent-end release, without host I/O.
-type teardownChannel struct{ stdin, stdout *teardownStream }
+type teardownChannel struct {
+	stdin, stdout *teardownStream
+	closes        atomic.Int32
+}
 
-func (*teardownChannel) Attach(*exec.Cmd)                 {}
-func (*teardownChannel) Detach()                          {}
-func (channel *teardownChannel) Close()                   { _ = channel.stdout.Close() }
+func (*teardownChannel) Attach(*exec.Cmd) {}
+func (*teardownChannel) Detach()          {}
+func (channel *teardownChannel) Close() {
+	channel.closes.Add(1)
+	_ = channel.stdin.Close()
+	_ = channel.stdout.Close()
+}
 func (channel *teardownChannel) Requests() io.WriteCloser { return channel.stdin }
 func (channel *teardownChannel) Responses() io.ReadCloser { return channel.stdout }
 
@@ -480,4 +487,49 @@ func assertAttemptOutstanding(t *testing.T, owned *attempt) {
 		t.Fatal("attempt declared resource completion while work was outstanding")
 	default:
 	}
+}
+
+func TestConcurrentRetirementHasOneStopOwner(t *testing.T) {
+	t.Parallel()
+	scheduler := newTeardownScheduler()
+	owner := &Service{scheduler: scheduler, logger: logging.NoopLogger{}}
+	owned := (&provider{}).newAttempt(providers.ExecuteRequest{})
+	stdin, stdout := &teardownStream{}, &teardownStream{}
+	channel := &teardownChannel{stdin: stdin, stdout: stdout}
+	protocolDone := make(chan struct{})
+	handles := &attemptHandles{stdin: stdin, stdout: stdout, stdio: channel,
+		finished: make(chan struct{}), protocolJoined: protocolDone}
+	owned.publish(handles)
+	stopped := make(chan error, 4)
+	go func() { stopped <- owner.stopAttempt(t.Context(), owned) }()
+	grace := awaitTeardownTimer(t, scheduler, 500*time.Millisecond)
+	// All claimants reach the same attempt. Release announces that execution
+	// has ended, but only the original stop owner may dispose the channel.
+	for range 2 {
+		go func() { stopped <- owner.stopAttempt(t.Context(), owned) }()
+	}
+	released := make(chan struct{})
+	go func() { owner.releaseAttempt(owned); close(released) }()
+	close(handles.finished)
+	for range 3 {
+		select {
+		case err := <-stopped:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for stop-result broadcast
+			t.Fatal("retirement claimant stranded")
+		}
+	}
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for release disposition
+		t.Fatal("release stranded behind protocol completion")
+	}
+	if channel.closes.Load() != 1 || stdin.closes.Load() != 1 || stdout.closes.Load() != 1 || !grace.stopped.Load() {
+		t.Fatal("claimants duplicated channel disposal or left an owned timer running")
+	}
+	assertAttemptOutstanding(t, owned)
+	close(protocolDone)
+	awaitAttemptCompletion(t, owned)
 }
