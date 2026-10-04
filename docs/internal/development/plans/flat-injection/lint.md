@@ -45,7 +45,7 @@ The inspected checkers use Go AST parsing, import maps, symbol inventories, and 
 | `cmd/pkgboundarycheck/repository_scan.go`, `findings.go`, `reporting.go`, `command.go` | Aggregate existing scans and diagnostics. | T20/T23 integrate the new finding classes with qualified symbol, function, file, line, rule, and cleanup guidance. |
 | `cmd/pkgboundarycheck/source_classification.go`, `recorded_baseline.go` | Production/test classification and recorded finding suppression exist. | Keep source classes; new policy findings must not be silently admitted into old baselines or omitted by aggregate filters. |
 | `cmd/loggingboundarycheck/main.go`, `prohibitedCalls`, `scanFile` | Globals and production/development logger acquisition are checked; `EnsureLogger`, `NewNop`, and no-op literals are allowed. Whole files currently receive exemptions. | T23 adds exact fallback selectors and no-op literal detection; replace whole-file exemptions with exact operation/symbol allowances for actual canonical leaf implementations. |
-| `cmd/durableruntimeconstructioncheck/main.go`, `calledName`, approved-file maps | Narrow durable rules match unqualified names and exempt old construction files. | T20 resolves imports/local aliases for registered constructors and migrates exact durable provider allowances; remove retired construction allowances with their lane. |
+| `internal/lint/analyzers/construction_durable.go`, resolved declarations, approved-file maps | Durable rules resolve compiler declarations and preserve the existing by-name bans and exact composition exceptions. | `make repolint` runs these rules in the shared multichecker. T20's registered construction migration remains separate; remove retired allowances with their owner lane. |
 | `cmd/servicecyclecheck/graph.go` | Cross-service import graph does not describe object construction or post-construction rebinding. | Retain complementary cycle check; same-owner object cycles belong in focused construction enforcement. |
 | `cmd/pkgmaintcheck/main.go`, `scanFile` | Function/file size and complexity gates are separate concerns. | Preserve them; split scanner logic into focused files/functions rather than add architectural logic to size checks. |
 
@@ -94,12 +94,12 @@ Rollback reverts the affected independently valid slice and its enforcement meta
 
 ## 7. Verification and integration
 
-Existing `Makefile:234` `LINT_TARGETS` includes `pkg-maint`, `pkg-boundary`, `service-cycle-check`, `durable-runtime-construction-check`, and `logging-boundary-check`; targets at lines 985–1038 already invoke their checkers through the canonical lint driver. `.github/workflows/ci.yml:1020` requires complete canonical lint on every PR and main push. Extending these tools automatically reaches that lane; do not add a competing checker execution path.
+`LINT_TARGETS` includes `pkg-maint`, `pkg-boundary`, `service-cycle-check`, `golangci-lint-run`, and `repolint`. Durable construction runs in `cmd/repolint` through `go vet -vettool`, replacing the durable scanner and its target. Logging uses the pinned golangci-lint configuration. Registered T20 construction still runs through `pkg-boundary` pending its analyzer cutover. Backend Lint requires canonical lint on every PR and main push; do not add a competing checker execution path.
 
 Required evidence, per change and per PR, free or bounded local resource use:
 
-- Unit/controlled: `go test ./cmd/pkgboundarycheck ./cmd/durableruntimeconstructioncheck ./cmd/loggingboundarycheck ./cmd/pkgmaintcheck ./cmd/servicecyclecheck`; fixture matrix proves specified matches and exclusions, not application behavior.
-- Static/per PR: `make pkg-boundary durable-runtime-construction-check logging-boundary-check service-cycle-check pkg-maint`; enabled sets have zero violations and stale allowances.
+- Unit/controlled: `go test ./internal/lint/analyzers ./cmd/pkgboundarycheck ./cmd/pkgmaintcheck ./cmd/servicecyclecheck`; fixture matrix proves specified matches and exclusions, not application behavior.
+- Static/per PR: `make golangci pkg-boundary service-cycle-check pkg-maint`; enabled sets have zero violations and stale allowances. `repolint` compiles the canonical tag union; excluded imports are read with `ImportsOnly`, while excluded call bodies require native platform/tag coverage.
 - Static/integrated gate: `make lint`; canonical complete target inventory passes on integrated head.
 - Functional/controlled: governing plan's time, diagnostics, concurrency, cancellation, and replay witnesses prove real injected dependency behavior. Use shared `root.BuildProcess`, explicit scenario Factory Sessions, exact controlled edges, scenario isolation, and canonical bounded runner.
 - Integrated evidence/T22 and independent loopback/VAL01: inspect actual generated Wire origins and run clean environment public journeys; distinguish source enforcement proof from untested runtime edges.
