@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -391,49 +390,4 @@ func buildStory001Binary(t testing.TB) string {
 		t.Skipf("compiled-artifact cell skipped: %s is unset in optional mode; no in-test build fallback", story005ArtifactEnvironment)
 	}
 	return story001Binary.path
-}
-
-func story001EnvironmentWithBrowserStub(t testing.TB, home, cache, endpoint string) []string {
-	t.Helper()
-	environment := story001Environment(home, cache, endpoint)
-	binDir := filepath.Join(home, "story-001-browser-stub")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("create story-001 browser stub directory: %v", err)
-	}
-	goPath, err := exec.LookPath("go")
-	if err != nil {
-		t.Fatalf("locate Go executable for story-001 browser stub: %v", err)
-	}
-	stubName := "xdg-open"
-	if runtime.GOOS == "windows" {
-		stubName = "rundll32.exe"
-	} else if runtime.GOOS == "darwin" {
-		stubName = "open"
-	}
-	stubPath := filepath.Join(binDir, stubName)
-	goBinary, err := os.ReadFile(goPath)
-	if err != nil {
-		t.Fatalf("read Go executable for story-001 browser stub: %v", err)
-	}
-	if err := os.WriteFile(stubPath, goBinary, 0o755); err != nil {
-		t.Fatalf("install story-001 browser stub: %v", err)
-	}
-	return prependStory001Path(environment, binDir)
-}
-
-func prependStory001Path(environment []string, directory string) []string {
-	pathValue := ""
-	filtered := make([]string, 0, len(environment)+1)
-	for _, entry := range environment {
-		key, value, ok := strings.Cut(entry, "=")
-		if ok && strings.EqualFold(key, "PATH") {
-			pathValue = value
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	if pathValue == "" {
-		pathValue = os.Getenv("PATH")
-	}
-	return append(filtered, "PATH="+directory+string(os.PathListSeparator)+pathValue)
 }

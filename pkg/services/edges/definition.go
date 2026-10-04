@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
+
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -224,6 +226,8 @@ type Edges struct {
 	RecordingsWorkSnapshotReaderObserver func(interface {
 		ReadWorkSnapshot(context.Context, string) (work.ReadSnapshot, error)
 	})
+	// ProcessLogger is an optional host override; nil means omitted.
+	ProcessLogger                    *zap.Logger
 	Clock                            platformclock.Source
 	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
@@ -631,6 +635,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.SystemInitializationInspectPath != nil {
 		defaults.SystemInitializationInspectPath = replacements.SystemInitializationInspectPath
+	}
+	if replacements.ProcessLogger != nil {
+		defaults.ProcessLogger = replacements.ProcessLogger
 	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock

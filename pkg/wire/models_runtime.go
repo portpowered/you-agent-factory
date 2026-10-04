@@ -324,8 +324,8 @@ func provideModelSlotFacts(state *modelswire.SlotState, scopes modelswire.Runtim
 	return modelswire.NewSlotFacts(scopes, assets, state)
 }
 
-func provideModelHostLogger() modelswire.HostDiagnosticLogger {
-	return modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop()))
+func provideModelHostLogger(logger *zap.Logger) modelswire.HostDiagnosticLogger {
+	return modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(logger))
 }
 
 func provideModelHostMetrics(edges serviceedges.Edges) modelswire.HostMetricsRecorder {
@@ -371,9 +371,9 @@ func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeSco
 	launcher modelswire.HostProcessLauncher, hostHTTP modelswire.HostHTTPDoer, clock modelswire.HostClock,
 	localRuntime modelswire.LocalRuntime, resources *modelswire.ResourceLimiter, now modelNow,
 	logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder, evidence modelswire.RuntimeEvidenceRecorder,
-	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform) (models.Service, error) {
+	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform, backend *zap.Logger) (models.Service, error) {
 	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime, resources,
-		zap.NewNop(), now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
+		backend, now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		logger, metrics, modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), evidence,
 		edges.ModelResolveHuggingFaceRevision, resolver, platform)
 }
