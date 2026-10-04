@@ -373,7 +373,7 @@ func TestModelsCLIInputFileReaderDefaultBoundsContent(t *testing.T) {
 func TestProvideSessionsCLIServiceReturnsConstructedAdapter(t *testing.T) {
 	t.Parallel()
 
-	standard, err := provideStandardCLIHTTPProtocol()
+	standard, err := provideStandardCLIHTTPProtocol(platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}

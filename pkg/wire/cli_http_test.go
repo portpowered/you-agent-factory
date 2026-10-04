@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -21,16 +22,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 )
 
 func TestCLIHTTPProfilesPreserveCommandTimeouts(t *testing.T) {
 	t.Parallel()
-	standard, err := provideStandardCLIHTTPProtocol()
+	standard, err := provideStandardCLIHTTPProtocol(platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	extended, err := provideExtendedCLIHTTPProtocol()
+	extended, err := provideExtendedCLIHTTPProtocol(platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +46,7 @@ func TestCLIHTTPProfilesPreserveCommandTimeouts(t *testing.T) {
 
 func TestModelsPullCLIHTTPProfileHasNoFixedClientTimeout(t *testing.T) {
 	t.Parallel()
-	pull, err := provideModelsPullCLIHTTPProtocol()
+	pull, err := provideModelsPullCLIHTTPProtocol(platformclock.Real{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,6 +56,79 @@ func TestModelsPullCLIHTTPProfileHasNoFixedClientTimeout(t *testing.T) {
 	if pull.timeout != 0 {
 		t.Fatalf("Models pull timeout = %s, want no fixed client timeout", pull.timeout)
 	}
+}
+
+func TestCLIHTTPProfilesObserveIndependentSelectedSources(t *testing.T) {
+	t.Parallel()
+	profiles := []struct {
+		name  string
+		build func(platformclock.Source) (clihttp.Protocol, error)
+	}{
+		{"standard", func(source platformclock.Source) (clihttp.Protocol, error) {
+			profile, err := provideStandardCLIHTTPProtocol(source)
+			return profile.Protocol, err
+		}},
+		{"extended", func(source platformclock.Source) (clihttp.Protocol, error) {
+			profile, err := provideExtendedCLIHTTPProtocol(source)
+			return profile.Protocol, err
+		}},
+		{"streaming", func(source platformclock.Source) (clihttp.Protocol, error) {
+			profile, err := provideStreamingCLIHTTPProtocol(source)
+			return profile.Protocol, err
+		}},
+		{"Models pull", func(source platformclock.Source) (clihttp.Protocol, error) {
+			profile, err := provideModelsPullCLIHTTPProtocol(source)
+			return profile.Protocol, err
+		}},
+		{"watch", func(source platformclock.Source) (clihttp.Protocol, error) {
+			profile, err := provideWatchCLIHTTPProtocol(source)
+			return profile.Protocol, err
+		}},
+	}
+	for _, profile := range profiles {
+		t.Run(profile.name, func(t *testing.T) {
+			t.Parallel()
+			start := time.Unix(100, 0)
+			// Each request observes its own two readings, without network or
+			// replacing the real HTTP client's deadline authority.
+			sources := []*cliHTTPObservationSource{
+				{values: []time.Time{start, start.Add(37 * time.Millisecond)}},
+				{values: []time.Time{start, start}},
+			}
+			protocols := make([]clihttp.Protocol, len(sources))
+			for i, source := range sources {
+				protocol, err := profile.build(source)
+				if err != nil {
+					t.Fatal(err)
+				}
+				protocols[i] = protocol
+			}
+			for i, protocol := range protocols {
+				result, err := protocol.GetJSON(context.Background(), "unsupported://factory.test/work", nil)
+				var transportErr *url.Error
+				var httpErr *clihttp.HTTPError
+				if !errors.As(err, &transportErr) || !errors.As(err, &httpErr) ||
+					!errors.Is(err, transportErr.Err) || httpErr.Stage != "transport" {
+					t.Fatalf("error = %v, want preserved transport cause and stage", err)
+				}
+				want := sources[i].values[1].Sub(sources[i].values[0])
+				if result.Duration != want || result.HTTP != nil || sources[i].index != 2 {
+					t.Fatalf("request %d: result = %#v, readings = %d, want duration %s", i, result, sources[i].index, want)
+				}
+			}
+		})
+	}
+}
+
+type cliHTTPObservationSource struct {
+	values []time.Time
+	index  int
+}
+
+func (source *cliHTTPObservationSource) Now() time.Time {
+	value := source.values[source.index]
+	source.index++
+	return value
 }
 
 func TestModelAssetHTTPClientAllowsBodyPastFormerWholeTransferBudget(t *testing.T) {
@@ -99,9 +174,9 @@ func TestMetricsCLICompletesReportAfterStandardCLITimeout(t *testing.T) {
 
 func assertMetricsCLIHTTPTimeoutPolicies(t *testing.T) {
 	t.Helper()
-	standard, err := provideStandardCLIHTTPProtocol()
+	standard, err := provideStandardCLIHTTPProtocol(platformclock.Real{})
 	if err != nil {
-		t.Fatalf("provideStandardCLIHTTPProtocol(): %v", err)
+		t.Fatalf("provideStandardCLIHTTPProtocol(platformclock.Real{}): %v", err)
 	}
 	if standard.timeout != 10*time.Second {
 		t.Fatalf("standard CLI timeout = %s, want 10s", standard.timeout)

@@ -921,7 +921,7 @@ func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing
 	if injected == nil {
 		t.Fatal("provideWorkersProviderCommandRunner(injected) = nil")
 	}
-	defaultRunner, err := provideWorkersProviderCommandRunner(serviceedges.Edges{})
+	defaultRunner, err := provideWorkersProviderCommandRunner(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideWorkersProviderCommandRunner(default) error = %v", err)
 	}

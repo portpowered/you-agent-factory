@@ -635,11 +635,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	wireStandardCLIHTTPProtocol, err := provideStandardCLIHTTPProtocol()
+	wireStandardCLIHTTPProtocol, err := provideStandardCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}
-	wireModelsPullCLIHTTPProtocol, err := provideModelsPullCLIHTTPProtocol()
+	wireModelsPullCLIHTTPProtocol, err := provideModelsPullCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}
@@ -668,7 +668,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v165)
 	localSessionsCLIService := provideLocalSessionsCLIService(factorysessionsService)
 	payloadFileReader := provideSubmitPayloadReader()
-	wireExtendedCLIHTTPProtocol, err := provideExtendedCLIHTTPProtocol()
+	wireExtendedCLIHTTPProtocol, err := provideExtendedCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}
@@ -701,11 +701,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	listWorkOperation := provideListWorkOperation(wireStandardCLIHTTPProtocol, listRequestPreparation)
 	listHumanApprovalsOperation := provideListHumanApprovalsOperation(wireStandardCLIHTTPProtocol)
 	showHumanApprovalOperation := provideShowHumanApprovalOperation(wireStandardCLIHTTPProtocol)
-	wireWatchCLIHTTPProtocol, err := provideWatchCLIHTTPProtocol()
+	wireWatchCLIHTTPProtocol, err := provideWatchCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}
-	v169 := provideWatchReconnectWait()
+	v169 := provideWatchReconnectWait(timerSource)
 	watchWorkOperation := provideWatchWorkOperation(wireWatchCLIHTTPProtocol, v169)
 	showWorkOperation := provideShowWorkOperation(wireStandardCLIHTTPProtocol)
 	moveWorkOperation := provideMoveWorkOperation(wireExtendedCLIHTTPProtocol)
@@ -714,7 +714,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v171 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol)
 	v172 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	v173 := provideReadWorkerSessionOperation(wireStandardCLIHTTPProtocol)
-	wireStreamingCLIHTTPProtocol, err := provideStreamingCLIHTTPProtocol()
+	wireStreamingCLIHTTPProtocol, err := provideStreamingCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}

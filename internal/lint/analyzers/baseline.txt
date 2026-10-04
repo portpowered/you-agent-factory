@@ -125,7 +125,6 @@ service-construction-test|pkg/transports/acp/internal/stdio|pkg/services/chat_se
 service-construction-test|tests/functional/recordings/root_composition_test|pkg/services/recordings/transports/cli.New
 service-construction-test|tests/functional/sessions_test|pkg/services/factory_sessions/wire.NewLiveChangeCoordinator
 service-construction-test|tests/functional/workers/inference_test|pkg/services/recordings/wire.NewWorkerRecordingFileWriter
-service-construction-test|tests/functional/workers/invoke_continue|pkg/services/providers/wire.NewService
 service-construction|pkg/services/factory_sessions/internal/execution|pkg/services/factory_runtime.NewWorkflowSourceReader
 service-construction|pkg/services/factory_sessions/internal/sessionservice|pkg/services/work.NewInvocationPolicyService
 transport-concurrency|pkg/transports/acp/internal/stdio|make(chan)
@@ -1868,8 +1867,6 @@ testsleep-deadline-test|pkg/platform/metrics|pkg/platform/metrics/runtime_metric
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_cancellation_unix_test.go::TestExecCommandRunner_ContextCancelReturnsWhenDescendantKeepsPipeOpen::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::2
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::1
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::2
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_grace_unix_test.go::reapCommandHelperLeader::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_test.go::TestExecCommandRunner_ContextDeadlineReturnsSystemError::deadline::1
 testsleep-deadline-test|pkg/platform/taskgroup|pkg/platform/taskgroup/task_group_test.go::TestGroupDoneClosesAfterEveryTaskReturnsRegardlessOfOutcome::deadline::1
