@@ -496,6 +496,7 @@ func provideFactoryRuntimeRoot(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflowDefinitions,
 	clock factoryruntime.Clock,
+	scheduler platformclock.TimerSource,
 ) (factorysessionwire.FactoryRuntimeRoot, error) {
 	return factoryruntimewire.NewService(
 		newID,
@@ -506,5 +507,6 @@ func provideFactoryRuntimeRoot(
 			return factoryruntime.ErrNotRunning
 		},
 		nil,
+		scheduler,
 	)
 }

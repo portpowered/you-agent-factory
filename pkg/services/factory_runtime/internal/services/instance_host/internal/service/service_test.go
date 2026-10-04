@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 )
 
@@ -23,7 +24,7 @@ func TestNewConstructsInertHost(t *testing.T) {
 	t.Parallel()
 
 	clock := clockwork.NewFakeClock()
-	host, err := New(instancehost.Dependencies{Clock: clock})
+	host, err := New(instancehost.Dependencies{Clock: clock, Scheduler: platformclock.Real{}})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

@@ -345,7 +345,7 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 	t.Parallel()
 
 	clock := clockwork.NewFakeClock()
-	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
+	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock, Scheduler: platformclock.Real{}})
 	if err != nil {
 		t.Fatalf("instancehostwire.New() error = %v", err)
 	}
@@ -365,6 +365,7 @@ func TestBoundRuntimeServiceUsesPublishedEngineForWideOperations(t *testing.T) {
 		clockwork.NewFakeClock(),
 		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
 		nil,
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
@@ -394,6 +395,7 @@ func TestBoundRuntimeServiceUsesPublishedEngineForLegacyWorkSnapshot(t *testing.
 		clockwork.NewFakeClock(),
 		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
 		nil,
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
@@ -561,6 +563,7 @@ func newBoundControlRoot(t *testing.T) *Root {
 		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)

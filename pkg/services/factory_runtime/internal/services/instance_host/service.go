@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
@@ -16,7 +17,8 @@ var ErrInvalidDependencies = errors.New("factory runtime instance host dependenc
 // Dependencies are fixed when Factory Runtime composes the parent-private
 // instance host. They never cross the peer-facing Runtime root boundary.
 type Dependencies struct {
-	Clock factoryruntime.Clock
+	Clock     factoryruntime.Clock
+	Scheduler platformclock.TimerSource
 }
 
 // ReplaceRequest configures hosted-runtime replacement through instance_host.

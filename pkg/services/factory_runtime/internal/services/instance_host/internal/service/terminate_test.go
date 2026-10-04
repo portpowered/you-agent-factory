@@ -126,7 +126,7 @@ func TestStopActiveHostedInstanceStopsSidecarsRunLoopAndFinalizesArtifacts(t *te
 
 	clock := clockwork.NewFakeClockAt(finishedAt)
 	host.clock = clock
-	host.lifecycle, err = factoryhost.NewLifecycleService(clock)
+	host.lifecycle, err = factoryhost.NewLifecycleService(clock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("NewLifecycleService() error = %v", err)
 	}

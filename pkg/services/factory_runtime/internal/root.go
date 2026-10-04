@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
@@ -68,6 +69,7 @@ func NewRoot(
 	clock factoryruntime.Clock,
 	workersPublisher dispatchplanning.WorkersPublisher,
 	workersCanceler dispatchplanning.WorkersCanceler,
+	scheduler platformclock.TimerSource,
 ) (*Root, error) {
 	if newID == nil {
 		return nil, fmt.Errorf("construct Factory Runtime: ID generator is required")
@@ -78,7 +80,7 @@ func NewRoot(
 	if workersPublisher == nil {
 		return nil, fmt.Errorf("construct Factory Runtime: Workers publisher is required")
 	}
-	instanceHost, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
+	instanceHost, err := instancehostwire.New(instancehost.Dependencies{Clock: clock, Scheduler: scheduler})
 	if err != nil {
 		return nil, err
 	}

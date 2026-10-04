@@ -344,7 +344,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	factoryRuntimeRoot, err := provideFactoryRuntimeRoot(factoryIDGenerator, javaScriptWorkflowDefinitions, clock)
+	factoryRuntimeRoot, err := provideFactoryRuntimeRoot(factoryIDGenerator, javaScriptWorkflowDefinitions, clock, timerSource)
 	if err != nil {
 		return nil, err
 	}

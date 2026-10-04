@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
@@ -15,6 +16,7 @@ import (
 // Factory Runtime parent.
 type Host struct {
 	clock     factoryruntime.Clock
+	scheduler platformclock.TimerSource
 	lifecycle *factoryhost.LifecycleService
 
 	mu      sync.Mutex
@@ -30,12 +32,13 @@ func New(dependencies instancehost.Dependencies) (instancehost.Service, error) {
 	if dependencies.Clock == nil {
 		return nil, fmt.Errorf("%w: clock is required", instancehost.ErrInvalidDependencies)
 	}
-	lifecycle, err := factoryhost.NewLifecycleService(dependencies.Clock)
+	lifecycle, err := factoryhost.NewLifecycleService(dependencies.Clock, dependencies.Scheduler)
 	if err != nil {
 		return nil, err
 	}
 	return &Host{
 		clock:     dependencies.Clock,
+		scheduler: dependencies.Scheduler,
 		lifecycle: lifecycle,
 		handles:   make(map[string]*factoryhost.Handle),
 	}, nil

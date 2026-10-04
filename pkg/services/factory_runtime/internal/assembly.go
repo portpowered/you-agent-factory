@@ -242,7 +242,7 @@ func (a *Assembly) Assemble(
 		)
 	}
 	attachInvocationScheduleFactory(ctx, automationService, instance)
-	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
+	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock, Scheduler: a.metricsClock})
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}

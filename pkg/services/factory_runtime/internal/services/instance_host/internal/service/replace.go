@@ -46,6 +46,7 @@ func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.RuntimeR
 		serviceCtx,
 		replacementBundle,
 		h.clock,
+		h.scheduler,
 		adaptSidecarStarter(req.AttachSidecars),
 		req.AttachSidecarsInServiceMode,
 	)

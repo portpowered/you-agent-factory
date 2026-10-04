@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -27,7 +28,7 @@ func TestMain(m *testing.M) {
 
 func newTestHost(t *testing.T) *Host {
 	t.Helper()
-	host, err := New(instancehost.Dependencies{Clock: clockwork.NewFakeClock()})
+	host, err := New(instancehost.Dependencies{Clock: clockwork.NewFakeClock(), Scheduler: platformclock.Real{}})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -201,7 +202,15 @@ func TestStartStartsOneRunLoopAndWaitForStartObservesReadiness(t *testing.T) {
 func TestWaitForStartFailureCleansUpHandleWithoutOrphan(t *testing.T) {
 	t.Parallel()
 
-	host := newTestHost(t)
+	scheduler := &observedReadinessScheduler{
+		TimerSource: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond),
+		created:     make(chan time.Duration, 2),
+	}
+	service, err := New(instancehost.Dependencies{Clock: clockwork.NewFakeClock(), Scheduler: scheduler})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := service.(*Host)
 	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
@@ -217,11 +226,20 @@ func TestWaitForStartFailureCleansUpHandleWithoutOrphan(t *testing.T) {
 		t.Fatalf("Start() = (%v, %v), want hosted handle", handle, err)
 	}
 
-	readinessCtx, cancelReadiness := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	readinessCtx, cancelReadiness := context.WithCancel(context.Background())
 	defer cancelReadiness()
-	waitErr := host.WaitForStart(readinessCtx, handle)
-	if waitErr == nil {
-		t.Fatal("WaitForStart() error = nil, want readiness failure")
+	result := make(chan error, 1)
+	go func() { result <- host.WaitForStart(readinessCtx, handle) }()
+	for _, want := range []time.Duration{time.Second, 10 * time.Millisecond} {
+		if got := <-scheduler.created; got != want {
+			t.Fatalf("readiness timer = %s, want %s", got, want)
+		}
+	}
+	// No logical scheduler advance: caller cancellation must stop and join the
+	// selected handle directly, rather than waiting for the next readiness poll.
+	cancelReadiness()
+	if waitErr := <-result; !errors.Is(waitErr, context.Canceled) {
+		t.Fatalf("WaitForStart() error = %v, want caller cancellation", waitErr)
 	}
 	if len(host.handles) != 0 {
 		t.Fatalf("handles after failed readiness = %d, want no orphaned registry entry", len(host.handles))
@@ -230,6 +248,17 @@ func TestWaitForStartFailureCleansUpHandleWithoutOrphan(t *testing.T) {
 	if !ok || !concrete.Completed() {
 		t.Fatal("failed readiness should leave a completed handle after cleanup stop")
 	}
+}
+
+type observedReadinessScheduler struct {
+	platformclock.TimerSource
+	created chan time.Duration
+}
+
+func (s *observedReadinessScheduler) NewTimer(duration time.Duration) platformclock.Timer {
+	timer := s.TimerSource.NewTimer(duration)
+	s.created <- duration
+	return timer
 }
 
 func TestWaitForStartRejectsInvalidHandle(t *testing.T) {

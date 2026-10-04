@@ -63,7 +63,7 @@ func (h *Host) WaitForStart(ctx context.Context, handle factoryruntime.RuntimeRu
 	if !ok || concrete == nil {
 		return fmt.Errorf("factory runtime host requires a runtime handle")
 	}
-	if err := factoryhost.WaitForStart(ctx, concrete); err != nil {
+	if err := factoryhost.WaitForStart(ctx, concrete, h.scheduler); err != nil {
 		h.removeHandle(concrete)
 		stopErr := h.lifecycle.Stop(concrete)
 		return errors.Join(err, stopErr)

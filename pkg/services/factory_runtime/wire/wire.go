@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
@@ -41,6 +42,7 @@ func NewService(
 	clock factoryruntime.Clock,
 	workersPublisher WorkersPublisher,
 	workersCanceler WorkersCanceler,
+	scheduler platformclock.TimerSource,
 ) (factoryruntime.Root, error) {
 	var publisher dispatchplanning.WorkersPublisher
 	if workersPublisher != nil {
@@ -64,6 +66,7 @@ func NewService(
 		clock,
 		publisher,
 		canceler,
+		scheduler,
 	)
 	if err != nil {
 		return nil, err

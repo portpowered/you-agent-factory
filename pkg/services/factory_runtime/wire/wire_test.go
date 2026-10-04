@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -197,6 +198,7 @@ func (in newServiceInputs) callNewService() (factoryruntime.Service, error) {
 		in.clock,
 		in.workersPublisher,
 		in.workersCanceler,
+		platformclock.Real{},
 	)
 }
 

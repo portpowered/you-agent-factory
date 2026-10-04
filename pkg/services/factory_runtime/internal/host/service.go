@@ -4,20 +4,25 @@ import (
 	"context"
 	"fmt"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 // LifecycleService is the host implementation of the public Factory Runtime
 // lifecycle contract.
 type LifecycleService struct {
-	clock factory.Clock
+	clock     factory.Clock
+	scheduler platformclock.TimerSource
 }
 
-func NewLifecycleService(clock factory.Clock) (*LifecycleService, error) {
+func NewLifecycleService(clock factory.Clock, scheduler platformclock.TimerSource) (*LifecycleService, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("construct Factory Runtime lifecycle service: clock is required")
 	}
-	return &LifecycleService{clock: clock}, nil
+	if scheduler == nil {
+		return nil, fmt.Errorf("construct Factory Runtime lifecycle service: scheduler is required")
+	}
+	return &LifecycleService{clock: clock, scheduler: scheduler}, nil
 }
 
 func (*LifecycleService) Start(ctx context.Context, instance factory.RuntimeRecord) (factory.RuntimeRun, error) {
@@ -28,12 +33,12 @@ func (*LifecycleService) Start(ctx context.Context, instance factory.RuntimeReco
 	return Start(ctx, bundle), nil
 }
 
-func (*LifecycleService) WaitForStart(ctx context.Context, handle factory.RuntimeRun) error {
+func (s *LifecycleService) WaitForStart(ctx context.Context, handle factory.RuntimeRun) error {
 	concrete, ok := handle.(*Handle)
 	if !ok || concrete == nil {
 		return fmt.Errorf("factory runtime host requires a runtime handle")
 	}
-	return WaitForStart(ctx, concrete)
+	return WaitForStart(ctx, concrete, s.scheduler)
 }
 
 func (s *LifecycleService) Stop(handle factory.RuntimeRun) error {

@@ -161,37 +161,41 @@ type runtimeMetricsObserver struct {
 }
 
 // WaitForStart blocks until the hosted runtime reports running readiness or fails early.
-func WaitForStart(ctx context.Context, handle *Handle) error {
+func WaitForStart(ctx context.Context, handle *Handle, scheduler platformclock.TimerSource) error {
 	if handle == nil || handle.Bundle == nil {
 		return fmt.Errorf("runtime handle is required")
 	}
 
-	startCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
+	deadline := scheduler.NewTimer(time.Second)
+	defer deadline.Stop()
+	poll := scheduler.NewTimer(10 * time.Millisecond)
+	defer func() { poll.Stop() }()
 
 	for {
 		select {
-		case <-startCtx.Done():
+		case <-ctx.Done():
 			if handle.Completed() {
 				return startupResult(handle.Result())
 			}
-			return startCtx.Err()
+			return ctx.Err()
+		case <-deadline.C():
+			if handle.Completed() {
+				return startupResult(handle.Result())
+			}
+			return context.DeadlineExceeded
 		case <-handle.RunDone:
 			return startupResult(handle.Result())
-		case <-ticker.C:
+		case <-poll.C():
 			// Startup readiness is deliberately checked through the aggregate
 			// engine boundary. Unlike lifecycle telemetry, this handshake must
 			// observe the hosted engine's complete readiness state before the
 			// transport component is allowed to start.
 			snap, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
-			if err != nil {
-				continue
-			}
-			if snap.FactoryState == string(interfaces.FactoryStateRunning) {
+			if err == nil && snap.FactoryState == string(interfaces.FactoryStateRunning) {
 				return nil
 			}
+			poll.Stop()
+			poll = scheduler.NewTimer(10 * time.Millisecond)
 		}
 	}
 }

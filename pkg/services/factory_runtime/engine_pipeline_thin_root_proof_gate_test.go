@@ -13,6 +13,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -171,6 +172,7 @@ func runPublishedServiceBoundaryProof(t *testing.T) {
 			) (workers.WorkstationDispatchCancelResult, error) {
 				return workers.WorkstationDispatchCancelResult{}, nil
 			},
+			platformclock.Real{},
 		)
 		if err != nil {
 			t.Fatalf("NewService() error = %v", err)
