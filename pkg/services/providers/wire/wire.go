@@ -105,9 +105,6 @@ type wireOptions struct {
 	agyCommandRunner   providerservice.CommandRunner
 	agyPTYEffect       AgyEffect
 	acpIntegrations    []providers.ACPIntegration
-	commandFactory     platformprocess.CommandFactory
-	executableLocator  platformprocess.ExecutableLocator
-	stdioPipes         platformprocess.StdioPipeFactory
 	registrations      ProviderRegistrations
 }
 
@@ -125,17 +122,6 @@ func WithRegistrations(registrations ...Registration) Option {
 	return registrationsOption{registrations: registrations}
 }
 
-type executableLocatorOption struct {
-	locator platformprocess.ExecutableLocator
-}
-
-func (o executableLocatorOption) apply(opts *wireOptions) { opts.executableLocator = o.locator }
-
-// WithExecutableLocator injects ACP executable preflight discovery.
-func WithExecutableLocator(locator platformprocess.ExecutableLocator) Option {
-	return executableLocatorOption{locator: locator}
-}
-
 type acpIntegrationsOption struct{ integrations []providers.ACPIntegration }
 
 func (o acpIntegrationsOption) apply(opts *wireOptions) {
@@ -145,31 +131,6 @@ func (o acpIntegrationsOption) apply(opts *wireOptions) {
 // WithACPIntegrations contributes configured ACP identities and commands.
 func WithACPIntegrations(integrations ...providers.ACPIntegration) Option {
 	return acpIntegrationsOption{integrations: integrations}
-}
-
-type commandFactoryOption struct {
-	factory platformprocess.CommandFactory
-}
-
-func (o commandFactoryOption) apply(opts *wireOptions) { opts.commandFactory = o.factory }
-
-// WithCommandFactory injects the only process-creation edge used by ACP.
-func WithCommandFactory(factory platformprocess.CommandFactory) Option {
-	return commandFactoryOption{factory: factory}
-}
-
-type stdioPipesOption struct {
-	factory platformprocess.StdioPipeFactory
-}
-
-func (o stdioPipesOption) apply(opts *wireOptions) { opts.stdioPipes = o.factory }
-
-// WithStdioPipeFactory injects the parent-owned ACP standard-stream channel
-// factory. Canonical composition selects it here; this package never defaults
-// it, so an ACP execution that reached Providers without one reports a missing
-// channel dependency instead of opening a host pipe from inside the service.
-func WithStdioPipeFactory(factory platformprocess.StdioPipeFactory) Option {
-	return stdioPipesOption{factory: factory}
 }
 
 // CatalogProbeOperation is the completed catalog readiness projection.
@@ -281,8 +242,18 @@ func WithWorkersCommandRunner(runner any) Option {
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
 // The caller supplies the completed readiness projection; this boundary never
-// substitutes an identity projection for a missing effect.
-func NewService(probe CatalogProbeOperation, clock platformclock.Source, scheduler platformclock.TimerSource, logger logging.Logger, options ...Option) (providers.Service, error) {
+// substitutes an identity projection for a missing effect. ACP process,
+// executable discovery and standard streams are supplied directly by composition.
+func NewService(
+	probe CatalogProbeOperation,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	logger logging.Logger,
+	commandFactory platformprocess.CommandFactory,
+	executableLocator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
+	options ...Option,
+) (providers.Service, error) {
 	var config wireOptions
 	for _, option := range options {
 		if option != nil {
@@ -313,9 +284,9 @@ func NewService(probe CatalogProbeOperation, clock platformclock.Source, schedul
 		scheduler,
 		config.agyPTYEffect,
 		acp,
-		config.commandFactory,
-		config.executableLocator,
-		config.stdioPipes,
+		commandFactory,
+		executableLocator,
+		stdioPipes,
 		logger,
 		config.registrations...,
 	)

@@ -124,7 +124,7 @@ func newRoutedOperatorSettingsRoot(t *testing.T, fixture *sharedOperatorSettings
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

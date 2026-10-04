@@ -147,7 +147,7 @@ func TestNewServiceRejectsManifestIntegrationPermissionBypassMismatch(t *testing
 	_, err := NewService(IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		WithRegistrations(Registration{
 			Manifest:    manifest,
 			Integration: integration,

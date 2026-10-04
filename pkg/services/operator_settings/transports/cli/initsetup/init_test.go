@@ -199,7 +199,7 @@ func testConfigService() operatorsettings.Service {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		panic(err)
 	}

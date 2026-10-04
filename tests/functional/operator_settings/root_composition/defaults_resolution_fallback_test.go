@@ -39,7 +39,7 @@ func TestResolveFromHomeFallbackPreservesAcceptedSemantics(t *testing.T) {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

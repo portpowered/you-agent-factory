@@ -19,7 +19,7 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -57,7 +57,7 @@ func TestRootCatalogDelegation_RegistersCodexAdapter(t *testing.T) {
 	service, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -85,7 +85,7 @@ func TestProvidersRootWireBoundaryPublishesExternalRegistrationThroughService(t 
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		providerswire.WithRegistrations(providerswire.Registration{
 			Manifest: providerswire.Manifest{
 				ID:                           "sealed-external",
@@ -146,7 +146,7 @@ func TestProvidersRootWireBoundaryRejectsExternalBypassBeforeInvocation(t *testi
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		providerswire.WithRegistrations(providerswire.Registration{
 			Manifest: providerswire.Manifest{
 				ID:                         "sealed-incapable",
@@ -191,7 +191,7 @@ func TestProvidersRootWireBoundaryRejectsNegotiatedExternalBypassBeforeInvocatio
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		providerswire.WithRegistrations(providerswire.Registration{
 			Manifest: providerswire.Manifest{
 				ID:                         string(integration.identity),
@@ -230,7 +230,7 @@ func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidatio
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providers/wire.NewService() error = %v", err)
 	}
@@ -267,7 +267,7 @@ func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidatio
 			service, constructErr := providerswire.NewService(providerswire.IdentityCatalogProbe,
 				platformclock.Real{},
 				platformclock.Real{},
-				logging.NoopLogger{},
+				logging.NoopLogger{}, nil, nil, nil,
 				providerswire.WithRegistrations(test.registration))
 			if constructErr == nil || service != nil || !strings.Contains(constructErr.Error(), test.want) {
 				t.Fatalf("NewService(%s) = (%#v, %v), want nil service and error containing %q", test.name, service, constructErr, test.want)

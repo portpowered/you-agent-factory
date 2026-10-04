@@ -165,7 +165,7 @@ func newSelectionRoot(t *testing.T, entries ...providers.Descriptor) providers.S
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		providerswire.WithCatalogDescriptors(entries...))
 	if err != nil {
 		t.Fatalf("providerswire.NewService() = %v", err)

@@ -167,9 +167,6 @@ func provideConfiguredProvidersService(
 	}
 	options := []providerswire.Option{
 		providerswire.WithAgyPTYEffect(agyPTYEffect),
-		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
-		providerswire.WithExecutableLocator(provideProvidersExecutableLocator(edges)),
-		providerswire.WithStdioPipeFactory(provideProvidersStdioPipeFactory(edges)),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
 		providerswire.WithCatalogCapabilityOverrides(edges.ProviderCatalogCapabilityOverrides...),
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
@@ -183,7 +180,8 @@ func provideConfiguredProvidersService(
 		options = append(options, providerswire.WithWorkersCommandRunner(
 			workerswire.NewProviderCommandRunner(loggedRunner),
 		))
-		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{})
+		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	if edges.ProviderCommandRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
@@ -195,7 +193,8 @@ func provideConfiguredProvidersService(
 		options = append(options, providerswire.WithWorkersCommandRunner(
 			workerswire.NewProviderCommandRunner(loggedRunner),
 		))
-		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{})
+		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
@@ -210,7 +209,8 @@ func provideConfiguredProvidersService(
 	options = append(options, providerswire.WithWorkersCommandRunner(
 		workerswire.NewProviderCommandRunner(loggedRunner),
 	))
-	return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{})
+	return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 }
 
 func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess.ExecutableLocator {

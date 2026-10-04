@@ -308,7 +308,7 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logger)
+		logger, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() = %v", err)
 	}

@@ -276,7 +276,7 @@ func startInvokeContinuePackageProcess(
 	fallbackProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		providerswire.WithCommandRunner(route))
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("build fixture provider fallback: %w", err)

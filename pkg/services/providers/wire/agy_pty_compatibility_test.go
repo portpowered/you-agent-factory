@@ -127,7 +127,7 @@ func newLegacyAgyProvidersService(
 	service, err := NewService(IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		WithAgyPTYEffect(NewAgyPTYEffect(allocator, legacyAgyExecutableLocator{path: executable}, platformfilesystem.Local{}, clock, AgyPTYPolicy{})))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -269,7 +269,11 @@ func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
 			clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
 			runner := &clockCommandRunner{clock: clock}
 			root, err := NewService(IdentityCatalogProbe, clock, platformclock.Real{}, logging.NoopLogger{},
-				WithCommandRunner(runner), WithAgyCommandRunner(runner))
+				nil,
+				nil,
+				nil,
+				WithCommandRunner(runner),
+				WithAgyCommandRunner(runner))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -43,7 +43,7 @@ func newWireCompositionRoot(t *testing.T) (operatorsettings.Service, string) {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -220,7 +220,7 @@ func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -245,7 +245,7 @@ func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -272,7 +272,7 @@ func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -308,7 +308,7 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -341,7 +341,7 @@ func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -368,7 +368,7 @@ func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{})
+		logging.NoopLogger{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}

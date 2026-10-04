@@ -40,7 +40,7 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 	providerService, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		providerswire.WithWorkersCommandRunner(command))
 	if err != nil {
 		t.Fatalf("providers wire NewService() error = %v", err)

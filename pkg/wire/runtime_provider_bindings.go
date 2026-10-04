@@ -37,11 +37,15 @@ func newConfiguredProvidersService(
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
 	logger logging.Logger,
+	commandFactory platformprocess.CommandFactory,
+	locator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
 ) (providers.Service, error) {
 	options = append(options, providerswire.WithAgyCommandRunner(
 		workerswire.NewProviderCommandRunner(agyRunner),
 	))
-	return providerswire.NewService(providerswire.IdentityCatalogProbe, clock, scheduler, logger, options...)
+	return providerswire.NewService(providerswire.IdentityCatalogProbe, clock, scheduler, logger, commandFactory, locator, stdioPipes,
+		options...)
 }
 
 type modelsProcessLauncher struct {

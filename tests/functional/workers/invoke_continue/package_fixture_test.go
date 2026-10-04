@@ -165,7 +165,7 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	unsupportedProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{},
 		platformclock.Real{},
-		logging.NoopLogger{},
+		logging.NoopLogger{}, nil, nil, nil,
 		providerswire.WithCommandRunner(route),
 		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,
