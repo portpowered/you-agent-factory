@@ -36,16 +36,16 @@ func TestKeyedSupervisionFourSessionsRetainHistoryBesideLivePeers(t *testing.T) 
 	var streams [4]*support.FactoryEventStream
 	var entries [4]*w4DispatchObservation
 	var cursors [4]int
-	for i, gate := range runner.gates {
+	for i, gate := range runner.gates[:4] {
 		sessions[i] = identityOpenSession(t, server, gate.marker)
 		streams[i] = support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), sessions[i]))
 		t.Cleanup(streams[i].Close)
 	}
-	for i, gate := range runner.gates {
+	for i, gate := range runner.gates[:4] {
 		batch := fmt.Sprintf(`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":"task","payload":{"title":%q}}]}`, gate.marker, gate.marker, gate.marker)
 		identityCLI(t, server, "--session", sessions[i], "submit", "batch", batch)
 	}
-	for i, gate := range runner.gates {
+	for i, gate := range runner.gates[:4] {
 		keyedRetentionSignal(t, gate.started, "all four provider admissions")
 		entries[i] = identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, sessions[i])))
 		if entries[i].sessionID == "" || entries[i].result != nil {
@@ -70,7 +70,21 @@ func TestKeyedSupervisionFourSessionsRetainHistoryBesideLivePeers(t *testing.T) 
 		t.Fatal("scoped close changed retained canceled recording")
 	}
 	keyedRetentionCursor(t, server, sessions[0], entries[0], cursors[0])
-	for i := 1; i < len(runner.gates); i++ {
+	// A separate Factory Session control proves the complete durable capture
+	// even when stopping the engine prevents a Factory dispatch response.
+	// Historical Factory read decorators have a separate later-owner cutover;
+	// this assertion observes the real Recordings reader, not that projection.
+	gate := runner.gates[4]
+	canceledFactory := identityOpenSession(t, server, gate.marker)
+	batch := fmt.Sprintf(`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":"task","payload":{"title":%q}}]}`, gate.marker, gate.marker, gate.marker)
+	identityCLI(t, server, "--session", canceledFactory, "submit", "batch", batch)
+	keyedRetentionSignal(t, gate.started, "Factory-cancel provider admission")
+	canceled := identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, canceledFactory)))
+	identityCLI(t, server, "--remote", "session", "cancel", canceledFactory)
+	keyedRetentionSignal(t, gate.returned, "Factory-cancel provider joined")
+	keyedRetentionCanceledRecording(t, server, capture, canceledFactory, canceled.sessionID)
+	keyedRetentionAssertPeersLive(t, runner)
+	for i := 1; i < len(sessions); i++ {
 		runner.gates[i].unblock()
 		identityAwaitResponse(t, streams[i])
 		entry := identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, sessions[i])))
@@ -96,7 +110,7 @@ type keyedRetentionGate struct {
 
 func (g *keyedRetentionGate) unblock() { g.once.Do(func() { close(g.release) }) }
 
-type keyedRetentionRunner struct{ gates [4]*keyedRetentionGate }
+type keyedRetentionRunner struct{ gates [5]*keyedRetentionGate }
 
 func newKeyedRetentionRunner() *keyedRetentionRunner {
 	r := &keyedRetentionRunner{}
@@ -164,7 +178,7 @@ func keyedRetentionSignal(t *testing.T, signal <-chan struct{}, property string)
 
 func keyedRetentionAssertPeersLive(t *testing.T, runner *keyedRetentionRunner) {
 	t.Helper()
-	for i := 1; i < len(runner.gates); i++ {
+	for i := 1; i < 4; i++ {
 		select {
 		case <-runner.gates[i].returned:
 			t.Fatalf("scoped control joined peer %d", i)
