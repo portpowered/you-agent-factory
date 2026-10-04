@@ -26,8 +26,8 @@ const (
 // Providers command-runner boundary. The command runner owns process
 // creation; this adapter owns only AGY's argv and timeout policy.
 
-func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source) Effect {
-	if runner == nil || clock == nil {
+func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) Effect {
+	if runner == nil || clock == nil || scheduler == nil {
 		return nil
 	}
 	return EffectFunc(func(
@@ -45,7 +45,7 @@ func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.
 		}
 
 		timeout := effectivePrintTimeout(request.PrintTimeout)
-		commandContext, cancel := context.WithTimeout(normalizeContext(ctx), timeout)
+		commandContext, cancel := printTimeoutContext(normalizeContext(ctx), scheduler, timeout)
 		defer cancel()
 		result, runErr := runCommand(commandContext, runner, command, observe)
 		effectResult := EffectResult{
@@ -63,6 +63,51 @@ func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.
 		return effectResult, nil
 	})
 }
+
+// printTimeoutContext keeps the runner's deadline error identity while the
+// supplied scheduler owns delivery. Cleanup joins the timer watcher before
+// releasing the attempt, including when the command finishes before its limit.
+func printTimeoutContext(parent context.Context, scheduler platformclock.TimerSource, timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancelCause(parent)
+	deadline := scheduler.Now().Add(timeout)
+	if parentDeadline, ok := parent.Deadline(); ok && parentDeadline.Before(deadline) {
+		deadline = parentDeadline
+	}
+	timer := scheduler.NewTimer(timeout)
+	joined := make(chan struct{})
+	go func() {
+		defer close(joined)
+		select {
+		case <-ctx.Done():
+		case <-timer.C():
+			cancel(printTimeoutCause{})
+		}
+	}()
+	return printDeadlineContext{Context: ctx, deadline: deadline}, func() {
+		cancel(context.Canceled)
+		timer.Stop()
+		<-joined
+	}
+}
+
+type printDeadlineContext struct {
+	context.Context
+	deadline time.Time
+}
+
+func (ctx printDeadlineContext) Deadline() (time.Time, bool) { return ctx.deadline, true }
+
+func (ctx printDeadlineContext) Err() error {
+	if _, expired := context.Cause(ctx.Context).(printTimeoutCause); expired {
+		return context.DeadlineExceeded
+	}
+	return ctx.Context.Err()
+}
+
+type printTimeoutCause struct{}
+
+func (printTimeoutCause) Error() string { return context.DeadlineExceeded.Error() }
+func (printTimeoutCause) Unwrap() error { return context.DeadlineExceeded }
 
 func buildCommand(request execution.ContinuationRequest) (providerservice.CommandRequest, error) {
 	workDir := strings.TrimSpace(request.WorkingDirectory)

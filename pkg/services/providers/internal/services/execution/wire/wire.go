@@ -126,7 +126,11 @@ func BuiltInDependenciesFromCommandRunner(
 		if clock == nil {
 			clock = platformclock.Real{}
 		}
-		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner, clock)
+		scheduler, ok := clock.(platformclock.TimerSource)
+		if !ok {
+			scheduler = platformclock.Real{}
+		}
+		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner, clock, scheduler)
 	}
 	return executionservice.BuiltInDependencies{
 		Antigravity: antigravity,
