@@ -12,6 +12,7 @@ type config struct {
 	packageRoot                       string
 	all                               bool
 	baseRef                           string
+	baselineCacheDir                  string
 	writeTestServiceImportBaseline    bool
 	writeSupportServiceImportBaseline bool
 	writeTransportBehaviorBaseline    bool
@@ -26,6 +27,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.packageRoot, "package-root", defaultScanRoot, "repository-relative package root to scan")
 	flag.BoolVar(&cfg.all, "all", false, "show recorded package-boundary diagnostics as well as unrecorded findings")
 	flag.StringVar(&cfg.baseRef, "base-ref", "", "optional Git ref used to identify recorded package-boundary findings")
+	flag.StringVar(&cfg.baselineCacheDir, "baseline-cache-dir", "", "memoize the base-tree scan per base commit and checker build in this directory (\"auto\" selects a per-user cache); empty disables the cache")
 	flag.BoolVar(
 		&cfg.writeTestServiceImportBaseline,
 		"create-test-service-import-baseline",

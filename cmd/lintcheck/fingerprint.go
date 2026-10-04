@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 )
 
 type goPackage struct {
@@ -49,7 +50,7 @@ func prepareChecker(cfg config, stderr io.Writer) (string, error) {
 		return "", err
 	}
 
-	cacheDir, err := filepath.Abs(cfg.cacheDir)
+	cacheDir, err := filepath.Abs(resolveCacheDir(cfg.cacheDir))
 	if err != nil {
 		return "", fmt.Errorf("resolve lint checker cache directory: %w", err)
 	}
@@ -86,6 +87,7 @@ func prepareChecker(cfg config, stderr io.Writer) (string, error) {
 		}
 		return "", fmt.Errorf("publish compiled lint checker executable: %w", err)
 	}
+	pruneStaleCheckers(cacheDir, baseName)
 	return checkerPath, nil
 }
 
@@ -160,9 +162,12 @@ func checkerFingerprint(goTool, packageRef string, stderr io.Writer) (string, er
 
 	digest := sha256.New()
 	writeHashField(digest, "package", packageRef)
-	writeSortedEnvironment(digest, environment)
-	writePackageMetadata(digest, packages)
-	if err := writeInputFiles(digest, inputFiles); err != nil {
+	writeSortedEnvironment(digest, environment, moduleRootDir(environment["GOMOD"]))
+	// Paths inside the main module are hashed relative to its root so that
+	// identical sources in different worktrees share one compiled checker.
+	moduleRoot := moduleRootDir(environment["GOMOD"])
+	writePackageMetadata(digest, packages, moduleRoot)
+	if err := writeInputFiles(digest, inputFiles, moduleRoot); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(digest.Sum(nil)), nil
@@ -254,7 +259,7 @@ func writeHashField(digest hash.Hash, key, value string) {
 	_, _ = io.WriteString(digest, value)
 }
 
-func writeSortedEnvironment(digest hash.Hash, environment map[string]string) {
+func writeSortedEnvironment(digest hash.Hash, environment map[string]string, moduleRoot string) {
 	keys := make([]string, 0, len(environment))
 	for key := range environment {
 		keys = append(keys, key)
@@ -262,14 +267,18 @@ func writeSortedEnvironment(digest hash.Hash, environment map[string]string) {
 	sort.Strings(keys)
 	for _, key := range keys {
 		writeHashField(digest, "env-key", key)
-		writeHashField(digest, "env-value", environment[key])
+		value := environment[key]
+		if key == "GOMOD" || key == "GOWORK" {
+			value = portablePath(value, moduleRoot)
+		}
+		writeHashField(digest, "env-value", value)
 	}
 }
 
-func writePackageMetadata(digest hash.Hash, packages []goPackage) {
+func writePackageMetadata(digest hash.Hash, packages []goPackage, moduleRoot string) {
 	for _, packageInfo := range packages {
 		writeHashField(digest, "import-path", packageInfo.ImportPath)
-		writeHashField(digest, "directory", filepath.ToSlash(packageInfo.Dir))
+		writeHashField(digest, "directory", portablePath(packageInfo.Dir, moduleRoot))
 		for _, pattern := range packageInfo.EmbedPatterns {
 			writeHashField(digest, "embed-pattern", pattern)
 		}
@@ -280,7 +289,7 @@ func writePackageMetadata(digest hash.Hash, packages []goPackage) {
 	}
 }
 
-func writeInputFiles(digest hash.Hash, paths map[string]struct{}) error {
+func writeInputFiles(digest hash.Hash, paths map[string]struct{}, moduleRoot string) error {
 	sortedPaths := make([]string, 0, len(paths))
 	for path := range paths {
 		if _, err := os.Stat(path); err == nil {
@@ -292,7 +301,7 @@ func writeInputFiles(digest hash.Hash, paths map[string]struct{}) error {
 	}
 	sort.Strings(sortedPaths)
 	for _, path := range sortedPaths {
-		writeHashField(digest, "file", filepath.ToSlash(path))
+		writeHashField(digest, "file", portablePath(path, moduleRoot))
 		file, err := os.Open(path)
 		if err != nil {
 			return fmt.Errorf("open lint checker build input %s: %w", path, err)
@@ -307,4 +316,74 @@ func writeInputFiles(digest hash.Hash, paths map[string]struct{}) error {
 		}
 	}
 	return nil
+}
+
+func moduleRootDir(goMod string) string {
+	if !isHashableBuildFile(goMod) {
+		return ""
+	}
+	return filepath.Clean(filepath.Dir(goMod))
+}
+
+// portablePath names a path inside the main module relative to the module
+// root and leaves every other path absolute.
+func portablePath(path, moduleRoot string) string {
+	if moduleRoot != "" {
+		if relative, err := filepath.Rel(moduleRoot, filepath.Clean(path)); err == nil &&
+			relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return "module:" + filepath.ToSlash(relative)
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+// autoCacheDir selects a per-user cache directory shared by every worktree of
+// the same user. Cache entries are keyed by source content, never by checkout
+// path, so a fresh worktree reuses checkers compiled by another one.
+const autoCacheDir = "auto"
+
+func resolveCacheDir(dir string) string {
+	if strings.TrimSpace(dir) != autoCacheDir {
+		return dir
+	}
+	base, err := os.UserCacheDir()
+	if err != nil || base == "" {
+		return ".cache/lint-checkers"
+	}
+	return filepath.Join(base, "you-lint", "lint-checkers")
+}
+
+// maxCachedCheckers bounds the shared cache: with roughly two dozen checkers
+// this keeps the last several distinct source revisions of each one.
+const maxCachedCheckers = 200
+
+// pruneStaleCheckers removes the least recently written compiled checkers once
+// the cache exceeds maxCachedCheckers. The checker just published is kept.
+func pruneStaleCheckers(cacheDir, keepBase string) {
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		return
+	}
+	type cached struct {
+		path    string
+		written time.Time
+	}
+	var candidates []cached
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || strings.HasPrefix(name, ".") || strings.HasPrefix(name, keepBase) {
+			continue
+		}
+		if info, err := entry.Info(); err == nil {
+			candidates = append(candidates, cached{filepath.Join(cacheDir, name), info.ModTime()})
+		}
+	}
+	excess := len(candidates) + 1 - maxCachedCheckers
+	if excess <= 0 {
+		return
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].written.Before(candidates[j].written) })
+	for _, candidate := range candidates[:excess] {
+		_ = os.Remove(candidate.path)
+	}
 }

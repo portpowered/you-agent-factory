@@ -48,6 +48,11 @@ func loadRecordedBoundaryBaseline(cfg config, policy boundaryPolicy) (recordedBo
 		return recordedBoundaryBaseline{}, nil
 	}
 
+	cacheFile := baselineCacheFile(cfg, repoRoot, selectedRef)
+	if fingerprints, ok := readBaselineCache(cacheFile); ok {
+		return recordedBoundaryBaseline{available: true, baseRef: selectedRef, findingFingerprints: fingerprints}, nil
+	}
+
 	baseRoot, err := extractGitTree(repoRoot, selectedRef)
 	if err != nil {
 		// Fail open for presentation: if the base cannot be materialized, keep
@@ -60,10 +65,12 @@ func loadRecordedBoundaryBaseline(cfg config, policy boundaryPolicy) (recordedBo
 	if err != nil {
 		return recordedBoundaryBaseline{}, nil
 	}
+	fingerprints := boundaryFindingFingerprints(baseResult)
+	writeBaselineCache(cacheFile, fingerprints)
 	return recordedBoundaryBaseline{
 		available:           true,
 		baseRef:             selectedRef,
-		findingFingerprints: boundaryFindingFingerprints(baseResult),
+		findingFingerprints: fingerprints,
 	}, nil
 }
 
