@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,35 +18,85 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// FileWriter durably snapshots source-native Worker records after each
-// accepted append. The hash-based filename keeps opaque recording identities
-// out of paths while preserving one stable sidecar per recording.
+// FileWriter persists synced deltas; its map lock never covers disk I/O.
+// Each process owns one writer. Multiple processes must not share this store.
 type FileWriter struct {
-	storage platformreplay.Storage
-	root    string
-
-	mu        sync.Mutex
-	snapshots map[string]recordings.WorkerRecordingSnapshot
+	storage  platformreplay.Storage
+	appender platformreplay.Appender
+	root     string
+	mu       sync.Mutex
+	entries  map[string]*recordingEntry
+}
+type recordingEntry struct {
+	mu       sync.Mutex
+	loaded   bool
+	exists   bool
+	damaged  bool
+	sessions map[string]*recordingSession
+	order    []string
+}
+type recordingSession struct {
+	projection recordings.WorkerRecordingProjection
+	records    []events.Record
+	identities map[events.AppendIdentity]events.Record
+}
+type workerJournalEntry struct {
+	Version           int                                 `json:"version"`
+	Kind              string                              `json:"kind"`
+	RecordingID       string                              `json:"recordingId"`
+	WorkerSessionID   string                              `json:"workerSessionId"`
+	Record            *events.Record                      `json:"record,omitempty"`
+	Topic             events.Topic                        `json:"topic,omitempty"`
+	Code              string                              `json:"code,omitempty"`
+	ExecutionTerminal *recordings.WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
 }
 
 var _ recordings.WorkerRecordingWriter = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingReader = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*FileWriter)(nil)
 
-// NewFileWriter constructs the default local durable Worker-record sidecar
-// writer. The storage port owns atomic replacement and filesystem mechanics.
+// NewFileWriter requires the existing append-and-sync storage capability.
 func NewFileWriter(storage platformreplay.Storage, root string) (recordings.WorkerRecordingWriter, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("Worker recording file writer: storage is required")
 	}
+	appender, ok := storage.(platformreplay.Appender)
+	if !ok {
+		return nil, fmt.Errorf("Worker recording file writer: append storage is required")
+	}
 	if root == "" {
 		return nil, fmt.Errorf("Worker recording file writer: root is required")
 	}
-	return &FileWriter{storage: storage, root: root, snapshots: make(map[string]recordings.WorkerRecordingSnapshot)}, nil
+	return &FileWriter{storage: storage, appender: appender, root: root, entries: make(map[string]*recordingEntry)}, nil
+}
+func (writer *FileWriter) entry(id string) *recordingEntry {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	entry := writer.entries[id]
+	if entry == nil {
+		entry = &recordingEntry{}
+		writer.entries[id] = entry
+	}
+	return entry
+}
+func (entry *recordingEntry) session(recordingID, sessionID string) *recordingSession {
+	if session := entry.sessions[sessionID]; session != nil {
+		return session
+	}
+	return &recordingSession{projection: recordings.WorkerRecordingProjection{
+		RecordingID: recordingID, WorkerSessionID: sessionID, Topic: events.Topic("worker-session/" + sessionID + "/events"),
+		Status: recordings.WorkerRecordingStatusIncomplete}, identities: make(map[events.AppendIdentity]events.Record)}
+}
+func (entry *recordingEntry) commit(session *recordingSession) {
+	id := session.projection.WorkerSessionID
+	if entry.sessions[id] == nil {
+		entry.order = append(entry.order, id)
+	}
+	entry.sessions[id] = session
+	entry.exists = true
 }
 
-// PersistWorkerRecord writes a complete detached snapshot before reporting
-// success, so the opening barrier cannot observe an in-memory-only acceptance.
+// PersistWorkerRecord admits a single detached record only after durable sync.
 func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
 	if writer == nil {
 		return recordings.ErrMissingWorkerRecordingWriter
@@ -56,78 +107,47 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	if strings.TrimSpace(record.RecordingID) == "" || strings.TrimSpace(record.WorkerSessionID) == "" {
 		return recordings.ErrInvalidWorkerRecordingRequest
 	}
-	if err := record.Record.Validate(); err != nil {
-		return fmt.Errorf("validate Worker record: %w", err)
-	}
-	return writer.persistWorkerRecord(ctx, record)
-}
-
-func (writer *FileWriter) persistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
-	snapshot, err := writer.snapshotForWrite(ctx, record.RecordingID)
-	if err != nil {
+	entry := writer.entry(record.RecordingID)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if err := writer.hydrate(ctx, record.RecordingID, entry); err != nil {
 		return err
 	}
-	writer.mu.Lock()
-	defer writer.mu.Unlock()
-	if cached, ok := writer.snapshots[record.RecordingID]; ok {
-		snapshot = cloneSnapshot(cached)
+	if entry.damaged {
+		return recordings.ErrWorkerRecordingReplay
 	}
-	snapshot.RecordingID = record.RecordingID
-	var session *recordings.WorkerSessionRecordingSnapshot
-	for i := range snapshot.Sessions {
-		if snapshot.Sessions[i].WorkerSessionID == record.WorkerSessionID {
-			session = &snapshot.Sessions[i]
-			break
-		}
-	}
-	if session == nil {
-		snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{WorkerSessionID: record.WorkerSessionID})
-		session = &snapshot.Sessions[len(snapshot.Sessions)-1]
-	}
-	for _, accepted := range session.Records {
-		if accepted.Identity() != record.Record.Identity() {
-			continue
-		}
-		if sameRecord(accepted, record.Record) {
-			return nil
-		}
-		return fmt.Errorf("%w: source identity %q/%q/%d/%q changed", recordings.ErrWorkerRecordingDuplicate, record.Record.SourceType, record.Record.SourceID, record.Record.SourceSequence, record.Record.SourceEventID)
-	}
-	history := make([]events.Record, 0, len(session.Records)+1)
-	for _, accepted := range session.Records {
-		history = append(history, accepted.Detached())
-	}
-	history = append(history, record.Record.Detached())
-	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:       record.RecordingID,
-		WorkerSessionID:   record.WorkerSessionID,
-		Topic:             session.Topic,
-		Failure:           session.Failure,
-		ExecutionTerminal: session.ExecutionTerminal,
-		Records:           history,
-	})
-	if err != nil {
+	session := entry.session(record.RecordingID, record.WorkerSessionID)
+	projection, duplicate, err := session.prepareRecord(record.Record)
+	if err != nil || duplicate {
 		return err
 	}
-	session.Topic = projection.Topic
-	session.Status = projection.Status
-	session.LastPosition = projection.LastPosition
-	session.InterruptionReason = projection.InterruptionReason
-	session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
-	session.Records = projection.Records
-	data, err := json.Marshal(snapshot)
-	if err != nil {
-		return fmt.Errorf("encode Worker recording snapshot: %w", err)
+	delta := workerJournalEntry{Version: 1, Kind: "record", RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Record: &record.Record}
+	if err := writer.append(ctx, entry, delta); err != nil {
+		return err
 	}
-	if err := writer.storage.WriteFile(writer.path(record.RecordingID), data); err != nil {
-		return fmt.Errorf("persist Worker recording snapshot: %w", err)
-	}
-	if writer.snapshots == nil {
-		writer.snapshots = make(map[string]recordings.WorkerRecordingSnapshot)
-	}
-	writer.snapshots[record.RecordingID] = snapshot
+	session.acceptRecord(projection)
+	entry.commit(session)
 	return nil
 }
+func (session *recordingSession) prepareRecord(record events.Record) (recordings.WorkerRecordingProjection, bool, error) {
+	if accepted, ok := session.identities[record.Identity()]; ok {
+		if sameRecord(accepted, record) {
+			return session.projection, true, nil
+		}
+		return recordings.WorkerRecordingProjection{}, false, recordings.ErrWorkerRecordingDuplicate
+	}
+	projection, err := (recordings.WorkerRecordingCodec{}).AdvanceWorkerRecording(session.projection, record)
+	return projection, false, err
+}
+func (session *recordingSession) acceptRecord(projection recordings.WorkerRecordingProjection) {
+	record := projection.Records[0]
+	session.records = append(session.records, record)
+	session.identities[record.Identity()] = record
+	projection.Records = nil
+	session.projection = projection
+}
+
+// PersistWorkerRecordingFailure appends a safe capture-loss fact.
 func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
 	if writer == nil {
 		return recordings.ErrMissingWorkerRecordingWriter
@@ -138,169 +158,216 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	if strings.TrimSpace(failure.RecordingID) == "" || strings.TrimSpace(failure.WorkerSessionID) == "" {
 		return recordings.ErrInvalidWorkerRecordingRequest
 	}
-
-	snapshot, err := writer.snapshotForWrite(ctx, failure.RecordingID)
+	entry := writer.entry(failure.RecordingID)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if err := writer.hydrate(ctx, failure.RecordingID, entry); err != nil {
+		return err
+	}
+	if entry.damaged {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	session := entry.session(failure.RecordingID, failure.WorkerSessionID)
+	delta := workerJournalEntry{Version: 1, Kind: "failure", RecordingID: failure.RecordingID, WorkerSessionID: failure.WorkerSessionID, Topic: failure.Topic, Code: failure.Code, ExecutionTerminal: failure.ExecutionTerminal}
+	projection, err := session.prepareFailure(delta)
 	if err != nil {
 		return err
 	}
-	writer.mu.Lock()
-	defer writer.mu.Unlock()
-	if cached, ok := writer.snapshots[failure.RecordingID]; ok {
-		snapshot = cloneSnapshot(cached)
+	if err := writer.append(ctx, entry, delta); err != nil {
+		return err
 	}
-	snapshot.RecordingID = failure.RecordingID
-	session := findOrCreateSession(&snapshot, failure.WorkerSessionID)
-	if failure.Topic != "" {
-		session.Topic = failure.Topic
+	session.projection = projection
+	entry.commit(session)
+	return nil
+}
+func (session *recordingSession) prepareFailure(delta workerJournalEntry) (recordings.WorkerRecordingProjection, error) {
+	if delta.Topic != session.projection.Topic {
+		return recordings.WorkerRecordingProjection{}, recordings.ErrWorkerRecordingOrder
 	}
-	session.Failure = failure.Code
-	session.ExecutionTerminal = cloneWorkerRecordingTerminal(failure.ExecutionTerminal)
-	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:       snapshot.RecordingID,
-		WorkerSessionID:   session.WorkerSessionID,
-		Topic:             session.Topic,
-		Failure:           session.Failure,
-		ExecutionTerminal: session.ExecutionTerminal,
-		Records:           session.Records,
-	})
+	if strings.TrimSpace(delta.Code) == "" {
+		return recordings.WorkerRecordingProjection{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	return (recordings.WorkerRecordingCodec{}).FailWorkerRecording(session.projection, delta.Code, delta.ExecutionTerminal)
+}
+func (writer *FileWriter) append(ctx context.Context, entry *recordingEntry, delta workerJournalEntry) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	data, err := json.Marshal(delta)
 	if err != nil {
-		return fmt.Errorf("classify failed Worker recording snapshot: %w", err)
+		return fmt.Errorf("encode Worker recording delta: %w", err)
 	}
-	session.Topic = projection.Topic
-	session.Status = projection.Status
-	session.LastPosition = projection.LastPosition
-	session.InterruptionReason = projection.InterruptionReason
-	session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
-	session.Records = projection.Records
-	data, err := json.Marshal(snapshot)
-	if err != nil {
-		return fmt.Errorf("encode failed Worker recording snapshot: %w", err)
+	if err := writer.appender.AppendFile(writer.path(delta.RecordingID)+"l", append(data, '\n')); err != nil {
+		// Even a close-after-sync error may have committed bytes. Rehydrate before
+		// retrying instead of risking a second identity or trusting partial rollback.
+		entry.loaded = false
+		return fmt.Errorf("persist Worker recording delta: %w", err)
 	}
-	if err := writer.storage.WriteFile(writer.path(failure.RecordingID), data); err != nil {
-		return fmt.Errorf("persist failed Worker recording snapshot: %w", err)
-	}
-	if writer.snapshots == nil {
-		writer.snapshots = make(map[string]recordings.WorkerRecordingSnapshot)
-	}
-	writer.snapshots[failure.RecordingID] = snapshot
 	return nil
 }
 
-// LoadWorkerRecording reads one opaque recording identity and derives each
-// session's health from its durable evidence before returning. This keeps
-// reopened sidecars on the same pure classification path as live capture and
-// portable replay.
-func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
+// LoadWorkerRecording returns detached, reducer-derived committed history.
+func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
 	if writer == nil {
 		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingWriter
 	}
-	if err := ctx.Err(); err != nil {
-		return recordings.WorkerRecordingSnapshot{}, err
-	}
-	if strings.TrimSpace(recordingID) == "" {
+	if strings.TrimSpace(id) == "" {
 		return recordings.WorkerRecordingSnapshot{}, recordings.ErrInvalidWorkerRecordingRequest
 	}
-
-	writer.mu.Lock()
-	if snapshot, ok := writer.snapshots[recordingID]; ok {
-		clone := cloneSnapshot(snapshot)
-		writer.mu.Unlock()
-		return clone, nil
-	}
-	writer.mu.Unlock()
-
-	snapshot, err := writer.readDurableSnapshot(ctx, recordingID)
-	if err != nil {
+	entry := writer.entry(id)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if err := writer.hydrate(ctx, id, entry); err != nil {
 		return recordings.WorkerRecordingSnapshot{}, err
 	}
-	clone := cloneSnapshot(snapshot)
-	writer.mu.Lock()
-	if writer.snapshots == nil {
-		writer.snapshots = make(map[string]recordings.WorkerRecordingSnapshot)
+	if !entry.exists {
+		return recordings.WorkerRecordingSnapshot{}, os.ErrNotExist
 	}
-	writer.snapshots[recordingID] = cloneSnapshot(snapshot)
-	writer.mu.Unlock()
-	return clone, nil
+	snapshot := recordings.WorkerRecordingSnapshot{RecordingID: id}
+	for _, sessionID := range entry.order {
+		session := entry.sessions[sessionID]
+		p, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+			RecordingID: id, WorkerSessionID: sessionID, Topic: session.projection.Topic, Failure: session.projection.Degradation,
+			ExecutionTerminal: session.projection.ExecutionTerminal, Records: session.records})
+		if err != nil {
+			return recordings.WorkerRecordingSnapshot{}, err
+		}
+		snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
+			WorkerSessionID: sessionID, Topic: p.Topic, Status: p.Status, LastPosition: p.LastPosition, Failure: p.Degradation,
+			InterruptionReason: session.projection.InterruptionReason, ExecutionTerminal: cloneWorkerRecordingTerminal(p.ExecutionTerminal), Records: p.Records})
+		if p.Status == recordings.WorkerRecordingStatusIncomplete && snapshot.Sessions[len(snapshot.Sessions)-1].InterruptionReason == "" {
+			reason := p.Degradation
+			if reason == "" {
+				reason = recordings.WorkerRecordingInterruptionProcessStopped
+			}
+			snapshot.Sessions[len(snapshot.Sessions)-1].InterruptionReason = reason
+		}
+	}
+	return snapshot, nil
 }
-
-func (writer *FileWriter) snapshotForWrite(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
-	writer.mu.Lock()
-	if snapshot, ok := writer.snapshots[recordingID]; ok {
-		clone := cloneSnapshot(snapshot)
-		writer.mu.Unlock()
-		return clone, nil
-	}
-	writer.mu.Unlock()
-
-	snapshot, err := writer.readDurableSnapshot(ctx, recordingID)
-	if errors.Is(err, os.ErrNotExist) {
-		return recordings.WorkerRecordingSnapshot{RecordingID: recordingID}, nil
-	}
-	return snapshot, err
-}
-
-func (writer *FileWriter) readDurableSnapshot(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
+func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordingEntry) error {
 	if err := ctx.Err(); err != nil {
-		return recordings.WorkerRecordingSnapshot{}, err
+		return err
 	}
-	data, err := writer.storage.ReadFile(writer.path(recordingID))
+	if entry.loaded {
+		return nil
+	}
+	// Build privately so malformed input cannot become cached accepted state.
+	loaded := &recordingEntry{sessions: make(map[string]*recordingSession)}
+	if err := writer.loadLegacy(id, loaded); err != nil {
+		return err
+	}
+	data, err := writer.storage.ReadFile(writer.path(id) + "l")
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("load Worker journal: %w", err)
+	}
+	if err == nil {
+		for len(data) > 0 {
+			end := bytes.IndexByte(data, '\n')
+			if end < 0 {
+				loaded.damaged = true
+				break
+			}
+			if err := loaded.applyLine(id, data[:end]); err != nil {
+				return err
+			}
+			data = data[end+1:]
+		}
+	}
+	if loaded.damaged {
+		for _, session := range loaded.sessions {
+			p, err := (recordings.WorkerRecordingCodec{}).FailWorkerRecording(session.projection, "PERSISTENCE_FAILED", session.projection.ExecutionTerminal)
+			if err != nil {
+				return err
+			}
+			session.projection = p
+		}
+	}
+	entry.sessions = loaded.sessions
+	entry.order = loaded.order
+	entry.exists = loaded.exists
+	entry.damaged = loaded.damaged
+	entry.loaded = true
+	return nil
+}
+func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry) error {
+	data, err := writer.storage.ReadFile(writer.path(id))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("load Worker recording snapshot: %w", err)
+		return fmt.Errorf("load Worker recording snapshot: %w", err)
 	}
 	var snapshot recordings.WorkerRecordingSnapshot
 	if err := json.Unmarshal(data, &snapshot); err != nil {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: decode Worker recording snapshot: %v", recordings.ErrWorkerRecordingReplay, err)
+		return fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingReplay, err)
 	}
-	if snapshot.RecordingID != recordingID {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: snapshot identity %q does not match %q", recordings.ErrWorkerRecordingReplay, snapshot.RecordingID, recordingID)
+	if snapshot.RecordingID != id {
+		return recordings.ErrWorkerRecordingReplay
 	}
 	if len(snapshot.Sessions) == 0 {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: Worker Session history is missing", recordings.ErrWorkerRecordingReplay)
+		return recordings.ErrWorkerRecordingReplay
 	}
-	for index := range snapshot.Sessions {
-		session := &snapshot.Sessions[index]
-		result, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
-			Snapshot:        snapshot,
-			WorkerSessionID: session.WorkerSessionID,
-		})
+	for _, legacy := range snapshot.Sessions {
+		result, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot, WorkerSessionID: legacy.WorkerSessionID})
 		if err != nil {
-			return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("classify Worker recording snapshot: %w", err)
+			return err
 		}
-		projection := result.Projection
-		session.Topic = projection.Topic
-		session.Status = projection.Status
-		session.LastPosition = projection.LastPosition
-		session.InterruptionReason = projection.InterruptionReason
-		session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
-		session.Records = projection.Records
+		session := entry.session(id, legacy.WorkerSessionID)
+		session.records = result.Projection.Records
+		session.projection = result.Projection
+		session.projection.Records = nil
+		for _, record := range session.records {
+			session.identities[record.Identity()] = record
+		}
+		entry.commit(session)
 	}
-	return snapshot, nil
+	return nil
+}
+func (entry *recordingEntry) applyLine(id string, line []byte) error {
+	var delta workerJournalEntry
+	if err := json.Unmarshal(line, &delta); err != nil {
+		return fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingReplay, err)
+	}
+	if delta.Version != 1 {
+		return recordings.ErrWorkerRecordingCompatibility
+	}
+	if delta.RecordingID != id || strings.TrimSpace(delta.WorkerSessionID) == "" {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	session := entry.session(id, delta.WorkerSessionID)
+	switch delta.Kind {
+	case "record":
+		if delta.Record == nil || delta.Topic != "" || delta.Code != "" || delta.ExecutionTerminal != nil {
+			return recordings.ErrWorkerRecordingReplay
+		}
+		projection, duplicate, err := session.prepareRecord(*delta.Record)
+		if err != nil {
+			return err
+		}
+		if duplicate {
+			return recordings.ErrWorkerRecordingDuplicate
+		}
+		session.acceptRecord(projection)
+	case "failure":
+		if delta.Record != nil {
+			return recordings.ErrWorkerRecordingReplay
+		}
+		projection, err := session.prepareFailure(delta)
+		if err != nil {
+			return err
+		}
+		session.projection = projection
+	default:
+		return recordings.ErrWorkerRecordingCompatibility
+	}
+	entry.commit(session)
+	return nil
 }
 
 func (writer *FileWriter) path(recordingID string) string {
 	digest := sha256.Sum256([]byte(recordingID))
 	return filepath.Join(writer.root, hex.EncodeToString(digest[:])+".worker.json")
-}
-
-func cloneSnapshot(snapshot recordings.WorkerRecordingSnapshot) recordings.WorkerRecordingSnapshot {
-	clone := snapshot
-	clone.Sessions = make([]recordings.WorkerSessionRecordingSnapshot, len(snapshot.Sessions))
-	for i, session := range snapshot.Sessions {
-		clone.Sessions[i] = recordings.WorkerSessionRecordingSnapshot{
-			WorkerSessionID:    session.WorkerSessionID,
-			Topic:              session.Topic,
-			Status:             session.Status,
-			LastPosition:       session.LastPosition,
-			Failure:            session.Failure,
-			InterruptionReason: session.InterruptionReason,
-			ExecutionTerminal:  cloneWorkerRecordingTerminal(session.ExecutionTerminal),
-			Records:            make([]events.Record, len(session.Records)),
-		}
-		for j, record := range session.Records {
-			clone.Sessions[i].Records[j] = record.Detached()
-		}
-	}
-	return clone
 }
 
 func cloneWorkerRecordingTerminal(terminal *recordings.WorkerRecordingTerminal) *recordings.WorkerRecordingTerminal {
@@ -309,17 +376,4 @@ func cloneWorkerRecordingTerminal(terminal *recordings.WorkerRecordingTerminal) 
 	}
 	clone := *terminal
 	return &clone
-}
-
-func findOrCreateSession(
-	snapshot *recordings.WorkerRecordingSnapshot,
-	workerSessionID string,
-) *recordings.WorkerSessionRecordingSnapshot {
-	for i := range snapshot.Sessions {
-		if snapshot.Sessions[i].WorkerSessionID == workerSessionID {
-			return &snapshot.Sessions[i]
-		}
-	}
-	snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{WorkerSessionID: workerSessionID})
-	return &snapshot.Sessions[len(snapshot.Sessions)-1]
 }
