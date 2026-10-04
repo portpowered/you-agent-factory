@@ -1429,12 +1429,6 @@ pkg/services/models/internal/legacyhost/supervisor.go: unreachable func: supervi
 pkg/services/models/internal/legacyhost/supervisor.go: unreachable func: supervisedRuntime.stop
 pkg/services/models/internal/legacyhost/supervisor.go: unreachable func: supervisedRuntime.waitForLoad
 pkg/services/models/internal/legacyhost/supervisor.go: unreachable func: supervisedRuntime.watchProcessExit
-pkg/services/models/internal/local/catalog.go: unreachable func: GetModel
-pkg/services/models/internal/local/catalog.go: unreachable func: ListModels
-pkg/services/models/internal/local/catalog.go: unreachable func: PullModel
-pkg/services/models/internal/local/catalog.go: unreachable func: SelectInvocationWorker
-pkg/services/models/internal/local/managed_runtime.go: unreachable func: buildManagedRuntime
-pkg/services/models/internal/service/runtime_factory.go: unreachable func: joinedAssetPreparationRequest
 pkg/services/models/internal/services/assets/internal/service/generic.go: unreachable func: service.discoverSnapshotRequirements
 pkg/services/models/internal/services/assets/internal/service/generic.go: unreachable func: service.walkSnapshotRequirements
 pkg/services/models/transports/cli/composition.go: unreachable func: BindService
