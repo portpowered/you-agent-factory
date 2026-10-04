@@ -35,7 +35,7 @@ func newAgyConformanceRoot(
 		execution.Registration{
 			Provider: providers.IDAntigravity,
 			Attempt:  attempt,
-			Continue: execution.UnsupportedContinuation,
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {

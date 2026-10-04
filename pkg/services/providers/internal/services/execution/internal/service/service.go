@@ -23,6 +23,17 @@ type service struct {
 
 var _ execution.ContinuationService = (*service)(nil)
 
+// UnsupportedContinuation supplies the explicit unavailable operation for
+// registrations whose adapter does not support provider-session continuation.
+type UnsupportedContinuation struct{}
+
+func (UnsupportedContinuation) Continue(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: "provider continuation adapter is unavailable",
+	}
+}
+
 // New constructs an inert execution service over one canonical catalog
 // authority and an immutable set of private adapter attempts. The returned
 // role includes exact-session continuation for direct injection into the root.

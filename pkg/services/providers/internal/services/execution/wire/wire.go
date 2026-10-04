@@ -55,6 +55,12 @@ func NewACPRegistration(id providers.ID, service acp.ContinuationService) execut
 	}
 }
 
+// NewUnsupportedContinuation completes the unavailable continuation operation
+// for an adapter that supports ordinary attempts only.
+func NewUnsupportedContinuation() execution.ContinuationAttempt {
+	return executionservice.UnsupportedContinuation{}.Continue
+}
+
 // Effect aliases expose completed native collaborators to owner composition.
 type CodexEffect = codexadapter.Effect
 type ClaudeEffect = claudeadapter.Effect

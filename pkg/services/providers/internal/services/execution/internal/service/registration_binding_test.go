@@ -50,7 +50,7 @@ func TestExecuteRejectsCatalogFactDriftWithoutInvokingAdapter(t *testing.T) {
 				adapterCalls++
 				return providers.ExecuteResult{Content: "wrong adapter"}, nil
 			},
-			Continue: execution.UnsupportedContinuation,
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {

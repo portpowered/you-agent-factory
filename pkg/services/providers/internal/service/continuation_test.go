@@ -211,7 +211,7 @@ func TestRootContinueUnsupportedWhenProviderCannotContinue(t *testing.T) {
 				adapterCalls++
 				return providers.ExecuteResult{}, nil
 			},
-			Continue: execution.UnsupportedContinuation,
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {

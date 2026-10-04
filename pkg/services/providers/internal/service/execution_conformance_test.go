@@ -46,7 +46,7 @@ func newConformanceRoot(
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt:  attempt,
-			Continue: execution.UnsupportedContinuation,
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
@@ -214,8 +214,8 @@ func mustCorrelationRootService(t *testing.T, attempt execution.Attempt) provide
 	}
 	executionService, err := executionwire.NewService(
 		catalogService,
-		execution.Registration{Provider: providers.IDCodex, Attempt: attempt, Continue: execution.UnsupportedContinuation},
-		execution.Registration{Provider: providers.IDClaude, Attempt: attempt, Continue: execution.UnsupportedContinuation},
+		execution.Registration{Provider: providers.IDCodex, Attempt: attempt, Continue: executionwire.NewUnsupportedContinuation()},
+		execution.Registration{Provider: providers.IDClaude, Attempt: attempt, Continue: executionwire.NewUnsupportedContinuation()},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
