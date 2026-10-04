@@ -964,3 +964,28 @@ func (r *registry) registerInvocationSupervision(
 	supervision.mu.Unlock()
 	return invocationPreparation{supervision: supervision}, nil
 }
+
+// Direct attempts publish through their admitted identity rather than a
+// composition-time bridge that must rediscover the Worker by bare dispatch.
+// Capture physical correlation per execution so a retry cannot redirect an
+// earlier execution's delayed progress to its replacement.
+func (r *registry) directAttemptProgress(
+	sessionID string,
+	supervision *supervision,
+) func(workers.ExecutionCorrelation, workers.ProgressFragment) {
+	return func(correlation workers.ExecutionCorrelation, fragment workers.ProgressFragment) {
+		attemptID := correlation.AttemptID
+		if (fragment.DispatchID != "" && fragment.DispatchID != attemptID) ||
+			(fragment.Correlation.DispatchID != "" && fragment.Correlation.DispatchID != attemptID) ||
+			(fragment.Correlation.AttemptID != "" && fragment.Correlation.AttemptID != attemptID) ||
+			(fragment.Correlation.RuntimeID != "" && fragment.Correlation.RuntimeID != correlation.RuntimeID) {
+			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "correlation_mismatch")
+			return
+		}
+		fragment.Correlation.DispatchID = attemptID
+		fragment.Correlation.AttemptID = attemptID
+		if err := supervision.progress.PublishWorkerSessionProgress(context.Background(), r, sessionID, fragment); err != nil {
+			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "publication_rejected")
+		}
+	}
+}

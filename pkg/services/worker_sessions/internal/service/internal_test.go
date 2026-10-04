@@ -2626,6 +2626,7 @@ func newAdmissionCancellationFixture(t *testing.T) admissionCancellationFixture 
 					r.acceptSupervision(fixture.sessionID, supervision)
 				}
 			},
+			nil,
 		)
 		r.finishSupervisionPublication(supervision)
 		fixture.executionDone <- admissionHandoffOutcome{result: result, err: err}
@@ -6689,6 +6690,148 @@ func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 	assertSelectedAttemptLineage(t, sink, request.ID, workers.AttemptReasonRetry, facts.Now().Add(-time.Second))
 }
 
+func TestKeyedRuntimeDirectExecutionPublishesThroughOwnedAttempt(t *testing.T) {
+	for _, mismatch := range []string{"dispatch", "logical", "physical", "runtime", "legacy"} {
+		t.Run(mismatch, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			var publish workers.ProgressPublisher
+			var fragment workers.ProgressFragment
+			execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				publish = request.Input.ProgressPublisher
+				if publish == nil {
+					t.Error("direct execution has no attempt-owned progress publisher")
+					return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+				}
+				fragment = directProgressFragment(request)
+				assertDirectProgressRejectsForeignCorrelation(t, sink, publish, fragment, mismatch)
+				if mismatch != "legacy" {
+					publish(fragment)
+				}
+				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+			}}
+			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+			service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := validStartRequest("direct-progress-worker", "direct-progress-dispatch")
+			result, err := service.InvokeSession(context.Background(), request)
+			if err != nil || result.Session.State != workersessions.StateCompleted {
+				t.Fatalf("direct invocation: %#v, %v", result, err)
+			}
+			association := result.Session.ProviderSessionAssociation
+			if association == nil || association.WorkerSessionID != request.ID || association.DispatchID != "direct-progress-dispatch" || association.AttemptID != "direct-progress-dispatch" || association.Reference.ID != "direct-progress-provider" {
+				t.Fatalf("direct association: %#v", association)
+			}
+			records := sink.requestsFor(workersessions.Topic(request.ID))
+			if len(records) != 4 || decodePerRuntimeDraft(t, records[2]).DispatchID != "direct-progress-dispatch" {
+				t.Fatalf("direct retained opening/binding/output/terminal: %#v", records)
+			}
+			publish(fragment)
+			if !reflect.DeepEqual(records, sink.requestsFor(workersessions.Topic(request.ID))) {
+				t.Fatal("late direct progress mutated terminal retention")
+			}
+		})
+	}
+}
+
+func TestKeyedRuntimeDirectRetryRejectsEarlierAttemptProgress(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	var earlier workers.ProgressPublisher
+	var earlierFragment workers.ProgressFragment
+	calls := 0
+	execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		calls++
+		if request.Input.ProgressPublisher == nil {
+			t.Error("direct retry has no attempt-owned publisher")
+			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+		}
+		if calls == 1 {
+			earlier = request.Input.ProgressPublisher
+			earlierFragment = directProgressFragment(request)
+			result := coverageExecutionResult(request, workers.ExecutionOutcomeFailed)
+			result.Failure = &workers.ExecutionFailure{Type: workers.WorkFailureTypeThrottled, Family: workers.WorkFailureFamilyRetryable, Message: "controlled direct retry"}
+			return result, nil
+		}
+		before := sink.requestsFor("")
+		earlier(earlierFragment)
+		if !reflect.DeepEqual(before, sink.requestsFor("")) {
+			t.Error("earlier attempt progress mutated retry retention")
+		}
+		if request.Correlation.AttemptID != "direct-retry-dispatch/attempt/2" {
+			t.Errorf("retry physical identity: %#v", request.Correlation)
+		}
+		request.Input.ProgressPublisher(directProgressFragment(request))
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validStartRequest("direct-retry-worker", "direct-retry-dispatch")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	result, err := service.InvokeSession(context.Background(), request)
+	assertDirectRetryProgressRetained(t, sink, result, err, calls)
+}
+
+func assertDirectRetryProgressRetained(t *testing.T, sink *perRuntimeAppendCapture, result workersessions.InvokeSessionResult, err error, calls int) {
+	t.Helper()
+	if err != nil || result.Session.State != workersessions.StateCompleted || result.Attempts != 2 || calls != 2 {
+		t.Fatalf("direct retry: %#v, %v, calls=%d", result, err, calls)
+	}
+	association := result.Session.ProviderSessionAssociation
+	if association == nil || association.WorkerSessionID != "direct-retry-worker" || association.DispatchID != "direct-retry-dispatch/attempt/2" || association.AttemptID != "direct-retry-dispatch/attempt/2" || association.Reference.ID != "direct-progress-provider" {
+		t.Fatalf("direct retry association: %#v", association)
+	}
+	var output []workers.Draft
+	for _, record := range sink.requestsFor(workersessions.Topic("direct-retry-worker")) {
+		draft := decodePerRuntimeDraft(t, record)
+		if draft.Kind == workers.KindMessage {
+			output = append(output, draft)
+		}
+	}
+	if len(output) != 1 || output[0].DispatchID != "direct-retry-dispatch/attempt/2" {
+		t.Fatalf("retained direct retry output: %#v", output)
+	}
+}
+
+func directProgressFragment(request workers.ExecuteRequest) workers.ProgressFragment {
+	return workers.ProgressFragment{
+		Correlation: request.Correlation, DispatchID: request.Correlation.AttemptID,
+		Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "direct output", Provider: "codex",
+		Continuation: &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "direct-progress-provider"},
+	}
+}
+
+func assertDirectProgressRejectsForeignCorrelation(t *testing.T, sink *perRuntimeAppendCapture, publish workers.ProgressPublisher, fragment workers.ProgressFragment, mismatch string) {
+	t.Helper()
+	foreign := fragment
+	switch mismatch {
+	case "dispatch":
+		foreign.DispatchID = "peer-dispatch"
+	case "logical":
+		foreign.Correlation.DispatchID = "peer-dispatch"
+	case "physical":
+		foreign.Correlation.AttemptID = "peer-physical"
+	case "runtime":
+		foreign.Correlation.RuntimeID = "peer-runtime"
+	case "legacy":
+		// Legacy source fragments can omit correlation; their owned publisher
+		// supplies physical identity without a dispatch-index lookup.
+		foreign.Correlation = workers.ExecutionCorrelation{}
+		publish(foreign)
+		return
+	}
+	before := sink.requestsFor("")
+	publish(foreign)
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("foreign direct progress published before correlation rejection")
+	}
+}
+
 func TestKeyedRuntimeOpeningPreservesDirectProviderRoute(t *testing.T) {
 	t.Parallel()
 	r := newRuntimeIdentityRegistry(t)
@@ -7020,7 +7163,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 	request := dispatchHandoff("handoff-dispatch")
 
 	t.Run("missing execution", func(t *testing.T) {
-		result, err := executeWithService(context.Background(), nil, request, newSupervision("handoff-dispatch", ""), func() {})
+		result, err := executeWithService(context.Background(), nil, request, newSupervision("handoff-dispatch", ""), func() {}, nil)
 		if !errors.Is(err, workers.ErrExecuteUnavailable) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
 			t.Fatalf("executeWithService(nil) = %#v, %v, want failed unavailable result", result, err)
 		}
@@ -7029,7 +7172,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 	t.Run("invalid dispatch", func(t *testing.T) {
 		invalid := request
 		invalid.Execution.Dispatch.DispatchID = "  "
-		result, err := executeWithService(context.Background(), coverageExecution{}, invalid, newSupervision("handoff-dispatch", ""), func() {})
+		result, err := executeWithService(context.Background(), coverageExecution{}, invalid, newSupervision("handoff-dispatch", ""), func() {}, nil)
 		if !errors.Is(err, workers.ErrInvalidExecuteRequest) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
 			t.Fatalf("executeWithService(invalid) = %#v, %v, want invalid failed result", result, err)
 		}
@@ -7039,7 +7182,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 		supervision := newSupervision("handoff-dispatch", "")
 		supervision.preAdmissionAction = workersessions.ControlActionPause
 		admitted := false
-		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() { admitted = true })
+		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() { admitted = true }, nil)
 		if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || admitted || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
 			t.Fatalf("executeWithService(pre-admission cancel) = %#v, %v, admitted=%t", result, err, admitted)
 		}
@@ -7047,7 +7190,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 
 	t.Run("admission callback declines", func(t *testing.T) {
 		supervision := newSupervision("handoff-dispatch", "")
-		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() {})
+		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() {}, nil)
 		if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
 			t.Fatalf("executeWithService(unaccepted) = %#v, %v, want canceled result", result, err)
 		}
@@ -7060,7 +7203,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 			execute: func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
 				panic("test executor panic")
 			},
-		}, request, supervision, func() {})
+		}, request, supervision, func() {}, nil)
 		var panicErr *workers.WorkerExecutorPanicError
 		if !errors.As(err, &panicErr) {
 			t.Fatalf("executeWithService(panic) error = %v, want WorkerExecutorPanicError", err)
@@ -7079,7 +7222,7 @@ func testWorkerExecutionHandoffProcessLifecycle(t *testing.T) {
 				request.Input.ProcessLifecycleObserver.ProcessExited(platformprocess.ProcessInfo{PID: 7})
 				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 			},
-		}, request, supervision, func() {})
+		}, request, supervision, func() {}, nil)
 		if !errors.Is(err, workers.ErrWorkstationDispatchProcessGone) || result.ReconciliationReason != workers.WorkstationDispatchReconciliationReasonProcessGone || result.Result.Outcome != workers.OutcomeFailed {
 			t.Fatalf("executeWithService(process exit) = %#v, %v, want process-gone failure", result, err)
 		}
@@ -7112,7 +7255,7 @@ func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
 			}
 			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 		},
-	}, customRequest, supervision, func() {})
+	}, customRequest, supervision, func() {}, nil)
 	if err != nil || customObserver.started != 0 || customObserver.exited != 0 {
 		t.Fatalf("executeWithService(custom observer) = %v, observer=%#v, want success without replacement", err, customObserver)
 	}

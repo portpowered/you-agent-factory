@@ -92,12 +92,16 @@ func (r *registry) publishExecution(
 	finished := make(chan struct{})
 	dispatchDone := make(chan error, 1)
 	execution := supervision.executor
+	var progress func(workers.ExecutionCorrelation, workers.ProgressFragment)
+	if supervision.runtimeKey.RuntimeID == "" {
+		progress = r.directAttemptProgress(sessionID, supervision)
+	}
 	go func() {
 		defer close(finished)
 		result, dispatchErr := executeWithService(attemptContext, execution, request, supervision, func() {
 			r.acceptSupervision(sessionID, supervision)
 			close(admitted)
-		})
+		}, progress)
 		if errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) && supervision.pendingTerminalControlBeforeAdmission() != "" {
 			// Let a terminal control that claimed this exact unadmitted
 			// supervision commit first. Publishing the canceled handoff must not
@@ -131,6 +135,7 @@ func executeWithService(
 	request workers.WorkstationDispatchRequest,
 	supervision *supervision,
 	admit func(),
+	progress func(workers.ExecutionCorrelation, workers.ProgressFragment),
 ) (result workers.WorkstationDispatchResult, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -158,6 +163,12 @@ func executeWithService(
 	}
 	if executeRequest.Input.ProcessLifecycleObserver == nil {
 		executeRequest.Input.ProcessLifecycleObserver = processLifecycleObserver{supervision: supervision}
+	}
+	if progress != nil {
+		correlation := executeRequest.Correlation
+		executeRequest.Input.ProgressPublisher = func(fragment workers.ProgressFragment) {
+			progress(correlation, fragment)
+		}
 	}
 	executeResult, executeErr := execution.Execute(ctx, executeRequest)
 	if supervision.processGoneObserved() {

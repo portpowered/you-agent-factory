@@ -269,19 +269,6 @@ type localWorkerSessionsBoundary struct {
 	service workersessions.Service
 }
 
-type localWorkerSessionsExecution struct {
-	workers.Service
-	publisher workers.ProgressPublisher
-}
-
-func (execution localWorkerSessionsExecution) Execute(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	request.Input.ProgressPublisher = execution.publisher
-	return execution.Service.Execute(ctx, request)
-}
-
 var _ workersessionscli.LocalInvokeBoundary = (*localWorkerSessionsBoundary)(nil)
 var _ workersessionscli.LocalControlBoundary = (*localWorkerSessionsBoundary)(nil)
 
@@ -383,14 +370,8 @@ func provideLocalWorkerSessionsBoundary(
 	if workerService == nil {
 		return nil, fmt.Errorf("construct local Worker Sessions boundary: Workers service is required")
 	}
-	// The local direct route has no Factory Runtime publisher to supply. Bind
-	// the same Worker Sessions-owned observation bridge used by Factory Runtime
-	// before the first dispatch so provider-session association and source-native
-	// Worker drafts reach the local session topic as well.
-	observationPublisher := workersessions.NewProviderSessionObservationPublisher(nil)
-	execution := localWorkerSessionsExecution{Service: workerService, publisher: observationPublisher.Publish}
 	service, err := workersessionswire.NewService(
-		execution,
+		workerService,
 		eventsService,
 		logger,
 		clock,
@@ -401,7 +382,6 @@ func provideLocalWorkerSessionsBoundary(
 	if err != nil {
 		return nil, fmt.Errorf("construct local Worker Sessions service: %w", err)
 	}
-	observationPublisher.Bind(service)
 	return &localWorkerSessionsBoundary{service: service}, nil
 }
 
