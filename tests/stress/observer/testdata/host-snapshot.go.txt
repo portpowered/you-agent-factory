@@ -1,0 +1,14 @@
+
+func observeBaselineHost(h *Host) {
+	identity := fmt.Sprintf("instance_host:%p", h)
+	baselineobservation.Register("instance_host", identity, "instance_host.New", func() baselineobservation.OwnerSnapshot {
+		h.mu.Lock()
+		entries := make([]baselineobservation.HandleEntry, 0, len(h.handles))
+		for key, handle := range h.handles {
+			entries = append(entries, baselineobservation.HandleEntry{Key: key, HandleIdentity: fmt.Sprintf("%p", handle)})
+		}
+		h.mu.Unlock()
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Key < entries[j].Key })
+		return baselineobservation.OwnerSnapshot{Kind: "instance_host", OwnerIdentity: identity, Source: "instance_host.New", Host: &baselineobservation.HostSnapshot{Handles: entries, HandleCount: len(entries)}}
+	})
+}
