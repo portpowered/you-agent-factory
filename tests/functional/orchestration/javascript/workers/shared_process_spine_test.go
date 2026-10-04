@@ -78,6 +78,7 @@ func TestJavaScriptSharedWorkerBehavior(t *testing.T) {
 		{"isolation/concurrent-success-failure", runJavaScriptConcurrentIsolation},
 		{"isolation/runtime-children", runJavaScriptRuntimeChildren},
 		{"isolation/local-cli-beside-runtime", runJavaScriptLocalCLIBesideRuntime},
+		{"isolation/resume-beside-live-peer", runJavaScriptResumeBesideLivePeer},
 	}
 	for _, test := range tests {
 		test := test
