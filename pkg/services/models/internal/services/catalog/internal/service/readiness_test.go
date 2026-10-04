@@ -258,14 +258,21 @@ func TestCatalogReadinessFailuresAreSanitizedAcrossListAndDetail(t *testing.T) {
 	}
 	scope := publicScope(t, openCatalogScope(t, scopes, "failed-model", "generate"))
 
-	if _, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+	listed, err := service.ListCatalog(t.Context(), models.ListModelsRequest{Scope: scope})
+	if !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
 		t.Fatalf("ListCatalog error = %v, want sanitized ErrUnavailable", err)
 	}
-	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: scope, Name: "failed-model",
-	}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+	if !reflect.DeepEqual(listed, models.ListModelsResult{}) {
+		t.Fatalf("ListCatalog failure returned partial results: %#v", listed)
+	}
+	detail, err := service.GetCatalogModel(t.Context(), models.GetModelRequest{Scope: scope, Name: "failed-model"})
+	if !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
 		t.Fatalf("GetCatalogModel error = %v, want sanitized ErrUnavailable", err)
 	}
+	if !reflect.DeepEqual(detail, models.GetModelResult{}) {
+		t.Fatalf("GetCatalogModel failure returned partial detail: %#v", detail)
+	}
+
 }
 
 func TestBuiltInReadinessUsesStableDiscoveryBaseline(t *testing.T) {
