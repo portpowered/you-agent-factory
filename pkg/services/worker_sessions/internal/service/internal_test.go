@@ -4686,7 +4686,8 @@ func TestControlHistoryGateFixtureCleanupJoinsEveryPhase(t *testing.T) {
 	}
 }
 
-func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T) {
+func assertControlHistoryGateCloseWaitsForPendingReservation(t *testing.T) {
+	t.Helper()
 	fixture := newPendingReservationsFixture(t)
 	pendingGate := fixture.gate
 	close(fixture.startClose)
@@ -4710,6 +4711,10 @@ func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T)
 		t.Fatal("controlHistoryGate.close() did not finish after the pending reservation drained")
 	}
 	fixture.cleanup(t)
+}
+
+func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T) {
+	assertControlHistoryGateCloseWaitsForPendingReservation(t)
 
 	gate := &controlHistoryGate{}
 	if !gate.acquire() {
