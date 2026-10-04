@@ -27,8 +27,18 @@ export function parseBaseline(text) {
 }
 
 // Compiler metadata alone identifies vanished units; no source inventory is read.
+function ownsCompilerMetadata(key) {
+  return /^(testsleep-|service-root-|service-container-go-file\||functional-test-|deprecated-runtime-api-)/u.test(key);
+}
+
+function targetFiles(key) {
+  const [rule, , target] = key.split('|');
+  if (rule === 'service-root-unexpected-directory' || target === '<none>') return [];
+  return target.split(',').map(site => site.split('::')[0].split('#')[0].split(':')[0]);
+}
+
 export function orphanTimingKeys(headText, unitText, prefix) {
-  const timingKeys = [...parseBaseline(headText)].filter(key => key.startsWith('testsleep-'));
+  const timingKeys = [...parseBaseline(headText)].filter(ownsCompilerMetadata);
   if (!timingKeys.length) return [];
   const units = new Map();
   const files = new Map();
@@ -51,11 +61,10 @@ export function orphanTimingKeys(headText, unitText, prefix) {
   }
   if (!units.size) throw new Error('compiler unit metadata contains no repository units');
   return timingKeys.filter(key => {
-    const [rule, unit, site] = key.split('|');
-    const file = site.split('::')[0].split('/').at(-1);
-    return rule.startsWith('testsleep-') &&
-      (!units.has(unit) || (rule.endsWith('-test') && !units.get(unit)) ||
-       (files.has(unit) && !files.get(unit).has(file)));
+    const [rule, unit] = key.split('|');
+    const targets = targetFiles(key).map(file => file.split('/').at(-1));
+    return !units.has(unit) || (rule.startsWith('testsleep-') && rule.endsWith('-test') && !units.get(unit)) ||
+      (files.has(unit) && targets.some(file => !files.get(unit).has(file)));
   }).sort();
 }
 
@@ -63,7 +72,7 @@ export function orphanTimingKeys(headText, unitText, prefix) {
 // the other supported GOOS values. IgnoredGoFiles includes default-only files,
 // so tagged metadata suffices for ownership (both vet configurations still run).
 export function collectTimingUnits(headText, tags, go = 'go', run = spawnSync, host = process.platform) {
-  const keys = [...parseBaseline(headText)].filter(key => key.startsWith('testsleep-'));
+  const keys = [...parseBaseline(headText)].filter(ownsCompilerMetadata);
   const platforms = [...new Set([host === 'win32' ? 'windows' : host, 'linux', 'windows', 'darwin'])];
   const template = '{{.ImportPath}}|{{join .TestGoFiles ","}}|{{join .XTestGoFiles ","}}|{{join .IgnoredGoFiles ","}}|{{join .GoFiles ","}}';
   let metadata = '';
@@ -72,7 +81,10 @@ export function collectTimingUnits(headText, tags, go = 'go', run = spawnSync, h
     if (!unresolved.length) break;
     // Use the repository-file directory, not a guessed _test suffix removal:
     // real directory names may also end in _test.
-    const packages = [...new Set(unresolved.map(key => './' + key.split('|')[2].split('::')[0].split('/').slice(0, -1).join('/')))];
+    const packages = [...new Set(unresolved.map(key => {
+      const targets = targetFiles(key);
+      return './' + (targets.length ? targets[0].split('/').slice(0, -1).join('/') : key.split('|')[1].replace(/_test$/u, ''));
+    }))];
     const result = run(go, ['list', '-e', '-test', `-tags=${tags}`, '-f', template, ...packages], {
       encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
       env: { ...process.env, GOOS: goos },
@@ -97,7 +109,7 @@ function main(args) {
   }
   const failures = orphanTimingKeys(head, readFileSync(options['--units'], 'utf8'), options['--module-prefix'] ?? 'github.com/portpowered/infinite-you/');
   if (failures.length) throw new Error(`lint baseline rejected keys:\n${failures.join('\n')}`);
-  console.log('lint timing ownership: owners and files are valid');
+  console.log('lint compiler ownership: owners and files are valid');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

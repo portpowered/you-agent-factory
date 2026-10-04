@@ -174,7 +174,7 @@ unit command enumerates only
 `./pkg/...`, then uses the shared `internal/testlanes` policy to exclude
 specialized packages. Code under `cmd/`, `internal/`, `tests/`, root
 `contracts/`, and the Go UI embed package is intentionally outside unit
-discovery. `make test-lane-audit` verifies that every required Go test package
+discovery. The TestLane analyzer in `make repolint` verifies that every required Go test package
 has one primary owner. Unit, functional, and lint package concurrency defaults
 to the bounded `GO_LANE_BUDGET`: `max(2, logical CPUs /
 YOU_EXPECTED_CONCURRENT_LANES)`, with the divisor defaulting to 4. The
