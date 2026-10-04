@@ -629,10 +629,3 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}}
 }
-
-// NewFactory returns an inert constructor used for operator-configured ACP catalogs.
-func NewFactory(commandFactory platformprocess.CommandFactory, options ...Option) providers.Factory {
-	return func(integrations []providers.ACPIntegration) (providers.Service, error) {
-		return NewService(append(options, WithCommandFactory(commandFactory), WithACPIntegrations(integrations...))...)
-	}
-}

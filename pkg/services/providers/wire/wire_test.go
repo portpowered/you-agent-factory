@@ -281,9 +281,51 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 		t.Fatalf("effectiveACPIntegrations(legacy package command) = %#v, want package runtime metadata preserved", legacySaved)
 	}
 
-	factory := NewFactory(nil)
-	if _, err := factory([]providers.ACPIntegration{{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"}}); err == nil {
-		t.Fatal("factory(invalid command) error = nil")
+	if _, err := NewService(WithACPIntegrations(providers.ACPIntegration{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"})); err == nil {
+		t.Fatal("NewService(invalid command) error = nil")
+	}
+}
+
+func TestACPConfigurationReusesInertRootAndPreservesCatalogAfterRejection(t *testing.T) {
+	t.Parallel()
+
+	commands := 0
+	root, err := NewService(WithCommandFactory(func(name string, args ...string) *exec.Cmd {
+		commands++
+		return exec.Command(name, args...)
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := root.(interface {
+		ConfigureACPIntegrations(context.Context, []providers.ACPIntegration) error
+		Close(context.Context) error
+	})
+	t.Cleanup(func() {
+		if err := configuration.Close(context.Background()); err != nil {
+			t.Errorf("Close() = %v", err)
+		}
+	})
+	configured := providers.ACPIntegration{ID: "configured", Name: "configured", Transport: "stdio", Command: "configured-agent acp"}
+	if err := configuration.ConfigureACPIntegrations(context.Background(), []providers.ACPIntegration{configured}); err != nil {
+		t.Fatalf("ConfigureACPIntegrations() = %v", err)
+	}
+	configured.Command = "mutated-agent"
+	configured.Name = "mutated"
+	before, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: "configured"})
+	if err != nil || before.Provider.ID != "configured" {
+		t.Fatalf("GetProvider(configured) = (%#v, %v)", before, err)
+	}
+	invalid := providers.ACPIntegration{ID: "invalid", Name: "invalid", Transport: "stdio", Command: "'"}
+	if err := configuration.ConfigureACPIntegrations(context.Background(), []providers.ACPIntegration{invalid}); err == nil {
+		t.Fatal("ConfigureACPIntegrations(invalid) error = nil")
+	}
+	after, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: "configured"})
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("catalog after rejected configuration = (%#v, %v), want %#v", after, err, before)
+	}
+	if commands != 0 {
+		t.Fatalf("construction/configuration/discovery started %d commands, want 0", commands)
 	}
 }
 
