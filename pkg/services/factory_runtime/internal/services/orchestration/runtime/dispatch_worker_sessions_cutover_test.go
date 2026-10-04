@@ -805,7 +805,7 @@ func TestRecordedDispatchFactsBranches(t *testing.T) {
 	if modelAssociation.model == nil || *modelAssociation.model != "gpt-5.6-luna" || modelAssociation.reasoningEffort == nil || *modelAssociation.reasoningEffort != "high" {
 		t.Fatalf("recordedDispatchFacts(model) = %#v, want resolved execution facts", modelAssociation)
 	}
-	modelFact := recordedDispatchFact("dispatch-model", modelAssociation, nil, nil, nil, nil, nil)
+	modelFact := recordedDispatchFactForTest("dispatch-model", modelAssociation, nil, nil, nil, nil, nil)
 	modelObservation := recordedObservationFromFact(modelFact, nil)
 	if modelObservation.Model == nil || *modelObservation.Model != "gpt-5.6-luna" || modelObservation.ReasoningEffort == nil || *modelObservation.ReasoningEffort != "high" {
 		t.Fatalf("recordedObservationFromFact(model) = %#v, want resolved execution facts", modelObservation)
@@ -817,11 +817,12 @@ func TestRecordedDispatchTimingBranches(t *testing.T) {
 	if got := latestFactoryEventTick(events); got != 4 {
 		t.Fatalf("latestFactoryEventTick() = %d, want 4", got)
 	}
-	if got := eventTimeForDispatch(events, "dispatch-1"); !got.Equal(base.Add(4 * time.Second)) {
-		t.Fatalf("eventTimeForDispatch() = %v", got)
+	index := newRecordedDispatchEventIndex(events)
+	if got := index.responseTimes["dispatch-1"]; !got.Equal(base.Add(4 * time.Second)) {
+		t.Fatalf("response time = %v", got)
 	}
-	if got := eventTimeForDispatch(events, "missing"); !got.IsZero() {
-		t.Fatalf("eventTimeForDispatch(missing) = %v, want zero", got)
+	if got := index.responseTimes["missing"]; !got.IsZero() {
+		t.Fatalf("response time(missing) = %v, want zero", got)
 	}
 	if got := firstRecordedTime(time.Time{}, base); !got.Equal(base) || !firstRecordedTime(base.Add(time.Second), base).Equal(base.Add(time.Second)) {
 		t.Fatal("firstRecordedTime() did not select primary/fallback correctly")
@@ -871,10 +872,10 @@ func TestRecordedWorldStateBranches(t *testing.T) {
 		t.Fatal("recordedWorkExists(missing) = true")
 	}
 	completedWithResponseTimeZero := interfaces.FactoryWorldDispatchCompletion{DispatchID: "dispatch-1"}
-	if ended := recordedDispatchEnd(completedWithResponseTimeZero, events, "dispatch-1"); ended == nil || !ended.Equal(base.Add(4*time.Second)) {
+	if ended := recordedDispatchEnd(completedWithResponseTimeZero, newRecordedDispatchEventIndex(events), "dispatch-1"); ended == nil || !ended.Equal(base.Add(4*time.Second)) {
 		t.Fatalf("recordedDispatchEnd(event fallback) = %v", ended)
 	}
-	if recordedDispatchEnd(completedWithResponseTimeZero, nil, "dispatch-1") != nil {
+	if recordedDispatchEnd(completedWithResponseTimeZero, newRecordedDispatchEventIndex(nil), "dispatch-1") != nil {
 		t.Fatal("recordedDispatchEnd(no facts) returned a value")
 	}
 	stateMaps := recordedDispatchStateMaps(interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{DispatchID: "completed"}}, FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{{DispatchID: "failed"}}})
@@ -974,4 +975,20 @@ func (s *historicalProviderSessions) Project(providersessions.ProjectRequest) (p
 		return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 	}
 	return s.result, s.err
+}
+
+// recordedDispatchFactForTest indexes the supplied events for one projection.
+func recordedDispatchFactForTest(
+	dispatchID string,
+	association recordedDispatchAssociation,
+	requests map[string]recordedDispatchRequest,
+	completed map[string]interfaces.FactoryWorldDispatchCompletion,
+	providerSessions []interfaces.FactoryWorldProviderSessionRecord,
+	active map[string]interfaces.FactoryWorldDispatch,
+	events []interfaces.FactoryEvent,
+) recordedDispatchObservation {
+	return recordedDispatchFact(
+		dispatchID, association, requests, completed, providerSessions, active,
+		newRecordedDispatchEventIndex(cloneAndSortFactoryEvents(events)),
+	)
 }
