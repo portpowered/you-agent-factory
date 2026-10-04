@@ -691,3 +691,30 @@ func (logger *recordingOperationLogger) Info(message string, fields ...any) {
 	}
 	logger.infos = append(logger.infos, recordingOperationLogEntry{message: message, fields: values})
 }
+
+// historicalQueryReplay returns supplied observations and captures root requests.
+// It deliberately does not execute replay policy or projection reduction.
+type historicalQueryReplay struct {
+	recordingsreplay.Service
+	scope   recordings.CanonicalEventScope
+	request recordings.CreateReplayPlanRequest
+	calls   int
+}
+
+func (owner *historicalQueryReplay) CreateReplayPlan(request recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
+	owner.request = request
+	return recordings.CreateReplayPlanResult{Plan: recordings.ReplayPlanFacts{Handle: "history-plan"}}, nil
+}
+func (owner *historicalQueryReplay) ObserveReplay(request recordings.ObserveReplayRequest) (recordings.ObserveReplayResult, error) {
+	if request.Plan != "history-plan" {
+		return recordings.ObserveReplayResult{}, recordings.ErrReplayPlanNotFound
+	}
+	owner.calls++
+	kind := recordings.ReplayProgress
+	if owner.calls == len(owner.request.Recording.Events) {
+		kind = recordings.ReplayCompleted
+	}
+	return recordings.ObserveReplayResult{Observation: recordings.ReplayObservation{
+		Kind: kind, Plan: request.Plan, WorldState: recordings.WorldStateView{Scope: owner.scope},
+	}}, nil
+}

@@ -7,7 +7,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -300,39 +299,30 @@ func TestRecordingScopeReplayProjectionInspectionAndArtifactQueries(t *testing.T
 	assertHistoricalArtifacts(t, fixture)
 }
 
+// This fixture supplies completed owner results; it exercises only root routing.
+// Native owner and public functional tests retain persistence/reduction proof.
 func newFinalizedQueryFixture(t *testing.T) *scopedQueryFixture {
 	t.Helper()
-	root := newScopedQueryRoot(t)
-	eventScope := recordings.CanonicalEventScope{FactorySessionID: "history-scope"}
-	bound, err := root.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-history-scope",
-		Artifact:    recordings.RecordingArtifactReference(filepath.Join(t.TempDir(), "history.json")),
-		Scope:       eventScope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: "history-scope"}
 	events := []recordings.CanonicalEvent{
-		scopedScopeEvent("history-event-1", 0, eventScope),
-		scopedScopeEvent("history-event-2", 1, eventScope),
+		scopedScopeEvent("history-event-1", 0, scope), scopedScopeEvent("history-event-2", 1, scope),
 	}
-	for index, event := range events {
-		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID,
-			Event:       event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent[%d]: %v", index, err)
-		}
-	}
-	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_100, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
+	artifacts := &foreignArtifactExportService{Artifact: recordings.PortableArtifact{
+		Summary: recordings.PortableArtifactSummary{RecordingID: "scope-adapter", Scope: scope}, Events: events,
+		Integrity: recordings.PortableArtifactIntegrity{Algorithm: "sha256", Digest: "0000000000000000000000000000000000000000000000000000000000000000"},
+	}}
+	replay := &historicalQueryReplay{scope: scope}
+	finished := time.Unix(1_700_000_400, 0).UTC()
+	status := recordings.RecordingStatusFacts{RecordingID: "scope-adapter", Scope: scope,
+		State: recordings.RecordingFinalized, FinalizedAt: &finished}
+	snapshots := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{
+		"scope-adapter": {Status: status, Events: events},
+	}}
+	projection := &plainReplayProjection{}
+	root := NewCombinedService(nil, projection, snapshots, artifacts, replay, nil, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
 	opened, err := root.OpenRecordingScope(context.Background(), recordings.OpenRecordingScopeRequest{
-		RecordingID: bound.Status.RecordingID,
-		Scope:       eventScope,
+		RecordingID: "scope-adapter", Scope: scope,
 	})
 	if err != nil {
 		t.Fatalf("OpenRecordingScope: %v", err)
@@ -340,13 +330,21 @@ func newFinalizedQueryFixture(t *testing.T) *scopedQueryFixture {
 	if opened.Scope.IsZero() || opened.Status.State != recordings.RecordingFinalized {
 		t.Fatalf("opened scope = %#v, want finalized opaque scope", opened)
 	}
-	return &scopedQueryFixture{
-		root:        root,
-		ref:         opened.Scope,
-		recordingID: bound.Status.RecordingID,
-		eventScope:  eventScope,
-		events:      events,
-	}
+	t.Cleanup(func() {
+		want := recordings.CreateReplayPlanRequest{SchemaVersion: recordings.ReplayPlanSchemaV1,
+			Timing: recordings.ReplayTimingOrderOnly, SelectedTick: 4,
+			Recording: recordings.ReplayRecordingFacts{RecordingID: "scope-adapter", Scope: scope, Events: events}}
+		if !reflect.DeepEqual(replay.request, want) || replay.calls != len(events) {
+			t.Errorf("replay did not receive selected facts/options: %#v", replay)
+		}
+		if len(projection.events) != len(events) || projection.events[0].Id != string(events[0].ID) || projection.events[1].Id != string(events[1].ID) {
+			t.Errorf("projection did not receive ordered selected facts: %#v", projection.events)
+		}
+		if artifacts.Build.RecordingID != "scope-adapter" || artifacts.Export.RecordingID != "scope-adapter" || artifacts.Read.Reference != "recording://foreign" {
+			t.Errorf("artifact delegation changed selection: %#v", artifacts)
+		}
+	})
+	return &scopedQueryFixture{root: root, ref: opened.Scope, recordingID: "scope-adapter", eventScope: scope, events: events}
 }
 
 func assertHistoricalReplayFacts(t *testing.T, fixture *scopedQueryFixture) {
