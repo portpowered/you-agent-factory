@@ -17,6 +17,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
+	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
 func TestCommandEffectBuildsRecordedPrintArgv(t *testing.T) {
@@ -305,7 +306,7 @@ func TestCommandEffectTimeoutIsProviderFailure(t *testing.T) {
 
 func newAgyCommandEffect(runner platformprocess.CommandRunner) agy.Effect {
 	return agy.NewCommandEffect(
-		runner,
+		executionwire.AdaptPlatformCommandRunner(runner),
 		platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond),
 	)
 }
@@ -340,4 +341,63 @@ func max(left, right int) int {
 		return left
 	}
 	return right
+}
+
+func TestCommandEffectDurationUsesInjectedClockOnSuccessAndFailure(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		runErr   error
+		wantKind providers.ExecuteFailureKind
+	}{
+		{name: "success"},
+		{name: "timeout", runErr: context.DeadlineExceeded, wantKind: providers.ExecuteFailureKindTimeout},
+		{name: "cancellation", runErr: context.Canceled, wantKind: providers.ExecuteFailureKindCanceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond)
+			calls := 0
+			effect := agy.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(clockAdvancingCommandRunner{
+				run: func(ctx context.Context, command platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+					calls++
+					if command.Command != "agy" || command.ExecutionScopeID != "owned-session" {
+						t.Fatalf("command = %#v, want agy in owned session", command)
+					}
+					clock.SetTick(43)
+					return platformprocess.CommandResult{Stdout: []byte("delivered"), Stderr: []byte("private diagnostic")}, tc.runErr
+				},
+			}), clock)
+			var observed strings.Builder
+			result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
+				Provider:    providers.IDAntigravity,
+				UserMessage: "perform work",
+				Correlation: providers.ExecuteCorrelation{FactorySessionID: "owned-session"},
+			}}, func(chunk []byte) error {
+				observed.Write(chunk)
+				return nil
+			})
+			if calls != 1 || result.DurationMillis != 43 || observed.String() != "delivered" || string(result.CapturedStdout) != "delivered" {
+				t.Fatalf("calls = %d, result = %#v, stdout = %q", calls, result, observed.String())
+			}
+			if tc.wantKind == "" {
+				if err != nil {
+					t.Fatalf("Execute() error = %v", err)
+				}
+			} else {
+				var failure providers.ExecuteFailure
+				if !errors.As(err, &failure) || failure.Kind != tc.wantKind {
+					t.Fatalf("error = %v, want %s", err, tc.wantKind)
+				}
+			}
+		})
+	}
+}
+
+type clockAdvancingCommandRunner struct {
+	run func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error)
+}
+
+func (runner clockAdvancingCommandRunner) Run(ctx context.Context, command platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return runner.run(ctx, command)
 }

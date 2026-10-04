@@ -26,6 +26,9 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 // NewCommandEffect binds one streaming subprocess runner to the Codex adapter.
 
 func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source) Effect {
+	if runner == nil || clock == nil {
+		return nil
+	}
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,

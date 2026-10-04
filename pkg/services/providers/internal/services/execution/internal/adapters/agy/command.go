@@ -26,8 +26,7 @@ const (
 // Providers command-runner boundary. The command runner owns process
 // creation; this adapter owns only AGY's argv and timeout policy.
 
-func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
-	runner := providerservice.AdaptCommandRunner(candidate)
+func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source) Effect {
 	if runner == nil || clock == nil {
 		return nil
 	}
