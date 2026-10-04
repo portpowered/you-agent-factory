@@ -893,7 +893,7 @@ func TestLocalExecutorLateResolutionReleasesLeaseWithoutFurtherEffects(t *testin
 				go func() {
 					result, err := executor.InvokeLocal(invocationCtx, a, configA, assets)
 					if !result.Handled || result.Content != "" {
-						err = fmt.Errorf("late result = %#v: %w", result, err)
+						err = fmt.Errorf("late result = %#v", result)
 					}
 					done <- err
 				}()
