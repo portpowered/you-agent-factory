@@ -10,18 +10,16 @@ import (
 )
 
 type config struct {
-	constructionRegistry              *contractguard.ConstructionRegistry
-	root                              string
-	packageRoot                       string
-	all                               bool
-	baseRef                           string
-	baselineCacheDir                  string
-	writeTestServiceImportBaseline    bool
-	writeSupportServiceImportBaseline bool
-	writeTransportBehaviorBaseline    bool
-	writeProductionDefaultBaseline    bool
-	writeTestBehaviorBaseline         bool
-	writePetriPublicSurfaceBaseline   bool
+	constructionRegistry            *contractguard.ConstructionRegistry
+	root                            string
+	packageRoot                     string
+	all                             bool
+	baseRef                         string
+	baselineCacheDir                string
+	writeTransportBehaviorBaseline  bool
+	writeProductionDefaultBaseline  bool
+	writeTestBehaviorBaseline       bool
+	writePetriPublicSurfaceBaseline bool
 }
 
 func parseConfig() config {
@@ -32,22 +30,10 @@ func parseConfig() config {
 	flag.StringVar(&cfg.baseRef, "base-ref", "", "optional Git ref used to identify recorded package-boundary findings")
 	flag.StringVar(&cfg.baselineCacheDir, "baseline-cache-dir", "", "memoize the base-tree scan per base commit and checker build in this directory (\"auto\" selects a per-user cache); empty disables the cache")
 	flag.BoolVar(
-		&cfg.writeTestServiceImportBaseline,
-		"create-test-service-import-baseline",
-		false,
-		"create the deletion-only test service import baseline; fails when the file already exists",
-	)
-	flag.BoolVar(
 		&cfg.writeProductionDefaultBaseline,
 		"create-production-default-selection-baseline",
 		false,
 		"create the deletion-only production default-selection baseline; fails when the file already exists or no debt exists",
-	)
-	flag.BoolVar(
-		&cfg.writeSupportServiceImportBaseline,
-		"create-support-service-import-baseline",
-		false,
-		"create the deletion-only reusable-support service import baseline; fails when the file already exists",
 	)
 	flag.BoolVar(
 		&cfg.writeTransportBehaviorBaseline,
@@ -125,11 +111,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 
 func countBlockingViolations(findings scanResult) int {
 	return contractguard.CountBlockingConstructionFindings(findings.constructionFindings) + countAlwaysBlockingViolations(findings) +
-		countProductionBoundaryViolations(findings) +
-		// Test-service imports are an intentional test-specific policy. They
-		// remain blocking even though their source class is test-only.
-		len(findings.testServiceImportFindings) +
-		len(findings.staleTestServiceBaselineEntries)
+		countProductionBoundaryViolations(findings)
 }
 
 func countAlwaysBlockingViolations(findings scanResult) int {
@@ -160,26 +142,6 @@ func countProductionBoundaryViolations(findings scanResult) int {
 func countProductionBoundaryImports(findings scanResult) int {
 	count := 0
 	count += countProductionBoundaryFindings(
-		findings.applicationGraphImportFindings,
-		func(finding applicationGraphImportFinding) boundarySourceClass { return finding.class },
-		func(finding applicationGraphImportFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
-		findings.domainTransportFindings,
-		func(finding domainTransportImportFinding) boundarySourceClass { return finding.class },
-		func(finding domainTransportImportFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
-		findings.peerServiceImportFindings,
-		func(finding peerServiceImportFinding) boundarySourceClass { return finding.class },
-		func(finding peerServiceImportFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
-		findings.supportServiceImportFindings,
-		func(finding supportServiceImportFinding) boundarySourceClass { return finding.class },
-		func(finding supportServiceImportFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
 		findings.serviceConstructionFindings,
 		func(finding serviceConstructionFinding) boundarySourceClass { return finding.class },
 		func(finding serviceConstructionFinding) string { return finding.filePath },
@@ -194,22 +156,6 @@ func countProductionBoundaryImports(findings scanResult) int {
 
 func countProductionBoundaryBaselines(findings scanResult) int {
 	count := 0
-	count += countProductionBoundaryFindings(
-		findings.stalePeerServiceBaselineEntries,
-		func(entry peerServiceImportBaselineEntry) boundarySourceClass {
-			class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
-			return class
-		},
-		func(entry peerServiceImportBaselineEntry) string { return entry.FilePath },
-	)
-	count += countProductionBoundaryFindings(
-		findings.staleSupportServiceBaselineEntries,
-		func(entry supportServiceImportBaselineEntry) boundarySourceClass {
-			class, _ := sourceClassFromBaseline(entry.Class, entry.FilePath)
-			return class
-		},
-		func(entry supportServiceImportBaselineEntry) string { return entry.FilePath },
-	)
 	count += countProductionBoundaryFindings(
 		findings.staleServiceConstructionEntries,
 		func(entry serviceConstructionBaselineEntry) boundarySourceClass {
