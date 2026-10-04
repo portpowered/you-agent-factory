@@ -89,6 +89,10 @@ type Connection struct {
 	// notificationQueue serializes notification processing to maintain order.
 	// It is bounded to keep memory usage predictable.
 	notificationQueue chan queuedNotification
+
+	// Initial loops stay registered while admitting their child work.
+	workers sync.WaitGroup
+	joined  chan struct{}
 }
 
 func NewConnection(handler MethodHandler, peerInput io.Writer, peerOutput io.Reader) *Connection {
@@ -106,17 +110,21 @@ func NewConnection(handler MethodHandler, peerInput io.Writer, peerOutput io.Rea
 		inboundCtx:          inboundCtx,
 		inboundCancel:       inboundCancel,
 		notificationQueue:   make(chan queuedNotification, defaultMaxQueuedNotifications),
+		joined:              make(chan struct{}),
 	}
 	c.notifyCond = sync.NewCond(&c.notifyMu)
+	c.workers.Add(4)
 	go func() {
+		defer c.workers.Done()
 		<-c.ctx.Done()
 		c.notifyMu.Lock()
 		c.notifyCond.Broadcast()
 		c.notifyMu.Unlock()
 	}()
-	go c.sendCancelRequests()
-	go c.receive()
-	go c.processNotifications()
+	go func() { defer c.workers.Done(); c.sendCancelRequests() }()
+	go func() { defer c.workers.Done(); c.receive() }()
+	go func() { defer c.workers.Done(); c.processNotifications() }()
+	go func() { c.workers.Wait(); close(c.joined) }()
 	return c
 }
 
@@ -409,7 +417,9 @@ func (c *Connection) receive() {
 				c.mu.Unlock()
 
 				m := msg
+				c.workers.Add(1)
 				go func(m *anyMessage, idKey string, reqCtx context.Context, cancel context.CancelCauseFunc) {
+					defer c.workers.Done()
 					defer func() {
 						c.mu.Lock()
 						delete(c.inflight, idKey)
@@ -482,7 +492,9 @@ func (c *Connection) shutdownReceive(cause error) {
 
 	// Cancel inboundCtx after notifications finish, but ensure we don't leak forever if a
 	// handler blocks waiting for cancellation.
+	c.workers.Add(1)
 	go func(finalEnqueuedSeq uint64) {
+		defer c.workers.Done()
 		c.waitForNotificationDrain(finalEnqueuedSeq, notificationQueueDrainTimeout)
 		c.inboundCancel(cause)
 	}(finalEnqueuedSeq)
@@ -834,7 +846,8 @@ func (c *Connection) waitNotificationsUpTo(ctx context.Context, target uint64) e
 
 	peerDisconnectedErr := NewInternalError(map[string]any{"error": "peer disconnected while waiting for pre-response notifications"})
 	stopWake := make(chan struct{})
-	defer close(stopWake)
+	wakeDone := make(chan struct{})
+	defer func() { close(stopWake); <-wakeDone }()
 
 	c.notifyMu.Lock()
 	defer c.notifyMu.Unlock()
@@ -843,6 +856,7 @@ func (c *Connection) waitNotificationsUpTo(ctx context.Context, target uint64) e
 	}
 
 	go func() {
+		defer close(wakeDone)
 		select {
 		case <-ctx.Done():
 		case <-c.inboundCtx.Done():
@@ -889,7 +903,8 @@ func (c *Connection) waitForNotificationDrain(target uint64, timeout time.Durati
 	defer cancel()
 
 	stopWake := make(chan struct{})
-	defer close(stopWake)
+	wakeDone := make(chan struct{})
+	defer func() { close(stopWake); <-wakeDone }()
 
 	c.notifyMu.Lock()
 	defer c.notifyMu.Unlock()
@@ -898,6 +913,7 @@ func (c *Connection) waitForNotificationDrain(target uint64, timeout time.Durati
 	}
 
 	go func() {
+		defer close(wakeDone)
 		select {
 		case <-ctx.Done():
 		case <-stopWake:
@@ -1002,3 +1018,8 @@ func (c *Connection) prepareNotification(method string, params any) (anyMessage,
 func (c *Connection) Done() <-chan struct{} {
 	return c.ctx.Done()
 }
+
+// Joined closes after the receive, notification, cancellation and shutdown
+// loops and admitted inbound handlers return. Done still signals disconnect.
+// Owners must release blocked I/O and callbacks; Joined does not stop them.
+func (c *Connection) Joined() <-chan struct{} { return c.joined }

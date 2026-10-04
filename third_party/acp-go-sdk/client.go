@@ -25,3 +25,6 @@ func (c *ClientSideConnection) Done() <-chan struct{} { return c.conn.Done() }
 
 // SetLogger directs connection diagnostics to the provided logger.
 func (c *ClientSideConnection) SetLogger(l *slog.Logger) { c.conn.SetLogger(l) }
+
+// Joined observes termination of connection-owned work after disconnect.
+func (c *ClientSideConnection) Joined() <-chan struct{} { return c.conn.Joined() }

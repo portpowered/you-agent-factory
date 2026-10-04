@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"os/exec"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,17 +34,21 @@ func TestAttemptTeardownUsesInjectedScheduler(t *testing.T) {
 			stdin, stdout := &teardownStream{}, &teardownStream{}
 			logger := &teardownLogger{}
 			handles := &attemptHandles{
-				stdin: stdin, stdout: stdout, finished: make(chan error, 1),
+				stdin: stdin, stdout: stdout, finished: make(chan struct{}),
+				stdio: &teardownChannel{stdin: stdin, stdout: stdout},
 			}
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			done := make(chan error, 1)
 			owner := &Service{scheduler: scheduler, logger: logger}
-			go func() { done <- owner.terminate(ctx, handles) }()
+			owned := (&provider{}).newAttempt(providers.ExecuteRequest{})
+			owned.publish(handles)
+			owned.executionRelease.Do(func() { close(owned.executionReleased) })
+			go func() { done <- owner.stopAttempt(ctx, owned) }()
 			grace := awaitTeardownTimer(t, scheduler, 500*time.Millisecond)
 			timers := []*teardownTimer{grace}
 			if outcome == "graceful" {
-				handles.finished <- nil
+				close(handles.finished)
 			} else {
 				if outcome == "caller-cancel" {
 					cancel()
@@ -52,10 +59,23 @@ func TestAttemptTeardownUsesInjectedScheduler(t *testing.T) {
 				if outcome == "kill-timeout" {
 					scheduler.clock.SetTick(2500)
 				} else {
-					handles.finished <- nil
+					close(handles.finished)
 				}
 			}
 			assertTeardownOutcome(t, outcome, <-done, stdin, stdout, timers)
+			if outcome == "kill-timeout" {
+				select {
+				case <-owned.completion:
+					t.Fatal("kill timeout falsely completed resources")
+				default:
+				}
+				// Repeated retirement keeps the same failure and cannot stop twice.
+				if err := owner.stopAttempt(context.Background(), owned); err == nil || err.Error() != "ACP process did not exit after termination" {
+					t.Fatalf("repeated stop lost its disposition: %v", err)
+				}
+				close(handles.finished)
+			}
+			awaitAttemptCompletion(t, owned)
 			assertTeardownLogs(t, outcome, logger)
 		})
 	}
@@ -87,11 +107,17 @@ func assertTeardownOutcome(t *testing.T, outcome string, err error, stdin, stdou
 	}
 }
 
-type teardownStream struct{ closes atomic.Int32 }
+type teardownStream struct {
+	closes atomic.Int32
+	once   sync.Once
+}
 
 func (*teardownStream) Read([]byte) (int, error)    { return 0, io.EOF }
 func (*teardownStream) Write(p []byte) (int, error) { return len(p), nil }
-func (stream *teardownStream) Close() error         { stream.closes.Add(1); return nil }
+func (stream *teardownStream) Close() error {
+	stream.once.Do(func() { stream.closes.Add(1) })
+	return nil
+}
 
 type teardownTimer struct {
 	platformclock.Timer
@@ -348,5 +374,110 @@ func assertTeardownLogs(t *testing.T, outcome string, logger *teardownLogger) {
 	}
 	if !slices.Equal(logger.reasons, want) {
 		t.Fatalf("cleanup diagnostics = %v, want %v", logger.reasons, want)
+	}
+}
+
+// One test-owned channel records all parent-end release, without host I/O.
+type teardownChannel struct{ stdin, stdout *teardownStream }
+
+func (*teardownChannel) Attach(*exec.Cmd)                 {}
+func (*teardownChannel) Detach()                          {}
+func (channel *teardownChannel) Close()                   { _ = channel.stdout.Close() }
+func (channel *teardownChannel) Requests() io.WriteCloser { return channel.stdin }
+func (channel *teardownChannel) Responses() io.ReadCloser { return channel.stdout }
+
+func awaitAttemptCompletion(t *testing.T, owned *attempt) {
+	t.Helper()
+	select {
+	case <-owned.completion:
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling; completion signal drives the assertion
+		t.Fatal("attempt resources did not finish")
+	}
+}
+
+func TestAttemptCompletionWaitsForProtocolAndProgressWithoutBlockingPeer(t *testing.T) {
+	t.Parallel()
+	protocolDone := make(chan struct{})
+	observerEntered, observerRelease := make(chan struct{}), make(chan struct{})
+	var observerOnce sync.Once
+	unblock := func() { observerOnce.Do(func() { close(observerRelease) }) }
+	t.Cleanup(unblock)
+	client := &client{}
+	client.reset(func(providers.ExecuteProgress) { close(observerEntered); <-observerRelease })
+	client.stream.dispatcher.Enqueue([]providers.ExecuteProgress{{}})
+	select {
+	case <-observerEntered:
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for observer readiness
+		t.Fatal("observer did not start")
+	}
+	owner := &Service{scheduler: platformclock.Real{}, logger: logging.NoopLogger{}}
+	target := &provider{}
+	owned := target.newAttempt(providers.ExecuteRequest{})
+	finished := make(chan struct{})
+	close(finished)
+	owned.publish(&attemptHandles{stdin: &teardownStream{}, stdout: &teardownStream{},
+		stdio:    &teardownChannel{stdin: &teardownStream{}, stdout: &teardownStream{}},
+		finished: finished, protocolJoined: protocolDone, client: client})
+	owned.executionRelease.Do(func() { close(owned.executionReleased) })
+	if err := owner.stopAttempt(t.Context(), owned); err != nil {
+		t.Fatal(err)
+	}
+	assertAttemptOutstanding(t, owned)
+	// A different attempt completes while A retains its callback and protocol work.
+	peer := target.newAttempt(providers.ExecuteRequest{})
+	if err := owner.stopAttempt(t.Context(), peer); err != nil {
+		t.Fatal(err)
+	}
+	awaitAttemptCompletion(t, peer)
+	if err := owner.stopAttempt(t.Context(), owned); err != nil {
+		t.Fatal(err)
+	}
+	assertAttemptOutstanding(t, owned)
+	close(protocolDone)
+	assertAttemptOutstanding(t, owned) // dispatcher is still held even after SDK producers end
+	unblock()
+	awaitAttemptCompletion(t, owned)
+}
+
+func TestAttemptRetirementRetainsLateStartup(t *testing.T) {
+	for _, launched := range []bool{false, true} {
+		t.Run(fmt.Sprint(launched), func(t *testing.T) {
+			t.Parallel()
+			owner := &Service{scheduler: platformclock.Real{}, logger: logging.NoopLogger{}}
+			owned := (&provider{}).newAttempt(providers.ExecuteRequest{})
+			if !owned.beginLaunch() {
+				t.Fatal("launch refused before retirement")
+			}
+			owned.retire()
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			if err := owner.stopAttempt(ctx, owned); !errors.Is(err, context.Canceled) {
+				t.Fatalf("stop = %v", err)
+			}
+			assertAttemptOutstanding(t, owned)
+			if launched {
+				finished := make(chan struct{})
+				close(finished)
+				stdin, stdout := &teardownStream{}, &teardownStream{}
+				owned.publish(&attemptHandles{stdin: stdin, stdout: stdout, finished: finished,
+					stdio: &teardownChannel{stdin: stdin, stdout: stdout}})
+			}
+			owned.settleStartup()
+			owner.releaseAttempt(owned)
+			awaitAttemptCompletion(t, owned)
+			if owned.beginLaunch() {
+				t.Fatal("retired attempt admitted a new launch")
+			}
+			owner.releaseAttempt(owned)
+		})
+	}
+}
+
+func assertAttemptOutstanding(t *testing.T, owned *attempt) {
+	t.Helper()
+	select {
+	case <-owned.completion:
+		t.Fatal("attempt declared resource completion while work was outstanding")
+	default:
 	}
 }
