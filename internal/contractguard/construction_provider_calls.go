@@ -86,13 +86,17 @@ func constructionProviderCallees(decl constructionDeclaration) ([]ConstructionSy
 				if symbol, resolved := resolveConstructionCall(call.Fun, body.source); resolved {
 					callees = append(callees, symbol)
 				}
-				closure, closureSource := constructionProviderClosure(call.Fun, body.source, map[*ast.Object]bool{})
-				if closure == nil {
+				callable := constructionProviderCallable(call.Fun, body.source, map[ast.Node]bool{})
+				if callable.symbol.Name != "" {
+					callees = append(callees, callable.symbol)
+				}
+				closure := callable.closure
+				if closure == nil && callable.symbol.Name == "" {
 					unresolved = unresolved || constructionProviderCallableDebt(call.Fun, body.source)
 				}
 				if closure != nil && !visited[closure] {
 					visited[closure] = true
-					pending = append(pending, bodySource{closure.Body, closureSource})
+					pending = append(pending, bodySource{closure.Body, callable.source})
 				}
 			}
 			return true
@@ -101,21 +105,49 @@ func constructionProviderCallees(decl constructionDeclaration) ([]ConstructionSy
 	return callees, unresolved
 }
 
-// Calling an immutable local function value establishes a closure edge. Merely
-// passing or storing the value does not; mutable and opaque values need further
-// classification rather than selecting their initializer as current behavior.
-func constructionProviderClosure(expr ast.Expr, source *constructionSource, visited map[*ast.Object]bool) (*ast.FuncLit, *constructionSource) {
+// Identity is authored declaration/closure identity, never body equivalence.
+type constructionCallable struct {
+	symbol  ConstructionSymbol
+	closure *ast.FuncLit
+	source  *constructionSource
+}
+
+// The visiting set covers expressions, bindings and return bodies. Re-entering
+// any node leaves identity unknown; sibling returns have independent paths.
+func constructionProviderCallable(expr ast.Expr, source *constructionSource, visiting map[ast.Node]bool) constructionCallable {
+	if expr == nil || visiting[expr] {
+		return constructionCallable{}
+	}
+	visiting[expr] = true
+	defer delete(visiting, expr)
 	switch value := expr.(type) {
 	case *ast.FuncLit:
-		return value, source
+		return constructionCallable{closure: value, source: source}
 	case *ast.ParenExpr:
-		return constructionProviderClosure(value.X, source, visited)
+		return constructionProviderCallable(value.X, source, visiting)
 	case *ast.Ident:
 		object, owner, safe := constructionProviderValue(value, source)
-		if safe && !visited[object] {
-			visited[object] = true
-			return constructionProviderClosure(constructionValueInitializer(object), owner, visited)
+		if object != nil && object.Kind == ast.Var {
+			if safe && (constructionProviderPackageObject(object, owner) || !constructionProviderValueEscaped(object, owner, map[*ast.Object]bool{})) {
+				return constructionProviderCallable(constructionValueInitializer(object), owner, visiting)
+			}
+			return constructionCallable{}
 		}
+	case *ast.CallExpr:
+		producer := constructionProviderCallable(value.Fun, source, visiting)
+		if producer.closure != nil {
+			return constructionProviderReturn(producer.closure.Type, producer.closure.Body, producer.source, visiting)
+		}
+		decl := source.declarations[producer.symbol]
+		if decl.function != nil {
+			return constructionProviderReturn(decl.function.Type, decl.function.Body, decl.source, visiting)
+		}
+		return constructionCallable{}
 	}
-	return nil, nil
+	symbol, resolved := resolveConstructionCall(expr, source)
+	decl := source.declarations[symbol]
+	if resolved && symbol.ImportPath == source.importPath && symbol.Receiver == "" && decl.function != nil && decl.function.Body != nil {
+		return constructionCallable{symbol: symbol, source: decl.source}
+	}
+	return constructionCallable{}
 }

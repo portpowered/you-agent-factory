@@ -130,56 +130,67 @@ func NewFactoryTargetCatalogService(a operator_settings.Service, b factory_defin
 func TestFocusedProviderDispatchDebtControlsCommandStatus(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, body string
-		mode       contractguard.ConstructionMode
+		name, body, helper, rule string
 	}{
-		{"callback-report", "callback();", contractguard.ConstructionReport},
-		{"callback-enforce", "callback();", contractguard.ConstructionEnforce},
-		{"returned-report", "factory()();", contractguard.ConstructionReport},
-		{"returned-enforce", "factory()();", contractguard.ConstructionEnforce},
-		{"field-report", "h := Hook{}; h.Run();", contractguard.ConstructionReport},
-		{"field-enforce", "h := Hook{}; h.Run();", contractguard.ConstructionEnforce},
+		{"callback", "callback();", "", "unresolved-focused-provider-dispatch"},
+		{"returned-acyclic", "factory()();", "func factory() func() { return func() {} }", ""},
+		{"returned-recursive", "factory()();", "func factory() func() { return func() { Provide(nil) } }", "registered-construction"},
+		{"returned-unsupported", "factory()();", "func factory() (next func()) { return func() {} }", "unresolved-focused-provider-dispatch"},
+		{"field", "h := Hook{}; h.Run();", "", "unresolved-focused-provider-dispatch"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			mode := tc.mode
-			root := t.TempDir()
-			writeGoSourceFile(t, root, "go.mod", "module example.test/factory\n\ngo 1.25.0\n")
-			writeGoSourceFile(t, root, "pkg/services/example/service.go", `package example
-type Service struct{}
-func New() *Service { return &Service{} }
-`)
-			writeGoSourceFile(t, root, "pkg/wire/provider.go", `package wire
-import "example.test/factory/pkg/services/example"
-func Provide(callback func()) { `+tc.body+` example.New() }
-func factory() func() { return func() {} }
-type Hook struct { Run func() }
-`)
-			const owner = "example.test/factory/pkg/services/example"
-			constructor := contractguard.ConstructionSymbol{ImportPath: owner, Name: "New"}
-			provider := contractguard.ConstructionSymbol{ImportPath: "example.test/factory/pkg/wire", Name: "Provide"}
-			service := contractguard.ConstructionSymbol{ImportPath: owner, Name: "Service"}
-			registry := contractguard.ConstructionRegistry{
-				CapabilitySets: []contractguard.ConstructionCapabilitySet{{Name: "example", OwnerTask: "T20", Mode: mode}},
-				Constructors:   []contractguard.ConstructionConstructor{{Symbol: constructor, CapabilitySet: "example", Results: []contractguard.ConstructionSymbol{service}}},
-				Types:          []contractguard.ConstructionType{{Symbol: service, CapabilitySet: "example", Kind: contractguard.ConstructionBehavior}},
-				Allowances: []contractguard.ConstructionAllowance{{Caller: provider, Callee: constructor, FilePath: "pkg/wire/provider.go",
-					Kind: "focused-provider", OwnerTask: "T20", Reason: "direct focused construction"}},
-			}
-			var stdout, stderr bytes.Buffer
-			err := run(config{root: root, packageRoot: defaultScanRoot, constructionRegistry: &registry}, &stdout, &stderr)
-			if (err != nil) != (mode == contractguard.ConstructionEnforce) {
-				t.Fatalf("mode %s: unexpected command status %v; stderr=%s", mode, err, &stderr)
-			}
-			output := stdout.String() + stderr.String()
-			for _, want := range []string{"pkg/wire/provider.go:3", "caller=" + provider.String(), "callee=" + constructor.String(), "mode=" + string(mode), "rule=unresolved-focused-provider-dispatch"} {
-				if !strings.Contains(output, want) {
-					t.Fatalf("output %q missing %q", output, want)
+		for _, mode := range []contractguard.ConstructionMode{contractguard.ConstructionReport, contractguard.ConstructionEnforce} {
+			t.Run(tc.name+"-"+string(mode), func(t *testing.T) {
+				t.Parallel()
+				root, registry := focusedProviderReportFixture(t, tc.body, tc.helper, mode)
+				var stdout, stderr bytes.Buffer
+				err := run(config{root: root, packageRoot: defaultScanRoot, constructionRegistry: &registry}, &stdout, &stderr)
+				if (err != nil) != (tc.rule != "" && mode == contractguard.ConstructionEnforce) {
+					t.Fatalf("mode %s: unexpected command status %v; stderr=%s", mode, err, &stderr)
 				}
-			}
-			if strings.Contains(output, tc.body) {
-				t.Fatalf("diagnostic exposed source text: %q", output)
-			}
-		})
+				output := stdout.String() + stderr.String()
+				if tc.rule == "" {
+					if strings.Contains(output, "rule=") || stderr.Len() != 0 {
+						t.Fatalf("acyclic result acquired construction debt: %q", output)
+					}
+					return
+				}
+				for _, want := range []string{"pkg/wire/provider.go:3", "caller=" + registry.Allowances[0].Caller.String(), "callee=" + registry.Constructors[0].Symbol.String(), "mode=" + string(mode), "rule=" + tc.rule} {
+					if !strings.Contains(output, want) {
+						t.Fatalf("output %q missing %q", output, want)
+					}
+				}
+				if strings.Contains(output, tc.body) {
+					t.Fatalf("diagnostic exposed source text: %q", output)
+				}
+			})
+		}
 	}
+}
+
+func focusedProviderReportFixture(t *testing.T, body, helper string, mode contractguard.ConstructionMode) (string, contractguard.ConstructionRegistry) {
+	t.Helper()
+	root := t.TempDir()
+	writeGoSourceFile(t, root, "go.mod", "module example.test/factory\n\ngo 1.25.0\n")
+	writeGoSourceFile(t, root, "pkg/services/example/service.go", `package example
+ type Service struct{}
+ func New() *Service { return &Service{} }
+ `)
+	writeGoSourceFile(t, root, "pkg/wire/provider.go", `package wire
+ import "example.test/factory/pkg/services/example"
+ func Provide(callback func()) { `+body+` example.New() }
+ type Hook struct { Run func() }
+ `)
+	writeGoSourceFile(t, root, "pkg/wire/helpers.go", "package wire\n"+helper)
+	const owner = "example.test/factory/pkg/services/example"
+	constructor := contractguard.ConstructionSymbol{ImportPath: owner, Name: "New"}
+	provider := contractguard.ConstructionSymbol{ImportPath: "example.test/factory/pkg/wire", Name: "Provide"}
+	service := contractguard.ConstructionSymbol{ImportPath: owner, Name: "Service"}
+	registry := contractguard.ConstructionRegistry{
+		CapabilitySets: []contractguard.ConstructionCapabilitySet{{Name: "example", OwnerTask: "T20", Mode: mode}},
+		Constructors:   []contractguard.ConstructionConstructor{{Symbol: constructor, CapabilitySet: "example", Results: []contractguard.ConstructionSymbol{service}}},
+		Types:          []contractguard.ConstructionType{{Symbol: service, CapabilitySet: "example", Kind: contractguard.ConstructionBehavior}},
+		Allowances: []contractguard.ConstructionAllowance{{Caller: provider, Callee: constructor, FilePath: "pkg/wire/provider.go",
+			Kind: "focused-provider", OwnerTask: "T20", Reason: "direct focused construction"}},
+	}
+	return root, registry
 }

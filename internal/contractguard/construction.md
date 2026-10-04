@@ -188,11 +188,18 @@ mode, and blocks an enforced set without claiming a concrete recursive path.
 Uncalled callbacks, uninvoked closure bodies, shadowed bindings, builtins and
 type conversions do not acquire dispatch debt. A proved recursive path still
 reports `registered-construction` even if another path is unresolved.
-Invoking a helper-returned function directly, through parentheses, defer/go,
-or a called helper/closure also retains dispatch debt. Merely evaluating or
-storing the helper result does not establish invocation. Even an authored
-acyclic return remains debt until a callable return summary proves identity;
-the helper declaration alone cannot select the returned implementation.
+Invoked same-package helper results follow a bounded callable return summary
+when the helper has one unnamed function result and every explicit return
+selects the same authored declaration or closure. Parentheses, defer/go,
+immutable local aliases and nested supported helper results preserve identity
+and the declaring source. Nested uncalled closure returns are excluded from
+the enclosing summary. Merely evaluating or storing a result does not invoke
+its body; calls in the producing helper still establish their own edges.
+Mixed identities, named/tuple results, missing or ambiguous bodies, imported
+identity and mutated/escaped local aliases retain dispatch debt when invoked.
+Self/mutual return-summary cycles terminate with unknown identity rather than
+choosing a target. This does not infer predicate truth, callback arguments or
+equivalence between separately authored closures.
 Invoked function fields and unresolved interface/opaque method selectors retain
 the same dispatch debt, including promoted/nested fields, returned owners,
 parentheses, defer/go and called helper/closure bodies. Concrete authored methods

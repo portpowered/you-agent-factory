@@ -5,6 +5,105 @@ import (
 	"go/token"
 )
 
+// Summarize only a single unnamed function result. Explicit alternatives must
+// agree on one authored identity; nested closure returns belong to that closure.
+func constructionProviderReturn(signature *ast.FuncType, body *ast.BlockStmt, source *constructionSource, visiting map[ast.Node]bool) constructionCallable {
+	if body == nil || visiting[body] || signature.Results == nil || len(signature.Results.List) != 1 {
+		return constructionCallable{}
+	}
+	result := signature.Results.List[0]
+	if _, callable := result.Type.(*ast.FuncType); !callable || len(result.Names) != 0 {
+		return constructionCallable{}
+	}
+	visiting[body] = true
+	defer delete(visiting, body)
+	var identity constructionCallable
+	found, unknown := false, false
+	ast.Inspect(body, func(node ast.Node) bool {
+		if _, nested := node.(*ast.FuncLit); nested {
+			return false
+		}
+		returned, ok := node.(*ast.ReturnStmt)
+		if !ok {
+			return true
+		}
+		if len(returned.Results) != 1 {
+			unknown = true
+			return false
+		}
+		candidate := constructionProviderCallable(returned.Results[0], source, visiting)
+		if candidate.source == nil || (found && (identity.symbol != candidate.symbol || identity.closure != candidate.closure)) {
+			unknown = true
+		}
+		identity, found = candidate, true
+		return false
+	})
+	if !found || unknown {
+		return constructionCallable{}
+	}
+	return identity
+}
+
+// Local callable aliases may be called, returned or transferred to another
+// stable local alias. Callback transfer, address escape and nonlocal storage
+// cannot prove the initializer remains the invoked identity.
+func constructionProviderValueEscaped(object *ast.Object, source *constructionSource, visiting map[*ast.Object]bool) bool {
+	if visiting[object] {
+		return true
+	}
+	visiting[object] = true
+	defer delete(visiting, object)
+	aliases, definitions := constructionValueBindings(source.file)
+	allowed := make(map[ast.Expr]bool)
+	ast.Inspect(source.file, func(node ast.Node) bool {
+		switch value := node.(type) {
+		case *ast.CallExpr:
+			markConstructionCallee(allowed, value.Fun)
+		case *ast.ReturnStmt:
+			for _, result := range value.Results {
+				markConstructionCallee(allowed, result)
+			}
+		case *ast.AssignStmt:
+			if len(value.Lhs) == 1 && len(value.Rhs) == 1 {
+				if name, ok := value.Lhs[0].(*ast.Ident); ok && name.Name == "_" {
+					markConstructionCallee(allowed, value.Rhs[0])
+				}
+			}
+		}
+		return true
+	})
+	for target, initializer := range aliases {
+		if target == object || source.mutations[target] || constructionProviderPackageObject(target, source) {
+			continue
+		}
+		// Only inspect aliases which actually transfer this binding.
+		parts := make(map[ast.Expr]bool)
+		markConstructionCallee(parts, initializer)
+		for part := range parts {
+			if name, ok := part.(*ast.Ident); ok && name.Obj == object && !constructionProviderValueEscaped(target, source, visiting) {
+				markConstructionCallee(allowed, initializer)
+			}
+		}
+	}
+	escaped := false
+	ast.Inspect(source.file, func(node ast.Node) bool {
+		if name, ok := node.(*ast.Ident); ok && name.Obj == object && !definitions[name] && !allowed[name] {
+			escaped = true
+		}
+		return !escaped
+	})
+	return escaped
+}
+
+func constructionProviderPackageObject(object *ast.Object, source *constructionSource) bool {
+	for _, candidate := range source.packageSources {
+		if candidate.file.Scope.Lookup(object.Name) == object {
+			return true
+		}
+	}
+	return false
+}
+
 // A called variable without a stable authored function or closure cannot
 // establish an acyclic provider path. Calling a parameter is dispatch debt,
 // even when one caller happens to pass a known callback. Types and builtins
@@ -14,8 +113,8 @@ func constructionProviderCallableDebt(expr ast.Expr, source *constructionSource)
 		return constructionProviderCallableDebt(parenthesized.X, source)
 	}
 	if _, returned := expr.(*ast.CallExpr); returned {
-		// Invoking a returned function requires a return-value summary. The
-		// helper's declaration alone cannot identify the selected callable.
+		// The caller first tries a bounded return summary. An unsupported or
+		// conflicting identity still cannot establish an acyclic path.
 		return true
 	}
 	if _, selector := expr.(*ast.SelectorExpr); selector {

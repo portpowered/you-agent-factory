@@ -9,6 +9,20 @@ type constructionProviderCycleCase struct {
 
 func constructionProviderCycleCases() []constructionProviderCycleCase {
 	return []constructionProviderCycleCase{
+		{"returned declaration", `factory()(p); selected.New(p)`, `func factory() func(selected.Port) { return Provide }`, 1},
+		{"returned closure", `factory(p)(); selected.New(p)`, `func factory(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"parenthesized returned closure", `(factory(p))(); selected.New(p)`, `func factory(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"deferred returned closure", `defer factory(p)(); selected.New(p)`, `func factory(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"asynchronous returned closure", `go factory(p)(); selected.New(p)`, `func factory(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"aliased returned closure", `next := factory(p); next(); selected.New(p)`, `func factory(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"returned alias chain", `first := factory(p); next := first; next(); selected.New(p)`, `func factory(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"nested returned callable", `factory(p)()(); selected.New(p)`, `func factory(p selected.Port) func() func() { return func() func() { return func() { Provide(p) } } }`, 1},
+		{"helper calls returned callable", `step(p); selected.New(p)`, `func step(p selected.Port) { factory(p)() }; func factory(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"helper return chain", `factory(p)(); selected.New(p)`, `func factory(p selected.Port) func() { return next(p) }; func next(p selected.Port) func() { return func() { Provide(p) } }`, 1},
+		{"identical declaration alternatives", `factory()(p); selected.New(p)`, `func factory() func(selected.Port) { if flag { return Provide }; return (Provide) }`, 1},
+		{"identical closure alternatives", `factory(p)(); selected.New(p)`, `func factory(p selected.Port) func() { next := func() { Provide(p) }; if flag { return next }; return (next) }`, 1},
+		{"helper evaluation despite uncalled result", `_ = factory(p); selected.New(p)`, `func factory(p selected.Port) func() { Provide(p); return func() {} }`, 1},
+		{"recursion beside mixed return", `factory(p)(); Provide(p); selected.New(p)`, `func factory(p selected.Port) func() { if flag { return func() {} }; return func() { Provide(p) } }`, 1},
 		{"direct recursion", `Provide(p); selected.New(p)`, "", 1},
 		{"recursion beside opaque dispatch", `var next func(); next(); Provide(p); selected.New(p)`, "", 1},
 		{"conditional recursion", `if flag { Provide(p) }; selected.New(p)`, "", 1},
