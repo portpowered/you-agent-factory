@@ -60,3 +60,13 @@ func TestPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) {
 		t.Fatalf("internal/services directories = %v, want %v", gotSubservices, wantSubservices)
 	}
 }
+
+func repositoryRoot(t *testing.T) string {
+	t.Helper()
+
+	dir, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repository root: %v", err)
+	}
+	return dir
+}

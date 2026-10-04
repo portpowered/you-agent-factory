@@ -295,6 +295,10 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	if err != nil {
 		t.Fatalf("construct events service: %v", err)
 	}
+	responses, err := factorysessionwire.NewResponseStreams(responseEventIDs, responseEventRetentionLimits, eventsService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
 		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
@@ -303,11 +307,10 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 		syncWaits,
 		sessionIDs,
 		responseEventIDs,
-		responseEventRetentionLimits,
+		responses,
 		allocator,
 		adaptRunner,
 		provideFactoryRuntimeProviderOverride(edges),
-		eventsService,
 		factorysessionwire.NewLiveChangeCoordinator(),
 	)
 
