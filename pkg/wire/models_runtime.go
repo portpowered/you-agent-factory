@@ -361,16 +361,18 @@ func provideModelInference(scopes modelswire.RuntimeScopes, assets modelswire.As
 	return modelswire.NewInference(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
 }
 
+func provideModelLocalRuntime(runner modelRuntimeRunner, client modelswire.RuntimeHTTPDoer, inspect modelswire.RuntimeInspectFile,
+	temp modelswire.RuntimeTempDirectory, create modelswire.RuntimeCreateTempFile) (modelswire.LocalRuntime, error) {
+	return modelswire.NewLocalRuntime(runner, client, inspect, temp, create)
+}
 func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	catalog modelswire.Catalog, host modelswire.RuntimeHost, inference modelswire.Inference,
 	launcher modelswire.HostProcessLauncher, hostHTTP modelswire.HostHTTPDoer, clock modelswire.HostClock,
-	runner modelRuntimeRunner, runtimeHTTP modelswire.RuntimeHTTPDoer, inspect modelswire.RuntimeInspectFile,
-	temp modelswire.RuntimeTempDirectory, create modelswire.RuntimeCreateTempFile, now modelNow,
+	localRuntime modelswire.LocalRuntime, now modelNow,
 	logger modelswire.HostDiagnosticLogger, metrics modelswire.HostMetricsRecorder, evidence modelswire.RuntimeEvidenceRecorder,
 	resolver modelswire.BackendArtifactResolver, platform models.AssetHostPlatform) (models.Service, error) {
-
-	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, runner,
-		runtimeHTTP, inspect, temp, create, zap.NewNop(), now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
+	return modelswire.NewService(scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime,
+		zap.NewNop(), now, adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		logger, metrics, modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), evidence,
 		edges.ModelResolveHuggingFaceRevision, resolver, platform)
 }

@@ -532,3 +532,56 @@ func loadPolicyPointer() *models.LoadPolicy {
 	policy := models.LoadPolicyOnDemand
 	return &policy
 }
+
+func TestRootInvokeLocalScopedExecutionUsesSelectedRuntime(t *testing.T) {
+	t.Parallel()
+	runtime := &decliningScopedRuntime{}
+	args := newRootConstructionArgs(t)
+	args.localRuntime = runtime
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runtime.workers) != 0 {
+		t.Fatal("construction called local runtime")
+	}
+	scopes := make([]models.RuntimeScopeRef, 2)
+	for index := range scopes {
+		opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		scopes[index] = opened.Scope
+	}
+	for index, name := range []string{"scope-a", "scope-b", "scope-a", "scope-b"} {
+		result, err := root.InvokeLocal(t.Context(), models.LocalInvocationRequest{
+			Scope: scopes[index%2],
+			Worker: models.LocalWorker{Name: name, Type: models.RuntimeWorkerTypeModel,
+				Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
+				Resources: []models.LocalResource{{Name: "voice-cache"}}},
+			Resources: []models.LocalResource{{Name: "voice-cache", Type: models.RuntimeResourceTypeModel,
+				Model: "voice", Backend: "TEST", LoadPolicy: "ON_DEMAND"}},
+		})
+		if err != nil || result.Handled {
+			t.Fatalf("selected runtime decline: result=%#v error=%v", result, err)
+		}
+	}
+	for _, scope := range scopes {
+		if _, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{Scope: scope}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(runtime.workers, []string{"scope-a", "scope-b", "scope-a", "scope-b"}) {
+		t.Fatalf("selected runtime workers=%v", runtime.workers)
+	}
+}
+
+type decliningScopedRuntime struct{ workers []string }
+
+func (r *decliningScopedRuntime) Supports(_ models.RuntimeResource, worker *models.RuntimeWorker) bool {
+	r.workers = append(r.workers, worker.Name)
+	return false
+}
+func (*decliningScopedRuntime) Load(context.Context, localmodels.LoadRequest) (localmodels.Handle, error) {
+	panic("declined runtime must not load")
+}

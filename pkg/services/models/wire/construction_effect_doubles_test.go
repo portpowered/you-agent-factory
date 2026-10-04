@@ -720,11 +720,8 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	assetService, err := NewAssets(
-		runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat, assetHome,
-		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
-		resolveEnvironment, revisionResolver, assetCoordination,
-	)
+	assetService, err := NewAssets(runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen, resolveEnvironment, revisionResolver, assetCoordination)
 	if err != nil {
 		return nil, err
 	}
@@ -739,10 +736,8 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	runtimeHost, err := NewRuntimeHost(
-		runtimeScopes, assetService, leases, state, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
-		assetPlatform, protocolNegotiator, compatibilityChecker, resolveSymlinks, runtimeEvidence, 0, 0,
-	)
+	runtimeHost, err := NewRuntimeHost(runtimeScopes, assetService, leases, state, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
+		assetPlatform, protocolNegotiator, compatibilityChecker, resolveSymlinks, runtimeEvidence, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -761,9 +756,13 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
+	localRuntime, err := NewLocalRuntime(runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile)
+	if err != nil {
+		return nil, err
+	}
 	return NewService(
 		runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
-		processLauncher, hostHTTP, hostClock, runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile,
+		processLauncher, hostHTTP, hostClock, localRuntime,
 		logger, now, pullMetrics, hostLogger, hostMetrics, localHooks, runtimeEvidence,
 		firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform,
 	)

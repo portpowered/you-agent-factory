@@ -710,3 +710,40 @@ func TestModelsConstructionPreservesIssuerEntropyFailure(t *testing.T) {
 		t.Fatalf("construction = (%T, %v), want nil service and preserved issuer failure", service, err)
 	}
 }
+
+func TestNewLocalRuntimeRequiresSelectedEffectsAndConstructsInertly(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		remove func(*constructionEdges)
+	}{
+		{"runner", func(e *constructionEdges) { e.runtimeRunner = nil }},
+		{"typed-nil runner", func(e *constructionEdges) { e.runtimeRunner = (*recordingCommandRunner)(nil) }},
+		{"HTTP", func(e *constructionEdges) { e.runtimeHTTP = nil }},
+		{"typed-nil HTTP", func(e *constructionEdges) { e.runtimeHTTP = (*recordingHTTPDoer)(nil) }},
+		{"inspect", func(e *constructionEdges) { e.runtimeInspect = nil }},
+		{"temp", func(e *constructionEdges) { e.runtimeTempDir = nil }},
+		{"create", func(e *constructionEdges) { e.runtimeTempFile = nil }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			effects := validConstructionEdges()
+			test.remove(&effects)
+			runtime, err := NewLocalRuntime(effects.runtimeRunner, effects.runtimeHTTP, effects.runtimeInspect, effects.runtimeTempDir, effects.runtimeTempFile)
+			if runtime != nil || err == nil {
+				t.Fatalf("missing effect: runtime=%T error=%v", runtime, err)
+			}
+		})
+	}
+	effects := validConstructionEdges()
+	effects.runtimeRunner = &recordingCommandRunner{}
+	effects.runtimeHTTP = &recordingHTTPDoer{}
+	effects.runtimeInspect = func(string) (os.FileInfo, error) { panic("inspection during construction") }
+	effects.runtimeTempDir = func() string { panic("temp directory during construction") }
+	effects.runtimeTempFile = func(string, string) (modelseffects.RuntimeTempFile, error) { panic("temp file during construction") }
+	runtime, err := NewLocalRuntime(effects.runtimeRunner, effects.runtimeHTTP, effects.runtimeInspect, effects.runtimeTempDir, effects.runtimeTempFile)
+	if runtime == nil || err != nil {
+		t.Fatalf("inert construction: runtime=%T error=%v", runtime, err)
+	}
+}

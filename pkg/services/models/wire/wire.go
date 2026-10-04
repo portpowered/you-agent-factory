@@ -123,46 +123,43 @@ type invocationRuntime interface {
 func NewService(
 	runtimeScopes RuntimeScopes, assets Assets, catalog Catalog, runtimeHost RuntimeHost, inference Inference,
 	processLauncher HostProcessLauncher, hostHTTP HostHTTPDoer, hostClock HostClock,
-	runtimeRunner platformprocess.CommandRunner, runtimeHTTP RuntimeHTTPDoer,
-	runtimeInspect RuntimeInspectFile, runtimeTempDir RuntimeTempDirectory, runtimeTempFile RuntimeCreateTempFile,
+	localRuntime LocalRuntime,
 	logger *zap.Logger, now func() time.Time, pullMetrics PullMetricsRecorder,
 	hostLogger HostDiagnosticLogger, hostMetrics HostMetricsRecorder, localHooks LocalRuntimeHooks,
 	runtimeEvidence RuntimeEvidenceRecorder, legacyRevisionOverride func(context.Context, string) (string, error),
 	backendResolver BackendArtifactResolver, assetPlatform models.AssetHostPlatform,
 ) (models.Service, error) {
-	if err := validateCompatibilityRuntimeEffects(runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, now); err != nil {
-		return nil, err
-	}
 	if legacyRevisionOverride == nil {
 		legacyRevisionOverride = NewUnresolvedAssetRevisionResolver()
 	}
-	launcher, clock, createTempFile := adaptConstructionPorts(processLauncher, hostClock, runtimeTempFile)
+	launcher, clock := adaptConstructionPorts(processLauncher, hostClock)
 	return modelsservice.NewRoot(
-		launcher, hostHTTP, clock, runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
-		localmodels.TempDirectory(runtimeTempDir), createTempFile,
+		launcher, hostHTTP, clock, localRuntime,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
 		logger, now, pullMetrics, runtimeEvidence, hostLogger, hostMetrics, localHooks,
 		legacyRevisionOverride, backendResolver, assetPlatform,
 	)
 }
 
-// The caller-facing compatibility adapter preserves the old Root's construction
-// failures while T11 still owns its runtime effect consumption.
-func validateCompatibilityRuntimeEffects(runner platformprocess.CommandRunner, client RuntimeHTTPDoer,
-	inspect RuntimeInspectFile, temp RuntimeTempDirectory, create RuntimeCreateTempFile, now func() time.Time) error {
+// LocalRuntime is the completed, inert local execution adapter shared by scopes.
+type LocalRuntime = localmodels.Runtime
+
+func NewLocalRuntime(runner platformprocess.CommandRunner, client RuntimeHTTPDoer,
+	inspect RuntimeInspectFile, temp RuntimeTempDirectory, create RuntimeCreateTempFile) (LocalRuntime, error) {
 	for _, required := range []struct {
 		value any
 		name  string
 	}{
 		{runner, "model runtime command runner"}, {client, "model runtime HTTP client"},
 		{inspect, "model runtime file inspector"}, {temp, "model runtime temporary directory resolver"},
-		{create, "model runtime temporary file creator"}, {now, "process clock"},
+		{create, "model runtime temporary file creator"},
 	} {
 		if isNilDependency(required.value) {
-			return fmt.Errorf("construct Models: %s is required", required.name)
+			return nil, fmt.Errorf("construct Models: %s is required", required.name)
 		}
 	}
-	return nil
+	return localmodels.NewOmniVoiceRuntime(runner, client, localmodels.InspectFile(inspect),
+		localmodels.TempDirectory(temp), runtimeTempFileAdapter{next: create}.create)
 }
 
 func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.RuntimeAssetEndpoints {
@@ -181,8 +178,7 @@ func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.Runtim
 func adaptConstructionPorts(
 	processLauncher HostProcessLauncher,
 	hostClock HostClock,
-	runtimeTempFile RuntimeCreateTempFile,
-) (modelhost.ProcessLauncher, modelhost.Clock, localmodels.CreateTempFile) {
+) (modelhost.ProcessLauncher, modelhost.Clock) {
 	var launcher modelhost.ProcessLauncher
 	if processLauncher != nil {
 		launcher = hostProcessLauncher{next: processLauncher}
@@ -191,11 +187,7 @@ func adaptConstructionPorts(
 	if hostClock != nil {
 		clock = hostClockAdapter{next: hostClock}
 	}
-	var createTempFile localmodels.CreateTempFile
-	if runtimeTempFile != nil {
-		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
-	}
-	return launcher, clock, createTempFile
+	return launcher, clock
 }
 
 // NewCatalogReadinessQuery connects readiness to the selected Assets role.

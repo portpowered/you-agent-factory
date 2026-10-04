@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -55,11 +54,7 @@ func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 		{name: "process launcher", mutate: func(args *rootConstructionArgs) { args.processLauncher = nil }, message: "model host process launcher"},
 		{name: "host HTTP client", mutate: func(args *rootConstructionArgs) { args.hostHTTP = nil }, message: "model host HTTP client"},
 		{name: "host clock", mutate: func(args *rootConstructionArgs) { args.hostClock = nil }, message: "model host clock"},
-		{name: "runtime command runner", mutate: func(args *rootConstructionArgs) { args.runtimeRunner = nil }, message: "model runtime command runner"},
-		{name: "runtime HTTP client", mutate: func(args *rootConstructionArgs) { args.runtimeHTTP = nil }, message: "model runtime HTTP client"},
-		{name: "runtime file inspector", mutate: func(args *rootConstructionArgs) { args.runtimeInspect = nil }, message: "model runtime file inspector"},
-		{name: "runtime temp directory", mutate: func(args *rootConstructionArgs) { args.runtimeTempDir = nil }, message: "model runtime temporary directory resolver"},
-		{name: "runtime temp file", mutate: func(args *rootConstructionArgs) { args.runtimeTempFile = nil }, message: "model runtime temporary file creator"},
+		{name: "local runtime", mutate: func(args *rootConstructionArgs) { args.localRuntime = nil }, message: "local model runtime"},
 		{name: "runtime scopes", mutate: func(args *rootConstructionArgs) { args.runtimeScopes = nil }, message: "Models Runtime Scopes service"},
 		{name: "catalog", mutate: func(args *rootConstructionArgs) { args.catalog = nil }, message: "Models Catalog service"},
 		{name: "assets", mutate: func(args *rootConstructionArgs) { args.assets = nil }, message: "Models Assets service"},
@@ -85,11 +80,7 @@ type rootConstructionArgs struct {
 	processLauncher  modelhost.ProcessLauncher
 	hostHTTP         modelhost.HTTPDoer
 	hostClock        modelhost.Clock
-	runtimeRunner    platformprocess.CommandRunner
-	runtimeHTTP      localmodels.HTTPDoer
-	runtimeInspect   localmodels.InspectFile
-	runtimeTempDir   localmodels.TempDirectory
-	runtimeTempFile  localmodels.CreateTempFile
+	localRuntime     localmodels.Runtime
 	runtimeScopes    runtimescopes.Service
 	catalog          modelcatalog.Service
 	assets           scopedassets.Service
@@ -105,11 +96,7 @@ func (args rootConstructionArgs) build() (*Root, error) {
 		args.processLauncher,
 		args.hostHTTP,
 		args.hostClock,
-		args.runtimeRunner,
-		args.runtimeHTTP,
-		args.runtimeInspect,
-		args.runtimeTempDir,
-		args.runtimeTempFile,
+		args.localRuntime,
 		args.runtimeScopes,
 		args.catalog,
 		args.assets,
@@ -141,19 +128,13 @@ func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
 		processLauncher: rootConstructionProcessLauncher{},
 		hostHTTP:        http.DefaultClient,
 		hostClock:       rootConstructionClock{},
-		runtimeRunner:   rootConstructionCommandRunner{},
-		runtimeHTTP:     http.DefaultClient,
-		runtimeInspect:  os.Stat,
-		runtimeTempDir:  os.TempDir,
-		runtimeTempFile: func(dir, pattern string) (localmodels.TempFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		runtimeScopes: scopes,
-		catalog:       catalog,
-		assets:        inferenceRecordingAssetsService{},
-		runtimeHost:   &joinedHostService{events: &events},
-		inference:     &joinedInferenceService{events: &events},
-		logger:        zap.NewNop(), now: time.Now,
+		localRuntime:    &leaseTestRuntime{},
+		runtimeScopes:   scopes,
+		catalog:         catalog,
+		assets:          inferenceRecordingAssetsService{},
+		runtimeHost:     &joinedHostService{events: &events},
+		inference:       &joinedInferenceService{events: &events},
+		logger:          zap.NewNop(), now: time.Now,
 		revisionResolver: func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved },
 	}
 }
@@ -394,9 +375,7 @@ func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 		t.Fatalf("construct Inference: %v", err)
 	}
 	root, err := NewRoot(
-		rootConstructionProcessLauncher{}, http.DefaultClient, rootConstructionClock{}, rootConstructionCommandRunner{},
-		http.DefaultClient, os.Stat, os.TempDir,
-		func(string, string) (localmodels.TempFile, error) { return rootConstructionTempFile{}, nil },
+		rootConstructionProcessLauncher{}, http.DefaultClient, rootConstructionClock{}, &leaseTestRuntime{},
 		scopes, catalog, assets, runtimeHost, inferenceService,
 		zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
 		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
@@ -406,73 +385,6 @@ func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 	}
 	if root == nil || root.resolveHuggingFaceRevision == nil || root.logger == nil {
 		t.Fatal("NewRoot did not retain a usable root with default logger/revision resolver")
-	}
-}
-
-func TestNewRootRejectsMissingRequiredComposedDependencies(t *testing.T) {
-	t.Parallel()
-
-	validLauncher := rootConstructionProcessLauncher{}
-	validHTTP := http.DefaultClient
-	validClock := rootConstructionClock{}
-	validRunner := rootConstructionCommandRunner{}
-	validTempFile := func(string, string) (localmodels.TempFile, error) {
-		return rootConstructionTempFile{}, nil
-	}
-	construct := func(
-		processLauncher modelhost.ProcessLauncher,
-		hostHTTP modelhost.HTTPDoer,
-		hostClock modelhost.Clock,
-		runtimeRunner platformprocess.CommandRunner,
-		runtimeHTTP localmodels.HTTPDoer,
-		runtimeInspect localmodels.InspectFile,
-		runtimeTempDir localmodels.TempDirectory,
-		runtimeTempFile localmodels.CreateTempFile,
-	) error {
-		_, err := NewRoot(
-			processLauncher, hostHTTP, hostClock, runtimeRunner, runtimeHTTP, runtimeInspect,
-			runtimeTempDir, runtimeTempFile, nil, nil, nil, nil, nil,
-			zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
-			func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
-		)
-		return err
-	}
-
-	missing := []struct {
-		name string
-		call func() error
-	}{
-		{name: "model host process launcher", call: func() error {
-			return construct(nil, validHTTP, validClock, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model host HTTP client", call: func() error {
-			return construct(validLauncher, nil, validClock, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model host clock", call: func() error {
-			return construct(validLauncher, validHTTP, nil, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime command runner", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, nil, validHTTP, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime HTTP client", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, nil, os.Stat, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime file inspector", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, nil, os.TempDir, validTempFile)
-		}},
-		{name: "model runtime temporary directory resolver", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, os.Stat, nil, validTempFile)
-		}},
-		{name: "model runtime temporary file creator", call: func() error {
-			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, os.Stat, os.TempDir, nil)
-		}},
-	}
-	for _, test := range missing {
-		t.Run(test.name, func(t *testing.T) {
-			if err := test.call(); !errors.Is(err, ErrInvalidDependencies) {
-				t.Fatalf("NewRoot missing %s error = %v, want ErrInvalidDependencies", test.name, err)
-			}
-		})
 	}
 }
 

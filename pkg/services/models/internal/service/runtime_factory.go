@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
@@ -29,11 +28,7 @@ type Root struct {
 	processLauncher            modelhost.ProcessLauncher
 	hostHTTP                   modelhost.HTTPDoer
 	hostClock                  modelhost.Clock
-	runtimeRunner              platformprocess.CommandRunner
-	runtimeHTTP                localmodels.HTTPDoer
-	runtimeInspect             localmodels.InspectFile
-	runtimeTempDir             localmodels.TempDirectory
-	runtimeTempFile            localmodels.CreateTempFile
+	localRuntime               localmodels.Runtime
 	runtimeScopes              runtimescopes.Service
 	assets                     scopedassets.Service
 	runtimeHost                runtimehost.Service
@@ -62,11 +57,7 @@ func NewRoot(
 	processLauncher modelhost.ProcessLauncher,
 	hostHTTP modelhost.HTTPDoer,
 	hostClock modelhost.Clock,
-	runtimeRunner platformprocess.CommandRunner,
-	runtimeHTTP localmodels.HTTPDoer,
-	runtimeInspect localmodels.InspectFile,
-	runtimeTempDir localmodels.TempDirectory,
-	runtimeTempFile localmodels.CreateTempFile,
+	localRuntime localmodels.Runtime,
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
@@ -92,20 +83,8 @@ func NewRoot(
 	if hostClock == nil {
 		return nil, missingDependencyError("model host clock")
 	}
-	if runtimeRunner == nil {
-		return nil, missingDependencyError("model runtime command runner")
-	}
-	if runtimeHTTP == nil {
-		return nil, missingDependencyError("model runtime HTTP client")
-	}
-	if runtimeInspect == nil {
-		return nil, missingDependencyError("model runtime file inspector")
-	}
-	if runtimeTempDir == nil {
-		return nil, missingDependencyError("model runtime temporary directory resolver")
-	}
-	if runtimeTempFile == nil {
-		return nil, missingDependencyError("model runtime temporary file creator")
+	if isNilDependency(localRuntime) {
+		return nil, missingDependencyError("local model runtime")
 	}
 	if runtimeScopes == nil {
 		return nil, missingDependencyError("Models Runtime Scopes service")
@@ -133,8 +112,7 @@ func NewRoot(
 	}
 	return &Root{
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
-		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
-		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
+		localRuntime:  localRuntime,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
@@ -151,12 +129,6 @@ func (o *Root) runtimeForBindingWithAssets(
 	binding models.RuntimeBinding,
 	assets localmodels.AssetPuller,
 ) (models.Service, error) {
-	localRuntime, err := localmodels.NewOmniVoiceRuntime(
-		o.runtimeRunner, o.runtimeHTTP, o.runtimeInspect, o.runtimeTempDir, o.runtimeTempFile,
-	)
-	if err != nil {
-		return nil, err
-	}
 	return newRuntimeWithHostEdges(
 		scope,
 		binding.RuntimeConfig,
@@ -167,7 +139,7 @@ func (o *Root) runtimeForBindingWithAssets(
 		o.hostMetrics,
 		o.localHooks,
 		assets,
-		localRuntime,
+		o.localRuntime,
 		o.runtimeHost,
 		nil,
 	)

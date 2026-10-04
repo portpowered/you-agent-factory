@@ -142,6 +142,7 @@ var servicesSet = wire.NewSet(
 	provideModelSlotCoordinator,
 	provideModelRuntimeHost,
 	provideModelInvocationRuntime,
+	provideModelLocalRuntime,
 	modelswire.NewInertInvocationArtifactFileSystem,
 	modelswire.NewInvocationArtifactRegistrar,
 	modelswire.NewExecutionDeadline,

@@ -60,8 +60,12 @@ func NewModelsServiceForManagedProcessIntegration(edges serviceedges.Edges) (mod
 	if err != nil {
 		return nil, err
 	}
-	return provideModelsService(edges, scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, runner,
-		provideModelRuntimeHTTP(edges), inspect, temp, create, now, logger, metrics, evidence, resolver, platform)
+	localRuntime, err := provideModelLocalRuntime(runner, provideModelRuntimeHTTP(edges), inspect, temp, create)
+	if err != nil {
+		return nil, err
+	}
+	return provideModelsService(edges, scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, localRuntime,
+		now, logger, metrics, evidence, resolver, platform)
 }
 
 // The tagged seam consumes the canonical providers without selecting defaults
