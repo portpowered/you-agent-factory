@@ -241,9 +241,6 @@ func filterRecordedPackageFindings(visible, recorded *scanResult, baseline recor
 	visible.retiredPackageRootFindings, recorded.retiredPackageRootFindings = splitRecordedFindings(visible.retiredPackageRootFindings, func(finding retiredPackageRootFinding) string {
 		return boundaryFindingFingerprint("retired-package-root", finding)
 	}, baseline)
-	visible.handwrittenGeneratedFindings, recorded.handwrittenGeneratedFindings = splitRecordedFindings(visible.handwrittenGeneratedFindings, func(finding handwrittenGeneratedFinding) string {
-		return boundaryFindingFingerprint("handwritten-generated", finding)
-	}, baseline)
 }
 
 func filterRecordedServiceFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
@@ -315,7 +312,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	fingerprints := make(map[string]struct{})
 	addBoundaryFindingFingerprints(fingerprints, "root-package", result.rootPackageFindings)
 	addBoundaryFindingFingerprints(fingerprints, "retired-package-root", result.retiredPackageRootFindings)
-	addBoundaryFindingFingerprints(fingerprints, "handwritten-generated", result.handwrittenGeneratedFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.serviceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "external-implementation", result.externalImplementationFindings)

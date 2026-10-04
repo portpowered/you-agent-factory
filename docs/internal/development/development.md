@@ -276,6 +276,10 @@ Provider Session policy helpers through `TestBoundary`. Compiler identities
 preserve alias/dot imports and captured callable values while allowing detached
 results and same-named methods. Exact source/symbol/count debt uses the shared
 baseline; the legacy test-behavior walker and its baseline-writing flag are retired.
+`Layering` enforces generated-only source at the exact HTTP client and server
+contract package roots, including tests and compiler-excluded Go inputs.
+Descendant packages remain allowed to contain handwritten source. This rule
+has no debt allowance; its legacy source walker is retired.
 Other unmigrated boundary rules remain in `make pkg-boundary`.
 
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/baselines/frontend-deadcode-baseline.json`. The backend analyzer uses production entrypoints only, so production code referenced exclusively by tests remains a dead-code finding. It writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/baselines/deadcode-baseline.txt`. Review any drift before updating either baseline.

@@ -3,7 +3,6 @@ package main
 type scanResult struct {
 	rootPackageFindings                 []rootPackageFinding
 	retiredPackageRootFindings          []retiredPackageRootFinding
-	handwrittenGeneratedFindings        []handwrittenGeneratedFinding
 	serviceConstructionFindings         []serviceConstructionFinding
 	recordedServiceConstructionFindings []serviceConstructionFinding
 	staleServiceConstructionEntries     []serviceConstructionBaselineEntry
@@ -31,11 +30,6 @@ type retiredPackageRoot struct {
 
 type retiredPackageRootFinding struct {
 	retiredPackageRoot
-}
-
-type handwrittenGeneratedFinding struct {
-	filePath    string
-	packagePath string
 }
 
 type rootPackageFinding struct {

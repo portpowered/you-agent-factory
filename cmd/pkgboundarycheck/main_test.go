@@ -671,28 +671,6 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	}
 }
 
-func TestRunRejectsHandwrittenGoInGeneratedOnlyPackage(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/transports/http/client/compatibility.go", "generatedclient", "context")
-
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want handwritten generated-package failure")
-	}
-	for _, want := range []string{
-		"handwritten Go file in generated-only package: pkg/transports/http/client (pkg/transports/http/client/compatibility.go)",
-		"standard Code generated ... DO NOT EDIT. marker",
-		"move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping",
-	} {
-		if got := stderr.String(); !strings.Contains(got, want) {
-			t.Fatalf("run() stderr = %q, want substring %q", got, want)
-		}
-	}
-}
-
 func TestRunRejectsGeneratedLookingRootOutsideDocumentedExceptions(t *testing.T) {
 	t.Parallel()
 

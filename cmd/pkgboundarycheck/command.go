@@ -106,7 +106,6 @@ func countBlockingViolations(findings scanResult) int {
 func countAlwaysBlockingViolations(findings scanResult) int {
 	return len(findings.rootPackageFindings) +
 		len(findings.retiredPackageRootFindings) +
-		len(findings.handwrittenGeneratedFindings) +
 		len(findings.transportBehaviorFindings) +
 		len(findings.staleTransportBehaviorEntries) +
 		len(findings.constructedServiceEdgesFindings) +

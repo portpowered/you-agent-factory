@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
@@ -35,9 +32,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 
 	result := scanResult{}
 	if err := scanRootPackageFamilies(repoRoot, scanRoot, cfg, policy, &result); err != nil {
-		return scanResult{}, err
-	}
-	if err := scanRepositoryPackageImports(repoRoot, scanRoot, cfg.packageRoot, policy, &result); err != nil {
 		return scanResult{}, err
 	}
 	if err := scanRepositoryServiceConstruction(repoRoot, &result); err != nil {
@@ -107,19 +101,6 @@ func scanRootPackageFamilies(
 		}
 	}
 	return nil
-}
-
-func scanRepositoryPackageImports(
-	repoRoot, scanRoot, packageRoot string,
-	policy boundaryPolicy,
-	result *scanResult,
-) error {
-	var err error
-	result.handwrittenGeneratedFindings, err = scanHandwrittenGeneratedFiles(repoRoot, policy.generatedCodeExceptions)
-	if err != nil {
-		return err
-	}
-	return err
 }
 
 func scanRepositoryServiceConstruction(repoRoot string, result *scanResult) error {
@@ -282,69 +263,6 @@ func isIgnoredRepositoryBoundaryPath(repoRoot, path string) bool {
 		}
 	}
 	return false
-}
-
-func scanHandwrittenGeneratedFiles(repoRoot string, exceptions []generatedCodeException) ([]handwrittenGeneratedFinding, error) {
-	var findings []handwrittenGeneratedFinding
-	for _, exception := range exceptions {
-		packageDir := filepath.Join(repoRoot, filepath.FromSlash(exception.packagePath))
-		info, err := os.Stat(packageDir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, fmt.Errorf("stat generated-only package %s: %w", exception.packagePath, err)
-		}
-		if !info.IsDir() {
-			continue
-		}
-
-		err = filepath.WalkDir(packageDir, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
-				return filepath.SkipDir
-			}
-			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
-				return nil
-			}
-			relativePath, err := filepath.Rel(packageDir, path)
-			if err != nil {
-				return err
-			}
-			if exception.scope == generatedCodeExceptionScopeRoot && filepath.Dir(relativePath) != "." {
-				return nil
-			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ParseComments)
-			if err != nil {
-				return fmt.Errorf("parse generated-only package file %s: %w", filepath.ToSlash(path), err)
-			}
-			if ast.IsGenerated(parsedFile) {
-				return nil
-			}
-			filePath, err := filepath.Rel(repoRoot, path)
-			if err != nil {
-				return err
-			}
-			findings = append(findings, handwrittenGeneratedFinding{
-				filePath:    filepath.ToSlash(filePath),
-				packagePath: exception.packagePath,
-			})
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("scan generated-only package %s: %w", exception.packagePath, err)
-		}
-	}
-	slices.SortFunc(findings, func(left, right handwrittenGeneratedFinding) int {
-		return strings.Compare(left.filePath, right.filePath)
-	})
-	return findings, nil
 }
 
 func findRetiredPackageRoot(packagePath string) (retiredPackageRoot, bool) {

@@ -14,7 +14,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 		fmt.Fprintln(writer, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
 	writeRetiredPackageRootFindings(writer, findings.retiredPackageRootFindings)
-	writeHandwrittenGeneratedFindings(writer, findings.handwrittenGeneratedFindings)
 	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
 	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
@@ -114,13 +113,5 @@ func writeExternalServiceImplementationFindings(writer io.Writer, findings []tra
 		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited external service subpackage import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
 		fmt.Fprintln(writer, "  reason: service subpackages are owner-internal for ordinary consumers; pkg/wire is the unrestricted composition-root exception.")
 		fmt.Fprintln(writer, "  remediation: import the exact pkg/services/<service-name> root and use its published contract.")
-	}
-}
-
-func writeHandwrittenGeneratedFindings(writer io.Writer, findings []handwrittenGeneratedFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] handwritten Go file in generated-only package: %s (%s)\n", finding.packagePath, finding.filePath)
-		fmt.Fprintln(writer, "  reason: generated-only packages may contain only files with the standard Code generated ... DO NOT EDIT. marker.")
-		fmt.Fprintln(writer, "  remediation: move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping.")
 	}
 }
