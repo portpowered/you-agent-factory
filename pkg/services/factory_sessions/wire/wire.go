@@ -95,6 +95,12 @@ func NewInvocationAuthority(state *SessionState, scheduler platformclock.TimerSo
 	return sessionservice.NewInvocationAuthority(state, scheduler, projector)
 }
 
+type SessionScopeActivation = sessionservice.SessionScopeActivation
+
+func NewScopeActivation(state *SessionState) SessionScopeActivation {
+	return sessionservice.NewScopeActivation(state)
+}
+
 // SessionScopeControl owns addressed cancellation and stop independently of the gateway.
 type SessionScopeControl = sessionservice.SessionScopeControl
 
@@ -143,6 +149,7 @@ func NewRuntimeAssembly(
 	streams StreamManager,
 	authority InvocationAuthority,
 	control SessionScopeControl,
+	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -162,7 +169,7 @@ func NewRuntimeAssembly(
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
-		registry, state, streams, authority, control,
+		registry, state, streams, authority, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,

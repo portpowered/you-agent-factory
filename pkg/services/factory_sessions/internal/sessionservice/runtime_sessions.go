@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identityservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -33,10 +34,42 @@ type (
 // Factory Session. The session keeps the hosted service only as a migration
 // fallback; all subsequent domain operations resolve the binding first.
 func (fs *SessionRuntime) BindRuntime(sessionID string, binding factory.RuntimeBinding) error {
-	if fs == nil || fs.sessionState == nil || binding.IsZero() || binding.Service() == nil {
+	if fs == nil || fs.openingSession == nil || fs.openingSession.ID != sessionID {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
-	return fs.sessionState.UpdateRuntime(sessionID, func(runtime *factorysessions.LiveRuntime) error {
+	return fs.scopeActivation.Activate(context.Background(), SessionScope{Session: fs.openingSession, Binding: binding})
+}
+
+// SessionScope is the captured registration and opaque capability published by
+// the existing Runtime activation bridge. It introduces no second registry.
+type SessionScope struct {
+	Session *livesession.LiveSession
+	Binding factory.RuntimeBinding
+}
+
+// SessionScopeActivation publishes to the independent keyed session authority.
+// Runtime activation and artifact cleanup remain owned by their existing bridge.
+type SessionScopeActivation interface {
+	Activate(context.Context, SessionScope) error
+}
+
+type scopeActivation struct {
+	state *sessionruntime.Service
+}
+
+func NewScopeActivation(state *sessionruntime.Service) SessionScopeActivation {
+	return &scopeActivation{state: state}
+}
+
+func (a *scopeActivation) Activate(ctx context.Context, scope SessionScope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if scope.Binding.IsZero() {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	return a.state.UpdateRuntimeGeneration(scope.Session, func(runtime *factorysessions.LiveRuntime) error {
+		binding := scope.Binding
 		runtime.Binding = binding
 		runtime.Factory = binding.Service()
 		runtime.WorkAndEventIngress = runtimebinding.DeclaredWorkAndEventIngress(runtime.Factory)

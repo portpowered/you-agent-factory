@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -62,6 +63,8 @@ type SessionRuntime struct {
 	runtimeState     runtimebinding.State
 	sessionState     *sessionruntime.Service
 	scopeControl     SessionScopeControl
+	scopeActivation  SessionScopeActivation
+	openingSession   *livesession.LiveSession
 	sessionGateway   sessionGateway
 	runtimeBuild     runtimeports.RuntimeReplacementBuilder
 	modelsScope      models.RuntimeScopeRef

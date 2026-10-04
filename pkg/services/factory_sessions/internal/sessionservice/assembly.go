@@ -38,6 +38,7 @@ type Assembly struct {
 	streams                      StreamManager
 	invocationAuthority          InvocationAuthority
 	scopeControl                 SessionScopeControl
+	scopeActivation              SessionScopeActivation
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
@@ -76,6 +77,7 @@ func NewAssembly(
 	streams StreamManager,
 	authority InvocationAuthority,
 	control SessionScopeControl,
+	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -101,6 +103,7 @@ func NewAssembly(
 		streams:                      streams,
 		invocationAuthority:          authority,
 		scopeControl:                 control,
+		scopeActivation:              activation,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
@@ -447,6 +450,8 @@ func (a *Assembly) Complete(
 		a.sessionResultProjection,
 		a.state,
 		a.scopeControl,
+		a.scopeActivation,
+		session,
 		a.sessionIDs,
 		a.resolveHome,
 		a.directoryInspection,

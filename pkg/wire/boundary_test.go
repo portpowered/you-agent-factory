@@ -126,6 +126,7 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 		registry, state, streams,
 		factorysessionwire.NewInvocationAuthority(state, platformclock.Real{}, nil),
 		factorysessionwire.NewScopeControl(state, func(factoryruntime.RuntimeRun, factoryruntime.Clock) error { return nil }),
+		factorysessionwire.NewScopeActivation(state),
 		factoryruntime.NewSessionResultProjectionOperation(),
 		nil,
 		nil,

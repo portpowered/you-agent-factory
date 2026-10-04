@@ -149,7 +149,7 @@ func TestBindRuntimePublishesOpaqueServiceToSession(t *testing.T) {
 		},
 	})
 
-	runtime := &SessionRuntime{sessionState: state}
+	runtime := &SessionRuntime{sessionState: state, scopeActivation: NewScopeActivation(state), openingSession: state.Resolve("session-bound")}
 	binding := factory.RuntimeBinding{}.New("runtime-bound", bound)
 	if err := runtime.BindRuntime("session-bound", binding); err != nil {
 		t.Fatalf("BindRuntime: %v", err)
@@ -164,6 +164,58 @@ func TestBindRuntimePublishesOpaqueServiceToSession(t *testing.T) {
 	if got := registered.Runtime.Factory; got != bound {
 		t.Fatalf("session Factory = %p, want bound Runtime service %p", got, bound)
 	}
+}
+
+func TestSessionScopeActivationPreservesReplacementAndRetriesFailedPublication(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	activation := NewScopeActivation(state)
+	register := func(id string, service factory.Service) *livesession.LiveSession {
+		state.Register(sessionruntime.Registration{SessionID: id, Handle: struct{}{}, Runtime: &factorysessions.LiveRuntime{Factory: service}})
+		return state.Resolve(id)
+	}
+	old := register("a", &scopedControlRuntime{status: "RUNNING"})
+	peer := register("b", &scopedControlRuntime{status: "PAUSED"})
+	replacement := register("a", &scopedControlRuntime{status: "PAUSED"})
+	oldScope := SessionScope{Session: old, Binding: factory.RuntimeBinding{}.New("old", &scopedControlRuntime{status: "COMPLETED"})}
+	if err := activation.Activate(context.Background(), oldScope); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("stale activation = %v, want unavailable", err)
+	}
+	assertStatus := func(session *livesession.LiveSession, want string) {
+		t.Helper()
+		observed, err := session.Runtime.Factory.Observe(context.Background(), factory.ObserveRequest{Scope: factory.ObservationScopeHealth})
+		if err != nil || string(observed.Observation.Health.FactoryState) != want {
+			t.Fatalf("session %s status = %s, error = %v, want %s", session.ID, observed.Observation.Health.FactoryState, err, want)
+		}
+	}
+	assertStatus(replacement, "PAUSED")
+	assertStatus(peer, "PAUSED")
+	if !old.Runtime.Binding.IsZero() {
+		t.Fatal("failed publication modified the retired registration")
+	}
+	currentScope := SessionScope{Session: replacement, Binding: factory.RuntimeBinding{}.New("new", &scopedControlRuntime{status: "RUNNING"})}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := activation.Activate(ctx, currentScope); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled activation = %v", err)
+	}
+	if err := activation.Activate(context.Background(), SessionScope{Session: replacement}); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("empty binding activation = %v", err)
+	}
+	assertStatus(replacement, "PAUSED")
+	if err := activation.Activate(context.Background(), currentScope); err != nil {
+		t.Fatalf("retry activation: %v", err)
+	}
+	assertStatus(replacement, "RUNNING")
+	assertStatus(peer, "PAUSED")
+	// The opening owner's bridge retains its original generation throughout
+	// Runtime activation and cannot reselect the replacement by public ID.
+	owner := &SessionRuntime{sessionState: state, scopeActivation: activation, openingSession: old}
+	if err := owner.BindRuntime("a", oldScope.Binding); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("stale opening-owner publication = %v", err)
+	}
+	assertStatus(replacement, "RUNNING")
+	assertStatus(peer, "PAUSED")
 }
 
 func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {

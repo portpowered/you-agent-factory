@@ -31,6 +31,7 @@ func NewAssembly(
 	streams legacyservice.StreamManager,
 	authority legacyservice.InvocationAuthority,
 	control legacyservice.SessionScopeControl,
+	activation legacyservice.SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -49,6 +50,9 @@ func NewAssembly(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (roles.RuntimeAssembly, error) {
+	if activation == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
+	}
 	if control == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scoped control is required")
 	}
@@ -73,7 +77,7 @@ func NewAssembly(
 		return nil, err
 	}
 	assemblyRole := legacyservice.NewAssembly(
-		registry, state, streams, authority, control,
+		registry, state, streams, authority, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,

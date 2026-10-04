@@ -601,6 +601,7 @@ func provideFactorySessionsAssembly(
 	streams factorysessionwire.StreamManager,
 	authority factorysessionwire.InvocationAuthority,
 	control factorysessionwire.SessionScopeControl,
+	activation factorysessionwire.SessionScopeActivation,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
@@ -618,7 +619,7 @@ func provideFactorySessionsAssembly(
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, authority, control, func() factoryruntime.JavaScriptCheckpointStore {
+	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, authority, control, activation, func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
 }
