@@ -362,3 +362,11 @@ the focused `TestLifecycleProfileDriver` selector and are synthetic component
 calibration, never composed public capacity evidence. This gate is not yet wired
 into the public capability; story 003 remains incomplete. The method hash also
 includes the gate template after the sample, cycle and report templates.
+
+The dedicated `TestLifecycleProfileModelDiagnostic` selector checks one explicit-session
+EMBED Work using controlled cached assets and joined host effects. It reports active
+and released holder counts in raw output; it does not qualify composed two-holder
+capacity, fault/cancellation outcomes, full profiling, or baseline acceptance.
+It skips under `-short`; use the same attested artifact environment as the samples
+capability, with `-test.run=^TestLifecycleProfileModelDiagnostic$ -test.short=false
+-test.count=1 -test.timeout=3m -test.v`.
