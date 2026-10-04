@@ -571,7 +571,8 @@ func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
 
 func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T) {
 	t.Parallel()
-	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	eventStore := newEventsAppender()
+	sink := &perRuntimeAppendCapture{EventsAppender: eventStore}
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
 	b := newPerRuntimeAttemptFixture(t, "b", sink)
 	beforeA := assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
@@ -579,6 +580,11 @@ func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T
 	beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
 	observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
 	before := sink.requestsFor("")
+	reads := make(map[events.Topic]events.ReadResult)
+	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+		topic := workersessions.Topic(fixture.request.ID)
+		reads[topic] = readPerRuntimeTopic(t, eventStore, topic)
+	}
 	if _, err := a.service.Reserve(context.Background(), workersessions.ReserveRequest{ID: a.request.ID}); !errors.Is(err, workersessions.ErrSessionAlreadyExists) {
 		t.Fatalf("Reserve(A duplicate) = %v, want ErrSessionAlreadyExists", err)
 	}
@@ -589,6 +595,11 @@ func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T
 		t.Fatalf("duplicate reservation changed A observation: %#v", after)
 	}
 	assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, "", before)
+	for topic, before := range reads {
+		if after := readPerRuntimeTopic(t, eventStore, topic); !reflect.DeepEqual(before, after) {
+			t.Fatalf("duplicate reservation changed retained topic %s: %#v", topic, after)
+		}
+	}
 	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
 		publishPerRuntimeProgress(t, fixture, sink)
 		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
@@ -630,13 +641,15 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 		t.Run(failure, func(t *testing.T) {
 			t.Parallel()
 			cause := errors.New("injected A-only " + failure + " failure")
-			boundary := &perRuntimeRejectOpeningAppender{EventsAppender: newEventsAppender()}
+			eventStore := newEventsAppender()
+			boundary := &perRuntimeRejectOpeningAppender{EventsAppender: eventStore}
 			sink := &perRuntimeAppendCapture{EventsAppender: boundary}
 			b := newPerRuntimeAttemptFixture(t, "b", sink)
 			controlB := bindPerRuntimeCancellation(t, b, nil)
 			beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
 			observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
 			before := sink.requestsFor(workersessions.Topic(b.request.ID))
+			beforeRead := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID))
 			a := preparePerRuntimeAttemptFixture(t, "a", sink)
 			switch failure {
 			case "append":
@@ -647,9 +660,10 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 				a.capture.awaitErr = cause
 			}
 			assertPerRuntimeRejectedOpening(t, a, sink, failure)
-			if after := sink.requestsFor(workersessions.Topic(b.request.ID)); !reflect.DeepEqual(before, after) {
-				t.Fatalf("A opening failure changed B topic: %#v", after)
+			if after := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID)); !reflect.DeepEqual(beforeRead, after) {
+				t.Fatalf("A opening failure changed retained B topic: %#v", after)
 			}
+			assertPerRuntimeFailedOpeningHistory(t, a, eventStore, failure)
 			assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, workersessions.Topic(b.request.ID), before)
 			assertPerRuntimeCancellationCalls(t, controlB, 0)
 			assertPerRuntimeCaptureNotAborted(t, b)
@@ -661,6 +675,30 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 			assertPerRuntimeCaptureNotAborted(t, b)
 			assertPerRuntimeCancellationCalls(t, controlB, 0)
 		})
+	}
+}
+
+func readPerRuntimeTopic(t *testing.T, eventStore events.Service, topic events.Topic) events.ReadResult {
+	t.Helper()
+	read, err := eventStore.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 100})
+	if err != nil {
+		t.Fatalf("Read(%s): %v", topic, err)
+	}
+	return read
+}
+
+func assertPerRuntimeFailedOpeningHistory(t *testing.T, fixture *perRuntimeAttemptFixture, eventStore events.Service, failure string) {
+	t.Helper()
+	read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(fixture.request.ID))
+	want := 0
+	if failure == "capture-await" {
+		want = 1
+	}
+	if len(read.Records) != want {
+		t.Fatalf("failed A retained records = %#v, want %d openings", read.Records, want)
+	}
+	if want == 1 && read.Records[0].SourceEventID != "started" {
+		t.Fatalf("AwaitOpening failure retained a non-opening record: %#v", read.Records)
 	}
 }
 
