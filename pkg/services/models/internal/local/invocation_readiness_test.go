@@ -1,7 +1,6 @@
 package local
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -98,58 +97,4 @@ func TestEnsureManagedRuntimeReadyForInvocation_PackagedAndAuthoredFactoriesMatc
 		authoredManaged.LifecycleState != packagedManaged.LifecycleState {
 		t.Fatalf("authored = %#v, packaged = %#v, want identical readiness", authoredManaged, packagedManaged)
 	}
-}
-
-func TestManager_BlocksInvocationWhenManagedRuntimeMissing(t *testing.T) {
-	t.Parallel()
-	runtime := &countingLocalRuntime{}
-	manager := mustNewManagedRuntime(t, stubInvocationReadinessAssetPuller{
-		inspection: RuntimeCacheInspection{
-			Supported:     true,
-			Installed:     false,
-			MissingAssets: []string{"omnivoice-base-Q4_K_M.gguf"},
-		},
-	}, runtime, Hooks{})
-
-	factoryCfg := managerTestFactoryConfig()
-	loaded := projectTestModelsRuntimeConfig(t.TempDir(), factoryCfg)
-	worker, ok := loaded.Worker("tts-worker")
-	if !ok || worker == nil {
-		t.Fatal("worker tts-worker not found in loaded config")
-	}
-
-	_, handled, err := manager.Invoke(context.Background(), loaded, loaded, worker, ModelInvocation{ModelOperation: "TTS"})
-	if !handled {
-		t.Fatal("Invoke handled = false, want true")
-	}
-	if err == nil || !errors.Is(err, apisurface.ErrMissing) {
-		t.Fatalf("Execute error = %v, want managed runtime missing", err)
-	}
-	if runtime.loadCount() != 0 {
-		t.Fatalf("load count = %d, want 0 when readiness blocks invocation", runtime.loadCount())
-	}
-}
-
-type stubInvocationReadinessAssetPuller struct {
-	inspection RuntimeCacheInspection
-	cache      CacheLayout
-}
-
-func (s stubInvocationReadinessAssetPuller) PullModel(_ context.Context, _ *modelRuntimeConfig, _ string) (apisurface.PullResult, error) {
-	return apisurface.PullResult{}, nil
-}
-
-func (s stubInvocationReadinessAssetPuller) EnsureModelAvailable(_ context.Context, _ *modelRuntimeConfig, _ *modelRuntimeWorker) error {
-	return nil
-}
-
-func (s stubInvocationReadinessAssetPuller) ResolveModelCache(_ context.Context, _ *modelRuntimeConfig, _ *modelRuntimeWorker) (CacheLayout, error) {
-	return s.cache, nil
-}
-
-func (s stubInvocationReadinessAssetPuller) InspectRuntimeCache(_ context.Context, _ *modelRuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
-	if CanonicalModelName(modelName) == CanonicalModelName("OMNIVOICE_Q4_K_M") {
-		return s.inspection, nil
-	}
-	return RuntimeCacheInspection{}, nil
 }

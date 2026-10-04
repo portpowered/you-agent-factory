@@ -121,12 +121,14 @@ func TestLocalExecutorReleasesLeaseAndCapacityOnFailure(t *testing.T) {
 		name                                  string
 		cacheErr, loadErr, invokeErr, wantErr error
 		leases, loads, invokes                int
+		acquireErr                            error
 	}{
-		{"cache", failure, nil, nil, failure, 1, 0, 0},
-		{"load", nil, failure, nil, failure, 1, 2, 0},
-		{"invoke", nil, nil, failure, failure, 1, 1, 2},
-		{"cancel", nil, nil, context.Canceled, context.Canceled, 1, 1, 2},
-		{"unsupported", nil, nil, nil, nil, 0, 0, 0},
+		{"cache", failure, nil, nil, failure, 1, 0, 0, nil},
+		{"load", nil, failure, nil, failure, 1, 2, 0, nil},
+		{"invoke", nil, nil, failure, failure, 1, 1, 2, nil},
+		{"cancel", nil, nil, context.Canceled, context.Canceled, 1, 1, 2, nil},
+		{"unsupported", nil, nil, nil, nil, 0, 0, 0, nil},
+		{"missing runtime", nil, nil, nil, models.ErrMissing, 0, 0, 0, models.ErrMissing},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -145,10 +147,18 @@ func TestLocalExecutorReleasesLeaseAndCapacityOnFailure(t *testing.T) {
 			config, worker := localExecutionConfiguration(request)
 			host := &leaseTestHost{}
 			assets := executorFailureAssets{err: test.cacheErr}
-			runtime := &executorFailureRuntime{supported: test.leases != 0, loadErr: test.loadErr, invokeErr: test.invokeErr}
+			runtime := &executorFailureRuntime{supported: test.name != "unsupported", loadErr: test.loadErr, invokeErr: test.invokeErr}
 			resources := mustResourceLimiter(t)
-			executor, err := newLocalExecutor(
-				host, runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
+			executor, err := newLocalExecutorWithLeases(
+				func(ctx context.Context, _ models.RuntimeScopeRef, config *models.RuntimeConfig, name, _ string) (modelhost.Lease, error) {
+					if test.acquireErr != nil {
+						return modelhost.Lease{}, test.acquireErr
+					}
+					return host.AcquireLease(ctx, config, name, modelhost.LeaseOptions{})
+				}, func(ctx context.Context, _ models.RuntimeScopeRef, id string) error {
+					return host.ReleaseLease(ctx, id)
+				},
+				runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -156,7 +166,7 @@ func TestLocalExecutorReleasesLeaseAndCapacityOnFailure(t *testing.T) {
 			defer cancel()
 			for attempt := 0; attempt < 2; attempt++ {
 				result, err := executor.InvokeLocal(ctx, request, config, assets)
-				if !errors.Is(err, test.wantErr) || result.Handled != (test.leases != 0) || result.Content != "" {
+				if !errors.Is(err, test.wantErr) || result.Handled != (test.name != "unsupported") || result.Content != "" {
 					t.Fatalf("attempt %d: result=%#v error=%v, want %v", attempt, result, err, test.wantErr)
 				}
 				wantLeases := (attempt + 1) * test.leases
@@ -207,12 +217,14 @@ func TestLocalExecutorScopedHandlesRetainIsolationAndRetireOnClose(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, request := range []models.LocalInvocationRequest{request, peer, request, peer} {
+	for index, request := range []models.LocalInvocationRequest{request, peer, request, peer, request, peer} {
+		// Every local worker taxonomy uses the same scoped handle and lease path.
+		request.Worker.Type = []string{models.RuntimeWorkerTypeModel, models.RuntimeWorkerTypeInference, models.RuntimeWorkerTypeAgent}[index/2]
 		if result, err := executor.InvokeLocal(t.Context(), request, config, leaseTestAssets{}); err != nil || !result.Handled {
 			t.Fatalf("invoke %s = %#v, %v", request.Scope, result, err)
 		}
 	}
-	if runtime.loads != 2 || runtime.invokes != 4 || host.acquires != 4 || host.releases != 4 {
+	if runtime.loads != 2 || runtime.invokes != 6 || host.acquires != 6 || host.releases != 6 {
 		t.Fatalf("loads/invokes/acquires/releases = %d/%d/%d/%d", runtime.loads, runtime.invokes, host.acquires, host.releases)
 	}
 	executor.CloseScope(request.Scope)
@@ -223,7 +235,7 @@ func TestLocalExecutorScopedHandlesRetainIsolationAndRetireOnClose(t *testing.T)
 	if _, err := executor.InvokeLocal(t.Context(), peer, config, leaseTestAssets{}); err != nil {
 		t.Fatal(err)
 	}
-	if runtime.loads != 2 || runtime.invokes != 5 || host.acquires != host.releases {
+	if runtime.loads != 2 || runtime.invokes != 7 || host.acquires != host.releases {
 		t.Fatalf("peer after close: loads/invokes/acquires/releases = %d/%d/%d/%d", runtime.loads, runtime.invokes, host.acquires, host.releases)
 	}
 	executor.Close()

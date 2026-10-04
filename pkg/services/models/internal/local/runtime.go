@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -56,13 +55,6 @@ type InvocationResponse struct {
 	Content string
 }
 
-func cloneModelInvocation(request ModelInvocation) ModelInvocation {
-	clone := request
-	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
-	clone.ModelBindings = cloneModelBindings(request.ModelBindings)
-	return clone
-}
-
 func cloneModelBindings(values []modelinference.ResolvedModelOperationBinding) []modelinference.ResolvedModelOperationBinding {
 	if len(values) == 0 {
 		return nil
@@ -86,159 +78,11 @@ type Runtime interface {
 
 type Hooks = modelseffects.LocalRuntimeHooks
 
-type Manager struct {
-	mu          sync.Mutex
-	entries     map[string]*managedLocalModelEntry
-	assetPuller AssetPuller
-	runtime     Runtime
-	hooks       Hooks
-	now         func() time.Time
-}
-
-// ErrInvalidDependencies classifies managed local-runtime construction failures.
+// ErrInvalidDependencies classifies local-runtime construction failures.
 var ErrInvalidDependencies = errors.New("managed local runtime dependencies are invalid")
-
-// NewManagedRuntime constructs managed local invocation behavior after
-// synchronously validating its required collaborators. It does not resolve
-// assets, load a runtime, or start lifecycle work during construction.
-func NewManagedRuntime(assetPuller AssetPuller, runtime Runtime, hooks Hooks, now func() time.Time) (*Manager, error) {
-	if isNilDependency(assetPuller) {
-		return nil, missingDependencyError("asset puller and cache resolver")
-	}
-	if isNilDependency(runtime) {
-		return nil, missingDependencyError("local invocation runtime")
-	}
-	if now == nil {
-		return nil, missingDependencyError("clock")
-	}
-	return newManager(assetPuller, runtime, hooks, now), nil
-}
-
-type managedLocalModelEntry struct {
-	mu     sync.Mutex
-	handle Handle
-}
-
-func newManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks, now func() time.Time) *Manager {
-	return &Manager{
-		entries:     make(map[string]*managedLocalModelEntry),
-		assetPuller: assetPuller,
-		runtime:     runtime,
-		hooks:       hooks,
-		now:         now,
-	}
-}
 
 func missingDependencyError(name string) error {
 	return fmt.Errorf("%w: %s is required", ErrInvalidDependencies, name)
-}
-
-func isNilDependency(value any) bool {
-	if value == nil {
-		return true
-	}
-	reflected := reflect.ValueOf(value)
-	switch reflected.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return reflected.IsNil()
-	default:
-		return false
-	}
-}
-
-// Invoke resolves, loads, and invokes a managed local model. handled is false
-// when the supplied worker is not owned by this runtime.
-func (m *Manager) Invoke(
-	ctx context.Context,
-	runtimeCfg *models.RuntimeConfig,
-	factoryCfg *models.RuntimeConfig,
-	workerDef *models.RuntimeWorker,
-	request ModelInvocation,
-) (InvocationResponse, bool, error) {
-	resource, resourceKey, ok := RuntimeResource(factoryCfg, workerDef)
-	if !ok || !m.runtime.Supports(resource, workerDef) {
-		return InvocationResponse{}, false, nil
-	}
-	loaded, err := runtimeCfgForLocalModel(runtimeCfg)
-	if err != nil {
-		return InvocationResponse{}, true, err
-	}
-	if _, err := EnsureManagedRuntimeReadyForInvocation(
-		loaded, workerDef.Model, m.assetPuller, DefaultManagedRuntimeSourceResolver(),
-	); err != nil {
-		return InvocationResponse{}, true, err
-	}
-	cacheLayout, err := m.assetPuller.ResolveModelCache(ctx, loaded, workerDef)
-	if err != nil {
-		return InvocationResponse{}, true, err
-	}
-	loadWorker := workerDef.Clone()
-	handle, err := m.loadHandle(ctx, resourceKey, LoadRequest{
-		Resource:  resource,
-		Worker:    &loadWorker,
-		ModelName: cacheLayout.ModelName,
-		CachePath: cacheLayout.CachePath,
-		Revision:  cacheLayout.Revision,
-		Files:     append([]string(nil), cacheLayout.Files...),
-	})
-	if err != nil {
-		return InvocationResponse{}, true, err
-	}
-	invokeWorker := workerDef.Clone()
-	response, err := handle.Invoke(ctx, InvocationRequest{
-		Resource: resource,
-		Worker:   &invokeWorker,
-		Request:  cloneModelInvocation(request),
-	})
-	return response, true, err
-}
-
-func runtimeCfgForLocalModel(runtimeCfg *models.RuntimeConfig) (*models.RuntimeConfig, error) {
-	if runtimeCfg == nil {
-		return nil, fmt.Errorf("loaded runtime config is required for local model execution")
-	}
-	return runtimeCfg, nil
-}
-
-func (m *Manager) loadHandle(ctx context.Context, key string, request LoadRequest) (Handle, error) {
-	entry := m.entry(key)
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-
-	if entry.handle != nil {
-		if m.hooks.MarkLoadReused != nil {
-			m.hooks.MarkLoadReused(ctx)
-		}
-		return entry.handle, nil
-	}
-	if m.hooks.MarkLoadRequested != nil {
-		m.hooks.MarkLoadRequested(ctx, m.now())
-	}
-	handle, err := m.runtime.Load(ctx, request)
-	if err != nil {
-		if m.hooks.MarkLoadFinished != nil {
-			m.hooks.MarkLoadFinished(ctx, m.now())
-		}
-		return nil, err
-	}
-	if m.hooks.MarkLoadFinished != nil {
-		m.hooks.MarkLoadFinished(ctx, m.now())
-	}
-	entry.handle = handle
-	return handle, nil
-}
-
-func (m *Manager) entry(key string) *managedLocalModelEntry {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	entry, ok := m.entries[key]
-	if ok {
-		return entry
-	}
-	entry = &managedLocalModelEntry{}
-	m.entries[key] = entry
-	return entry
 }
 
 func RuntimeResource(factoryCfg *models.RuntimeConfig, workerDef *models.RuntimeWorker) (models.RuntimeResource, string, bool) {
