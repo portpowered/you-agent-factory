@@ -60,8 +60,101 @@ type agyQuietInvocation struct {
 	err       error
 }
 
+// Quiet presentation is invocation-scoped even when a normal or verbose peer
+// is active. Each subtest owns its routes, sessions and captured streams.
+func TestAgyQuietOutputIsolatedFromNormalAndVerbosePeers(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"normal", "verbose"} {
+		for _, outcome := range []string{"success", "failure"} {
+			t.Run(mode+"/"+outcome, func(t *testing.T) {
+				t.Parallel()
+				runAgyQuietPeerScenario(t, mode, outcome)
+			})
+		}
+	}
+}
+
+func runAgyQuietPeerScenario(t *testing.T, mode, outcome string) {
+	t.Helper()
+	fixture := agySharedProcess(t)
+	host := fixture.startRoleHost(t)
+	trace := newAgySharedLifecycleTrace()
+	t.Cleanup(func() { trace.log(t) })
+	ctx, cancel := context.WithTimeout(t.Context(), agySharedInvocationTimeout)
+	defer cancel()
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	defer unblock()
+	prefix := "quiet-" + mode + "-" + outcome
+	quiet := startAgyQuietInvocation(t, ctx, fixture, host, prefix, trace, release)
+	presentation := []string{"--output", "primary"}
+	if mode == "verbose" {
+		presentation = append(presentation, "--verbose")
+	}
+	peer := startAgyQuietInvocation(t, ctx, fixture, host, prefix+"-peer", trace, release, presentation...)
+	if err := trace.waitForBothEntered(ctx); err != nil {
+		t.Fatalf("quiet and %s peer did not reach both command gates: %v", mode, err)
+	}
+	unblock()
+	quiet.wait(t, ctx)
+	peer.wait(t, ctx)
+	assertAgyPrimaryOutput(t, peer, agyMarkedColdWatchTrace(t, prefix+"-peer"))
+	assertAgyQuietPeerOutcome(t, host, quiet, prefix, outcome)
+	assertAgyStreamsExclude(t, quiet, "["+prefix+"-peer]")
+	assertAgyStreamsExclude(t, peer, "quiet-secret-peer-token", "quiet-secret-peer-diagnostic", "["+prefix+"]")
+	// This remote primary-output route emits no diagnostics for either mode.
+	// Preserve that policy without claiming coverage of nonempty verbose logs.
+	if got := peer.inputs.Stderr(); got != "" {
+		t.Fatalf("%s primary-output peer stderr = %q, want empty", mode, got)
+	}
+	assertAgyQuietInvocationEvents(t, host, peer, factoryapi.WorkOutcomeAccepted)
+
+	// A fresh request on the same process must retain quiet presentation after
+	// the overlapping invocations, including a failed provider attempt.
+	reuse := startAgyQuietInvocation(t, ctx, fixture, host, prefix+"-reuse", newAgySharedLifecycleTrace(), nil)
+	reuse.wait(t, ctx)
+	assertAgyPrimaryOutput(t, reuse, agyMarkedColdWatchTrace(t, prefix+"-reuse"))
+	if got := reuse.inputs.Stderr(); got != "" {
+		t.Fatalf("subsequent quiet stderr = %q, want empty", got)
+	}
+	assertAgyStreamsExclude(t, reuse, prefix+"-peer", "quiet-secret-peer-token", "quiet-secret-peer-diagnostic")
+	assertAgyQuietInvocationEvents(t, host, reuse, factoryapi.WorkOutcomeAccepted)
+}
+
+func assertAgyQuietPeerOutcome(t *testing.T, host *agySharedRoleHost, quiet *agyQuietInvocation, prefix, outcome string) {
+	t.Helper()
+	if outcome == "failure" {
+		assertAgyQuietFailure(t, quiet)
+		assertAgyQuietInvocationEvents(t, host, quiet, factoryapi.WorkOutcomeFailed)
+		return
+	}
+	assertAgyPrimaryOutput(t, quiet, agyMarkedColdWatchTrace(t, prefix))
+	if got := quiet.inputs.Stderr(); got != "" {
+		t.Fatalf("quiet success stderr = %q, want empty", got)
+	}
+	assertAgyQuietInvocationEvents(t, host, quiet, factoryapi.WorkOutcomeAccepted)
+}
+
+func assertAgyQuietInvocationEvents(t *testing.T, host *agySharedRoleHost, invocation *agyQuietInvocation, outcome factoryapi.WorkOutcome) {
+	t.Helper()
+	events := support.GetFactoryEventsForSessionAt(t, host.baseURL, invocation.sessionID)
+	assertAgySingleDispatch(t, events, outcome)
+	assertAgyFactoryEventOrderForSession(t, invocation.sessionID, events)
+}
+
+func assertAgyStreamsExclude(t *testing.T, invocation *agyQuietInvocation, markers ...string) {
+	t.Helper()
+	for _, marker := range markers {
+		if strings.Contains(invocation.inputs.Stdout(), marker) || strings.Contains(invocation.inputs.Stderr(), marker) {
+			t.Fatalf("session %s streams leaked marker %q", invocation.sessionID, marker)
+		}
+	}
+}
+
 func startAgyQuietInvocation(t *testing.T, ctx context.Context, fixture *agySharedProcessFixture,
 	host *agySharedRoleHost, selector string, trace *agySharedLifecycleTrace, release <-chan struct{},
+	presentation ...string,
 ) *agyQuietInvocation {
 	t.Helper()
 	route := fixture.routes[selector]
@@ -81,10 +174,14 @@ func startAgyQuietInvocation(t *testing.T, ctx context.Context, fixture *agyShar
 		t.Fatal(err)
 	}
 	invocationContext, cancel := context.WithCancel(ctx)
-	inputs := support.FakeInputs(invocationContext, []string{
+	args := []string{
 		"you", "--remote", "--server", host.baseURL, "run", "--session", id,
-		"--named", route.factoryName, "--cut-path", route.assetPath, "--quiet",
-	})
+		"--named", route.factoryName, "--cut-path", route.assetPath,
+	}
+	if len(presentation) == 0 {
+		presentation = []string{"--quiet"}
+	}
+	inputs := support.FakeInputs(invocationContext, append(args, presentation...))
 	inputs.Input.Env = agySharedEnvironment(host.homeDir)
 	inputs.Input.WorkingDirectory = route.workDir
 	invocation := &agyQuietInvocation{inputs: inputs, sessionID: id, done: make(chan struct{})}
@@ -117,22 +214,27 @@ func (invocation *agyQuietInvocation) wait(t *testing.T, ctx context.Context) {
 
 func assertAgyQuietSuccess(t *testing.T, invocation *agyQuietInvocation) {
 	t.Helper()
+	assertAgyPrimaryOutput(t, invocation, agyColdWatchCompleteReportTrace(t))
+	if got := invocation.inputs.Stderr(); got != "" {
+		t.Fatalf("quiet success stderr = %q, want empty", got)
+	}
+}
+
+func assertAgyPrimaryOutput(t *testing.T, invocation *agyQuietInvocation, expectedTrace []byte) {
+	t.Helper()
 	if invocation.err != nil {
-		t.Fatalf("quiet success failed: %v", invocation.err)
+		t.Fatalf("primary-output invocation failed: %v", invocation.err)
 	}
 	var trace struct {
 		Result struct {
 			Response string `json:"response"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(agyColdWatchCompleteReportTrace(t), &trace); err != nil {
+	if err := json.Unmarshal(expectedTrace, &trace); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.TrimSpace(invocation.inputs.Stdout()); got != trace.Result.Response {
 		t.Fatalf("quiet stdout = %q, want raw primary result %q", got, trace.Result.Response)
-	}
-	if got := invocation.inputs.Stderr(); got != "" {
-		t.Fatalf("quiet success stderr = %q, want empty", got)
 	}
 }
 

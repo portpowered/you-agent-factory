@@ -1,6 +1,7 @@
 package agy
 
 import (
+	"bytes"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -8,6 +9,7 @@ import (
 
 func (fixture *agySharedProcessFixture) registerRoleColdWatchRoutes(t *testing.T) {
 	t.Helper()
+	fixture.registerQuietPeerRoutes(t)
 	fixture.addRoleRoute(t, "quiet-success", agyColdWatchFactoryName,
 		"clip-fixture.mp4", agyColdWatchCompleteReportTrace(t))
 	fixture.addRoleRouteWithOutcomes(t, "quiet-failure", agyColdWatchFactoryName,
@@ -23,6 +25,35 @@ func (fixture *agySharedProcessFixture) registerRoleColdWatchRoutes(t *testing.T
 		"groundtruth-fixture.mp4", readAgyGoldenAsset(t, "agy-trace-groundtruth-verbose.stream.jsonl"))
 	fixture.addRoleRoute(t, "role-cold-watch-missing-file", agyColdWatchFactoryName,
 		"does-not-exist-xyz.mp4", readAgyGoldenAsset(t, "agy-trace-missing-file.stream.jsonl"))
+}
+
+func (fixture *agySharedProcessFixture) registerQuietPeerRoutes(t *testing.T) {
+	t.Helper()
+	for _, mode := range []string{"normal", "verbose"} {
+		for _, outcome := range []string{"success", "failure"} {
+			prefix := "quiet-" + mode + "-" + outcome
+			fixture.addRoleRoute(t, prefix+"-peer", agyColdWatchFactoryName,
+				"clip-fixture.mp4", agyMarkedColdWatchTrace(t, prefix+"-peer"))
+			fixture.addRoleRoute(t, prefix+"-reuse", agyColdWatchFactoryName,
+				"clip-fixture.mp4", agyMarkedColdWatchTrace(t, prefix+"-reuse"))
+			if outcome == "success" {
+				fixture.addRoleRoute(t, prefix, agyColdWatchFactoryName,
+					"clip-fixture.mp4", agyMarkedColdWatchTrace(t, prefix))
+				continue
+			}
+			fixture.addRoleRouteWithOutcomes(t, prefix, agyColdWatchFactoryName,
+				"clip-fixture.mp4", agySharedCommandOutcome{result: platformprocess.CommandResult{
+					Stdout: []byte("authentication failed: quiet-secret-peer-token"),
+					Stderr: []byte("quiet-secret-peer-diagnostic"), ExitCode: 1,
+				}})
+		}
+	}
+}
+
+func agyMarkedColdWatchTrace(t *testing.T, marker string) []byte {
+	t.Helper()
+	return bytes.ReplaceAll(agyColdWatchCompleteReportTrace(t), []byte("The subject enters frame."),
+		[]byte("The subject enters frame. ["+marker+"]"))
 }
 
 func (fixture *agySharedProcessFixture) registerRoleClipQARoutes(t *testing.T) {
