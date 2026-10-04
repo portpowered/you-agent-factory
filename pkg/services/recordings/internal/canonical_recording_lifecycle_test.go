@@ -764,9 +764,7 @@ func replayScopeWorldState(
 		if err != nil {
 			return recordings.WorldStateView{}, err
 		}
-		if observed.Observation.Plan != planned.Plan.Handle || observed.Observation.ProcessedEvents != index+1 ||
-			observed.Observation.TotalEvents != len(scope.events) || observed.Observation.Through == nil || *observed.Observation.Through != event.Cursor ||
-			observed.Observation.WorldState.Scope != scope.eventScope {
+		if !replayObservationMatchesPrefix(observed.Observation, planned.Plan.Handle, scope, index, event) {
 			return recordings.WorldStateView{}, errors.New("replay observation crossed plan, prefix or scope")
 		}
 		if index < len(scope.events)-1 && observed.Observation.Kind != recordings.ReplayProgress {
@@ -778,4 +776,16 @@ func replayScopeWorldState(
 			" did not complete: " + string(observed.Observation.Kind))
 	}
 	return observed.Observation.WorldState, nil
+}
+
+func replayObservationMatchesPrefix(
+	observation recordings.ReplayObservation,
+	plan recordings.ReplayPlanHandle,
+	scope finalizedReplayScope,
+	index int,
+	event recordings.CanonicalEvent,
+) bool {
+	return observation.Plan == plan && observation.ProcessedEvents == index+1 &&
+		observation.TotalEvents == len(scope.events) && observation.Through != nil &&
+		*observation.Through == event.Cursor && observation.WorldState.Scope == scope.eventScope
 }
