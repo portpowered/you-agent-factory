@@ -19,7 +19,7 @@ import (
 
 // The two sessions share the customer's process clock. Advance it only after
 // both public dispatches complete; this local sequence owns the stop/peer invariant.
-func TestAutomationsCronSessionsStopIndependentlyAndRestart(t *testing.T) {
+func TestAutomationsCronAndIntervalSessionsStopIndependentlyAndRestart(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	clock := clockwork.NewFakeClockAt(start)
@@ -138,6 +138,11 @@ func cronSessionFactoryConfig(name string) map[string]any {
 	cfg["workers"] = []map[string]string{{"name": "cron-worker", "type": "SCRIPT_WORKER", "command": "owned-cron-worker"}}
 	ws := cfg["workstations"].([]map[string]any)[0]
 	ws["name"] = name
+	if name == "owned-cron-A" {
+		// Exercise duration scheduling through the canonical lifecycle owner.
+		// The peer retains calendar scheduling, including jitter and expiry.
+		ws["cron"] = map[string]any{"every": "1m", "triggerAtStart": true}
+	}
 	extra := map[string]any{
 		"name": "owned-cron-malformed", "behavior": "CRON", "worker": "cron-worker",
 		"cron":    map[string]any{"schedule": "not-a-cron", "triggerAtStart": true},
