@@ -83,6 +83,9 @@ func provideWorkerRecordingWriter(
 		if err != nil {
 			return nil, fmt.Errorf("resolve Worker recording project root: %w", err)
 		}
+		if projectRoot == "" || !filepath.IsAbs(projectRoot) {
+			return nil, fmt.Errorf("resolve Worker recording project root: expected a non-empty absolute directory")
+		}
 		writer, err = recordingswire.NewWorkerRecordingFileWriter(
 			platformreplay.NewLocal(runtime.GOOS),
 			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -83,6 +84,29 @@ func TestWorkerRecordingRootFailureAndOverride(t *testing.T) {
 	got, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory, WorkerRecordingWriter: override})
 	if err != nil || got != override || directory.calls != 0 {
 		t.Fatalf("override = %v, error %v, Getwd calls %d", got, err, directory.calls)
+	}
+}
+
+func TestWorkerRecordingRejectsInvalidDefaultRoot(t *testing.T) {
+	t.Parallel()
+	for _, root := range []string{"", "relative-project"} {
+		t.Run(root, func(t *testing.T) {
+			t.Parallel()
+			directory := &workerRecordingDirectoryProbe{root: root}
+			writer, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory})
+			if err == nil || writer != nil || !strings.Contains(err.Error(), "expected a non-empty absolute directory") {
+				t.Fatalf("invalid root %q: writer = %v, error = %v", root, writer, err)
+			}
+			override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			directory.calls = 0
+			got, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory, WorkerRecordingWriter: override})
+			if err != nil || got != override || directory.calls != 0 {
+				t.Fatalf("override for root %q: writer = %v, error = %v, Getwd calls = %d", root, got, err, directory.calls)
+			}
+		})
 	}
 }
 
