@@ -137,6 +137,9 @@ func (r GetObservationRequest) Validate() error {
 // without requiring a provider-native session reference.
 type GetObservationByWorkerSessionIDRequest struct {
 	WorkerSessionID string
+	// FactorySessionID selects the owning retained scope. Empty preserves the
+	// unscoped direct Worker lookup.
+	FactorySessionID string
 }
 
 // Validate reports whether the request carries a complete Worker Session
@@ -145,6 +148,9 @@ func (r GetObservationByWorkerSessionIDRequest) Validate() error {
 	if !validSessionID(r.WorkerSessionID) {
 		return ErrInvalidSessionID
 	}
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	return nil
 }
 
@@ -152,13 +158,14 @@ func (r GetObservationByWorkerSessionIDRequest) Validate() error {
 // recorded Provider Session association should be projected.
 type ReadTranscriptByWorkerSessionIDRequest struct {
 	WorkerSessionID string
+	// FactorySessionID selects the recorded association's owning scope.
+	FactorySessionID string
 }
 
 func (r ReadTranscriptByWorkerSessionIDRequest) Validate() error {
-	if !validSessionID(r.WorkerSessionID) {
-		return ErrInvalidSessionID
-	}
-	return nil
+	return (GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: r.WorkerSessionID, FactorySessionID: r.FactorySessionID,
+	}).Validate()
 }
 
 // StreamObservationsRequest names one exact Provider Session identity and the
@@ -201,8 +208,10 @@ func (r StreamObservationsRequest) Validate() error {
 // Session and the bounded delivery policy for its retained/live stream.
 type StreamObservationsByWorkerSessionIDRequest struct {
 	WorkerSessionID string
-	Limit           int
-	ReplayOnly      bool
+	// FactorySessionID selects the source topic's owning retained scope.
+	FactorySessionID string
+	Limit            int
+	ReplayOnly       bool
 	// Cursor resumes strictly after the last acknowledged Worker Session event.
 	Cursor *ObservationCursor
 }
@@ -210,8 +219,10 @@ type StreamObservationsByWorkerSessionIDRequest struct {
 // Validate reports whether the request carries a complete Worker Session
 // identity and a non-negative effective delivery limit.
 func (r StreamObservationsByWorkerSessionIDRequest) Validate() error {
-	if !validSessionID(r.WorkerSessionID) {
-		return ErrInvalidSessionID
+	if err := (GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: r.WorkerSessionID, FactorySessionID: r.FactorySessionID,
+	}).Validate(); err != nil {
+		return err
 	}
 	if r.Limit < 0 {
 		return ErrInvalidObservationStreamLimit
@@ -651,12 +662,17 @@ var (
 type ReadTranscriptRequest struct {
 	WorkerSessionID string
 	ProviderSession providers.SessionRef
+	// FactorySessionID fences the selected identity to its owning retained scope.
+	FactorySessionID string
 }
 
 // Validate reports whether the request carries exactly one complete typed
 // identity. Accepting both identities would make a disagreement ambiguous and
 // could let a legacy provider reference escape its Worker Session scope.
 func (r ReadTranscriptRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	workerSessionID := strings.TrimSpace(r.WorkerSessionID)
 	providerIdentityPresent := strings.TrimSpace(string(r.ProviderSession.Provider)) != "" ||
 		strings.TrimSpace(r.ProviderSession.Kind) != "" || strings.TrimSpace(r.ProviderSession.ID) != ""

@@ -808,7 +808,7 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID)
+	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
@@ -876,11 +876,12 @@ func (r *registry) observationStreamSession(ref providers.SessionRef) (string, b
 	return workerSessionID, alreadyTerminal, workerSessionState, nil
 }
 
-func (r *registry) observationStreamSessionByID(id string) (string, bool, workersessions.State, error) {
+func (r *registry) observationStreamSessionByID(id string, factorySessionIDs ...string) (string, bool, workersessions.State, error) {
 	r.mu.RLock()
 	session, exists := r.sessions[id]
+	scopeMatches := observationFactoryScopeMatches(r.observations[id], factorySessionIDs...)
 	r.mu.RUnlock()
-	if !exists {
+	if !exists || !scopeMatches {
 		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
 		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
 	}

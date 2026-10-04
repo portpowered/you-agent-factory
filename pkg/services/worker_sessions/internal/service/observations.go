@@ -186,7 +186,7 @@ func (r *registry) ReadTranscriptByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
-	session, metadata, ok := r.loadObservationState(req.WorkerSessionID)
+	session, metadata, ok := r.loadObservationState(req.WorkerSessionID, req.FactorySessionID)
 	if !ok {
 		r.logger.Info("worker session identity transcript read", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
@@ -286,7 +286,7 @@ func (r *registry) transcriptSession(req workersessions.ReadTranscriptRequest) (
 		if req.WorkerSessionID == "" {
 			matches = session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == req.ProviderSession
 		}
-		if matches {
+		if matches && observationFactoryScopeMatches(r.observations[id], req.FactorySessionID) {
 			ids = append(ids, id)
 		}
 	}
@@ -415,7 +415,7 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	// Worker-ID lookup is the provider-neutral history boundary. It must not
 	// require transcript enrichment from Provider Sessions: a worker can emit
 	// canonical lifecycle/output records without a readable provider transcript.
-	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID)
+	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
 		return workersessions.Observation{}, err
@@ -443,12 +443,12 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 // identity and lifecycle timing without consulting Provider Sessions. The
 // canonical Worker-ID history stream uses this boundary so missing provider
 // transcript storage cannot hide retained Worker Session records.
-func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) (workersessions.Observation, error) {
+func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string, factorySessionIDs ...string) (workersessions.Observation, error) {
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
 
-	session, metadata, ok := r.loadObservationState(id)
+	session, metadata, ok := r.loadObservationState(id, factorySessionIDs...)
 	if !ok {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
@@ -498,11 +498,14 @@ func observedTerminalCause(session workersessions.Session) *workersessions.Failu
 
 // loadObservationState returns detached snapshots of the registered session
 // and observation metadata for id. ok is false when either is missing.
-func (r *registry) loadObservationState(id string) (workersessions.Session, *observation, bool) {
+func (r *registry) loadObservationState(id string, factorySessionIDs ...string) (workersessions.Session, *observation, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	session, exists := r.sessions[id]
 	metadata := r.observations[id]
+	if !observationFactoryScopeMatches(metadata, factorySessionIDs...) {
+		return workersessions.Session{}, nil, false
+	}
 	if exists {
 		session = cloneSession(session)
 	}
@@ -513,6 +516,13 @@ func (r *registry) loadObservationState(id string) (workersessions.Session, *obs
 		return workersessions.Session{}, nil, false
 	}
 	return session, metadata, true
+}
+
+func observationFactoryScopeMatches(metadata *observation, factorySessionIDs ...string) bool {
+	if len(factorySessionIDs) == 0 || strings.TrimSpace(factorySessionIDs[0]) == "" {
+		return true
+	}
+	return metadata != nil && metadata.factorySessionID == strings.TrimSpace(factorySessionIDs[0])
 }
 
 // baseObservation projects the registry-owned identity, correlation, and

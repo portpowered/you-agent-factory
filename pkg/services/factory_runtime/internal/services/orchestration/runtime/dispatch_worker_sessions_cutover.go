@@ -673,6 +673,11 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if err := req.Validate(); err != nil {
 		return workersessions.Observation{}, err
 	}
+	scope, err := s.observationReadScope(req.FactorySessionID)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	req.FactorySessionID = scope
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
@@ -761,6 +766,11 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if err := req.Validate(); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	scope, err := s.observationReadScope(req.FactorySessionID)
+	if err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	req.FactorySessionID = scope
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
