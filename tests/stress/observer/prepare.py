@@ -16,20 +16,27 @@ def git(source, *args):
 
 
 def instrument(text, concrete, hook, template):
-    # Fail closed on source drift; only replace the constructor's literal return.
+    # Scope views can share an owner's registry. Instrument only New so the
+    # same registry is not registered twice through those compatibility views.
+    constructor_start = text.index("func New(")
+    constructor_end = text.index("\n}", constructor_start)
+    constructor = text[constructor_start:constructor_end]
     marker = "return &" + concrete + "{"
-    if text.count(marker) != 1:
+    if constructor.count(marker) != 1:
         raise ValueError("unsupported constructor: " + concrete)
-    start = text.index(marker)
-    end_marker = "\n\t}, nil" if concrete == "Host" else "\n\t}"
-    end = text.index(end_marker, start)
-    text = text[:start] + text[start:end].replace(marker, "owner := &" + concrete + "{", 1) + text[end:]
-    end = text.index(end_marker, start)
-    suffix = "\n\t}\n\t" + hook + "(owner)\n\treturn owner"
+    end_marker = "}, nil" if concrete == "Host" else "}"
+    if not constructor.endswith(end_marker):
+        raise ValueError("unsupported constructor return: " + concrete)
+    constructor = constructor.replace(marker, "owner := &" + concrete + "{", 1)
+    suffix = "}\n\t" + hook + "(owner)\n\treturn owner"
     if concrete == "Host":
         suffix += ", nil"
-    text = text[:end] + suffix + text[end + len(end_marker):]
-    text = text.replace("import (", 'import (\n "sort"\n ' + IMPORT, 1)
+    constructor = constructor[:-len(end_marker)] + suffix
+    text = text[:constructor_start] + constructor + text[constructor_end:]
+    imports = '\n "sort"\n ' + IMPORT
+    if '"fmt"' not in text:
+        imports += '\n "fmt"'
+    text = text.replace("import (", "import (" + imports, 1)
     return text + "\n" + template
 
 
@@ -65,6 +72,8 @@ def prepare(args):
         original = (source / path / existing).read_text()
         imports = '\n "fmt"\n ' + IMPORT
         calibration = (templates / template).read_text()
+        if path == HOST and '"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"' not in original:
+            imports += '\n instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"'
         if path == HOST and head == PIN:
             # Only the original pin lacks the testing.T cleanup argument.
             # Current candidates retain their helper's fixture cleanup.
