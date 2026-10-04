@@ -100,6 +100,7 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 				observed = append(observed, fact)
 				observedMu.Unlock()
 			})
+			t.Cleanup(mapperClient.release)
 			if err := mapperClient.SessionUpdate(context.Background(), acpsdk.SessionNotification{SessionId: acpsdk.SessionId(envelope.SessionID), Update: update}); err != nil {
 				t.Fatalf("SessionUpdate() unexpected error: %v", err)
 			}

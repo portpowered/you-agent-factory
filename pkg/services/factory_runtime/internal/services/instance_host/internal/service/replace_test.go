@@ -57,7 +57,7 @@ func TestReplaceSuccessfulStartsReplacementAttachesSidecarsAndSwapsActiveHandle(
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	var currentAttachCalls, currentRestoreCalls, replacementAttachCalls int
 	currentAttach := func(_ context.Context, handle factory.RuntimeRun) error {
 		if handle == nil {
@@ -70,7 +70,7 @@ func TestReplaceSuccessfulStartsReplacementAttachesSidecarsAndSwapsActiveHandle(
 		t, host, currentFactory, "runtime-replace-current", currentAttach,
 	)
 
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-replace-next")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -130,7 +130,7 @@ func TestReplaceStopsReplacementWhenReadinessFailsAndKeepsPriorHandle(t *testing
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	var restoreCalls int
 	current := startReadyHostedHandleWithSidecars(
 		t, host, currentFactory, "runtime-replace-readiness-fail",
@@ -184,13 +184,13 @@ func TestReplaceStopsReplacementWhenSidecarAttachFails(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	current := startReadyHostedHandleWithSidecars(
 		t, host, currentFactory, "runtime-replace-sidecar-fail",
 		func(context.Context, factory.RuntimeRun) error { return nil },
 	)
 
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-replace-sidecar-next")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -232,7 +232,7 @@ func TestReplaceRestoresPriorSidecarsOnFailure(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	current := startReadyHostedHandle(t, host, currentFactory, "runtime-replace-restore")
 
 	replacementFactory := &blockingReplaceFactory{}
@@ -272,10 +272,10 @@ func TestReplaceDoesNotRestorePriorSidecarsAfterCommit(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	current := startReadyHostedHandle(t, host, currentFactory, "runtime-replace-no-restore")
 
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-replace-no-restore-next")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -308,9 +308,9 @@ func TestReplaceRejectsInvalidCurrentAndReplacement(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	current := startReadyHostedHandle(t, host, currentFactory, "runtime-replace-invalid")
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-replace-invalid-next")
 	ctx := context.Background()
 
@@ -339,7 +339,7 @@ func TestReplaceStopsSidecarsBeforeAttemptInServiceMode(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	currentConcrete := startReadyHostedHandle(t, host, currentFactory, "runtime-replace-stop-sidecars").(*factoryhost.Handle)
 
 	sidecarCtx, sidecarCancel := context.WithCancel(context.Background())
@@ -353,7 +353,7 @@ func TestReplaceStopsSidecarsBeforeAttemptInServiceMode(t *testing.T) {
 		stopped.Done()
 	}()
 
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-replace-stop-sidecars-next")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

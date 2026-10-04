@@ -290,3 +290,201 @@ func assertOneLeaseRelease(t *testing.T, host *recordingInferenceHost) {
 		t.Fatalf("lease release calls = %d, want exactly one", host.releaseCalls)
 	}
 }
+
+// Host inspection precedes ClaimInvocationLease. Its failure leaves the
+// caller-owned lease active; it must not be mistaken for runtime cleanup.
+func TestHostInspectionFailurePreservesUnclaimedLeaseForRetry(t *testing.T) {
+	t.Parallel()
+	scopes, scope, lease, host := releaseFixture(t, "inspection-retry", "generate")
+	wantErr := models.ErrHostRuntimeNotReady
+	failingHost := &inspectionFailureHost{recordingInferenceHost: host, failure: wantErr}
+	runtime := &recordingInvocationRuntime{}
+	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), failingHost, runtime, fixedClock(), nil)
+	request := releaseRequest(scope, lease, "generate")
+	result, err := service.InvokeModelWithLease(t.Context(), request)
+	if !errors.Is(err, wantErr) || !result.Invocation.IsZero() || len(result.Content) != 0 || len(result.Artifacts) != 0 {
+		t.Fatalf("inspection failure = (%#v, %v), want original error without invocation/output", result, err)
+	}
+	if runtime.invokeCalls != 0 || failingHost.claims != 0 || host.releaseCalls != 0 || host.leases[lease.String()].Status != models.ModelLeaseStatusActive {
+		t.Fatalf("pre-claim failure invoked/claimed/released capacity: runtime=%d claims=%d releases=%d lease=%#v", runtime.invokeCalls, failingHost.claims, host.releaseCalls, host.leases[lease.String()])
+	}
+	failingHost.failure = nil
+	result, err = service.InvokeModelWithLease(t.Context(), request)
+	assertReleaseOutcome(t, result, err, models.ModelInvocationStatusCompleted, nil)
+	if runtime.invokeCalls != 1 || failingHost.claims != 1 {
+		t.Fatalf("retry runtime=%d claims=%d, want one accepted invocation", runtime.invokeCalls, failingHost.claims)
+	}
+	assertOneLeaseRelease(t, host)
+}
+
+type inspectionFailureHost struct {
+	*recordingInferenceHost
+	failure error
+	claims  int
+}
+
+func (host *inspectionFailureHost) InspectModelHost(ctx context.Context, request models.InspectModelHostRequest) (models.InspectModelHostResult, error) {
+	if host.failure != nil {
+		return models.InspectModelHostResult{}, host.failure
+	}
+	return host.recordingInferenceHost.InspectModelHost(ctx, request)
+}
+
+func (host *inspectionFailureHost) ClaimInvocationLease(ctx context.Context, request models.InvokeModelRequest) (models.ModelLease, error) {
+	host.claims++
+	return host.recordingInferenceHost.ClaimInvocationLease(ctx, request)
+}
+
+func TestRuntimeAndReleaseFailuresPreserveBothClassificationsWithoutOutput(t *testing.T) {
+	t.Parallel()
+	scopes, scope, lease, host := releaseFixture(t, "runtime-cleanup-failure", "generate")
+	host.releaseErr = errors.New("PRIVATE_CLEANUP_DETAIL")
+	runtime := &recordingInvocationRuntime{invokeErr: models.ErrInferenceTimeout}
+	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, runtime, fixedClock(), nil)
+	result, err := service.InvokeModelWithLease(t.Context(), releaseRequest(scope, lease, "generate"))
+	if !errors.Is(err, models.ErrInferenceTimeout) || strings.Contains(err.Error(), "PRIVATE_CLEANUP_DETAIL") {
+		t.Fatalf("joined error = %v, want preserved timeout and redacted cleanup", err)
+	}
+	diagnostic := modelseffects.ProjectRuntimeFailure(err, 0)
+	if diagnostic.Subcause != modelseffects.RuntimeSubcauseCleanup {
+		t.Fatalf("joined diagnostic = %#v, want cleanup subcause", diagnostic)
+	}
+	if result.Status != models.ModelInvocationStatusFailed || result.LeaseDisposition != models.InvocationLeaseRetained ||
+		len(result.Content) != 0 || len(result.Artifacts) != 0 || len(result.Outputs) != 0 {
+		t.Fatalf("joined failure = %#v, want failed/retained without output", result)
+	}
+	if runtime.invokeCalls != 1 || host.leases[lease.String()].Status != models.ModelLeaseStatusActive {
+		t.Fatalf("runtime calls=%d lease=%#v, want one attempt and retained capacity", runtime.invokeCalls, host.leases[lease.String()])
+	}
+	assertOneLeaseRelease(t, host)
+}
+
+func TestCancelAcceptedInvocationPreservesPeerScopeCapacity(t *testing.T) {
+	t.Parallel()
+	scopes, selectedScope, selectedLease, host := releaseFixture(t, "cancel-peer", "hold")
+	peerRef, err := scopes.Open(models.RuntimeBinding{RuntimeConfig: func() *models.RuntimeConfig {
+		return &models.RuntimeConfig{Workers: []models.RuntimeWorker{inferenceWorker("peer-model", "hold")}}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	peerScope := mustScopeRef(t, string(peerRef))
+	peerLease := mustLeaseRef(t, "peer-lease")
+	host.leases[peerLease.String()] = activeLease(peerScope, peerLease, "peer-model", "peer-worker")
+	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, holdInvocationRuntime{}, fixedClock(), nil)
+	selected, err := service.InvokeModelWithLease(t.Context(), releaseRequest(selectedScope, selectedLease, "hold"))
+	if err != nil || selected.Status != models.ModelInvocationStatusAccepted {
+		t.Fatalf("selected invocation = (%#v, %v), want accepted", selected, err)
+	}
+	peer, err := service.InvokeModelWithLease(t.Context(), invokeRequest(peerScope, peerLease, "peer-worker", "peer-model", "hold"))
+	if err != nil || peer.Status != models.ModelInvocationStatusAccepted || peer.Invocation == selected.Invocation {
+		t.Fatalf("peer invocation = (%#v, %v), want distinct accepted invocation", peer, err)
+	}
+	cancelled, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: selectedScope, Invocation: selected.Invocation})
+	if err != nil || cancelled.Status != models.ModelInvocationStatusCancelled || cancelled.LeaseDisposition != models.InvocationLeaseReleased {
+		t.Fatalf("selected cancellation = (%#v, %v)", cancelled, err)
+	}
+	assertOneLeaseRelease(t, host)
+	if host.leases[peerLease.String()].Status != models.ModelLeaseStatusActive {
+		t.Fatalf("selected cancellation changed peer capacity: %#v", host.leases[peerLease.String()])
+	}
+	assertEligibleRetryAfterCancellation(t, service, host, selectedScope, selected.Invocation, peerLease)
+	assertPeerCancellationScope(t, service, host, selectedScope, peer)
+}
+
+func assertEligibleRetryAfterCancellation(t *testing.T, service inference.Service, host *recordingInferenceHost, selectedScope models.RuntimeScopeRef, previous models.ModelInvocationRef, peerLease models.ModelLeaseRef) {
+	t.Helper()
+	// A fresh lease represents the host owner's eligible reacquisition. This
+	// witnesses Inference accepting it; capacity allocation itself stays in the
+	// leases component's exhausted/contended/recovery tests.
+	retryLease := mustLeaseRef(t, "retry-after-cancel")
+	host.leases[retryLease.String()] = activeLease(selectedScope, retryLease, "scoped-model", "worker-1")
+	retry, err := service.InvokeModelWithLease(t.Context(), releaseRequest(selectedScope, retryLease, "hold"))
+	if err != nil || retry.Status != models.ModelInvocationStatusAccepted || retry.Invocation == previous {
+		t.Fatalf("retry after cancellation = (%#v, %v), want new accepted invocation", retry, err)
+	}
+	retryCancelled, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: selectedScope, Invocation: retry.Invocation})
+	if err != nil || retryCancelled.LeaseDisposition != models.InvocationLeaseReleased || host.releaseCalls != 2 ||
+		host.leases[peerLease.String()].Status != models.ModelLeaseStatusActive {
+		t.Fatalf("retry cleanup = (%#v, %v), releases=%d peer=%#v", retryCancelled, err, host.releaseCalls, host.leases[peerLease.String()])
+	}
+}
+
+func assertPeerCancellationScope(t *testing.T, service inference.Service, host *recordingInferenceHost, selectedScope models.RuntimeScopeRef, peer models.InvokeModelResult) {
+	t.Helper()
+	wrongScope, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: selectedScope, Invocation: peer.Invocation})
+	if !errors.Is(err, models.ErrInvocationNotFound) || wrongScope.Outcome != "" || host.releaseCalls != 2 {
+		t.Fatalf("foreign cancellation = (%#v, %v), releases=%d", wrongScope, err, host.releaseCalls)
+	}
+	peerCancelled, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: peer.Scope, Invocation: peer.Invocation})
+	if err != nil || peerCancelled.Outcome != models.InvocationCancellationRequested || peerCancelled.LeaseDisposition != models.InvocationLeaseReleased || host.releaseCalls != 3 {
+		t.Fatalf("peer-owned cancellation = (%#v, %v), releases=%d", peerCancelled, err, host.releaseCalls)
+	}
+}
+
+func TestScopedInvocationAndRepeatKeepSelectedModelAndOutput(t *testing.T) {
+	t.Parallel()
+	scopes, firstScope, firstLease, host := releaseFixture(t, "scoped-repeat", "generate")
+	peerRef, err := scopes.Open(models.RuntimeBinding{RuntimeConfig: func() *models.RuntimeConfig {
+		return &models.RuntimeConfig{Workers: []models.RuntimeWorker{inferenceWorker("peer-model", "generate")}}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	peerScope := mustScopeRef(t, string(peerRef))
+	runtime := &scopedRequestRuntime{}
+	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, runtime, fixedClock(), nil)
+	var previous models.ModelInvocationRef
+	for index, scenario := range []struct {
+		scope models.RuntimeScopeRef
+		model string
+		lease models.ModelLeaseRef
+		text  string
+	}{
+		{firstScope, "scoped-model", firstLease, "first output"},
+		{peerScope, "peer-model", mustLeaseRef(t, "peer-lease"), "peer output"},
+		{firstScope, "scoped-model", mustLeaseRef(t, "repeat-lease"), "repeated output"},
+	} {
+		host.leases[scenario.lease.String()] = activeLease(scenario.scope, scenario.lease, scenario.model, "worker-1")
+		request := invokeRequest(scenario.scope, scenario.lease, "worker-1", scenario.model, "generate")
+		request.Input = models.InferenceInput{ContentType: "TEXT", Content: scenario.text}
+		result, err := service.InvokeModelWithLease(t.Context(), request)
+		assertReleaseOutcome(t, result, err, models.ModelInvocationStatusCompleted, nil)
+		assertSelectedRuntimeRequest(t, runtime.requests[index], request)
+		assertSelectedInvocationResult(t, result, request, previous)
+		if host.leases[scenario.lease.String()].Status != models.ModelLeaseStatusReleased || host.releaseCalls != index+1 {
+			t.Fatalf("scenario %d release calls=%d lease=%#v", index, host.releaseCalls, host.leases[scenario.lease.String()])
+		}
+		previous = result.Invocation
+	}
+	if runtime.invokeCalls != 3 || runtime.reusedHostSlots != 3 {
+		t.Fatalf("selected runtime calls=%d reused slots=%d, want three scoped executions", runtime.invokeCalls, runtime.reusedHostSlots)
+	}
+}
+
+func assertSelectedRuntimeRequest(t *testing.T, observed inference.InvocationRuntimeRequest, request models.InvokeModelRequest) {
+	t.Helper()
+	if observed.Request.Scope != request.Scope || observed.Request.Lease != request.Lease ||
+		observed.Request.ModelName != request.ModelName || observed.Request.Input.Content != request.Input.Content ||
+		observed.Operation.Name != request.Operation || !observed.HostSlot.Reused {
+		t.Fatalf("runtime effect = %#v, want selected request %#v and ready host", observed, request)
+	}
+}
+
+func assertSelectedInvocationResult(t *testing.T, result models.InvokeModelResult, request models.InvokeModelRequest, previous models.ModelInvocationRef) {
+	t.Helper()
+	if result.Scope != request.Scope || result.ModelName != request.ModelName || result.Lease != request.Lease ||
+		result.Invocation.IsZero() || result.Invocation == previous || len(result.Content) != 1 || result.Content[0].Content != request.Input.Content {
+		t.Fatalf("result = %#v, want selected request %#v and distinct invocation", result, request)
+	}
+}
+
+type scopedRequestRuntime struct {
+	recordingInvocationRuntime
+	requests []inference.InvocationRuntimeRequest
+}
+
+func (runtime *scopedRequestRuntime) Invoke(ctx context.Context, request inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
+	runtime.requests = append(runtime.requests, request)
+	return runtime.recordingInvocationRuntime.Invoke(ctx, request)
+}

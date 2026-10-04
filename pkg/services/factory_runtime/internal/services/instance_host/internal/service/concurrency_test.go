@@ -23,9 +23,9 @@ type gatedRunFactory struct {
 	releaseRun chan struct{}
 }
 
-func newGatedRunFactory(state interfaces.FactoryState) *gatedRunFactory {
+func newGatedRunFactory(t *testing.T, state interfaces.FactoryState) *gatedRunFactory {
 	return &gatedRunFactory{
-		lifecycleControlFactory: newLifecycleControlFactory(state),
+		lifecycleControlFactory: newLifecycleControlFactory(t, state),
 		enterRun:                make(chan struct{}),
 		releaseRun:              make(chan struct{}),
 	}
@@ -45,7 +45,7 @@ func TestConcurrentStartAdmitsOneActiveHandle(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	bundle := testBundle(factoryStub, "runtime-concurrent-start")
 	ctx := context.Background()
 
@@ -96,7 +96,7 @@ func TestConcurrentStartAndTerminateConvergesWithoutOrphanedHandle(t *testing.T)
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newGatedRunFactory(interfaces.FactoryStateIdle)
+	factoryStub := newGatedRunFactory(t, interfaces.FactoryStateIdle)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateIdle),
@@ -140,7 +140,7 @@ func TestConcurrentPauseResumeNeverCreatesSecondHandle(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	handle := startReadyHostedHandle(t, host, factoryStub, "runtime-concurrent-pause-resume")
 
 	const submissions = 64
@@ -187,10 +187,10 @@ func TestConcurrentReplaceAndTerminateDoesNotCommitReplacement(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	current := startReadyHostedHandle(t, host, currentFactory, "runtime-replace-terminate-current")
 
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-replace-terminate-next")
 	serviceCtx, serviceCancel := context.WithCancel(context.Background())
 	defer serviceCancel()
@@ -253,7 +253,7 @@ func TestExecuteFailureUnwindsInReverseStartupOrder(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	bundle := testBundle(factoryStub, "runtime-unwind-order")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

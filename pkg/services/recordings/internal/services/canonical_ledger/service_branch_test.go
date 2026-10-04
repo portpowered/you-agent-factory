@@ -7,16 +7,11 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	ledgerservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 )
 
 func TestCanonicalLedgerNewAndAppendFallbackRemainExplicit(t *testing.T) {
 	t.Parallel()
-
-	if got := ledgerservice.New(nil); got != nil {
-		t.Fatalf("New(nil) = %#v, want nil", got)
-	}
 
 	ledger := &discardingLedger{stubLedger: &stubLedger{}}
 	service := wire.NewService(ledger)

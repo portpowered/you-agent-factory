@@ -5,13 +5,17 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 type config struct {
+	constructionRegistry              *contractguard.ConstructionRegistry
 	root                              string
 	packageRoot                       string
 	all                               bool
 	baseRef                           string
+	baselineCacheDir                  string
 	writeTestServiceImportBaseline    bool
 	writeSupportServiceImportBaseline bool
 	writeTransportBehaviorBaseline    bool
@@ -26,6 +30,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.packageRoot, "package-root", defaultScanRoot, "repository-relative package root to scan")
 	flag.BoolVar(&cfg.all, "all", false, "show recorded package-boundary diagnostics as well as unrecorded findings")
 	flag.StringVar(&cfg.baseRef, "base-ref", "", "optional Git ref used to identify recorded package-boundary findings")
+	flag.StringVar(&cfg.baselineCacheDir, "baseline-cache-dir", "", "memoize the base-tree scan per base commit and checker build in this directory (\"auto\" selects a per-user cache); empty disables the cache")
 	flag.BoolVar(
 		&cfg.writeTestServiceImportBaseline,
 		"create-test-service-import-baseline",
@@ -96,6 +101,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 			writeBoundaryFindings(stdout, findings)
 			writeBaselineSummaries(stdout, findings)
 		} else {
+			contractguard.WriteConstructionFindings(stdout, findings.constructionFindings)
 			writeBoundaryFindings(stdout, testOnlyFindings)
 		}
 		writeClassifiedDependencyViolationCounts(stdout, classifiedDependencyCounts)
@@ -118,7 +124,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 }
 
 func countBlockingViolations(findings scanResult) int {
-	return countAlwaysBlockingViolations(findings) +
+	return contractguard.CountBlockingConstructionFindings(findings.constructionFindings) + countAlwaysBlockingViolations(findings) +
 		countProductionBoundaryViolations(findings) +
 		// Test-service imports are an intentional test-specific policy. They
 		// remain blocking even though their source class is test-only.

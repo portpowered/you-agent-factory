@@ -505,7 +505,7 @@ Before merge, authors **SHOULD** confirm:
 These standards are intentionally general, but the current repository stack suggests the following defaults:
 
 - Use thin `cmd/` entrypoints and keep backend behavior in `pkg/` and `internal/`.
-- Treat `make lint`, `go vet`, and repository-specific dead-code or guard checks as required quality gates.
+- Treat `make lint`, `go vet`, and repository-specific dead-code or guard checks as required quality gates enforced by hosted CI; run only the changed lint target locally.
 - Keep OpenAPI and generated artifacts aligned through automated smoke or contract checks.
 - Use `tests/functional/` for new high-value system behavior, not for replacing
   package-level unit coverage. `tests/functional_test/` is legacy fixture and

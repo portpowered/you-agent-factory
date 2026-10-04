@@ -94,7 +94,7 @@ func TestStopActiveHostedInstanceStopsSidecarsRunLoopAndFinalizesArtifacts(t *te
 	finishedAt := time.Date(2026, 7, 27, 22, 0, 0, 0, time.UTC)
 	recording := &terminalRecording{}
 	host := newTestHost(t)
-	factoryStub := &executeObserverFactory{}
+	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateRunning),
@@ -158,7 +158,7 @@ func TestStopAlreadyStoppedReturnsErrAlreadyStoppedWithoutDoubleFinalizing(t *te
 
 	recording := &terminalRecording{}
 	host := newTestHost(t)
-	factoryStub := &executeObserverFactory{}
+	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateRunning),
@@ -198,7 +198,7 @@ func TestStopUnknownOrUnregisteredHandleReturnsErrNotRunning(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	factoryStub := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	other := startReadyHostedHandle(t, host, factoryStub, "runtime-terminate-other")
 
 	unregistered := &factoryhost.Handle{
@@ -241,7 +241,7 @@ func TestStopNeverStartedInvalidHandleReturnsTypedFailure(t *testing.T) {
 	}
 
 	neverStarted := &factoryhost.Handle{
-		Bundle:  testBundle(newLifecycleControlFactory(interfaces.FactoryStateRunning), "runtime-never-started"),
+		Bundle:  testBundle(newLifecycleControlFactory(t, interfaces.FactoryStateRunning), "runtime-never-started"),
 		RunDone: make(chan struct{}),
 	}
 	if err := host.Stop(neverStarted); !errors.Is(err, factory.ErrNotRunning) {
@@ -270,7 +270,7 @@ func TestStopEmitsLifecycleStopMetricOnce(t *testing.T) {
 	}
 
 	host := newTestHost(t)
-	factoryStub := &executeObserverFactory{}
+	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusFinished,
 		FactoryState:  string(interfaces.FactoryStateRunning),
@@ -332,7 +332,7 @@ func TestReplacementSidecarShutdownDoesNotEmitFalseTerminalStop(t *testing.T) {
 	}
 
 	host := newTestHost(t)
-	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	current := startReadyHostedHandle(t, host, currentFactory, "runtime-terminate-replace-sidecar").(*factoryhost.Handle)
 	current.Bundle.MetricsSink = metricsSink
 
@@ -342,7 +342,7 @@ func TestReplacementSidecarShutdownDoesNotEmitFalseTerminalStop(t *testing.T) {
 	defer cancelObserver()
 	go factoryhost.ObserveRuntimeMetrics(observerCtx, current, platformclock.Real{})
 
-	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-terminate-replace-sidecar-next")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

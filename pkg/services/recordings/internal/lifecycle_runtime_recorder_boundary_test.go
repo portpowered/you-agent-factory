@@ -4,13 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
-	"github.com/portpowered/infinite-you/pkg/services/work"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
+	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 type runtimeRoot interface {
@@ -18,11 +24,67 @@ type runtimeRoot interface {
 	recordings.RuntimeScopeService
 }
 
+// Live scope units supply detached lifecycle facts and completed subscription
+// outcomes; the canonical owner tests retain ordering and reconnect policy.
+type liveSubscriptionOwner struct {
+	canonicalledger.Service
+	request  recordings.SubscribeRequest
+	outcomes []recordings.CanonicalEvent
+	err      error
+	calls    int
+}
+
+func (owner *liveSubscriptionOwner) SubscribeFrom(_ context.Context, request recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+	owner.request = request
+	owner.calls++
+	remaining := append([]recordings.CanonicalEvent(nil), owner.outcomes...)
+	return recordings.SubscribeResult{Subscription: func(context.Context) recordings.SubscriptionOutcome {
+		if len(remaining) == 0 {
+			return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+		}
+		event := remaining[0]
+		remaining = remaining[1:]
+		return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event}
+	}}, owner.err
+}
+
+func newLiveSubscriptionAdapter(scope recordings.CanonicalEventScope, events []recordings.CanonicalEvent) (*combinedService, recordings.RecordingScopeRef, *liveSubscriptionOwner) {
+	status := recordings.RecordingStatusFacts{RecordingID: "live-recording", Scope: scope, State: recordings.RecordingActive}
+	lifecycle := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{
+		status.RecordingID: {Status: status, Events: events},
+	}}
+	canonical := &liveSubscriptionOwner{}
+	root := NewCombinedService(nil, nil, lifecycle, nil, nil, canonical, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	ref := root.newRecordingScope()
+	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: status.RecordingID, eventScope: scope}
+	return root, ref, canonical
+}
+
+func assertLiveSubscriptionRequest(t *testing.T, owner *liveSubscriptionOwner, scope recordings.CanonicalEventScope, cursor *recordings.CanonicalEventCursor) {
+	t.Helper()
+	if owner.request.Scope != scope || !reflect.DeepEqual(owner.request.Cursor, cursor) {
+		t.Fatalf("subscription request = %#v, want selected scope %#v and cursor %#v", owner.request, scope, cursor)
+	}
+}
+
+func newActiveScopeAdapter(scope recordings.CanonicalEventScope) (*combinedService, recordings.RecordingScopeRef, *activeRuntimeLifecycle, *liveSubscriptionOwner) {
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "active-recording", Scope: scope, State: recordings.RecordingActive,
+	}}
+	canonical := &liveSubscriptionOwner{}
+	root := NewCombinedService(&stubLedger{}, nil, owner,
+		injectedArtifactsOwner{err: recordings.ErrPortableArtifactUnavailable}, nil, canonical, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	ref := root.newRecordingScope()
+	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: owner.status.RecordingID, eventScope: scope}
+	return root, ref, owner, canonical
+}
+
 // TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent proves the
 // recorder accepts Factory event vocabulary from a runtime producer and
-// preserves observable identity, kind, and payload fields through to the
-// portable artifact, including the terminal run-finished event it appends
-// itself.
+// preserves identity, kind, and payload fields in the lifecycle append
+// requests, including the terminal run-finished event it appends itself.
 //
 // The recorder no longer depends on Factory Runtime at all; that constraint is
 // enforced repo-wide by the cross-service cycle ratchet (cmd/servicecyclecheck)
@@ -32,18 +94,10 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 
 	startedAt := time.Date(2026, 7, 27, 17, 0, 0, 0, time.UTC)
 	finishedAt := startedAt.Add(2 * time.Minute)
-	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
-		NewProjectionService(),
-		nil,
-		nil,
-		nil,
-		nil,
-		runtimeRecorderTestClock{now: startedAt},
-	)
+	lifecycle := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "runtime-recording"}}}
 	recorder := newLifecycleRecorderForTest(t, startedAt, "runtime-root-finished.json")
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-runtime-root"}
-	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
@@ -60,42 +114,27 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 		t.Fatalf("Finalize: %v", err)
 	}
 
-	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: recordings.RecordingID(recorder.recordingID),
-	})
-	if err != nil {
-		t.Fatalf("QueryRecordingStatus: %v", err)
+	if len(lifecycle.appendRequests) != 3 {
+		t.Fatalf("append requests = %d, want initial, work request, and terminal events", len(lifecycle.appendRequests))
 	}
-	if status.Status.AcceptedEvents < 3 {
-		t.Fatalf("accepted events = %d, want run-started, work request, and run-finished", status.Status.AcceptedEvents)
-	}
+	assertRuntimeRecorderAppendRequests(t, lifecycle.appendRequests, recorder.recordingID, scope)
 
-	built, err := root.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: recordings.RecordingID(recorder.recordingID),
-	})
-	if err != nil {
-		t.Fatalf("BuildPortableArtifact: %v", err)
-	}
-	if len(built.Artifact.Events) < 3 {
-		t.Fatalf("portable events = %d, want at least three", len(built.Artifact.Events))
-	}
-
-	recordedWorkEvent := built.Artifact.Events[len(built.Artifact.Events)-2]
-	if recordedWorkEvent.ID != recordings.CanonicalEventID(runtimeEvent.Id) {
+	recordedWorkEvent := lifecycle.appendRequests[1].Event
+	if recordedWorkEvent.ID != runtimeEvent.Id {
 		t.Fatalf("recorded work event id = %q, want %q", recordedWorkEvent.ID, runtimeEvent.Id)
 	}
-	if recordedWorkEvent.Kind != recordings.CanonicalEventKind(runtimeEvent.Type) {
+	if recordedWorkEvent.Kind != string(runtimeEvent.Type) {
 		t.Fatalf("recorded work event kind = %q, want %q", recordedWorkEvent.Kind, runtimeEvent.Type)
 	}
-	if !strings.Contains(recordedWorkEvent.Payload, "work-runtime-root") {
+	if recordedWorkEvent.Payload != string(runtimeEvent.Payload) || recordedWorkEvent.RecordedAt != runtimeEvent.Context.EventTime {
 		t.Fatalf("recorded work event payload = %q, want runtime-root work id", recordedWorkEvent.Payload)
 	}
 
-	finishedEvent := built.Artifact.Events[len(built.Artifact.Events)-1]
-	if finishedEvent.ID != recordings.CanonicalEventID(recordingevents.RunFinishedFactoryEventID) {
+	finishedEvent := lifecycle.appendRequests[2].Event
+	if finishedEvent.ID != recordingevents.RunFinishedFactoryEventID {
 		t.Fatalf("finished event id = %q, want %q", finishedEvent.ID, recordingevents.RunFinishedFactoryEventID)
 	}
-	if finishedEvent.Kind != recordings.CanonicalEventKind(recordings.FactoryEventTypeRunResponse) {
+	if finishedEvent.Kind != string(recordings.FactoryEventTypeRunResponse) {
 		t.Fatalf("finished event kind = %q, want %q", finishedEvent.Kind, recordings.FactoryEventTypeRunResponse)
 	}
 	if !strings.Contains(finishedEvent.Payload, string(recordings.FactoryStateCompleted)) {
@@ -105,21 +144,40 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 	assertTerminalRunPayload(t, finishedEvent.Payload, startedAt, finishedAt)
 }
 
-func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) {
+func assertRuntimeRecorderAppendRequests(t *testing.T, requests []recordings.AppendLifecycleEventRequest,
+	id recordings.LifecycleRecordingID, scope recordings.CanonicalEventScope,
+) {
+	t.Helper()
+	for index, request := range requests {
+		if request.RecordingID != id || request.Event.Scope.FactorySessionID != scope.FactorySessionID ||
+			request.Event.Sequence != int64(index) || request.Event.Cursor.Sequence != int64(index) ||
+			request.Event.Cursor.StreamGenerationID != string(id) {
+			t.Fatalf("append request %d = %#v", index, request)
+		}
+	}
+}
+
+func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 	t.Parallel()
 
 	startedAt := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
-	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+	factoryFields := map[string]any{
 		"credential": "runtime-secret",
 		"items":      []any{map[string]any{"token": "item-secret", "label": "visible"}},
 		"a/b":        map[string]any{"~key": "escaped-secret"},
 		"scalar":     "leaf",
-	})
+	}
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factoryFields)
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
-	root := NewRuntimeRoot(
-		nil, nil, nil, nil,
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "runtime-provenance",
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: "session-runtime-provenance"},
+	}}
+	clock := runtimeRecorderTestClock{now: startedAt}
+	root := NewCombinedService(nil, nil, owner, nil, nil, nil, nil,
+		clock, logging.NoopLogger{}, newRuntimeLedgerRouter(clock.Now),
 		func(
 			factorydefinitions.FactorySnapshotSource,
 			string,
@@ -127,8 +185,7 @@ func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) 
 		) (*factorydefinitions.FactorySnapshot, error) {
 			return snapshot, nil
 		},
-		nil, nil, nil, nil,
-		runtimeRecorderTestClock{now: startedAt},
+		nil, nil, nil,
 	)
 	opening, ok := root.(recordings.RuntimeScopeService)
 	if !ok {
@@ -145,58 +202,45 @@ func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) 
 	if err != nil {
 		t.Fatalf("OpenRuntime: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := opened.Recorder.Finalize(startedAt.Add(time.Minute)); err != nil {
+			t.Errorf("Finalize cleanup: %v", err)
+		}
+	})
 	if err := opened.Recorder.Finalize(startedAt.Add(time.Minute)); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
 
-	built, err := root.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: "runtime-provenance",
-	})
-	if err != nil {
-		t.Fatalf("BuildPortableArtifact: %v", err)
+	if len(owner.events) != 2 || len(owner.finishes) != 1 {
+		t.Fatalf("lifecycle requests = %#v / %#v, want initial, terminal and one Finish", owner.events, owner.finishes)
 	}
-	if len(built.Artifact.Events) < 2 {
-		t.Fatalf("final artifact events = %d, want initial and terminal events", len(built.Artifact.Events))
+	assertCapturedFactoryPayload(t, owner.events[0].Event.Payload, factoryFields)
+	want := []recordings.RecordingSecret{
+		{JSONPointer: "/factory/credential", Provenance: recordings.RecordingSecretProvenanceDeclared},
+		{JSONPointer: "/factory/items/0/token", Provenance: recordings.RecordingSecretProvenanceDeclared},
+		{JSONPointer: "/factory/a~1b/~0key", Provenance: recordings.RecordingSecretProvenanceDeclared},
 	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(built.Artifact.Events[0].Payload), &payload); err != nil {
-		t.Fatalf("decode initial event payload: %v", err)
+	if !reflect.DeepEqual(owner.events[0].SecretProvenance, want) || len(owner.events[1].SecretProvenance) != 0 {
+		t.Fatalf("initial/terminal provenance = %#v / %#v", owner.events[0].SecretProvenance, owner.events[1].SecretProvenance)
 	}
-	factory, ok := payload["factory"].(map[string]any)
-	if !ok {
-		t.Fatalf("initial event factory payload = %#v", payload["factory"])
+	for _, request := range owner.events {
+		if request.RecordingID != owner.status.RecordingID || request.Event.Scope != owner.status.Scope {
+			t.Fatalf("selected recording/scope = %#v", request)
+		}
 	}
-	assertRedactedRuntimeValue(t, factory["credential"], "credential")
-	items, ok := factory["items"].([]any)
-	if !ok || len(items) != 1 {
-		t.Fatalf("initial event items = %#v, want one item", factory["items"])
-	}
-	item, ok := items[0].(map[string]any)
-	if !ok {
-		t.Fatalf("initial event item = %#v", items[0])
-	}
-	assertRedactedRuntimeValue(t, item["token"], "items/0/token")
-	escaped, ok := factory["a/b"].(map[string]any)
-	if !ok {
-		t.Fatalf("initial event escaped object = %#v", factory["a/b"])
-	}
-	assertRedactedRuntimeValue(t, escaped["~key"], "a/b/~key")
-	if factory["scalar"] != "leaf" {
-		t.Fatalf("unclassified scalar = %#v, want leaf", factory["scalar"])
-	}
-	if _, exists := factory["missing"]; exists {
-		t.Fatalf("missing declared path changed the Factory payload: %#v", factory["missing"])
-	}
+	assertTerminalRunPayload(t, owner.events[1].Event.Payload, startedAt, startedAt.Add(time.Minute))
 }
 
-func assertRedactedRuntimeValue(t *testing.T, value any, path string) {
+func assertCapturedFactoryPayload(t *testing.T, rawPayload string, want map[string]any) {
 	t.Helper()
-	marker, ok := value.(map[string]any)
-	if !ok || marker["redacted"] != true || marker["provenance"] != string(recordings.RecordingSecretProvenanceDeclared) {
-		t.Fatalf("redacted %s value = %#v, want typed redaction marker", path, value)
+	var payload struct {
+		Factory map[string]any `json:"factory"`
 	}
-	if _, hasOriginalValue := marker["value"]; hasOriginalValue {
-		t.Fatalf("redacted %s value retained original content: %#v", path, marker)
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		t.Fatalf("decode initial event payload: %v", err)
+	}
+	if !reflect.DeepEqual(payload.Factory, want) {
+		t.Fatalf("initial Factory payload = %#v, want captured snapshot %#v", payload.Factory, want)
 	}
 }
 
@@ -250,18 +294,11 @@ func assertTerminalRunPayload(t *testing.T, rawPayload string, startedAt, finish
 	}
 }
 
-func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *testing.T) {
+func TestProjectionOwnerReconstructsCanonicalFactoryWorldStateFromFixture(t *testing.T) {
 	t.Parallel()
 
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	root := NewService(
-		NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil),
-		NewProjectionService(),
-	)
-	opening, ok := root.(recordings.RuntimeScopeService)
-	if !ok {
-		t.Fatal("Recordings root does not expose RuntimeScopeService")
-	}
+	projection := projectionquerywire.NewService()
 
 	factorySnapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
 		"name": "roundtrip-factory",
@@ -281,7 +318,7 @@ func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *test
 
 	const workID = "work-roundtrip"
 	const traceID = "trace-roundtrip"
-	restored, err := opening.ReconstructCanonicalFactoryWorldState(
+	restored, err := projection.ReconstructFactoryWorldState(
 		roundtripFixtureEvents(t, base, factorySnapshot),
 		1,
 	)
@@ -331,11 +368,10 @@ func mustMarshalRoundtripTest(t *testing.T, value any) []byte {
 }
 
 func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T) {
-	service := NewRuntimeRoot(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	root, ok := service.(runtimeRoot)
-	if !ok || root == nil {
-		t.Fatal("NewRuntimeRoot() returned nil")
-	}
+	t.Parallel()
+	router := newRuntimeLedgerRouter(nil)
+	root := NewCombinedService(router, nil, nil, nil, nil, nil, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, router, nil, nil, nil, nil).(*combinedService)
 	topology := runtimeOpeningTopology{}
 	now := func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
 
@@ -348,6 +384,7 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	if err != nil {
 		t.Fatalf("OpenRuntime(first): %v", err)
 	}
+	t.Cleanup(func() { _ = first.Recorder.Finalize(now().Add(time.Second)) })
 	second, err := root.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
 		Topology:         topology,
 		Now:              now,
@@ -357,6 +394,7 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	if err != nil {
 		t.Fatalf("OpenRuntime(second): %v", err)
 	}
+	t.Cleanup(func() { _ = second.Recorder.Finalize(now().Add(time.Second)) })
 	if first.Ledger == second.Ledger {
 		t.Fatal("OpenRuntime returned the same ledger for concurrent sessions")
 	}
@@ -376,8 +414,8 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	if err := first.Recorder.Finalize(finishedAt.Add(time.Second)); err != nil {
 		t.Fatalf("Finalize(first) second call: %v", err)
 	}
-	if _, err := root.SubscribeFrom(context.Background(), recordings.SubscribeRequest{
-		Scope: recordings.CanonicalEventScope{FactorySessionID: "session-one"},
+	if _, err := router.Subscribe(context.Background(), nil, factorydefinitions.FactoryEventReconnectScope{
+		SessionID: "session-one",
 	}); !errors.Is(err, recordings.ErrReconnectCursorUnavailable) {
 		t.Fatalf("Subscribe(closed first session) = %v, want isolated route failure", err)
 	}
@@ -391,21 +429,143 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	}
 }
 
+type runtimeOpeningProjection struct {
+	recordings.ProjectionService
+	events []recordings.FactoryEvent
+	tick   int
+	result recordings.FactoryWorldState
+	err    error
+}
+
+func (projection *runtimeOpeningProjection) ReconstructFactoryWorldState(events []recordings.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	projection.events = events
+	projection.tick = tick
+	return projection.result, projection.err
+}
+
+func TestRuntimeRootForwardsCanonicalWorldStateAndProjectionCause(t *testing.T) {
+	t.Parallel()
+	ownerErr := errors.New("projection failed")
+	projection := &runtimeOpeningProjection{result: recordings.FactoryWorldState{Tick: 7}, err: ownerErr}
+	root := NewCombinedService(nil, projection, nil, nil, nil, nil, nil,
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	events := []recordings.FactoryEvent{{Id: "selected-event", Type: recordings.FactoryEventTypeWorkRequest}}
+	state, err := root.ReconstructCanonicalFactoryWorldState(events, 7)
+	if !errors.Is(err, ownerErr) || !reflect.DeepEqual(state, projection.result) ||
+		!reflect.DeepEqual(projection.events, events) || projection.tick != 7 {
+		t.Fatalf("projection forwarding = (%#v, %v), inputs = (%#v, %d)", state, err, projection.events, projection.tick)
+	}
+	projection.err = nil
+	state, err = root.ReconstructCanonicalFactoryWorldState(events, 7)
+	if err != nil || !reflect.DeepEqual(state, projection.result) {
+		t.Fatalf("projection success = (%#v, %v), want supplied result", state, err)
+	}
+}
+
 func TestRuntimeRootActiveRecordingOwnsOpaqueScopeAndFinalizesOnce(t *testing.T) {
-	root, opened, now := openActiveRuntime(t)
+	t.Parallel()
+	owner := &activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{
+		RecordingID: "recording-active", Scope: recordings.CanonicalEventScope{FactorySessionID: "session-active"},
+	}}
+	canonical := &activeRuntimeCanonical{}
+	root, opened, now := openActiveRuntime(t, owner, canonical)
+	t.Cleanup(func() { _ = opened.Recorder.Finalize(now().Add(time.Second)) })
 	if opened.Scope.IsZero() {
 		t.Fatal("OpenRuntime(active) returned a zero scope")
 	}
-	assertActiveRecordingStarted(t, root)
+	if owner.started.RecordingID != owner.status.RecordingID || owner.started.Scope != owner.status.Scope ||
+		!owner.started.Enabled || owner.started.Target.Artifact != "recording.json" || len(owner.events) != 1 {
+		t.Fatalf("active start = %#v, events = %#v, want selected binding and initial event", owner.started, owner.events)
+	}
+	initialCursor := owner.events[0].Event.Cursor
+	owner.status.LastEvent = &initialCursor
+	owner.status.AcceptedEvents = 1
 	opened.Ledger.RecordRunRequest()
 	scopeStatus := queryActiveScope(t, root, opened.Scope)
+	assertActiveRuntimeQueryDetached(t, scopeStatus, owner)
+	scopeStatus = queryActiveScope(t, root, opened.Scope)
+	owner.status.AcceptedEvents = 2
 	appendActiveScopeEvent(t, root, opened.Scope, scopeStatus)
+	if canonical.event.ID != "runtime-scope-event" || len(owner.events) != 2 ||
+		owner.events[1].RecordingID != owner.status.RecordingID || owner.events[1].Event != canonical.event {
+		t.Fatalf("canonical event = %#v, lifecycle requests = %#v, want selected event forwarded", canonical.event, owner.events)
+	}
 	finalizeActiveRuntime(t, opened.Recorder, now)
-	assertActiveRecordingFinalized(t, root)
+	if len(owner.finishes) != 1 || owner.finishes[0].RecordingID != owner.status.RecordingID ||
+		!owner.finishes[0].FinishedAt.Equal(now().Add(time.Second)) || len(owner.events) != 3 {
+		t.Fatalf("finish = %#v, events = %#v, want one selected finalization", owner.finishes, owner.events)
+	}
+	assertTerminalRunPayload(t, owner.events[2].Event.Payload, now(), now().Add(time.Second))
 	assertActiveScopeClosed(t, root, opened.Scope)
 }
 
-func openActiveRuntime(t *testing.T) (runtimeRoot, recordings.RuntimeScopeResult, func() time.Time) {
+func assertActiveRuntimeQueryDetached(t *testing.T, result recordings.QueryRecordingScopeResult, owner *activeRuntimeLifecycle) {
+	t.Helper()
+	status := owner.status
+	if owner.statusRequest.RecordingID != status.RecordingID {
+		t.Fatalf("status request = %#v, want selected recording %q", owner.statusRequest, status.RecordingID)
+	}
+	if result.Status.EventScope != status.Scope || result.Status.AcceptedEvents != status.AcceptedEvents ||
+		*result.Status.LastEvent != *status.LastEvent {
+		t.Fatalf("scope status = %#v, want selected owner's supplied status %#v", result, status)
+	}
+	// Query returns detached cursors, leaving the owner's supplied facts intact.
+	want := *status.LastEvent
+	result.Status.LastEvent.Sequence++
+	if *status.LastEvent != want {
+		t.Fatal("scope query cursor aliases the owner status")
+	}
+}
+
+// Completed-owner doubles capture the root adapter's requests. Native lifecycle
+// and public functional witnesses own terminal state and persistence policy.
+type activeRuntimeLifecycle struct {
+	recordinglifecycle.Service
+	status        recordings.RecordingStatusFacts
+	started       recordings.StartRecordingRequest
+	events        []recordings.RecordRecordingEventRequest
+	finishes      []recordings.FinishRecordingRequest
+	statusRequest recordings.RecordingStatusRequest
+}
+
+func (owner *activeRuntimeLifecycle) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
+	owner.started = request
+	return recordings.StartRecordingResult{Enabled: true, Status: owner.status}, nil
+}
+
+func (owner *activeRuntimeLifecycle) RecordRecordingEvent(request recordings.RecordRecordingEventRequest) (recordings.RecordRecordingEventResult, error) {
+	owner.events = append(owner.events, request)
+	return recordings.RecordRecordingEventResult{Status: owner.status}, nil
+}
+
+func (owner *activeRuntimeLifecycle) QueryRecordingStatus(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+	owner.statusRequest = request
+	return recordings.RecordingStatusResult{Status: owner.status}, nil
+}
+
+func (owner *activeRuntimeLifecycle) FinishRecording(request recordings.FinishRecordingRequest) (recordings.FinishRecordingResult, error) {
+	owner.finishes = append(owner.finishes, request)
+	return recordings.FinishRecordingResult{Status: owner.status}, nil
+}
+
+func (owner *activeRuntimeLifecycle) Snapshot(recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
+	return recordinglifecycle.Snapshot{Status: owner.status}, nil
+}
+
+type activeRuntimeCanonical struct {
+	canonicalledger.Service
+	event recordings.CanonicalEvent
+}
+
+func (owner *activeRuntimeCanonical) AppendWithValidation(request recordings.AppendRecordedEventRequest, validate func(recordings.CanonicalEvent) error) (recordings.AppendRecordedEventResult, error) {
+	owner.event = request.Event
+	if err := validate(request.Event); err != nil {
+		return recordings.AppendRecordedEventResult{}, err
+	}
+	return recordings.AppendRecordedEventResult{Event: request.Event}, nil
+}
+
+func openActiveRuntime(t *testing.T, owner *activeRuntimeLifecycle, canonical *activeRuntimeCanonical) (runtimeRoot, recordings.RuntimeScopeResult, func() time.Time) {
 	t.Helper()
 	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
 		"id": "runtime-opening-test",
@@ -413,11 +573,9 @@ func openActiveRuntime(t *testing.T) (runtimeRoot, recordings.RuntimeScopeResult
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
-	service := NewRuntimeRoot(
-		nil,
-		nil,
-		nil,
-		nil,
+	now := func() time.Time { return time.Unix(1_700_000_100, 0).UTC() }
+	service := NewCombinedService(nil, nil, owner, nil, nil, canonical, nil,
+		runtimeRecorderTestClock{now: now()}, logging.NoopLogger{}, newRuntimeLedgerRouter(now),
 		func(
 			factorydefinitions.FactorySnapshotSource,
 			string,
@@ -425,16 +583,12 @@ func openActiveRuntime(t *testing.T) (runtimeRoot, recordings.RuntimeScopeResult
 		) (*factorydefinitions.FactorySnapshot, error) {
 			return snapshot, nil
 		},
-		nil,
-		nil,
-		nil,
-		nil,
+		nil, nil, nil,
 	)
 	root, ok := service.(runtimeRoot)
 	if !ok || root == nil {
-		t.Fatal("NewRuntimeRoot() did not expose runtime opening")
+		t.Fatal("NewCombinedService() did not expose runtime opening")
 	}
-	now := func() time.Time { return time.Unix(1_700_000_100, 0).UTC() }
 	opened, err := root.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
 		Topology:         runtimeOpeningTopology{},
 		Now:              now,
@@ -446,19 +600,6 @@ func openActiveRuntime(t *testing.T) (runtimeRoot, recordings.RuntimeScopeResult
 		t.Fatalf("OpenRuntime(active): %v", err)
 	}
 	return root, opened, now
-}
-
-func assertActiveRecordingStarted(t *testing.T, root runtimeRoot) {
-	t.Helper()
-	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: "recording-active",
-	})
-	if err != nil {
-		t.Fatalf("QueryRecordingStatus(active): %v", err)
-	}
-	if status.Status.AcceptedEvents != 1 {
-		t.Fatalf("active recording events = %d, want initial snapshot event", status.Status.AcceptedEvents)
-	}
 }
 
 func queryActiveScope(
@@ -506,19 +647,6 @@ func finalizeActiveRuntime(t *testing.T, recorder recordings.RuntimeRecorder, no
 	}
 }
 
-func assertActiveRecordingFinalized(t *testing.T, root runtimeRoot) {
-	t.Helper()
-	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: "recording-active",
-	})
-	if err != nil {
-		t.Fatalf("QueryRecordingStatus(finalized): %v", err)
-	}
-	if status.Status.State != recordings.RecordingFinalized || status.Status.AcceptedEvents != 3 {
-		t.Fatalf("finalized active recording = %#v, want FINALIZED with initial, scoped, and terminal events", status.Status)
-	}
-}
-
 func assertActiveScopeClosed(t *testing.T, root runtimeRoot, scope recordings.RecordingScopeRef) {
 	t.Helper()
 	if _, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
@@ -537,3 +665,34 @@ func (runtimeOpeningTopology) RecordingInitialStructure(
 }
 
 var _ recordings.InitialStructureSource = runtimeOpeningTopology{}
+
+func assertActiveScopeCloseAndQuery(t *testing.T, root recordings.Service, scope recordings.RecordingScopeRef, owner *activeRuntimeLifecycle) {
+	t.Helper()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	closed, err := root.CloseRecordingScope(canceled, recordings.CloseRecordingScopeRequest{
+		Scope: scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
+	})
+	if !errors.Is(err, context.Canceled) || closed.Closed {
+		t.Fatalf("CloseRecordingScope canceled = (%#v, %v), want unfinished canceled scope", closed, err)
+	}
+	if len(owner.finishes) != 0 {
+		t.Fatal("canceled CloseRecordingScope delegated finalization")
+	}
+	finished := time.Unix(1_700_000_400, 0).UTC()
+	owner.status.State, owner.status.FinalizedAt = recordings.RecordingFinalized, &finished
+	closed, err = root.CloseRecordingScope(context.Background(), recordings.CloseRecordingScopeRequest{
+		Scope: scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
+	})
+	if err != nil || !closed.Closed || closed.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("CloseRecordingScope retry = (%#v, %v), want finalized closed scope", closed, err)
+	}
+	if len(owner.finishes) != 1 || owner.finishes[0].RecordingID != owner.status.RecordingID || !owner.finishes[0].FinishedAt.Equal(finished) {
+		t.Fatalf("finish requests = %#v, want one selected recording and timestamp", owner.finishes)
+	}
+	if _, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
+		Scope: scope,
+	}); !errors.Is(err, recordings.ErrRecordingScopeClosed) {
+		t.Fatalf("QueryRecordingScope after close = %v, want ErrRecordingScopeClosed", err)
+	}
+}

@@ -43,8 +43,10 @@ Required planning behavior:
   justified bounded enablers;
 - establish a narrow executable spine early rather than producing disconnected
   API, backend, UI, and test phases;
-- measure current behavioral coverage and put characterization work before
-  structural change when required;
+- measure current behavioral coverage and put the tests that protect current
+  behavior in the same task and PR as the structural change; never plan a
+  characterization-only, evidence-only, witness, "correction", or amendment
+  task or PR;
 - include contract, architecture/state, failure-mode, operational, rollout,
   rollback, security/privacy, accessibility/localization, performance, and cost
   analysis when applicable;
@@ -58,8 +60,8 @@ Required planning behavior:
   its behavior/observer, boundary, Factory Session and shared-process strategy,
   parallel isolation, prebuilt-artifact owner, or dedicated load/lint lane as
   applicable;
-- give every task a behavioral witness, executable-spine effect, exact evidence,
-  highest feasible level, and remaining unproven edges with owning gates;
+- give every task a behavioral witness (a test shipped in that task's own PR),
+  executable-spine effect, exact evidence, highest feasible level, and remaining unproven edges with owning gates;
 - budget paid or real-remote validation and schedule it as soon as the minimal
   path can prove the material real-edge property;
 - include a clean-room validation loopback that reports through
@@ -195,7 +197,11 @@ verification evidence.
 
 ## Operator questions (mailbox)
 
-Before asking: if the packet contradicts repository reality and a
+Before asking, check whether the standing rules already answer the question.
+Questions about evidence, authority, or untouched-package CI are answered by
+the rules: merge on green, and failures in untouched packages are
+operator-owned. Decide for yourself; do not ask the mailbox about them. Also:
+if the packet contradicts repository reality and a
 conservative reading exists that weakens no acceptance criterion, raises no
 baseline and widens no scope, take it, record it (in the plan), and
 continue. Ask the mailbox only when no such reading exists. Examples:
@@ -206,8 +212,8 @@ continue. Ask the mailbox only when no such reading exists. Examples:
   file or delete the dead export, and never raise the baseline.
 - A literal criterion contradicts documented current behavior (for example
   "quiet emits no output" when the docs say quiet emits the raw result, or
-  "every event has sessionId" when startup frames have none): characterize
-  what exists and record the gap.
+  "every event has sessionId" when startup frames have none): assert
+  what exists in the product-change PR and record the gap.
 - A criterion assumes an ID is globally unique when the contract makes it
   session-scoped: assert uniqueness within the session.
 

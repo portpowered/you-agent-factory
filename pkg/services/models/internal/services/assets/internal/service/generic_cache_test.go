@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,7 +20,6 @@ import (
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -55,7 +55,9 @@ func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T
 		requests.Add(1)
 		return nil, errors.New("network should not be used for a cache hit")
 	})
+	var environmentReads []string
 	environment := func(name string) string {
+		environmentReads = append(environmentReads, name)
 		switch name {
 		case "HUGGINGFACE_HUB_CACHE":
 			return first
@@ -68,6 +70,9 @@ func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T
 	scopes := newScopes(t, "generic-cache-order")
 	scope := openScope(t, scopes, you, models.RuntimeConfig{})
 	service := newGenericService(t, scopes, client, environment)
+	if len(environmentReads) != 0 {
+		t.Fatal("construction read the selected environment")
+	}
 
 	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
 		Scope:     scope,
@@ -78,6 +83,9 @@ func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T
 		t.Fatalf("PrepareModelAssets: %v", err)
 	}
 	assertGenericHFCachedResult(t, result, body, requests.Load())
+	if !reflect.DeepEqual(environmentReads, []string{"HUGGINGFACE_HUB_CACHE", "HF_HOME"}) {
+		t.Fatalf("environment reads = %v, want selected cache keys", environmentReads)
+	}
 	assertGenericRootUntouched(t, second)
 	assertGenericRootUntouched(t, filepath.Join(third, "models--owner--repo"))
 }
@@ -748,37 +756,24 @@ func newGenericService(
 	scopes runtimescopes.Service,
 	client modelseffects.AssetHTTPDoer,
 	environment modelseffects.AssetResolveEnvironment,
+	resolvers ...func(context.Context, string) (string, error),
 ) *service {
 	t.Helper()
+	var resolver func(context.Context, string) (string, error)
+	if len(resolvers) > 0 {
+		resolver = resolvers[0]
+	}
 	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
 	if err != nil {
 		t.Fatalf("construct asset coordination: %v", err)
 	}
-	value := New(
-		scopes,
-		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		client,
-		models.RuntimeAssetEndpoints{BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test"},
-		os.MkdirAll,
-		os.Stat,
-		os.UserHomeDir,
-		os.WriteFile,
-		os.Rename,
-		os.Remove,
-		os.ReadFile,
-		os.ReadDir,
-		func(path string) (io.WriteCloser, error) { return os.Create(path) },
-		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		assets.ConstructionOptions{
-			ResolveEnvironment: environment,
-			Coordination:       coordination,
-		},
-	)
-	service, ok := value.(*service)
-	if !ok {
-		t.Fatalf("New returned %T, want *service", value)
+	if environment == nil {
+		environment = func(string) string { return "" }
 	}
-	return service
+	if resolver == nil {
+		resolver = func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }
+	}
+	return newGenericServiceWithEffects(t, scopes, client, environment, resolver, coordination)
 }
 
 func genericManifestClient(

@@ -142,7 +142,7 @@ every changed shape.>
 
 ## 9. Implementation strategy [Required]
 
-### Coverage assessment and characterization needs
+### Coverage assessment and tests shipped with the change
 ### Parent behavior lanes
 ### Narrow executable spine
 ### Justified enabling work

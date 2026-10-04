@@ -5,29 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
-	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
-	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
-	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
-	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
 	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
-	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
-	"strings"
-	"sync"
-	"time"
 )
-
-func NewProjectionService() recordings.ProjectionService {
-	return projectionquerywire.NewService()
-}
 
 type combinedService struct {
 	recordings.Ledger
@@ -97,12 +89,6 @@ func (service *combinedService) ReconstructWorldState(
 func (service *combinedService) QueryHistoricalRecording(
 	request recordings.HistoricalRecordingQueryRequest,
 ) (recordings.HistoricalRecordingQueryResult, error) {
-	if service == nil || service.historicalQuery == nil {
-		return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
-			Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
-			RecordingID: request.Recording.RecordingID,
-		}
-	}
 	return service.historicalQuery.QueryHistoricalRecording(request)
 }
 
@@ -248,149 +234,43 @@ func (service *combinedService) ObserveReplay(
 	return service.replayService.ObserveReplay(request)
 }
 
-func NewService(
+// NewCombinedService stores completed behavior owners and the runtime resources
+// selected by the canonical process graph. Construction starts no effects.
+func NewCombinedService(
 	ledger recordings.Ledger,
 	projection recordings.ProjectionService,
-	targets ...recordings.LiveRecordingTargetPlanner,
-) recordings.Service {
-	return NewServiceWithLifecycleEffects(
-		ledger,
-		projection,
-		firstTargetPlanner(targets),
-		nil,
-		nil,
-		nil,
-	)
-}
-
-func firstTargetPlanner(
-	targets []recordings.LiveRecordingTargetPlanner,
-) recordings.LiveRecordingTargetPlanner {
-	if len(targets) == 0 {
-		return nil
-	}
-	return targets[0]
-}
-
-// NewServiceWithLifecycleEffects constructs the Recordings root with the exact
-// active-flush persistence and scheduling effects selected by Wire.
-func NewServiceWithLifecycleEffects(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targetPlanner recordings.LiveRecordingTargetPlanner,
-	writer recordings.RecordingSnapshotWriter,
-	tickers recordings.RecordingFlushTickerFactory,
-	publication portableArtifactPublication,
-	clocks ...recordings.RecordingClock,
-) recordings.Service {
-	return newServiceWithLifecycleEffects(
-		ledger,
-		projection,
-		targetPlanner,
-		writer,
-		tickers,
-		publication,
-		logging.NoopLogger{},
-		nil,
-		nil,
-		nil,
-		clocks...,
-	)
-}
-
-// NewServiceWithLifecycleEffectsAndLogger constructs the Recordings root with
-// the process logger selected by canonical Wire. The logger is intentionally
-// separate from the legacy test-friendly constructor so existing owner tests
-// continue to exercise a no-op service without manufacturing an application
-// logging graph.
-func NewServiceWithLifecycleEffectsAndLogger(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targetPlanner recordings.LiveRecordingTargetPlanner,
-	writer recordings.RecordingSnapshotWriter,
-	tickers recordings.RecordingFlushTickerFactory,
-	publication portableArtifactPublication,
+	lifecycle recordinglifecycle.Service,
+	artifacts artifactsexport.Service,
+	replay recordingsreplay.Service,
+	canonical canonicalledger.Service,
+	historical historicalquery.Service,
+	clock recordings.RecordingClock,
 	logger logging.Logger,
-	clocks ...recordings.RecordingClock,
+	router *RuntimeLedgerRouter,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
 ) recordings.Service {
-	return newServiceWithLifecycleEffects(
-		ledger,
-		projection,
-		targetPlanner,
-		writer,
-		tickers,
-		publication,
-		logger,
-		nil,
-		nil,
-		nil,
-		clocks...,
-	)
-}
-
-// NewServiceWithLifecycleEffectsAndHistoricalQuery constructs the Recordings
-// root with a Wire-selected historical read capability and no-op logging.
-func NewServiceWithLifecycleEffectsAndHistoricalQuery(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targetPlanner recordings.LiveRecordingTargetPlanner,
-	writer recordings.RecordingSnapshotWriter,
-	tickers recordings.RecordingFlushTickerFactory,
-	publication portableArtifactPublication,
-	historicalQuery historicalquery.Service,
-	clocks ...recordings.RecordingClock,
-) recordings.Service {
-	return newServiceWithLifecycleEffects(
-		ledger,
-		projection,
-		targetPlanner,
-		writer,
-		tickers,
-		publication,
-		logging.NoopLogger{},
-		historicalQuery,
-		nil,
-		nil,
-		clocks...,
-	)
-}
-
-func newServiceWithLifecycleEffects(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targetPlanner recordings.LiveRecordingTargetPlanner,
-	writer recordings.RecordingSnapshotWriter,
-	tickers recordings.RecordingFlushTickerFactory,
-	publication portableArtifactPublication,
-	logger logging.Logger,
-	historicalQuery historicalquery.Service,
-	readFile recordings.RecordingReadFile,
-	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	clocks ...recordings.RecordingClock,
-) recordings.Service {
-	if ledger == nil || projection == nil {
-		return nil
-	}
-	lifecycle := recordinglifecyclewire.NewService(
-		targetPlanner,
-		writer,
-		tickers,
-		clocks...,
-	)
 	service := &combinedService{
-		Ledger:            ledger,
-		ProjectionService: projection,
-		Service:           lifecycle,
-		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
-		replayService:     replaywire.NewService(lifecycle, projection, readFile, decodeFactorySnapshot),
-		canonicalLedger:   canonicalledgerwire.NewService(ledger),
-		historicalQuery:   historicalQuery,
-		replayByKey:       make(map[string]*recordings.ReplayArtifact),
-		clock:             firstRecordingClock(clocks),
-		logger:            logging.EnsureLogger(logger),
+		Ledger:                 ledger,
+		ProjectionService:      projection,
+		Service:                lifecycle,
+		artifactsExport:        artifacts,
+		replayService:          replay,
+		canonicalLedger:        canonical,
+		historicalQuery:        historical,
+		clock:                  clock,
+		logger:                 logger,
+		runtimeRouter:          router,
+		runtimeSnapshotCapture: captureSnapshot,
+		replaySnapshotDecoder:  decodeSnapshot,
+		replayConfigDecoder:    decodeRuntimeConfig,
+		replayInputs:           replayInputs,
+		replayByKey:            make(map[string]*recordings.ReplayArtifact),
+		scopeByRef:             make(map[recordings.RecordingScopeRef]*recordingScopeBinding),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
-	service.scopeByRef = make(map[recordings.RecordingScopeRef]*recordingScopeBinding)
 	return service
 }
 
@@ -404,10 +284,7 @@ func (service *combinedService) startOperationLog(
 	ref recordings.RecordingScopeRef,
 	scope recordings.CanonicalEventScope,
 ) recordingOperationLog {
-	var logger logging.Logger = logging.NoopLogger{}
-	if service != nil {
-		logger = logging.EnsureLogger(service.logger)
-	}
+	logger := service.logger
 	fields := []any{"operation", name}
 	if !ref.IsZero() {
 		fields = append(fields, "scope_ref", ref.String())
@@ -429,27 +306,7 @@ func (operation recordingOperationLog) finish(err error) {
 	operation.logger.Info("recordings operation finished", fields...)
 }
 
-func firstRecordingClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
-	for _, clock := range clocks {
-		if clock != nil {
-			return clock
-		}
-	}
-	return nil
-}
-
-func recordingClockNow(clocks ...recordings.RecordingClock) func() time.Time {
-	clock := firstRecordingClock(clocks)
-	if clock == nil {
-		return nil
-	}
-	return func() time.Time { return clock.Now() }
-}
-
 func (service *combinedService) recordingFinishedAt() time.Time {
-	if service == nil || service.clock == nil {
-		return time.Time{}
-	}
 	return service.clock.Now().UTC()
 }
 

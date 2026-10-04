@@ -190,6 +190,7 @@ test("functional coverage retries failing tests once and publishes the flake led
 	assert.match(supervisor, /FUNCTIONAL_FLAKE_LEDGER: \.artifacts\/functional-test-viz\/flake-ledger\.json/);
 	assert.match(supervisor, /FUNCTIONAL_FLAKE_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 	assert.match(record, /if: always\(\) && matrix\.suite == 'functional'/);
+	assert.match(record, /hashFiles\('scripts\/ci\/flake-ledger-summary\.mjs'\) != ''/);
 	assert.match(record, /node scripts\/ci\/flake-ledger-summary\.mjs --ledger \.artifacts\/functional-test-viz\/flake-ledger\.json/);
 	assert.match(upload, /name: functional-flake-ledger/);
 	assert.match(upload, /if-no-files-found: ignore/);

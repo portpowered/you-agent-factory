@@ -20,7 +20,7 @@ func TestRecordingLifecycleRedactsEveryStreamingAndFinalSnapshot(t *testing.T) {
 		recordingsinternal.NewReplayRecordingSnapshotWriter(func(_ string, payload []byte) error {
 			writes = append(writes, append([]byte(nil), payload...))
 			return nil
-		}),
+		}, nil, nil),
 		func(time.Duration) recordings.RecordingFlushTicker {
 			return manualTickerHandle(newManualFlushTicker())
 		},

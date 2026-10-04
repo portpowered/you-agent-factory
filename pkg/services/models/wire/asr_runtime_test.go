@@ -5,11 +5,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"encoding/binary"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
@@ -122,6 +125,136 @@ func TestQwenASRNormalizesNoncanonicalAudioBeforeCodec(t *testing.T) {
 		})
 	}
 }
+
+func TestMediaAdaptersUseSelectedRunnerAndPreserveItsFailure(t *testing.T) {
+	t.Parallel()
+	for _, video := range []bool{false, true} {
+		for _, fail := range []bool{false, true} {
+			name := "audio"
+			if video {
+				name = "video"
+			}
+			if fail {
+				name += "/failure"
+			} else {
+				name += "/success"
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				input, wantAudio := []byte("selected media input"), ttsRouteWAV()
+				wantErr := errors.New("selected media runner failed")
+				ctx := t.Context()
+				calls := []string{}
+				staged := map[string][]byte{}
+				options := mediaAdapterOptions(t, staged, input, wantAudio)
+				options.VideoAudioRunner = mediaAdapterRunner(func(gotCtx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+					if gotCtx != ctx {
+						t.Fatal("media runner lost selected context")
+					}
+					assertSelectedMediaCommand(t, request, staged, input)
+					calls = append(calls, request.Command)
+					if fail {
+						return platformprocess.CommandResult{}, wantErr
+					}
+					return platformprocess.CommandResult{Stdout: []byte(`{"streams":[{"codec_type":"video"},{"codec_type":"audio"}]}`)}, nil
+				})
+				adapter := audioNormalizer(options)
+				wantCalls := []string{"ffmpeg"}
+				if video {
+					adapter = videoAudioExtractor(options)
+					wantCalls = []string{"ffprobe", "ffmpeg"}
+				}
+				got, err := adapter(ctx, input)
+				if fail {
+					wantCalls = wantCalls[:1]
+					if !errors.Is(err, wantErr) || got != nil {
+						t.Fatalf("media failure = (%q, %v), want original cause without audio", got, err)
+					}
+				} else if err != nil || !bytes.Equal(got, wantAudio) {
+					t.Fatalf("media result = (%q, %v), want selected WAV", got, err)
+				}
+				if !reflect.DeepEqual(calls, wantCalls) || len(staged) != 0 {
+					t.Fatalf("commands/remaining staging = %v/%v, want %v and cleanup", calls, staged, wantCalls)
+				}
+			})
+		}
+	}
+}
+
+func assertSelectedMediaCommand(t *testing.T, request platformprocess.CommandRequest, staged map[string][]byte, input []byte) {
+	t.Helper()
+	path := ""
+	for index, arg := range request.Args {
+		if arg == "-i" && index+1 < len(request.Args) {
+			path = request.Args[index+1]
+		}
+	}
+	if !bytes.Equal(staged[path], input) || len(request.Stdin) != 0 {
+		t.Fatalf("%s command lost seekable media input: %#v", request.Command, request)
+	}
+	if request.Command == "ffmpeg" {
+		for _, arg := range []string{"-ac", "1", "-ar", "16000", "pcm_s16le"} {
+			found := false
+			for _, got := range request.Args {
+				if got == arg {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("decoder args %v omit %q", request.Args, arg)
+			}
+		}
+	}
+}
+
+func mediaAdapterOptions(t *testing.T, staged map[string][]byte, input, audio []byte) invocationRuntimeOptions {
+	t.Helper()
+	directory := filepath.Join("controlled", "media")
+	nextPath := 0
+	return invocationRuntimeOptions{
+		ASRTempDirectory: func() string { return directory },
+		ASRCreateTemp: func(dir, pattern string) (localai.TempFile, error) {
+			if dir != directory {
+				t.Fatalf("staging directory = %q, want %q", dir, directory)
+			}
+			nextPath++
+			path := filepath.Join(dir, pattern)
+			staged[path] = nil
+			return mediaAdapterTempFile(path), nil
+		},
+		ASRWriteFile: func(path string, body []byte) error {
+			if !bytes.Equal(body, input) {
+				t.Fatal("staging lost selected input")
+			}
+			staged[path] = append([]byte(nil), body...)
+			return nil
+		},
+		ASRReadFile: func(path string) ([]byte, error) {
+			if _, ok := staged[path]; !ok || nextPath != 2 {
+				t.Fatal("read without reserved decoder output")
+			}
+			return append([]byte(nil), audio...), nil
+		},
+		ASRRemoveFile: func(path string) error {
+			if _, ok := staged[path]; !ok {
+				t.Fatal("duplicate staging cleanup")
+			}
+			delete(staged, path)
+			return nil
+		},
+	}
+}
+
+type mediaAdapterRunner func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error)
+
+func (runner mediaAdapterRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return runner(ctx, request)
+}
+
+type mediaAdapterTempFile string
+
+func (file mediaAdapterTempFile) Name() string { return string(file) }
+func (mediaAdapterTempFile) Close() error      { return nil }
 
 type asrRuntimeDialer struct {
 	endpoint   string

@@ -59,7 +59,7 @@ preserve public vocabulary, update authored contracts before generated output,
 and use existing abstractions and shared UI primitives unless the plan justifies
 a new reusable boundary.
 
-Structural work **MUST** preserve characterized behavior. Replacement work
+Structural work **MUST** preserve current tested behavior. Replacement work
 **MUST** retain the declared canonical path and must not remove compatibility
 paths before their planned removal task.
 

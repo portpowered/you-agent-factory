@@ -4,14 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"reflect"
+	"testing"
 )
 
 func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
@@ -45,176 +41,95 @@ func (workerRecordingReaderCompositionProbe) LoadWorkerRecording(context.Context
 	return recordings.WorkerRecordingSnapshot{}, nil
 }
 
-// TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory proves the
-// Wire recordings factory wires neutral replay through the singular Recordings
-// root rather than a second peer authority.
-func TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory(t *testing.T) {
+// This fixture observes provider forwarding, not the implementation of the
+// supplied owner. Native owner tests and public functional journeys own policy.
+type replayForwardingOwner struct {
+	request  any
+	response any
+	err      error
+	ctx      context.Context
+	calls    int
+}
+
+func (owner *replayForwardingOwner) LoadReplayRecording(request recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error) {
+	owner.request = request
+	owner.calls++
+	if owner.err != nil {
+		return recordings.LoadReplayRecordingResult{}, owner.err
+	}
+	return owner.response.(recordings.LoadReplayRecordingResult), nil
+}
+func (owner *replayForwardingOwner) LoadReplayRecordingForResume(request recordings.LoadReplayRecordingForResumeRequest) (recordings.LoadReplayRecordingForResumeResult, error) {
+	owner.request = request
+	owner.calls++
+	if owner.err != nil {
+		return recordings.LoadReplayRecordingForResumeResult{}, owner.err
+	}
+	return owner.response.(recordings.LoadReplayRecordingForResumeResult), nil
+}
+func (owner *replayForwardingOwner) CreateReplayPlan(request recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
+	owner.request = request
+	owner.calls++
+	if owner.err != nil {
+		return recordings.CreateReplayPlanResult{}, owner.err
+	}
+	return owner.response.(recordings.CreateReplayPlanResult), nil
+}
+func (owner *replayForwardingOwner) ObserveReplay(request recordings.ObserveReplayRequest) (recordings.ObserveReplayResult, error) {
+	owner.request = request
+	owner.calls++
+	if owner.err != nil {
+		return recordings.ObserveReplayResult{}, owner.err
+	}
+	return owner.response.(recordings.ObserveReplayResult), nil
+}
+func TestProvideRecordingsRootForwardsCompletedReplayOwner(t *testing.T) {
 	t.Parallel()
-
-	if _, err := InjectBundle(t.Context(), serviceedges.Edges{}); err != nil {
-		t.Fatalf("InjectBundle() error = %v", err)
+	recording := recordings.ReplayRecordingFacts{RecordingID: "selected-recording", Events: []recordings.CanonicalEvent{{ID: "selected-event", Payload: "{}"}}}
+	cases := []struct {
+		name        string
+		failure     error
+		request     any
+		response    any
+		withContext bool
+		call        func(recordings.Service, context.Context) (any, error)
+	}{
+		{name: "LoadReplayRecording", failure: recordings.ErrReplayRecordingNotFound, request: recordings.LoadReplayRecordingRequest{RecordingID: "selected-recording"}, response: recordings.LoadReplayRecordingResult{Recording: recording}, withContext: false,
+			call: func(service recordings.Service, ctx context.Context) (any, error) {
+				return service.LoadReplayRecording(recordings.LoadReplayRecordingRequest{RecordingID: "selected-recording"})
+			}},
+		{name: "LoadReplayRecordingForResume", failure: recordings.ErrReplayRecordingNotFinalized, request: recordings.LoadReplayRecordingForResumeRequest{RecordingID: "selected-recording"}, response: recordings.LoadReplayRecordingForResumeResult{Recording: recording, RecoveredEventCount: 1}, withContext: false,
+			call: func(service recordings.Service, ctx context.Context) (any, error) {
+				return service.LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest{RecordingID: "selected-recording"})
+			}},
+		{name: "CreateReplayPlan", failure: recordings.ErrCorruptReplayInput, request: recordings.CreateReplayPlanRequest{SchemaVersion: recordings.ReplayPlanSchemaV1, Timing: recordings.ReplayTimingOrderOnly, Recording: recording, SelectedTick: 7}, response: recordings.CreateReplayPlanResult{Plan: recordings.ReplayPlanFacts{Handle: "selected-plan"}}, withContext: false,
+			call: func(service recordings.Service, ctx context.Context) (any, error) {
+				return service.CreateReplayPlan(recordings.CreateReplayPlanRequest{SchemaVersion: recordings.ReplayPlanSchemaV1, Timing: recordings.ReplayTimingOrderOnly, Recording: recording, SelectedTick: 7})
+			}},
+		{name: "ObserveReplay", failure: recordings.ErrReplayPlanNotFound, request: recordings.ObserveReplayRequest{Plan: "selected-plan"}, response: recordings.ObserveReplayResult{Observation: recordings.ReplayObservation{Kind: recordings.ReplayCompleted, ProcessedEvents: 1}}, withContext: false,
+			call: func(service recordings.Service, ctx context.Context) (any, error) {
+				return service.ObserveReplay(recordings.ObserveReplayRequest{Plan: "selected-plan"})
+			}},
 	}
-
-	reserver, err := provideRuntimeArtifactPathReserver()
-	if err != nil {
-		t.Fatalf("provideRuntimeArtifactPathReserver() error = %v", err)
-	}
-	root, err := provideRecordingsRoot(
-		serviceedges.Edges{},
-		provideLiveRecordingTargetPlanner(reserver),
-		platformreplay.Local{},
-		nil,
-		nil,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("provideRecordingsRoot() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("provideRecordingsRoot() returned nil root")
-	}
-	var service recordings.Service = root
-	recording := finalizedNeutralReplayRecording(t, service)
-	assertNeutralReplayTypedFailures(t, service, recording)
-}
-
-func finalizedNeutralReplayRecording(
-	t *testing.T,
-	service recordings.Service,
-) recordings.ReplayRecordingFacts {
-	t.Helper()
-
-	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-neutral-replay"}
-	artifactPath := filepath.Join(t.TempDir(), "neutral-replay.json")
-	bound, err := service.BindRecording(recordings.BindRecordingRequest{
-		Artifact: recordings.RecordingArtifactReference(artifactPath),
-		Scope:    scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
-	runRequest, err := wireCompositionRunRequestEvent(
-		"root-neutral-replay-run-request",
-		0,
-		scope,
-		time.Unix(1_700_000_000, 0).UTC(),
-		"generation-root-neutral-replay",
-	)
-	if err != nil {
-		t.Fatalf("wireCompositionRunRequestEvent: %v", err)
-	}
-	for index, event := range []recordings.CanonicalEvent{
-		runRequest,
-		neutralReplayCompositionEvent("root-neutral-replay-1", 1, scope),
-		neutralReplayCompositionEvent("root-neutral-replay-2", 2, scope),
-	} {
-		if _, err := service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID,
-			Event:       event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent[%d]: %v", index, err)
-		}
-	}
-	if _, err := service.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_300, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
-	loaded, err := service.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-	})
-	if err != nil {
-		t.Fatalf("LoadReplayRecording: %v", err)
-	}
-	planned, err := service.CreateReplayPlan(recordings.CreateReplayPlanRequest{
-		SchemaVersion: recordings.ReplayPlanSchemaV1,
-		Timing:        recordings.ReplayTimingOrderOnly,
-		Recording:     loaded.Recording,
-	})
-	if err != nil {
-		t.Fatalf("CreateReplayPlan: %v", err)
-	}
-	var observed recordings.ObserveReplayResult
-	for step := 0; step < len(loaded.Recording.Events); step++ {
-		observed, err = service.ObserveReplay(recordings.ObserveReplayRequest{
-			Plan: planned.Plan.Handle,
+	for _, cell := range cases {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			for _, failure := range []error{nil, cell.failure, errors.New("selected-owner-dependency-failure")} {
+				owner := &replayForwardingOwner{response: cell.response, err: failure}
+				root := testRecordingsRoot(serviceedges.Edges{}, inertArtifactsOwner{}, owner)
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				result, err := cell.call(root, ctx)
+				if err != failure || owner.calls != 1 || !reflect.DeepEqual(owner.request, cell.request) {
+					t.Fatalf("forward = %v, calls %d, request %#v; want %v and %#v", err, owner.calls, owner.request, failure, cell.request)
+				}
+				if failure == nil && !reflect.DeepEqual(result, cell.response) {
+					t.Fatalf("result = %#v, want %#v", result, cell.response)
+				}
+				if cell.withContext && owner.ctx != ctx {
+					t.Fatal("owner did not receive caller context")
+				}
+			}
 		})
-		if err != nil {
-			t.Fatalf("ObserveReplay step %d: %v", step, err)
-		}
-	}
-	if observed.Observation.Kind != recordings.ReplayCompleted {
-		t.Fatalf("ObserveReplay completion = %#v, want COMPLETED", observed.Observation)
-	}
-	return loaded.Recording
-}
-
-func assertNeutralReplayTypedFailures(
-	t *testing.T,
-	service recordings.Service,
-	recording recordings.ReplayRecordingFacts,
-) {
-	t.Helper()
-
-	if _, err := service.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: "missing-root-neutral-replay",
-	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
-		t.Fatalf("LoadReplayRecording missing = %v, want ErrReplayRecordingNotFound", err)
-	}
-	if _, err := service.ObserveReplay(recordings.ObserveReplayRequest{
-		Plan: "missing-root-neutral-replay-plan",
-	}); !errors.Is(err, recordings.ErrReplayPlanNotFound) {
-		t.Fatalf("ObserveReplay missing plan = %v, want ErrReplayPlanNotFound", err)
-	}
-	corrupt := recording
-	corrupt.Events = append([]recordings.CanonicalEvent(nil), recording.Events...)
-	corrupt.Events[1].Sequence = 9
-	if _, err := service.CreateReplayPlan(recordings.CreateReplayPlanRequest{
-		SchemaVersion: recordings.ReplayPlanSchemaV1,
-		Timing:        recordings.ReplayTimingOrderOnly,
-		Recording:     corrupt,
-	}); !errors.Is(err, recordings.ErrCorruptReplayInput) {
-		t.Fatalf("CreateReplayPlan corrupt = %v, want ErrCorruptReplayInput", err)
-	}
-	for _, err := range []error{
-		recordings.ErrReplayRecordingNotFound,
-		recordings.ErrReplayPlanNotFound,
-		recordings.ErrCorruptReplayInput,
-	} {
-		assertWireBoundedReplayError(t, err)
-	}
-}
-
-func assertWireBoundedReplayError(t *testing.T, err error) {
-	t.Helper()
-	message := err.Error()
-	if len(message) > 120 {
-		t.Fatalf("error message too long (%d chars): %q", len(message), message)
-	}
-	for _, leaked := range []string{"/pkg/", "ledger", "internal/services", "decoder"} {
-		if strings.Contains(strings.ToLower(message), strings.ToLower(leaked)) {
-			t.Fatalf("error leaked %q: %q", leaked, message)
-		}
-	}
-}
-
-func neutralReplayCompositionEvent(
-	id string,
-	sequence recordings.CanonicalEventSequence,
-	scope recordings.CanonicalEventScope,
-) recordings.CanonicalEvent {
-	return recordings.CanonicalEvent{
-		ID:       recordings.CanonicalEventID(id),
-		Kind:     "WORK_REQUEST",
-		Sequence: sequence,
-		Scope:    scope,
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: "generation-root-neutral-replay",
-			Sequence:           sequence,
-		},
-		FactoryTick: 1,
-		RecordedAt:  time.Unix(1_700_000_000+int64(sequence), 0).UTC(),
-		Payload:     `{"type":"WORK_REQUEST"}`,
 	}
 }

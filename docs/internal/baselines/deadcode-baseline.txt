@@ -1635,8 +1635,6 @@ pkg/services/models/transports/mcp/schemas.go: unreachable func: stringProperty
 pkg/services/models/transports/mcp/schemas.go: unreachable func: toolErrorEnvelopeSchema
 pkg/services/models/transports/mcp/schemas.go: unreachable func: toolResponseSchema
 pkg/services/models/transports/mcp/tool.go: unreachable func: ToolDefinition.MarshalJSON
-pkg/services/models/wire/wire.go: unreachable func: NewService
-pkg/services/models/wire/wire.go: unreachable func: NewServiceWithBackendArtifactResolver
 pkg/services/operator_settings/acp_integrations.go: unreachable func: ConfigDocumentService.AddACPIntegration
 pkg/services/operator_settings/acp_integrations.go: unreachable func: ConfigDocumentService.ConfigureACPIntegrationAdd
 pkg/services/operator_settings/acp_integrations.go: unreachable func: ConfigDocumentService.ConfigureACPIntegrationDelete
@@ -1965,16 +1963,8 @@ pkg/services/providers/wire/wire.go: unreachable func: loggerOption.apply
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: ApplyJavaScriptProjectionFacts
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: resultFromJavaScriptProjection
 pkg/services/recordings/internal/contracts/contracts.go: unreachable func: LiveRecordingTargetPlannerFunc.PlanLiveRecordingTarget
-pkg/services/recordings/internal/core.go: unreachable func: NewService
-pkg/services/recordings/internal/core.go: unreachable func: NewServiceWithLifecycleEffects
-pkg/services/recordings/internal/core.go: unreachable func: NewServiceWithLifecycleEffectsAndHistoricalQuery
-pkg/services/recordings/internal/core.go: unreachable func: NewServiceWithLifecycleEffectsAndLogger
-pkg/services/recordings/internal/core.go: unreachable func: firstTargetPlanner
 pkg/services/recordings/internal/events/event_history_session_lifecycle.go: unreachable func: FactoryStateToDurableLifecycleStatus
 pkg/services/recordings/internal/lifecycle_effects.go: unreachable func: NewRecordingSnapshotWriter
-pkg/services/recordings/internal/lifecycle_effects.go: unreachable func: NewReplayRecordingSnapshotWriter
-pkg/services/recordings/internal/lifecycle_runtime_recorder.go: unreachable func: NewRuntimeRoot
-pkg/services/recordings/internal/lifecycle_runtime_recorder.go: unreachable func: NewRuntimeRootWithHistoricalQuery
 pkg/services/recordings/internal/projections/world_state_session_lifecycle.go: unreachable func: buildFactoryWorldSessionBracketProjection
 pkg/services/recordings/internal/projections/world_view.go: unreachable func: filterCustomerPlaceIDs
 pkg/services/recordings/internal/projections/world_view.go: unreachable func: isSystemTimeWorkstation
@@ -2146,10 +2136,6 @@ pkg/services/recordings/wire/providers.go: unreachable func: NewLifecycleRuntime
 pkg/services/recordings/wire/providers.go: unreachable func: NewReplayClock
 pkg/services/recordings/wire/providers.go: unreachable func: NewReplayExecution
 pkg/services/recordings/wire/providers.go: unreachable func: NewRuntimeLedger
-pkg/services/recordings/wire/providers.go: unreachable func: NewServiceWithProjection
-pkg/services/recordings/wire/providers.go: unreachable func: NewServiceWithProjectionAndEffects
-pkg/services/recordings/wire/providers.go: unreachable func: newServiceWithProjection
-pkg/services/recordings/wire/wire.go: unreachable func: NewService
 pkg/services/recordings/worker_capture.go: unreachable func: WorkerRecordingWriterFunc.PersistWorkerRecord
 pkg/services/system_initialization/transports/cli/composition.go: unreachable func: BindInitialize
 pkg/services/system_initialization/transports/cli/composition.go: unreachable func: BindInitializeSystem

@@ -3,15 +3,21 @@ package root_composition_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -524,3 +530,299 @@ func (r *interleavingW4ProviderCommandRunner) completedExpectedCalls() bool {
 }
 
 var _ platformprocess.CommandRunner = (*interleavingW4ProviderCommandRunner)(nil)
+
+// TestFactorySessionsEqualFirstDispatchDefaultWorkerIdentityCharacterization
+// observes the default allocator through two explicit customer Sessions. HTTP
+// reads own the source-stream and recording observations; all actions use CLI.
+// A is admitted before B solely to hold the first-dispatch overlap. The original
+// equal-ID premise was BLOCKED: the production Petri allocator returns UUIDs.
+// This freezes that observation; it does not prove equal-ID collision safety.
+func TestFactorySessionsEqualFirstDispatchDefaultWorkerIdentityCharacterization(t *testing.T) {
+	t.Parallel()
+	server, runner, capture := identityServer(t)
+	a := identityOpenSession(t, server, "identity-A")
+	b := identityOpenSession(t, server, "identity-B")
+	if a == b {
+		t.Fatalf("explicit Sessions collided: %q", a)
+	}
+	streamA := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), a))
+	streamB := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), b))
+	identityCLI(t, server, "--session", a, "submit", "batch", `{"requestId":"identity-A","type":"FACTORY_REQUEST_BATCH","works":[{"name":"identity-A","workTypeName":"task","payload":{"title":"identity-A"}}]}`)
+	select {
+	case <-runner.admitted:
+	case <-time.After(30 * time.Second):
+		t.Fatal("BLOCKED: A provider admission not reached")
+	}
+	identityCLI(t, server, "--session", b, "submit", "batch", `{"requestId":"identity-B","type":"FACTORY_REQUEST_BATCH","works":[{"name":"identity-B","workTypeName":"task","payload":{"title":"identity-B"}}]}`)
+	identityAwaitResponse(t, streamB)
+	entryA := identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, a)))
+	entryB := identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, b)))
+	if entryA.result != nil {
+		t.Fatal("A completed before its provider gate was released")
+	}
+	w4AssertDispatch(t, entryB, "trace-identity-B", "identity-B COMPLETE")
+	t.Logf("overlap A=%s B=%s dispatchA=%s dispatchB=%s workerA=%s workerB=%s topicA=%s topicB=%s", a, b, entryA.dispatchID, entryB.dispatchID, entryA.sessionID, entryB.sessionID, workersessions.Topic(entryA.sessionID), workersessions.Topic(entryB.sessionID))
+	runner.unblock()
+	identityAwaitResponse(t, streamA)
+	entryA = identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, a)))
+	w4AssertDispatch(t, entryA, "trace-identity-A", "identity-A COMPLETE")
+	identityInspectWorker(t, server, a, entryA.sessionID, "batch-identity-A-identity-A")
+	identityInspectWorker(t, server, b, entryB.sessionID, "batch-identity-B-identity-B")
+	recordingA := identityInspectRecording(t, server, capture, a, entryA.sessionID, "identity-A", "identity-B")
+	recordingB := identityInspectRecording(t, server, capture, b, entryB.sessionID, "identity-B", "identity-A")
+	if recordingA == recordingB {
+		t.Fatal("recording associations collapsed")
+	}
+	streamA.Close()
+	streamB.Close()
+	identityCLI(t, server, "--remote", "session", "terminate", b)
+	identityCLI(t, server, "session", "delete", b)
+	identityCLI(t, server, "--remote", "session", "terminate", a)
+	identityCLI(t, server, "session", "delete", a)
+	runner.mu.Lock()
+	calls := runner.calls
+	runner.mu.Unlock()
+	if calls != 2 {
+		t.Fatalf("provider calls=%d, want exactly the two owned dispatches", calls)
+	}
+	if entryA.dispatchID == entryB.dispatchID || entryA.sessionID != entryA.dispatchID || entryB.sessionID != entryB.dispatchID {
+		t.Fatalf("default allocation changed: A=%+v B=%+v", entryA, entryB)
+	}
+}
+
+func identityServer(t *testing.T) (*identityFixture, *identityCharacterizationRunner, *identityRecordingWriter) {
+	t.Helper()
+	runner := &identityCharacterizationRunner{admitted: make(chan struct{}), release: make(chan struct{})}
+	capture := &identityRecordingWriter{root: t.TempDir(), storage: platformreplay.NewLocal(runtime.GOOS)}
+	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
+	home := t.TempDir()
+	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE=", "HOMEPATH="+home)
+	server := &identityFixture{env: env, dir: dir}
+	server.FunctionalAPIServer = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env:   env,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: capture},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	t.Cleanup(runner.unblock)
+	return server, runner, capture
+}
+
+type identityFixture struct {
+	*support.FunctionalAPIServer
+	env []string
+	dir string
+}
+
+func identityCLI(t *testing.T, server *identityFixture, args ...string) string {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), append([]string{"you", "--server", server.URL(), "--json"}, args...))
+	inputs.Input.Env = server.env
+	inputs.Input.WorkingDirectory = server.dir
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI %v: %v stdout=%s stderr=%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+	return inputs.Stdout()
+}
+
+func identityOpenSession(t *testing.T, server *identityFixture, marker string) string {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", "---\nmodel: test-model\nstopToken: COMPLETE\ntype: MODEL_WORKER\n---\nPerform the owned "+marker+" witness.\n")
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nPerform "+marker+".\n")
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal([]byte(identityCLI(t, server, "session", "create", "--dir", dir)), &opened); err != nil {
+		t.Fatal(err)
+	}
+	if opened.Session == nil || opened.Session.Id == "" {
+		t.Fatalf("missing Session: %+v", opened)
+	}
+	return opened.Session.Id
+}
+
+func identityAwaitResponse(t *testing.T, stream *support.FactoryEventStream) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	for {
+		event := stream.NextEventContext(ctx)
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			return
+		}
+	}
+}
+
+func identityLedger(t *testing.T, server *identityFixture, sessionID string) *interfaces.ReplayArtifact {
+	t.Helper()
+	artifact := &interfaces.ReplayArtifact{}
+	for _, public := range support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID) {
+		event, err := interfaces.NewFactoryEvent(public)
+		if err != nil {
+			t.Fatal(err)
+		}
+		artifact.Events = append(artifact.Events, event)
+	}
+	return artifact
+}
+
+func identityOnlyDispatch(t *testing.T, observed *w4Dispatches) *w4DispatchObservation {
+	t.Helper()
+	if len(observed.byID) != 1 {
+		t.Fatalf("want one ordinary first dispatch, got %+v", observed.byID)
+	}
+	for _, entry := range observed.byID {
+		return entry
+	}
+	return nil
+}
+
+func identityInspectWorker(t *testing.T, server *identityFixture, factoryID, workerID, workID string) {
+	t.Helper()
+	events := support.GetWorkerSessionEventsForSessionByIDAt(t, server.URL(), factoryID, workerID)
+	if len(events) == 0 {
+		t.Fatal("empty public Worker stream")
+	}
+	for _, event := range events {
+		if event.WorkerSessionId != workerID || event.FactorySessionId == nil || *event.FactorySessionId != factoryID || len(event.WorkIds) != 1 || event.WorkIds[0] != workID {
+			t.Fatalf("misattributed public Worker event: %+v", event)
+		}
+	}
+	t.Logf("scoped Worker stream Factory=%s Worker=%s Work=%s frames=%d", factoryID, workerID, workID, len(events))
+}
+
+type identityCharacterizationRunner struct {
+	mu                sync.Mutex
+	calls             int
+	admitted, release chan struct{}
+	once              sync.Once
+}
+
+func (r *identityCharacterizationRunner) unblock() { r.once.Do(func() { close(r.release) }) }
+
+func (r *identityCharacterizationRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	r.calls++
+	call := r.calls
+	r.mu.Unlock()
+	marker := fmt.Sprintf("identity-%c", 'A'+call-1)
+	if call > 2 || !strings.Contains(string(req.Stdin)+strings.Join(req.Args, "\n"), marker) {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected owned provider handoff %d", call)
+	}
+	if call == 1 {
+		close(r.admitted)
+		select {
+		case <-r.release:
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+	}
+	output := marker + " COMPLETE"
+	return platformprocess.CommandResult{Stdout: w4ProviderStdout(req, output)}, nil
+}
+
+// identityRecordingWriter owns the test's controlled filesystem acceptance
+// edge. Capture and the codec are production implementations; this stores raw
+// source records and uses the public reducer for reads, without allocating IDs.
+type identityRecordingWriter struct {
+	root    string
+	storage platformreplay.Local
+	mu      sync.Mutex
+	records []recordings.WorkerRecordingRecord
+}
+
+func (w *identityRecordingWriter) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var owned []recordings.WorkerRecordingRecord
+	for _, previous := range w.records {
+		if previous.RecordingID == record.RecordingID {
+			owned = append(owned, previous)
+		}
+	}
+	owned = append(owned, record)
+	encoded, err := json.Marshal(owned)
+	if err != nil {
+		return err
+	}
+	if err := w.storage.WriteFile(filepath.Join(w.root, record.RecordingID+".json"), encoded); err != nil {
+		return err
+	}
+	w.records = append(w.records, record)
+	return nil
+}
+
+func (w *identityRecordingWriter) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	data, err := w.storage.ReadFile(filepath.Join(w.root, id+".json"))
+	if err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	var owned []recordings.WorkerRecordingRecord
+	if err := json.Unmarshal(data, &owned); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	if len(owned) == 0 {
+		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("empty owned recording %q", id)
+	}
+	history := recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: owned[0].WorkerSessionID}
+	for _, record := range owned {
+		history.Records = append(history.Records, record.Record)
+	}
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(history)
+	if err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	return recordings.WorkerRecordingSnapshot{RecordingID: id, Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+		WorkerSessionID: projection.WorkerSessionID, Topic: projection.Topic, Status: projection.Status,
+		LastPosition: projection.LastPosition, ExecutionTerminal: projection.ExecutionTerminal, Records: projection.Records,
+	}}}, nil
+}
+func identityInspectRecording(t *testing.T, server *identityFixture, writer *identityRecordingWriter, factoryID, workerID, ownMarker, peerMarker string) string {
+	t.Helper()
+	writer.mu.Lock()
+	records := append([]recordings.WorkerRecordingRecord(nil), writer.records...)
+	writer.mu.Unlock()
+	recordingID := ""
+	count := 0
+	for _, record := range records {
+		if record.WorkerSessionID != workerID {
+			continue
+		}
+		if record.FactorySessionID != factoryID {
+			t.Fatalf("capture misattributed Worker %q to Factory %q", workerID, record.FactorySessionID)
+		}
+		if recordingID != "" && recordingID != record.RecordingID {
+			t.Fatal("multiple recording associations")
+		}
+		recordingID = record.RecordingID
+		count++
+	}
+	if count == 0 || recordingID == "" {
+		t.Fatal("no observed durable recording association")
+	}
+	snapshot, err := server.WorkerRecordingReader().LoadWorkerRecording(t.Context(), recordingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(snapshot)
+	t.Logf("Factory=%s Worker=%s Recording=%s snapshot=%s", factoryID, workerID, recordingID, encoded)
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].WorkerSessionID != workerID || snapshot.Sessions[0].Topic != workersessions.Topic(workerID) || len(snapshot.Sessions[0].Records) != count || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete {
+		t.Fatalf("recording read does not preserve source association: %+v", snapshot)
+	}
+	if !strings.Contains(string(encoded), ownMarker+" COMPLETE") || strings.Contains(string(encoded), peerMarker) {
+		t.Fatalf("recording output attribution incorrect: %s", encoded)
+	}
+	for _, record := range snapshot.Sessions[0].Records {
+		if record.ID.Topic != workersessions.Topic(workerID) || (string(record.SourceID) != workerID && string(record.SourceID) != workerID+"/provider-binding") {
+			t.Fatalf("source record escaped Worker topic: %+v", record)
+		}
+	}
+	return recordingID
+}

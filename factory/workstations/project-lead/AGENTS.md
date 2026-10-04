@@ -186,6 +186,12 @@ ratchet-counted packages or new production exports that only tests call, and
 never write a criterion whose literal text contradicts documented behavior.
 Ratchet gates win over any named artifact (see planning standards).
 
+Ship product changes, not proof. Do not admit, plan, or release a lane whose
+deliverable is a characterization test, an evidence document, a witness, a
+"correction", or a plan amendment. Tests ship in the same PR as the product
+change they cover. Judge delivery by the diff against the acceptance criteria
+plus the hosted CI.
+
 ## Delivery and failure feedback
 
 The existing delivery graph remains the execution boundary:

@@ -40,10 +40,86 @@ var (
 	_ modelswire.PullMetricsRecorder          = modelsPullMetricsAdapter{}
 )
 
+// Existing component fixtures supply the same separately selected roles as Wire.
+func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
+	scopes, err := provideModelRuntimeScopes()
+	if err != nil {
+		return nil, err
+	}
+	assets, err := newModelAssetsFixture(edges, scopes)
+	if err != nil {
+		return nil, err
+	}
+	catalog, err := modelswire.NewCatalog(scopes, modelswire.NewCatalogReadinessQuery(assets))
+	if err != nil {
+		return nil, err
+	}
+	source, err := provideModelRuntimeEvidenceSource()
+	if err != nil {
+		return nil, err
+	}
+	evidence := provideModelOrderedRuntimeEvidence(source)
+	host, err := newModelHostFixture(edges, scopes, assets, source, evidence)
+	if err != nil {
+		return nil, err
+	}
+	runner, err := provideModelRuntimeRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	temp, create, inspect := provideModelRuntimeTempDirectory(edges), provideModelRuntimeTempFile(edges), provideModelRuntimeInspectFile(edges)
+	runtime, err := provideModelInvocationRuntime(edges, runner, temp, create, provideModelAssetWriteFile(edges), inspect, provideModelAssetReadFile(edges), provideModelAssetRemovePath(edges))
+	if err != nil {
+		return nil, err
+	}
+	now := provideModelNow(edges)
+	inference, err := provideModelInference(scopes, assets, catalog, host, runtime, now)
+	if err != nil {
+		return nil, err
+	}
+	resolver, err := provideModelBackendArtifactResolver(edges, runner, provideModelAssetHTTP(edges))
+	if err != nil {
+		return nil, err
+	}
+	return provideModelsService(edges, scopes, assets, catalog, host, inference, provideModelHostLauncher(edges, source),
+		provideModelHostHTTP(edges), provideModelHostClock(edges), runner, provideModelRuntimeHTTP(edges), inspect, temp, create,
+		now, provideModelHostLogger(), provideModelHostMetrics(edges), evidence, resolver, provideModelAssetHostPlatform(edges))
+}
+
+func newModelAssetsFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes) (modelswire.Assets, error) {
+	coordination, err := provideModelAssetCoordination(edges)
+	if err != nil {
+		return nil, err
+	}
+	return provideModelAssets(scopes, provideModelAssetHostPlatform(edges), provideModelAssetHTTP(edges), provideModelAssetEndpoints(edges),
+		provideModelAssetMakeDirectories(edges), provideModelAssetInspectPath(edges), provideModelAssetResolveHomeDirectory(edges),
+		provideModelAssetWriteFile(edges), provideModelAssetRenamePath(edges), provideModelAssetRemovePath(edges),
+		provideModelAssetReadFile(edges), provideModelAssetReadDirectory(edges), provideModelAssetCreateFile(edges), provideModelAssetOpenFile(edges),
+		provideModelAssetResolveEnvironment(edges), provideModelAssetRevision(edges), coordination)
+}
+
+func newModelHostFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
+	source modelRuntimeEvidenceSource, evidence modelswire.RuntimeEvidenceRecorder) (modelswire.RuntimeHost, error) {
+	state := modelswire.NewSlotState()
+	clock, logger, metrics := provideModelHostClock(edges), provideModelHostLogger(), provideModelHostMetrics(edges)
+	coordinator := provideModelSlotCoordinator(state, scopes, clock, logger, metrics)
+	leases, err := modelswire.NewHostLeases(clock, provideModelSlotFacts(state, scopes, assets), coordinator)
+	if err != nil {
+		return nil, err
+	}
+	compatibility, err := provideModelHostCompatibility(edges)
+	if err != nil {
+		return nil, err
+	}
+	symlinks := provideModelHostSymlinks()
+	return provideModelRuntimeHost(scopes, assets, leases, state, provideModelHostLauncher(edges, source), provideModelHostHTTP(edges), clock,
+		logger, metrics, provideModelAssetHostPlatform(edges), provideModelHostProtocol(edges, symlinks), compatibility, symlinks, evidence)
+}
+
 func TestModelsServiceIsConstructedOnceAndOpensRuntimeScopeOnSameRoot(t *testing.T) {
 	t.Parallel()
 
-	root, err := provideModelsService(serviceedges.Edges{})
+	root, err := newModelsServiceFixture(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
@@ -293,7 +369,7 @@ func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			_, err := provideModelsService(testCase.edges)
+			_, err := newModelsServiceFixture(testCase.edges)
 			if err == nil || !strings.Contains(err.Error(), testCase.want) {
 				t.Fatalf("provideModelsService() error = %v, want %q", err, testCase.want)
 			}
@@ -420,7 +496,7 @@ func TestManagedProcessCauseReducerUsesOnlySafeCodes(t *testing.T) {
 func TestModelsCompositionRejectsMissingAssetStagingCoordination(t *testing.T) {
 	t.Parallel()
 
-	_, err := provideModelsService(serviceedges.Edges{
+	_, err := newModelsServiceFixture(serviceedges.Edges{
 		ModelAssetStagingCoordinationFactory: func() (serviceedges.AssetStagingCoordination, error) {
 			return nil, nil
 		},

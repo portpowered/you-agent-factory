@@ -631,7 +631,7 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	modelsService, err := provideModelsService(serviceedges.Edges{})
+	modelsService, err := newModelsServiceFixture(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideModelsService() error = %v", err)
 	}
@@ -768,7 +768,7 @@ func newProductionCleanupStatelessService(
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	modelsService, err := provideModelsService(edges)
+	modelsService, err := newModelsServiceFixture(edges)
 	if err != nil {
 		t.Fatalf("provideModelsService() error = %v", err)
 	}
