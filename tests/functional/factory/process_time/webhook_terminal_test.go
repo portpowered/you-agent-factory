@@ -22,6 +22,23 @@ func runWebhookTerminal(t *testing.T, c *timeCohort, specialized bool, key strin
 	emitWebhookWork(t, c, id)
 	route := c.webhookEffects.routes[key]
 	firstAt := webhookNow(c, specialized)
+	firstBody, eventID := runWebhookTerminalAttempts(t, c, id, specialized, key, attempts, status)
+	var line []byte
+	select {
+	case line = <-c.webhookEffects.letters:
+	case <-time.After(30 * time.Second):
+		t.Fatal("terminal dead-letter append not observed")
+	}
+	// Close joins the delivery and append before checking diagnostics/no storm.
+	support.CloseFactorySessionAt(t, c.url, id)
+	assertWebhookTerminalRecord(t, line, key, eventID, firstBody, attempts, status, reason, firstAt, webhookNow(c, specialized))
+	route.assertHeld(t)
+	assertNoWebhookLetters(t, c)
+}
+
+func runWebhookTerminalAttempts(t *testing.T, c *timeCohort, id string, specialized bool, key string, attempts, status int) ([]byte, string) {
+	t.Helper()
+	route := c.webhookEffects.routes[key]
 	var firstBody []byte
 	var eventID string
 	for attempt := 1; attempt <= attempts; attempt++ {
@@ -42,14 +59,11 @@ func runWebhookTerminal(t *testing.T, c *timeCohort, specialized bool, key strin
 			advanceWebhookScheduler(c.webhook, attempt)
 		}
 	}
-	var line []byte
-	select {
-	case line = <-c.webhookEffects.letters:
-	case <-time.After(30 * time.Second):
-		t.Fatal("terminal dead-letter append not observed")
-	}
-	// Close joins the delivery and append before checking diagnostics/no storm.
-	support.CloseFactorySessionAt(t, c.url, id)
+	return firstBody, eventID
+}
+
+func assertWebhookTerminalRecord(t *testing.T, line []byte, key, eventID string, firstBody []byte, attempts, status int, reason string, firstAt, lastAt time.Time) {
+	t.Helper()
 	var record struct {
 		Endpoint string          `json:"endpointName"`
 		EventID  string          `json:"eventId"`
@@ -67,14 +81,12 @@ func runWebhookTerminal(t *testing.T, c *timeCohort, specialized bool, key strin
 	if record.Endpoint != key || record.EventID != eventID || record.Attempts != attempts || record.Status != status || record.Reason != reason || !bytes.Equal(record.Body, firstBody) {
 		t.Fatalf("terminal outcome=%s", line)
 	}
-	if !record.First.Equal(firstAt) || !record.Last.Equal(webhookNow(c, specialized)) || !record.Terminal.Equal(webhookNow(c, specialized)) {
+	if !record.First.Equal(firstAt) || !record.Last.Equal(lastAt) || !record.Terminal.Equal(lastAt) {
 		t.Fatalf("terminal selected timestamps=%s", line)
 	}
 	if strings.Contains(string(line), webhookSecret) {
 		t.Fatal("dead-letter leaked secret query or response")
 	}
-	route.assertHeld(t)
-	assertNoWebhookLetters(t, c)
 }
 
 func assertHealthyWebhook(t *testing.T, c *timeCohort, id string, specialized bool) {
