@@ -223,24 +223,18 @@ func filterRecordedScanResult(result scanResult, baseline recordedBoundaryBaseli
 
 func newRecordedScanResult(result scanResult) scanResult {
 	return scanResult{
-		peerServiceBaselineCount:             result.peerServiceBaselineCount,
-		testServiceBaselineCount:             result.testServiceBaselineCount,
-		supportServiceBaselineCount:          result.supportServiceBaselineCount,
-		serviceConstructionBaselineCount:     result.serviceConstructionBaselineCount,
-		transportBehaviorBaselineCount:       result.transportBehaviorBaselineCount,
-		productionDefaultBaselineCount:       result.productionDefaultBaselineCount,
-		initializerBehaviorBaselineCount:     result.initializerBehaviorBaselineCount,
-		testBehaviorBaselineCount:            result.testBehaviorBaselineCount,
-		petriPublicSurfaceBaselineCount:      result.petriPublicSurfaceBaselineCount,
-		recordedPeerServiceImportFindings:    append([]peerServiceImportFinding(nil), result.recordedPeerServiceImportFindings...),
-		recordedTestServiceImportFindings:    append([]testServiceImportFinding(nil), result.recordedTestServiceImportFindings...),
-		recordedSupportServiceImportFindings: append([]supportServiceImportFinding(nil), result.recordedSupportServiceImportFindings...),
-		recordedServiceConstructionFindings:  append([]serviceConstructionFinding(nil), result.recordedServiceConstructionFindings...),
-		recordedTransportBehaviorFindings:    append([]transportBehaviorFinding(nil), result.recordedTransportBehaviorFindings...),
-		recordedProductionDefaultFindings:    append([]productionDefaultFinding(nil), result.recordedProductionDefaultFindings...),
-		recordedInitializerBehaviorFindings:  append([]initializerBehaviorFinding(nil), result.recordedInitializerBehaviorFindings...),
-		recordedTestBehaviorFindings:         append([]testBehaviorFinding(nil), result.recordedTestBehaviorFindings...),
-		recordedPetriPublicSurfaceFindings:   append([]petriPublicSurfaceFinding(nil), result.recordedPetriPublicSurfaceFindings...),
+		serviceConstructionBaselineCount:    result.serviceConstructionBaselineCount,
+		transportBehaviorBaselineCount:      result.transportBehaviorBaselineCount,
+		productionDefaultBaselineCount:      result.productionDefaultBaselineCount,
+		initializerBehaviorBaselineCount:    result.initializerBehaviorBaselineCount,
+		testBehaviorBaselineCount:           result.testBehaviorBaselineCount,
+		petriPublicSurfaceBaselineCount:     result.petriPublicSurfaceBaselineCount,
+		recordedServiceConstructionFindings: append([]serviceConstructionFinding(nil), result.recordedServiceConstructionFindings...),
+		recordedTransportBehaviorFindings:   append([]transportBehaviorFinding(nil), result.recordedTransportBehaviorFindings...),
+		recordedProductionDefaultFindings:   append([]productionDefaultFinding(nil), result.recordedProductionDefaultFindings...),
+		recordedInitializerBehaviorFindings: append([]initializerBehaviorFinding(nil), result.recordedInitializerBehaviorFindings...),
+		recordedTestBehaviorFindings:        append([]testBehaviorFinding(nil), result.recordedTestBehaviorFindings...),
+		recordedPetriPublicSurfaceFindings:  append([]petriPublicSurfaceFinding(nil), result.recordedPetriPublicSurfaceFindings...),
 	}
 }
 
@@ -251,27 +245,12 @@ func filterRecordedPackageFindings(visible, recorded *scanResult, baseline recor
 	visible.retiredPackageRootFindings, recorded.retiredPackageRootFindings = splitRecordedFindings(visible.retiredPackageRootFindings, func(finding retiredPackageRootFinding) string {
 		return boundaryFindingFingerprint("retired-package-root", finding)
 	}, baseline)
-	visible.applicationGraphImportFindings, recorded.applicationGraphImportFindings = splitRecordedFindings(visible.applicationGraphImportFindings, func(finding applicationGraphImportFinding) string {
-		return boundaryFindingFingerprint("application-graph-import", finding)
-	}, baseline)
 	visible.handwrittenGeneratedFindings, recorded.handwrittenGeneratedFindings = splitRecordedFindings(visible.handwrittenGeneratedFindings, func(finding handwrittenGeneratedFinding) string {
 		return boundaryFindingFingerprint("handwritten-generated", finding)
-	}, baseline)
-	visible.domainTransportFindings, recorded.domainTransportFindings = splitRecordedFindings(visible.domainTransportFindings, func(finding domainTransportImportFinding) string {
-		return boundaryFindingFingerprint("domain-transport-import", finding)
 	}, baseline)
 }
 
 func filterRecordedServiceFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
-	visible.peerServiceImportFindings, recorded.peerServiceImportFindings = splitRecordedFindings(visible.peerServiceImportFindings, func(finding peerServiceImportFinding) string {
-		return boundaryFindingFingerprint("peer-service-import", finding)
-	}, baseline)
-	visible.testServiceImportFindings, recorded.testServiceImportFindings = splitRecordedFindings(visible.testServiceImportFindings, func(finding testServiceImportFinding) string {
-		return boundaryFindingFingerprint("test-service-import", finding)
-	}, baseline)
-	visible.supportServiceImportFindings, recorded.supportServiceImportFindings = splitRecordedFindings(visible.supportServiceImportFindings, func(finding supportServiceImportFinding) string {
-		return boundaryFindingFingerprint("support-service-import", finding)
-	}, baseline)
 	visible.serviceConstructionFindings, recorded.serviceConstructionFindings = splitRecordedFindings(visible.serviceConstructionFindings, func(finding serviceConstructionFinding) string {
 		return boundaryFindingFingerprint("service-construction", finding)
 	}, baseline)
@@ -309,9 +288,6 @@ func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recor
 }
 
 func clearVisibleRecordedFindings(visible *scanResult) {
-	visible.recordedPeerServiceImportFindings = nil
-	visible.recordedTestServiceImportFindings = nil
-	visible.recordedSupportServiceImportFindings = nil
 	visible.recordedServiceConstructionFindings = nil
 	visible.recordedTransportBehaviorFindings = nil
 	visible.recordedProductionDefaultFindings = nil
@@ -358,15 +334,7 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	fingerprints := make(map[string]struct{})
 	addBoundaryFindingFingerprints(fingerprints, "root-package", result.rootPackageFindings)
 	addBoundaryFindingFingerprints(fingerprints, "retired-package-root", result.retiredPackageRootFindings)
-	addBoundaryFindingFingerprints(fingerprints, "application-graph-import", result.applicationGraphImportFindings)
 	addBoundaryFindingFingerprints(fingerprints, "handwritten-generated", result.handwrittenGeneratedFindings)
-	addBoundaryFindingFingerprints(fingerprints, "domain-transport-import", result.domainTransportFindings)
-	addBoundaryFindingFingerprints(fingerprints, "peer-service-import", result.peerServiceImportFindings)
-	addBoundaryFindingFingerprints(fingerprints, "peer-service-import", result.recordedPeerServiceImportFindings)
-	addBoundaryFindingFingerprints(fingerprints, "test-service-import", result.testServiceImportFindings)
-	addBoundaryFindingFingerprints(fingerprints, "test-service-import", result.recordedTestServiceImportFindings)
-	addBoundaryFindingFingerprints(fingerprints, "support-service-import", result.supportServiceImportFindings)
-	addBoundaryFindingFingerprints(fingerprints, "support-service-import", result.recordedSupportServiceImportFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.serviceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "external-implementation", result.externalImplementationFindings)

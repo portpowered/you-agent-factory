@@ -11,7 +11,6 @@ import (
 	wire8 "github.com/google/wire"
 	"github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	wire6 "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
@@ -110,7 +109,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	configDiagnosticsDecoder := provideOperatorConfigDiagnosticsDecoder()
 	configEncoder := provideOperatorConfigEncoder()
 	idGenerator := provideOperatorSettingsIDGenerator(edges2)
-	logger, err := logging.NewDefaultLogger()
+	logger, err := provideProcessLogger(edges2)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +279,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v53 := provideModelHostClock(edges2)
 	v54 := wire5.NewSlotState()
 	v55 := provideModelSlotFacts(v54, v36, v50)
-	v56 := provideModelHostLogger()
+	v56 := provideModelHostLogger(logger)
 	v57 := provideModelHostMetrics(edges2)
 	v58 := provideModelSlotCoordinator(v54, v36, v53, v56, v57)
 	v59, err := wire5.NewHostLeases(v53, v55, v58)
@@ -325,7 +324,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	modelsService, err := provideModelsService(edges2, v36, v50, v52, v66, v71, v60, v61, v53, wireModelRuntimeRunner, v72, v69, v67, v68, wireModelNow, v56, v57, v65, v73, assetHostPlatform)
+	modelsService, err := provideModelsService(edges2, v36, v50, v52, v66, v71, v60, v61, v53, wireModelRuntimeRunner, v72, v69, v67, v68, wireModelNow, v56, v57, v65, v73, assetHostPlatform, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -861,7 +860,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 
 // wire.go:
 
-var platformSet = wire8.NewSet(logging.NewDefaultLogger)
+var platformSet = wire8.NewSet(
+	provideProcessLogger,
+)
 
 var apiSet = wire8.NewSet(http.NewAdapter, http.NewHandler, stdio.NewOpener, provideHTTPRuntimeBindingWithMetrics)
 

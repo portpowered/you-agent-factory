@@ -5,9 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -181,78 +178,6 @@ func (process *startedBuiltProcess) stop() {
 	process.waited = true
 }
 
-type httpObservation struct {
-	method string
-	path   string
-	status int
-	body   []byte
-	err    string
-}
-
-func callStory001HTTP(
-	t testing.TB,
-	parent context.Context,
-	method, endpoint string,
-	body io.Reader,
-) httpObservation {
-	t.Helper()
-	request, err := http.NewRequestWithContext(parent, method, endpoint, body)
-	if err != nil {
-		return httpObservation{method: method, path: endpoint, err: err.Error()}
-	}
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
-	if err != nil {
-		return httpObservation{method: method, path: endpoint, err: err.Error()}
-	}
-	defer response.Body.Close()
-	responseBody, readErr := io.ReadAll(response.Body)
-	observation := httpObservation{
-		method: method, path: endpoint, status: response.StatusCode,
-		body: append([]byte(nil), responseBody...),
-	}
-	if readErr != nil {
-		observation.err = readErr.Error()
-	}
-	return observation
-}
-
-func waitForStory001HTTP200(t testing.TB, parent context.Context, endpoint string) httpObservation {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(parent, story001ServerTimeout)
-	defer cancel()
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-	var last httpObservation
-	for {
-		last = callStory001HTTP(t, ctx, http.MethodGet, endpoint, nil)
-		if last.status == http.StatusOK {
-			return last
-		}
-		select {
-		case <-ticker.C:
-		case <-ctx.Done():
-			last.err = ctx.Err().Error()
-			return last
-		}
-	}
-}
-
-func reserveStory001Loopback(t testing.TB) string {
-	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve story-001 loopback port: %v", err)
-	}
-	address := listener.Addr().String()
-	if err := listener.Close(); err != nil {
-		t.Fatalf("release story-001 loopback port: %v", err)
-	}
-	return address
-}
-
 func waitForStory001ModelStarts(t testing.TB, origin *characterizationOrigin, count int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), story001ServerTimeout)
@@ -266,11 +191,21 @@ func waitForStory001ModelStarts(t testing.TB, origin *characterizationOrigin, co
 	}
 }
 
-func summarizeHTTP(observation httpObservation) string {
-	return fmt.Sprintf(
-		"method=%s status=%d bodyBytes=%d bodySHA256=%s error=%s",
-		observation.method, observation.status, len(observation.body), sha256Hex(observation.body), observation.err,
-	)
+// waitForStory001ModelAborts blocks until the controlled origin has observed
+// count blocked model transfers lose their client. Releasing the origin before
+// the disconnect is observed lets a dead owner's transfer complete as a 200
+// and be miscounted as a finished download.
+func waitForStory001ModelAborts(t testing.TB, origin *characterizationOrigin, count int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), story001ServerTimeout)
+	defer cancel()
+	for observed := 0; observed < count; observed++ {
+		select {
+		case <-origin.modelAborted:
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for %d aborted model transfers; observed=%d exchanges=%s", count, observed, compactJSON(origin.exchangesSnapshot()))
+		}
+	}
 }
 
 func summarizeProcess(result builtProcessResult) string {
