@@ -616,41 +616,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	baseURL := server.URL()
-	sessionIDs := make([]string, 4)
-	streams := make([]*support.FactoryResponseEventStream, 4)
-	acknowledged := make([][]support.FactoryResponseEventFrame, 4)
-	prompts := make(map[string]string)
-	for i := range 4 {
-		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
-		opened := support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt))
-		sessionIDs[i] = opened.Session.Id
-		if sessionIDs[i] == factorysessions.DefaultSessionID {
-			t.Fatal("scope is not explicit")
-		}
-		for j := range i {
-			if sessionIDs[j] == sessionIDs[i] {
-				t.Fatal("explicit session identity reused")
-			}
-		}
-		// Establish acknowledged history before the four held dispatches, so the
-		// canceled scope also has a real nonzero reconnect cursor.
-		warmup, err := postConcurrentIsolationInvocation(t.Context(), baseURL, sessionIDs[i], prompt+"-warmup")
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertConcurrentIsolationInvocationCompleted(t, concurrentIsolationInvocation{response: warmup}, "warmup "+prompt)
-		id := sessionIDs[i]
-		t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, id) })
-		streams[i] = support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, id))
-		t.Cleanup(streams[i].Close)
-		acknowledged[i] = collectResponseEventStreamUntilCount(t, streams[i], 2, concurrentIsolationTimeout)
-		for _, frame := range acknowledged[i] {
-			if frame.Event.FactorySessionId != id {
-				t.Fatalf("scope %q acknowledged foreign event %#v", id, frame.Event)
-			}
-		}
-		prompts[id] = prompt
-	}
+	sessionIDs, streams, acknowledged, prompts := openExplicitIsolationScopes(t, baseURL)
 	invocations := make(map[string]chan concurrentIsolationInvocation)
 	cancels := make(map[string]context.CancelFunc)
 	for id, prompt := range prompts {
@@ -689,20 +655,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 		}
 		close(gates[fmt.Sprintf("four-scope-prompt-%d", i)].release)
 	}
-	// Live cancel currently returns SUCCEEDED for its stopped runtime (durable
-	// cancel uses CANCELED). Preserve that typed control outcome.
-	// Session control's typed terminal outcome is independent of the HTTP
-	// invocation wait. Observe the public session status, then release that
-	// caller-owned wait rather than inventing a session-to-request guarantee.
-	support.WaitForSessionStopped(t, baseURL, canceledID, concurrentIsolationTimeout)
-	read := support.GetJSON[factoryapi.FactorySessionGetResponse](t, baseURL+"/factory-sessions/"+url.PathEscape(canceledID))
-	session, err := read.AsFactorySession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if session.Id != canceledID || session.Runtime.LifecycleControlStatus == nil || *session.Runtime.LifecycleControlStatus != control.Status {
-		t.Fatalf("canceled public session = %#v, lifecycle=%v", session, *session.Runtime.LifecycleControlStatus)
-	}
+	assertExplicitIsolationSessionStopped(t, baseURL, canceledID, control.Status)
 	cancels[canceledID]()
 	canceled := awaitConcurrentIsolationInvocation(t, invocations[canceledID])
 	if !errors.Is(canceled.err, context.Canceled) {
@@ -720,6 +673,64 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 		assertResponseEventStreamResumesFromCursor(t, baseURL, sessionIDs[i], frames)
 	}
 	assertCanceledIsolationHistory(t, baseURL, canceledID, gates, acknowledged[3])
+}
+
+func assertExplicitIsolationSessionStopped(t *testing.T, baseURL, canceledID string, wantStatus factoryapi.FactorySessionDurableLifecycleStatus) {
+	t.Helper()
+	// Live cancel currently returns SUCCEEDED for its stopped runtime (durable
+	// cancel uses CANCELED). Preserve that typed control outcome.
+	// Session control's typed terminal outcome is independent of the HTTP
+	// invocation wait. Observe the public session status, then release that
+	// caller-owned wait rather than inventing a session-to-request guarantee.
+	support.WaitForSessionStopped(t, baseURL, canceledID, concurrentIsolationTimeout)
+	read := support.GetJSON[factoryapi.FactorySessionGetResponse](t, baseURL+"/factory-sessions/"+url.PathEscape(canceledID))
+	session, err := read.AsFactorySession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Id != canceledID || session.Runtime.LifecycleControlStatus == nil || *session.Runtime.LifecycleControlStatus != wantStatus {
+		t.Fatalf("canceled public session = %#v, lifecycle=%v", session, session.Runtime.LifecycleControlStatus)
+	}
+}
+
+func openExplicitIsolationScopes(t *testing.T, baseURL string) ([]string, []*support.FactoryResponseEventStream, [][]support.FactoryResponseEventFrame, map[string]string) {
+	t.Helper()
+	sessionIDs := make([]string, 4)
+	streams := make([]*support.FactoryResponseEventStream, 4)
+	acknowledged := make([][]support.FactoryResponseEventFrame, 4)
+	prompts := make(map[string]string)
+	for i := range 4 {
+		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
+		opened := support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt))
+		sessionIDs[i] = opened.Session.Id
+		if sessionIDs[i] == factorysessions.DefaultSessionID {
+			t.Fatal("scope is not explicit")
+		}
+		for j := range i {
+			if sessionIDs[j] == sessionIDs[i] {
+				t.Fatal("explicit session identity reused")
+			}
+		}
+		// Establish acknowledged history before the four held dispatches, so the
+		// canceled scope also has a real nonzero reconnect cursor.
+		warmup, err := postConcurrentIsolationInvocation(t.Context(), baseURL, sessionIDs[i], prompt+"-warmup")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertConcurrentIsolationInvocationCompleted(t, concurrentIsolationInvocation{response: warmup}, "warmup "+prompt)
+		id := sessionIDs[i]
+		t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, id) })
+		streams[i] = support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, id))
+		t.Cleanup(streams[i].Close)
+		acknowledged[i] = collectResponseEventStreamUntilCount(t, streams[i], 2, concurrentIsolationTimeout)
+		for _, frame := range acknowledged[i] {
+			if frame.Event.FactorySessionId != id {
+				t.Fatalf("scope %q acknowledged foreign event %#v", id, frame.Event)
+			}
+		}
+		prompts[id] = prompt
+	}
+	return sessionIDs, streams, acknowledged, prompts
 }
 
 type isolatedCommandGate struct {
