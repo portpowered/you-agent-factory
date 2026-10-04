@@ -192,13 +192,31 @@ type perRuntimeRecordingCapture struct {
 	mu       sync.Mutex
 	requests []recordings.WorkerSessionRecordingRequest
 	delegate *interruptRecordingService
+	startErr error
+	awaitErr error
 }
 
 func (capture *perRuntimeRecordingCapture) StartWorkerSessionRecording(ctx context.Context, request recordings.WorkerSessionRecordingRequest) (recordings.WorkerSessionRecording, error) {
 	capture.mu.Lock()
 	capture.requests = append(capture.requests, request)
 	capture.mu.Unlock()
-	return capture.delegate.StartWorkerSessionRecording(ctx, request)
+	if capture.startErr != nil {
+		return nil, capture.startErr
+	}
+	handle, err := capture.delegate.StartWorkerSessionRecording(ctx, request)
+	if capture.awaitErr != nil {
+		return &perRuntimeOpeningRecording{WorkerSessionRecording: handle, err: capture.awaitErr}, err
+	}
+	return handle, err
+}
+
+type perRuntimeOpeningRecording struct {
+	recordings.WorkerSessionRecording
+	err error
+}
+
+func (recording *perRuntimeOpeningRecording) AwaitOpening(context.Context) error {
+	return recording.err
 }
 
 func assertPerRuntimeObservation(t *testing.T, fixture *perRuntimeAttemptFixture, state workersessions.State) workersessions.Observation {
@@ -372,6 +390,23 @@ func assertPerRuntimeFirstTerminal(t *testing.T, fixture *perRuntimeAttemptFixtu
 
 func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
 	t.Helper()
+	fixture := preparePerRuntimeAttemptFixture(t, suffix, sink)
+	var err error
+	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	if err != nil || fixture.attempt == nil {
+		t.Fatalf("BeginRuntimeAttempt(%s) = %v, %v", suffix, fixture.attempt, err)
+	}
+	// Close both observation windows even when an assertion exits the test early.
+	t.Cleanup(func() {
+		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+			t.Errorf("cleanup Complete(%s): %v", suffix, err)
+		}
+	})
+	return fixture
+}
+
+func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
+	t.Helper()
 	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
 	if suffix == "b" {
 		now = now.Add(time.Hour)
@@ -393,16 +428,6 @@ func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppende
 	fixture.request.Execution.Execution.FactorySessionID = "factory-" + suffix
 	fixture.request.Execution.Execution.RecordingID = "recording-" + suffix
 	fixture.request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-" + suffix}
-	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
-	if err != nil || fixture.attempt == nil {
-		t.Fatalf("BeginRuntimeAttempt(%s) = %v, %v", suffix, fixture.attempt, err)
-	}
-	// Close both observation windows even when an assertion exits the test early.
-	t.Cleanup(func() {
-		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
-			t.Errorf("cleanup Complete(%s): %v", suffix, err)
-		}
-	})
 	return fixture
 }
 
@@ -542,6 +567,147 @@ func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
 		assertPerRuntimeAttemptState(t, fixture, workersessions.StateCompleted)
 	}
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
+}
+
+func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	beforeA := assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
+	observationA := assertPerRuntimeObservation(t, a, workersessions.StateRunning)
+	beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
+	before := sink.requestsFor("")
+	if _, err := a.service.Reserve(context.Background(), workersessions.ReserveRequest{ID: a.request.ID}); !errors.Is(err, workersessions.ErrSessionAlreadyExists) {
+		t.Fatalf("Reserve(A duplicate) = %v, want ErrSessionAlreadyExists", err)
+	}
+	if after := assertPerRuntimeAttemptState(t, a, workersessions.StateRunning); !reflect.DeepEqual(beforeA, after) {
+		t.Fatalf("duplicate reservation changed A: %#v -> %#v", beforeA, after)
+	}
+	if after := assertPerRuntimeObservation(t, a, workersessions.StateRunning); !reflect.DeepEqual(observationA, after) {
+		t.Fatalf("duplicate reservation changed A observation: %#v", after)
+	}
+	assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, "", before)
+	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+		publishPerRuntimeProgress(t, fixture, sink)
+		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+			t.Fatal(err)
+		}
+		assertPerRuntimeFirstTerminal(t, fixture, sink, workersessions.StateCompleted)
+	}
+}
+
+func assertPerRuntimePeerUnchanged(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, session workersessions.Session, observation workersessions.Observation, topic events.Topic, requests []events.AppendRequest) {
+	t.Helper()
+	if after := assertPerRuntimeAttemptState(t, fixture, workersessions.StateRunning); !reflect.DeepEqual(session, after) {
+		t.Fatalf("peer session changed: %#v -> %#v", session, after)
+	}
+	if after := assertPerRuntimeObservation(t, fixture, workersessions.StateRunning); !reflect.DeepEqual(observation, after) {
+		t.Fatalf("peer observation changed: %#v -> %#v", observation, after)
+	}
+	if after := sink.requestsFor(topic); !reflect.DeepEqual(requests, after) {
+		t.Fatalf("unexpected publication: %#v -> %#v", requests, after)
+	}
+}
+
+type perRuntimeRejectOpeningAppender struct {
+	EventsAppender
+	topic events.Topic
+	err   error
+}
+
+func (sink *perRuntimeRejectOpeningAppender) Append(ctx context.Context, request events.AppendRequest) (events.AppendResult, error) {
+	if request.Topic == sink.topic {
+		return events.AppendResult{}, sink.err
+	}
+	return sink.EventsAppender.Append(ctx, request)
+}
+
+func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"append", "capture-start", "capture-await"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("injected A-only " + failure + " failure")
+			boundary := &perRuntimeRejectOpeningAppender{EventsAppender: newEventsAppender()}
+			sink := &perRuntimeAppendCapture{EventsAppender: boundary}
+			b := newPerRuntimeAttemptFixture(t, "b", sink)
+			controlB := bindPerRuntimeCancellation(t, b, nil)
+			beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+			observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
+			before := sink.requestsFor(workersessions.Topic(b.request.ID))
+			a := preparePerRuntimeAttemptFixture(t, "a", sink)
+			switch failure {
+			case "append":
+				boundary.topic, boundary.err = workersessions.Topic(a.request.ID), cause
+			case "capture-start":
+				a.capture.startErr = cause
+			case "capture-await":
+				a.capture.awaitErr = cause
+			}
+			assertPerRuntimeRejectedOpening(t, a, sink, failure)
+			if after := sink.requestsFor(workersessions.Topic(b.request.ID)); !reflect.DeepEqual(before, after) {
+				t.Fatalf("A opening failure changed B topic: %#v", after)
+			}
+			assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, workersessions.Topic(b.request.ID), before)
+			assertPerRuntimeCancellationCalls(t, controlB, 0)
+			assertPerRuntimeCaptureNotAborted(t, b)
+			publishPerRuntimeProgress(t, b, sink)
+			if err := b.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeFirstTerminal(t, b, sink, workersessions.StateCompleted)
+			assertPerRuntimeCaptureNotAborted(t, b)
+			assertPerRuntimeCancellationCalls(t, controlB, 0)
+		})
+	}
+}
+
+func assertPerRuntimeCaptureNotAborted(t *testing.T, fixture *perRuntimeAttemptFixture) {
+	t.Helper()
+	handle := fixture.capture.delegate.handleFor(t, fixture.request.ID)
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
+	if handle.abortCalls != 0 {
+		t.Fatalf("peer recording aborted %d times", handle.abortCalls)
+	}
+}
+
+func assertPerRuntimeRejectedOpening(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, failure string) {
+	t.Helper()
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	if attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
+		t.Fatalf("BeginRuntimeAttempt(A) = %v, %v, want nil/ErrStartOpeningPublication", attempt, err)
+	}
+	assertPerRuntimeAttemptState(t, fixture, workersessions.StateFailed)
+	assertPerRuntimeObservation(t, fixture, workersessions.StateFailed)
+	controlA := &perRuntimeCancellation{invoked: make(chan struct{}, 1)}
+	if err := fixture.service.BindRuntimeAttemptCancellation(fixture.request.ID, perRuntimeLogicalDispatchID, controlA.cancel); err == nil {
+		t.Fatal("rejected opening accepted a cancellation binding")
+	}
+	if _, err := fixture.service.PublishRecord(context.Background(), perRuntimeProgressRequest(fixture)); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
+		t.Fatalf("PublishRecord(A) = %v, want ErrPublicationNotOpen", err)
+	}
+	assertPerRuntimeCancellationCalls(t, controlA, 0)
+	requests := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	if failure == "capture-start" {
+		if len(requests) != 0 {
+			t.Fatalf("capture start failure appended history: %#v", requests)
+		}
+		return
+	}
+	// AwaitOpening may reject after the opening append. Neither failure may invent a terminal-only history.
+	if len(requests) != 1 || requests[0].SourceEventID != "started" {
+		t.Fatalf("opening failure append attempts = %#v, want only opening", requests)
+	}
+	assertPerRuntimeOpeningPayload(t, fixture, decodePerRuntimeDraft(t, requests[0]))
+	handle := fixture.capture.delegate.handleFor(t, fixture.request.ID)
+	handle.mu.Lock()
+	defer handle.mu.Unlock()
+	if handle.abortCalls != 1 || handle.closeCalls != 0 || handle.terminalCalls != 0 {
+		t.Fatalf("failed A recording cleanup = %d/%d/%d, want abort only", handle.abortCalls, handle.closeCalls, handle.terminalCalls)
+	}
 }
 
 func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
