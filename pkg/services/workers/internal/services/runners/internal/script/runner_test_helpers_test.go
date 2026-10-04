@@ -18,19 +18,6 @@ func emptyDocs(string) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
-func testDependencies(
-	commandRunner workerprocess.CommandRunner,
-	factoryDocs workers.FactoryDocsLoader,
-) Dependencies {
-	return Dependencies{
-		CommandRunner: commandRunner,
-		FactoryDocs:   factoryDocs,
-		Now:           func() time.Time { return time.Unix(0, 0) },
-		Publish:       func(workers.ProgressFragment) {},
-		Record:        func(workers.ScriptEvent) {},
-	}
-}
-
 type outputChunk struct {
 	stream  string
 	payload string
@@ -337,12 +324,12 @@ func assertAttributedObservations(t *testing.T, log *observationLog, request wor
 func newTestRunner(
 	t *testing.T,
 	config Config,
-	commandRunner workerprocess.CommandRunner,
+	commandRunner workerprocess.StreamingCommandRunner,
 ) workers.Runner {
 	t.Helper()
-	scriptRunner, err := New(config, testDependencies(commandRunner, emptyDocs))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	return scriptRunner
+	return New(config, commandRunner, emptyDocs,
+		func() time.Time { return time.Unix(0, 0) },
+		func(workers.ProgressFragment) {},
+		func(workers.ScriptEvent) {},
+	)
 }

@@ -30,15 +30,15 @@ func runInterruptedScriptCase(t *testing.T, deadline bool) {
 		observations: observations,
 	}
 	started := time.Unix(100, 0).In(time.FixedZone("selected", 3600))
-	scriptRunner, err := New(Config{Command: "long-running-script"}, Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   emptyDocs,
-		Now:           (&sequenceClock{times: []time.Time{started, started.Add(3 * time.Second)}}).Now,
-		Publish: func(fragment workers.ProgressFragment) {
+	scriptRunner := New(Config{Command: "long-running-script"},
+		commandEdge,
+		emptyDocs,
+		(&sequenceClock{times: []time.Time{started, started.Add(3 * time.Second)}}).Now,
+		func(fragment workers.ProgressFragment) {
 			observations.CaptureProgress(fragment)
 			observations.Append(fragment.Type + ":" + fragment.Payload)
 		},
-		Record: func(event workers.ScriptEvent) {
+		func(event workers.ScriptEvent) {
 			observations.CaptureEvent(event)
 			if event.Request != nil {
 				observations.Append("request")
@@ -48,10 +48,7 @@ func runInterruptedScriptCase(t *testing.T, deadline bool) {
 				observations.SetTerminal(*event.Response)
 			}
 		},
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var executionContext context.Context = ctx

@@ -23,7 +23,7 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 		result: workerprocess.CommandResult{Stdout: []byte("  completed  \n")},
 	}
 	factoryDirectory := filepath.Join("factory-root", "selected")
-	scriptRunner, err := New(Config{
+	scriptRunner := New(Config{
 		Command:          "scripts/run.sh",
 		FactoryDirectory: factoryDirectory,
 		Args: []string{
@@ -40,15 +40,13 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 			"relative/value",
 			"C:/absolute/tool",
 		},
-	}, testDependencies(commandEdge, func(directory string) (map[string]string, error) {
+	}, commandEdge, func(directory string) (map[string]string, error) {
 		if directory != factoryDirectory {
 			t.Fatalf("Factory docs directory = %q, want %q", directory, factoryDirectory)
 		}
 		return map[string]string{"guide.md": "factory guidance"}, nil
-	}))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	}, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) {},
+	)
 
 	request := validRequest()
 	result, err := scriptRunner.Execute(t.Context(), request)
@@ -98,7 +96,7 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 	commandEdge := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("completed")}}
 	contextFactoryDirectory := filepath.Join("factory-root", "detached")
-	scriptRunner, err := New(Config{
+	scriptRunner := New(Config{
 		Command:          "scripts/run.sh",
 		FactoryDirectory: filepath.Join("factory-root", "configured"),
 		Args: []string{
@@ -107,15 +105,13 @@ func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 			`{{ .Context.WorkDir }}`,
 			`{{ .Context.SessionID }}`,
 		},
-	}, testDependencies(commandEdge, func(directory string) (map[string]string, error) {
+	}, commandEdge, func(directory string) (map[string]string, error) {
 		if directory != contextFactoryDirectory {
 			t.Fatalf("Factory docs directory = %q, want detached context directory %q", directory, contextFactoryDirectory)
 		}
 		return nil, nil
-	}))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	}, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) {},
+	)
 
 	request := validRequest()
 	request.FactoryDirectory = ""
@@ -248,16 +244,16 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 	}
 	started := time.Date(2026, 7, 26, 20, 0, 0, 0, time.FixedZone("selected", 3600))
 	clock := &sequenceClock{times: []time.Time{started, started.Add(1500 * time.Millisecond)}}
-	dependencies := Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   emptyDocs,
-		Now:           clock.Now,
-		Publish: func(fragment workers.ProgressFragment) {
+	scriptRunner := New(Config{Command: "echo", Args: []string{"safe-arg"}},
+		commandEdge,
+		emptyDocs,
+		clock.Now,
+		func(fragment workers.ProgressFragment) {
 			observations.CaptureProgress(fragment)
 			observations.Append(fragment.Type + ":" + fragment.Payload)
 			fragment.Metadata["stream"] = "mutated"
 		},
-		Record: func(event workers.ScriptEvent) {
+		func(event workers.ScriptEvent) {
 			observations.CaptureEvent(event)
 			switch event.Kind {
 			case workers.ScriptEventKindRequest:
@@ -269,11 +265,8 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 				event.Response.Stdout = "mutated"
 			}
 		},
-	}
-	scriptRunner, err := New(Config{Command: "echo", Args: []string{"safe-arg"}}, dependencies)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	)
+
 	request := observedRequest()
 	request.EnvVars["CI"] = "true"
 	request.EnvVars["SCRIPT_API_TOKEN"] = "fixture-secret"
@@ -316,14 +309,14 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 	commandEdge := &streamingCommandEdge{
 		result: workerprocess.CommandResult{Stdout: []byte("stable"), Stderr: []byte("note")},
 	}
-	scriptRunner, err := New(Config{Command: "echo", Args: []string{"one"}}, Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   emptyDocs,
-		Now:           func() time.Time { return time.Unix(100, 0) },
-		Publish: func(fragment workers.ProgressFragment) {
+	scriptRunner := New(Config{Command: "echo", Args: []string{"one"}},
+		commandEdge,
+		emptyDocs,
+		func() time.Time { return time.Unix(100, 0) },
+		func(fragment workers.ProgressFragment) {
 			fragment.Metadata["stream"] = "mutated"
 		},
-		Record: func(event workers.ScriptEvent) {
+		func(event workers.ScriptEvent) {
 			if event.Request != nil {
 				event.Request.Args[0] = "mutated"
 			}
@@ -331,10 +324,7 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 				event.Response.Stdout = "mutated"
 			}
 		},
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	)
 
 	first, err := scriptRunner.Execute(t.Context(), validRequest())
 	if err != nil {
@@ -469,15 +459,15 @@ func runCommandFailureCase(
 		err:    commandErr,
 	}
 	started := time.Date(2026, 7, 26, 21, 0, 0, 0, time.FixedZone("selected", -7200))
-	scriptRunner, err := New(Config{Command: "missing-tool"}, Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   emptyDocs,
-		Now:           (&sequenceClock{times: []time.Time{started, started.Add(2 * time.Second)}}).Now,
-		Publish: func(fragment workers.ProgressFragment) {
+	scriptRunner := New(Config{Command: "missing-tool"},
+		commandEdge,
+		emptyDocs,
+		(&sequenceClock{times: []time.Time{started, started.Add(2 * time.Second)}}).Now,
+		func(fragment workers.ProgressFragment) {
 			observations.CaptureProgress(fragment)
 			observations.Append(fragment.Type + ":" + fragment.Payload)
 		},
-		Record: func(event workers.ScriptEvent) {
+		func(event workers.ScriptEvent) {
 			observations.CaptureEvent(event)
 			if event.Request != nil {
 				observations.Append("request")
@@ -487,10 +477,7 @@ func runCommandFailureCase(
 				observations.SetTerminal(*event.Response)
 			}
 		},
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	)
 
 	request := observedRequest()
 	result, executeErr := scriptRunner.Execute(t.Context(), request)
@@ -548,19 +535,15 @@ func assertFailureObservation(
 func TestRunnerValidationFailureDoesNotRecordOrStartCommand(t *testing.T) {
 	observations := &observationLog{}
 	commandEdge := &streamingCommandEdge{observations: observations}
-	scriptRunner, err := New(
+	scriptRunner := New(
 		Config{Command: "echo", Args: []string{"{{"}},
-		Dependencies{
-			CommandRunner: commandEdge,
-			FactoryDocs:   emptyDocs,
-			Now:           func() time.Time { return time.Unix(0, 0) },
-			Publish:       func(workers.ProgressFragment) { observations.Append("progress") },
-			Record:        func(workers.ScriptEvent) { observations.Append("event") },
-		},
+
+		commandEdge,
+		emptyDocs,
+		func() time.Time { return time.Unix(0, 0) },
+		func(workers.ProgressFragment) { observations.Append("progress") },
+		func(workers.ScriptEvent) { observations.Append("event") },
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	_, executeErr := scriptRunner.Execute(t.Context(), validRequest())
 	assertFailureType(t, executeErr, workers.WorkFailureTypePermanentBadRequest)
@@ -733,17 +716,15 @@ func TestRunnerRejectsInvalidInputBeforeCommandExecution(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			commandEdge := &captureCommandRunner{}
 			var effects []string
-			deps := testDependencies(commandEdge, func(string) (map[string]string, error) {
+			scriptRunner := New(test.config, commandEdge, func(string) (map[string]string, error) {
 				effects = append(effects, "docs")
 				return nil, nil
-			})
-			deps.Now = func() time.Time { effects = append(effects, "clock"); return time.Time{} }
-			deps.Publish = func(workers.ProgressFragment) { effects = append(effects, "progress") }
-			deps.Record = func(workers.ScriptEvent) { effects = append(effects, "record") }
-			scriptRunner, newErr := New(test.config, deps)
-			if newErr != nil {
-				t.Fatalf("New() error = %v", newErr)
-			}
+			},
+				func() time.Time { effects = append(effects, "clock"); return time.Time{} },
+				func(workers.ProgressFragment) { effects = append(effects, "progress") },
+				func(workers.ScriptEvent) { effects = append(effects, "record") },
+			)
+
 			request := validRequest()
 			if test.mutate != nil {
 				test.mutate(&request)
@@ -768,44 +749,6 @@ func TestRunnerRejectsInvalidInputBeforeCommandExecution(t *testing.T) {
 	}
 }
 
-func TestNewRejectsMissingConfigurationAndEffects(t *testing.T) {
-	tests := []struct {
-		name   string
-		config Config
-		mutate func(*Dependencies)
-	}{
-		{name: "command"},
-		{name: "command runner", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.CommandRunner = nil
-		}},
-		{name: "streaming command runner", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.CommandRunner = nonStreamingCommandRunner{}
-		}},
-		{name: "Factory docs loader", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.FactoryDocs = nil
-		}},
-		{name: "clock", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.Now = nil
-		}},
-		{name: "progress publisher", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.Publish = nil
-		}},
-		{name: "event recorder", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.Record = nil
-		}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dependencies := testDependencies(&captureCommandRunner{}, emptyDocs)
-			if test.mutate != nil {
-				test.mutate(&dependencies)
-			}
-			_, err := New(test.config, dependencies)
-			assertFailureType(t, err, workers.WorkFailureTypeMisconfigured)
-		})
-	}
-}
-
 func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 	docsEntered := make(chan struct{})
 	releaseDocs := make(chan struct{})
@@ -819,14 +762,13 @@ func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 			`{{ .Context.Env.RUNTIME }}`,
 		},
 	}
-	scriptRunner, err := New(config, testDependencies(commandEdge, func(string) (map[string]string, error) {
+	scriptRunner := New(config, commandEdge, func(string) (map[string]string, error) {
 		close(docsEntered)
 		<-releaseDocs
 		return map[string]string{}, nil
-	}))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	}, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) {},
+	)
+
 	config.Args[0] = "mutated-config"
 	request := validRequest()
 
@@ -864,16 +806,14 @@ func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 func TestRunnerPreservesPreCanceledContextWithoutCallingEffects(t *testing.T) {
 	commandEdge := &captureCommandRunner{}
 	var effects []string
-	scriptRunner, err := New(Config{Command: "echo"}, Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   func(string) (map[string]string, error) { effects = append(effects, "docs"); return nil, nil },
-		Now:           func() time.Time { effects = append(effects, "clock"); return time.Time{} },
-		Publish:       func(workers.ProgressFragment) { effects = append(effects, "progress") },
-		Record:        func(workers.ScriptEvent) { effects = append(effects, "record") },
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	scriptRunner := New(Config{Command: "echo"},
+		commandEdge,
+		func(string) (map[string]string, error) { effects = append(effects, "docs"); return nil, nil },
+		func() time.Time { effects = append(effects, "clock"); return time.Time{} },
+		func(workers.ProgressFragment) { effects = append(effects, "progress") },
+		func(workers.ScriptEvent) { effects = append(effects, "record") },
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	result, err := scriptRunner.Execute(ctx, validRequest())

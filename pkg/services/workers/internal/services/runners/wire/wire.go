@@ -4,6 +4,8 @@ package wire
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -13,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service"
 	agentwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent/wire"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 // NewService validates registrations into one immutable private registry.
@@ -144,6 +147,35 @@ func scriptImplementation(
 	config runners.ScriptConfig,
 	dependencies runners.ScriptDependencies,
 ) (workers.Runner, error) {
+	if strings.TrimSpace(config.Command) == "" && !config.RequestSelected {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command is required", nil)
+	}
+	if dependencies.CommandRunner == nil {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command runner is required", nil)
+	}
+	commandValue := reflect.ValueOf(dependencies.CommandRunner)
+	switch commandValue.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if commandValue.IsNil() {
+			return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command runner is required", nil)
+		}
+	}
+	commandRunner, ok := dependencies.CommandRunner.(workerprocess.StreamingCommandRunner)
+	if !ok {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command runner must support streaming", nil)
+	}
+	if dependencies.FactoryDocs == nil {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script Factory docs loader is required", nil)
+	}
+	if dependencies.Now == nil {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script clock is required", nil)
+	}
+	if dependencies.Publish == nil {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script progress publisher is required", nil)
+	}
+	if dependencies.Record == nil {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script event recorder is required", nil)
+	}
 	return script.New(
 		script.Config{
 			Command:          config.Command,
@@ -151,14 +183,12 @@ func scriptImplementation(
 			FactoryDirectory: config.FactoryDirectory,
 			RequestSelected:  config.RequestSelected,
 		},
-		script.Dependencies{
-			CommandRunner: dependencies.CommandRunner,
-			FactoryDocs:   dependencies.FactoryDocs,
-			Now:           dependencies.Now,
-			Publish:       dependencies.Publish,
-			Record:        dependencies.Record,
-		},
-	)
+		commandRunner,
+		dependencies.FactoryDocs,
+		dependencies.Now,
+		dependencies.Publish,
+		dependencies.Record,
+	), nil
 }
 func inferenceImplementation(
 	config runners.InferenceConfig,
