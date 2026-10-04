@@ -79,6 +79,7 @@ func TestJavaScriptSharedWorkerBehavior(t *testing.T) {
 		{"isolation/runtime-children", runJavaScriptRuntimeChildren},
 		{"isolation/local-cli-beside-runtime", runJavaScriptLocalCLIBesideRuntime},
 		{"isolation/resume-beside-live-peer", runJavaScriptResumeBesideLivePeer},
+		{"isolation/provider-failure-beside-live-peer", runJavaScriptProviderFailureBesideLivePeer},
 	}
 	for _, test := range tests {
 		test := test
