@@ -492,6 +492,89 @@ func assertPerRuntimeCancellationCalls(t *testing.T, control *perRuntimeCancella
 	}
 }
 
+func TestKeyedRuntimeCloseJoinsOwnedCaptureAndPreservesPeer(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	controlA := bindPerRuntimeCancellation(t, a, nil)
+	controlB := bindPerRuntimeCancellation(t, b, nil)
+	publishPerRuntimeProgress(t, a, sink)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	closed := make(chan error, 1)
+	go func() { closed <- a.service.CloseRuntimeAttempts(ctx, "  "+a.request.Key.RuntimeID+"  ") }()
+	if err := waitControlledSignal(controlA.invoked, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-closed:
+		t.Fatalf("close returned before owned completion and capture finalization: %v", err)
+	default:
+	}
+	assertPerRuntimeCaptureNotAborted(t, b)
+	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	publishPerRuntimeProgress(t, b, sink)
+	if err := a.attempt.Complete(ctx, runtimeAttemptCanceledDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("CloseRuntimeAttempts: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	assertPerRuntimeFirstTerminal(t, a, sink, workersessions.StateCanceled)
+	assertPerRuntimeCancellationCalls(t, controlA, 1)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	if err := a.service.CloseRuntimeAttempts(ctx, a.request.Key.RuntimeID); err != nil {
+		t.Fatalf("repeat close: %v", err)
+	}
+	result, err := a.service.Cancel(ctx, workersessions.ControlRequest{ID: a.request.ID})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.DispatchID != perRuntimeLogicalDispatchID {
+		t.Fatalf("retained terminal control identity = %#v, %v", result, err)
+	}
+	if err := b.attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	assertPerRuntimeFirstTerminal(t, b, sink, workersessions.StateCompleted)
+}
+
+func TestKeyedRuntimeCloseFailureAndInvalidScopePreserveLiveAttempts(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	cause := errors.New("owned close cancellation failure")
+	controlA := bindPerRuntimeCancellation(t, a, cause)
+	controlB := bindPerRuntimeCancellation(t, b, nil)
+	if err := a.service.CloseRuntimeAttempts(context.Background(), " "); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("blank scope: %v", err)
+	}
+	if err := a.service.CloseRuntimeAttempts(context.Background(), "unknown-runtime"); err != nil {
+		t.Fatalf("unknown scope: %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := a.service.CloseRuntimeAttempts(canceled, a.request.Key.RuntimeID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled caller: %v", err)
+	}
+	assertPerRuntimeCancellationCalls(t, controlA, 0)
+	if err := a.service.CloseRuntimeAttempts(context.Background(), a.request.Key.RuntimeID); !errors.Is(err, cause) {
+		t.Fatalf("close failure = %v, want exact cause", err)
+	}
+	assertPerRuntimeCancellationCalls(t, controlA, 1)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
+	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	assertPerRuntimeCaptureNotAborted(t, a)
+	assertPerRuntimeCaptureNotAborted(t, b)
+	publishPerRuntimeProgress(t, a, sink)
+	publishPerRuntimeProgress(t, b, sink)
+}
+
 func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
 	t.Parallel()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}

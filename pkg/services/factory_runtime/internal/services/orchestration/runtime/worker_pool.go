@@ -670,6 +670,16 @@ func (f *factoryImpl) stopDispatchRuntimeLocked(
 	if f.cfg != nil && f.cfg.attempts != nil {
 		stopErr = errors.Join(stopErr, f.cfg.attempts.stop(stopCtx))
 	}
+	// Detached execution admission and terminal callbacks are now drained.
+	// Close only this runtime's observation handles; the supervisor may also
+	// retain live attempts belonging to other Factory Sessions.
+	if f.cfg != nil && f.cfg.workerSessions != nil {
+		if closer, ok := f.cfg.workerSessions.(interface {
+			CloseRuntimeAttempts(context.Context, string) error
+		}); ok {
+			stopErr = errors.Join(stopErr, closer.CloseRuntimeAttempts(stopCtx, f.cfg.runtimeID))
+		}
+	}
 	return stopErr
 }
 

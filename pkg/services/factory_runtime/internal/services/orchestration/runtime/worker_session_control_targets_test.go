@@ -302,6 +302,26 @@ type beginRuntimeAttemptService struct {
 	beginErr      error
 	existing      workersessions.Session
 	getErr        error
+	closedRuntime string
+	closeErr      error
+}
+
+func (service *beginRuntimeAttemptService) CloseRuntimeAttempts(_ context.Context, runtimeID string) error {
+	service.closedRuntime = runtimeID
+	return service.closeErr
+}
+
+func TestWorkerSessionRuntimeShutdownClosesExactRuntimeAndRetainsFailure(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("owned observation close failure")
+	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}, closeErr: cause}
+	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, runtimeID: "owned-runtime"}}
+	if err := f.stopDispatchRuntime(context.Background(), ""); !errors.Is(err, cause) {
+		t.Fatalf("stop runtime = %v, want exact close failure", err)
+	}
+	if sessions.closedRuntime != "owned-runtime" {
+		t.Fatalf("closed runtime = %q, want owned-runtime", sessions.closedRuntime)
+	}
 }
 
 func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {

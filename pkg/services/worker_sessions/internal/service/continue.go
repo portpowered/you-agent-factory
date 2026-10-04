@@ -823,3 +823,44 @@ func (r *registry) associateProviderSessionLocked(
 		Outcome:     workersessions.ProviderSessionAssociationOutcomeAccepted,
 	}, nil
 }
+
+// CloseRuntimeAttempts joins the admitted attempts of one runtime without
+// stopping process admission or discarding retained observations. The runtime
+// owns admission and must quiesce its opener before calling this operation.
+func (r *registry) CloseRuntimeAttempts(ctx context.Context, runtimeID string) error {
+	ctx = runtimeAttemptContext(ctx)
+	runtimeID = strings.TrimSpace(runtimeID)
+	if runtimeID == "" {
+		return workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.RLock()
+	var attempts []*runtimeAttempt
+	for _, attempt := range r.runtimeAttemptControls {
+		if attempt.key.RuntimeID == runtimeID {
+			attempts = append(attempts, attempt)
+		}
+	}
+	r.mu.RUnlock()
+	results := make(chan error, len(attempts))
+	for _, attempt := range attempts {
+		go func() {
+			_, err := r.cancelRuntimeAttemptControl(ctx,
+				workersessions.ControlRequest{ID: attempt.workerID},
+				workersessions.ControlActionCancel, false, attempt)
+			results <- err
+		}()
+	}
+	var closeErr error
+	for range attempts {
+		select {
+		case err := <-results:
+			closeErr = errors.Join(closeErr, err)
+		case <-ctx.Done():
+			return errors.Join(closeErr, ctx.Err())
+		}
+	}
+	return closeErr
+}
