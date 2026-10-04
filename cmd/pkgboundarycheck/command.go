@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 type config struct {
+	constructionRegistry              *contractguard.ConstructionRegistry
 	root                              string
 	packageRoot                       string
 	all                               bool
@@ -96,6 +99,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 			writeBoundaryFindings(stdout, findings)
 			writeBaselineSummaries(stdout, findings)
 		} else {
+			contractguard.WriteConstructionFindings(stdout, findings.constructionFindings)
 			writeBoundaryFindings(stdout, testOnlyFindings)
 		}
 		writeClassifiedDependencyViolationCounts(stdout, classifiedDependencyCounts)
@@ -118,7 +122,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 }
 
 func countBlockingViolations(findings scanResult) int {
-	return countAlwaysBlockingViolations(findings) +
+	return contractguard.CountBlockingConstructionFindings(findings.constructionFindings) + countAlwaysBlockingViolations(findings) +
 		countProductionBoundaryViolations(findings) +
 		// Test-service imports are an intentional test-specific policy. They
 		// remain blocking even though their source class is test-only.
