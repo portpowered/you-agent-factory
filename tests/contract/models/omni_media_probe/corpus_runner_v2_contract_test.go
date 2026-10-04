@@ -21,7 +21,7 @@ const (
 func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
 	t.Parallel()
 	root := contractRepositoryRoot(t)
-	base := filepath.Join(root, "tests", "integration", "models", "omni_media_probe")
+	base := filepath.Join(root, "tests", "internal", "localai", "omni_media_probe")
 	input := readContractSchema(t, filepath.Join(base, "probe-input.schema.json"))
 	report := readContractSchema(t, filepath.Join(base, "report.schema.json"))
 	if input["$id"] != "urn:you-agent-factory:tests:omni-video-corpus-runner-input:v2" {
@@ -99,7 +99,7 @@ func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
 func TestCandidateManifestSchemaPinsExactWindowsArtifactProvenance(t *testing.T) {
 	t.Parallel()
 	root := contractRepositoryRoot(t)
-	manifestSchema := readContractSchema(t, filepath.Join(root, "tests", "integration", "models", "omni_media_probe", "candidate-manifest.schema.json"))
+	manifestSchema := readContractSchema(t, filepath.Join(root, "tests", "internal", "localai", "omni_media_probe", "candidate-manifest.schema.json"))
 	schemaID := "urn:you-agent-factory:tests:omni-video-candidate-manifest:v1"
 	if manifestSchema["$id"] != schemaID {
 		t.Fatalf("candidate manifest schema id = %#v, want %q", manifestSchema["$id"], schemaID)

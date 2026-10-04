@@ -1133,17 +1133,11 @@ test("enumerates exactly the classified snapshots and wires every merged writer"
 	assert.deepEqual(SHARED_BASELINE_PATHS, [
 		"docs/internal/baselines/deadcode-baseline.txt",
 		"docs/internal/baselines/go-unit-lane-latency-budget.v1.json",
-		"docs/internal/baselines/ownership-inventory.json",
-		"docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json",
-		"docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json",
-		"docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json",
-		"docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json",
-		"docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json",
 		"contracts/testdata/baseline/cli-commands.json",
 		"contracts/testdata/baseline/cli-command-inputs.json",
 		"contracts/testdata/baseline/mcp-tools.json",
 	]);
-	assert.equal(new Set(SHARED_BASELINE_PATHS).size, 11);
+	assert.equal(new Set(SHARED_BASELINE_PATHS).size, 5);
 
 	const listed = spawnSync(process.execPath, [helper, "list-paths"], { encoding: "utf8" });
 	assert.equal(listed.status, 0, listed.stderr);
@@ -1151,7 +1145,6 @@ test("enumerates exactly the classified snapshots and wires every merged writer"
 
 	for (const command of [
 		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget',
-		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze',
 		'cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run "^TestWriteProductionInventoryBaseline$$" -count=1',
 		'cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run "^TestWriteProductionInputsInventoryBaseline$$" -count=1',
 		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .',
@@ -2013,19 +2006,19 @@ test("F-16 and F-17 stop before auto-merge for invalid metadata or a failed muta
 
 test("F-06/F-07 stop the integrated writer spine and never hand off a partial candidate", () => {
 	const firstFailure = runFakeRegeneration({
-		failAt: "ownershipinventoryfreeze",
+		failAt: "commandidentity",
 		failExit: 17,
 	});
 	try {
 		assert.notEqual(firstFailure.result.status, 0, firstFailure.result.stdout + firstFailure.result.stderr);
-		assert.deepEqual(firstFailure.stages, ["unitlanebudget", "ownershipinventoryfreeze"], firstFailure.result.stdout + firstFailure.result.stderr);
+		assert.deepEqual(firstFailure.stages, ["unitlanebudget", "commandidentity"], firstFailure.result.stdout + firstFailure.result.stderr);
 		assert.equal(readFileSync(firstFailure.outputPath, "utf8"), "partial snapshot\n");
 		assert.doesNotMatch(firstFailure.result.stdout + firstFailure.result.stderr, /mcptoolinventorygen|publication succeeded/);
 		const plan = planReconciliation({
 			triggeringSha: MAIN_SHA,
 			currentMainSha: MAIN_SHA,
 			changedPaths: [SHARED_BASELINE_PATHS[0]],
-			generationError: "ownershipinventoryfreeze exited 17",
+			generationError: "commandidentity exited 17",
 		});
 		assert.equal(plan.action, "fail");
 		assert.equal(plan.publish, false);
@@ -2041,7 +2034,6 @@ test("F-06/F-07 stop the integrated writer spine and never hand off a partial ca
 		assert.notEqual(laterFailure.result.status, 0, laterFailure.result.stdout + laterFailure.result.stderr);
 		assert.deepEqual(laterFailure.stages, [
 			"unitlanebudget",
-			"ownershipinventoryfreeze",
 			"commandidentity",
 			"cliinputs",
 		], laterFailure.result.stdout + laterFailure.result.stderr);
@@ -2056,7 +2048,6 @@ test("F-06/F-07 stop the integrated writer spine and never hand off a partial ca
 		assert.equal(cleanRetry.result.status, 0, cleanRetry.result.stdout + cleanRetry.result.stderr);
 		assert.deepEqual(cleanRetry.stages, [
 			"unitlanebudget",
-			"ownershipinventoryfreeze",
 			"commandidentity",
 			"cliinputs",
 			"mcptoolinventorygen",
@@ -2152,7 +2143,7 @@ test("F-20 capacity failure returns once without a publication retry", () => {
 
 test("F-23 loopback reports a blocked generation with a delta plan and does not repair it", () => {
 	const failed = runFakeRegeneration({
-		failAt: "ownershipinventoryfreeze",
+		failAt: "commandidentity",
 		failExit: 28,
 	});
 	try {
@@ -2161,7 +2152,7 @@ test("F-23 loopback reports a blocked generation with a delta plan and does not 
 			triggeringSha: MAIN_SHA,
 			currentMainSha: MAIN_SHA,
 			changedPaths: [SHARED_BASELINE_PATHS[0]],
-			generationError: "ownershipinventoryfreeze exited 28 (capacity)",
+			generationError: "commandidentity exited 28 (capacity)",
 		});
 		const report = {
 			verdict: plan.publish ? "PASS" : "BLOCKED",

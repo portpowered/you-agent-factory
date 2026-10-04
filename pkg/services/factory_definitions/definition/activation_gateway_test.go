@@ -74,7 +74,7 @@ func TestNamedFactorySwapUsesActivationGatewayAndRejectsIdle(t *testing.T) {
 		rootDir,
 		"named-target",
 		namedFactoryPayload(t, "named-target"),
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, testCanonicalFactoryLoader),
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(named-target): %v", err)
 	}

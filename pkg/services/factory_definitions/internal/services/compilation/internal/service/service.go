@@ -27,9 +27,6 @@ func New(
 	loadFromFactoryDir factoryroot.LoadedFactoryLoader,
 	encodeFactory factoryroot.FactoryConfigJSONEncoder,
 ) *Service {
-	if loadCanonical == nil || loadFromFactoryDir == nil || encodeFactory == nil {
-		return nil
-	}
 	return &Service{
 		loadCanonical:      loadCanonical,
 		loadFromFactoryDir: loadFromFactoryDir,
@@ -37,14 +34,20 @@ func New(
 	}
 }
 
+// LoadCanonicalFactorySource preserves the injected canonical loader's arguments,
+// result and error for existing validation consumers.
+func (s *Service) LoadCanonicalFactorySource(
+	payload []byte,
+	workstationLoader factoryroot.WorkstationLoader,
+) (factoryroot.MutableLoadedFactorySource, error) {
+	return s.loadCanonical(payload, workstationLoader)
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *Service) CompileEffectiveFactorySource(
 	ctx context.Context,
 	request factoryroot.CompileEffectiveFactorySourceRequest,
 ) (factoryroot.CompileEffectiveFactorySourceResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factoryroot.CompileEffectiveFactorySourceResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factoryroot.CompileEffectiveFactorySourceResult{}, err
 	}
@@ -119,14 +122,4 @@ func mapCompileError(err error) error {
 		return factoryroot.ErrInvalidAuthoredFactorySource
 	}
 	return fmt.Errorf("%w: %w", factoryroot.ErrInvalidAuthoredFactorySource, err)
-}
-
-func (s *Service) requirePorts() error {
-	if s == nil || s.loadCanonical == nil || s.loadFromFactoryDir == nil {
-		return fmt.Errorf("Factory Definition compilation collaborator is required")
-	}
-	if s.encodeFactory == nil {
-		return fmt.Errorf("canonical Factory encoder is required")
-	}
-	return nil
 }

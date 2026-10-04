@@ -42,6 +42,10 @@ var (
 
 // Existing component fixtures supply the same separately selected roles as Wire.
 func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
+	processLogger, err := provideProcessLogger(edges)
+	if err != nil {
+		return nil, err
+	}
 	scopes, err := provideModelRuntimeScopes()
 	if err != nil {
 		return nil, err
@@ -83,7 +87,7 @@ func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
 	}
 	return provideModelsService(edges, scopes, assets, catalog, host, inference, provideModelHostLauncher(edges, source),
 		provideModelHostHTTP(edges), provideModelHostClock(edges), runner, provideModelRuntimeHTTP(edges), inspect, temp, create,
-		now, provideModelHostLogger(), provideModelHostMetrics(edges), evidence, resolver, provideModelAssetHostPlatform(edges))
+		now, provideModelHostLogger(processLogger), provideModelHostMetrics(edges), evidence, resolver, provideModelAssetHostPlatform(edges), processLogger)
 }
 
 func newModelAssetsFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes) (modelswire.Assets, error) {
@@ -101,7 +105,11 @@ func newModelAssetsFixture(edges serviceedges.Edges, scopes modelswire.RuntimeSc
 func newModelHostFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	source modelRuntimeEvidenceSource, evidence modelswire.RuntimeEvidenceRecorder) (modelswire.RuntimeHost, error) {
 	state := modelswire.NewSlotState()
-	clock, logger, metrics := provideModelHostClock(edges), provideModelHostLogger(), provideModelHostMetrics(edges)
+	processLogger, err := provideProcessLogger(edges)
+	if err != nil {
+		return nil, err
+	}
+	clock, logger, metrics := provideModelHostClock(edges), provideModelHostLogger(processLogger), provideModelHostMetrics(edges)
 	coordinator := provideModelSlotCoordinator(state, scopes, clock, logger, metrics)
 	leases, err := modelswire.NewHostLeases(clock, provideModelSlotFacts(state, scopes, assets), coordinator)
 	if err != nil {

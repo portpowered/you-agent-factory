@@ -58,7 +58,7 @@ func (h stubDefinitionHost) PrepareFactoryLayoutPayload(
 		context.Background(),
 		segment,
 		payload,
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, testCanonicalFactoryLoader),
 	)
 }
 func (h stubDefinitionHost) PersistNamedFactoryWithPrepared(
@@ -184,7 +184,7 @@ func TestService_GetCurrentNamedFactory_ReadsPersistedPointerAndPayload(t *testi
 	t.Parallel()
 
 	rootDir := t.TempDir()
-	if _, err := persistNamedFactoryForTest(rootDir, "alpha", namedFactoryPayload(t, "alpha"), factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(rootDir, "alpha", namedFactoryPayload(t, "alpha"), factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	if err := definitionTestNamedPaths.WriteCurrentPointer(rootDir, "alpha"); err != nil {
@@ -263,7 +263,7 @@ func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesConfigVersion(t *test
 	if err != nil {
 		t.Fatalf("Marshal versioned payload: %v", err)
 	}
-	if _, err := persistNamedFactoryForTest(rootDir, "alpha", versioned, factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(rootDir, "alpha", versioned, factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
 
@@ -294,7 +294,7 @@ func TestService_GetCurrentFactoryForSession_IncludesPersistedVersionForNamedPoi
 	if err != nil {
 		t.Fatalf("Marshal versioned payload: %v", err)
 	}
-	if _, err := persistNamedFactoryForTest(rootDir, "alpha", versioned, factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(rootDir, "alpha", versioned, factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	if err := definitionTestNamedPaths.WriteCurrentPointer(rootDir, "alpha"); err != nil {
@@ -376,7 +376,7 @@ func TestService_ActivateNamedFactory_SwapsPersistedNamedFactory(t *testing.T) {
 	t.Parallel()
 
 	rootDir := t.TempDir()
-	if _, err := persistNamedFactoryForTest(rootDir, "alpha", namedFactoryPayload(t, "alpha"), factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(rootDir, "alpha", namedFactoryPayload(t, "alpha"), factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 

@@ -27,7 +27,7 @@ import (
 )
 
 func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPersistence {
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
 	writer := factoryauthoredlayout.NewWriter(
@@ -43,7 +43,7 @@ func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPer
 	persistence, err := factorypersistence.New(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, factorydefinitioncomposition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		func(
 			ctx context.Context,

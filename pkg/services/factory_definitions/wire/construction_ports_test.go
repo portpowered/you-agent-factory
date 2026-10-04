@@ -433,3 +433,21 @@ func TestNewCatalogPathsServiceRejectsMissingNamedFactoryCatalog(t *testing.T) {
 		t.Fatal("NewCatalogPathsService(nil namedFactoryCatalog) error = nil, want a validation error")
 	}
 }
+
+type stubRequiredToolChecker struct{}
+
+func (stubRequiredToolChecker) Check(
+	factorydefinitions.RequiredToolConfig,
+) factorydefinitions.RequiredToolCheckResult {
+	return factorydefinitions.RequiredToolCheckResult{}
+}
+
+type stubOrchestratorValidator struct{}
+
+func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
+	context.Context,
+	*factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	factorydefinitions.WorkflowSourceReader,
+) []factorydefinitions.ValidationTarget {
+	return nil
+}

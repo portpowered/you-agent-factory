@@ -28,15 +28,3 @@ type Service interface {
 		factorydefinitions.ValidateEffectiveFactoryDefinitionRequest,
 	) (factorydefinitions.ValidateEffectiveFactoryDefinitionResult, error)
 }
-
-// Dependencies are the exact collaborator ports required by validation.
-// They are supplied by Factory Definitions composition and never selected here:
-// validation does not construct Runtime/Petri implementations or choose host
-// filesystem adapters.
-type Dependencies struct {
-	Operations            factorydefinitions.DefinitionValidationOperation
-	Effective             factorydefinitions.EffectiveDefinitionValidationOperation
-	LoadCanonical         factorydefinitions.CanonicalFactoryJSONLoader
-	RequiredToolChecker   factorydefinitions.RequiredToolChecker
-	OrchestratorValidator factorydefinitions.OrchestratorDefinitionValidator
-}

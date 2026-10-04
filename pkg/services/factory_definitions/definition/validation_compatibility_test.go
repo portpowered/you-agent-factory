@@ -23,7 +23,7 @@ func validateFactoryAPIPrePersistForTest(
 	if err != nil {
 		return factorydefinitions.ValidationResult{}, err
 	}
-	request, err := validationentry.MapFactoryJSONForPersistence(payload, testCanonicalFactoryLoader)
+	request, err := validationentry.MapFactoryJSONForPersistence(payload)
 	if err != nil {
 		return factorydefinitions.ValidationResult{}, err
 	}

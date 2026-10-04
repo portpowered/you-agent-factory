@@ -3,54 +3,40 @@ package main
 import "github.com/portpowered/infinite-you/internal/contractguard"
 
 type scanResult struct {
-	constructionFindings                 []contractguard.ConstructionFinding
-	rootPackageFindings                  []rootPackageFinding
-	retiredPackageRootFindings           []retiredPackageRootFinding
-	applicationGraphImportFindings       []applicationGraphImportFinding
-	handwrittenGeneratedFindings         []handwrittenGeneratedFinding
-	domainTransportFindings              []domainTransportImportFinding
-	peerServiceImportFindings            []peerServiceImportFinding
-	recordedPeerServiceImportFindings    []peerServiceImportFinding
-	stalePeerServiceBaselineEntries      []peerServiceImportBaselineEntry
-	peerServiceBaselineCount             int
-	testServiceImportFindings            []testServiceImportFinding
-	recordedTestServiceImportFindings    []testServiceImportFinding
-	staleTestServiceBaselineEntries      []testServiceImportBaselineEntry
-	testServiceBaselineCount             int
-	supportServiceImportFindings         []supportServiceImportFinding
-	recordedSupportServiceImportFindings []supportServiceImportFinding
-	staleSupportServiceBaselineEntries   []supportServiceImportBaselineEntry
-	supportServiceBaselineCount          int
-	serviceConstructionFindings          []serviceConstructionFinding
-	recordedServiceConstructionFindings  []serviceConstructionFinding
-	staleServiceConstructionEntries      []serviceConstructionBaselineEntry
-	serviceConstructionBaselineCount     int
-	externalImplementationFindings       []transportServiceImplementationFinding
-	transportBehaviorFindings            []transportBehaviorFinding
-	recordedTransportBehaviorFindings    []transportBehaviorFinding
-	staleTransportBehaviorEntries        []transportBehaviorBaselineEntry
-	transportBehaviorBaselineCount       int
-	functionalProcessEdgeFindings        []functionalProcessEdgeFinding
-	constructedServiceEdgesFindings      []constructedServiceEdgesFinding
-	processEdgeContractFindings          []processEdgeContractFinding
-	testWorkNormalizationFindings        []testWorkNormalizationFinding
-	productionDefaultFindings            []productionDefaultFinding
-	recordedProductionDefaultFindings    []productionDefaultFinding
-	staleProductionDefaultEntries        []productionDefaultBaselineEntry
-	productionDefaultBaselineCount       int
-	initializerBehaviorFindings          []initializerBehaviorFinding
-	recordedInitializerBehaviorFindings  []initializerBehaviorFinding
-	staleInitializerBehaviorEntries      []initializerBehaviorBaselineEntry
-	initializerBehaviorBaselineCount     int
-	testBehaviorFindings                 []testBehaviorFinding
-	recordedTestBehaviorFindings         []testBehaviorFinding
-	staleTestBehaviorEntries             []testBehaviorBaselineEntry
-	testBehaviorBaselineCount            int
-	petriPublicSurfaceFindings           []petriPublicSurfaceFinding
-	recordedPetriPublicSurfaceFindings   []petriPublicSurfaceFinding
-	stalePetriPublicSurfaceEntries       []petriPublicSurfaceBaselineEntry
-	petriPublicSurfaceBaselineCount      int
-	providerEffectOwnershipFindings      []providerEffectOwnershipFinding
+	constructionFindings                []contractguard.ConstructionFinding
+	rootPackageFindings                 []rootPackageFinding
+	retiredPackageRootFindings          []retiredPackageRootFinding
+	handwrittenGeneratedFindings        []handwrittenGeneratedFinding
+	serviceConstructionFindings         []serviceConstructionFinding
+	recordedServiceConstructionFindings []serviceConstructionFinding
+	staleServiceConstructionEntries     []serviceConstructionBaselineEntry
+	serviceConstructionBaselineCount    int
+	externalImplementationFindings      []transportServiceImplementationFinding
+	transportBehaviorFindings           []transportBehaviorFinding
+	recordedTransportBehaviorFindings   []transportBehaviorFinding
+	staleTransportBehaviorEntries       []transportBehaviorBaselineEntry
+	transportBehaviorBaselineCount      int
+	functionalProcessEdgeFindings       []functionalProcessEdgeFinding
+	constructedServiceEdgesFindings     []constructedServiceEdgesFinding
+	processEdgeContractFindings         []processEdgeContractFinding
+	testWorkNormalizationFindings       []testWorkNormalizationFinding
+	productionDefaultFindings           []productionDefaultFinding
+	recordedProductionDefaultFindings   []productionDefaultFinding
+	staleProductionDefaultEntries       []productionDefaultBaselineEntry
+	productionDefaultBaselineCount      int
+	initializerBehaviorFindings         []initializerBehaviorFinding
+	recordedInitializerBehaviorFindings []initializerBehaviorFinding
+	staleInitializerBehaviorEntries     []initializerBehaviorBaselineEntry
+	initializerBehaviorBaselineCount    int
+	testBehaviorFindings                []testBehaviorFinding
+	recordedTestBehaviorFindings        []testBehaviorFinding
+	staleTestBehaviorEntries            []testBehaviorBaselineEntry
+	testBehaviorBaselineCount           int
+	petriPublicSurfaceFindings          []petriPublicSurfaceFinding
+	recordedPetriPublicSurfaceFindings  []petriPublicSurfaceFinding
+	stalePetriPublicSurfaceEntries      []petriPublicSurfaceBaselineEntry
+	petriPublicSurfaceBaselineCount     int
+	providerEffectOwnershipFindings     []providerEffectOwnershipFinding
 }
 
 type retiredPackageRoot struct {
@@ -71,69 +57,10 @@ type rootPackageFinding struct {
 	packagePath string
 }
 
-type applicationGraphImportFinding struct {
-	packagePath string
-	filePath    string
-	class       boundarySourceClass
-}
-
-type domainTransportImportFinding struct {
-	packagePath string
-	importPath  string
-	filePath    string
-	class       boundarySourceClass
-}
-
-type peerServiceImportFinding struct {
-	owner      string
-	peer       string
-	importPath string
-	filePath   string
-	class      boundarySourceClass
-}
-
-type peerServiceImportBaseline struct {
-	Version int                              `json:"version"`
-	Entries []peerServiceImportBaselineEntry `json:"entries"`
-}
-
-type peerServiceImportBaselineEntry struct {
-	Owner        string `json:"owner"`
-	Peer         string `json:"peer"`
-	ImportPath   string `json:"importPath"`
-	FilePath     string `json:"filePath"`
-	TargetRoot   string `json:"targetRoot"`
-	Class        string `json:"class,omitempty"`
-	Stage        string `json:"stage"`
-	DeletionGate string `json:"deletionGate"`
-}
-
 type transportServiceImplementationFinding struct {
 	importPath string
 	filePath   string
 	class      boundarySourceClass
-}
-
-type testServiceImportFinding struct {
-	owner      string
-	importPath string
-	filePath   string
-	class      boundarySourceClass
-}
-
-type testServiceImportBaseline struct {
-	Version int                              `json:"version"`
-	Entries []testServiceImportBaselineEntry `json:"entries"`
-}
-
-type testServiceImportBaselineEntry struct {
-	Owner        string `json:"owner"`
-	ImportPath   string `json:"importPath"`
-	FilePath     string `json:"filePath"`
-	TargetRoot   string `json:"targetRoot"`
-	Class        string `json:"class,omitempty"`
-	Stage        string `json:"stage"`
-	DeletionGate string `json:"deletionGate"`
 }
 
 type serviceConstructionFinding struct {

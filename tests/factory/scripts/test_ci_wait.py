@@ -96,6 +96,14 @@ def repository_payload(name_with_owner=TEST_REPOSITORY, url=TEST_REPOSITORY_URL)
     return {"nameWithOwner": name_with_owner, "url": url}
 
 
+def lifecycle_payload(number=100, state="OPEN", head=TEST_HEAD, queue=None, auto=False):
+    return {"data": {"repository": {"pullRequest": {
+        "number": number, "state": state, "headRefOid": head,
+        "mergeQueueEntry": queue,
+        "autoMergeRequest": {"enabledAt": "2026-10-04T06:29:00Z"} if auto else None,
+    }}}}
+
+
 def pr_identity_payload(number, state="OPEN", repository_url=TEST_REPOSITORY_URL):
     return {
         "number": number,
@@ -167,10 +175,12 @@ import os
 import sys
 
 raw_args = sys.argv[1:]
-if raw_args[:1] in (["pr"], ["repo"]):
+if raw_args[:1] in (["pr"], ["repo"], ["api"]):
     args = raw_args
 elif os.path.basename(sys.argv[0]) == "repo":
     args = ["repo", *raw_args]
+elif os.path.basename(sys.argv[0]) == "api":
+    args = ["api", *raw_args]
 else:
     args = ["pr", *raw_args]
 
@@ -184,12 +194,25 @@ calls.append(args)
 with open(ledger_path, "w", encoding="utf-8") as ledger:
     json.dump(calls, ledger)
 
-if len(args) < 2 or args[0] not in {"pr", "repo"}:
+if len(args) < 2 or args[0] not in {"pr", "repo", "api"}:
     print(f"unsupported fake gh command: {args!r}", file=sys.stderr)
     sys.exit(2)
 selector = args[:2]
-command = args[1] if args[0] == "pr" else "repo"
-responses = json.loads(os.environ["CI_WAIT_FAKE_GH_FIXTURE"]).get(command, [])
+command = args[1] if args[0] == "pr" else args[0]
+fixture = json.loads(os.environ["CI_WAIT_FAKE_GH_FIXTURE"])
+responses = fixture.get(command, [])
+if command == "repo" and not responses:
+    responses = [{"stdout": json.dumps({"nameWithOwner": "example/repo", "url": "https://github.com/example/repo"})}]
+if command == "api" and not responses:
+    # Compatibility fixtures describe head/check progression. Derive their
+    # unqueued lifecycle from the most recently consumed view, preserving races.
+    view_count = sum(call[:2] == ["pr", "view"] for call in calls)
+    views = fixture.get("view", [])
+    view = json.loads(views[min(max(0, view_count - 1), len(views) - 1)]["stdout"])
+    number = int(next(arg.split("=", 1)[1] for arg in args if arg.startswith("number=")))
+    pr = {"number": number, "state": "OPEN", "headRefOid": view.get("headRefOid", "0123456789abcdef0123456789abcdef01234567"),
+          "mergeQueueEntry": None, "autoMergeRequest": None}
+    responses = [{"stdout": json.dumps({"data": {"repository": {"pullRequest": pr}}})}]
 if not responses:
     print(f"no fake response configured for {args!r}", file=sys.stderr)
     sys.exit(2)
@@ -207,19 +230,26 @@ sys.exit(response.get("returncode", 0))
 import time
 
 _calls = 0
+_elapsed = 0.0
 _real_monotonic = time.monotonic
 
 def _monotonic():
     global _calls
     if any(frame.filename.endswith("subprocess.py") for frame in inspect.stack(0)):
         return _real_monotonic()
-    _calls += 1
-    if {clock!r} == "deadline" and _calls > 2:
+    if inspect.stack(0)[1].function == "main":
+        _calls += 1
+    if {clock!r} == "deadline" and _calls > 3:
         return 100000.0
-    return 0.0
+    return _elapsed
+
+def _sleep(seconds):
+    global _elapsed
+    if {clock!r} == "elapsed":
+        _elapsed += seconds
 
 time.monotonic = _monotonic
-time.sleep = lambda _seconds: None
+time.sleep = _sleep
 """,
                 encoding="utf-8",
             )
@@ -238,7 +268,7 @@ time.sleep = lambda _seconds: None
                     runtime_path = Path(sys.executable).with_name(runtime_name)
                     if runtime_path.exists():
                         shutil.copy2(runtime_path, scratch_path / runtime_name)
-                for command_name in ("pr", "repo"):
+                for command_name in ("pr", "repo", "api"):
                     (scratch_path / command_name).write_text(
                         fake_gh_source,
                         encoding="utf-8",
@@ -284,7 +314,7 @@ time.sleep = lambda _seconds: None
                         capture_output=True,
                         text=True,
                         check=False,
-                        timeout=15,
+                        timeout=30,
                     )
                 except subprocess.TimeoutExpired as error:
                     ledger = (
@@ -311,8 +341,23 @@ time.sleep = lambda _seconds: None
         argv = ["ci-wait.py", branch]
         if process_output is not NO_PROCESS_OUTPUT:
             argv.append(process_output)
+        head = [TEST_HEAD]
+
+        def compatibility_gh(*args, **kwargs):
+            if args[0] == "repo":
+                return subprocess.CompletedProcess(args, 0, stdout=json.dumps(repository_payload()))
+            if args[0] == "api":
+                number = int(next(arg.split("=", 1)[1] for arg in args if arg.startswith("number=")))
+                return subprocess.CompletedProcess(args, 0, stdout=json.dumps(lifecycle_payload(number, head=head[0])))
+            result = run_gh(*args)
+            if args[:2] == ("pr", "view"):
+                try:
+                    head[0] = json.loads(result.stdout).get("headRefOid", head[0])
+                except (ValueError, AttributeError):
+                    pass
+            return result
         with (
-            patch.object(self.module, "run_gh", side_effect=run_gh),
+            patch.object(self.module, "run_gh", side_effect=compatibility_gh),
             patch.object(self.module.sys, "argv", argv),
             patch.object(self.module.time, "sleep", side_effect=sleeps.append),
             patch.object(self.module.time, "monotonic", return_value=0),
@@ -340,8 +385,13 @@ time.sleep = lambda _seconds: None
         responses = [response for observation in observations for response in observation]
         calls = []
         sleeps = []
+        head = [TEST_HEAD]
 
-        def run_gh(*args):
+        def run_gh(*args, **kwargs):
+            if args[0] == "repo":
+                return subprocess.CompletedProcess(args, 0, stdout=json.dumps(repository_payload()))
+            if args[0] == "api":
+                return subprocess.CompletedProcess(args, 0, stdout=json.dumps(lifecycle_payload(pr_number, head=head[0])))
             calls.append(args)
             if args[1] == "list":
                 return subprocess.CompletedProcess(
@@ -356,6 +406,11 @@ time.sleep = lambda _seconds: None
             if isinstance(response, subprocess.CompletedProcess):
                 return response
             stdout = response if isinstance(response, str) else json.dumps(response)
+            if args[:2] == ("pr", "view"):
+                try:
+                    head[0] = json.loads(stdout).get("headRefOid", head[0])
+                except (ValueError, AttributeError):
+                    pass
             return subprocess.CompletedProcess(
                 ["gh", *args], 0, stdout=stdout, stderr=""
             )
@@ -470,7 +525,7 @@ time.sleep = lambda _seconds: None
             ],
         )
         self.assertFalse(any(call[:2] == ["pr", "list"] for call in calls))
-        for call in calls[1:]:
+        for call in [call for call in calls[1:] if call[0] == "pr"]:
             if call[:2] in (["pr", "view"], ["pr", "checks"]):
                 self.assertEqual(call[2], str(pr_number))
                 self.assertIn("--repo", call)
@@ -496,7 +551,7 @@ time.sleep = lambda _seconds: None
                 self.assertEqual(result.returncode, 0)
                 self.assertEqual(json.loads(result.stdout)["pr"], pr_number)
                 self.assertEqual(calls[0][:2], ["pr", "list"])
-                self.assertFalse(any(call[:2] == ["repo", "view"] for call in calls))
+                self.assertEqual(sum(call[:2] == ["repo", "view"] for call in calls), 1)
 
     def test_classifier_reads_tail_of_oversized_output(self):
         cap = self.module.MAX_PROCESS_OUTPUT_BYTES
@@ -1045,7 +1100,7 @@ time.sleep = lambda _seconds: None
                 self.assertNotIn("passed", result.stdout)
                 self.assertNotIn("mergeAuthorized", result.stdout)
                 self.assertEqual(
-                    [call[:2] for call in calls],
+                    [call[:2] for call in calls if call[0] == "pr"],
                     [
                         ["pr", "list"],
                         ["pr", "view"],
@@ -1056,7 +1111,7 @@ time.sleep = lambda _seconds: None
                         ["pr", "view"],
                     ],
                 )
-                self.assertEqual(len(calls), 7)
+                self.assertEqual(len(calls), 12)  # seven check reads, repo, four lifecycle reads
                 self.assertEqual(result.stderr.count("terminal"), 2)
 
     def test_actual_entrypoint_current_head_matrix_stays_within_fixture_budget(self):
@@ -1234,12 +1289,12 @@ time.sleep = lambda _seconds: None
                 self.assertNotIn("passed", result.stdout)
                 self.assertNotIn("mergeAuthorized", result.stdout)
                 for call in calls:
-                    if call[1] == "view":
+                    if call[:2] == ["pr", "view"]:
                         self.assertEqual(
                             call[3:],
                             ["--json", self.module.PR_VIEW_JSON_FIELDS],
                         )
-                    elif call[1] == "checks":
+                    elif call[:2] == ["pr", "checks"]:
                         self.assertEqual(
                             call[3:],
                             ["--json", self.module.PR_CHECKS_JSON_FIELDS],
@@ -1284,7 +1339,7 @@ time.sleep = lambda _seconds: None
                     self.assertEqual(
                         payload["uncertainty"]["reason"], "check-state-mismatch"
                     )
-                total_calls += len(calls)
+                total_calls += sum(call[0] == "pr" for call in calls)
 
         self.assertLessEqual(total_calls, 100)
 
@@ -1593,7 +1648,7 @@ time.sleep = lambda _seconds: None
         self.assertEqual(payload["headRefOid"], TEST_HEAD)
         self.assertEqual(payload["pendingChecks"][0]["state"], "IN_PROGRESS")
         self.assertNotIn("checks-terminal", result.stdout)
-        self.assertEqual(len(calls), 4)
+        self.assertEqual(len(calls), 7)  # check reads plus repo and lifecycle
 
     def test_reconstructed_c1_changing_checks_returns_bounded_uncertainty(self):
         """Reconstruct the lost Work response around its retained head identity."""
@@ -1656,7 +1711,7 @@ time.sleep = lambda _seconds: None
         self.assertNotIn("Traceback", result.stderr)
         self.assertNotIn('"status": "passed"', result.stdout)
         self.assertNotIn("checks-terminal", result.stdout)
-        self.assertEqual(len(calls), 4)
+        self.assertEqual(len(calls), 7)  # check reads plus repo and lifecycle
 
     def test_main_pending_checks_wait_then_keep_terminal_policy(self):
         pending_view = view_payload(
@@ -1769,6 +1824,224 @@ time.sleep = lambda _seconds: None
         self.assertEqual(json.loads(stdout)["reason"], "no-checks-reported")
         self.assertEqual(sleeps, [])
         self.assertIn("no checks", stderr)
+
+
+class MergeWaitTest(unittest.TestCase):
+    # Reuse the existing serial executable fixture without duplicating its cases.
+    setUp = CIWaitPRLookupTest.setUp
+    invoke_actual_script_with_fake_gh = CIWaitPRLookupTest.invoke_actual_script_with_fake_gh
+    def lifecycle(self, **kwargs):
+        return self.module.parse_merge_lifecycle(
+            self.module.JSONRead(self.module.JSONReadStatus.OK, lifecycle_payload(**kwargs)),
+            kwargs.get("number", 100),
+        )
+
+    def snapshot(self, state="SUCCESS", head=TEST_HEAD):
+        check, reason = self.module._normalize_check(checks_row(state), "checks")
+        self.assertIsNone(reason)
+        return self.module.CurrentHeadSnapshot(self.module.SnapshotStatus.VALID, "stable", head,
+                                               checks=(check,))
+
+    def test_merge_wait_decision_precedence_and_queue_states(self):
+        entry = {"id": "MQE_incident", "state": "AWAITING_CHECKS", "position": 1}
+        for state in ("AWAITING_CHECKS", "QUEUED", "LOCKED", "MERGEABLE", "UNMERGEABLE"):
+            with self.subTest(queue_state=state):
+                decision = self.module.merge_wait_decision(
+                    self.lifecycle(queue={**entry, "state": state}), self.snapshot())
+                self.assertEqual((decision.outcome, decision.reason, decision.was_queued),
+                                 ("pending", "merge-queue-pending", True))
+        for state, reason in (("MERGED", "pr-merged"), ("CLOSED", "pr-closed")):
+            decision = self.module.merge_wait_decision(self.lifecycle(state=state), None, True)
+            self.assertEqual((decision.outcome, decision.reason), ("terminal", reason))
+        for auto in (False, True):
+            for state in ("SUCCESS", "FAILURE", "IN_PROGRESS"):
+                decision = self.module.merge_wait_decision(self.lifecycle(auto=auto), self.snapshot(state), True)
+                self.assertEqual((decision.outcome, decision.reason), ("terminal", "pr-ejected"))
+        decision = self.module.merge_wait_decision(self.lifecycle(auto=True), self.snapshot("IN_PROGRESS"))
+        self.assertEqual((decision.outcome, decision.reason), ("pending", "auto-merge-pending"))
+        for state in ("SUCCESS", "FAILURE"):
+            for auto in (False, True):
+                decision = self.module.merge_wait_decision(self.lifecycle(auto=auto), self.snapshot(state))
+                self.assertEqual(decision.outcome, "checks")
+        mismatch = self.module.merge_wait_decision(self.lifecycle(head=TEST_HEAD_NEXT), self.snapshot())
+        self.assertEqual(mismatch.reason, "lifecycle-check-head-mismatch")
+        self.assertFalse(self.module.merge_wait_decision(self.lifecycle(), self.snapshot()).was_queued)
+
+    def test_merge_wait_decision_invalid_lifecycle_never_infers_ejection(self):
+        good = lifecycle_payload()
+        pr = good["data"]["repository"]["pullRequest"]
+        cases = [{}, {"data": None}, {**good, "errors": [{"message": "secret"}]}]
+        for key in pr:
+            cases.append({"data": {"repository": {"pullRequest": {k: v for k, v in pr.items() if k != key}}}})
+        for change in ({"number": 101}, {"number": True}, {"headRefOid": "secret\n"},
+                       {"state": "UNKNOWN"}, {"mergeQueueEntry": {}},
+                       {"mergeQueueEntry": {"id": "MQE", "state": "QUEUED", "position": True}},
+                       {"autoMergeRequest": {}}, {"autoMergeRequest": False}):
+            cases.append({"data": {"repository": {"pullRequest": {**pr, **change}}}})
+        reads = [self.module.JSONRead(self.module.JSONReadStatus.OK, value) for value in cases]
+        reads.extend(self.module.JSONRead(status) for status in (
+            self.module.JSONReadStatus.UNAVAILABLE, self.module.JSONReadStatus.MALFORMED))
+        for read in reads:
+            with self.subTest(read=read):
+                lifecycle = self.module.parse_merge_lifecycle(read, 100)
+                decision = self.module.merge_wait_decision(lifecycle, self.snapshot(), True)
+                self.assertEqual(decision.outcome, "uncertain")
+                self.assertTrue(decision.was_queued)
+                self.assertNotIn("secret", decision.reason)
+
+    def invoke_poll(self, lifecycles, snapshots=(), deadline=6000, grace=600):
+        elapsed = [0]
+        sleeps, lifecycle_calls = [], []
+        lifecycle_iter = iter(lifecycles)
+        last = [lifecycles[-1]]
+        def fetch(*args):
+            lifecycle_calls.append(elapsed[0])
+            last[0] = next(lifecycle_iter, last[0])
+            return last[0]
+        def sleep(seconds):
+            sleeps.append(seconds)
+            elapsed[0] += seconds
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (patch.object(self.module.sys, "argv", ["ci-wait.py", "lane"]),
+              patch.object(self.module, "resolve_pr", return_value={"number": 100, "state": "OPEN"}),
+              patch.object(self.module, "read_gh_json", return_value=self.module.JSONRead(
+                  self.module.JSONReadStatus.OK, repository_payload())),
+              patch.object(self.module, "fetch_merge_lifecycle", side_effect=fetch),
+              patch.object(self.module, "observe_current_head", side_effect=snapshots) as checks,
+              patch.object(self.module.time, "monotonic", side_effect=lambda: elapsed[0]),
+              patch.object(self.module.time, "sleep", side_effect=sleep),
+              patch.object(self.module, "DEADLINE_SECONDS", deadline),
+              patch.object(self.module, "NO_CHECKS_GRACE_SECONDS", grace),
+              redirect_stdout(stdout), redirect_stderr(stderr)):
+            self.module.main()
+        return json.loads(stdout.getvalue()), stderr.getvalue(), sleeps, lifecycle_calls, checks.call_count
+
+    def test_main_queue_waits_30_and_90_minutes_then_merges(self):
+        queued = self.lifecycle(queue={"id": "MQE", "state": "AWAITING_CHECKS", "position": 1})
+        for minutes in (30, 90):
+            with self.subTest(minutes=minutes):
+                payload, stderr, sleeps, calls, checks = self.invoke_poll(
+                    [queued] * (minutes // 2) + [self.lifecycle(state="MERGED")], grace=0)
+                self.assertEqual(payload["reason"], "pr-merged")
+                self.assertEqual(payload["prState"], "MERGED")
+                self.assertEqual(sum(sleeps), minutes * 60)
+                self.assertEqual(checks, 0)  # lifecycle wins even beyond empty-check grace
+                self.assertNotIn("checks-terminal", stderr)
+                self.assertEqual(len(calls), minutes // 2 + 1)
+
+    def test_main_admission_refresh_invalidates_terminal_candidate(self):
+        plain = self.lifecycle()
+        queued = self.lifecycle(queue={"id": "MQE", "state": "LOCKED", "position": 1})
+        result, _, sleeps, _, checks = self.invoke_poll(
+            [plain, plain, plain, queued, self.lifecycle(state="MERGED")],
+            [self.snapshot(), self.snapshot()])
+        self.assertEqual(result["reason"], "pr-merged")
+        self.assertEqual(checks, 2)
+        self.assertEqual(sleeps, [120, 120])
+
+    def test_main_merge_overrides_failed_check_observation(self):
+        uncertain = self.module.CurrentHeadSnapshot(self.module.SnapshotStatus.UNCERTAIN, "checks-unavailable", TEST_HEAD)
+        for state, reason in (("MERGED", "pr-merged"), ("CLOSED", "pr-closed")):
+            result, _, sleeps, _, _ = self.invoke_poll(
+                [self.lifecycle(), self.lifecycle(state=state)], [uncertain])
+            self.assertEqual(result["reason"], reason)
+            self.assertEqual(sleeps, [])
+
+    def test_main_final_lifecycle_uncertainty_or_head_change_blocks_release(self):
+        for refresh in (self.module.MergeLifecycle(reason="lifecycle-unavailable"),
+                        self.lifecycle(head=TEST_HEAD_NEXT)):
+            with self.subTest(refresh=refresh):
+                result, stderr, sleeps, _, checks = self.invoke_poll(
+                    [self.lifecycle(), self.lifecycle(), self.lifecycle(), refresh,
+                     self.lifecycle(state="MERGED")], [self.snapshot(), self.snapshot()])
+                self.assertEqual(result["reason"], "pr-merged")
+                self.assertEqual(sleeps, [120, 120])
+                self.assertEqual(checks, 2)
+                self.assertNotIn("stable observations", stderr)
+
+    def test_main_auto_merge_and_uncertainty_stay_pending(self):
+        armed = self.lifecycle(auto=True)
+        result, _, sleeps, _, checks = self.invoke_poll(
+            [armed, armed, self.module.MergeLifecycle(reason="lifecycle-unavailable"),
+             self.lifecycle(state="MERGED")], [self.snapshot("IN_PROGRESS")])
+        self.assertEqual(result["reason"], "pr-merged")
+        self.assertEqual(sleeps, [120, 120])
+        self.assertEqual(checks, 1)
+
+    def test_main_queue_ejection_and_bounded_uncertainty_deadline(self):
+        queued = self.lifecycle(queue={"id": "MQE", "state": "QUEUED", "position": 1})
+        result, _, _, _, checks = self.invoke_poll([queued, self.lifecycle(auto=True)])
+        self.assertEqual(result["reason"], "pr-ejected")
+        self.assertTrue(result["autoMergeArmed"])
+        self.assertEqual(checks, 0)
+        for last in (queued, self.module.MergeLifecycle(reason="lifecycle-unavailable")):
+            result, _, sleeps, calls, _ = self.invoke_poll([queued, last], deadline=250)
+            self.assertEqual(result["reason"], "deadline-requeue")
+            self.assertTrue(result["wasQueued"])
+            self.assertEqual(sum(sleeps), 250)
+            self.assertLessEqual(max(calls), 250)
+            self.assertEqual(result["uncertainty"]["reason"],
+                             last.reason or "merge-queue-pending")
+
+    def test_lifecycle_query_and_call_timeout_use_remaining_budget(self):
+        with (patch.object(self.module.time, "monotonic", return_value=5980),
+              patch.object(self.module.subprocess, "run", return_value=subprocess.CompletedProcess(
+                  [], 0, stdout=json.dumps(lifecycle_payload()), stderr="")) as run):
+            context = self.module.RepositoryContext("example/repo", "github.example")
+            result = self.module.fetch_merge_lifecycle(100, context, 6000)
+            self.assertEqual(result.state, "OPEN")
+            self.assertEqual(run.call_args.kwargs["timeout"], 20)
+            argv = run.call_args.args[0]
+            self.assertIn("github.example", argv)
+            self.assertIn("query=" + self.module.MERGE_WAIT_QUERY, argv)
+            self.assertIn("number=100", argv)
+            run.reset_mock()
+            result = self.module.fetch_merge_lifecycle(100, context, 5980)
+            self.assertEqual(result.reason, "lifecycle-unavailable")
+            run.assert_not_called()
+        with patch.object(self.module, "run_gh", return_value=subprocess.CompletedProcess(
+                [], 1, stdout=json.dumps(lifecycle_payload()), stderr="secret")):
+            result = self.module.fetch_merge_lifecycle(100, context, 6000)
+            self.assertEqual(result.reason, "lifecycle-unavailable")
+
+    def test_i01_actual_queued_receipts_then_merged(self):
+        queue = {"id": "MQE_lQDOSPrmM88AAAABGbkl3s4ABHfMzgMWVBE", "state": "AWAITING_CHECKS", "position": 1}
+        fixture = actual_fixture(2724, [], direct_view=pr_identity_payload(2724), repository=repository_payload())
+        fixture["api"] = [{"stdout": json.dumps(lifecycle_payload(number=2724, queue=queue))}] * 3
+        fixture["api"].append({"stdout": json.dumps(lifecycle_payload(number=2724, state="MERGED"))})
+        result, calls = self.invoke_actual_script_with_fake_gh(fixture, clock="elapsed", process_output="PR #2724")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["reason"], "pr-merged")
+        self.assertEqual(sum(c[:2] == ["api", "graphql"] for c in calls), 4)
+        self.assertFalse(any(c[:2] == ["pr", "checks"] for c in calls))
+        self.assertNotIn("checks-terminal", result.stdout + result.stderr)
+
+    def test_i02_actual_ejected_with_auto_merge_still_armed(self):
+        fixture = actual_fixture(100, [], direct_view=pr_identity_payload(100), repository=repository_payload())
+        fixture["api"] = [{"stdout": json.dumps(lifecycle_payload(queue={"id": "MQE", "state": "QUEUED", "position": 1}))},
+                          {"stdout": json.dumps(lifecycle_payload(auto=True))}]
+        result, _ = self.invoke_actual_script_with_fake_gh(fixture, clock="elapsed", process_output="PR #100")
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["reason"], "pr-ejected")
+        self.assertEqual(payload["prState"], "OPEN")
+        self.assertTrue(payload["wasQueued"])
+        self.assertTrue(payload["autoMergeArmed"])
+        self.assertIsNone(payload["mergeQueueEntry"])
+
+    def test_i03_actual_persistent_queue_and_unavailable_read_at_deadline(self):
+        fixture = actual_fixture(100, [], direct_view=pr_identity_payload(100), repository=repository_payload())
+        queued = {"stdout": json.dumps(lifecycle_payload(queue={"id": "MQE", "state": "QUEUED", "position": 1}))}
+        fixture["api"] = [queued] * 50 + [{"returncode": 1, "stderr": "secret-token"}]
+        result, calls = self.invoke_actual_script_with_fake_gh(fixture, clock="elapsed", process_output="PR #100")
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["reason"], "deadline-requeue")
+        self.assertEqual(payload["uncertainty"]["reason"], "lifecycle-unavailable")
+        self.assertTrue(payload["wasQueued"])
+        self.assertNotIn("secret-token", result.stdout + result.stderr)
+        self.assertLessEqual(len(calls), 54)
+        self.assertIn("elapsed=6000s", result.stderr)
 
 
 if __name__ == "__main__":
