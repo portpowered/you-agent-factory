@@ -158,17 +158,221 @@ type perRuntimeAttemptFixture struct {
 	service *registry
 	request workersessions.RuntimeAttemptRequest
 	attempt workersessions.RuntimeAttempt
+	clock   time.Time
+	capture *perRuntimeRecordingCapture
+}
+
+// These captures inspect detached collaborator requests, not durable replay.
+type perRuntimeAppendCapture struct {
+	EventsAppender
+	mu       sync.Mutex
+	requests []events.AppendRequest
+}
+
+func (sink *perRuntimeAppendCapture) Append(ctx context.Context, request events.AppendRequest) (events.AppendResult, error) {
+	sink.mu.Lock()
+	sink.requests = append(sink.requests, request.Detached())
+	sink.mu.Unlock()
+	return sink.EventsAppender.Append(ctx, request)
+}
+
+func (sink *perRuntimeAppendCapture) requestsFor(topic events.Topic) []events.AppendRequest {
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	var requests []events.AppendRequest
+	for _, request := range sink.requests {
+		if topic == "" || request.Topic == topic {
+			requests = append(requests, request.Detached())
+		}
+	}
+	return requests
+}
+
+type perRuntimeRecordingCapture struct {
+	mu       sync.Mutex
+	requests []recordings.WorkerSessionRecordingRequest
+	delegate *interruptRecordingService
+}
+
+func (capture *perRuntimeRecordingCapture) StartWorkerSessionRecording(ctx context.Context, request recordings.WorkerSessionRecordingRequest) (recordings.WorkerSessionRecording, error) {
+	capture.mu.Lock()
+	capture.requests = append(capture.requests, request)
+	capture.mu.Unlock()
+	return capture.delegate.StartWorkerSessionRecording(ctx, request)
+}
+
+func assertPerRuntimeObservation(t *testing.T, fixture *perRuntimeAttemptFixture, state workersessions.State) workersessions.Observation {
+	t.Helper()
+	observation, err := fixture.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.request.ID})
+	if err != nil {
+		t.Fatalf("GetObservationByWorkerSessionID(%s): %v", fixture.request.ID, err)
+	}
+	execution := fixture.request.Execution.Execution
+	if observation.WorkerSessionID != fixture.request.ID || observation.FactorySessionID != execution.FactorySessionID ||
+		observation.AttemptID != fixture.request.AttemptID || !reflect.DeepEqual(observation.WorkIDs, execution.Dispatch.Execution.WorkIDs) || observation.State != state {
+		t.Fatalf("own observation attribution = %#v", observation)
+	}
+	if observation.StartedAt == nil || !observation.StartedAt.Equal(fixture.clock) {
+		t.Fatalf("StartedAt = %v, want constructor clock %v", observation.StartedAt, fixture.clock)
+	}
+	if state.Terminal() {
+		if observation.EndedAt == nil || !observation.EndedAt.Equal(fixture.clock) {
+			t.Fatalf("EndedAt = %v, want constructor clock %v", observation.EndedAt, fixture.clock)
+		}
+	} else if observation.EndedAt != nil {
+		t.Fatalf("running observation has EndedAt = %v", observation.EndedAt)
+	}
+	return observation
+}
+
+func decodePerRuntimeDraft(t *testing.T, request events.AppendRequest) workers.Draft {
+	t.Helper()
+	var draft workers.Draft
+	if err := json.Unmarshal(request.Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	return draft
+}
+
+func assertPerRuntimeOpeningAttribution(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture) {
+	t.Helper()
+	assertPerRuntimeObservation(t, fixture, workersessions.StateRunning)
+	execution := fixture.request.Execution.Execution
+	wantCapture := recordings.WorkerSessionRecordingRequest{
+		RecordingID: execution.RecordingID, FactorySessionID: execution.FactorySessionID,
+		WorkerSessionID: fixture.request.ID, Topic: workersessions.Topic(fixture.request.ID),
+	}
+	fixture.capture.mu.Lock()
+	requests := append([]recordings.WorkerSessionRecordingRequest(nil), fixture.capture.requests...)
+	fixture.capture.mu.Unlock()
+	if !reflect.DeepEqual(requests, []recordings.WorkerSessionRecordingRequest{wantCapture}) {
+		t.Fatalf("recording requests = %#v, want %#v", requests, wantCapture)
+	}
+	appends := sink.requestsFor(wantCapture.Topic)
+	if len(appends) != 1 || appends[0].SourceID != events.SourceID(fixture.request.ID) || appends[0].SourceEventID != "started" {
+		t.Fatalf("opening appends = %#v", appends)
+	}
+	draft := decodePerRuntimeDraft(t, appends[0])
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseStarted || draft.DispatchID != fixture.request.AttemptID ||
+		payload.WorkerSessionID != fixture.request.ID || payload.FactorySessionID != execution.FactorySessionID || payload.RecordingID != execution.RecordingID ||
+		payload.AttemptID != fixture.request.AttemptID || payload.DispatchID != fixture.request.AttemptID ||
+		!reflect.DeepEqual(payload.WorkIDs, execution.Dispatch.Execution.WorkIDs) || payload.StartedAt == nil || !payload.StartedAt.Equal(fixture.clock) {
+		t.Fatalf("opening attribution = %#v / %#v", draft, payload)
+	}
+}
+
+func perRuntimeProgressRequest(fixture *perRuntimeAttemptFixture) workersessions.PublishRecordRequest {
+	payload, _ := json.Marshal(workers.SessionPayload{
+		Status: string(workersessions.StateRunning), WorkerSessionID: fixture.request.ID,
+		AttemptID: fixture.request.AttemptID, FactorySessionID: fixture.request.Execution.Execution.FactorySessionID,
+		WorkIDs: fixture.request.Execution.Execution.Dispatch.Execution.WorkIDs,
+	})
+	return workersessions.PublishRecordRequest{
+		SessionID: fixture.request.ID, SourceType: "paired-runtime", SourceID: "shared-progress-source",
+		SourceSequence: 1, SourceEventID: "progress", SchemaID: "workers.draft.v1",
+		Draft: workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseUpdated, Payload: payload, DispatchID: fixture.request.AttemptID},
+	}
+}
+
+func publishPerRuntimeProgress(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture) {
+	t.Helper()
+	before := sink.requestsFor("")
+	result, err := fixture.service.PublishRecord(context.Background(), perRuntimeProgressRequest(fixture))
+	if err != nil || result.SessionID != fixture.request.ID || result.Outcome != workersessions.PublishOutcomeAccepted {
+		t.Fatalf("PublishRecord(%s) = %#v, %v", fixture.request.ID, result, err)
+	}
+	after := sink.requestsFor("")
+	if len(after) != len(before)+1 || !reflect.DeepEqual(before, after[:len(before)]) || after[len(before)].Topic != workersessions.Topic(fixture.request.ID) {
+		t.Fatalf("PublishRecord(%s) did not append exactly once to its own topic: %#v", fixture.request.ID, after)
+	}
+}
+
+func assertPerRuntimeTerminalAppends(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, state workersessions.State) {
+	t.Helper()
+	var terminals, progress int
+	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID)) {
+		draft := decodePerRuntimeDraft(t, request)
+		if request.SourceEventID == "progress" {
+			progress++
+			want := perRuntimeProgressRequest(fixture)
+			if request.Identity() != (events.AppendIdentity{SourceType: want.SourceType, SourceID: want.SourceID, SourceSequence: want.SourceSequence, SourceEventID: want.SourceEventID}) ||
+				request.SchemaID != want.SchemaID || !reflect.DeepEqual(draft, want.Draft) {
+				t.Fatalf("progress request = %#v / %#v, want %#v", request, draft, want)
+			}
+		}
+		if request.SourceEventID != "terminal" {
+			continue
+		}
+		terminals++
+		var payload workers.SessionPayload
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		wantPhase := workers.PhaseCompleted
+		if state == workersessions.StateCanceled {
+			wantPhase = workers.PhaseCanceled
+		}
+		if request.SourceID != events.SourceID(fixture.request.ID) || draft.DispatchID != fixture.request.AttemptID ||
+			draft.Kind != workers.KindSession || draft.Phase != wantPhase || payload.Status != string(state) {
+			t.Fatalf("terminal attribution = %#v / %#v", request, draft)
+		}
+	}
+	if terminals != 1 || progress != 1 {
+		t.Fatalf("%s append counts: terminal=%d progress=%d, want one each", fixture.request.ID, terminals, progress)
+	}
+}
+
+func assertPerRuntimeFirstTerminal(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, state workersessions.State) {
+	t.Helper()
+	first := assertPerRuntimeAttemptState(t, fixture, state)
+	observation := assertPerRuntimeObservation(t, fixture, state)
+	before := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	if err := fixture.attempt.Complete(context.Background(), runtimeAttemptFailedDispatch(perRuntimeLogicalDispatchID), errors.New("late contradictory failure")); err != nil {
+		t.Fatalf("duplicate Complete(%s): %v", fixture.request.ID, err)
+	}
+	if retained := assertPerRuntimeAttemptState(t, fixture, state); !reflect.DeepEqual(first, retained) {
+		t.Fatalf("duplicate completion changed first terminal: %#v -> %#v", first, retained)
+	}
+	if retained := assertPerRuntimeObservation(t, fixture, state); !reflect.DeepEqual(observation, retained) {
+		t.Fatalf("duplicate completion changed observation: %#v -> %#v", observation, retained)
+	}
+	detached := assertPerRuntimeAttemptState(t, fixture, state)
+	if detached.Result == nil {
+		t.Fatal("terminal Result is nil")
+	}
+	detached.Result.Outcome = workersessions.TerminalOutcomeFailed
+	detached.Result.Cause = &workersessions.FailureCause{Detail: "caller mutation"}
+	if retained := assertPerRuntimeAttemptState(t, fixture, state); !reflect.DeepEqual(first, retained) {
+		t.Fatalf("caller mutation changed retained terminal: %#v", retained)
+	}
+	if after := sink.requestsFor(workersessions.Topic(fixture.request.ID)); !reflect.DeepEqual(before, after) {
+		t.Fatalf("duplicate Complete appended again: %#v", after)
+	}
+	assertPerRuntimeTerminalAppends(t, fixture, sink, state)
+	handle := fixture.capture.delegate.handleFor(t, fixture.request.ID)
+	if closes, terminals := handle.counts(); closes != 1 || terminals != 1 {
+		t.Fatalf("exact returned handle finalized %d/%d times, want 1/1", closes, terminals)
+	}
 }
 
 func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
 	t.Helper()
+	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	if suffix == "b" {
+		now = now.Add(time.Hour)
+	}
+	capture := &perRuntimeRecordingCapture{delegate: newInterruptRecordingService()}
 	service, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{},
-		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)},
-		unavailableProviderSessions{}, newInterruptRecordingService())
+		coverageClock{now: now}, unavailableProviderSessions{}, capture)
 	if err != nil {
 		t.Fatalf("New(%s): %v", suffix, err)
 	}
 	fixture := &perRuntimeAttemptFixture{
+		clock: now, capture: capture,
 		service: service.(*registry),
 		request: workersessions.RuntimeAttemptRequest{
 			ID: "worker-" + suffix, AttemptID: "physical-" + suffix,
@@ -238,11 +442,14 @@ func assertPerRuntimeCancellationCalls(t *testing.T, control *perRuntimeCancella
 
 func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
 	t.Parallel()
-	sink := newEventsAppender()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
 	b := newPerRuntimeAttemptFixture(t, "b", sink)
 	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
 	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	assertPerRuntimeOpeningAttribution(t, a, sink)
+	assertPerRuntimeOpeningAttribution(t, b, sink)
+	publishPerRuntimeProgress(t, a, sink)
 	for _, pair := range [][2]*perRuntimeAttemptFixture{{a, b}, {b, a}} {
 		if _, err := pair[0].service.Get(context.Background(), workersessions.GetRequest{ID: pair[1].request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
 			t.Fatalf("peer Get error = %v, want ErrSessionNotFound", err)
@@ -281,11 +488,15 @@ func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
 	assertPerRuntimeAttemptState(t, a, workersessions.StateCanceled)
 	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	// B's publication window remains usable after A's terminal commits.
+	publishPerRuntimeProgress(t, b, sink)
 	if err := b.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
 		t.Fatalf("Complete(B): %v", err)
 	}
 	assertPerRuntimeAttemptState(t, b, workersessions.StateCompleted)
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	assertPerRuntimeFirstTerminal(t, a, sink, workersessions.StateCanceled)
+	assertPerRuntimeFirstTerminal(t, b, sink, workersessions.StateCompleted)
 }
 
 func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
