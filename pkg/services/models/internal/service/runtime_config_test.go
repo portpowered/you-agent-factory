@@ -630,7 +630,7 @@ func TestLocalExecutorTwoScopesUseSelectedOperationConfiguration(t *testing.T) {
 	configB := &models.RuntimeConfig{FactoryDirectory: "revision-b", BaseDirectory: "cache-b"}
 	host, runtime := &operationConfigHost{}, &operationConfigRuntime{}
 	resources := mustResourceLimiter(t)
-	executor, err := newLocalExecutor(host, operationConfigAssets{}, runtime, resources,
+	executor, err := newLocalExecutor(host, runtime, resources,
 		modelseffects.LocalRuntimeHooks{}, time.Now)
 	if err != nil {
 		t.Fatal(err)
@@ -654,7 +654,7 @@ func TestLocalExecutorTwoScopesUseSelectedOperationConfiguration(t *testing.T) {
 	configB = &models.RuntimeConfig{FactoryDirectory: "revision-b2", BaseDirectory: "cache-b2"}
 	assertOperationConfigInvocation(t, executor, ctx, b, configB)
 	executor.CloseScope(a.Scope)
-	if _, err := executor.InvokeLocal(ctx, a, configA); !errors.Is(err, models.ErrRuntimeScopeClosed) {
+	if _, err := executor.InvokeLocal(ctx, a, configA, operationConfigAssets{}); !errors.Is(err, models.ErrRuntimeScopeClosed) {
 		t.Fatalf("closed A invocation = %v", err)
 	}
 	assertOperationConfigInvocation(t, executor, ctx, b, configB)
@@ -671,15 +671,17 @@ func TestLocalExecutorConcurrentScopesPreservePeerWhileResolutionCloses(t *testi
 	configB := &models.RuntimeConfig{FactoryDirectory: "revision-b", BaseDirectory: "cache-b"}
 	started, resume := make(chan struct{}), make(chan struct{})
 	host, runtime := &operationConfigHost{}, &operationConfigRuntime{}
-	executor, err := newLocalExecutor(host, operationConfigAssets{started: started, resume: resume},
-		runtime, mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
+	executor, err := newLocalExecutor(host, runtime, mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { _, err := executor.InvokeLocal(ctx, a, configA); done <- err }()
+	go func() {
+		_, err := executor.InvokeLocal(ctx, a, configA, operationConfigAssets{started: started, resume: resume})
+		done <- err
+	}()
 	// Context cancellation also unblocks the test-owned effect during failure cleanup.
 	select {
 	case <-started:
@@ -707,18 +709,18 @@ func TestLocalExecutorConcurrentScopesPreservePeerWhileResolutionCloses(t *testi
 func TestLocalExecutorMissingOperationConfigurationFailsBeforeEffects(t *testing.T) {
 	t.Parallel()
 	host, runtime := &operationConfigHost{}, &operationConfigRuntime{}
-	executor, err := newLocalExecutor(host, operationConfigAssets{}, runtime, mustResourceLimiter(t),
+	executor, err := newLocalExecutor(host, runtime, mustResourceLimiter(t),
 		modelseffects.LocalRuntimeHooks{}, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := scopedHandleRequest(t, "missing-config")
-	result, err := executor.InvokeLocal(t.Context(), request, nil)
+	result, err := executor.InvokeLocal(t.Context(), request, nil, operationConfigAssets{})
 	if err == nil || !result.Handled || host.acquires.Load() != 0 || runtime.loads.Load() != 0 {
 		t.Fatalf("missing configuration = %#v, %v; acquires/loads = %d/%d", result, err, host.acquires.Load(), runtime.loads.Load())
 	}
 	request.Worker.Type = "COMMAND"
-	result, err = executor.InvokeLocal(t.Context(), request, nil)
+	result, err = executor.InvokeLocal(t.Context(), request, nil, operationConfigAssets{})
 	if err != nil || result.Handled {
 		t.Fatalf("unmanaged request = %#v, %v", result, err)
 	}
@@ -727,7 +729,7 @@ func TestLocalExecutorMissingOperationConfigurationFailsBeforeEffects(t *testing
 func assertOperationConfigInvocation(t *testing.T, executor *localExecutor, ctx context.Context,
 	request models.LocalInvocationRequest, config *models.RuntimeConfig) {
 	t.Helper()
-	result, err := executor.InvokeLocal(ctx, request, config)
+	result, err := executor.InvokeLocal(ctx, request, config, operationConfigAssets{})
 	want := config.BaseDirectory + "|" + config.FactoryDirectory + "|http://" + config.FactoryDirectory
 	if err != nil || !result.Handled || result.Content != want {
 		t.Fatalf("invoke %s = %#v, %v; want %q", request.Scope, result, err, want)
@@ -798,6 +800,69 @@ func (h *operationConfigHost) assertEveryLeaseReleasedOnce(t *testing.T) {
 	for id := int32(1); id <= h.acquires.Load(); id++ {
 		if count := h.released[fmt.Sprint(id)]; count != 1 {
 			t.Fatalf("lease %d released %d times, want once", id, count)
+		}
+	}
+}
+
+func TestLocalExecutorTwoScopesSelectAssetsPerInvocation(t *testing.T) {
+	t.Parallel()
+	a, b := scopedHandleRequest(t, "assets-a"), scopedHandleRequest(t, "assets-b")
+	config := &models.RuntimeConfig{FactoryDirectory: "shared-config"}
+	host, runtime := &operationConfigHost{}, &operationConfigRuntime{}
+	executor, err := newLocalExecutor(host, runtime, mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetsA := &operationSelectedAssets{layout: localmodels.CacheLayout{CachePath: "cache-a", Revision: "revision-a"}}
+	assetsB := &operationSelectedAssets{layout: localmodels.CacheLayout{CachePath: "cache-b", Revision: "revision-b"}}
+	for _, call := range []struct {
+		request models.LocalInvocationRequest
+		assets  *operationSelectedAssets
+	}{{a, assetsA}, {b, assetsB}, {a, assetsA}, {b, assetsB}} {
+		result, err := executor.InvokeLocal(t.Context(), call.request, config, call.assets)
+		want := call.assets.layout.CachePath + "|" + call.assets.layout.Revision + "|http://shared-config"
+		if err != nil || !result.Handled || result.Content != want {
+			t.Fatalf("invoke %s = %#v, %v; want %q", call.request.Scope, result, err, want)
+		}
+	}
+	executor.CloseScope(a.Scope)
+	if _, err := executor.InvokeLocal(t.Context(), b, config, assetsB); err != nil {
+		t.Fatal(err)
+	}
+	host.assertEveryLeaseReleasedOnce(t)
+	if assetsA.calls.Load() != 2 || assetsB.calls.Load() != 3 || runtime.loads.Load() != 2 {
+		t.Fatalf("asset A/B resolutions, loads = %d/%d/%d", assetsA.calls.Load(), assetsB.calls.Load(), runtime.loads.Load())
+	}
+}
+
+type operationSelectedAssets struct {
+	leaseTestAssets
+	layout localmodels.CacheLayout
+	calls  atomic.Int32
+}
+
+func (a *operationSelectedAssets) ResolveModelCache(context.Context, *models.RuntimeConfig, *models.RuntimeWorker) (localmodels.CacheLayout, error) {
+	a.calls.Add(1)
+	return a.layout, nil
+}
+
+func TestLocalExecutorMissingOperationAssetsFailsBeforeEffects(t *testing.T) {
+	t.Parallel()
+	var typedNil *operationSelectedAssets
+	for _, assets := range []localmodels.AssetPuller{nil, typedNil} {
+		host, runtime := &operationConfigHost{}, &operationConfigRuntime{}
+		executor, err := newLocalExecutor(host, runtime, mustResourceLimiter(t), modelseffects.LocalRuntimeHooks{}, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := scopedHandleRequest(t, "missing-assets")
+		result, err := executor.InvokeLocal(t.Context(), request, &models.RuntimeConfig{}, assets)
+		if !errors.Is(err, ErrInvalidDependencies) || !result.Handled || host.acquires.Load() != 0 || runtime.loads.Load() != 0 {
+			t.Fatalf("missing assets = %#v, %v; acquires/loads = %d/%d", result, err, host.acquires.Load(), runtime.loads.Load())
+		}
+		request.Worker.Type = "COMMAND"
+		if result, err := executor.InvokeLocal(t.Context(), request, nil, assets); err != nil || result.Handled {
+			t.Fatalf("unmanaged invocation = %#v, %v", result, err)
 		}
 	}
 }

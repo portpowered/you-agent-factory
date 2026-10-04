@@ -14,11 +14,10 @@ import (
 )
 
 // localExecutor owns all Models implementation collaborators required for
-// managed local invocation. Configuration is detached operation data; retaining a
-// loader here would bind shared execution behavior to the first scope.
+// managed local invocation. Configuration and the selected scoped asset adapter
+// are operation inputs so shared execution does not retain the first scope.
 type localExecutor struct {
 	host      modelhost.Host
-	assets    localmodels.AssetPuller
 	runtime   localmodels.Runtime
 	resources *localmodels.ResourceLimiter
 	hooks     modelseffects.LocalRuntimeHooks
@@ -42,7 +41,6 @@ type localExecutionEntry struct {
 
 func newLocalExecutor(
 	host modelhost.Host,
-	assets localmodels.AssetPuller,
 	runtime localmodels.Runtime,
 	resources *localmodels.ResourceLimiter,
 	hooks modelseffects.LocalRuntimeHooks,
@@ -50,9 +48,6 @@ func newLocalExecutor(
 ) (*localExecutor, error) {
 	if isNilDependency(host) {
 		return nil, missingDependencyError("local executor model host")
-	}
-	if isNilDependency(assets) {
-		return nil, missingDependencyError("local executor model assets")
 	}
 	if isNilDependency(runtime) {
 		return nil, missingDependencyError("local executor model runtime")
@@ -65,7 +60,6 @@ func newLocalExecutor(
 	}
 	return &localExecutor{
 		host:         host,
-		assets:       assets,
 		runtime:      runtime,
 		resources:    resources,
 		hooks:        hooks,
@@ -79,6 +73,7 @@ func (e *localExecutor) InvokeLocal(
 	ctx context.Context,
 	request models.LocalInvocationRequest,
 	runtimeConfig *models.RuntimeConfig,
+	assets localmodels.AssetPuller,
 ) (models.LocalInvocationResult, error) {
 	if e == nil || !request.Worker.UsesManagedRuntime() {
 		return models.LocalInvocationResult{}, nil
@@ -88,6 +83,9 @@ func (e *localExecutor) InvokeLocal(
 	}
 	if runtimeConfig == nil {
 		return models.LocalInvocationResult{Handled: true}, fmt.Errorf("loaded runtime config is required for local model execution")
+	}
+	if isNilDependency(assets) {
+		return models.LocalInvocationResult{Handled: true}, missingDependencyError("local invocation model assets")
 	}
 	factoryConfig, worker := localExecutionConfiguration(request)
 
@@ -105,13 +103,14 @@ func (e *localExecutor) InvokeLocal(
 		ModelBindings:    append([]models.ResolvedModelOperationBinding(nil), request.ModelBindings...),
 		WorkingDirectory: request.WorkingDirectory,
 	}
-	return e.invokeWithLease(ctx, request.Scope, runtimeConfig, factoryConfig, worker, request.Holder, invocation)
+	return e.invokeWithLease(ctx, request.Scope, runtimeConfig, assets, factoryConfig, worker, request.Holder, invocation)
 }
 
 func (e *localExecutor) invokeWithLease(
 	ctx context.Context,
 	scope models.RuntimeScopeRef,
 	runtimeConfig *models.RuntimeConfig,
+	assets localmodels.AssetPuller,
 	factoryConfig *models.RuntimeConfig,
 	worker *models.RuntimeWorker,
 	holder string,
@@ -131,7 +130,7 @@ func (e *localExecutor) invokeWithLease(
 		_ = e.host.ReleaseLease(ctx, lease.ID)
 	}()
 
-	cacheLayout, err := e.assets.ResolveModelCache(ctx, runtimeConfig, worker)
+	cacheLayout, err := assets.ResolveModelCache(ctx, runtimeConfig, worker)
 	if err != nil {
 		return models.LocalInvocationResult{Handled: true}, err
 	}
