@@ -805,24 +805,32 @@ func TestBeginRecordingScopeCancellationWithoutClockCleansUp(t *testing.T) {
 	}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("BeginRecordingScope cancellation without clock = %v, want context.Canceled", err)
 	}
+}
 
-	runtimeRoot := NewRuntimeRootWithHistoricalQueryAndAppender(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		staticRecordingClock{at: time.Unix(1_700_000_500, 0).UTC()},
+func TestRuntimeOpeningWithoutRecordingAllocatesUsableLedger(t *testing.T) {
+	t.Parallel()
+	now := func() time.Time { return time.Unix(1_700_000_500, 0).UTC() }
+	runtimeRoot := NewCombinedService(nil, nil, nil, nil, nil, nil, nil,
+		staticRecordingClock{at: now()}, logging.NoopLogger{}, newRuntimeLedgerRouter(now),
+		nil, nil, nil, nil,
 	)
 	opening, ok := runtimeRoot.(recordings.RuntimeScopeService)
 	if !ok || opening == nil {
-		t.Fatal("NewRuntimeRootWithHistoricalQueryAndAppender did not expose RuntimeScopeService")
+		t.Fatal("NewCombinedService did not expose RuntimeScopeService")
 	}
-	now := func() time.Time { return time.Unix(1_700_000_500, 0).UTC() }
 	opened, err := opening.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
 		Topology:         runtimeOpeningTopology{},
 		Now:              now,
 		FactorySessionID: "constructor-behavior",
 	})
 	if err != nil {
-		t.Fatalf("OpenRuntime from composed constructor: %v", err)
+		t.Fatalf("OpenRuntime without recording: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := opened.Recorder.Finalize(now().Add(time.Second)); err != nil {
+			t.Errorf("Finalize cleanup: %v", err)
+		}
+	})
 	opened.Ledger.RecordRunRequest()
 	if events := opened.Ledger.CanonicalEvents(); len(events) != 1 || events[0].Type != recordings.FactoryEventTypeRunRequest {
 		t.Fatalf("OpenRuntime ledger events = %#v, want one run request", events)
