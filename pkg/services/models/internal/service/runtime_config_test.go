@@ -594,7 +594,7 @@ func TestRootPullModelForScopeRoutesDottedOperatorNameBeforeLegacyCatalogPull(t 
 	root, scope, assets := newPullFallbackRoot(t, name, map[string]models.ModelOverlay{
 		name: {Source: &source, Backend: &backend, LoadPolicy: &loadPolicy, Operations: []string{models.OperationTTS}},
 	})
-	runtime := root.runtimeByScope[scope].(*pullCatalogMissRuntime)
+	runtime := root.localExecution.(*pullCatalogMissRuntime)
 	runtime.err = models.ErrAssetSourceMissing
 	resolved, err := root.ResolveModelReference(context.Background(), models.ResolveModelReferenceRequest{
 		Scope: scope, Reference: models.ModelReference{NameOrURI: name},

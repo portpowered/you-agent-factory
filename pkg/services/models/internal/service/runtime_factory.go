@@ -40,7 +40,6 @@ type Root struct {
 	cacheLifecycleMu           sync.Mutex
 	runtimeMu                  sync.RWMutex
 	correlationSequence        uint64
-	runtimeByScope             map[models.RuntimeScopeRef]models.Service
 	catalog                    modelcatalog.Service
 	logger                     *zap.Logger
 	now                        func() time.Time
@@ -127,33 +126,10 @@ func NewRoot(
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
 		resolveBackendArtifact:     resolveBackend,
-		runtimeByScope:             make(map[models.RuntimeScopeRef]models.Service),
 		logger:                     logger, now: now, pullMetrics: pullMetrics, runtimeEvidence: runtimeEvidence,
 		hostLogger: hostLogger, hostMetrics: hostMetrics, localHooks: localHooks,
 		backendArtifactPlatform: platform,
 	}, nil
-}
-
-func (o *Root) runtimeForBindingWithAssets(
-	scope models.RuntimeScopeRef,
-	binding models.RuntimeBinding,
-	assets localmodels.AssetPuller,
-) (models.Service, error) {
-	return newRuntimeWithHostEdges(
-		scope,
-		binding.RuntimeConfig,
-		o.logger,
-		o.now,
-		o.pullMetrics,
-		o.hostLogger,
-		o.hostMetrics,
-		o.localHooks,
-		assets,
-		o.localRuntime,
-		o.resources,
-		o.runtimeHost,
-		nil,
-	)
 }
 
 func (o *Root) OpenRuntimeScope(
@@ -209,14 +185,6 @@ func (o *Root) Close(ctx context.Context) error {
 		return err
 	}
 	o.resources.Close()
-	o.runtimeMu.Lock()
-	for _, runtime := range o.runtimeByScope {
-		if runtime, ok := runtime.(*runtimeService); ok {
-			runtime.local.Close()
-		}
-	}
-	o.runtimeByScope = make(map[models.RuntimeScopeRef]models.Service)
-	o.runtimeMu.Unlock()
 	return nil
 }
 
@@ -293,29 +261,28 @@ func (o *Root) PullModelForScope(
 	if err := models.ValidatePullModelRequest(request); err != nil {
 		return models.PullResult{}, err
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
-	runtime, err := o.scopedRuntime(request.Scope)
-	if err != nil {
-		return models.PullResult{}, err
-	}
-	puller, ok := runtime.(interface {
-		PullModel(context.Context, string) (models.PullResult, error)
-	})
-	if !ok {
+	if o == nil || o.runtimeScopes == nil || isNilDependency(o.localExecution) {
 		return models.PullResult{}, models.ErrUnsupportedOperation
 	}
-	if o.runtimeScopes != nil {
-		binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
-		if err != nil {
-			return models.PullResult{}, runtimeScopeError(err)
-		}
-		_, _, hasOverlay, _ := findOverlay(binding.OperatorModels, strings.ToLower(strings.TrimSpace(request.Name)))
-		if hasOverlay {
-			return o.pullResolvedModelAfterCatalogMiss(ctx, request, models.ErrNotFound)
-		}
+	o.cacheLifecycleMu.Lock()
+	defer o.cacheLifecycleMu.Unlock()
+	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.PullResult{}, runtimeScopeError(err)
 	}
-	result, err := puller.PullModel(ctx, request.Name)
+	started := o.now()
+	o.logger.Info("managed runtime pull started", zap.String("model_name", (models.PullDiagnostics{ModelName: request.Name}).Normalize().ModelName))
+	result, err := o.pullScopedModel(ctx, request, binding)
+	recordManagedRuntimePull(o.logger.With(zap.String("scope", request.Scope.String())), o.pullMetrics, request.Name, result, err, o.now().Sub(started))
+	return result, err
+}
+
+func (o *Root) pullScopedModel(ctx context.Context, request models.PullModelRequest, binding models.RuntimeBinding) (models.PullResult, error) {
+	_, _, hasOverlay, _ := findOverlay(binding.OperatorModels, strings.ToLower(strings.TrimSpace(request.Name)))
+	if hasOverlay {
+		return o.pullResolvedModelAfterCatalogMiss(ctx, request, models.ErrNotFound)
+	}
+	result, err := o.localExecution.PullModelForScope(ctx, request)
 	if err == nil || !errors.Is(err, models.ErrNotFound) {
 		return result, err
 	}

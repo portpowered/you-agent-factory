@@ -322,7 +322,7 @@ func (hostLeaseTestHost) Unload(context.Context, *modelRuntimeConfig, string) er
 
 // Root component proof: controlled asset/host effects, real scope registration,
 // and public operations. No runtime service map is populated by the fixture.
-func TestRootTwoScopesInvokeLocalWithoutRuntimeGraphs(t *testing.T) {
+func TestRootTwoScopesScopedExecutionInvokeAndPullWithoutRuntimeGraphs(t *testing.T) {
 	t.Parallel()
 	root, host, runtime, resources := newScopedLocalRoot(t, nil, nil)
 	a, b := openScopedLocalRoot(t, root, "cache-a", "endpoint-a"), openScopedLocalRoot(t, root, "cache-b", "endpoint-b")
@@ -330,6 +330,7 @@ func TestRootTwoScopesInvokeLocalWithoutRuntimeGraphs(t *testing.T) {
 	defer cancel()
 	for _, scope := range []models.RuntimeScopeRef{a, b, a, b} {
 		assertScopedLocalRootInvocation(t, root, ctx, scope, host, resources)
+		assertScopedLocalRootPull(t, root, ctx, scope, host)
 	}
 	if _, err := root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: a}); err != nil {
 		t.Fatal(err)
@@ -338,6 +339,10 @@ func TestRootTwoScopesInvokeLocalWithoutRuntimeGraphs(t *testing.T) {
 		t.Fatalf("closed A: %v", err)
 	}
 	assertScopedLocalRootInvocation(t, root, ctx, b, host, resources)
+	assertScopedLocalRootPull(t, root, ctx, b, host)
+	if result, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: a, Name: "cache-a"}); !errors.Is(err, models.ErrRuntimeScopeClosed) || result.CachePath != "" {
+		t.Fatalf("closed A pull=%#v,%v", result, err)
+	}
 	host.mu.Lock()
 	defer host.mu.Unlock()
 	if len(host.releases) != 5 || runtime.loads != 2 {
@@ -409,15 +414,29 @@ func openScopedLocalRoot(t *testing.T, root *modelsservice.Root, cache, endpoint
 		Runtime: models.RuntimeConfig{
 			BaseDirectory: cache, FactoryDirectory: endpoint,
 			Resources: []models.RuntimeResource{{Name: "voice", Type: models.RuntimeResourceTypeModel,
-				Model: "voice", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND", Capacity: 1}},
+				Model: "voice", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND", Capacity: 1},
+				{Name: cache, Type: models.RuntimeResourceTypeModel, Model: cache, Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND"}},
 			Workers: []models.RuntimeWorker{{Name: "voice", Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
-				Args: []string{"--health-endpoint", endpoint}, Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}}},
+				Args: []string{"--health-endpoint", endpoint}, Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}},
+				{Name: cache, Type: models.RuntimeWorkerTypeModel, Model: cache, ModelLocality: models.RuntimeModelLocalityLocal, Resources: []models.RuntimeResource{{Name: cache}}}},
 		},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return opened.Scope
+}
+
+func assertScopedLocalRootPull(t *testing.T, root *modelsservice.Root, ctx context.Context, scope models.RuntimeScopeRef, host *scopedLocalRootHost) {
+	t.Helper()
+	binding, err := host.scopes.Resolve(runtimescopes.Reference(scope.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: scope, Name: binding.CacheDirectory})
+	if err != nil || result.ModelName != binding.CacheDirectory || result.CachePath != binding.CacheDirectory || result.ReadinessState != "READY" {
+		t.Fatalf("scope %s pull=%#v,%v", scope, result, err)
+	}
 }
 
 func assertScopedLocalRootInvocation(t *testing.T, root *modelsservice.Root, ctx context.Context, scope models.RuntimeScopeRef, host *scopedLocalRootHost, resources *localmodels.ResourceLimiter) {
@@ -483,6 +502,23 @@ type scopedLocalRootAssets struct {
 	scopedassets.Service
 	scopes          runtimescopes.Service
 	started, resume chan struct{}
+}
+
+func (a scopedLocalRootAssets) PrepareModelAssets(_ context.Context, request models.PrepareModelAssetsRequest) (models.PrepareModelAssetsResult, error) {
+	if _, err := a.scopes.Resolve(runtimescopes.Reference(request.Scope.String())); err != nil {
+		return models.PrepareModelAssetsResult{}, err
+	}
+	return models.PrepareModelAssetsResult{Outcome: models.AssetPreparationPrepared, Asset: models.AssetSnapshot{
+		ModelName: request.Name, Readiness: models.AssetReadinessAvailable,
+	}}, nil
+}
+
+func (a scopedLocalRootAssets) InspectRuntimeCache(_ context.Context, request models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheInspection, error) {
+	binding, err := a.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return scopedassets.RuntimeCacheInspection{}, err
+	}
+	return scopedassets.RuntimeCacheInspection{Supported: true, Installed: true, CachePath: binding.CacheDirectory, Revision: "immutable"}, nil
 }
 
 func (a scopedLocalRootAssets) ResolveRuntimeCache(ctx context.Context, request models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheLayout, error) {

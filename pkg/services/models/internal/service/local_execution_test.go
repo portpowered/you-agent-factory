@@ -269,8 +269,7 @@ func TestRootCloseRuntimeScopeDuringLocalLoadPreventsLateInvocation(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			root := &Root{runtimeScopes: scopes, resources: resources, runtimeHost: &shutdownTrackingRuntimeHost{}, localExecution: compatibilityLocalExecution{bound.(*runtimeService)},
-				runtimeByScope: map[models.RuntimeScopeRef]models.Service{scope: bound}}
+			root := &Root{runtimeScopes: scopes, resources: resources, runtimeHost: &shutdownTrackingRuntimeHost{}, localExecution: compatibilityLocalExecution{bound.(*runtimeService)}}
 			done := make(chan error, 1)
 			go func() { _, err := root.InvokeLocal(t.Context(), request); done <- err }()
 			awaitCloseRaceSignal(t, runtime.started, "local load started")
@@ -439,9 +438,6 @@ func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
 
 	root := &Root{
 		runtimeScopes: scopes, localExecution: compatibilityLocalExecution{bound.(*runtimeService)},
-		runtimeByScope: map[models.RuntimeScopeRef]models.Service{
-			scope: bound,
-		},
 	}
 	result, err := root.InvokeLocal(context.Background(), models.LocalInvocationRequest{
 		Scope:  scope,

@@ -281,10 +281,9 @@ func TestScopedRuntimeResolutionDoesNotReplaceInjectedInferenceOwner(t *testing.
 
 	privateInference := &delegatingInferenceService{}
 	root := &Root{
-		runtimeScopes:  scopes,
-		assets:         inferenceRecordingAssetsService{},
-		inference:      privateInference,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+		runtimeScopes: scopes,
+		assets:        inferenceRecordingAssetsService{},
+		inference:     privateInference,
 	}
 
 	_, err = root.PullModelForScope(context.Background(), models.PullModelRequest{
@@ -776,58 +775,35 @@ func TestRootInvokeModelValidatesSlotsBeforeAssetAndHostEffects(t *testing.T) {
 	}
 }
 
-func TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion(t *testing.T) {
+func TestRootCloseRuntimeScopePreventsConcurrentPullResolution(t *testing.T) {
 	t.Parallel()
-
 	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:close-race")
 	if err != nil {
-		t.Fatalf("parse runtime scope: %v", err)
+		t.Fatal(err)
 	}
 	scopes := newCloseRaceRuntimeScopes()
-	runtime := &closeRaceRuntime{}
-	root := &Root{
-		runtimeScopes: scopes, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{},
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+	args := newRootConstructionArgs(t)
+	args.runtimeScopes = scopes
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
 	}
-	invokeResult := make(chan error, 1)
+	result := make(chan error, 1)
 	go func() {
-		resolved, invokeErr := root.scopedRuntimeWithBuilder(
-			scope,
-			func(models.RuntimeBinding) (models.Service, error) { return runtime, nil },
-		)
-		if invokeErr == nil {
-			_, invokeErr = resolved.InvokeLocal(
-				context.Background(),
-				models.LocalInvocationRequest{Scope: scope},
-			)
-		}
-		invokeResult <- invokeErr
+		_, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Scope: scope, Name: "voice"})
+		result <- err
 	}()
-
 	awaitCloseRaceSignal(t, scopes.resolveStarted, "initial scope resolution")
-	if _, err := root.CloseRuntimeScope(
-		context.Background(),
-		models.CloseRuntimeScopeRequest{Scope: scope},
-	); err != nil {
-		t.Fatalf("CloseRuntimeScope() error = %v, want nil", err)
+	if _, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{Scope: scope}); err != nil {
+		t.Fatal(err)
 	}
-
 	select {
-	case err := <-invokeResult:
+	case err := <-result:
 		if !errors.Is(err, models.ErrRuntimeScopeClosed) {
-			t.Fatalf("concurrent InvokeLocal() error = %v, want ErrRuntimeScopeClosed", err)
+			t.Fatalf("late pull: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("concurrent InvokeLocal() did not return")
-	}
-	if runtime.invokeCalls != 0 {
-		t.Fatalf("closed-scope runtime invocation calls = %d, want 0", runtime.invokeCalls)
-	}
-	root.runtimeMu.RLock()
-	retained := root.runtimeByScope[scope]
-	root.runtimeMu.RUnlock()
-	if retained != nil {
-		t.Fatal("runtime capability was reinserted after its scope closed")
+		t.Fatal("late pull did not return")
 	}
 }
 
@@ -880,19 +856,6 @@ func (scopes *closeRaceRuntimeScopes) Close(runtimescopes.Reference) error {
 	return nil
 }
 
-type closeRaceRuntime struct {
-	models.Service
-	invokeCalls int
-}
-
-func (runtime *closeRaceRuntime) InvokeLocal(
-	context.Context,
-	models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	runtime.invokeCalls++
-	return models.LocalInvocationResult{}, nil
-}
-
 func awaitCloseRaceSignal(t *testing.T, signal <-chan struct{}, description string) {
 	t.Helper()
 	select {
@@ -915,6 +878,10 @@ func newRuntimeHostFixture(scopes runtimescopes.Service, assets scopedassets.Ser
 
 type inertScopedLocalExecution struct{}
 
+func (inertScopedLocalExecution) PullModelForScope(context.Context, models.PullModelRequest) (models.PullResult, error) {
+	return models.PullResult{}, models.ErrNotFound
+}
+
 func (inertScopedLocalExecution) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{}, nil
 }
@@ -927,3 +894,86 @@ func (e compatibilityLocalExecution) CloseScope(scope models.RuntimeScopeRef) {
 	e.local.CloseScope(scope)
 }
 func (e compatibilityLocalExecution) Close() { e.local.Close() }
+
+// Configuration resolution is a component boundary: a successful lookup can
+// complete after close, without permitting a new host or asset effect.
+func TestRootScopedExecutionCloseWinningConfigurationResolution(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"invoke", "pull"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			args := newRootConstructionArgs(t)
+			gate := &gatedConfigurationScopes{Service: args.runtimeScopes, started: make(chan struct{}), resume: make(chan struct{})}
+			args.runtimeScopes = gate
+			assets := &preparationAssetService{}
+			args.assets = assets
+			root, err := args.build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			var resumeOnce sync.Once
+			resume := func() { resumeOnce.Do(func() { close(gate.resume) }) }
+			defer resume()
+			done := make(chan error, 1)
+			go func() {
+				if operation == "pull" {
+					result, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: opened.Scope, Name: "voice"})
+					if result.CachePath != "" {
+						err = errors.New("closed pull published a cache")
+					}
+					done <- err
+					return
+				}
+				request := scopedHandleRequest(t, "config-close")
+				request.Scope = opened.Scope
+				result, err := root.InvokeLocal(ctx, request)
+				if result.Content != "" {
+					err = errors.New("closed invocation published content")
+				}
+				done <- err
+			}()
+			awaitCloseRaceSignal(t, gate.started, "configuration lookup")
+			if _, err := root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: opened.Scope}); err != nil {
+				t.Fatal(err)
+			}
+			resume()
+			select {
+			case err := <-done:
+				if !errors.Is(err, models.ErrRuntimeScopeClosed) {
+					t.Fatalf("late %s: %v", operation, err)
+				}
+			case <-ctx.Done():
+				t.Fatal("late operation did not return")
+			}
+			if assets.request.Name != "" || args.localRuntime.(*leaseTestRuntime).loads != 0 {
+				t.Fatal("closed configuration reached assets or runtime")
+			}
+		})
+	}
+}
+
+type gatedConfigurationScopes struct {
+	runtimescopes.Service
+	started, resume chan struct{}
+	once            sync.Once
+}
+
+func (s *gatedConfigurationScopes) Resolve(ref runtimescopes.Reference) (models.RuntimeBinding, error) {
+	binding, err := s.Service.Resolve(ref)
+	if err != nil {
+		return binding, err
+	}
+	lookup := binding.RuntimeConfig
+	binding.RuntimeConfig = func() *models.RuntimeConfig {
+		config := lookup()
+		s.once.Do(func() { close(s.started); <-s.resume })
+		return config
+	}
+	return binding, nil
+}

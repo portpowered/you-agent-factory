@@ -106,12 +106,6 @@ func (o *Root) CloseRuntimeScope(
 	}
 	o.resources.CloseScope(request.Scope)
 	o.localExecution.CloseScope(request.Scope)
-	o.runtimeMu.Lock()
-	if runtime, ok := o.runtimeByScope[request.Scope].(*runtimeService); ok {
-		runtime.local.CloseScope(request.Scope)
-	}
-	delete(o.runtimeByScope, request.Scope)
-	o.runtimeMu.Unlock()
 	if closer, ok := o.runtimeHost.(interface {
 		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
 	}); ok {
@@ -777,54 +771,6 @@ func safeModelName(value string) bool {
 		return false
 	}
 	return value != ""
-}
-
-func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, error) {
-	return o.scopedRuntimeWithBuilder(scope, func(binding models.RuntimeBinding) (models.Service, error) {
-		assets, err := localmodels.NewScopedAssetPuller(o.assets, scope)
-		if err != nil {
-			return nil, err
-		}
-		return o.runtimeForBindingWithAssets(scope, binding, assets)
-	})
-}
-
-func (o *Root) scopedRuntimeWithBuilder(
-	scope models.RuntimeScopeRef,
-	builder func(models.RuntimeBinding) (models.Service, error),
-) (models.Service, error) {
-	if o == nil || o.runtimeScopes == nil {
-		return nil, models.ErrUnsupportedOperation
-	}
-	if scope.IsZero() {
-		return nil, models.ErrRuntimeScopeInvalid
-	}
-	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String()))
-	if err != nil {
-		return nil, runtimeScopeError(err)
-	}
-	o.runtimeMu.RLock()
-	runtime := o.runtimeByScope[scope]
-	o.runtimeMu.RUnlock()
-	if runtime != nil {
-		return runtime, nil
-	}
-	runtime, err = builder(binding)
-	if err != nil {
-		return nil, err
-	}
-	o.runtimeMu.Lock()
-	if _, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String())); err != nil {
-		o.runtimeMu.Unlock()
-		return nil, runtimeScopeError(err)
-	}
-	if existing := o.runtimeByScope[scope]; existing != nil {
-		runtime = existing
-	} else {
-		o.runtimeByScope[scope] = runtime
-	}
-	o.runtimeMu.Unlock()
-	return runtime, nil
 }
 
 func newRuntimeWithHostEdges(

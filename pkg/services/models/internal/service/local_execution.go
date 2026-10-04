@@ -95,8 +95,9 @@ func newLocalExecutorWithLeases(
 }
 
 // ScopedLocalExecution shares fixed execution behavior and retains only scoped
-// handles. Pull compatibility remains separate until its owner migration.
+// handles. Pull receives configuration and assets selected for each operation.
 type ScopedLocalExecution interface {
+	PullModelForScope(context.Context, models.PullModelRequest) (models.PullResult, error)
 	InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
 	CloseScope(models.RuntimeScopeRef)
 	Close()

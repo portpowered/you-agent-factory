@@ -91,8 +91,7 @@ func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T
 func TestRootPullModelForScopePreservesUnknownCatalogMiss(t *testing.T) {
 	t.Parallel()
 
-	root, _, assets := newPullFallbackRoot(t, "")
-	scope := firstPullFallbackScope(t, root)
+	root, scope, assets := newPullFallbackRoot(t, "")
 	_, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
 		Scope: scope,
 		Name:  "unknown-model",
@@ -109,7 +108,7 @@ func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
 	t.Parallel()
 
 	root, scope, assets := newPullFallbackRoot(t, "")
-	runtime := root.runtimeByScope[scope].(*pullCatalogMissRuntime)
+	runtime := root.localExecution.(*pullCatalogMissRuntime)
 	runtime.result = models.PullResult{
 		ModelName:          "factory-model",
 		ProviderLocality:   string(models.LocalityLocal),
@@ -163,32 +162,22 @@ func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]
 		},
 	}}
 	root := &Root{
-		runtimeScopes: scopes,
-		assets:        assets,
-		runtimeByScope: map[models.RuntimeScopeRef]models.Service{
-			scope: &pullCatalogMissRuntime{err: models.ErrNotFound},
-		},
+		runtimeScopes:  scopes,
+		assets:         assets,
+		localExecution: &pullCatalogMissRuntime{err: models.ErrNotFound},
+		logger:         zap.NewNop(), now: time.Now,
 	}
 	return root, scope, assets
 }
 
-func firstPullFallbackScope(t *testing.T, root *Root) models.RuntimeScopeRef {
-	t.Helper()
-	for scope := range root.runtimeByScope {
-		return scope
-	}
-	t.Fatal("pull fallback root has no runtime scope")
-	return models.RuntimeScopeRef{}
-}
-
 type pullCatalogMissRuntime struct {
-	models.Service
+	inertScopedLocalExecution
 	result    models.PullResult
 	err       error
 	pullCalls int
 }
 
-func (runtime *pullCatalogMissRuntime) PullModel(context.Context, string) (models.PullResult, error) {
+func (runtime *pullCatalogMissRuntime) PullModelForScope(context.Context, models.PullModelRequest) (models.PullResult, error) {
 	runtime.pullCalls++
 	return runtime.result, runtime.err
 }
@@ -718,11 +707,10 @@ func newJoinedInvocationRootWithModel(
 	host := &joinedHostService{events: events}
 	assets := &joinedAssetsService{events: events, requests: assetRequests}
 	root := &Root{
-		runtimeScopes:  scopes,
-		assets:         assets,
-		runtimeHost:    host,
-		inference:      inference,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
+		runtimeScopes: scopes,
+		assets:        assets,
+		runtimeHost:   host,
+		inference:     inference,
 	}
 	return root, scope, host
 }
