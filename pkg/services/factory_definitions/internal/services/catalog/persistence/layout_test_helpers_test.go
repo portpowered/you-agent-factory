@@ -35,7 +35,7 @@ var factorydefinitioncomposition = func() factorydefinitiontestcomposition.Compo
 		SafeLayoutSegment: authoredmapping.SafeFactoryLayoutSegment,
 		SafePromptPath:    authoredmapping.SafePromptFilePath,
 		MapPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,

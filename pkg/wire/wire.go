@@ -9,7 +9,6 @@ import (
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -31,8 +30,7 @@ import (
 )
 
 var platformSet = wire.NewSet(
-	// TODO: remove this when we figure out how to appropriately inject the logging.
-	logging.NewDefaultLogger,
+	provideProcessLogger,
 )
 
 var apiSet = wire.NewSet(
@@ -336,6 +334,9 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionCompilation,
+	provideFactoryDefinitionRuntimeSnapshot,
+	provideFactoryDefinitionValidationOwner,
 	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
@@ -354,6 +355,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryCatalogOperation,
 	provideEffectiveFactoryDefinitionsService,
 	factorydefinitionswire.NewCatalogPathsService,
+	factorydefinitionswire.NewCatalogService,
 )
 
 var workerServiceSet = wire.NewSet(

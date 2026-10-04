@@ -1,0 +1,51 @@
+# golangci-lint configuration. Built-in linters live here; rules with no
+# off-the-shelf equivalent are go/analysis analyzers in internal/lint/analyzers,
+# built into cmd/repolint and run by `make repolint`. Both halves are run by
+# `make golangci`, which `make lint` includes.
+version: "2"
+
+run:
+  timeout: 30m
+  tests: true
+  # Tag union so build-tagged Go files are analyzed too (see REPOLINT_TAGS).
+  build-tags:
+    - functionallong
+    - backendconformance
+    - factoryartifact
+    - managed_process_integration
+
+linters:
+  default: none
+  enable:
+    - forbidigo
+  settings:
+    forbidigo:
+      # Resolve identifiers through go/types so import aliases cannot hide a call.
+      analyze-types: true
+      forbid:
+        - pattern: '^log\.(Default|Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln|Print|Printf|Println)$'
+          msg: accept or propagate an injected logger instead of using process-global logging
+        - pattern: '^slog\.(Default|SetDefault)$'
+          msg: accept or propagate an injected logger instead of using process-global logging
+        - pattern: '^zap\.(L|S|NewDevelopment|NewDevelopmentConfig|NewProduction|NewProductionConfig|ReplaceGlobals)$'
+          msg: construct the application logger only at the approved composition boundary and propagate it
+        - pattern: '^logging\.BuildTerminalLogger$'
+          msg: accept or propagate an injected logger
+  exclusions:
+    generated: lax
+    rules:
+      # The logging boundary applies to production code under cmd, internal and pkg.
+      - linters: [forbidigo]
+        path-except: '^(cmd|internal|pkg)/'
+      - linters: [forbidigo]
+        path: '_test\.go$'
+      # The approved composition boundary that may acquire loggers.
+      - linters: [forbidigo]
+        path: '^(pkg/wire/profiles\.go|pkg/transports/cli/root\.go|pkg/transports/cli/terminalpolicy/policy\.go|pkg/platform/logging/logger\.go)$'
+
+issues:
+  # Ratchet: only violations introduced since the merge base fail. Requires
+  # origin/main to be fetched; Backend Lint checks out with fetch-depth 0.
+  new-from-merge-base: origin/main
+  max-issues-per-linter: 0
+  max-same-issues: 0

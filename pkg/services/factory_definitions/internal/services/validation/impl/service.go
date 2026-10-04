@@ -19,13 +19,9 @@ type Service struct {
 // orchestrator semantic validator supplied explicitly.
 func New(
 	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
-	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
+	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
 ) *Service {
-	service := &Service{orchestrators: orchestrators}
-	if len(loadCanonical) > 0 {
-		service.loadCanonical = loadCanonical[0]
-	}
-	return service
+	return &Service{orchestrators: orchestrators, loadCanonical: loadCanonical}
 }
 
 // ValidateDefinition owns the complete profile-specific validation sequence.
@@ -35,9 +31,6 @@ func (s *Service) ValidateDefinition(
 	ctx context.Context,
 	request factorydefinitions.DefinitionValidationRequest,
 ) (factorydefinitions.ValidationResult, error) {
-	if s == nil {
-		return factorydefinitions.ValidationResult{}, fmt.Errorf("Factory Definition validator is required")
-	}
 	if ctx == nil {
 		return factorydefinitions.ValidationResult{}, fmt.Errorf("Factory Definition validation context is required")
 	}
@@ -50,17 +43,10 @@ func (s *Service) ValidateDefinition(
 
 	switch factorydefinitions.ResolveValidationProfile(request.Profile) {
 	case factorydefinitions.ValidationProfilePrePersist:
-		loadCanonical := s.loadCanonical
-		if loadCanonical == nil {
-			loadCanonical = request.CanonicalFactoryLoader
-		}
-		if loadCanonical == nil {
-			return factorydefinitions.ValidationResult{}, fmt.Errorf("canonical Factory loader is required for pre-persist validation")
-		}
 		if len(request.CanonicalPayload) == 0 {
 			return factorydefinitions.ValidationResult{}, fmt.Errorf("canonical Factory payload is required for pre-persist validation")
 		}
-		_, loadErr := loadCanonical(request.CanonicalPayload, request.WorkstationLoader)
+		_, loadErr := s.loadCanonical(request.CanonicalPayload, request.WorkstationLoader)
 		if loadErr != nil {
 			if errors.Is(loadErr, factorydefinitions.ErrInvalidNamedFactory) {
 				blocking := s.ValidateBlockingLoad(ctx, request.Config)
@@ -100,9 +86,6 @@ func (s *Service) ValidateEffectiveDefinition(
 	ctx context.Context,
 	request factorydefinitions.EffectiveDefinitionValidationRequest,
 ) (factorydefinitions.ValidationResult, error) {
-	if s == nil {
-		return factorydefinitions.ValidationResult{}, fmt.Errorf("Factory Definition validator is required")
-	}
 	if request.Config == nil {
 		return factorydefinitions.ValidationResult{}, fmt.Errorf("Factory Definition config is required")
 	}

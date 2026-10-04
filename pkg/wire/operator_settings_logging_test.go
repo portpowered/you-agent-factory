@@ -60,3 +60,28 @@ func TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger(t *test
 		t.Fatalf("observed log messages = %v, want a finished log proving the canonical wire logger reached the service", messages)
 	}
 }
+
+func TestProcessLoggerSelectionAndModelHostLogger(t *testing.T) {
+	t.Parallel()
+	backend, observed := testdeps.CapturingZapLogger(zapcore.DebugLevel)
+	selected, err := provideProcessLogger(serviceedges.Edges{ProcessLogger: backend})
+	if err != nil || selected != backend {
+		t.Fatalf("selected backend=%v error=%v", selected, err)
+	}
+	provideModelHostLogger(selected).Info("owned host diagnostic", map[string]string{"correlation_id": "owned-scope"})
+	records := observed.All()
+	if len(records) != 1 || records[0].LoggerName != "modelhost" || records[0].ContextMap()["correlation_id"] != "owned-scope" {
+		t.Fatalf("host adapter records=%v", records)
+	}
+	muted, err := provideProcessLogger(serviceedges.Edges{})
+	if err != nil || muted == nil {
+		t.Fatalf("default selection error=%v", err)
+	}
+	if muted.Core().Enabled(zapcore.InfoLevel) || !muted.Core().Enabled(zapcore.WarnLevel) {
+		t.Fatal("default process logger must retain terminal-muted warn policy")
+	}
+	muted.Warn("default backend remains terminal-muted")
+	if observed.Len() != 1 {
+		t.Fatal("default selection reused caller backend")
+	}
+}

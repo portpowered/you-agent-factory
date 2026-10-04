@@ -14,20 +14,6 @@ var (
 
 func main() {
 	cfg := parseConfig()
-	if cfg.writeTestServiceImportBaseline {
-		if err := createTestServiceImportBaseline(cfg); err != nil {
-			fmt.Fprintln(stderrWriter, err)
-			exitFunc(1)
-		}
-		return
-	}
-	if cfg.writeSupportServiceImportBaseline {
-		if err := createSupportServiceImportBaseline(cfg); err != nil {
-			fmt.Fprintln(stderrWriter, err)
-			exitFunc(1)
-		}
-		return
-	}
 	if cfg.writeTransportBehaviorBaseline {
 		if err := createTransportBehaviorBaseline(cfg); err != nil {
 			fmt.Fprintln(stderrWriter, err)

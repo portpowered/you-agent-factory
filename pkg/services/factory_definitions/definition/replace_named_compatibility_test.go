@@ -17,7 +17,7 @@ func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 	t.Parallel()
 	sessionRoot := t.TempDir()
 	payload := []byte(`{"name":"alpha","id":"alpha-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`)
-	if _, err := persistNamedFactoryForTest(sessionRoot, "alpha", payload, factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(sessionRoot, "alpha", payload, factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	factoryDir, err := externalDefinitionTestNamedPaths.ResolveExistingDir(sessionRoot, "alpha")
@@ -103,7 +103,7 @@ func TestSaveNamedCurrentFactoryForSession_CoercesDriftedPayloadName(t *testing.
 	t.Parallel()
 	sessionRoot := t.TempDir()
 	payload := []byte(`{"name":"alpha","id":"alpha-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`)
-	if _, err := persistNamedFactoryForTest(sessionRoot, "alpha", payload, factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(sessionRoot, "alpha", payload, factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	factoryDir, err := externalDefinitionTestNamedPaths.ResolveExistingDir(sessionRoot, "alpha")

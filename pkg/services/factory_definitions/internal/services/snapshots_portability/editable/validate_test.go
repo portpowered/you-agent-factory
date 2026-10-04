@@ -58,7 +58,7 @@ func TestValidateSnapshotForcesPrePersistOwnerProfile(t *testing.T) {
 		snapshot,
 		nil,
 		func(snapshot *factorydefinitions.FactorySnapshot, loader factorydefinitions.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
-			request, mapErr := validationentry.MapEditableFactorySnapshot(snapshot, loader, loadCanonical)
+			request, mapErr := validationentry.MapEditableFactorySnapshot(snapshot, loader)
 			request.Profile = factorydefinitions.ValidationProfileTopology
 			return request, mapErr
 		},
@@ -84,11 +84,7 @@ func validateSnapshot(
 			snapshot *factorydefinitions.FactorySnapshot,
 			loader factorydefinitions.WorkstationLoader,
 		) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapEditableFactorySnapshot(
-				snapshot,
-				loader,
-				factorydefinitioncomposition.LoadCanonicalJSON,
-			)
+			return validationentry.MapEditableFactorySnapshot(snapshot, loader)
 		},
 		factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON),
 	)

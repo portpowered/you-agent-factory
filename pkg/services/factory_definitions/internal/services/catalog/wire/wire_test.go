@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,15 +18,18 @@ import (
 )
 
 type recordingPathResolver struct {
-	requireDefinitionDirCalls int
-	readCurrentPointerCalls   int
-	writeCurrentPointerCalls  int
-	resolveExistingDirCalls   int
-	currentName               string
-	existing                  map[string]string
+	resolveCandidatePathsCalls int
+	resolveCurrentDirCalls     int
+	requireDefinitionDirCalls  int
+	readCurrentPointerCalls    int
+	writeCurrentPointerCalls   int
+	resolveExistingDirCalls    int
+	currentName                string
+	existing                   map[string]string
 }
 
 func (r *recordingPathResolver) ResolveCandidatePaths(_, _, _ string) (factorydefinitions.NamedFactoryCandidatePaths, error) {
+	r.resolveCandidatePathsCalls++
 	return factorydefinitions.NamedFactoryCandidatePaths{}, nil
 }
 
@@ -50,6 +52,7 @@ func (r *recordingPathResolver) RequireDefinitionDir(factoryDir string) error {
 }
 
 func (r *recordingPathResolver) ResolveCurrentDir(rootDir string) (string, error) {
+	r.resolveCurrentDirCalls++
 	if r.currentName == "" {
 		return "", os.ErrNotExist
 	}
@@ -139,34 +142,19 @@ func (f *recordingCatalogFileSystem) RemoveAll(path string) error {
 	return nil
 }
 
-func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
+func TestNewServiceConstructsInertCatalog(t *testing.T) {
 	t.Parallel()
-
 	paths := &recordingPathResolver{}
 	fileSystem := &recordingCatalogFileSystem{}
-
-	if svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      nil,
-		FileSystem: fileSystem,
-	}); err == nil || svc != nil || !strings.Contains(err.Error(), "path resolver is required") {
-		t.Fatalf("NewService(nil paths) = %#v, %v; want path resolver required error", svc, err)
-	}
-	if svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: nil,
-	}); err == nil || svc != nil || !strings.Contains(err.Error(), "catalog filesystem is required") {
-		t.Fatalf("NewService(nil filesystem) = %#v, %v; want catalog filesystem required error", svc, err)
-	}
-
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("NewService with exact injected ports: %v", err)
-	}
+	svc := catalogwire.NewService(paths, fileSystem)
 	if svc == nil {
 		t.Fatal("NewService returned nil service")
+	}
+	if paths.resolveCandidatePathsCalls != 0 || paths.resolveCurrentDirCalls != 0 ||
+		paths.requireDefinitionDirCalls != 0 || paths.readCurrentPointerCalls != 0 ||
+		paths.writeCurrentPointerCalls != 0 || paths.resolveExistingDirCalls != 0 ||
+		fileSystem.statCalls != 0 || fileSystem.readDirCalls != 0 || fileSystem.removeAllCalls != 0 {
+		t.Fatal("catalog construction performed a host effect")
 	}
 	var _ catalog.Service = svc
 }
@@ -194,13 +182,7 @@ func TestNewService_HostEffectsComeOnlyFromInjectedPorts(t *testing.T) {
 		},
 	}
 
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
+	svc := catalogwire.NewService(paths, fileSystem)
 
 	ctx := context.Background()
 	listed, err := svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: rootDir})
@@ -248,13 +230,7 @@ func TestNewPathResolverAndCatalogWireResolveNamedFactoryAndCurrentPointer(t *te
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
+	svc := catalogwire.NewService(paths, fileSystem)
 
 	ctx := context.Background()
 	got, err := svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
@@ -320,13 +296,7 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	svc, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
+	svc := catalogwire.NewService(paths, fileSystem)
 
 	ctx := context.Background()
 	listed, err := svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: projectRoot})
@@ -402,7 +372,9 @@ func TestNewPersistencePrepareAndCreateAndReplaceNamedFactoryLayout(t *testing.T
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return nil, nil
+	})
 	prepared := &factorydefinitions.PreparedFactoryLayoutPayload{}
 	persistence, err := catalogwire.NewPersistence(
 		validator,
@@ -410,9 +382,6 @@ func TestNewPersistencePrepareAndCreateAndReplaceNamedFactoryLayout(t *testing.T
 			return factorydefinitions.DefinitionValidationRequest{
 				Config:           &factorydefinitions.FactoryConfig{},
 				CanonicalPayload: []byte(`{}`),
-				CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-					return nil, nil
-				},
 			}, nil
 		},
 		func(

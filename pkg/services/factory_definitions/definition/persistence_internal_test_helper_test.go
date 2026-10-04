@@ -40,7 +40,7 @@ func persistPreparedNamedFactoryForTest(
 	name string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 ) (string, error) {
-	return definitionPersistenceForTest(factoryvalidation.New(nil)).
+	return definitionPersistenceForTest(factoryvalidation.New(nil, testCanonicalFactoryLoader)).
 		CreateNamedFactory(rootDir, name, prepared)
 }
 
@@ -48,7 +48,7 @@ func replacePreparedFactoryLayoutForTest(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 ) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-	return definitionPersistenceForTest(factoryvalidation.New(nil)).
+	return definitionPersistenceForTest(factoryvalidation.New(nil, testCanonicalFactoryLoader)).
 		ReplaceFactoryLayout(targetDir, prepared)
 }
 
@@ -58,18 +58,7 @@ func definitionPersistenceForTest(
 	persistence, err := factorypersistence.New(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(
-				payload,
-				func(
-					payload []byte,
-					loader factorydefinitions.WorkstationLoader,
-				) (factorydefinitions.MutableLoadedFactorySource, error) {
-					return factorydefinitioncomposition.LoadCanonicalJSON(
-						payload,
-						loader)
-
-				},
-			)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		prepareFactoryLayoutForDefinitionTest,
 		writePreparedLayoutForDefinitionTest,
