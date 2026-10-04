@@ -228,6 +228,13 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 Burn down an exemption by removing both the inline directive and its matching `docs/internal/baselines/backend-exemption-budget.json` entry in the same change, then run `make backend-size` and `make pkg-maint`. Removing only the directive leaves a stale entry and fails the applicable command; removing both lowers the checked baseline without requiring cleanup of unrelated exemptions. The exemption budget covers only these size and complexity directives. Root package-family and migration-shim policy remains exclusively owned by `make pkg-boundary`.
 
+The `Behavior` analyzer in `make repolint` also owns Initializer import,
+product lifecycle mode/slot, edge-bag, retired declaration, command-construction,
+and stream-stat boundaries. It consumes compiler AST and resolved objects,
+preserves exact lifecycle import allowances and excludes tests/generated sources
+for these rules. These Initializer boundary rules have no legacy debt and reject
+every occurrence; the legacy scanner and unused store loader are retired.
+
 The `ProcessEdges` analyzer in `make repolint` owns the zero-debt Process Edges
 contract rules: no Models-wire imports (including tests and descendants), only
 `Edges` and the reviewed types in `models_effects.go` at the root, and exactly

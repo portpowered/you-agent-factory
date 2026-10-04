@@ -20,10 +20,6 @@ type scanResult struct {
 	recordedProductionDefaultFindings   []productionDefaultFinding
 	staleProductionDefaultEntries       []productionDefaultBaselineEntry
 	productionDefaultBaselineCount      int
-	initializerBehaviorFindings         []initializerBehaviorFinding
-	recordedInitializerBehaviorFindings []initializerBehaviorFinding
-	staleInitializerBehaviorEntries     []initializerBehaviorBaselineEntry
-	initializerBehaviorBaselineCount    int
 	testBehaviorFindings                []testBehaviorFinding
 	recordedTestBehaviorFindings        []testBehaviorFinding
 	staleTestBehaviorEntries            []testBehaviorBaselineEntry

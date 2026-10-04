@@ -28,9 +28,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	writeProductionDefaultFindings(writer, findings.productionDefaultFindings)
 	writeProductionDefaultFindings(writer, findings.recordedProductionDefaultFindings)
 	writeStaleProductionDefaultBaselineEntries(writer, findings.staleProductionDefaultEntries)
-	writeInitializerBehaviorFindings(writer, findings.initializerBehaviorFindings)
-	writeInitializerBehaviorFindings(writer, findings.recordedInitializerBehaviorFindings)
-	writeStaleInitializerBehaviorBaselineEntries(writer, findings.staleInitializerBehaviorEntries)
 	writeTestBehaviorFindings(writer, findings.testBehaviorFindings)
 	writeTestBehaviorFindings(writer, findings.recordedTestBehaviorFindings)
 	writeStaleTestBehaviorBaselineEntries(writer, findings.staleTestBehaviorEntries)
@@ -44,7 +41,6 @@ func writeBaselineSummaries(writer io.Writer, findings scanResult) {
 	writeServiceConstructionBaselineSummary(writer, findings.serviceConstructionBaselineCount)
 	writeTransportBehaviorBaselineSummary(writer, findings.transportBehaviorBaselineCount)
 	writeProductionDefaultBaselineSummary(writer, findings.productionDefaultBaselineCount)
-	writeInitializerBehaviorBaselineSummary(writer, findings.initializerBehaviorBaselineCount)
 	writeTestBehaviorBaselineSummary(writer, findings.testBehaviorBaselineCount)
 	writePetriPublicSurfaceBaselineSummary(writer, findings.petriPublicSurfaceBaselineCount)
 }

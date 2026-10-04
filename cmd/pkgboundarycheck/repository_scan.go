@@ -55,9 +55,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err := scanRepositoryProductionDefaults(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
-	if err := scanRepositoryInitializerBehavior(repoRoot, &result); err != nil {
-		return scanResult{}, err
-	}
 	if err := scanRepositoryPetriAndProviderBoundaries(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
@@ -244,31 +241,6 @@ func scanRepositoryProductionDefaults(repoRoot string, result *scanResult) error
 		},
 	)
 	result.productionDefaultBaselineCount = len(baseline.Entries)
-	return nil
-}
-
-func scanRepositoryInitializerBehavior(repoRoot string, result *scanResult) error {
-	findings, err := scanInitializerBehavior(repoRoot)
-	if err != nil {
-		return err
-	}
-	baseline, err := loadInitializerBehaviorBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
-	result.initializerBehaviorFindings, result.staleInitializerBehaviorEntries, err =
-		partitionInitializerBehaviorFindings(findings, baseline)
-	if err != nil {
-		return err
-	}
-	result.recordedInitializerBehaviorFindings = recordedFindingsFromPartition(
-		findings,
-		result.initializerBehaviorFindings,
-		func(finding initializerBehaviorFinding) string {
-			return initializerBehaviorKey(finding.filePath, finding.kind, finding.symbol)
-		},
-	)
-	result.initializerBehaviorBaselineCount = len(baseline.Entries)
 	return nil
 }
 

@@ -96,6 +96,9 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 		}
 		if initializer {
 			initializerFindings(pass, file, add)
+			if !test {
+				initializerBoundaryFindings(pass, file)
+			}
 		}
 		if mapping {
 			mappingFindings(pass, file, add)

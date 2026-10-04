@@ -165,15 +165,14 @@ func directSession() { _ = sessions.NewLiveSession("", "", nil, nil) }
 		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/work.NewFutureService",
 		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/factory_visualization.New",
 		"prohibited product-service construction: github.com/portpowered/infinite-you/pkg/services/factory_sessions.NewLiveSession",
-		"prohibited Initializer behavior: github.com/portpowered/infinite-you/pkg/services/factory_visualization (service-coupling)",
 		"construct the collaborator in pkg/wire and inject its service-root role",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
 		}
 	}
-	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 3 package-boundary violation(s)" {
-		t.Fatalf("run() error = %q, want three production violations", got)
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 2 package-boundary violation(s)" {
+		t.Fatalf("run() error = %q, want two production construction violations", got)
 	}
 }
 

@@ -226,13 +226,11 @@ func newRecordedScanResult(result scanResult) scanResult {
 		serviceConstructionBaselineCount:    result.serviceConstructionBaselineCount,
 		transportBehaviorBaselineCount:      result.transportBehaviorBaselineCount,
 		productionDefaultBaselineCount:      result.productionDefaultBaselineCount,
-		initializerBehaviorBaselineCount:    result.initializerBehaviorBaselineCount,
 		testBehaviorBaselineCount:           result.testBehaviorBaselineCount,
 		petriPublicSurfaceBaselineCount:     result.petriPublicSurfaceBaselineCount,
 		recordedServiceConstructionFindings: append([]serviceConstructionFinding(nil), result.recordedServiceConstructionFindings...),
 		recordedTransportBehaviorFindings:   append([]transportBehaviorFinding(nil), result.recordedTransportBehaviorFindings...),
 		recordedProductionDefaultFindings:   append([]productionDefaultFinding(nil), result.recordedProductionDefaultFindings...),
-		recordedInitializerBehaviorFindings: append([]initializerBehaviorFinding(nil), result.recordedInitializerBehaviorFindings...),
 		recordedTestBehaviorFindings:        append([]testBehaviorFinding(nil), result.recordedTestBehaviorFindings...),
 		recordedPetriPublicSurfaceFindings:  append([]petriPublicSurfaceFinding(nil), result.recordedPetriPublicSurfaceFindings...),
 	}
@@ -275,9 +273,6 @@ func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recor
 	visible.productionDefaultFindings, recorded.productionDefaultFindings = splitRecordedFindings(visible.productionDefaultFindings, func(finding productionDefaultFinding) string {
 		return boundaryFindingFingerprint("production-default", finding)
 	}, baseline)
-	visible.initializerBehaviorFindings, recorded.initializerBehaviorFindings = splitRecordedFindings(visible.initializerBehaviorFindings, func(finding initializerBehaviorFinding) string {
-		return boundaryFindingFingerprint("initializer-behavior", finding)
-	}, baseline)
 	visible.testBehaviorFindings, recorded.testBehaviorFindings = splitRecordedFindings(visible.testBehaviorFindings, func(finding testBehaviorFinding) string { return boundaryFindingFingerprint("test-behavior", finding) }, baseline)
 	visible.petriPublicSurfaceFindings, recorded.petriPublicSurfaceFindings = splitRecordedFindings(visible.petriPublicSurfaceFindings, func(finding petriPublicSurfaceFinding) string {
 		return boundaryFindingFingerprint("petri-public-surface", finding)
@@ -291,7 +286,6 @@ func clearVisibleRecordedFindings(visible *scanResult) {
 	visible.recordedServiceConstructionFindings = nil
 	visible.recordedTransportBehaviorFindings = nil
 	visible.recordedProductionDefaultFindings = nil
-	visible.recordedInitializerBehaviorFindings = nil
 	visible.recordedTestBehaviorFindings = nil
 	visible.recordedPetriPublicSurfaceFindings = nil
 }
@@ -345,8 +339,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	addBoundaryFindingFingerprints(fingerprints, "test-work-normalization", result.testWorkNormalizationFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.productionDefaultFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.recordedProductionDefaultFindings)
-	addBoundaryFindingFingerprints(fingerprints, "initializer-behavior", result.initializerBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "initializer-behavior", result.recordedInitializerBehaviorFindings)
 	addBoundaryFindingFingerprints(fingerprints, "test-behavior", result.testBehaviorFindings)
 	addBoundaryFindingFingerprints(fingerprints, "test-behavior", result.recordedTestBehaviorFindings)
 	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.petriPublicSurfaceFindings)
