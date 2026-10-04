@@ -8,7 +8,7 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 )
 
-// Allocator combines the injected native host effect with Workers-owned
+// Allocator combines the injected native host effect with Providers-owned
 // validation, session limits, capture, timeout, and output-cleaning policy.
 type Allocator struct {
 	host      platformpty.Host
@@ -16,26 +16,15 @@ type Allocator struct {
 	scheduler platformclock.TimerSource
 }
 
-// NewAllocator fails closed unless both external effects are injected.
+// NewAllocator stores the completed host, duration clock, and scheduler.
+// Canonical composition supplies every required effect before construction.
 func NewAllocator(host platformpty.Host, clock platformclock.Source, scheduler platformclock.TimerSource) (*Allocator, error) {
-	if host == nil {
-		return nil, ErrHostRequired
-	}
-	if clock == nil {
-		return nil, ErrClockRequired
-	}
 	return &Allocator{host: host, clock: clock, scheduler: scheduler}, nil
 }
 
 // Allocate validates owner input, obtains an opaque native PTY, and returns an
-// inert session whose policy remains owned by Workers.
+// inert session whose policy remains owned by Providers.
 func (a *Allocator) Allocate(ctx context.Context, launch ProcessLaunch, cfg SessionConfig) (PTYSession, error) {
-	if a == nil || a.host == nil {
-		return nil, ErrHostRequired
-	}
-	if a.clock == nil {
-		return nil, ErrClockRequired
-	}
 	if err := checkAllocateContext(ctx); err != nil {
 		return nil, err
 	}

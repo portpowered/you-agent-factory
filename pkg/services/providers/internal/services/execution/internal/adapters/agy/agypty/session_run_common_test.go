@@ -254,17 +254,6 @@ func TestAllocator_ReturnsOwnerSessionFromInjectedHost(t *testing.T) {
 	}
 }
 
-func TestAllocator_RejectsMissingHostOrClock(t *testing.T) {
-	t.Parallel()
-
-	if _, err := NewAllocator(nil, testPTYClock, platformclock.Real{}); !errors.Is(err, ErrHostRequired) {
-		t.Fatalf("NewAllocator(nil host) error = %v, want %v", err, ErrHostRequired)
-	}
-	if _, err := NewAllocator(testPTYHost{}, nil, platformclock.Real{}); !errors.Is(err, ErrClockRequired) {
-		t.Fatalf("NewAllocator(nil clock) error = %v, want %v", err, ErrClockRequired)
-	}
-}
-
 func TestExecuteSessionRun_CapsCaptureAndCleans(t *testing.T) {
 	t.Parallel()
 
@@ -467,18 +456,6 @@ func TestNewPlatformSession_RejectsNilPTY(t *testing.T) {
 	}
 }
 
-func TestNewPlatformSession_RejectsMissingClock(t *testing.T) {
-	t.Parallel()
-
-	_, err := newPlatformSession(ProcessLaunch{
-		Executable: "/bin/agy",
-		Argv:       []string{"/bin/agy"},
-	}, DefaultSessionConfig(), PTYKindPOSIX, closeOnlyPTY{}, testPTYHost{}, nil, platformclock.Real{})
-	if !errors.Is(err, ErrClockRequired) {
-		t.Fatalf("newPlatformSession(nil clock) error = %v, want %v", err, ErrClockRequired)
-	}
-}
-
 func TestValidateProcessLaunch_RejectsEmptyArgv(t *testing.T) {
 	t.Parallel()
 
@@ -629,9 +606,6 @@ func TestExecuteSessionRun_RejectsMissingInputs(t *testing.T) {
 	}
 
 	reader = io.NopCloser(strings.NewReader(""))
-	if _, err := executeSessionRun(context.Background(), cfg, reader, proc, nil, platformclock.Real{}); !errors.Is(err, ErrClockRequired) {
-		t.Fatalf("executeSessionRun(nil clock) error = %v, want %v", err, ErrClockRequired)
-	}
 }
 
 func TestClosePTYReader_AllowsNil(t *testing.T) {

@@ -59,12 +59,6 @@ func newPlatformSession(
 	if pty == nil {
 		return nil, errors.New("agypty: PTY allocation is required")
 	}
-	if clock == nil {
-		return nil, ErrClockRequired
-	}
-	if host == nil {
-		return nil, ErrHostRequired
-	}
 	return &platformSession{
 		launch:    launch,
 		cfg:       cfg,
@@ -97,9 +91,6 @@ func (s *platformSession) Run(ctx context.Context) (SessionResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if s.host == nil {
-		return SessionResult{}, ErrHostRequired
-	}
 	defer closeSessionPTY(s)
 	proc, reader, err := s.host.Start(platformProcessLaunch(s.launch), s.pty)
 	if err != nil {
@@ -121,9 +112,6 @@ func executeSessionRun(
 	}
 	if proc == nil {
 		return SessionResult{}, errors.New("agypty: supervised process is required")
-	}
-	if clock == nil {
-		return SessionResult{}, ErrClockRequired
 	}
 
 	defer closePTYReader(reader)

@@ -14,7 +14,6 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 )
 
 type recordingPlatformRunner struct {
@@ -212,15 +211,6 @@ func TestAdaptPlatformCommandRunnerNilAndEmptyOutput(t *testing.T) {
 	}
 	if err := publishCompleteOutput(nil, nil, nil); err != nil {
 		t.Fatalf("publishCompleteOutput(nil) error = %v", err)
-	}
-}
-
-func TestNewAgyPTYAllocatorRequiresExplicitPlatformEffects(t *testing.T) {
-	t.Parallel()
-
-	allocator, err := NewAgyPTYAllocator(nil, nil, platformclock.Real{})
-	if !errors.Is(err, agypty.ErrHostRequired) {
-		t.Fatalf("NewAgyPTYAllocator(nil, nil, platformclock.Real{}) = (%v, %v), want host validation error", allocator, err)
 	}
 }
 
