@@ -50,7 +50,6 @@ func ValidateEditableFactorySnapshot(
 // interpret findings.
 func MapFactoryJSONForPersistence(
 	payload []byte,
-	loadCanonicalFactory interfaces.CanonicalFactoryJSONLoader,
 ) (interfaces.DefinitionValidationRequest, error) {
 	var factory factoryapi.Factory
 	if err := json.Unmarshal(payload, &factory); err != nil {
@@ -64,7 +63,6 @@ func MapFactoryJSONForPersistence(
 		factory,
 		nil,
 		nil,
-		loadCanonicalFactory,
 	)
 	if err != nil {
 		if errors.Is(err, interfaces.ErrInvalidNamedFactory) {
@@ -80,7 +78,6 @@ func MapFactoryJSONForPersistence(
 func MapEditableFactorySnapshot(
 	snapshot *interfaces.FactorySnapshot,
 	workstationLoader interfaces.WorkstationLoader,
-	loadCanonicalFactory interfaces.CanonicalFactoryJSONLoader,
 ) (interfaces.DefinitionValidationRequest, error) {
 	if snapshot == nil {
 		return interfaces.DefinitionValidationRequest{}, fmt.Errorf("%w: Factory snapshot is required", interfaces.ErrInvalidNamedFactory)
@@ -93,7 +90,6 @@ func MapEditableFactorySnapshot(
 		submitted,
 		workstationLoader,
 		nil,
-		loadCanonicalFactory,
 	)
 	if err != nil {
 		return interfaces.DefinitionValidationRequest{}, fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
@@ -126,18 +122,16 @@ func prePersistFactoryValidationRequest(
 	factory factoryapi.Factory,
 	workstationLoader interfaces.WorkstationLoader,
 	workflowSourceReader interfaces.WorkflowSourceReader,
-	loadCanonicalFactory interfaces.CanonicalFactoryJSONLoader,
 ) (interfaces.DefinitionValidationRequest, error) {
 	cfg, err := factorymapping.FactoryConfigFromOpenAPI(factory)
 	if err != nil {
 		return interfaces.DefinitionValidationRequest{}, err
 	}
 	request := interfaces.DefinitionValidationRequest{
-		Config:                 &cfg,
-		WorkstationLoader:      workstationLoader,
-		WorkflowSourceReader:   workflowSourceReader,
-		CanonicalFactoryLoader: loadCanonicalFactory,
-		SubmittedTaxonomy:      submittedDefinitionTaxonomyFromAPI(factory),
+		Config:               &cfg,
+		WorkstationLoader:    workstationLoader,
+		WorkflowSourceReader: workflowSourceReader,
+		SubmittedTaxonomy:    submittedDefinitionTaxonomyFromAPI(factory),
 	}
 	request.CanonicalPayload, err = json.Marshal(factory)
 	if err != nil {

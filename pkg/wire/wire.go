@@ -331,6 +331,9 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionCompilation,
+	provideFactoryDefinitionRuntimeSnapshot,
+	provideFactoryDefinitionValidationOwner,
 	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
@@ -349,6 +352,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryCatalogOperation,
 	provideEffectiveFactoryDefinitionsService,
 	factorydefinitionswire.NewCatalogPathsService,
+	factorydefinitionswire.NewCatalogService,
 )
 
 var workerServiceSet = wire.NewSet(
