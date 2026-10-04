@@ -489,3 +489,61 @@ func assertCommandTimerStopped(t *testing.T, scheduler *observedCommandScheduler
 		t.Fatalf("timer duration = %v, timer = %+v, want %v and stopped", scheduler.duration, scheduler.timer, expectedTimeout)
 	}
 }
+
+func TestCommandEffectScheduledTimeoutPreservesPeerAndReuse(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond)
+	peerReady := make(chan struct{})
+	releasePeer := make(chan struct{}, 1)
+	defer close(releasePeer)
+	runner := clockAdvancingCommandRunner{run: func(ctx context.Context, command platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+		switch argumentValue(command.Args, "-p") {
+		case "peer":
+			close(peerReady)
+			select {
+			case <-releasePeer:
+				return platformprocess.CommandResult{Stdout: []byte("peer done")}, nil
+			case <-ctx.Done():
+				return platformprocess.CommandResult{}, ctx.Err()
+			}
+		case "expire":
+			clock.SetTick(10)
+			<-ctx.Done()
+			return platformprocess.CommandResult{}, ctx.Err()
+		default:
+			return platformprocess.CommandResult{Stdout: []byte("later done")}, nil
+		}
+	}}
+	effect := agy.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), clock, clock)
+	peerDone := make(chan error, 1)
+	go func() {
+		result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
+			Provider: providers.IDAntigravity, UserMessage: "peer",
+		}}, func([]byte) error { return nil })
+		if err == nil && string(result.CapturedStdout) != "peer done" {
+			err = errors.New("peer output was not preserved")
+		}
+		peerDone <- err
+	}()
+	select {
+	case <-peerReady:
+	case <-t.Context().Done():
+		t.Fatal("peer did not reach command readiness")
+	}
+	_, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
+		Provider: providers.IDAntigravity, UserMessage: "expire", PrintTimeout: 10 * time.Millisecond,
+	}}, func([]byte) error { return nil })
+	if !errors.Is(err, providers.ErrExecuteTimeout) {
+		t.Fatalf("selected attempt error = %v, want provider timeout", err)
+	}
+	releasePeer <- struct{}{}
+	if err := <-peerDone; err != nil {
+		t.Fatalf("peer error = %v, want completion after selected timeout", err)
+	}
+	result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
+		Provider: providers.IDAntigravity, UserMessage: "later",
+	}}, func([]byte) error { return nil })
+	if err != nil || string(result.CapturedStdout) != "later done" {
+		t.Fatalf("later result = %+v, error = %v", result, err)
+	}
+}
