@@ -264,6 +264,12 @@ func (o *Root) PullModelForScope(
 	if o == nil || o.runtimeScopes == nil || isNilDependency(o.localExecution) {
 		return models.PullResult{}, models.ErrUnsupportedOperation
 	}
+	if request.Scope.IsZero() {
+		return models.PullResult{}, models.ErrRuntimeScopeInvalid
+	}
+	if err := ctx.Err(); err != nil {
+		return models.PullResult{}, err
+	}
 	o.cacheLifecycleMu.Lock()
 	defer o.cacheLifecycleMu.Unlock()
 	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))

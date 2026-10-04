@@ -27,6 +27,19 @@ func TestRootPullModelForScopeValidatesBeforeRuntimeResolution(t *testing.T) {
 	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Name: "voice"}); !errors.Is(err, models.ErrUnsupportedOperation) {
 		t.Fatalf("unavailable scoped runtime error = %v, want ErrUnsupportedOperation", err)
 	}
+	args := newRootConstructionArgs(t)
+	root, err := args.build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Name: "voice"}); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
+		t.Fatalf("zero scope error = %v, want ErrRuntimeScopeInvalid", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: scopedHandleRequest(t, "cancelled").Scope, Name: "voice"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled pull error = %v, want context.Canceled", err)
+	}
 }
 
 func TestIsRemovableCacheAbsenceClassifiesAssetAbsenceErrors(t *testing.T) {
