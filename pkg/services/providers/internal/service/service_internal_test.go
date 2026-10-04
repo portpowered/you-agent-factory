@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -256,7 +257,7 @@ func TestRootDispatchContinuationUsesCompletedCapabilities(t *testing.T) {
 				request := providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "continued-attempt", UserMessage: "next turn"}
 				observe := func(got providers.ExecuteRequest, ref providers.SessionRef) (providers.ExecuteResult, error) {
 					calls++
-					if got.Provider != request.Provider || got.AttemptID != request.AttemptID || got.UserMessage != request.UserMessage || ref != reference {
+					if !reflect.DeepEqual(got, request) || ref != reference {
 						t.Fatalf("continuation input = (%#v, %#v), want (%#v, %#v)", got, ref, request, reference)
 					}
 					return providers.ExecuteResult{Content: "selected continuation"}, outcome.err

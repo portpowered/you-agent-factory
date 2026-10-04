@@ -904,7 +904,7 @@ func (session *mockPTYSession) Close() error { return nil }
 
 func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
-	runner := executionwire.AdaptPlatformCommandRunner(testutil.NewProviderCommandRunner())
+	runner := fixtureCommandRunner(testutil.NewProviderCommandRunner())
 	service, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{}),
@@ -977,4 +977,21 @@ func (unavailableACPContinuation) Continue(context.Context, providers.ID, provid
 
 func (*stubExecution) Continue(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "provider continuation adapter is unavailable"}
+}
+
+// fixtureCommandRunner projects the controlled buffered platform fake into the
+// component's direct Providers command port. Production selects its own bridge.
+func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
+	return bufferedFixtureRunner{runner: runner}
+}
+
+type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
+
+func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	result, err := r.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin, Env: request.Env,
+		WorkDir: request.WorkDir, ExecutionScopeID: request.FactorySessionID,
+		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
 }

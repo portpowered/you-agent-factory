@@ -3,6 +3,7 @@ package codex_test
 import (
 	"context"
 	"errors"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
 func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
@@ -72,7 +72,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
@@ -94,7 +94,7 @@ func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) 
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -134,7 +134,7 @@ func TestCommandEffectForwardsWorkerArgsBeforeResumeAndPrompt(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -178,7 +178,7 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -263,4 +263,21 @@ type terminalCommandRunner func(context.Context, providerservice.CommandRequest)
 
 func (runner terminalCommandRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
 	return runner(ctx, request)
+}
+
+// fixtureCommandRunner projects the controlled buffered platform fake into the
+// component's direct Providers command port. Production selects its own bridge.
+func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
+	return bufferedFixtureRunner{runner: runner}
+}
+
+type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
+
+func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	result, err := r.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin, Env: request.Env,
+		WorkDir: request.WorkDir, ExecutionScopeID: request.FactorySessionID,
+		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
 }

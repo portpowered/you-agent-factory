@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,7 +18,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
-	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
 func TestCommandEffectBuildsRecordedPrintArgv(t *testing.T) {
@@ -286,7 +286,7 @@ func TestCommandEffectRejectsUnsupportedModelAndEffortBeforeLaunch(t *testing.T)
 
 func newAgyCommandEffect(runner platformprocess.CommandRunner) agy.Effect {
 	return agy.NewCommandEffect(
-		executionwire.AdaptPlatformCommandRunner(runner),
+		fixtureCommandRunner(runner),
 		platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond),
 		platformclock.Real{},
 	)
@@ -332,7 +332,7 @@ func TestCommandEffectDurationUsesInjectedClockOnSuccessAndFailure(t *testing.T)
 			t.Parallel()
 			clock := platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond)
 			calls := 0
-			effect := agy.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(clockAdvancingCommandRunner{
+			effect := agy.NewCommandEffect(fixtureCommandRunner(clockAdvancingCommandRunner{
 				run: func(ctx context.Context, command platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 					calls++
 					if command.Command != "agy" || command.ExecutionScopeID != "owned-session" {
@@ -396,7 +396,7 @@ func TestCommandEffectScheduledTimeoutAndCleanup(t *testing.T) {
 			runner := clockAdvancingCommandRunner{run: func(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 				return scheduledCommandOutcome(t, ctx, scheduler, cancel, tc.outcome, commandErr)
 			}}
-			effect := agy.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), scheduler, scheduler)
+			effect := agy.NewCommandEffect(fixtureCommandRunner(runner), scheduler, scheduler)
 			result, err := effect.Execute(parent, execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider: providers.IDAntigravity, PrintTimeout: tc.timeout,
 			}}, func([]byte) error { return nil })
@@ -514,7 +514,7 @@ func TestCommandEffectScheduledTimeoutPreservesPeerAndReuse(t *testing.T) {
 			return platformprocess.CommandResult{Stdout: []byte("later done")}, nil
 		}
 	}}
-	effect := agy.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), clock, clock)
+	effect := agy.NewCommandEffect(fixtureCommandRunner(runner), clock, clock)
 	peerDone := make(chan error, 1)
 	go func() {
 		result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
@@ -546,4 +546,21 @@ func TestCommandEffectScheduledTimeoutPreservesPeerAndReuse(t *testing.T) {
 	if err != nil || string(result.CapturedStdout) != "later done" {
 		t.Fatalf("later result = %+v, error = %v", result, err)
 	}
+}
+
+// fixtureCommandRunner projects the controlled buffered platform fake into the
+// component's direct Providers command port. Production selects its own bridge.
+func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
+	return bufferedFixtureRunner{runner: runner}
+}
+
+type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
+
+func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	result, err := r.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin, Env: request.Env,
+		WorkDir: request.WorkDir, ExecutionScopeID: request.FactorySessionID,
+		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
 }

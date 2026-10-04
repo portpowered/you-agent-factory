@@ -15,14 +15,13 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
-	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
 func TestCommandEffectRendersProviderNeutralReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), platformclock.Real{})
+	effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -55,7 +54,7 @@ func TestCommandEffectRendersResumeSessionFlag(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), platformclock.Real{})
+	effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -103,7 +102,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffort(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runner := testutil.NewProviderCommandRunner()
-			effect := claude.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), platformclock.Real{})
+			effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 			_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:        providers.IDClaude,
 				AttemptID:       "claude-invalid-effort-dispatch",
@@ -203,7 +202,7 @@ func TestCommandEffectKeepsAnOversizedPromptOffTheCommandLine(t *testing.T) {
 
 			prompt := strings.Repeat("u", tc.payloadSize)
 			runner := testutil.NewProviderCommandRunner()
-			effect := claude.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), platformclock.Real{})
+			effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 			_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 				ExecuteRequest: providers.ExecuteRequest{
 					Provider:     providers.IDClaude,
@@ -250,7 +249,7 @@ func TestCommandEffectPreservesFlagsWhenThePromptMovesToStdin(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner), platformclock.Real{})
+	effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 		ExecuteRequest: providers.ExecuteRequest{
 			Provider:        providers.IDClaude,
@@ -336,4 +335,21 @@ type terminalCommandRunner func(context.Context, providerservice.CommandRequest)
 
 func (runner terminalCommandRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
 	return runner(ctx, request)
+}
+
+// fixtureCommandRunner projects the controlled buffered platform fake into the
+// component's direct Providers command port. Production selects its own bridge.
+func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
+	return bufferedFixtureRunner{runner: runner}
+}
+
+type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
+
+func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	result, err := r.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin, Env: request.Env,
+		WorkDir: request.WorkDir, ExecutionScopeID: request.FactorySessionID,
+		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
 }
