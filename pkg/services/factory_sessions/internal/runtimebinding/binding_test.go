@@ -204,6 +204,34 @@ func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
 	}
 }
 
+func TestStopSessionPreservesReplacementPublishedDuringStop(t *testing.T) {
+	t.Parallel()
+	state := newRuntimeBindingState()
+	old := registerTestSession(state, "a")
+	peer := registerTestSession(state, "b")
+	var active runtimebinding.State
+	active.SetActive(context.Background(), old.ID, runtimebinding.HandleFromSession(old))
+	var replacement *livesession.LiveSession
+	err := runtimebinding.StopSession(state, &active, old.ID, func(handle factory.RuntimeRun) error {
+		if handle != runtimebinding.HandleFromSession(old) {
+			t.Fatal("stop targeted the replacement")
+		}
+		replacement = registerTestSession(state, "a")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StopSession: %v", err)
+	}
+	if state.Resolve("a") != replacement || state.Resolve("b") != peer {
+		t.Fatal("old retirement removed the replacement or peer")
+	}
+	if _, err := state.ResponseStreams().Streams("a").Subscribe("next", 0); err != nil {
+		t.Fatalf("replacement response stream was closed: %v", err)
+	}
+	state.Unregister("a")
+	state.Unregister("b")
+}
+
 func TestStopSessionRetiresSessionWhenRuntimeAlreadyStopped(t *testing.T) {
 	t.Parallel()
 

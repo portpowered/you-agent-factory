@@ -692,7 +692,7 @@ func StopSession(
 	if err := errors.Join(cleanupErrs...); err != nil {
 		return err
 	}
-	state.Unregister(sessionID)
+	state.UnregisterGeneration(session)
 	return nil
 }
 

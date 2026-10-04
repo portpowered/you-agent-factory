@@ -427,14 +427,31 @@ func (s *Service) Unregister(sessionID string) {
 		return
 	}
 	session := s.Resolve(sessionID)
-	if session == nil {
-		return
+	s.UnregisterGeneration(session)
+}
+
+// UnregisterGeneration retires only the captured record and its response
+// streams. Replacement under the same identity must remain queryable and open.
+func (s *Service) UnregisterGeneration(session *livesession.LiveSession) bool {
+	if s == nil || s.registry == nil || session == nil {
+		return false
+	}
+	streams := s.responses.Existing(livesession.CanonicalID(session))
+	if !s.registry.RemoveGeneration(session) {
+		return false
 	}
 	if s.close != nil {
 		s.close(session)
 	}
-	s.CloseResponseStreams(session)
-	s.registry.Remove(session.ID)
+	if s.responseEvents != nil {
+		s.responseEvents.Close(session.ResponseEvents)
+	} else {
+		session.CloseResponseEvents()
+	}
+	if streams != nil {
+		streams.Close()
+	}
+	return true
 }
 
 // Current returns the selected live session.
