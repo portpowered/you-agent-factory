@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -751,4 +755,131 @@ func homeEnvironment(home string) []string {
 		return []string{"home=" + home}
 	}
 	return []string{"HOME=" + home}
+}
+
+// The JSON fail/recover sequence remains ordered within its customer scope.
+// Standalone Models currently opens ~default and does not admit --quiet.
+func TestProcessModelsDiagnosticOutputFailureAndRecovery(t *testing.T) {
+	t.Parallel()
+	fixture := localai.Start(t, localai.Options{TTSFailureText: "private-failure-prompt"})
+	home := t.TempDir()
+	writeControlledBuiltinTTSSource(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
+	boundaries := newProcessTTSBoundaries(home, processModelHealthServer(t), fixture, nil)
+	core, observed := observer.New(zapcore.DebugLevel)
+	boundaries.edges.ProcessLogger = zap.New(core)
+	process, err := root.BuildProcess(t.Context(), boundaries.edges)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := process.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	mode := "json"
+	scenarioHome := home
+	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	warmup := filepath.Join(t.TempDir(), "warmup.wav")
+	if _, _, err := executeProcessTTS(t, process, scenarioHome, factoryDir, warmup, "private-warmup-prompt"); err != nil {
+		t.Fatalf("prepare assets: %v", err)
+	}
+	failed := filepath.Join(t.TempDir(), "failed.wav")
+	stdout, stderr, err := executeProcessTTSMode(t, process, scenarioHome, factoryDir, failed, "private-failure-prompt", mode)
+	if err == nil || stdout != "" {
+		t.Fatalf("failed %s invocation: error=%v stdout=%q", mode, err, stdout)
+	}
+	var diagnostic factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(stderr), &diagnostic); err != nil {
+		t.Fatalf("typed stderr: %v stderr=%q", err, stderr)
+	}
+	if diagnostic.Code != factoryapi.ErrorResponseCode("MODEL_BACKEND_NOT_READY") || diagnostic.Message != "TTS backend is unavailable" {
+		t.Fatalf("failure response=%#v", diagnostic)
+	}
+	if _, err := os.Stat(failed); !os.IsNotExist(err) {
+		t.Fatalf("failure artifact stat=%v", err)
+	}
+	recovered := filepath.Join(t.TempDir(), "recovered.wav")
+	stdout, stderr, err = executeProcessTTS(t, process, scenarioHome, factoryDir, recovered, "private-recovery-prompt")
+	if err != nil {
+		t.Fatalf("recovery %s: error=%v stderr=%q", mode, err, stderr)
+	}
+	audio, err := os.ReadFile(recovered)
+	if err != nil || !bytes.Equal(audio, localai.AudioBytes()) {
+		t.Fatalf("recovery artifact error=%v", err)
+	}
+	assertModelsDiagnosticOrigins(t, observed, scenarioHome)
+	for _, sentinel := range []string{"private-failure-prompt", "private-recovery-prompt"} {
+		if strings.Contains(stdout+stderr, sentinel) {
+			t.Fatal("private prompt reached terminal streams")
+		}
+	}
+}
+
+func executeProcessTTSMode(t *testing.T, process interface{ Execute(root.Input) error }, home, factoryDir, output, text, mode string) (string, string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	err := process.Execute(root.Input{
+		Args: processTTSModeArgs(mode, text, output),
+		Env:  homeEnvironment(home), Stdout: &stdout, Stderr: &stderr, Context: t.Context(), WorkingDirectory: factoryDir,
+	})
+	return stdout.String(), stderr.String(), err
+}
+
+func assertModelsDiagnosticOrigins(t *testing.T, observed *observer.ObservedLogs, home string) {
+	t.Helper()
+	processOrigin, hostOrigin := false, false
+	for _, entry := range observed.All() {
+		fields := entry.ContextMap()
+		if entry.Message == "models invocation completed" && fields["correlation_id"] != nil {
+			processOrigin = true
+		}
+		if entry.LoggerName == "modelhost" && fields["correlation_id"] != nil {
+			hostOrigin = true
+		}
+		sentinels := []string{"private-warmup-prompt", "private-failure-prompt", "private-recovery-prompt"}
+		// The shared backend also receives retention diagnostics with an explicit
+		// filesystem root. Path redaction here belongs to Models and its host;
+		// prompt contents must never appear in any captured diagnostic.
+		if strings.HasPrefix(entry.Message, "models ") || entry.LoggerName == "modelhost" {
+			sentinels = append(sentinels, home)
+		}
+		safeMessage := entry.Message
+		for _, sentinel := range sentinels {
+			safeMessage = strings.ReplaceAll(safeMessage, sentinel, "[redacted]")
+		}
+		for _, sentinel := range sentinels {
+			if strings.Contains(entry.Message, sentinel) {
+				t.Errorf("private prompt or path reached diagnostic logger=%q message=%q field=<message>", entry.LoggerName, safeMessage)
+			}
+		}
+		for key, value := range fields {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, sentinel := range sentinels {
+				needle, err := json.Marshal(sentinel)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Encode the needle too: JSON escapes Windows backslashes and
+				// nested field values, so a raw path would miss leaked content.
+				if strings.Contains(string(encoded), string(needle[1:len(needle)-1])) {
+					t.Errorf("private prompt or path reached diagnostic logger=%q message=%q field=%q", entry.LoggerName, safeMessage, key)
+				}
+			}
+		}
+	}
+	if !processOrigin || !hostOrigin {
+		t.Fatalf("captured Models process=%v host=%v", processOrigin, hostOrigin)
+	}
+}
+
+func processTTSModeArgs(mode, text, output string) []string {
+	args := []string{"you", "models", "invoke", "tts", "--operation", "TTS", "--text", text, "--output", output}
+	if mode == "json" {
+		return append([]string{"you", "--json"}, args[1:]...)
+	}
+	return args
 }
