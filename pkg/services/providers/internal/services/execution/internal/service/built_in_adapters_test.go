@@ -61,19 +61,22 @@ func TestBuiltInRegistrationsRouteSuppliedEffectsAndContinuation(t *testing.T) {
 		t.Run(string(provider), func(t *testing.T) {
 			t.Parallel()
 			var received []execution.ContinuationRequest
-			record := func(request execution.ContinuationRequest) error {
+			record := func(selected providers.ID, request execution.ContinuationRequest) error {
+				if selected != provider {
+					t.Fatalf("effect provider = %q, want %q", selected, provider)
+				}
 				received = append(received, request.Clone())
 				return execution.AttemptFailure{NativeError: context.Canceled}
 			}
 			registrations := BuiltInRegistrations(
 				agy.EffectFunc(func(_ context.Context, request execution.ContinuationRequest, _ func([]byte) error) (agy.EffectResult, error) {
-					return agy.EffectResult{}, record(request)
+					return agy.EffectResult{}, record(providers.IDAntigravity, request)
 				}),
 				codex.EffectFunc(func(_ context.Context, request execution.ContinuationRequest, _ func([]byte) error) (codex.EffectResult, error) {
-					return codex.EffectResult{}, record(request)
+					return codex.EffectResult{}, record(providers.IDCodex, request)
 				}),
 				claude.EffectFunc(func(_ context.Context, request execution.ContinuationRequest, _ func([]byte) error) (claude.EffectResult, error) {
-					return claude.EffectResult{}, record(request)
+					return claude.EffectResult{}, record(providers.IDClaude, request)
 				}),
 			)
 			request := providers.ExecuteRequest{Provider: provider, AttemptID: "selected", Model: "request-model", UserMessage: "request-message"}
@@ -86,8 +89,10 @@ func TestBuiltInRegistrationsRouteSuppliedEffectsAndContinuation(t *testing.T) {
 				assertSuppliedEffectNativeCancellation(t, err)
 				_, err = registration.Continue(t.Context(), execution.ContinuationRequest{ExecuteRequest: request, ResumeSession: resume})
 				assertSuppliedEffectNativeCancellation(t, err)
+				_, err = registration.Attempt(t.Context(), request)
+				assertSuppliedEffectNativeCancellation(t, err)
 			}
-			want := []execution.ContinuationRequest{{ExecuteRequest: request}, {ExecuteRequest: request, ResumeSession: resume}}
+			want := []execution.ContinuationRequest{{ExecuteRequest: request}, {ExecuteRequest: request, ResumeSession: resume}, {ExecuteRequest: request}}
 			if !reflect.DeepEqual(received, want) {
 				t.Fatalf("effect requests = %#v, want %#v", received, want)
 			}
