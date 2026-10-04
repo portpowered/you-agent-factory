@@ -14,13 +14,14 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
 
+func persistenceValidationLoader([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	return nil, nil
+}
+
 func validPersistenceValidationRequest() factorydefinitions.DefinitionValidationRequest {
 	return factorydefinitions.DefinitionValidationRequest{
 		Config:           &factorydefinitions.FactoryConfig{},
 		CanonicalPayload: []byte(`{}`),
-		CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, nil
-		},
 	}
 }
 
@@ -30,11 +31,14 @@ func validPersistenceValidationRequest() factorydefinitions.DefinitionValidation
 func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil)
+	canonicalLoads := 0
+	validator := factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		canonicalLoads++
+		return nil, nil
+	})
 	prepared := &factorydefinitions.PreparedFactoryLayoutPayload{}
 	var preparedWith factorydefinitions.Validator
 	mapCalls := 0
-	canonicalLoads := 0
 	writeCalls := 0
 
 	service, err := catalogpersistence.New(
@@ -46,10 +50,6 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 			mapCalls++
 			request := validPersistenceValidationRequest()
 			request.Profile = factorydefinitions.ValidationProfileTopology
-			request.CanonicalFactoryLoader = func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-				canonicalLoads++
-				return nil, nil
-			}
 			return request, nil
 		},
 		func(
@@ -150,7 +150,7 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, persistenceValidationLoader)
 	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
@@ -229,7 +229,7 @@ func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.
 func TestReplaceFactoryLayout_ValidationFailureLeavesCommittedFactoryUnchanged(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, persistenceValidationLoader)
 	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {

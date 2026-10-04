@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ci-wait.py — Gate a task until its PR's observed checks are terminal.
+"""ci-wait.py — Gate a task on current-head checks and merge queue lifecycle.
 
 Usage: python3 factory/scripts/ci-wait.py <lane-name> [process-output]
 
@@ -43,6 +43,11 @@ Special cases:
     reviewer sees reality. It is never treated as checks-terminal.
 
 Stdlib-only; shells out to the `gh` CLI like setup-workspace.py does for git.
+
+Once queue membership is observed, keep this invocation pending until MERGED,
+CLOSED, confirmed ejection, or the bounded deadline. Auto-merge with pending
+checks also waits. Queue history is invocation-local; restart cannot prove an
+earlier ejection. Lifecycle uncertainty never establishes queue absence.
 """
 
 import json
@@ -69,6 +74,17 @@ REPOSITORY_JSON_FIELDS = "nameWithOwner,url"
 PR_CHECKS_JSON_FIELDS = "name,state,bucket,link,workflow,startedAt,completedAt"
 CONVERGENCE_OBSERVATIONS = 2
 MAX_PROCESS_OUTPUT_BYTES = 8 * 1024
+MERGE_WAIT_QUERY = """query PRMergeWait($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      number
+      state
+      headRefOid
+      mergeQueueEntry { id state position }
+      autoMergeRequest { enabledAt }
+    }
+  }
+}"""
 
 PR_URL_TOKEN = re.compile(
     r"[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\[\]\"'`]+", re.IGNORECASE
@@ -226,13 +242,18 @@ def log(message):
     print(message, file=sys.stderr, flush=True)
 
 
-def run_gh(*args):
+def run_gh(*args, deadline=None):
     """Run a gh command, returning the CompletedProcess. Never raises on rc."""
+    timeout = GH_CALL_TIMEOUT_SECONDS
+    if deadline is not None:
+        timeout = min(timeout, deadline - time.monotonic())
+        if timeout <= 0:
+            raise subprocess.TimeoutExpired("gh", 0)
     return subprocess.run(
         ["gh", *args],
         capture_output=True,
         text=True,
-        timeout=GH_CALL_TIMEOUT_SECONDS,
+        timeout=timeout,
     )
 
 
@@ -773,10 +794,10 @@ def resolve_pr(branch):
     sys.exit(1)
 
 
-def read_gh_json(label, *args):
+def read_gh_json(label, *args, deadline=None, require_success=False):
     """Read one JSON response without leaking dependency stderr or payloads."""
     try:
-        result = run_gh(*args)
+        result = run_gh(*args, deadline=deadline) if deadline is not None else run_gh(*args)
     except subprocess.TimeoutExpired:
         log(f"{label} timed out; treating the observation as unavailable")
         return JSONRead(JSONReadStatus.UNAVAILABLE)
@@ -784,6 +805,9 @@ def read_gh_json(label, *args):
         log(f"{label} could not be executed; treating the observation as unavailable")
         return JSONRead(JSONReadStatus.UNAVAILABLE)
 
+    if require_success and result.returncode:
+        log(f"{label} failed; treating the observation as unavailable")
+        return JSONRead(JSONReadStatus.UNAVAILABLE)
     stdout = (result.stdout or "").strip()
     if not stdout:
         status = JSONReadStatus.UNAVAILABLE if result.returncode else JSONReadStatus.EMPTY
@@ -805,22 +829,119 @@ def read_gh_json(label, *args):
     return JSONRead(JSONReadStatus.OK, value)
 
 
-def fetch_pr_view(pr_number, repository=None):
+def fetch_pr_view(pr_number, repository=None, deadline=None):
     """Read the PR head and status-check rollup for one bounded observation."""
     args = ["pr", "view", str(pr_number)]
     if repository:
         args.extend(["--repo", repository])
     args.extend(["--json", PR_VIEW_JSON_FIELDS])
-    return read_gh_json("gh pr view", *args)
+    return read_gh_json("gh pr view", *args, deadline=deadline)
 
 
-def fetch_checks(pr_number, repository=None):
+def fetch_checks(pr_number, repository=None, deadline=None):
     """Read the full review-observed check list; required-only is not used."""
     args = ["pr", "checks", str(pr_number)]
     if repository:
         args.extend(["--repo", repository])
     args.extend(["--json", PR_CHECKS_JSON_FIELDS])
-    return read_gh_json("gh pr checks", *args)
+    return read_gh_json("gh pr checks", *args, deadline=deadline)
+
+
+@dataclass(frozen=True)
+class MergeLifecycle:
+    """Validated lifecycle, or a bounded reason why it is unknown."""
+
+    reason: str = ""
+    state: str = ""
+    head_ref_oid: str = ""
+    queue_entry: object = None
+    auto_merge_armed: bool = False
+
+
+@dataclass(frozen=True)
+class MergeWaitDecision:
+    outcome: str
+    reason: str
+    was_queued: bool
+
+
+def parse_merge_lifecycle(read, pr_number):
+    """Require explicit nullable keys; partial GraphQL data is not absence."""
+    if read.status != JSONReadStatus.OK:
+        return MergeLifecycle(reason=f"lifecycle-{read.status.value}")
+    payload = read.value
+    if not isinstance(payload, dict) or payload.get("errors"):
+        return MergeLifecycle(reason="lifecycle-graphql-error")
+    data = payload.get("data")
+    repository = data.get("repository") if isinstance(data, dict) else None
+    pr = repository.get("pullRequest") if isinstance(repository, dict) else None
+    required = {"number", "state", "headRefOid", "mergeQueueEntry", "autoMergeRequest"}
+    if not isinstance(pr, dict) or not required.issubset(pr):
+        return MergeLifecycle(reason="lifecycle-missing-fields")
+    if type(pr["number"]) is not int or pr["number"] != pr_number:
+        return MergeLifecycle(reason="lifecycle-pr-number-mismatch")
+    head = pr["headRefOid"]
+    if (pr["state"] not in PR_STATE_PREFERENCE
+            or not isinstance(head, str)
+            or not re.fullmatch(r"[0-9a-fA-F]{40}", head)):
+        return MergeLifecycle(reason="lifecycle-invalid-state-or-head")
+    entry = pr["mergeQueueEntry"]
+    if entry is not None:
+        if (not isinstance(entry, dict)
+                or not isinstance(entry.get("id"), str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", entry["id"])
+                or not isinstance(entry.get("state"), str)
+                or not re.fullmatch(r"[A-Z_]{1,64}", entry["state"])
+                or type(entry.get("position")) is not int or entry["position"] < 1):
+            return MergeLifecycle(reason="lifecycle-invalid-queue-entry")
+        entry = {key: entry[key] for key in ("id", "state", "position")}
+    auto = pr["autoMergeRequest"]
+    if auto is not None and (
+            not isinstance(auto, dict) or not _non_empty_text(auto.get("enabledAt"))):
+        return MergeLifecycle(reason="lifecycle-invalid-auto-merge")
+    return MergeLifecycle(state=pr["state"], head_ref_oid=head,
+                          queue_entry=entry, auto_merge_armed=auto is not None)
+
+
+def fetch_merge_lifecycle(pr_number, repository, deadline):
+    """Read one exact PR through validated local repository/hostname routing."""
+    if repository is None:
+        return MergeLifecycle(reason="lifecycle-repository-unavailable")
+    owner, name = repository.name_with_owner.split("/")
+    host = repository.host
+    if repository.port is not None:
+        host = f"{host}:{repository.port}"
+    read = read_gh_json(
+        "gh PR lifecycle", "api", "graphql", "--hostname", host,
+        "-f", f"query={MERGE_WAIT_QUERY}", "-f", f"owner={owner}",
+        "-f", f"name={name}", "-F", f"number={pr_number}", deadline=deadline,
+        require_success=True,
+    )
+    return parse_merge_lifecycle(read, pr_number)
+
+
+def merge_wait_decision(lifecycle, snapshot=None, was_queued=False):
+    """Pure precedence; ordinary checks still require the poller's convergence."""
+    if lifecycle.reason:
+        return MergeWaitDecision("uncertain", lifecycle.reason, was_queued)
+    if lifecycle.state in {"MERGED", "CLOSED"}:
+        return MergeWaitDecision("terminal", f"pr-{lifecycle.state.lower()}", was_queued)
+    if lifecycle.queue_entry is not None:
+        return MergeWaitDecision("pending", "merge-queue-pending", True)
+    if was_queued:
+        return MergeWaitDecision("terminal", "pr-ejected", True)
+    if snapshot is not None and snapshot.head_ref_oid != lifecycle.head_ref_oid:
+        return MergeWaitDecision("uncertain", "lifecycle-check-head-mismatch", False)
+    if (lifecycle.auto_merge_armed and snapshot is not None
+            and non_terminal_checks(snapshot.checks)):
+        return MergeWaitDecision("pending", "auto-merge-pending", False)
+    return MergeWaitDecision("checks", "current-head-checks", False)
+
+
+def lifecycle_fields(lifecycle, was_queued):
+    return {"mergeQueueEntry": lifecycle.queue_entry,
+            "autoMergeArmed": lifecycle.auto_merge_armed if not lifecycle.reason else None,
+            "wasQueued": was_queued}
 
 
 def _non_empty_text(value):
@@ -1008,11 +1129,11 @@ def _observed_heads(*heads):
     return tuple(dict.fromkeys(head for head in heads if head))
 
 
-def observe_current_head(pr_number, repository=None):
+def observe_current_head(pr_number, repository=None, deadline=None):
     """Take one bounded before/checks/after observation of the PR."""
-    before_read = fetch_pr_view(pr_number, repository)
-    checks_read = fetch_checks(pr_number, repository)
-    after_read = fetch_pr_view(pr_number, repository)
+    before_read = fetch_pr_view(pr_number, repository, deadline)
+    checks_read = fetch_checks(pr_number, repository, deadline)
+    after_read = fetch_pr_view(pr_number, repository, deadline)
 
     before, before_reason = _view_parts(before_read, pr_number)
     after, after_reason = _view_parts(after_read, pr_number)
@@ -1231,15 +1352,49 @@ def main():
         return
 
     deadline = time.monotonic() + DEADLINE_SECONDS
+    started = time.monotonic()
     no_checks_deadline = time.monotonic() + NO_CHECKS_GRACE_SECONDS
     candidate_fingerprint = None
     convergence_count = 0
+    was_queued = False
+    repository_context = None
     while True:
-        snapshot = observe_current_head(pr_number, repository)
+        if repository_context is None:
+            args = ["repo", "view"]
+            if repository:
+                args.extend([repository])
+            repo_read = read_gh_json(
+                "gh repo view", *args, "--json", REPOSITORY_JSON_FIELDS,
+                deadline=deadline, require_success=True,
+            )
+            if repo_read.status == JSONReadStatus.OK:
+                repository_context = _repository_context_from_value(repo_read.value)
+        lifecycle = fetch_merge_lifecycle(pr_number, repository_context, deadline)
+        decision = merge_wait_decision(lifecycle, was_queued=was_queued)
+        was_queued = decision.was_queued
+        snapshot = CurrentHeadSnapshot(SnapshotStatus.UNCERTAIN, decision.reason,
+                                       lifecycle.head_ref_oid)
+        if decision.outcome == "checks":
+            snapshot = observe_current_head(pr_number, repository, deadline)
+            # Queue admission or merge can race the before/checks/after reads.
+            # This refresh must succeed before an ordinary terminal release.
+            lifecycle = fetch_merge_lifecycle(pr_number, repository_context, deadline)
+            decision = merge_wait_decision(lifecycle, snapshot, was_queued)
+            was_queued = decision.was_queued
+        if decision.outcome == "terminal":
+            emit_result(pr=pr_number, prState=lifecycle.state, reason=decision.reason,
+                        headRefOid=lifecycle.head_ref_oid,
+                        **lifecycle_fields(lifecycle, was_queued))
+            return
         now = time.monotonic()
         pending = non_terminal_checks(snapshot.checks)
 
-        if snapshot.status == SnapshotStatus.VALID:
+        if decision.outcome != "checks":
+            candidate_fingerprint = None
+            convergence_count = 0
+            log(f"PR #{pr_number}: {decision.reason}; queue={lifecycle.queue_entry}; "
+                f"wasQueued={was_queued}; elapsed={int(now - started)}s")
+        elif snapshot.status == SnapshotStatus.VALID:
             if pending:
                 candidate_fingerprint = None
                 convergence_count = 0
@@ -1307,12 +1462,15 @@ def main():
                 f"({snapshot.reason}) at {snapshot.head_ref_oid or 'unknown'}; retrying"
             )
 
-        if now + POLL_INTERVAL_SECONDS >= deadline:
+        if now >= deadline or (
+                decision.outcome == "checks" and now + POLL_INTERVAL_SECONDS >= deadline):
             # Continue-equivalent re-queue: exit 0 so the task reaches review;
             # the reviewer observes the bounded evidence and can hold/requeue.
             # The convergence comparison above, not this polling interval, is
             # the completeness proof.
-            if snapshot.status == SnapshotStatus.VALID and pending:
+            if decision.outcome != "checks":
+                deadline_reason = decision.reason
+            elif snapshot.status == SnapshotStatus.VALID and pending:
                 deadline_reason = "non-terminal-checks"
             elif snapshot.status == SnapshotStatus.VALID:
                 deadline_reason = "terminal-candidate-not-converged"
@@ -1328,10 +1486,11 @@ def main():
                 prState=pr_state,
                 reason="deadline-requeue",
                 **snapshot_fields(snapshot),
+                **lifecycle_fields(lifecycle, was_queued),
                 uncertainty=snapshot_uncertainty(snapshot, deadline_reason),
             )
             return
-        time.sleep(POLL_INTERVAL_SECONDS)
+        time.sleep(min(POLL_INTERVAL_SECONDS, max(0, deadline - time.monotonic())))
 
 
 if __name__ == "__main__":

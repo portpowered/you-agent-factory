@@ -10,7 +10,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
@@ -27,14 +26,11 @@ func TestCompilationOwner_LoadAndCompilePreserveEffectiveSourceFacts(t *testing.
 	composition := testComposition()
 	loader := composition.Loader()
 
-	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
-		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
-	})
-	if err != nil {
-		t.Fatalf("compilationwire.NewService: %v", err)
-	}
+	compilation := compilationwire.NewService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		compilationcanonical.EncodeFactoryPort(),
+	)
 
 	loaded, err := loader.LoadSourceFromFactoryDir(factoryDir, nil)
 	if err != nil {

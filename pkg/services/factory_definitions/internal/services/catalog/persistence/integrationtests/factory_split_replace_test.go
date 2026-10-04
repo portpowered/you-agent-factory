@@ -21,7 +21,7 @@ func TestReplaceFactoryLayoutAtDir_WritesSplitLayoutAndRestores(t *testing.T) {
 	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(
 		targetDir,
 		updated,
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON),
 	)
 	if err != nil {
 		t.Fatalf("ReplaceFactoryLayout: %v", err)
@@ -44,7 +44,7 @@ func TestReplaceFactorySplitLayout_WritesSplitLayoutAndRestores(t *testing.T) {
 	}
 
 	updated := splitReplaceTestPayload(t, "alpha-v2")
-	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, updated, factoryvalidation.New(nil))
+	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, updated, factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON))
 	if err != nil {
 		t.Fatalf("ReplaceFactorySplitLayout: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestReplaceFactorySplitLayout_PrunesRemovedWorkerAndOverwritesAgents(t *tes
 	}
 
 	updated := splitReplaceTestPayload(t, "alpha-v2")
-	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, updated, factoryvalidation.New(nil))
+	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, updated, factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON))
 	if err != nil {
 		t.Fatalf("ReplaceFactorySplitLayout: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkerDirectory(t *testing.T) {
 	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(
 		targetDir,
 		splitReplaceTestPayload(t, "alpha-v2"),
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON),
 	)
 	if err != nil {
 		t.Fatalf("ReplaceFactoryLayout: %v", err)
@@ -145,7 +145,7 @@ func TestReplaceFactoryLayoutAtDir_PrunesRemovedWorkstationDirectory(t *testing.
 	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(
 		targetDir,
 		splitReplaceTestPayload(t, "alpha-v2"),
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON),
 	)
 	if err != nil {
 		t.Fatalf("ReplaceFactoryLayout: %v", err)
@@ -166,7 +166,7 @@ func TestReplaceFactorySplitLayout_OverwritesExistingAgentsOnSave(t *testing.T) 
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
-	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, payload, factoryvalidation.New(nil))
+	result, err := factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, payload, factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON))
 	if err != nil {
 		t.Fatalf("ReplaceFactorySplitLayout initial: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestReplaceFactorySplitLayout_OverwritesExistingAgentsOnSave(t *testing.T) 
 		t.Fatalf("WriteFile(old worker AGENTS.md): %v", err)
 	}
 
-	result, err = factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, payload, factoryvalidation.New(nil))
+	result, err = factorydefinitioncomposition.ReplaceFactoryLayout(targetDir, payload, factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON))
 	if err != nil {
 		t.Fatalf("ReplaceFactorySplitLayout refresh: %v", err)
 	}
