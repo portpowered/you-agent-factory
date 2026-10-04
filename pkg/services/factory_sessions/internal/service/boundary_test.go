@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+
+	"go.uber.org/goleak"
 )
 
 func TestOperatorConfigPathRequiresExplicitProcessHome(t *testing.T) {
@@ -102,3 +104,9 @@ func (service *orderlyRecordingService) FlushRecording(
 }
 
 var _ recordings.Service = (*orderlyRecordingService)(nil)
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}

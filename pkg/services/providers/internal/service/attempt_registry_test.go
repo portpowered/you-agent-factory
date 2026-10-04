@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+
+	"go.uber.org/goleak"
 )
 
 func TestLiveAttemptRegistry_BindThenContainsThenRelease(t *testing.T) {
@@ -349,4 +351,10 @@ func TestLiveAttemptRegistry_ClaimRacingReleaseHasOneDeterministicWinnerAndAlway
 			t.Fatalf("iteration %d: contains() = true after a claim/release race, want the identity removed either way", i)
 		}
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

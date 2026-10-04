@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"go.uber.org/goleak"
 )
 
 func TestGroupWaitReturnsNilWhenEveryTaskSucceeds(t *testing.T) {
@@ -187,4 +189,10 @@ func TestGroupDoneClosesImmediatelyForAGroupWithNoTasks(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Done() never closed for a group with no tracked tasks")
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

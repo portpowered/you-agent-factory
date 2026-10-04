@@ -16,6 +16,8 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+
+	"go.uber.org/goleak"
 )
 
 func TestDefaultPostRunCleanupGracePeriod(t *testing.T) {
@@ -971,4 +973,10 @@ func assertInterruptionPreventsDelayedSideEffect(t *testing.T, deadline bool) {
 	if _, statErr := os.Stat(sideEffectFile); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("delayed descendant side effect exists after Run returned: %v", statErr)
 	}
+}
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

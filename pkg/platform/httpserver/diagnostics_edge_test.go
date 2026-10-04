@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/google/pprof/profile"
+
+	"go.uber.org/goleak"
 )
 
 func TestHandlerWithPprofHandlesNilHandlerAndDirectProfileDispatch(t *testing.T) {
@@ -293,3 +295,9 @@ type diagnosticReadCloser struct {
 
 func (reader *diagnosticReadCloser) Read([]byte) (int, error) { return 0, reader.err }
 func (*diagnosticReadCloser) Close() error                    { return nil }
+
+// TestMain fails the package when a test leaves goroutines running, which
+// otherwise surfaces as teardown hangs and cross-test interference.
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
