@@ -95,9 +95,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v6 := provideLiveRecordingTargetPlanner(reserver)
+	source := edges2.Clock
+	v6 := provideLiveRecordingTargetPlanner(reserver, source)
 	adapter := provideRecordingsCLIAdapter()
-	v7 := provideCLIRunDefaults(v6, adapter)
+	v7 := provideCLIRunDefaults(v6, adapter, source)
 	batchInputFileSystem := provideBatchInputFileSystem()
 	pathInspector := provideRunInputPathInspector()
 	directoryCreator := provideRunDirectoryCreator()
@@ -195,7 +196,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	quorumPolicyService := provideQuorumPolicyService(invocationPolicyPorts)
 	invocationOutputShapingService := provideInvocationOutputShapingService(invocationPolicyPorts)
 	workPropagationPolicyService := provideWorkPropagationPolicyService(invocationPolicyPorts)
-	contentStagingService, err := provideWorkContentStagingService(edges2)
+	contentStagingService, err := provideWorkContentStagingService(edges2, source)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +243,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	workService := provideWorkService(v25, submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer, v43, requestPreparationService, invocationInputPreparation)
 	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
 	runtimeLoggerFactory := provideRuntimeLoggerFactory()
-	wireRuntimeArtifactClock := provideRuntimeArtifactClock()
+	wireRuntimeArtifactClock := provideRuntimeArtifactClock(source)
 	wireRuntimeArtifactIDGenerator := provideRuntimeArtifactIDGenerator()
 	factoryRuntimeLogOwner, err := provideRuntimeLogOwner(logger, wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver)
 	if err != nil {
@@ -779,7 +780,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	remoteInvocationOperation := provideRemoteInvocationOperation(wireStandardCLIHTTPProtocol)
 	operations := provideACPCLIService(operatorsettingsService, service, idGenerator)
-	chatsessionsService, err := provideChatSessionsService(eventsService, loggingLogger)
+	chatsessionsService, err := provideChatSessionsService(eventsService, loggingLogger, source)
 	if err != nil {
 		return nil, err
 	}
@@ -931,7 +932,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 // wire.go:
 
 var platformSet = wire11.NewSet(
-	provideProcessLogger,
+	provideProcessLogger, wire11.FieldsOf(new(edges.Edges), "Clock"),
 )
 
 var apiSet = wire11.NewSet(http.NewAdapter, http.NewHandler, stdio.NewOpener, provideHTTPRuntimeBindingWithMetrics)

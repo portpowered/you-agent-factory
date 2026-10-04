@@ -33,6 +33,7 @@ import (
 
 var platformSet = wire.NewSet(
 	provideProcessLogger,
+	wire.FieldsOf(new(edges.Edges), "Clock"),
 )
 
 var apiSet = wire.NewSet(
