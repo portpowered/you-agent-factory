@@ -232,7 +232,7 @@ func keyedRetentionCanceledRecording(t *testing.T, server *identityFixture, writ
 func keyedRetentionWorkerCursor(t *testing.T, server *identityFixture, factoryID, workerID string, events []factoryapi.WorkerSessionEvent) {
 	t.Helper()
 	cursor := events[0].Event.Cursor
-	endpoint := server.URL() + "/factory-sessions/" + factoryID + "/worker-sessions/" + workerID + "/events?replayOnly=true&after_position=" + strconv.FormatInt(cursor.Position, 10) + "&cursor_worker_session_id=" + workerID
+	endpoint := server.URL() + "/factory-sessions/" + factoryID + "/worker-sessions/" + workerID + "/events?replayOnly=true&after_position=" + strconv.FormatInt(cursor.Position, 10)
 	if cursor.StreamGenerationId != nil {
 		endpoint += "&stream_generation_id=" + *cursor.StreamGenerationId
 	}

@@ -9,11 +9,12 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
-
 	"go.uber.org/goleak"
+	"go.uber.org/zap"
 )
 
 type closingDurableOwner struct {
@@ -162,4 +163,43 @@ func TestStopLiveRuntimeSidecars_MissingSidecarsSkipsLifecycleFallback(t *testin
 // otherwise surfaces as teardown hangs and cross-test interference.
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
+}
+
+type suppliedStreamFactories struct {
+	progressScope, completionScope, dispatch, payload string
+	logger                                            *zap.Logger
+}
+
+func (s *suppliedStreamFactories) InferenceProgressPublisherFactory(logger *zap.Logger) func(string) factorysessions.ProgressPublisher {
+	s.logger = logger
+	return func(id string) factorysessions.ProgressPublisher {
+		s.progressScope = id
+		return func(fragment factorysessions.ProgressFragment) { s.payload = fragment.Payload }
+	}
+}
+func (s *suppliedStreamFactories) DispatchCompletionObserverFactory() func(string) func(string) {
+	return func(id string) func(string) {
+		s.completionScope = id
+		return func(dispatch string) { s.dispatch = dispatch }
+	}
+}
+func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
+	streams := &suppliedStreamFactories{}
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
+	if assembly.Resolve("supplied") != state.Resolve("supplied") {
+		t.Fatal("assembly replaced supplied authority")
+	}
+	logger := zap.NewNop()
+	assembly.InferenceProgressPublisherFactory(logger)("supplied")(factorysessions.ProgressFragment{Payload: "owned-output"})
+	assembly.DispatchCompletionObserverFactory()("supplied")("owned-dispatch")
+	if streams.logger != logger || streams.progressScope != "supplied" || streams.completionScope != "supplied" || streams.payload != "owned-output" || streams.dispatch != "owned-dispatch" {
+		t.Fatalf("forwarded factories = %#v", streams)
+	}
+	state.Unregister("supplied")
+	if assembly.Resolve("supplied") != nil {
+		t.Fatal("assembly retained retired authority entry")
+	}
 }
