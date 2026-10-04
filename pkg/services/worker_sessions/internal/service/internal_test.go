@@ -1556,6 +1556,53 @@ func TestKeyedRuntime_CanonicalProgressPreservesDraftBeforeForwarding(t *testing
 	}
 }
 
+func TestKeyedRuntime_AgentFinalDraftRetainsExactProvenanceAndRejectsForeignAttempts(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	first := newPerRuntimeAttemptFixture(t, "a", sink)
+	peer := newPerRuntimeAttemptFixture(t, "b", sink, first)
+	correlation := keyedRuntimeProgressFragment(first).Correlation
+	payload, err := json.Marshal(workers.MessagePayload{
+		Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "authoritative final answer"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := workers.Draft{
+		Kind: workers.KindMessage, Phase: workers.PhaseCompleted, DispatchID: correlation.AttemptID,
+		ItemID: correlation.AttemptID + "-final-message", Payload: payload,
+		Provenance: workers.Provenance{Provider: "agent-run", NativeEventType: "agent_final_response",
+			Delivery: workers.DeliveryNativeFinal, Fidelity: workers.FidelityFinalOnly, Representation: workers.RepresentationSnapshot},
+	}
+	// The harness final has only a physical DispatchID and canonical draft;
+	// its admitting Workers request supplies the logical/physical correlation.
+	fragment := workers.CanonicalDraftFragment(correlation.AttemptID, draft)
+	fragment.Correlation = correlation
+	forwarded := 0
+	next := func(got workers.ProgressFragment) {
+		forwarded++
+		records := sink.requestsFor(workersessions.Topic(first.request.ID, first.request.Execution.Execution.FactorySessionID))
+		if len(records) != 2 || !reflect.DeepEqual(decodePerRuntimeDraft(t, records[1]), draft) || !reflect.DeepEqual(got, fragment) {
+			t.Errorf("final draft/fragment changed or forwarded before commit: %#v, %#v", records, got)
+		}
+	}
+	for _, rejected := range []workers.ExecutionCorrelation{{}, keyedRuntimeProgressFragment(peer).Correlation, {
+		RuntimeID: correlation.RuntimeID, DispatchID: correlation.DispatchID, AttemptID: "stale-physical",
+	}} {
+		foreign := fragment
+		foreign.Correlation = rejected
+		before := sink.requestsFor("")
+		err := first.service.PublishRuntimeProgress(context.Background(), first.request.Key, foreign, next)
+		if !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) || forwarded != 0 || !reflect.DeepEqual(before, sink.requestsFor("")) {
+			t.Fatalf("foreign final publication: %v, forwarded=%d", err, forwarded)
+		}
+	}
+	workersessions.RuntimeProgressPublisher(first.service.PublishRuntimeProgress).ForRuntime(first.request.Key.RuntimeID, next)(fragment)
+	if forwarded != 1 || len(sink.requestsFor(workersessions.Topic(peer.request.ID, peer.request.Execution.Execution.FactorySessionID))) != 1 {
+		t.Fatalf("final forwards=%d or peer topic mutated", forwarded)
+	}
+}
+
 func TestKeyedRuntimeCompatibilityInvocationPublishesBeforeForwarding(t *testing.T) {
 	t.Parallel()
 	testKeyedRuntimeCompatibilityProgress(t, "keyed-compat-runtime", true)
