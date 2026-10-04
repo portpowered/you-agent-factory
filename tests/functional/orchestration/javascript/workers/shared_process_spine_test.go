@@ -77,6 +77,7 @@ func TestJavaScriptSharedWorkerBehavior(t *testing.T) {
 		{"overrides/unknown-provider", runJavaScriptUnknownProviderOverride},
 		{"isolation/concurrent-success-failure", runJavaScriptConcurrentIsolation},
 		{"isolation/runtime-children", runJavaScriptRuntimeChildren},
+		{"isolation/local-cli-beside-runtime", runJavaScriptLocalCLIBesideRuntime},
 	}
 	for _, test := range tests {
 		test := test
