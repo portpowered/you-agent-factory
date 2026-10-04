@@ -333,3 +333,44 @@ func newTestRunner(
 		func(workers.ScriptEvent) {},
 	)
 }
+
+func assertDefaultExecutionAfterOverride(t *testing.T, scriptRunner workers.Runner,
+	commandEdge *streamingCommandEdge, constructionLog, overrideLog *observationLog,
+	overrideRequest workers.RunnerExecutionRequest, overridden workers.RunnerExecutionResult,
+	started time.Time, constructionChunks, overrideChunks []outputChunk) {
+	t.Helper()
+	overridden.Diagnostics.Command.Args[0] = "override mutation"
+	overridden.Diagnostics.Command.Env["RUNTIME"] = "override mutation"
+	overridden.Diagnostics.Metadata["dispatch_id"] = "override mutation"
+	request := observedRequest()
+	request.Correlation.RuntimeID = "default-runtime"
+	request.Correlation.AttemptID = "default-attempt"
+	result, err := scriptRunner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("default Execute() after override error = %v", err)
+	}
+	assertObservedValue(t, "default output", result.Content, "construction")
+	assertObservedValue(t, "default command calls", constructionLog.Values(), []string{"command"})
+	assertObservedValue(t, "default selected command", commandEdge.Request().Command, "echo")
+	assertObservedValue(t, "default command dispatch", commandEdge.Request().DispatchID, "dispatch-1")
+	assertObservedValue(t, "default detached args", result.Diagnostics.Command.Args, []string{"safe-arg"})
+	assertObservedValue(t, "default detached environment", result.Diagnostics.Command.Env["RUNTIME"], "<metadata-only>")
+	assertObservedValue(t, "default detached metadata", result.Diagnostics.Metadata["dispatch_id"], "dispatch-1")
+	assertAttributedObservations(t, constructionLog, request, started.Add(2*time.Second),
+		started.Add(3*time.Second), "echo", []string{"safe-arg"}, constructionChunks)
+	assertObservedValue(t, "default terminal stdout", constructionLog.events[1].Response.Stdout, "construction")
+	assertObservedValue(t, "default terminal stderr", constructionLog.events[1].Response.Stderr, "construction note")
+	assertObservedValue(t, "default terminal outcome", constructionLog.events[1].Response.Outcome, workers.ScriptExecutionOutcomeSucceeded)
+	// The default execution must not publish or record into the request-local captures.
+	assertAttributedObservations(t, overrideLog, overrideRequest, started, started.Add(time.Second),
+		"echo", []string{"safe-arg"}, overrideChunks)
+	assertObservedValue(t, "override terminal stdout", overrideLog.events[1].Response.Stdout, overrideChunks[0].payload)
+	assertObservedValue(t, "override terminal outcome", overrideLog.events[1].Response.Outcome, workers.ScriptExecutionOutcomeSucceeded)
+	result.Diagnostics.Command.Args[0] = "default mutation"
+	result.Diagnostics.Command.Env["RUNTIME"] = "default mutation"
+	result.Diagnostics.Metadata["dispatch_id"] = "default mutation"
+	assertObservedValue(t, "override output stays detached", overridden.Content, overrideChunks[0].payload)
+	assertObservedValue(t, "override args stay detached", overridden.Diagnostics.Command.Args, []string{"override mutation"})
+	assertObservedValue(t, "override environment stays detached", overridden.Diagnostics.Command.Env["RUNTIME"], "override mutation")
+	assertObservedValue(t, "override metadata stays detached", overridden.Diagnostics.Metadata["dispatch_id"], "override mutation")
+}

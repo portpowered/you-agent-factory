@@ -148,70 +148,60 @@ func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 }
 
 func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
-	t.Run("non-streaming override preserves output and correlation", func(t *testing.T) {
-		constructionRunner := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("construction")}}
-		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
-		request := validRequest()
-		request.Correlation = workers.ExecutionCorrelation{
-			FactorySessionID: "session-detached",
-			RuntimeID:        "runtime-detached",
-			GenerationID:     "generation-detached",
-			DispatchID:       "dispatch-detached",
-			AttemptID:        "attempt-detached",
-		}
-		override := nonStreamingCommandRunner{result: workerprocess.CommandResult{
-			Stdout: []byte("override stdout"),
-			Stderr: []byte("override stderr"),
-		}}
-		var fragments []workers.ProgressFragment
-		var events []workers.ScriptEvent
-		ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), override)
-		ctx = workerexecution.WithProgressPublisher(ctx, func(fragment workers.ProgressFragment) {
-			fragments = append(fragments, fragment)
-		})
-		ctx = workerexecution.WithScriptEventRecorder(ctx, func(event workers.ScriptEvent) {
-			events = append(events, event)
-		})
-
-		result, err := scriptRunner.Execute(ctx, request)
-		if err != nil {
-			t.Fatalf("Execute() error = %v", err)
-		}
-		if result.Content != "override stdout" {
-			t.Fatalf("result content = %q, want override output", result.Content)
-		}
-		if constructionRunner.Calls() != 0 {
-			t.Fatalf("construction command calls = %d, want request override only", constructionRunner.Calls())
-		}
-		if len(fragments) != 2 || fragments[0].Payload != "override stdout" || fragments[1].Payload != "override stderr" {
-			t.Fatalf("request-scoped progress = %#v, want stdout and stderr chunks", fragments)
-		}
-		for _, fragment := range fragments {
-			if fragment.Correlation != request.Correlation {
-				t.Fatalf("progress correlation = %#v, want %#v", fragment.Correlation, request.Correlation)
+	cases := []struct {
+		name   string
+		edge   workerprocess.CommandRunner
+		chunks []outputChunk
+	}{
+		{
+			name: "non-streaming override preserves output and correlation",
+			edge: nonStreamingCommandRunner{result: workerprocess.CommandResult{
+				Stdout: []byte("override stdout"), Stderr: []byte("override stderr"),
+			}},
+			chunks: []outputChunk{{platformprocess.OutputStreamStdout, "override stdout"},
+				{platformprocess.OutputStreamStderr, "override stderr"}},
+		},
+		{
+			name: "streaming override keeps streaming boundary",
+			edge: &streamingCommandEdge{
+				chunks: []outputChunk{{platformprocess.OutputStreamStdout, "streamed"}},
+				result: workerprocess.CommandResult{Stdout: []byte("streamed")},
+			},
+			chunks: []outputChunk{{platformprocess.OutputStreamStdout, "streamed"}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			constructionLog, overrideLog := &observationLog{}, &observationLog{}
+			constructionChunks := []outputChunk{{platformprocess.OutputStreamStdout, "construction"},
+				{platformprocess.OutputStreamStderr, "construction note"}}
+			constructionRunner := &streamingCommandEdge{
+				observations: constructionLog, chunks: constructionChunks,
+				result: workerprocess.CommandResult{Stdout: []byte("construction"), Stderr: []byte("construction note")},
 			}
-		}
-		if len(events) != 2 {
-			t.Fatalf("request-scoped script events = %d, want request and response", len(events))
-		}
-	})
-
-	t.Run("streaming override keeps streaming boundary", func(t *testing.T) {
-		constructionRunner := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("construction")}}
-		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
-		override := &streamingCommandEdge{
-			chunks: []outputChunk{{stream: platformprocess.OutputStreamStdout, payload: "streamed"}},
-			result: workerprocess.CommandResult{Stdout: []byte("streamed")},
-		}
-		ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), override)
-		result, err := scriptRunner.Execute(ctx, validRequest())
-		if err != nil {
-			t.Fatalf("Execute() error = %v", err)
-		}
-		if result.Content != "streamed" || constructionRunner.Calls() != 0 {
-			t.Fatalf("streaming override result/calls = %q/%d, want streamed/0", result.Content, constructionRunner.Calls())
-		}
-	})
+			started := time.Unix(100, 0)
+			clock := &sequenceClock{times: []time.Time{started, started.Add(time.Second),
+				started.Add(2 * time.Second), started.Add(3 * time.Second)}}
+			scriptRunner := New(Config{Command: "echo", Args: []string{"safe-arg"}},
+				constructionRunner, emptyDocs, clock.Now, constructionLog.CaptureProgress, constructionLog.CaptureEvent)
+			request := observedRequest()
+			ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), tc.edge)
+			ctx = workerexecution.WithProgressPublisher(ctx, overrideLog.CaptureProgress)
+			ctx = workerexecution.WithScriptEventRecorder(ctx, overrideLog.CaptureEvent)
+			result, err := scriptRunner.Execute(ctx, request)
+			if err != nil {
+				t.Fatalf("override Execute() error = %v", err)
+			}
+			assertObservedValue(t, "override output", result.Content, tc.chunks[0].payload)
+			assertAttributedObservations(t, overrideLog, request, started, started.Add(time.Second),
+				"echo", []string{"safe-arg"}, tc.chunks)
+			assertObservedValue(t, "construction command calls before default", constructionLog.Values(), []string(nil))
+			assertObservedValue(t, "construction progress before default", len(constructionLog.fragments), 0)
+			assertObservedValue(t, "construction events before default", len(constructionLog.events), 0)
+			assertDefaultExecutionAfterOverride(t, scriptRunner, constructionRunner, constructionLog,
+				overrideLog, request, result, started, constructionChunks, tc.chunks)
+		})
+	}
 }
 
 func TestCommandRunnerWithStreamingFallbackPreservesResultWithoutObserver(t *testing.T) {
