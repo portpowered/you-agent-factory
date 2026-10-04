@@ -105,6 +105,7 @@ func (o *Root) CloseRuntimeScope(
 		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
 	}
 	o.resources.CloseScope(request.Scope)
+	o.localExecution.CloseScope(request.Scope)
 	o.runtimeMu.Lock()
 	if runtime, ok := o.runtimeByScope[request.Scope].(*runtimeService); ok {
 		runtime.local.CloseScope(request.Scope)

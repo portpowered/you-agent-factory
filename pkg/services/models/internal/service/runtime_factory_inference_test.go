@@ -94,12 +94,13 @@ type rootConstructionArgs struct {
 }
 
 func (args rootConstructionArgs) build() (*Root, error) {
+	execution, _ := NewScopedLocalExecution(args.runtimeScopes, args.assets, args.runtimeHost, args.localRuntime, args.resources, modelseffects.LocalRuntimeHooks{}, args.now)
 	return NewRoot(
 		args.processLauncher,
 		args.hostHTTP,
 		args.hostClock,
 		args.localRuntime,
-		args.resources,
+		args.resources, execution,
 		args.runtimeScopes,
 		args.catalog,
 		args.assets,
@@ -239,7 +240,7 @@ func TestRootCloseShutsDownRuntimeHost(t *testing.T) {
 	t.Parallel()
 
 	host := &shutdownTrackingRuntimeHost{}
-	root := &Root{runtimeHost: host, resources: mustResourceLimiter(t)}
+	root := &Root{runtimeHost: host, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{}}
 	if err := root.Close(context.Background()); err != nil {
 		t.Fatalf("Root.Close() error = %v, want nil", err)
 	}
@@ -380,7 +381,7 @@ func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 	}
 	root, err := NewRoot(
 		rootConstructionProcessLauncher{}, http.DefaultClient, rootConstructionClock{}, &leaseTestRuntime{},
-		mustResourceLimiter(t), scopes, catalog, assets, runtimeHost, inferenceService,
+		mustResourceLimiter(t), inertScopedLocalExecution{}, scopes, catalog, assets, runtimeHost, inferenceService,
 		zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
 		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{},
 	)
@@ -785,7 +786,7 @@ func TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion(t *testin
 	scopes := newCloseRaceRuntimeScopes()
 	runtime := &closeRaceRuntime{}
 	root := &Root{
-		runtimeScopes: scopes, resources: mustResourceLimiter(t),
+		runtimeScopes: scopes, resources: mustResourceLimiter(t), localExecution: inertScopedLocalExecution{},
 		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
 	}
 	invokeResult := make(chan error, 1)
@@ -911,3 +912,18 @@ func newRuntimeHostFixture(scopes runtimescopes.Service, assets scopedassets.Ser
 	}
 	return runtimehostwire.NewService(scopes, assets, leases, state, launcher, httpDoer, clock, logger, metrics, platform, protocol, compatibility, resolve, evidence, idle, maximum)
 }
+
+type inertScopedLocalExecution struct{}
+
+func (inertScopedLocalExecution) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+	return models.LocalInvocationResult{}, nil
+}
+func (inertScopedLocalExecution) CloseScope(models.RuntimeScopeRef) {}
+func (inertScopedLocalExecution) Close()                            {}
+
+type compatibilityLocalExecution struct{ *runtimeService }
+
+func (e compatibilityLocalExecution) CloseScope(scope models.RuntimeScopeRef) {
+	e.local.CloseScope(scope)
+}
+func (e compatibilityLocalExecution) Close() { e.local.Close() }

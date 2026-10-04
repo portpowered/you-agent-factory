@@ -124,6 +124,7 @@ func NewService(
 	runtimeScopes RuntimeScopes, assets Assets, catalog Catalog, runtimeHost RuntimeHost, inference Inference,
 	processLauncher HostProcessLauncher, hostHTTP HostHTTPDoer, hostClock HostClock,
 	localRuntime LocalRuntime, resources *ResourceLimiter,
+	localExecution ScopedLocalExecution,
 	logger *zap.Logger, now func() time.Time, pullMetrics PullMetricsRecorder,
 	hostLogger HostDiagnosticLogger, hostMetrics HostMetricsRecorder, localHooks LocalRuntimeHooks,
 	runtimeEvidence RuntimeEvidenceRecorder, legacyRevisionOverride func(context.Context, string) (string, error),
@@ -134,7 +135,7 @@ func NewService(
 	}
 	launcher, clock := adaptConstructionPorts(processLauncher, hostClock)
 	return modelsservice.NewRoot(
-		launcher, hostHTTP, clock, localRuntime, resources,
+		launcher, hostHTTP, clock, localRuntime, resources, localExecution,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
 		logger, now, pullMetrics, runtimeEvidence, hostLogger, hostMetrics, localHooks,
 		legacyRevisionOverride, backendResolver, assetPlatform,
@@ -146,6 +147,14 @@ type LocalRuntime = localmodels.Runtime
 
 // ResourceLimiter retains only scoped reservation state, independently of execution behavior.
 type ResourceLimiter = localmodels.ResourceLimiter
+
+type ScopedLocalExecution = modelsservice.ScopedLocalExecution
+
+func NewScopedLocalExecution(scopes RuntimeScopes, assets Assets, host RuntimeHost,
+	runtime LocalRuntime, resources *ResourceLimiter, hooks LocalRuntimeHooks,
+	now func() time.Time) (ScopedLocalExecution, error) {
+	return modelsservice.NewScopedLocalExecution(scopes, assets, host, runtime, resources, hooks, now)
+}
 
 func NewResourceLimiter(hooks LocalRuntimeHooks, now func() time.Time) (*ResourceLimiter, error) {
 	return localmodels.NewResourceLimiter(hooks, now)

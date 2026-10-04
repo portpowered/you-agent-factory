@@ -5,19 +5,24 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 // localExecutor owns all Models implementation collaborators required for
 // managed local invocation. Configuration and the selected scoped asset adapter
 // are operation inputs so shared execution does not retain the first scope.
 type localExecutor struct {
-	host      modelhost.Host
+	acquire   func(context.Context, models.RuntimeScopeRef, *models.RuntimeConfig, string, string) (modelhost.Lease, error)
+	release   func(context.Context, models.RuntimeScopeRef, string) error
 	runtime   localmodels.Runtime
 	resources *localmodels.ResourceLimiter
 	hooks     modelseffects.LocalRuntimeHooks
@@ -49,6 +54,26 @@ func newLocalExecutor(
 	if isNilDependency(host) {
 		return nil, missingDependencyError("local executor model host")
 	}
+	return newLocalExecutorWithLeases(
+		func(ctx context.Context, _ models.RuntimeScopeRef, config *models.RuntimeConfig, name, holder string) (modelhost.Lease, error) {
+			return host.AcquireLease(ctx, config, name, modelhost.LeaseOptions{Holder: holder})
+		},
+		func(ctx context.Context, _ models.RuntimeScopeRef, id string) error {
+			return host.ReleaseLease(ctx, id)
+		},
+		runtime, resources, hooks, now,
+	)
+}
+
+func newLocalExecutorWithLeases(
+	acquire func(context.Context, models.RuntimeScopeRef, *models.RuntimeConfig, string, string) (modelhost.Lease, error),
+	release func(context.Context, models.RuntimeScopeRef, string) error,
+	runtime localmodels.Runtime, resources *localmodels.ResourceLimiter,
+	hooks modelseffects.LocalRuntimeHooks, now func() time.Time,
+) (*localExecutor, error) {
+	if acquire == nil || release == nil {
+		return nil, missingDependencyError("local executor lease effects")
+	}
 	if isNilDependency(runtime) {
 		return nil, missingDependencyError("local executor model runtime")
 	}
@@ -59,7 +84,7 @@ func newLocalExecutor(
 		return nil, missingDependencyError("local executor clock")
 	}
 	return &localExecutor{
-		host:         host,
+		acquire: acquire, release: release,
 		runtime:      runtime,
 		resources:    resources,
 		hooks:        hooks,
@@ -68,6 +93,115 @@ func newLocalExecutor(
 		closedScopes: make(map[models.RuntimeScopeRef]bool),
 	}, nil
 }
+
+// ScopedLocalExecution shares fixed execution behavior and retains only scoped
+// handles. Pull compatibility remains separate until its owner migration.
+type ScopedLocalExecution interface {
+	InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+	CloseScope(models.RuntimeScopeRef)
+	Close()
+}
+
+type scopedLocalExecution struct {
+	scopes   runtimescopes.Service
+	assets   scopedassets.Service
+	host     runtimehost.Service
+	executor *localExecutor
+	sequence atomic.Uint64
+}
+
+// NewScopedLocalExecution constructs an inert owner over completed services.
+func NewScopedLocalExecution(scopes runtimescopes.Service, assets scopedassets.Service,
+	host runtimehost.Service, runtime localmodels.Runtime, resources *localmodels.ResourceLimiter,
+	hooks modelseffects.LocalRuntimeHooks, now func() time.Time) (ScopedLocalExecution, error) {
+	for _, dependency := range []struct {
+		value any
+		name  string
+	}{
+		{scopes, "local execution scopes"}, {assets, "local execution assets"}, {host, "local execution host"},
+	} {
+		if isNilDependency(dependency.value) {
+			return nil, missingDependencyError(dependency.name)
+		}
+	}
+	s := &scopedLocalExecution{scopes: scopes, assets: assets, host: host}
+	executor, err := newLocalExecutorWithLeases(s.acquire, s.release, runtime, resources, hooks, now)
+	if err != nil {
+		return nil, err
+	}
+	s.executor = executor
+	return s, nil
+}
+
+func (s *scopedLocalExecution) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+	if err := models.ValidateLocalInvocationRequest(request); err != nil {
+		return models.LocalInvocationResult{}, err
+	}
+	if request.Scope.IsZero() {
+		return models.LocalInvocationResult{}, models.ErrRuntimeScopeInvalid
+	}
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.LocalInvocationResult{}, runtimeScopeError(err)
+	}
+	if !request.Worker.UsesManagedRuntime() {
+		return models.LocalInvocationResult{}, nil
+	}
+	if err := s.executor.admitInvocation(ctx, request.Scope); err != nil {
+		return models.LocalInvocationResult{Handled: true}, err
+	}
+	if binding.RuntimeConfig == nil {
+		return models.LocalInvocationResult{Handled: true}, models.ErrUnavailable
+	}
+	config := binding.RuntimeConfig()
+	// Configuration lookup may race close. Never begin an effect for a retired scope.
+	if _, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String())); err != nil {
+		return models.LocalInvocationResult{Handled: true}, runtimeScopeError(err)
+	}
+	assets, err := localmodels.NewScopedAssetPuller(s.assets, request.Scope)
+	if err != nil {
+		return models.LocalInvocationResult{Handled: true}, err
+	}
+	return s.executor.InvokeLocal(ctx, request, config, assets)
+}
+
+func (s *scopedLocalExecution) acquire(ctx context.Context, scope models.RuntimeScopeRef,
+	config *models.RuntimeConfig, name, holder string) (modelhost.Lease, error) {
+	if holder == "" {
+		holder = fmt.Sprintf("local-execution-%d", s.sequence.Add(1))
+	}
+	ready, err := s.host.EnsureModelHost(ctx, models.EnsureModelHostRequest{Scope: scope, Name: name})
+	if err != nil {
+		return modelhost.Lease{}, err
+	}
+	if err := s.executor.admitInvocation(ctx, scope); err != nil {
+		return modelhost.Lease{}, err
+	}
+	endpoint, err := modelhost.LocalInvocationEndpoint(config, name, ready.Host.Diagnostics)
+	if err != nil {
+		return modelhost.Lease{}, err
+	}
+	acquired, err := s.host.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{Scope: scope, Name: name, Holder: holder})
+	if err != nil {
+		return modelhost.Lease{}, err
+	}
+	return modelhost.Lease{ID: acquired.Lease.Lease.String(), Endpoint: endpoint, Holder: holder}, nil
+}
+
+func (s *scopedLocalExecution) release(ctx context.Context, scope models.RuntimeScopeRef, id string) error {
+	lease, err := (models.ModelLeaseRef{}).Parse(id)
+	if err != nil {
+		return err
+	}
+	_, err = s.host.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{Scope: scope, Lease: lease})
+	return err
+}
+
+func (s *scopedLocalExecution) CloseScope(scope models.RuntimeScopeRef) {
+	s.executor.CloseScope(scope)
+}
+
+func (s *scopedLocalExecution) Close() { s.executor.Close() }
 
 func (e *localExecutor) InvokeLocal(
 	ctx context.Context,
@@ -120,14 +254,12 @@ func (e *localExecutor) invokeWithLease(
 	if !ok || !e.runtime.Supports(resource, worker) {
 		return models.LocalInvocationResult{}, nil
 	}
-	lease, err := e.host.AcquireLease(ctx, runtimeConfig, worker.Model, modelhost.LeaseOptions{
-		Holder: strings.TrimSpace(holder),
-	})
+	lease, err := e.acquire(ctx, scope, runtimeConfig, worker.Model, strings.TrimSpace(holder))
 	if err != nil {
 		return models.LocalInvocationResult{Handled: true}, err
 	}
 	defer func() {
-		_ = e.host.ReleaseLease(context.WithoutCancel(ctx), lease.ID)
+		_ = e.release(context.WithoutCancel(ctx), scope, lease.ID)
 	}()
 	if err := e.admitInvocation(ctx, scope); err != nil {
 		return models.LocalInvocationResult{Handled: true}, err

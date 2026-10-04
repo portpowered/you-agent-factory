@@ -30,6 +30,7 @@ type Root struct {
 	hostClock                  modelhost.Clock
 	localRuntime               localmodels.Runtime
 	resources                  *localmodels.ResourceLimiter
+	localExecution             ScopedLocalExecution
 	runtimeScopes              runtimescopes.Service
 	assets                     scopedassets.Service
 	runtimeHost                runtimehost.Service
@@ -60,6 +61,7 @@ func NewRoot(
 	hostClock modelhost.Clock,
 	localRuntime localmodels.Runtime,
 	resources *localmodels.ResourceLimiter,
+	localExecution ScopedLocalExecution,
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
@@ -112,12 +114,15 @@ func NewRoot(
 	if now == nil {
 		return nil, missingDependencyError("Models process clock")
 	}
+	if isNilDependency(localExecution) {
+		return nil, missingDependencyError("scoped local execution")
+	}
 	if resolveRevision == nil {
 		return nil, missingDependencyError("Models revision resolver")
 	}
 	return &Root{
 		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
-		localRuntime: localRuntime, resources: resources,
+		localRuntime: localRuntime, resources: resources, localExecution: localExecution,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
@@ -197,6 +202,9 @@ func (o *Root) Close(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("Models runtime host does not support process shutdown")
 	}
+	// Retire admission before the external shutdown/join can block. A late
+	// resolution must not begin invocation while the host is stopping.
+	o.localExecution.Close()
 	if err := shutdown.Shutdown(ctx); err != nil {
 		return err
 	}
@@ -945,9 +953,5 @@ func (o *Root) InvokeLocal(
 	ctx context.Context,
 	request models.LocalInvocationRequest,
 ) (models.LocalInvocationResult, error) {
-	runtime, err := o.scopedRuntime(request.Scope)
-	if err != nil {
-		return models.LocalInvocationResult{}, err
-	}
-	return runtime.InvokeLocal(ctx, request)
+	return o.localExecution.InvokeLocal(ctx, request)
 }

@@ -3,7 +3,9 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +15,12 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
 )
 
@@ -310,4 +318,237 @@ func (hostLeaseTestHost) ReleaseLease(context.Context, string) error {
 
 func (hostLeaseTestHost) Unload(context.Context, *modelRuntimeConfig, string) error {
 	return errors.New("unload unavailable in test host")
+}
+
+// Root component proof: controlled asset/host effects, real scope registration,
+// and public operations. No runtime service map is populated by the fixture.
+func TestRootTwoScopesInvokeLocalWithoutRuntimeGraphs(t *testing.T) {
+	t.Parallel()
+	root, host, runtime, resources := newScopedLocalRoot(t, nil, nil)
+	a, b := openScopedLocalRoot(t, root, "cache-a", "endpoint-a"), openScopedLocalRoot(t, root, "cache-b", "endpoint-b")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	for _, scope := range []models.RuntimeScopeRef{a, b, a, b} {
+		assertScopedLocalRootInvocation(t, root, ctx, scope, host, resources)
+	}
+	if _, err := root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: a}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.InvokeLocal(ctx, scopedLocalRootRequest(a)); !errors.Is(err, models.ErrRuntimeScopeClosed) {
+		t.Fatalf("closed A: %v", err)
+	}
+	assertScopedLocalRootInvocation(t, root, ctx, b, host, resources)
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	if len(host.releases) != 5 || runtime.loads != 2 {
+		t.Fatalf("released leases/loaded handles=%d/%d", len(host.releases), runtime.loads)
+	}
+	for lease, count := range host.releases {
+		if count != 1 {
+			t.Fatalf("lease %s released %d times", lease, count)
+		}
+	}
+}
+
+func TestRootScopedExecutionCloseWinningCacheResolution(t *testing.T) {
+	t.Parallel()
+	started, resume := make(chan struct{}), make(chan struct{})
+	root, host, runtime, resources := newScopedLocalRoot(t, started, resume)
+	a, b := openScopedLocalRoot(t, root, "gated-cache", "endpoint-a"), openScopedLocalRoot(t, root, "cache-b", "endpoint-b")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		result, err := root.InvokeLocal(ctx, scopedLocalRootRequest(a))
+		if result.Content != "" {
+			err = fmt.Errorf("closed invocation published %q", result.Content)
+		}
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("A did not enter asset resolution")
+	}
+	assertScopedLocalRootInvocation(t, root, ctx, b, host, resources)
+	if _, err := root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: a}); err != nil {
+		t.Fatal(err)
+	}
+	close(resume)
+	select {
+	case err := <-done:
+		if !errors.Is(err, models.ErrRuntimeScopeClosed) {
+			t.Fatalf("late resolution: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("A did not return")
+	}
+	assertScopedLocalRootInvocation(t, root, ctx, b, host, resources)
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	if len(host.releases) != 3 || runtime.loads != 1 {
+		t.Fatalf("release/load counts=%d/%d", len(host.releases), runtime.loads)
+	}
+	for lease, count := range host.releases {
+		if count != 1 {
+			t.Fatalf("lease %s released %d times", lease, count)
+		}
+	}
+}
+
+func scopedLocalRootRequest(scope models.RuntimeScopeRef) models.LocalInvocationRequest {
+	return models.LocalInvocationRequest{Scope: scope, Holder: "dispatch",
+		Worker:    models.LocalWorker{Name: "voice", Type: models.RuntimeWorkerTypeModel, Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal, Resources: []models.LocalResource{{Name: "voice", Capacity: 1}}},
+		Resources: []models.LocalResource{{Name: "voice", Type: models.RuntimeResourceTypeModel, Model: "voice", Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1}}}
+}
+
+func openScopedLocalRoot(t *testing.T, root *modelsservice.Root, cache, endpoint string) models.RuntimeScopeRef {
+	t.Helper()
+	opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{Config: models.RuntimeScopeConfig{CacheDirectory: cache, Runtime: models.RuntimeConfig{BaseDirectory: cache, FactoryDirectory: endpoint, Resources: []models.RuntimeResource{{Name: "voice", Type: models.RuntimeResourceTypeModel, Model: "voice", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND", Capacity: 1}}, Workers: []models.RuntimeWorker{{Name: "voice", Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal, Args: []string{"--health-endpoint", endpoint}, Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return opened.Scope
+}
+
+func assertScopedLocalRootInvocation(t *testing.T, root *modelsservice.Root, ctx context.Context, scope models.RuntimeScopeRef, host *scopedLocalRootHost, resources *localmodels.ResourceLimiter) {
+	t.Helper()
+	binding, err := host.scopes.Resolve(runtimescopes.Reference(scope.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := scopedLocalRootRequest(scope)
+	result, err := root.InvokeLocal(ctx, request)
+	want := binding.CacheDirectory + "|" + binding.RuntimeConfig().FactoryDirectory
+	if err != nil || !result.Handled || result.Content != want {
+		t.Fatalf("scope %s invoke=%#v,%v want %q", scope, result, err, want)
+	}
+	host.mu.Lock()
+	active := len(host.active)
+	host.mu.Unlock()
+	// A peer may hold a lease; this invocation's lease must have been released.
+	if active > 1 {
+		t.Fatalf("unexpected retained leases: %d", active)
+	}
+	config := &models.RuntimeConfig{Resources: []models.RuntimeResource{{Name: "voice", Type: models.RuntimeResourceTypeModel, Model: "voice", Backend: "TEST", LoadPolicy: "ON_DEMAND", Capacity: 1}}}
+	worker := &models.RuntimeWorker{Name: "voice", Type: models.RuntimeWorkerTypeModel, Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal, Resources: config.Resources}
+	release, err := resources.Acquire(ctx, scope, config, worker)
+	if err != nil || release == nil {
+		t.Fatalf("capacity after invoke: %v", err)
+	}
+	release()
+}
+
+func newScopedLocalRoot(t *testing.T, started, resume chan struct{}) (*modelsservice.Root, *scopedLocalRootHost, *scopedLocalRootRuntime, *localmodels.ResourceLimiter) {
+	t.Helper()
+	scopes, err := runtimescopeswire.NewService(func() string { return "scoped-local-root" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := &scopedLocalRootHost{scopes: scopes, active: map[string]models.RuntimeScopeRef{}, releases: map[string]int{}}
+	assets := scopedLocalRootAssets{scopes: scopes, started: started, resume: resume}
+	runtime := &scopedLocalRootRuntime{}
+	resources, err := localmodels.NewResourceLimiter(modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, err := modelsservice.NewScopedLocalExecution(scopes, assets, host, runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := modelsservice.NewRoot(struct{ modelhost.ProcessLauncher }{}, struct{ modelhost.HTTPDoer }{}, struct{ modelhost.Clock }{}, runtime, resources, execution,
+		scopes, struct{ modelcatalog.Service }{}, assets, host, struct{ inference.Service }{}, zap.NewNop(), time.Now, nil, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
+		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := root.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	return root, host, runtime, resources
+}
+
+type scopedLocalRootAssets struct {
+	scopedassets.Service
+	scopes          runtimescopes.Service
+	started, resume chan struct{}
+}
+
+func (a scopedLocalRootAssets) ResolveRuntimeCache(ctx context.Context, request models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheLayout, error) {
+	binding, err := a.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return scopedassets.RuntimeCacheLayout{}, err
+	}
+	if binding.CacheDirectory == "gated-cache" {
+		close(a.started)
+		select {
+		case <-a.resume:
+		case <-ctx.Done():
+			return scopedassets.RuntimeCacheLayout{}, ctx.Err()
+		}
+	}
+	return scopedassets.RuntimeCacheLayout{ModelName: request.Name, CachePath: binding.CacheDirectory, Revision: "immutable"}, nil
+}
+
+type scopedLocalRootHost struct {
+	runtimehost.Service
+	scopes   runtimescopes.Service
+	mu       sync.Mutex
+	sequence int
+	active   map[string]models.RuntimeScopeRef
+	releases map[string]int
+}
+
+func (h *scopedLocalRootHost) EnsureModelHost(_ context.Context, r models.EnsureModelHostRequest) (models.EnsureModelHostResult, error) {
+	binding, err := h.scopes.Resolve(runtimescopes.Reference(r.Scope.String()))
+	if err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	return models.EnsureModelHostResult{Host: models.ModelHostSnapshot{Scope: r.Scope, ModelName: r.Name, ReadinessState: models.ReadinessStateReady, Diagnostics: map[string]string{"endpoint": binding.RuntimeConfig().FactoryDirectory}}}, nil
+}
+func (h *scopedLocalRootHost) AcquireModelLease(_ context.Context, r models.AcquireModelLeaseRequest) (models.AcquireModelLeaseResult, error) {
+	if err := r.Validate(); err != nil {
+		return models.AcquireModelLeaseResult{}, err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.sequence++
+	ref, err := (models.ModelLeaseRef{}).Parse(fmt.Sprintf("local-root-lease:%d", h.sequence))
+	if err != nil {
+		return models.AcquireModelLeaseResult{}, err
+	}
+	h.active[ref.String()] = r.Scope
+	return models.AcquireModelLeaseResult{Lease: models.ModelLease{Lease: ref, Scope: r.Scope, Holder: r.Holder, ModelName: r.Name, Status: models.ModelLeaseStatusActive}}, nil
+}
+func (h *scopedLocalRootHost) ReleaseModelLease(ctx context.Context, r models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	if err := ctx.Err(); err != nil {
+		return models.ReleaseModelLeaseResult{}, err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.active[r.Lease.String()] != r.Scope {
+		return models.ReleaseModelLeaseResult{}, errors.New("lease scope mismatch")
+	}
+	delete(h.active, r.Lease.String())
+	h.releases[r.Lease.String()]++
+	return models.ReleaseModelLeaseResult{Outcome: models.ModelLeaseReleased}, nil
+}
+func (*scopedLocalRootHost) Shutdown(context.Context) error { return nil }
+
+type scopedLocalRootRuntime struct{ loads int }
+
+func (*scopedLocalRootRuntime) Supports(models.RuntimeResource, *models.RuntimeWorker) bool {
+	return true
+}
+func (r *scopedLocalRootRuntime) Load(_ context.Context, q localmodels.LoadRequest) (localmodels.Handle, error) {
+	r.loads++
+	return scopedLocalRootHandle(q.CachePath + "|" + q.ServingEndpoint), nil
+}
+
+type scopedLocalRootHandle string
+
+func (h scopedLocalRootHandle) Invoke(context.Context, localmodels.InvocationRequest) (localmodels.InvocationResponse, error) {
+	return localmodels.InvocationResponse{Content: string(h)}, nil
 }

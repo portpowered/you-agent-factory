@@ -147,6 +147,7 @@ var servicesSet = wire.NewSet(
 	modelswire.NewExecutionDeadline,
 	provideModelInference,
 	provideModelsService,
+	provideModelScopedLocalExecution,
 	modelswire.NewCatalogReadinessQuery,
 	modelswire.NewCatalog,
 	modelswire.NewSlotState,

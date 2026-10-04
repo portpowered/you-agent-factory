@@ -669,14 +669,10 @@ func newModelsServiceWithFixtureEffects(
 }
 
 func composeModelsService(
-	assetPlatform models.AssetHostPlatform,
-	assetHTTP AssetHTTPDoer,
-	assetEndpoints models.RuntimeAssetEndpoints,
-	assetMkdirAll AssetMakeDirectories,
-	assetStat AssetInspectPath,
-	assetHome AssetResolveHomeDirectory,
-	assetWriteFile AssetWriteFile,
-	assetRename AssetRenamePath,
+	assetPlatform models.AssetHostPlatform, assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints, assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath, assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile, assetRename AssetRenamePath,
 	assetRemove AssetRemovePath,
 	assetReadFile AssetReadFile,
 	assetReadDir AssetReadDirectory,
@@ -764,8 +760,12 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
+	execution, err := NewScopedLocalExecution(runtimeScopes, assetService, runtimeHost, localRuntime, resources, localHooks, now)
+	if err != nil {
+		return nil, err
+	}
 	return NewService(runtimeScopes, assetService, catalogService, runtimeHost, inferenceService,
-		processLauncher, hostHTTP, hostClock, localRuntime, resources, logger, now, pullMetrics,
+		processLauncher, hostHTTP, hostClock, localRuntime, resources, execution, logger, now, pullMetrics,
 		hostLogger, hostMetrics, localHooks, runtimeEvidence, firstRevisionResolver(revisionResolvers), backendResolver, assetPlatform)
 }
 

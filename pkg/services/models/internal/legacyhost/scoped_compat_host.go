@@ -403,6 +403,16 @@ func (h *ScopedCompatHost) supervisedLeaseEndpoint(
 	if !requiresSupervisedBackend(identity) {
 		return "", nil
 	}
+	return LocalInvocationEndpoint(runtimeCfg, modelName, diagnostics)
+}
+
+// LocalInvocationEndpoint preserves the worker's existing choice between a
+// supervised endpoint and command execution without retaining a scoped host.
+func LocalInvocationEndpoint(runtimeCfg *models.RuntimeConfig, modelName string, diagnostics map[string]string) (string, error) {
+	resource := modelScopedResource(runtimeCfg, modelName)
+	if resource == nil || !models.IsManagedRuntimeBackend(resource.Backend) {
+		return "", nil
+	}
 	worker, err := localWorkerForModel(runtimeCfg, modelName)
 	if err != nil {
 		return "", err
