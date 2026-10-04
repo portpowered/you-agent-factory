@@ -3,6 +3,7 @@ package agy_test
 import (
 	"context"
 	"errors"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -17,6 +19,8 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
+	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
+	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 
 	"go.uber.org/goleak"
@@ -25,19 +29,19 @@ import (
 func TestAgyNewRegistrationBindsCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 
-	registration := agy.NewRegistration(nil)
+	registration := agy.NewRegistration(disabledAgyEffect())
 	if registration.Provider != providers.IDAntigravity {
 		t.Fatalf("Provider = %q, want %q", registration.Provider, providers.IDAntigravity)
 	}
 	if registration.Attempt == nil {
-		t.Fatal("Attempt = nil, want unavailable attempt")
+		t.Fatal("Attempt = nil, want completed attempt")
 	}
 }
 
-func TestAgyRootFailsClosedWhenEffectAbsent(t *testing.T) {
+func TestAgyRootPreservesDisabledEffectFailure(t *testing.T) {
 	t.Parallel()
 
-	root := newAgyRoot(t, nil)
+	root := newAgyRoot(t, disabledAgyEffect())
 	result, err := root.Execute(
 		t.Context(),
 		providers.ExecuteRequest{
@@ -48,20 +52,31 @@ func TestAgyRootFailsClosedWhenEffectAbsent(t *testing.T) {
 	assertAgyDependencyFailure(t, result, err)
 }
 
-func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
+func TestAgyBuiltInRegistrationPreservesDisabledEffectFailure(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
-	executionService, err := executionwire.NewBuiltInService(catalog)
+	rejectPeer := func() error {
+		t.Fatal("disabled AGY attempt invoked a peer effect")
+		return nil
+	}
+	registrations := executionwire.BuiltInRegistrations(disabledAgyEffect(),
+		codex.EffectFunc(func(context.Context, execution.ContinuationRequest, func([]byte) error) (codex.EffectResult, error) {
+			return codex.EffectResult{}, rejectPeer()
+		}),
+		claude.EffectFunc(func(context.Context, execution.ContinuationRequest, func([]byte) error) (claude.EffectResult, error) {
+			return claude.EffectResult{}, rejectPeer()
+		}))
+	executionService, err := executionwire.NewService(catalog, registrations...)
 	if err != nil {
 		t.Fatalf("NewBuiltInService() = %v", err)
 	}
-	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 	if err != nil {
-		t.Fatalf("providerservice.New() = %v", err)
+		t.Fatalf("providerservice.NewWithACP() = %v", err)
 	}
 
 	result, err := root.Execute(
@@ -79,11 +94,9 @@ func TestAgyRootPTYExecutionEndToEnd(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "Hello from Agy"}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  "agy",
 	})
 	root := newAgyRoot(t, effect)
 
@@ -123,11 +136,9 @@ func TestAgyRootRejectsUnusableFinalOutput(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: ""}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  "agy",
 	})
 	root := newAgyRoot(t, effect)
 
@@ -256,13 +267,11 @@ func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
 	t.Parallel()
 
 	factoryRoot := t.TempDir()
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+	effect := agy.NewPTYEffect(&failureStubAllocator{result: agypty.SessionResult{
+		ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
+	}, runErr: agypty.ErrSessionTimedOut}, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
 		FactoryRoot: factoryRoot,
-		Allocator: &failureStubAllocator{result: agypty.SessionResult{
-			ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
-		}, runErr: agypty.ErrSessionTimedOut},
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+		Executable:  "agy",
 	})
 	root := newAgyRoot(t, effect)
 
@@ -308,11 +317,9 @@ func TestAgyRootMissingExecutablePreservesResumeSessionOnFailure(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	missingExecutable := filepath.Join(factoryRoot, "missing-agy")
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              &stubAllocator{},
-		Executable:             missingExecutable,
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(&stubAllocator{}, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  missingExecutable,
 	})
 	root := newAgyRoot(t, effect)
 
@@ -369,7 +376,7 @@ func assertAgyDependencyFailure(
 
 func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 	t.Helper()
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,15 +387,36 @@ func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return root
 }
 
+func disabledAgyEffect() agy.Effect {
+	return agy.EffectFunc(func(context.Context, execution.ContinuationRequest, func([]byte) error) (agy.EffectResult, error) {
+		return agy.EffectResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "Antigravity native execution is unavailable",
+		}
+	})
+}
+
 // TestMain fails the package when a test leaves goroutines running, which
 // otherwise surfaces as teardown hangs and cross-test interference.
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
+}
+
+// disabledACP is an inert native-only fixture. Root routing cannot dispatch
+// into its unused ACP operations; Close is an explicit completed capability.
+type disabledACP struct{ acp.Service }
+
+func (disabledACP) Resolve(providers.ID) (providers.ID, bool) { return "", false }
+func (disabledACP) Integrations() []providers.ACPIntegration  { return nil }
+func (disabledACP) Close(context.Context) error               { return nil }
+
+func (disabledACP) Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP provider continuation is unavailable"}
 }

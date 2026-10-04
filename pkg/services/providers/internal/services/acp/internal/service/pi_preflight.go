@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -29,6 +31,8 @@ func piPreflight(
 	locator platformprocess.ExecutableLocator,
 	cwd string,
 	environment []string,
+	scheduler platformclock.TimerSource,
+	logger logging.Logger,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return nativeFailure(err)
@@ -41,7 +45,7 @@ func piPreflight(
 			return piMissingExecutableFailure()
 		}
 	}
-	output, err := probePiVersion(ctx, newCommand, cwd, environment)
+	output, err := probePiVersion(ctx, newCommand, cwd, environment, scheduler, logger)
 	if ctx.Err() != nil {
 		return nativeFailure(ctx.Err())
 	}
@@ -115,6 +119,8 @@ func probePiVersion(
 	newCommand platformprocess.CommandFactory,
 	cwd string,
 	environment []string,
+	scheduler platformclock.TimerSource,
+	logger logging.Logger,
 ) (string, error) {
 	command := newCommand("pi", "--version")
 	if command == nil {
@@ -138,20 +144,20 @@ func probePiVersion(
 	}
 	finished := make(chan error, 1)
 	go func() { finished <- command.Wait() }()
-	timer := time.NewTimer(3 * time.Second)
+	timer := scheduler.NewTimer(3 * time.Second)
 	defer timer.Stop()
 	select {
 	case err := <-finished:
-		platformprocess.CloseSubprocessTree(command, tree)
+		platformprocess.CloseSubprocessTreeWithEffects(command, tree, scheduler, logger)
 		if err != nil {
 			return "", errPiVersionProbe
 		}
 		return output.String(), nil
 	case <-ctx.Done():
-	case <-timer.C:
+	case <-timer.C():
 	}
-	_ = platformprocess.TerminateSubprocessTree(command, tree)
+	_ = platformprocess.TerminateSubprocessTreeWithEffects(command, tree, scheduler, logger)
 	<-finished
-	platformprocess.CloseSubprocessTree(command, tree)
+	platformprocess.CloseSubprocessTreeWithEffects(command, tree, scheduler, logger)
 	return "", errPiVersionProbe
 }

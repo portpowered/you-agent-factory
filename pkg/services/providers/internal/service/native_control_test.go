@@ -42,19 +42,19 @@ func (a *ctxAwareAttempt) attempt(ctx context.Context, request providers.Execute
 func mustControlCapableRootService(t *testing.T, attempt execution.Attempt) *providerservice.Service {
 	t.Helper()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
 	executionService, err := executionwire.NewService(
 		catalogService,
-		execution.Registration{Provider: providers.IDCodex, Attempt: attempt},
-		execution.Registration{Provider: providers.IDClaude, Attempt: attempt},
+		execution.Registration{Provider: providers.IDCodex, Attempt: attempt, Continue: executionwire.NewUnsupportedContinuation()},
+		execution.Registration{Provider: providers.IDClaude, Attempt: attempt, Continue: executionwire.NewUnsupportedContinuation()},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

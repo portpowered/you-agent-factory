@@ -40,6 +40,20 @@ func CloseSubprocessTree(cmd *exec.Cmd, tree SubprocessTree) {
 	closeCommandProcessTree(cmd, tree.tree, platformclock.Real{}, postRunCleanup)
 }
 
+// TerminateSubprocessTreeWithEffects force-terminates the supervised tree using
+// the caller's selected clock and logger. Both effects must be supplied.
+func TerminateSubprocessTreeWithEffects(cmd *exec.Cmd, tree SubprocessTree, clock platformclock.Source, logger logging.Logger) error {
+	cleanup := commandProcessCleanupContext{logger: logger, reason: commandProcessCleanupReasonCancel}
+	return terminateCommandProcessTree(cmd, tree.tree, clock, cleanup)
+}
+
+// CloseSubprocessTreeWithEffects performs post-run cleanup using the caller's
+// selected clock and logger. It retains the existing process-tree cleanup policy.
+func CloseSubprocessTreeWithEffects(cmd *exec.Cmd, tree SubprocessTree, clock platformclock.Source, logger logging.Logger) {
+	cleanup := commandProcessCleanupContext{logger: logger, reason: commandProcessCleanupReasonPostRun}
+	closeCommandProcessTree(cmd, tree.tree, clock, cleanup)
+}
+
 // StdioChannel is one parent-owned duplex standard-stream channel for a child
 // process.
 //

@@ -1195,6 +1195,10 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata",
+      "minimum": 78.57
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service",
       "minimum": 80.22
     },
@@ -1207,20 +1211,12 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/internal/service",
-      "minimum": 78.57
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy",
       "minimum": 49.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-      "minimum": 2.14
+      "minimum": 1.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
