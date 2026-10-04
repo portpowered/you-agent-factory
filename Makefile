@@ -242,7 +242,7 @@ endif
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint test-sleep-check compatibility-alias-check retired-surface-check deadcode fmt-check contracts-check
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check golangci-lint-run repolint compatibility-alias-check retired-surface-check deadcode fmt-check contracts-check
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -314,7 +314,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check test-functional-resumed-successor-artifact
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -1069,16 +1069,21 @@ golangci-lint-run:
 repolint:
 	@mkdir -p $(REPOLINT_DIR)
 	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
+	$(GO) vet -testsleep -vettool=$(abspath $(REPOLINT_BIN)) ./...
 	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
+	$(GO) list -test -f '{{.ImportPath}}|{{join .TestGoFiles ","}}|{{join .XTestGoFiles ","}}|{{join .IgnoredGoFiles ","}}|{{join .GoFiles ","}}' ./... > "$(REPOLINT_DIR)/units.txt"
+	$(GO) list -test -tags=$(REPOLINT_TAGS) -f '{{.ImportPath}}|{{join .TestGoFiles ","}}|{{join .XTestGoFiles ","}}|{{join .IgnoredGoFiles ","}}|{{join .GoFiles ","}}' ./... >> "$(REPOLINT_DIR)/units.txt"
+	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt"
 	$(MAKE) lint-baseline-growth
 
-# lint-baseline-growth compares the one baseline object with its merge-base
-# copy: every current entry must already exist there, so the list only shrinks.
+# New rule IDs may seed existing debt once; established IDs only shrink.
 lint-baseline-growth:
-	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; 	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then 		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; 	git show "$$base:$(REPOLINT_BASELINE)" | grep -v '^#' | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.base"; 	grep -v '^#' "$(REPOLINT_BASELINE)" | grep -v '^$$' | sort -u > "$(REPOLINT_DIR)/baseline.head"; 	added=$$(comm -13 "$(REPOLINT_DIR)/baseline.base" "$(REPOLINT_DIR)/baseline.head"); 	if [ -n "$$added" ]; then echo "lint-baseline-growth: $(REPOLINT_BASELINE) gained entries versus merge-base; fix the violation instead:"; echo "$$added"; exit 1; fi; 	echo "lint-baseline-growth: $(REPOLINT_BASELINE) did not grow"
-
-test-sleep-check:
-	$(call run_lint_checker,./cmd/testsleepcheck,-root ".")
+	@mkdir -p $(REPOLINT_DIR)
+	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; \
+	if git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
+		git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base"; \
+	else : > "$(REPOLINT_DIR)/baseline.base"; fi
+	$(NODE) scripts/ci/lint-baseline-growth.mjs --base "$(REPOLINT_DIR)/baseline.base" --head "$(REPOLINT_BASELINE)"
 
 compatibility-alias-check:
 	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")
