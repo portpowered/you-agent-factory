@@ -748,11 +748,9 @@ func mergeRecordedObservations(recorded, live []workersessions.Observation) []wo
 		return nil
 	}
 
-	// Recorded facts remain authoritative for an overlapping Worker Session,
-	// while the live registry can contain a session whose association has not
-	// reached the durable projection yet. Clone both sources so the read
-	// decorator never mutates a service-owned observation while reconciling the
-	// two views.
+	// The registry owns all facts for identities it still holds, including
+	// terminal attempts. History supplies only absent identities. Clone both
+	// sources so reads never mutate owner values.
 	merged := make([]workersessions.Observation, 0, len(recorded)+len(live))
 	seen := make(map[string]struct{}, len(recorded)+len(live))
 	liveBySession := make(map[string]workersessions.Observation, len(live))
@@ -767,7 +765,7 @@ func mergeRecordedObservations(recorded, live []workersessions.Observation) []wo
 		seen[recordedObservation.WorkerSessionID] = struct{}{}
 		mergedObservation := recordedObservation.Clone()
 		if liveObservation, ok := liveBySession[recordedObservation.WorkerSessionID]; ok {
-			mergeLiveObservation(&mergedObservation, liveObservation)
+			mergedObservation = liveObservation.Clone()
 		}
 		merged = append(merged, mergedObservation)
 	}
@@ -781,43 +779,6 @@ func mergeRecordedObservations(recorded, live []workersessions.Observation) []wo
 	}
 	sortObservationAttempts(merged)
 	return merged
-}
-
-func mergeLiveObservation(recorded *workersessions.Observation, live workersessions.Observation) {
-	if recorded == nil {
-		return
-	}
-	// A terminal recorded attempt already has a stable Factory timeline. A
-	// process-local live session can be reconstructed with a new opening time
-	// after restart, so it must not replace that history. The durable Worker
-	// Recording timestamp is applied later when the source-native opening record
-	// is available.
-	if live.StartedAt != nil && (recorded.StartedAt == nil || !recorded.State.Terminal()) {
-		started := *live.StartedAt
-		recorded.StartedAt = &started
-	}
-	if live.Model != nil && strings.TrimSpace(*live.Model) != "" {
-		recorded.Model = cloneRecordedString(live.Model)
-	}
-	if live.ReasoningEffort != nil && strings.TrimSpace(*live.ReasoningEffort) != "" {
-		recorded.ReasoningEffort = cloneRecordedString(live.ReasoningEffort)
-	}
-	if live.ProviderSessionAvailable {
-		recorded.ProviderSession = live.ProviderSession.Clone()
-		recorded.ProviderSessionAvailable = true
-	}
-	if live.TokenUsage != nil {
-		clone := live.TokenUsage.Clone()
-		recorded.TokenUsage = &clone
-	}
-	if live.Transcript != workersessions.TranscriptAvailabilityUnavailable {
-		recorded.Transcript = live.Transcript
-		recorded.Parse = live.Parse.Clone()
-	}
-	if recorded.Failure == nil && live.Failure != nil {
-		failure := *live.Failure
-		recorded.Failure = &failure
-	}
 }
 
 func sortObservationAttempts(observations []workersessions.Observation) {

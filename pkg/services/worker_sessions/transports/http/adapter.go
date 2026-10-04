@@ -55,8 +55,7 @@ type controlService interface {
 
 // SessionScope is the transport's detached view of the identity needed to
 // select and validate one Factory Session's Worker Session observations.
-// EffectiveID is used for the internal observation lookup; the requested
-// selector remains the public response alias.
+// EffectiveID is used for observation lookup and truthful response attribution.
 type SessionScope struct {
 	EffectiveID string
 	IsDefault   bool

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -684,9 +685,7 @@ func TestRecordedObservationListBranches(t *testing.T) {
 	if got, err := recordedObservationListResult(nil, true, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live-known"}}}, nil); err != nil || len(got.Observations) != 1 {
 		t.Fatalf("known live fallback = %#v, %v", got, err)
 	}
-	if !acceptableLiveObservationError(nil) || !acceptableLiveObservationError(workersessions.ErrObservationProjectionUnavailable) || !acceptableLiveObservationError(workersessions.ErrObservationWorkNotFound) || acceptableLiveObservationError(errors.New("other")) {
-		t.Fatal("acceptableLiveObservationError() classification is incorrect")
-	}
+
 }
 
 func TestRecordedFailureMappingBranches(t *testing.T) {
@@ -771,6 +770,80 @@ func TestMergeRecordedObservationsUsesCanonicalWorkerStartTimestamp(t *testing.T
 	)
 	if len(merged) != 1 || merged[0].StartedAt == nil || !merged[0].StartedAt.Equal(authoritativeStarted) {
 		t.Fatalf("merged Worker Session startedAt = %#v, want canonical opening %s", merged, authoritativeStarted.Format(time.RFC3339Nano))
+	}
+}
+
+func TestMergeRecordedObservationsUsesAllLiveFacts(t *testing.T) {
+	t.Parallel()
+	for _, state := range []workersessions.State{workersessions.StateRunning, workersessions.StateCompleted, workersessions.StateFailed} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			live := workersessions.Observation{
+				WorkerSessionID: "worker-1", FactorySessionID: "selected", State: state,
+				ProviderSessionAvailable: false, Transcript: workersessions.TranscriptAvailabilityUnavailable,
+				WorkIDs: []string{"work-1"},
+			}
+			recorded := live.Clone()
+			recorded.State = workersessions.StateFailed
+			recorded.FactorySessionID = "~default"
+			recorded.ProviderSessionAvailable = true
+			recorded.Failure = &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure}
+			historyOnly := workersessions.Observation{WorkerSessionID: "historical", State: workersessions.StateCompleted}
+			merged := mergeRecordedObservations([]workersessions.Observation{recorded, recorded, historyOnly}, []workersessions.Observation{live, live})
+			if len(merged) != 2 {
+				t.Fatalf("merged attempts = %#v, want two unique identities", merged)
+			}
+			for _, got := range merged {
+				if got.WorkerSessionID == "worker-1" {
+					if got.State != state || got.FactorySessionID != "selected" || got.Failure != nil || got.ProviderSessionAvailable {
+						t.Fatalf("merged overlap = %#v, want live facts including absent optional facts", got)
+					}
+					got.WorkIDs[0] = "mutated"
+				}
+			}
+			if live.WorkIDs[0] != "work-1" || recorded.State != workersessions.StateFailed || recorded.Failure == nil {
+				t.Fatal("read mutated owner observations")
+			}
+		})
+	}
+}
+
+type selectedObservationSource struct {
+	workersessions.Service
+	observation workersessions.Observation
+	err         error
+}
+
+func (s *selectedObservationSource) GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return s.observation.Clone(), s.err
+}
+
+func (s *selectedObservationSource) GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error) {
+	return s.observation.Clone(), s.err
+}
+
+func TestRecordedWorkerSessionObservationConsultsLiveBeforeHistory(t *testing.T) {
+	t.Parallel()
+	for _, sourceErr := range []error{nil, workersessions.ErrObservationCanceled, workersessions.ErrObservationProjectionUnavailable, context.DeadlineExceeded} {
+		t.Run(fmt.Sprint(sourceErr), func(t *testing.T) {
+			t.Parallel()
+			service := &recordedWorkerSessionObservation{
+				Service: &selectedObservationSource{observation: workersessions.Observation{WorkerSessionID: "worker-1", State: workersessions.StateRunning, FactorySessionID: "selected"}, err: sourceErr},
+				ledger:  &recordingfixtures.ScriptedRuntimeLedger{},
+				projector: func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+					t.Error("history consulted despite live presence or non-absence error")
+					return interfaces.FactoryWorldState{}, nil
+				},
+			}
+			byID, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
+			if !errors.Is(err, sourceErr) || (err == nil && byID.State != workersessions.StateRunning) {
+				t.Fatalf("ID read = %#v, %v; want live outcome %v", byID, err, sourceErr)
+			}
+			byProvider, err := service.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: providers.SessionRef{Provider: "codex", Kind: "session_id", ID: "provider-1"}})
+			if !errors.Is(err, sourceErr) || (err == nil && byProvider.State != workersessions.StateRunning) {
+				t.Fatalf("provider read = %#v, %v; want live outcome %v", byProvider, err, sourceErr)
+			}
+		})
 	}
 }
 

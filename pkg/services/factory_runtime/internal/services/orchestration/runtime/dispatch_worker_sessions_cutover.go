@@ -470,18 +470,17 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return result, err
 	}
 
+	live, liveErr := s.listLive(ctx, req)
+	if liveErr != nil && !errors.Is(liveErr, workersessions.ErrObservationWorkNotFound) && s.Service != nil {
+		return workersessions.ListObservationsResult{}, liveErr
+	}
 	events := s.canonicalEvents()
 	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID)
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-
-	live, liveErr := s.listLive(ctx, req)
 	if liveErr == nil {
 		recorded = mergeRecordedObservations(recorded, live.Observations)
-	}
-	if !acceptableLiveObservationError(liveErr) {
-		return workersessions.ListObservationsResult{}, liveErr
 	}
 	if err := s.applyRecordingHealth(ctx, recorded); err != nil {
 		return workersessions.ListObservationsResult{}, err
@@ -493,10 +492,6 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	s.applyConfirmation(recorded, sample)
 	s.applyConfirmation(live.Observations, sample)
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
-}
-
-func acceptableLiveObservationError(err error) bool {
-	return err == nil || isObservationNotFound(err) || isObservationProjectionUnavailable(err)
 }
 
 func recordedObservationListResult(
@@ -542,7 +537,14 @@ func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	result, err := s.Service.ListWorkerSessionObservations(ctx, req)
-	if err == nil {
+	if err == nil || errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		for index := range result.Observations {
+			var healthErr error
+			result.Observations[index], healthErr = s.withLiveRecordingHealth(ctx, result.Observations[index])
+			if healthErr != nil {
+				return workersessions.ListWorkerSessionObservationsResult{}, healthErr
+			}
+		}
 		s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
 	}
 	return result, err
@@ -710,6 +712,19 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	if s != nil && s.Service != nil {
+		observation, err := s.Service.GetObservation(ctx, req)
+		if err == nil {
+			observation, err = s.withLiveRecordingHealth(ctx, observation)
+			if err != nil {
+				return workersessions.Observation{}, err
+			}
+			return s.confirmedObservation(observation), nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.Observation{}, err
+		}
+	}
 	if s != nil && s.ledger != nil && s.projector != nil {
 		fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
 		if err != nil {
@@ -733,19 +748,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	observation, err := s.Service.GetObservation(ctx, req)
-	if err != nil {
-		return workersessions.Observation{}, err
-	}
-	observation, err = s.withRecordingHealth(ctx, observation)
-	if err != nil {
-		return workersessions.Observation{}, err
-	}
-	return s.confirmedObservation(observation), nil
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
-// GetObservationByWorkerSessionID resolves the Worker Session against this
-// Factory Session's durable history before consulting the process-local registry.
+// GetObservationByWorkerSessionID resolves the Worker Session against the
+// live registry before falling back to this Factory Session's durable history.
 func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	ctx context.Context,
 	req workersessions.GetObservationByWorkerSessionIDRequest,
@@ -756,6 +763,12 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
+	}
+	if s != nil && s.Service != nil {
+		observation, err := s.readLiveWorkerSessionByID(ctx, req)
+		if err == nil || !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return observation, err
+		}
 	}
 	if s != nil && s.ledger != nil && s.projector != nil {
 		observation, found, err := s.readRecordedWorkerSessionByID(ctx, req.WorkerSessionID)
@@ -772,7 +785,7 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.readLiveWorkerSessionByID(ctx, req)
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
 func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
