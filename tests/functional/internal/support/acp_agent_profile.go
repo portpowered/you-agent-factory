@@ -1,59 +1,44 @@
 package support
 
 import (
-	"context"
 	"os"
-	"sync"
+	"path/filepath"
 	"testing"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
-// SeedACPAgentProfile persists a real ACP Agent profile at the production
-// Operator Settings config path for home, through the same
-// operatorsettings.Service.UpdateACPAgentProfile production callers use, so
-// a root.BuildProcess-composed process's real Operator Settings root
-// resolves it unmodified. This is inert fixture setup, not a second
-// service-construction path exercised by the scenario itself: the
-// Providers/Operator Settings services built here only ever write the
-// config document ahead of time and are discarded before the scenario's own
-// root.BuildProcess call.
+// SeedACPAgentProfile authors an isolated fixture before the scenario starts.
+// The scenario's BuildProcess-composed Settings owner reads this real document.
 func SeedACPAgentProfile(t testing.TB, home, defaultTarget string, allowedTargets []string) {
 	t.Helper()
-
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	service, err := settingswire.NewServiceFromConfigDocument(
-		settingswire.NewConfigDocumentService(
-			platformfilesystem.Local{},
-			func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-				return os.CreateTemp(dir, pattern)
-			},
-			globalconfigmapping.Decode,
-			globalconfigmapping.Encode,
-			nil,
-			&sync.Mutex{},
-		),
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000009" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-
 	configPath := operatorsettings.DefaultConfigPath(home)
-	if _, err := service.UpdateACPAgentProfile(context.Background(), configPath, operatorsettings.ACPAgentProfile{
-		DefaultTarget:  defaultTarget,
-		AllowedTargets: allowedTargets,
-	}); err != nil {
-		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
+	config := operatorsettings.Config{}
+	data, err := os.ReadFile(configPath)
+	if err == nil {
+		config, err = globalconfigmapping.Decode(data)
+	} else if os.IsNotExist(err) {
+		err = nil
+	}
+	if err != nil {
+		t.Fatalf("load ACP profile fixture: %v", err)
+	}
+	profile, err := (operatorsettings.ACPAgentProfile{
+		DefaultTarget: defaultTarget, AllowedTargets: allowedTargets,
+	}).Normalize()
+	if err != nil {
+		t.Fatalf("normalize ACP profile fixture: %v", err)
+	}
+	config.Workers.ACP.AgentProfile = &profile
+	data, err = globalconfigmapping.Encode(config)
+	if err != nil {
+		t.Fatalf("encode ACP profile fixture: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("create ACP profile fixture directory: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("write ACP profile fixture: %v", err)
 	}
 }
