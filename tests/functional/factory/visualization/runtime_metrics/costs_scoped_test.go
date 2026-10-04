@@ -82,6 +82,14 @@ func (group *costsProcessGroup) checkPricing(t *testing.T, name, model, status, 
 	if all.Coverage.EncounteredRows != 2 {
 		t.Fatalf("all-session report = %#v, want both rows", all)
 	}
+	selected.assertScopedReport(t, report, status)
+	assertScopedPricing(t, report, name, amount)
+	selected.assertFailure(t, "missing-session", http.StatusNotFound, "METRICS_SESSION_NOT_FOUND")
+	selected.parity(t)
+}
+
+func (selected costsSessionFixture) assertScopedReport(t *testing.T, report generatedclient.CostsReport, status string) {
+	t.Helper()
 	if string(report.Status) != status || report.Coverage.EncounteredRows != 1 || len(report.LineItems) != 1 {
 		t.Fatalf("selected report = %#v", report)
 	}
@@ -94,6 +102,10 @@ func (group *costsProcessGroup) checkPricing(t *testing.T, name, model, status, 
 	if report.TokenTotals.InputTokens == nil || *report.TokenTotals.InputTokens != 1_000_000 || report.TokenTotals.OutputTokens == nil || *report.TokenTotals.OutputTokens != 2_000_000 {
 		t.Fatalf("token classes=%#v", report.TokenTotals)
 	}
+}
+
+func assertScopedPricing(t *testing.T, report generatedclient.CostsReport, name, amount string) {
+	t.Helper()
 	if name == "built-in" && (report.LineItems[0].PriceSource == nil || string(*report.LineItems[0].PriceSource) != "BUILT_IN") {
 		t.Fatalf("built-in source=%#v", report.LineItems[0])
 	}
@@ -107,8 +119,6 @@ func (group *costsProcessGroup) checkPricing(t *testing.T, name, model, status, 
 	if name == "operator-zero" && (report.LineItems[0].PriceSource == nil || string(*report.LineItems[0].PriceSource) != "OPERATOR_SUPPLIED") {
 		t.Fatalf("explicit zero source = %#v", report.LineItems[0])
 	}
-	selected.assertFailure(t, "missing-session", http.StatusNotFound, "METRICS_SESSION_NOT_FOUND")
-	selected.parity(t)
 }
 func (group *costsProcessGroup) checkSettingsRecovery(t *testing.T) {
 	home := t.TempDir()
@@ -320,6 +330,11 @@ func (fixture costsSessionFixture) assertFailure(t *testing.T, id string, status
 	if strings.Contains(body.String(), "secret-token") || strings.Contains(body.String(), "private-path") || strings.Contains(body.String(), "line_items") || strings.Contains(body.String(), fixture.home) || strings.Contains(body.String(), "not a directory") {
 		t.Fatalf("unsafe/partial error body=%s", body.String())
 	}
+	fixture.assertCLIFailure(t, id, code)
+}
+
+func (fixture costsSessionFixture) assertCLIFailure(t *testing.T, id, code string) {
+	t.Helper()
 	output, err := fixture.cli(t, id)
 	var typed *costscli.CostsError
 	if !errors.As(err, &typed) || typed.Code != code || strings.TrimSpace(output) != "" {

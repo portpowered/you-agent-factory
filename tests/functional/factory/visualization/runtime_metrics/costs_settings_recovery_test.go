@@ -22,6 +22,19 @@ func (group *costsProcessGroup) checkPhysicalSettingsRecovery(t *testing.T) {
 	if string(empty.Status) != "NO_USAGE" || empty.KnownCost != nil || empty.Coverage.EncounteredRows != 0 || len(empty.LineItems) != 0 {
 		t.Fatalf("original empty report=%#v", empty)
 	}
+	restore := faultOwnedSettingsDirectory(t, home)
+	fixture.assertFailure(t, fixture.id, http.StatusInternalServerError, "COSTS_QUERY_FAILED")
+	if current := foreign.parity(t); !reflect.DeepEqual(peer, current) {
+		t.Fatalf("owned Settings fault changed foreign report: %#v", current)
+	}
+	restore()
+	if recovered := fixture.parity(t); !reflect.DeepEqual(empty, recovered) {
+		t.Fatalf("Settings recovery changed original NO_USAGE report: %#v", recovered)
+	}
+}
+
+func ownedSettingsDirectory(t *testing.T, home string) string {
+	t.Helper()
 	settingsDir := filepath.Join(home, ".you-agent-factory")
 	// Resolve the real directory before mutation and reject any path escaping
 	// the scenario-owned profile, including a symlink introduced during setup.
@@ -33,7 +46,12 @@ func (group *costsProcessGroup) checkPhysicalSettingsRecovery(t *testing.T) {
 	if err != nil || relative != ".you-agent-factory" {
 		t.Fatalf("Settings directory is outside owned profile: path=%q relative=%q error=%v", resolved, relative, err)
 	}
-	settingsDir = resolved
+	return resolved
+}
+
+func faultOwnedSettingsDirectory(t *testing.T, home string) func() {
+	t.Helper()
+	settingsDir := ownedSettingsDirectory(t, home)
 	backup := settingsDir + ".saved"
 	if err := os.Rename(settingsDir, backup); err != nil {
 		if runtime.GOOS == "windows" && errors.Is(err, os.ErrPermission) {
@@ -55,18 +73,13 @@ func (group *costsProcessGroup) checkPhysicalSettingsRecovery(t *testing.T) {
 	if err := os.WriteFile(settingsDir, []byte("unavailable Settings directory secret-token private-path"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	fixture.assertFailure(t, fixture.id, http.StatusInternalServerError, "COSTS_QUERY_FAILED")
-	if current := foreign.parity(t); !reflect.DeepEqual(peer, current) {
-		t.Fatalf("owned Settings fault changed foreign report: %#v", current)
-	}
-	if err := os.Remove(settingsDir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(backup, settingsDir); err != nil {
-		t.Fatal(err)
-	}
-	restored = true
-	if recovered := fixture.parity(t); !reflect.DeepEqual(empty, recovered) {
-		t.Fatalf("Settings recovery changed original NO_USAGE report: %#v", recovered)
+	return func() {
+		if err := os.Remove(settingsDir); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(backup, settingsDir); err != nil {
+			t.Fatal(err)
+		}
+		restored = true
 	}
 }
