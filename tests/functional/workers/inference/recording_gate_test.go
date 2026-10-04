@@ -2,10 +2,12 @@ package inference_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -17,6 +19,7 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -51,13 +54,49 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 		runner := newWSRFT004ProviderRunner(t, probe)
 		dir := wsrFT004Factory(t)
 
-		runWSRFT004FactoryShared(t, dir, runner, probe)
+		support.ClearSeedInputs(t, dir)
+		queueWSRFT004ProviderResult(t, runner, 0)
+		result := runSharedInferenceFactory(t, dir, sharedInferenceScenario{
+			commandRunner: runner, workerRecordingWriter: probe,
+			submittedWork: sharedInferenceWork("WSR-FT-004 durable opening"),
+		}, sharedInferenceScenarioTimeout)
+		assertWSRFT004SafeOpeningFailure(t, result)
 
 		if got := runner.CallCount(); got != 0 {
 			t.Fatalf("provider command calls = %d, want zero after opening durability failure", got)
 		}
 		probe.assertOpeningFailure(t)
 	})
+}
+
+const wsrFT004OpeningFault = `sidecar sync failed: secret=sidecar-sentinel-5291 path=C:\private\sidecar-sentinel.worker.jsonl`
+
+func assertWSRFT004SafeOpeningFailure(t *testing.T, result sharedInferenceFactoryResult) {
+	t.Helper()
+	data, err := json.Marshal(result.events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "sidecar-sentinel") || strings.Contains(string(data), "private") {
+		t.Fatal("public Worker history exposed the injected storage fault")
+	}
+	for _, event := range result.events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if payload.FailureDetail == nil || payload.FailureDetail.Message != "worker session: opening publication failed" || payload.FailureDetail.Reason != "internal_server_error" {
+			t.Fatalf("public opening failure detail = %#v", payload.FailureDetail)
+		}
+		if payload.ProviderFailure == nil || payload.ProviderFailure.Family == nil || *payload.ProviderFailure.Family != "retryable" {
+			t.Fatalf("opening failure classification = %#v, want retryable", payload.ProviderFailure)
+		}
+		return
+	}
+	t.Fatal("Factory history omitted the opening failure dispatch response")
 }
 
 // TestWSRFT005CompletedWorkerReplayParity proves the root-composed durable
@@ -453,7 +492,7 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
 		probe.mu.Lock()
 		probe.events = append(probe.events, "opening-rejected")
 		probe.mu.Unlock()
-		return errors.New("injected opening durability failure")
+		return errors.New(wsrFT004OpeningFault)
 	}
 	if probe.failPosition > 0 && record.Record.ID.Position == probe.failPosition {
 		probe.mu.Lock()

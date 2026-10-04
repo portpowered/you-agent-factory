@@ -7,18 +7,12 @@ import (
 
 // NewOrchestrationJavaScriptExecution constructs the Runtime JavaScript
 // orchestration execute/resume port for peer wire assembly.
-func NewOrchestrationJavaScriptExecution(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflows,
-) factoryruntime.OrchestrationJavaScriptExecution {
-	return factoryruntimeorchestrationowner.New(newID, workflows)
+func NewOrchestrationJavaScriptExecution(service Orchestration) factoryruntime.OrchestrationJavaScriptExecution {
+	return factoryruntimeorchestrationowner.New(service)
 }
 
 // NewOrchestrationCompilation constructs the Runtime orchestration kind
 // selection and compilation port for peer wire assembly.
-func NewOrchestrationCompilation(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflows,
-) factoryruntime.OrchestrationCompilation {
-	return factoryruntimeorchestrationowner.NewCompilation(newID, workflows, workflows)
+func NewOrchestrationCompilation(service Orchestration) factoryruntime.OrchestrationCompilation {
+	return factoryruntimeorchestrationowner.NewCompilation(service)
 }

@@ -110,14 +110,11 @@ service-subpackage-test|pkg/services/workers/internal/services/runners/internal/
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire
 service-subpackage-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire
 service-subpackage-test|tests/functional/operator_settings/configcore|pkg/services/operator_settings/wire
-service-subpackage-test|tests/functional/operator_settings/root_composition_test|pkg/services/operator_settings/wire
 service-subpackage-test|tests/functional/runtime_api|pkg/services/work/wire
 service-subpackage-test|tests/functional/sessions_test|pkg/services/factory_sessions/wire
 service-subpackage-test|tests/functional/workers/inference_test|pkg/services/recordings/wire
 service-subpackage|tests/functional/internal/support|pkg/services/factory_sessions/transports/http
 service-subpackage|tests/functional/internal/support|pkg/services/operator_settings/transports/globalconfig
-service-subpackage|tests/functional/internal/support|pkg/services/operator_settings/wire
-service-subpackage|tests/functional/internal/support|pkg/services/providers/wire
 
 # Timing debt: file::declaration::kind::occurrence (no source line numbers).
 testsleep-deadline-test|cmd/gocoveragecheck|cmd/gocoveragecheck/functional_stream_test.go::waitForFunctionalStreamMarker::deadline::1
@@ -218,7 +215,6 @@ testsleep-deadline-test|pkg/services/factory_runtime/internal/host|pkg/services/
 testsleep-deadline-test|pkg/services/factory_runtime/internal/host|pkg/services/factory_runtime/internal/host/lifecycle_memory_test.go::TestObserveRuntimeMetricsStopsMemorySamplingWithRunLifecycle::deadline::2
 testsleep-deadline-test|pkg/services/factory_runtime/internal/services/instance_host/internal/service|pkg/services/factory_runtime/internal/services/instance_host/internal/service/concurrency_test.go::TestConcurrentReplaceAndTerminateDoesNotCommitReplacement::deadline::1
 testsleep-deadline-test|pkg/services/factory_runtime/internal/services/instance_host/internal/service|pkg/services/factory_runtime/internal/services/instance_host/internal/service/concurrency_test.go::TestConcurrentReplaceAndTerminateDoesNotCommitReplacement::deadline::2
-testsleep-deadline-test|pkg/services/factory_runtime/internal/services/instance_host/internal/service|pkg/services/factory_runtime/internal/services/instance_host/internal/service/execute_test.go::TestWaitForStartFailureCleansUpHandleWithoutOrphan::deadline::1
 testsleep-deadline-test|pkg/services/factory_runtime/internal/services/instance_host/internal/service|pkg/services/factory_runtime/internal/services/instance_host/internal/service/execute_test.go::TestWaitForStartObservesReadinessWithoutSecondHandle::deadline::1
 testsleep-deadline-test|pkg/services/factory_runtime/internal/services/instance_host/internal/service|pkg/services/factory_runtime/internal/services/instance_host/internal/service/replace_test.go::TestReplaceRestoresPriorSidecarsOnFailure::deadline::1
 testsleep-deadline-test|pkg/services/factory_runtime/internal/services/instance_host/internal/service|pkg/services/factory_runtime/internal/services/instance_host/internal/service/replace_test.go::TestReplaceStopsReplacementWhenReadinessFailsAndKeepsPriorHandle::deadline::1
