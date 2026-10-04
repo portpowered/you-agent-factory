@@ -338,17 +338,9 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 	session := entry.session(id, delta.WorkerSessionID)
 	switch delta.Kind {
 	case "record":
-		if delta.Record == nil || delta.Topic != "" || delta.Code != "" || delta.ExecutionTerminal != nil {
-			return recordings.ErrWorkerRecordingReplay
-		}
-		projection, duplicate, err := session.prepareRecord(*delta.Record)
-		if err != nil {
+		if err := session.applyRecordDelta(delta); err != nil {
 			return err
 		}
-		if duplicate {
-			return recordings.ErrWorkerRecordingDuplicate
-		}
-		session.acceptRecord(projection)
 	case "failure":
 		if delta.Record != nil {
 			return recordings.ErrWorkerRecordingReplay
@@ -362,6 +354,21 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 		return recordings.ErrWorkerRecordingCompatibility
 	}
 	entry.commit(session)
+	return nil
+}
+
+func (session *recordingSession) applyRecordDelta(delta workerJournalEntry) error {
+	if delta.Record == nil || delta.Topic != "" || delta.Code != "" || delta.ExecutionTerminal != nil {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	projection, duplicate, err := session.prepareRecord(*delta.Record)
+	if err != nil {
+		return err
+	}
+	if duplicate {
+		return recordings.ErrWorkerRecordingDuplicate
+	}
+	session.acceptRecord(projection)
 	return nil
 }
 

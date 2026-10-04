@@ -839,6 +839,14 @@ func TestFileWriterAppendsBoundedSuffixAndRehydratesUncertainCommit(t *testing.T
 	probe.mu.Lock()
 	reads := probe.reads
 	probe.mu.Unlock()
+	assertJournalRedelivery(t, writer, record)
+	if probe.reads != reads || probe.replacements != 0 || len(probe.suffixes) != 1 || bytes.Count(probe.suffixes[0], []byte("\n")) != 1 {
+		t.Fatalf("reads=%d replacements=%d suffixes=%d", probe.reads, probe.replacements, len(probe.suffixes))
+	}
+	assertJournalUncertainCommit(t, writer, probe, record)
+}
+func assertJournalRedelivery(t *testing.T, writer *FileWriter, record recordings.WorkerRecordingRecord) {
+	t.Helper()
 	if err := writer.PersistWorkerRecord(context.Background(), record); err != nil {
 		t.Fatal(err)
 	}
@@ -854,9 +862,10 @@ func TestFileWriterAppendsBoundedSuffixAndRehydratesUncertainCommit(t *testing.T
 	if err := writer.PersistWorkerRecord(context.Background(), changed); !errors.Is(err, recordings.ErrWorkerRecordingDuplicate) {
 		t.Fatalf("changed duplicate: %v", err)
 	}
-	if probe.reads != reads || probe.replacements != 0 || len(probe.suffixes) != 1 || bytes.Count(probe.suffixes[0], []byte("\n")) != 1 {
-		t.Fatalf("reads=%d replacements=%d suffixes=%d", probe.reads, probe.replacements, len(probe.suffixes))
-	}
+}
+
+func assertJournalUncertainCommit(t *testing.T, writer *FileWriter, probe *journalProbe, record recordings.WorkerRecordingRecord) {
+	t.Helper()
 	output := record
 	output.Record = mustRecord(t, workerOutputAppend(record.Record.ID.Topic, "session", 1, "output"), 2)
 	probe.failAfterSync = true
