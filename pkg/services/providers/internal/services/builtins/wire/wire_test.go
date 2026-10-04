@@ -1,17 +1,19 @@
 package wire
 
 import (
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
-	service, err := NewService()
+	t.Parallel()
+	first, err := DecodeACPIntegrations(modelproviders.RuntimeACPJSON())
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("DecodeACPIntegrations() error = %v", err)
 	}
-	first := service.ACPIntegrations()
+
 	want := []struct {
 		name      string
 		aliases   []string
@@ -63,7 +65,10 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 	}
 	droidIndex := 2
 	first[droidIndex].Aliases[0] = "mutated"
-	second := service.ACPIntegrations()
+	second, err := DecodeACPIntegrations(modelproviders.RuntimeACPJSON())
+	if err != nil {
+		t.Fatalf("DecodeACPIntegrations() error = %v", err)
+	}
 	if second[droidIndex].Aliases[0] != "factory-droid" {
 		t.Fatalf("catalog retained caller mutation: %#v", second[droidIndex].Aliases)
 	}

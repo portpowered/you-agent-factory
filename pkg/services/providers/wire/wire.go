@@ -376,11 +376,7 @@ func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]provider
 // Providers. Composition uses this exact source when materializing a new
 // operator configuration so init and runtime discovery cannot drift.
 func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
-	packaged, err := builtinswire.NewService()
-	if err != nil {
-		return nil, err
-	}
-	return packaged.ACPIntegrations(), nil
+	return ACPIntegrationsFromRuntimeCatalog(modelproviders.RuntimeACPJSON())
 }
 
 // ACPIntegrationsFromRuntimeCatalog projects a generated package-owned
@@ -389,11 +385,7 @@ func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
 // able to validate and diagnose alternate generated documents without starting
 // any provider process.
 func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegration, error) {
-	packaged, err := builtinswire.NewServiceFromRuntimeCatalog(document)
-	if err != nil {
-		return nil, err
-	}
-	return packaged.ACPIntegrations(), nil
+	return builtinswire.DecodeACPIntegrations(document)
 }
 
 func newRootWithOptions(
