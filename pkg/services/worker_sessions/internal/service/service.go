@@ -535,15 +535,25 @@ func (r *registry) associateProviderSessionLocked(
 
 	turnID := ""
 	dispatchID := req.DispatchID
+	attemptID := dispatchID
 	if supervision != nil {
 		turnID = supervision.turnID
 		dispatchID = supervision.dispatchID
+		attemptID = dispatchID
+	} else if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
+		// Runtime owns execution, but its immutable handle still identifies the
+		// physical attempt. A logical dispatch may survive several attempts.
+		dispatchID = attempt.dispatchID
+		attemptID = attempt.attemptID
+		if observation := r.observations[req.WorkerSessionID]; observation != nil {
+			turnID = observation.turnID
+		}
 	}
 	association := workersessions.ProviderSessionAssociation{
 		WorkerSessionID: req.WorkerSessionID,
 		TurnID:          turnID,
 		DispatchID:      dispatchID,
-		AttemptID:       dispatchID,
+		AttemptID:       attemptID,
 		Reference:       req.Reference.Clone(),
 	}
 	if existing := session.ProviderSessionAssociation; existing != nil {

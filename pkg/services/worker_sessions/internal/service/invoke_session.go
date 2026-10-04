@@ -125,7 +125,7 @@ func (r *registry) BindRuntimeAttemptCancellation(
 	}
 	attempt.mu.Lock()
 	defer attempt.mu.Unlock()
-	if attempt.completing || attempt.completed == nil {
+	if attempt.completing || attempt.completed == nil || attempt.cancel != nil {
 		return errRuntimeAttemptControlUnavailable
 	}
 	attempt.cancel = cancel

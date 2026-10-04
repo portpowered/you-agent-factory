@@ -871,6 +871,112 @@ func TestCancel_RuntimeAttemptRepeatNoopRetainsAdmittedDispatchID(t *testing.T) 
 	}
 }
 
+func TestRuntimeAttempt_ProviderAssociationRetainsPhysicalIdentity(t *testing.T) {
+	for _, fromResult := range []bool{false, true} {
+		t.Run(fmt.Sprintf("from-result=%t", fromResult), func(t *testing.T) {
+			t.Parallel()
+			r := newRuntimeIdentityRegistry(t)
+			request := workersessions.RuntimeAttemptRequest{
+				ID: "worker-physical", AttemptID: "physical-retry-2",
+				Execution: dispatchHandoff("logical-dispatch"),
+			}
+			request.Execution.Execution.Dispatch.Execution.RequestID = "turn-physical"
+			attempt, err := r.BeginRuntimeAttempt(context.Background(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch("logical-dispatch"), nil)
+			})
+			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-physical"}
+			result := runtimeAttemptCompletedDispatch("logical-dispatch")
+			if fromResult {
+				result.Result.Continuation = &providers.ContinuationRef{Provider: string(reference.Provider), Kind: reference.Kind, ProviderSessionID: reference.ID}
+			} else {
+				association, err := r.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+					DispatchID: "logical-dispatch", Reference: reference,
+				})
+				if err != nil || association.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
+					t.Fatalf("ObserveProviderSession = %#v, %v", association, err)
+				}
+				assertRuntimePhysicalAssociation(t, r, request.ID, reference)
+			}
+			if err := attempt.Complete(context.Background(), result, nil); err != nil {
+				t.Fatal(err)
+			}
+			assertRuntimePhysicalAssociation(t, r, request.ID, reference)
+			observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+			if err != nil || observation.State != workersessions.StateCompleted || observation.AttemptID != request.AttemptID {
+				t.Fatalf("retained observation = %#v, %v", observation, err)
+			}
+		})
+	}
+}
+
+func newRuntimeIdentityRegistry(t *testing.T) *registry {
+	t.Helper()
+	service, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{},
+		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service.(*registry)
+}
+
+func assertRuntimePhysicalAssociation(t *testing.T, r *registry, workerID string, reference providers.SessionRef) {
+	t.Helper()
+	session, err := r.Get(context.Background(), workersessions.GetRequest{ID: workerID})
+	want := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: workerID, TurnID: "turn-physical", DispatchID: "logical-dispatch",
+		AttemptID: "physical-retry-2", Reference: reference,
+	}
+	if err != nil || !reflect.DeepEqual(session.ProviderSessionAssociation, &want) {
+		t.Fatalf("Get provider association = %#v, %v, want %#v", session.ProviderSessionAssociation, err, want)
+	}
+}
+
+func TestRuntimeAttempt_CancellationBindingCannotReplaceOwnedResource(t *testing.T) {
+	t.Parallel()
+	r := newRuntimeIdentityRegistry(t)
+	for _, id := range []string{"target", "peer"} {
+		attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			ID: id, AttemptID: "physical-" + id, Execution: dispatchHandoff("dispatch-" + id),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch("dispatch-"+id), nil)
+		})
+	}
+	beforePeer, err := r.Get(context.Background(), workersessions.GetRequest{ID: "peer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cause := errors.New("owned target cancellation failed")
+	ownedCalls, replacementCalls := 0, 0
+	if err := r.BindRuntimeAttemptCancellation("target", "dispatch-target", func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+		ownedCalls++
+		return "", cause
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.BindRuntimeAttemptCancellation("target", "dispatch-target", func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+		replacementCalls++
+		return "", errors.New("replacement must not run")
+	}); !errors.Is(err, errRuntimeAttemptControlUnavailable) {
+		t.Fatalf("replacement binding = %v, want control unavailable", err)
+	}
+	result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "target"})
+	if !errors.Is(err, cause) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning || ownedCalls != 1 || replacementCalls != 0 {
+		t.Fatalf("Cancel = %#v, %v; calls = %d/%d", result, err, ownedCalls, replacementCalls)
+	}
+	afterPeer, err := r.Get(context.Background(), workersessions.GetRequest{ID: "peer"})
+	if err != nil || !reflect.DeepEqual(beforePeer, afterPeer) {
+		t.Fatalf("peer changed: %#v -> %#v, %v", beforePeer, afterPeer, err)
+	}
+}
+
 func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *testing.T) {
 	t.Run("opening failure terminalizes without claiming runtime ownership", func(t *testing.T) {
 		r := newTestRegistry(t)
