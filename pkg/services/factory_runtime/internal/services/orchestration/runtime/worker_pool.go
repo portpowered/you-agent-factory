@@ -655,15 +655,6 @@ func (f *factoryImpl) stopDispatchRuntimeLocked(
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	var stopErr error
-	// Worker Sessions closes asynchronous admission and joins its server-owned
-	// supervisors before Workers closes the dispatch pool. This ordering keeps
-	// a shutdown race from admitting new work after the pool has stopped and
-	// lets terminal callbacks publish through the still-open Events boundary.
-	if f.cfg != nil && f.cfg.workerSessions != nil {
-		if lifecycle, ok := f.cfg.workerSessions.(interface{ Stop(context.Context) error }); ok {
-			stopErr = lifecycle.Stop(stopCtx)
-		}
-	}
 	if f.dispatchPlan != nil {
 		stopErr = errors.Join(stopErr, f.dispatchPlan.Stop(stopCtx, reason))
 	}
@@ -671,8 +662,9 @@ func (f *factoryImpl) stopDispatchRuntimeLocked(
 		stopErr = errors.Join(stopErr, f.cfg.attempts.stop(stopCtx))
 	}
 	// Detached execution admission and terminal callbacks are now drained.
-	// Close only this runtime's observation handles; the supervisor may also
-	// retain live attempts belonging to other Factory Sessions.
+	// Seal and join this runtime's supervision scope, including compatibility
+	// invocations. The process supervisor retains peer Factory Sessions and
+	// remains available for their admission; only its lifecycle owner stops it.
 	if f.cfg != nil && f.cfg.workerSessions != nil {
 		if closer, ok := f.cfg.workerSessions.(interface {
 			CloseRuntimeAttempts(context.Context, string) error
