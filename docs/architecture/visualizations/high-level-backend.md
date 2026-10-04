@@ -13,15 +13,15 @@ flowchart TB
     s_services_operator_settings["operator settings<br/>7508 LOC · 2 subservices"]
   end
   subgraph coordination["Factory coordination"]
-    s_services_factory_runtime["factory runtime<br/>47958 LOC · 4 subservices"]
+    s_services_factory_runtime["factory runtime<br/>48014 LOC · 4 subservices"]
     s_services_factory_sessions["factory sessions<br/>58224 LOC · 4 subservices"]
   end
   subgraph execution["Execution"]
-    s_services_models["models<br/>42185 LOC · 5 subservices"]
+    s_services_models["models<br/>39272 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>5382 LOC · 2 subservices"]
-    s_services_providers["providers<br/>15658 LOC · 4 subservices"]
+    s_services_providers["providers<br/>14743 LOC · 3 subservices"]
     s_services_worker_sessions["worker sessions<br/>18390 LOC · 0 subservices"]
-    s_services_workers["workers<br/>22163 LOC · 2 subservices"]
+    s_services_workers["workers<br/>22145 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
     s_services_events["events<br/>1939 LOC · 0 subservices"]
@@ -33,7 +33,7 @@ flowchart TB
   end
   subgraph support["Support"]
     s_services_edges["edges<br/>958 LOC · 0 subservices"]
-    s_services_system_initialization["system initialization<br/>781 LOC · 0 subservices"]
+    s_services_system_initialization["system initialization<br/>754 LOC · 0 subservices"]
   end
   s_services_automations --> s_services_factory_definitions
   s_services_chat_sessions --> s_services_events
@@ -127,13 +127,13 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`edges`](services/edges.md) | — |
 | [`events`](services/events.md) | — |
 | [`factory_definitions`](services/factory_definitions.md) | (subservice) authoring layout (2136 LOC)<br/>(subservice) catalog (1376 LOC)<br/>(subservice) compilation (1673 LOC)<br/>(subservice) distribution (2803 LOC)<br/>(subservice) invocation policy (2994 LOC)<br/>(subservice) runtime snapshot (419 LOC)<br/>(subservice) snapshots portability (2370 LOC)<br/>(subservice) validation (5996 LOC) |
-| [`factory_runtime`](services/factory_runtime.md) | (subservice) checkpoint recovery (982 LOC)<br/>(subservice) dispatch planning (828 LOC)<br/>(subservice) instance host (719 LOC)<br/>(subservice) orchestration (32935 LOC) |
+| [`factory_runtime`](services/factory_runtime.md) | (subservice) checkpoint recovery (982 LOC)<br/>(subservice) dispatch planning (828 LOC)<br/>(subservice) instance host (742 LOC)<br/>(subservice) orchestration (32943 LOC) |
 | [`factory_sessions`](services/factory_sessions.md) | (subservice) durable execution (164 LOC)<br/>(subservice) identity (142 LOC)<br/>(subservice) invocation (171 LOC)<br/>(subservice) response stream (381 LOC) |
 | [`factory_visualization`](services/factory_visualization.md) | (subservice) activation lifecycle (444 LOC)<br/>(subservice) live view projection (530 LOC)<br/>(subservice) response event presentation (329 LOC) |
-| [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1128 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
+| [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (738 LOC)<br/>(subservice) resolution (302 LOC) |
 | [`provider_sessions`](services/provider_sessions.md) | (subservice) codex reader (1518 LOC)<br/>(subservice) cursor reader (2914 LOC) |
-| [`providers`](services/providers.md) | (subservice) acp (2702 LOC)<br/>(subservice) builtins (190 LOC)<br/>(subservice) catalog (888 LOC)<br/>(subservice) execution (5822 LOC) |
+| [`providers`](services/providers.md) | (subservice) acp (2716 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (5568 LOC) |
 | [`recordings`](services/recordings.md) | (subservice) artifacts export (592 LOC)<br/>(subservice) canonical ledger (479 LOC)<br/>(subservice) historical query (611 LOC)<br/>(subservice) projection query (261 LOC)<br/>(subservice) recorded session inventory (307 LOC)<br/>(subservice) recording lifecycle (784 LOC)<br/>(subservice) replay (368 LOC)<br/>(subservice) worker capture (2607 LOC) |
 | [`system_initialization`](services/system_initialization.md) | — |
 | [`webhooks`](services/webhooks.md) | — |
