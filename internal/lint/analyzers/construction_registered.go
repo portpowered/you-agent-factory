@@ -14,7 +14,7 @@ import (
 )
 
 // RegisteredConstruction migrates qualified construction calls and references.
-// The legacy scanner still owns guard, storage, getter and provider provenance
+// The legacy scanner still owns storage, helper, getter and provider provenance
 // until their typed replacements are complete. Report mode never enables an owner.
 var RegisteredConstruction = registeredConstructionAnalyzer(RepositoryConstructionRegistry())
 
@@ -70,6 +70,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 		}
 	}
 	scanRegisteredConstructionBags(pass, registry, add)
+	scanRegisteredConstructionGuards(pass, registry, values, add)
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
 			continue
@@ -127,7 +128,8 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 			})
 		}
 	}
-	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference", "required-dependency-bag"), blocking, false)
+	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference", "required-dependency-bag",
+		"required-dependency-guard", "required-receiver-guard", "required-dependency-assertion-guard", "unresolved-required-dependency-guard"), blocking, false)
 	return findings, nil
 }
 

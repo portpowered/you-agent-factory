@@ -32,7 +32,7 @@ func registeredConstructionValues(pass *analysis.Pass) registeredValues {
 					if id, ok := left.(*ast.Ident); ok {
 						if obj := pass.TypesInfo.Defs[id]; obj != nil && n.Tok.String() == ":=" && len(n.Lhs) == len(n.Rhs) {
 							v.initial[obj] = n.Rhs[i]
-						} else {
+						} else if pass.TypesInfo.Defs[id] == nil {
 							v.mutated[pass.TypesInfo.ObjectOf(id)] = true
 						}
 					}
