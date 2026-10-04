@@ -51,6 +51,11 @@ var supportRoots = []string{"internal/configcontractsmoke", "internal/testutil",
 
 var layeringRules = []layeringRule{
 	{
+		name:     "functional-provider-boundary",
+		hint:     "use tests/functional/internal/support.BuildProcess and exact public external-effect ports",
+		violates: violatesFunctionalProvider,
+	},
+	{
 		name: "constructed-service-edges",
 		hint: "inject exact external-effect ports from pkg/wire instead of the broad Edges bag",
 		violates: func(e edge) bool {
@@ -208,6 +213,9 @@ func runLayering(pass *analysis.Pass) (any, error) {
 		}
 	}
 	var found []violation
+	if providerLocalSupport(importer) {
+		pass.Reportf(pass.Files[0].Package, "functional-provider-support: keep reusable process support in tests/functional/internal/support")
+	}
 	hasTests := false
 	visit := func(file *ast.File, filename string) {
 		if (importer == "pkg/transports/http/client" || importer == "pkg/transports/http/generated") && !ast.IsGenerated(file) {
