@@ -8,7 +8,6 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
@@ -28,7 +27,7 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 	assets := recordingAssetsService{}
 	runtimeHost := testRuntimeHostService()
 
-	for _, test := range inferenceDependencyCases(scopes, assets, catalog, runtimeHost) {
+	for _, test := range inferenceDependencyCases(t, scopes, assets, catalog, runtimeHost) {
 		t.Run(test.name, func(t *testing.T) {
 			assertInferenceConstruction(t, test)
 		})
@@ -51,62 +50,73 @@ type inferenceDependencyCase struct {
 	catalog           modelcatalog.Service
 	runtimeHost       runtimehost.Service
 	invocationRuntime inferenceinternalservice.InvocationRuntime
-	fileSystem        modelseffects.InvocationArtifactFileSystem
+	registrar         *inferencewire.InvocationArtifactRegistrar
 	includeClock      bool
 	wantContains      string
 	wantInvalidDeps   bool
 }
 
 func inferenceDependencyCases(
+	t *testing.T,
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
 ) []inferenceDependencyCase {
+	t.Helper()
+	registrar, err := inferencewire.NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
+	if err != nil {
+		t.Fatalf("construct artifact registrar: %v", err)
+	}
 	return []inferenceDependencyCase{
 		{
 			name: "valid", scopes: scopes, assets: assets, catalog: catalog,
 			runtimeHost: runtimeHost, invocationRuntime: constructionInvocationRuntime{},
-			fileSystem: inference.InertArtifactFileSystem{}, includeClock: true,
+			registrar: registrar, includeClock: true,
 		},
 		{
 			name: "scopes", assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: constructionInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
+			registrar:         registrar, includeClock: true,
 			wantContains: "Runtime Scopes", wantInvalidDeps: true,
 		},
 		{
 			name: "assets", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: constructionInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
+			registrar:         registrar, includeClock: true,
 			wantContains: "Assets", wantInvalidDeps: true,
 		},
 		{
 			name: "catalog", scopes: scopes, assets: assets, runtimeHost: runtimeHost,
 			invocationRuntime: constructionInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
+			registrar:         registrar, includeClock: true,
 			wantContains: "Catalog", wantInvalidDeps: true,
 		},
 		{
 			name: "runtime host", scopes: scopes, assets: assets, catalog: catalog,
 			invocationRuntime: constructionInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
+			registrar:         registrar, includeClock: true,
 			wantContains: "Runtime Host", wantInvalidDeps: true,
 		},
 		{
 			name: "invocation runtime", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			fileSystem: inference.InertArtifactFileSystem{}, includeClock: true,
+			registrar: registrar, includeClock: true,
 			wantContains: "invocation runtime", wantInvalidDeps: true,
 		},
 		{
-			name: "filesystem", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
+			name: "registrar", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: constructionInvocationRuntime{}, includeClock: true,
-			wantContains: "filesystem", wantInvalidDeps: true,
+			wantContains: "registrar", wantInvalidDeps: true,
+		},
+		{
+			name: "deadline", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
+			invocationRuntime: constructionInvocationRuntime{}, registrar: registrar, includeClock: true,
+			wantContains: "deadline", wantInvalidDeps: true,
 		},
 		{
 			name: "clock", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: constructionInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{},
+			registrar:         registrar,
 			wantContains:      "clock", wantInvalidDeps: true,
 		},
 	}
@@ -121,14 +131,19 @@ func assertInferenceConstruction(t *testing.T, test inferenceDependencyCase) {
 		clockFn = clock.Now
 	}
 
+	deadline := inferencewire.NewExecutionDeadline()
+	if test.name == "deadline" {
+		deadline = nil
+	}
 	service, err := inferencewire.NewService(
 		test.scopes,
 		test.assets,
 		test.catalog,
 		test.runtimeHost,
 		test.invocationRuntime,
-		test.fileSystem,
+		test.registrar,
 		clockFn,
+		deadline,
 	)
 	if test.wantInvalidDeps {
 		if service != nil || err == nil {
@@ -280,4 +295,19 @@ func (recordingAssetsService) InspectRuntimeCache(
 	models.InspectModelAssetsRequest,
 ) (scopedassets.RuntimeCacheInspection, error) {
 	return scopedassets.RuntimeCacheInspection{}, models.ErrUnsupportedOperation
+}
+
+func TestNewInvocationArtifactRegistrarRequiresFilesystem(t *testing.T) {
+	t.Parallel()
+	registrar, err := inferencewire.NewInvocationArtifactRegistrar(nil)
+	if registrar != nil || !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+		t.Fatalf("registrar = (%v, %v), want invalid dependencies", registrar, err)
+	}
+}
+
+func TestNewExecutionDeadlinePreservesSelectedPolicy(t *testing.T) {
+	t.Parallel()
+	if got := inferencewire.NewExecutionDeadline()(); got != 30*time.Minute {
+		t.Fatalf("execution deadline = %v, want 30 minutes", got)
+	}
 }

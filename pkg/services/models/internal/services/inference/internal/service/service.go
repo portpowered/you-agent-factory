@@ -54,9 +54,6 @@ func New(
 	clock func() time.Time,
 	executionDeadline func() time.Duration,
 ) inference.Service {
-	if executionDeadline == nil {
-		executionDeadline = defaultExecutionDeadline
-	}
 	return &service{
 		scopes:            scopes,
 		assets:            assets,
@@ -117,11 +114,6 @@ func (s *service) InvokeModelWithLease(
 	}
 	if _, err := s.runtimeHost.ClaimInvocationLease(validationCtx, request); err != nil {
 		return models.InvokeModelResult{}, err
-	}
-
-	if s.runtime == nil {
-		disposition, releaseErr := s.releaseInvocationLease(ctx, request)
-		return failedLeaseCleanupResult(request, disposition), joinInvocationCleanupError(models.ErrUnavailable, releaseErr)
 	}
 
 	invocation, err := s.nextInvocationRef()

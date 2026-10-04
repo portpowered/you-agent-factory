@@ -4,18 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
-
-const defaultInferenceExecutionDeadline = 30 * time.Minute
-
-func defaultExecutionDeadline() time.Duration {
-	return defaultInferenceExecutionDeadline
-}
 
 func (s *service) putInvocation(invocation models.ModelInvocationRef, result models.InvokeModelResult) {
 	s.mu.Lock()
@@ -27,14 +20,11 @@ func (s *service) putInvocation(invocation models.ModelInvocationRef, result mod
 }
 
 func (s *service) invokeWithDeadline(parent context.Context) (context.Context, context.CancelFunc) {
-	if s == nil || s.executionDeadline == nil {
-		return parent, func() {}
-	}
 	duration := s.executionDeadline()
 	if duration <= 0 {
 		return parent, func() {}
 	}
-	if parentDeadline, ok := parent.Deadline(); ok && s.clock != nil {
+	if parentDeadline, ok := parent.Deadline(); ok {
 		remaining := parentDeadline.Sub(s.clock())
 		if remaining > 0 && remaining < duration {
 			return parent, func() {}

@@ -437,12 +437,25 @@ func NewInvocationRuntime(
 	return inferenceRuntime(options)
 }
 
-// NewInference consumes completed roles and the selected artifact/time effects.
+type InvocationArtifactRegistrar = inferencewire.InvocationArtifactRegistrar
+
+// NewInvocationArtifactRegistrar supplies the completed Inference resource.
+func NewInvocationArtifactRegistrar(fileSystem InvocationArtifactFileSystem) (*InvocationArtifactRegistrar, error) {
+	return inferencewire.NewInvocationArtifactRegistrar(fileSystem)
+}
+
+// NewExecutionDeadline selects the existing Models execution policy.
+func NewExecutionDeadline() func() time.Duration {
+	return inferencewire.NewExecutionDeadline()
+}
+
+// NewInference consumes completed roles and selected time policy.
 func NewInference(scopes RuntimeScopes, assets Assets, catalog Catalog, host RuntimeHost,
-	runtime InvocationRuntime, fileSystem InvocationArtifactFileSystem, now func() time.Time,
+	runtime InvocationRuntime, registrar *InvocationArtifactRegistrar, now func() time.Time,
+	executionDeadline func() time.Duration,
 ) (Inference, error) {
 	if now == nil {
 		return nil, fmt.Errorf("construct Models: process clock is required")
 	}
-	return inferencewire.NewService(scopes, assets, catalog, host, runtime, fileSystem, now)
+	return inferencewire.NewService(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
 }

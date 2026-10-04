@@ -356,8 +356,9 @@ func provideModelInvocationRuntime(edges serviceedges.Edges, runner modelRuntime
 }
 
 func provideModelInference(scopes modelswire.RuntimeScopes, assets modelswire.Assets, catalog modelswire.Catalog,
-	host modelswire.RuntimeHost, runtime modelswire.InvocationRuntime, now modelNow) (modelswire.Inference, error) {
-	return modelswire.NewInference(scopes, assets, catalog, host, runtime, modelswire.NewInertInvocationArtifactFileSystem(), now)
+	host modelswire.RuntimeHost, runtime modelswire.InvocationRuntime, registrar *modelswire.InvocationArtifactRegistrar,
+	now modelNow, executionDeadline func() time.Duration) (modelswire.Inference, error) {
+	return modelswire.NewInference(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
 }
 
 func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,

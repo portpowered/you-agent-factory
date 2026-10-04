@@ -48,7 +48,11 @@ func NewModelsServiceForManagedProcessIntegration(edges serviceedges.Edges) (mod
 		return nil, err
 	}
 	now := provideModelNow(edges)
-	inference, err := provideModelInference(scopes, assets, catalog, host, runtime, now)
+	registrar, err := modelswire.NewInvocationArtifactRegistrar(modelswire.NewInertInvocationArtifactFileSystem())
+	if err != nil {
+		return nil, err
+	}
+	inference, err := provideModelInference(scopes, assets, catalog, host, runtime, registrar, now, modelswire.NewExecutionDeadline())
 	if err != nil {
 		return nil, err
 	}

@@ -336,14 +336,13 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
+	registrar, err := inferencewire.NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
+	if err != nil {
+		t.Fatalf("construct artifact registrar: %v", err)
+	}
 	inference, err := inferencewire.NewService(
-		scopes,
-		assets,
-		catalog,
-		runtimeHost,
-		constructionInvocationRuntime{},
-		inference.InertArtifactFileSystem{},
-		clock.Now,
+		scopes, assets, catalog, runtimeHost, constructionInvocationRuntime{},
+		registrar, clock.Now, inferencewire.NewExecutionDeadline(),
 	)
 	if err != nil {
 		t.Fatalf("construct Inference: %v", err)
@@ -383,9 +382,13 @@ func TestNewRootAcceptsComposedDependenciesAndSelectedLogger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Runtime Host: %v", err)
 	}
+	registrar, err := inferencewire.NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
+	if err != nil {
+		t.Fatalf("construct artifact registrar: %v", err)
+	}
 	inferenceService, err := inferencewire.NewService(
 		scopes, assets, catalog, runtimeHost, constructionInvocationRuntime{},
-		inference.InertArtifactFileSystem{}, clock.Now,
+		registrar, clock.Now, inferencewire.NewExecutionDeadline(),
 	)
 	if err != nil {
 		t.Fatalf("construct Inference: %v", err)

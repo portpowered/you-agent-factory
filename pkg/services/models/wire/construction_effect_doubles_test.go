@@ -753,7 +753,11 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	inferenceService, err := NewInference(runtimeScopes, assetService, catalogService, runtimeHost, runtime, inference.InertArtifactFileSystem{}, now)
+	registrar, err := NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
+	if err != nil {
+		return nil, err
+	}
+	inferenceService, err := NewInference(runtimeScopes, assetService, catalogService, runtimeHost, runtime, registrar, now, NewExecutionDeadline())
 	if err != nil {
 		return nil, err
 	}
