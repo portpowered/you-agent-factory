@@ -2,11 +2,16 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -680,4 +685,109 @@ func (e *synchronousFanOutExecution) observedCanceledControlContext() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.canceledControlContext
+}
+
+// scopedListFixture builds a ledger shaped like the live daemon that exposed
+// the work-scoped list latency: hundreds of dispatches spread over ~100 Work
+// items plus filler events up to a few thousand.
+func scopedListFixture(tb testing.TB, dispatches, works, fillerEvents int) (
+	*recordedWorkerSessionObservation, string, int,
+) {
+	tb.Helper()
+	base := time.Date(2026, 10, 4, 5, 0, 0, 0, time.UTC)
+	var events []interfaces.FactoryEvent
+	completed := make([]interfaces.FactoryWorldDispatchCompletion, 0, dispatches)
+	workItems := make(map[string]work.FactoryWorkItem, works)
+	for w := 0; w < works; w++ {
+		id := fmt.Sprintf("work-%03d", w)
+		workItems[id] = work.FactoryWorkItem{ID: id}
+	}
+	seq := 0
+	next := func() int { seq++; return seq }
+	ptr := func(v string) *string { return &v }
+	want := 0
+	target := "work-007"
+	for d := 0; d < dispatches; d++ {
+		dispatchID := fmt.Sprintf("dispatch-%04d", d)
+		workID := fmt.Sprintf("work-%03d", d%works)
+		if workID == target {
+			want++
+		}
+		at := base.Add(time.Duration(d) * time.Second)
+		events = append(events,
+			interfaces.FactoryEvent{
+				Id: fmt.Sprintf("req-%d", d), Type: interfaces.FactoryEventTypeDispatchRequest,
+				Context: interfaces.FactoryEventContext{
+					Tick: d, Sequence: next(), EventTime: at, DispatchID: ptr(dispatchID),
+					WorkIDs: &[]string{workID},
+				},
+				Payload: json.RawMessage(`{"inputs":[]}`),
+			},
+			interfaces.FactoryEvent{
+				Id: fmt.Sprintf("assoc-%d", d), Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+				Context: interfaces.FactoryEventContext{
+					Tick: d, Sequence: next(), EventTime: at, DispatchID: ptr(dispatchID),
+				},
+				Payload: json.RawMessage(fmt.Sprintf(`{"workerSessionId":"ws-%04d"}`, d)),
+			},
+			interfaces.FactoryEvent{
+				Id: fmt.Sprintf("resp-%d", d), Type: interfaces.FactoryEventTypeDispatchResponse,
+				Context: interfaces.FactoryEventContext{
+					Tick: d, Sequence: next(), EventTime: at.Add(time.Second), DispatchID: ptr(dispatchID),
+				},
+				Payload: json.RawMessage(`{}`),
+			},
+		)
+		completed = append(completed, interfaces.FactoryWorldDispatchCompletion{
+			DispatchID: dispatchID, StartedAt: at, CompletedAt: at.Add(time.Second),
+			WorkItemIDs: []string{workID},
+			Result:      interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
+		})
+	}
+	for f := 0; f < fillerEvents; f++ {
+		events = append(events, interfaces.FactoryEvent{
+			Id: fmt.Sprintf("filler-%d", f), Type: interfaces.FactoryEventTypeWorkRequest,
+			Context: interfaces.FactoryEventContext{
+				Tick: f % dispatches, Sequence: next(), EventTime: base,
+				WorkIDs: &[]string{fmt.Sprintf("work-%03d", f%works)},
+			},
+			Payload: json.RawMessage(`{}`),
+		})
+	}
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+	projector := func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+		return interfaces.FactoryWorldState{WorkItemsByID: workItems, CompletedDispatches: completed}, nil
+	}
+	service := newRecordedWorkerSessionObservation(
+		nil, ledger, factory.WorldStateProjector(projector),
+		platformclock.NewDeterministic(base, time.Second), nil,
+	)
+	return service.(*recordedWorkerSessionObservation), target, want
+}
+
+func TestRecordedWorkerSessionObservationScopedListScalesWithHundredsOfSessions(t *testing.T) {
+	service, workID, want := scopedListFixture(t, 600, 100, 1800)
+	started := time.Now()
+	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("ListObservations() error = %v", err)
+	}
+	if len(result.Observations) != want {
+		t.Fatalf("observations = %d, want %d", len(result.Observations), want)
+	}
+	t.Logf("work-scoped list over 600 sessions / ~3600 events: %s", elapsed)
+	if elapsed > 200*time.Millisecond {
+		t.Fatalf("work-scoped list took %s, want under 200ms", elapsed)
+	}
+}
+
+func BenchmarkRecordedWorkerSessionObservationScopedList(b *testing.B) {
+	service, workID, _ := scopedListFixture(b, 600, 100, 1800)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID}); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
