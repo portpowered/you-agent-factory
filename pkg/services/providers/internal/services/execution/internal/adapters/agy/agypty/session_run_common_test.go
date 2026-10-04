@@ -604,8 +604,6 @@ func TestExecuteSessionRun_RejectsMissingInputs(t *testing.T) {
 	if _, err := executeSessionRun(context.Background(), cfg, reader, nil, testPTYClock, platformclock.Real{}); err == nil {
 		t.Fatal("executeSessionRun(nil proc) error = nil, want error")
 	}
-
-	reader = io.NopCloser(strings.NewReader(""))
 }
 
 func TestClosePTYReader_AllowsNil(t *testing.T) {
