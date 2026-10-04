@@ -90,7 +90,7 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 		select {
 		case <-done:
 			trace.add("cleanup Execute joined error=%v", executeErr)
-		case <-time.After(5 * time.Second):
+		case <-time.After(5 * time.Second): //nolint:testsleep // Cleanup joins the owned Execute completion channel; five seconds is only the retained failure ceiling.
 			t.Error("cleanup could not join Execute; no recovery attempted")
 		}
 		t.Logf("diagnostic stdout=%q stderr=%q provider_calls=%d\n%s", stdout.snapshot(), stderr.snapshot(), runner.calls.Load(), trace.snapshot())
@@ -485,7 +485,7 @@ func (trace *wsrFT009Trace) snapshot() string {
 
 func (trace *wsrFT009Trace) wait(t *testing.T, signal, done <-chan struct{}, executeErr *error, description string, stdout, stderr *wsrFT009Output) {
 	t.Helper()
-	timer := time.NewTimer(5 * time.Second)
+	timer := time.NewTimer(5 * time.Second) //nolint:testsleep // Injected edge/completion signals drive readiness; preserve the operator-required five-second witness failure ceiling.
 	defer timer.Stop()
 	trace.add("waiting for %s", description)
 	select {
