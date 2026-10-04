@@ -34,18 +34,7 @@ func TestReaderDetailsConcurrentIdentitiesReturnOrderedDetachedEntries(t *testin
 			if err != nil || !reflect.DeepEqual(first, second) {
 				t.Fatalf("repeated Details = %#v, %v; want %#v", second, err, first)
 			}
-			if first.ProviderSession.ID != id || first.ProviderSession.Provider != providersessions.ProviderCodex || first.ProviderSession.Kind != providersessions.SessionIDKind || len(first.Transcript) != 3 {
-				t.Fatalf("unexpected identity or transcript: %#v", first)
-			}
-			wantTypes := []providersessions.TranscriptEntryType{providersessions.TranscriptToolCall, providersessions.TranscriptToolOutput, providersessions.TranscriptAssistantMessage}
-			for index, want := range wantTypes {
-				if first.Transcript[index].Type != want {
-					t.Fatalf("transcript[%d] = %#v, want %s", index, first.Transcript[index], want)
-				}
-			}
-			if stringValue(first.Transcript[0].Arguments) != id || stringValue(first.Transcript[1].Output) != "ok" || stringValue(first.Transcript[2].Text) != id {
-				t.Fatalf("unexpected transcript content: %#v", first.Transcript)
-			}
+			assertCodexIdentityAndOrderedEntries(t, first, id)
 			*first.Transcript[0].Arguments = "mutated"
 			*first.Transcript[2].Text = "mutated"
 			third, err := reader.Details(context.Background(), codexSessionRef(id))
@@ -53,6 +42,22 @@ func TestReaderDetailsConcurrentIdentitiesReturnOrderedDetachedEntries(t *testin
 				t.Fatalf("mutation escaped inspection: second=%#v third=%#v error=%v", second, third, err)
 			}
 		})
+	}
+}
+
+func assertCodexIdentityAndOrderedEntries(t *testing.T, detail providersessions.Detail, id string) {
+	t.Helper()
+	if detail.ProviderSession.ID != id || detail.ProviderSession.Provider != providersessions.ProviderCodex || detail.ProviderSession.Kind != providersessions.SessionIDKind || len(detail.Transcript) != 3 {
+		t.Fatalf("unexpected identity or transcript: %#v", detail)
+	}
+	wantTypes := []providersessions.TranscriptEntryType{providersessions.TranscriptToolCall, providersessions.TranscriptToolOutput, providersessions.TranscriptAssistantMessage}
+	for index, want := range wantTypes {
+		if detail.Transcript[index].Type != want {
+			t.Fatalf("transcript[%d] = %#v, want %s", index, detail.Transcript[index], want)
+		}
+	}
+	if stringValue(detail.Transcript[0].Arguments) != id || stringValue(detail.Transcript[1].Output) != "ok" || stringValue(detail.Transcript[2].Text) != id {
+		t.Fatalf("unexpected transcript content: %#v", detail.Transcript)
 	}
 }
 
