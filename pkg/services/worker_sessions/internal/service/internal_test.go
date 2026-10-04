@@ -661,7 +661,7 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 			observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
 			before := sink.requestsFor(workersessions.Topic(b.request.ID))
 			beforeRead := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID))
-			a := preparePerRuntimeAttemptFixture(t, "a", sink)
+			a := preparePerRuntimeAttemptFixture(t, "a", sink, b)
 			switch failure {
 			case "append":
 				boundary.topic, boundary.err = workersessions.Topic(a.request.ID), cause
@@ -1139,6 +1139,54 @@ func TestKeyedRuntime_ExplicitProviderAssociationSurvivesEqualDispatchPeer(t *te
 				assertPerRuntimeObservation(t, fixture, workersessions.StateCompleted)
 			}
 		})
+	}
+}
+
+func TestKeyedRuntime_FirstProviderRecordUsesOwnedPhysicalAttempt(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+		request := perRuntimeProgressRequest(fixture)
+		request.Draft.Provenance.Provider = string(providers.IDCodex)
+		before := sink.requestsFor("")
+		foreign := request
+		foreign.Draft = workers.CloneDraft(request.Draft)
+		foreign.Draft.DispatchID = "foreign-physical"
+		if _, err := fixture.service.PublishRecord(context.Background(), foreign); !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) {
+			t.Fatalf("foreign physical PublishRecord = %v, want attempt mismatch", err)
+		}
+		if after := sink.requestsFor(""); !reflect.DeepEqual(before, after) {
+			t.Fatalf("rejected foreign physical record changed retained appends: %#v", after)
+		}
+		result, err := fixture.service.PublishRecord(context.Background(), request)
+		if err != nil || result.Outcome != workersessions.PublishOutcomeAccepted || result.SessionID != fixture.request.ID {
+			t.Fatalf("owned PublishRecord = %#v, %v", result, err)
+		}
+		after := sink.requestsFor("")
+		if len(after) != len(before)+2 || !reflect.DeepEqual(before, after[:len(before)]) {
+			t.Fatalf("owned record must append binding then output exactly once: %#v", after)
+		}
+		assertRuntimeProviderBindingBeforeOutput(t, fixture, request.Draft, after[len(before)], after[len(before)+1])
+	}
+}
+
+func assertRuntimeProviderBindingBeforeOutput(t *testing.T, fixture *perRuntimeAttemptFixture, want workers.Draft, binding, output events.AppendRequest) {
+	t.Helper()
+	if binding.Topic != workersessions.Topic(fixture.request.ID) || output.Topic != binding.Topic {
+		t.Fatalf("binding/output routed to foreign topic: %#v / %#v", binding, output)
+	}
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(decodePerRuntimeDraft(t, binding).Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.WorkerSessionID != fixture.request.ID || payload.AttemptID != fixture.request.AttemptID ||
+		payload.DispatchID != fixture.request.AttemptID || payload.ProviderSelection == nil || payload.ProviderSelection.RunnerID != string(providers.IDCodex) {
+		t.Fatalf("provider binding lost physical attribution: %#v", payload)
+	}
+	if draft := decodePerRuntimeDraft(t, output); !reflect.DeepEqual(draft, want) {
+		t.Fatalf("retained output = %#v, want %#v", draft, want)
 	}
 }
 

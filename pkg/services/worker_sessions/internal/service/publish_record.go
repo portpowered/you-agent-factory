@@ -661,15 +661,17 @@ func (r *registry) ensurePublishRecordProvider(
 		}
 		return nil
 	}
-
 	dispatchID := strings.TrimSpace(req.Draft.DispatchID)
 	if dispatchID == "" {
 		return workersessions.ErrInvalidProviderBinding
 	}
 	r.mu.RLock()
-	ownerID, exists := r.dispatchOwners[dispatchID]
+	owned := r.dispatchOwners[dispatchID] == req.SessionID
+	if attempt := r.runtimeAttemptControls[req.SessionID]; attempt != nil {
+		owned = attempt.attemptID == dispatchID && r.runtimeAttemptOwners[attempt.key] == req.SessionID
+	}
 	r.mu.RUnlock()
-	if !exists || ownerID != req.SessionID {
+	if !owned {
 		return workersessions.ErrProviderBindingAttemptMismatch
 	}
 	_, err := r.publishProviderBindingLocked(ctx, req.SessionID, dispatchID, provider, pub)
