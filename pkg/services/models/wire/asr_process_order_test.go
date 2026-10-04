@@ -253,8 +253,12 @@ func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 	if err != nil {
 		t.Fatalf("construct Models Catalog: %v", err)
 	}
+	registrar, err := inferencewire.NewInvocationArtifactRegistrar(inference.InertArtifactFileSystem{})
+	if err != nil {
+		t.Fatalf("construct artifact registrar: %v", err)
+	}
 	inferenceService, err := inferencewire.NewService(
-		scopes, assets, catalog, host, invocation, inference.InertArtifactFileSystem{}, time.Now,
+		scopes, assets, catalog, host, invocation, registrar, time.Now, inferencewire.NewExecutionDeadline(),
 	)
 	if err != nil {
 		t.Fatalf("construct Models Inference: %v", err)

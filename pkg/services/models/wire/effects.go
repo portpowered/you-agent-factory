@@ -9,7 +9,6 @@ type PullMetricsRecorder = effects.PullMetricsRecorder
 type HostDiagnosticLogger = effects.HostDiagnosticLogger
 type HostMetricsRecorder = effects.HostMetricsRecorder
 type LocalRuntimeHooks = effects.LocalRuntimeHooks
-type ProcessDependencies = effects.ProcessDependencies
 type ResolvedHostConfiguration = effects.ResolvedHostConfiguration
 type BackendArtifactSelection = effects.BackendArtifactSelection
 type BackendArtifactResolver = effects.BackendArtifactResolver

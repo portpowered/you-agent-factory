@@ -3,13 +3,11 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
@@ -24,66 +22,51 @@ const (
 	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
 )
 
-// Scoped asset lifecycle is contract-only until the Models implementation
-// packet owns runtime-scope registration, asset inspection, and removal.
-func (s *Service) PreflightModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
-) (models.PreflightModelAssetsResult, error) {
-	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *Service) PrepareModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
-) (models.PrepareModelAssetsResult, error) {
-	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *Service) InspectModelAssets(
-	context.Context,
-	models.InspectModelAssetsRequest,
-) (models.InspectModelAssetsResult, error) {
-	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *Service) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
-) (models.RemoveModelAssetsResult, error) {
-	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-// PullModel starts or reports managed-runtime pull materialization for one model.
-func (s *Service) PullModel(ctx context.Context, modelName string) (models.PullResult, error) {
-	if s == nil {
-		return models.PullResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	if err := models.ValidatePullModelRequest(models.PullModelRequest{Name: modelName}); err != nil {
+// PullModelForScope uses the same fixed owner as local invocation. Only detached
+// configuration and a scope adapter are selected here; no service graph is built.
+func (s *scopedLocalExecution) PullModelForScope(ctx context.Context, request models.PullModelRequest) (models.PullResult, error) {
+	if err := models.ValidatePullModelRequest(request); err != nil {
 		return models.PullResult{}, err
 	}
-	started := s.now()
-	if logger := s.logger(); logger != nil {
-		safeModelName := (models.PullDiagnostics{ModelName: modelName}).Normalize().ModelName
-		logger.Info(
-			"managed runtime pull started",
-			zap.String("model_name", safeModelName),
-		)
+	if request.Scope.IsZero() {
+		return models.PullResult{}, models.ErrRuntimeScopeInvalid
 	}
-	host := s.modelHost()
-	if host == nil {
-		puller := s.modelAssetPuller()
-		opts := localmodels.PullOptions{
-			RuntimeCacheInspector: puller,
-			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
-		}
-		result, err := localmodels.PullModelWithOptions(puller, ctx, s.runtimeConfig(), modelName, opts)
-		s.recordManagedRuntimePull(modelName, result, err, s.now().Sub(started))
-		return result, err
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.PullResult{}, runtimeScopeError(err)
 	}
-	result, err := s.pullWithModelHost(ctx, host, modelName)
-	s.recordManagedRuntimePull(modelName, result, err, s.now().Sub(started))
+	var config *models.RuntimeConfig
+	if binding.RuntimeConfig != nil {
+		config = binding.RuntimeConfig()
+	}
+	// Even a successful configuration lookup may finish after close.
+	if _, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String())); err != nil {
+		return models.PullResult{}, runtimeScopeError(err)
+	}
+	if err := s.executor.admitInvocation(ctx, request.Scope); err != nil {
+		return models.PullResult{}, err
+	}
+	if config == nil {
+		return models.PullResult{}, models.ErrUnavailable
+	}
+	assets, err := localmodels.NewScopedAssetPuller(s.assets, request.Scope)
+	if err != nil {
+		return models.PullResult{}, err
+	}
+	result, err := localmodels.PullModelWithOptions(assets, ctx, config, request.Name, localmodels.PullOptions{
+		RuntimeCacheInspector: assets, SourceResolver: localmodels.DefaultManagedRuntimeSourceResolver(),
+	})
+	if closedErr := s.executor.admitInvocation(ctx, request.Scope); closedErr != nil {
+		return models.PullResult{}, closedErr
+	}
 	return result, err
+}
+
+func (o *Root) checkPullScope(ctx context.Context, scope models.RuntimeScopeRef) error {
+	if _, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String())); err != nil {
+		return runtimeScopeError(err)
+	}
+	return ctx.Err()
 }
 
 func (o *Root) pullResolvedModelAfterCatalogMiss(
@@ -118,6 +101,9 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 		return models.PullResult{}, models.ErrUnavailable
 	}
 	runtimeConfig := binding.RuntimeConfig()
+	if err := o.checkPullScope(ctx, request.Scope); err != nil {
+		return models.PullResult{}, err
+	}
 	if runtimeConfig == nil {
 		return models.PullResult{}, models.ErrUnavailable
 	}
@@ -132,7 +118,7 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 					Model: models.ModelReference{NameOrURI: modelName},
 				},
 				resolved,
-				o.process.BackendArtifactPlatform,
+				o.backendArtifactPlatform,
 			)
 			if o.resolveBackendArtifact != nil && isJoinedManagedBackend(resolved.Definition.Backend) {
 				var resolveErr error
@@ -140,6 +126,9 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 				if resolveErr != nil {
 					return models.PrepareModelAssetsRequest{}, resolveErr
 				}
+			}
+			if _, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String())); err != nil {
+				return models.PrepareModelAssetsRequest{}, runtimeScopeError(err)
 			}
 			return joinedAssetPreparationRequestWithConfiguration(
 				models.InvokeModelRequest{
@@ -165,109 +154,9 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 	)
 }
 
-func (s *Service) pullWithModelHost(
-	ctx context.Context,
-	host modelhost.Host,
-	modelName string,
-) (models.PullResult, error) {
-	runtimeCfg := s.runtimeConfig()
-	if runtimeCfg == nil {
-		return models.PullResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	snapshot, err := host.Pull(ctx, runtimeCfg, modelName)
-	result := modelPullResultFromSnapshot(snapshot)
-	if err == nil {
-		return result, nil
-	}
-	var pullErr *models.PullError
-	if errors.As(err, &pullErr) && pullErr != nil {
-		pullErr.Result.PullDiagnostics = pullsupport.MergePullDiagnostics(
-			pullErr.Result.PullDiagnostics,
-			pullsupport.PullDiagnosticsFromError(pullErr.Cause),
-		).WithDefaults(
-			modelName, pullErr.Result.SourceID, pullErr.Result.Revision, "", "pull model",
-		)
-		return pullErr.Result, err
-	}
-	if errors.Is(err, managedruntime.ErrNotFound) {
-		return result, err
-	}
-	if isUnsupportedModelHostPull(err) {
-		name := strings.TrimSpace(result.ModelName)
-		if name == "" {
-			name = strings.TrimSpace(modelName)
-		}
-		return result, fmt.Errorf("%w: model %q is not a local model", models.ErrPullUnsupported, name)
-	}
-
-	pullOutcome, readiness := localmodels.ClassifyPullFailure(err)
-	if strings.TrimSpace(result.ModelName) == "" {
-		result.ModelName = strings.TrimSpace(modelName)
-	}
-	result.Outcome = "FAILED"
-	if strings.TrimSpace(result.ManagedPullOutcome) == "" {
-		result.ManagedPullOutcome = pullOutcome
-	}
-	if strings.TrimSpace(result.ReadinessState) == "" {
-		result.ReadinessState = readiness
-	}
-	if strings.TrimSpace(result.LifecycleState) == "" {
-		result.LifecycleState = string(managedruntime.LifecycleStateNotInstalled)
-	}
-	result.PullDiagnostics = pullsupport.MergePullDiagnostics(
-		result.PullDiagnostics,
-		pullsupport.PullDiagnosticsFromError(err),
-	).WithDefaults(modelName, result.SourceID, result.Revision, "", "pull model")
-	return result, &models.PullError{Result: result, Cause: err}
-}
-
-func isUnsupportedModelHostPull(err error) bool {
-	if errors.Is(err, modelhost.ErrUnsupportedRuntime) || errors.Is(err, models.ErrPullUnsupported) {
-		return true
-	}
-	var readinessErr *modelhost.ReadinessError
-	return errors.As(err, &readinessErr) && errors.Is(readinessErr.Cause, modelhost.ErrUnsupportedRuntime)
-}
-
-func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) models.PullResult {
-	files := make([]models.DownloadedFile, 0, len(snapshot.DownloadedFiles))
-	for _, file := range snapshot.DownloadedFiles {
-		files = append(files, models.DownloadedFile{
-			Path:   file.Path,
-			Bytes:  file.Bytes,
-			SHA256: file.SHA256,
-		})
-	}
-	locality := snapshot.Identity.Locality
-	if locality == "" {
-		locality = managedruntime.LocalityLocal
-	}
-	return models.PullResult{
-		ModelName:          strings.TrimSpace(snapshot.Identity.Name),
-		ProviderLocality:   string(locality),
-		Outcome:            strings.TrimSpace(snapshot.LegacyOutcome),
-		CachePath:          strings.TrimSpace(snapshot.CachePath),
-		Revision:           strings.TrimSpace(snapshot.Revision),
-		DownloadedFiles:    files,
-		ManagedPullOutcome: string(snapshot.PullOutcome),
-		ReadinessState:     string(snapshot.ReadinessState),
-		LifecycleState:     string(snapshot.LifecycleState),
-		SourceKind:         strings.TrimSpace(snapshot.Identity.SourceKind),
-		SourceID:           strings.TrimSpace(snapshot.Identity.SourceID),
-		ResolverNotes:      strings.TrimSpace(snapshot.Identity.ResolverNotes),
-	}
-}
-
-func (s *Service) modelAssetPuller() localmodels.AssetPuller {
-	if s == nil {
-		return nil
-	}
-	return s.assetPuller
-}
-
-func (s *Service) recordManagedRuntimePull(modelName string, result models.PullResult, err error, elapsed time.Duration) {
+func recordManagedRuntimePull(logger *zap.Logger, metrics modelseffects.PullMetricsRecorder, modelName string, result models.PullResult, err error, elapsed time.Duration) {
 	labels := map[string]string{"model_name": strings.TrimSpace(modelName)}
-	s.recordModelPullMetric(modelPullMetricAttempts, labels)
+	recordModelPullMetric(metrics, modelPullMetricAttempts, labels)
 	if err != nil {
 		pullOutcome, readiness := localmodels.ClassifyPullFailure(err)
 		if strings.TrimSpace(result.ManagedPullOutcome) != "" {
@@ -285,12 +174,12 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 			"readiness_state": readiness,
 			"lifecycle_state": lifecycle,
 		})
-		s.recordModelPullMetric(modelPullMetricFailure, failureLabels)
+		recordModelPullMetric(metrics, modelPullMetricFailure, failureLabels)
 		if !errors.Is(err, context.Canceled) &&
 			(errors.Is(err, models.ErrSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED") {
-			s.recordModelPullMetric(modelPullMetricSourceFailure, failureLabels)
+			recordModelPullMetric(metrics, modelPullMetricSourceFailure, failureLabels)
 		}
-		if logger := s.logger(); logger != nil {
+		if logger != nil {
 			diagnostics := pullsupport.MergePullDiagnostics(
 				result.PullDiagnostics,
 				pullsupport.PullDiagnosticsFromError(err),
@@ -336,8 +225,8 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 		"lifecycle_state": strings.TrimSpace(result.LifecycleState),
 		"source_kind":     strings.TrimSpace(result.SourceKind),
 	})
-	s.recordModelPullMetric(modelPullMetricSuccess, successLabels)
-	if logger := s.logger(); logger != nil {
+	recordModelPullMetric(metrics, modelPullMetricSuccess, successLabels)
+	if logger != nil {
 		logger.Info(
 			"managed runtime pull completed",
 			zap.String("model_name", modelName),
@@ -394,21 +283,14 @@ func managedRuntimePullFailureReason(err error) string {
 	}
 }
 
-func (s *Service) recordModelPullMetric(name string, labels map[string]string) {
-	if s == nil || s.pullMetrics == nil {
+func recordModelPullMetric(metrics modelseffects.PullMetricsRecorder, name string, labels map[string]string) {
+	if metrics == nil {
 		return
 	}
-	s.pullMetrics.RecordModelPullMetric(modelseffects.PullMetric{
+	metrics.RecordModelPullMetric(modelseffects.PullMetric{
 		Name:   name,
 		Labels: cloneMetricLabels(labels),
 	})
-}
-
-func (s *Service) logger() *zap.Logger {
-	if s == nil {
-		return nil
-	}
-	return s.loggerValue
 }
 
 func mergeMetricLabels(parts ...map[string]string) map[string]string {
@@ -433,10 +315,10 @@ func cloneMetricLabels(labels map[string]string) map[string]string {
 }
 
 func removeModelCacheStartLog(o *Root, request models.RemoveModelAssetsRequest) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
-	o.process.Logger.Info(
+	o.logger.Info(
 		"models cache removal started",
 		zap.String("model_name", strings.TrimSpace(request.Name)),
 		zap.String("scope", request.Scope.String()),
@@ -451,7 +333,7 @@ func removeModelCacheTerminalLog(
 	err error,
 	elapsed time.Duration,
 ) {
-	if o == nil || o.process.Logger == nil {
+	if o == nil || o.logger == nil {
 		return
 	}
 	outcome := string(result.Outcome)
@@ -469,7 +351,7 @@ func removeModelCacheTerminalLog(
 			zap.String("failure_class", removeModelCacheFailureClass(err)),
 			zap.Error(err),
 		)
-		o.process.Logger.Warn("models cache removal completed", fields...)
+		o.logger.Warn("models cache removal completed", fields...)
 		return
 	}
 	fields = append(fields,
@@ -479,7 +361,7 @@ func removeModelCacheTerminalLog(
 		zap.Int64("reclaimed_cache_bytes", result.ReclaimedCacheBytes),
 		zap.Int64("retained_shared_cache_bytes", result.RetainedSharedCacheBytes),
 	)
-	o.process.Logger.Info("models cache removal completed", fields...)
+	o.logger.Info("models cache removal completed", fields...)
 }
 
 func removeModelCacheFailureClass(err error) string {

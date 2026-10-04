@@ -4,218 +4,15 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
-	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
-	"go.uber.org/zap"
 )
-
-func TestNewServiceRetainsExplicitDependencies(t *testing.T) {
-	t.Parallel()
-
-	runtimeCfg := mustConstructionRuntimeConfig(t)
-	puller := constructionAssetPuller{}
-	logger := zap.NewNop()
-	metrics := &constructionPullMetrics{}
-	host := constructionModelHost{}
-
-	svc, err := NewService(
-		func() *modelRuntimeConfig { return runtimeCfg },
-		host,
-		puller,
-		logger,
-		func() time.Time { return time.Unix(123, 0) },
-		metrics,
-	)
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	if svc.runtimeConfig() != runtimeCfg || svc.modelHost() != host || svc.modelAssetPuller() != puller {
-		t.Fatal("NewService did not retain required dependencies")
-	}
-	if svc.logger() != logger || svc.pullMetrics != modelseffects.PullMetricsRecorder(metrics) {
-		t.Fatal("NewService did not retain optional dependencies")
-	}
-}
-
-func TestNewServiceRejectsMissingClockAndLogger(t *testing.T) {
-	t.Parallel()
-
-	runtimeCfg := mustConstructionRuntimeConfig(t)
-	for _, test := range []struct {
-		name   string
-		logger *zap.Logger
-		clock  func() time.Time
-		want   string
-	}{
-		{name: "logger", clock: time.Now, want: "logger is required"},
-		{name: "clock", logger: zap.NewNop(), want: "clock is required"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			svc, err := NewService(
-				func() *modelRuntimeConfig { return runtimeCfg }, constructionModelHost{},
-				constructionAssetPuller{}, test.logger, test.clock, nil,
-			)
-			if svc != nil || err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("NewService = (%#v, %v), want %q", svc, err, test.want)
-			}
-		})
-	}
-}
-
-func TestServiceNilReceiverPreservesUnavailableRuntimeErrors(t *testing.T) {
-	t.Parallel()
-
-	var svc *Service
-	assertUnavailable := func(operation string, err error) {
-		t.Helper()
-		if err == nil || !strings.Contains(err.Error(), "runtime is not available") {
-			t.Fatalf("%s error = %v, want runtime unavailable", operation, err)
-		}
-	}
-
-	_, err := svc.ListModels(context.Background())
-	assertUnavailable("ListModels", err)
-	_, err = svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
-	assertUnavailable("GetModel", err)
-	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
-	assertUnavailable("PullModel", err)
-	if svc.logger() != nil || svc.modelHost() != nil {
-		t.Fatal("nil service accessors returned configured collaborators")
-	}
-}
-
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
-	t.Parallel()
-
-	runtimeCfg := mustConstructionRuntimeConfig(t)
-	runtimeConfig := func() *modelRuntimeConfig { return runtimeCfg }
-	host := constructionModelHost{}
-	puller := constructionAssetPuller{}
-	tests := []struct {
-		name       string
-		dependency string
-		construct  func() (*Service, error)
-	}{
-		{
-			name: "runtime lookup", dependency: "runtime configuration lookup",
-			construct: func() (*Service, error) { return NewService(nil, host, puller, zap.NewNop(), time.Now, nil) },
-		},
-		{
-			name: "model host", dependency: "model host",
-			construct: func() (*Service, error) { return NewService(runtimeConfig, nil, puller, zap.NewNop(), time.Now, nil) },
-		},
-		{
-			name: "typed nil model host", dependency: "model host",
-			construct: func() (*Service, error) {
-				var typedNilHost *constructionModelHost
-				return NewService(runtimeConfig, typedNilHost, puller, zap.NewNop(), time.Now, nil)
-			},
-		},
-		{
-			name: "asset puller", dependency: "model asset puller",
-			construct: func() (*Service, error) { return NewService(runtimeConfig, host, nil, zap.NewNop(), time.Now, nil) },
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			svc, err := test.construct()
-			if svc != nil {
-				t.Fatalf("NewService service = %#v, want nil", svc)
-			}
-			if !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), test.dependency) {
-				t.Fatalf("NewService error = %v, want invalid-dependencies error naming %q", err, test.dependency)
-			}
-		})
-	}
-}
-
-type constructionPullMetrics struct{}
-
-func (*constructionPullMetrics) RecordModelPullMetric(modelseffects.PullMetric) {}
-
-type constructionAssetPuller struct{}
-
-func (constructionAssetPuller) PullModel(context.Context, *modelRuntimeConfig, string) (models.PullResult, error) {
-	return models.PullResult{}, nil
-}
-func (constructionAssetPuller) EnsureModelAvailable(context.Context, *modelRuntimeConfig, *modelRuntimeWorker) error {
-	return nil
-}
-func (constructionAssetPuller) ResolveModelCache(context.Context, *modelRuntimeConfig, *modelRuntimeWorker) (localmodels.CacheLayout, error) {
-	return localmodels.CacheLayout{}, nil
-}
-func (constructionAssetPuller) InspectRuntimeCache(context.Context, *modelRuntimeConfig, string) (localmodels.RuntimeCacheInspection, error) {
-	return localmodels.RuntimeCacheInspection{}, nil
-}
-
-func mustConstructionRuntimeConfig(t *testing.T) *modelRuntimeConfig {
-	t.Helper()
-	return projectTestModelsRuntimeConfig(t.TempDir(), &testFactoryConfig{
-		Name: "construction-test",
-	})
-}
-
-type constructionModelHost struct{}
-
-func (constructionModelHost) ResolveIdentity(context.Context, *modelRuntimeConfig, string) (modelhost.Identity, error) {
-	return modelhost.Identity{}, nil
-}
-
-func (constructionModelHost) InspectReadiness(context.Context, *modelRuntimeConfig, string) (modelhost.ReadinessSnapshot, error) {
-	return modelhost.ReadinessSnapshot{}, nil
-}
-
-func (constructionModelHost) Pull(context.Context, *modelRuntimeConfig, string) (modelhost.PullSnapshot, error) {
-	return modelhost.PullSnapshot{}, nil
-}
-
-func (constructionModelHost) AcquireLease(context.Context, *modelRuntimeConfig, string, modelhost.LeaseOptions) (modelhost.Lease, error) {
-	return modelhost.Lease{}, nil
-}
-
-func (constructionModelHost) ReleaseLease(context.Context, string) error { return nil }
-
-func (constructionModelHost) Unload(context.Context, *modelRuntimeConfig, string) error {
-	return nil
-}
-
-func TestService_AcquireLease_ReturnsRuntimeNotReadyWhenHostMissing(t *testing.T) {
-	t.Parallel()
-
-	svc := &Service{
-		runtimeConfigLookup: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-		clock:               time.Now,
-	}
-
-	_, err := svc.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "local-model"})
-	if !errors.Is(err, models.ErrHostRuntimeNotReady) {
-		t.Fatalf("AcquireLease nil host = %v, want ErrHostRuntimeNotReady", err)
-	}
-}
-
-func TestService_ReleaseLease_ReturnsLeaseNotFoundWhenHostMissing(t *testing.T) {
-	t.Parallel()
-
-	svc := &Service{
-		runtimeConfigLookup: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-		loggerValue:         zap.NewNop(),
-		clock:               time.Now,
-	}
-
-	err := svc.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: "lease-1"})
-	if !errors.Is(err, models.ErrHostLeaseNotFound) {
-		t.Fatalf("ReleaseLease nil host = %v, want ErrHostLeaseNotFound", err)
-	}
-}
 
 func TestRootListCatalogReturnsStableDetachedScopedProjection(t *testing.T) {
 	t.Parallel()
@@ -329,7 +126,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
 
 	directList, err := privateCatalog.ListCatalog(
@@ -449,7 +246,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog}
+	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
 
 	assertCatalogGetFailureParity(t, root, privateCatalog, models.GetModelRequest{
@@ -491,149 +288,42 @@ func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	assertCatalogListFailureParity(t, root, privateCatalog, canceled, unavailableScope, context.Canceled)
 }
 
-func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
+func TestRootGetModelReadinessPreservesRequestResultAndFailure(t *testing.T) {
 	t.Parallel()
-
-	fixture := newCompatibilityParityFixture(t)
-	assertCompatibilityListParity(t, fixture)
-	assertCompatibilityDetailParity(t, fixture)
-	fixture.markReady()
-	assertCompatibilityReadinessParity(t, fixture)
-}
-
-type compatibilityParityFixture struct {
-	compatibility    *Service
-	root             *Root
-	opened           models.OpenRuntimeScopeResult
-	currentReadiness *models.Runtime
-	host             *compatibilityParityHost
-}
-
-func newCompatibilityParityFixture(t *testing.T) compatibilityParityFixture {
-	t.Helper()
-	runtimeConfig := models.RuntimeConfig{
-		Workers: []models.RuntimeWorker{
-			scopedCatalogWorker("compatibility-worker", "compatibility-model", "generate"),
-		},
-	}
-	entry := localmodels.BuildCatalogWithRuntime(
-		&runtimeConfig,
-		nil,
-		localmodels.DefaultManagedRuntimeSourceResolver(),
-	)[localmodels.CanonicalModelName("compatibility-model")]
-	currentReadiness := entry.Detail.ManagedRuntime.Clone()
-	host := &compatibilityParityHost{snapshot: readinessSnapshot(currentReadiness)}
-	compatibility, err := NewService(
-		func() *models.RuntimeConfig { return &runtimeConfig },
-		host,
-		constructionAssetPuller{},
-		zap.NewNop(),
-		time.Now,
-		nil,
-	)
+	scope, err := (models.RuntimeScopeRef{}).Parse("root-readiness-boundary")
 	if err != nil {
-		t.Fatalf("construct compatibility service: %v", err)
+		t.Fatal(err)
 	}
-
-	scopes, err := runtimescopeswire.NewService(func() string { return "compatibility-parity-test" })
-	if err != nil {
-		t.Fatalf("construct Runtime Scopes: %v", err)
-	}
-	privateCatalog, err := catalogwire.NewService(
-		scopes,
-		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
-			return currentReadiness.Clone(), nil
-		},
-	)
-	if err != nil {
-		t.Fatalf("construct Catalog: %v", err)
-	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog}
-	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
-		Config: models.RuntimeScopeConfig{Runtime: runtimeConfig},
-	})
-	if err != nil {
-		t.Fatalf("OpenRuntimeScope: %v", err)
-	}
-	return compatibilityParityFixture{
-		compatibility:    compatibility,
-		root:             root,
-		opened:           opened,
-		currentReadiness: &currentReadiness,
-		host:             host,
-	}
-}
-
-func assertCompatibilityListParity(t *testing.T, fixture compatibilityParityFixture) {
-	t.Helper()
-	legacyList, err := fixture.compatibility.ListModels(context.Background())
-	if err != nil {
-		t.Fatalf("compatibility ListModels: %v", err)
-	}
-	scopedList, err := fixture.root.ListCatalog(
-		context.Background(),
-		models.ListModelsRequest{Scope: fixture.opened.Scope},
-	)
-	if err != nil {
-		t.Fatalf("ListCatalog: %v", err)
-	}
-	var scopedCompatibility []models.Summary
-	for _, model := range scopedList.Models {
-		if model.Name == "compatibility-model" {
-			scopedCompatibility = append(scopedCompatibility, model)
+	request := models.GetModelReadinessRequest{Scope: scope, Name: "selected-model", Operation: "generate"}
+	want := models.GetModelReadinessResult{Readiness: models.Runtime{
+		Identity: "selected-model", ReadinessState: models.ReadinessStateReady,
+		LifecycleState: models.LifecycleStateInstalled,
+	}}
+	failure := errors.New("readiness query failed")
+	for _, queryErr := range []error{nil, failure} {
+		ctx, cancel := context.WithCancel(context.Background())
+		boundary := rootReadinessBoundary{query: func(gotCtx context.Context, got models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+			if gotCtx != ctx || got != request {
+				t.Fatalf("readiness request/context = (%#v, %v), want selected request/context", got, gotCtx)
+			}
+			return want, queryErr
+		}}
+		root := &Root{catalog: boundary}
+		got, gotErr := root.GetModelReadiness(ctx, request)
+		cancel()
+		if !reflect.DeepEqual(got, want) || !errors.Is(gotErr, queryErr) {
+			t.Fatalf("GetModelReadiness = (%#v, %v), want (%#v, %v)", got, gotErr, want, queryErr)
 		}
 	}
-	if !reflect.DeepEqual(legacyList.Results, scopedCompatibility) {
-		t.Fatalf("catalog list parity = (legacy %#v, scoped %#v)", legacyList.Results, scopedCompatibility)
-	}
 }
 
-func assertCompatibilityDetailParity(t *testing.T, fixture compatibilityParityFixture) {
-	t.Helper()
-	legacyDetail, err := fixture.compatibility.GetModel(context.Background(), "compatibility-model")
-	if err != nil {
-		t.Fatalf("compatibility GetModel: %v", err)
-	}
-	scopedDetail, err := fixture.root.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: fixture.opened.Scope, Name: "compatibility-model", Operation: "generate",
-	})
-	if err != nil {
-		t.Fatalf("GetCatalogModel: %v", err)
-	}
-	scopedCompatibilityFields := scopedDetail.Model.Clone()
-	scopedCompatibilityFields.Sources = nil
-	if !reflect.DeepEqual(legacyDetail, scopedCompatibilityFields) {
-		t.Fatalf("catalog get parity = (legacy %#v, scoped %#v)", legacyDetail, scopedCompatibilityFields)
-	}
+type rootReadinessBoundary struct {
+	modelcatalog.Service
+	query func(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error)
 }
 
-func (fixture *compatibilityParityFixture) markReady() {
-	fixture.currentReadiness.ReadinessState = models.ReadinessStateReady
-	fixture.currentReadiness.LifecycleState = models.LifecycleStateInstalled
-	fixture.currentReadiness.Diagnostics["readinessState"] = string(models.ReadinessStateReady)
-	fixture.currentReadiness.Diagnostics["lifecycleState"] = string(models.LifecycleStateInstalled)
-	fixture.host.snapshot = readinessSnapshot(*fixture.currentReadiness)
-}
-
-func assertCompatibilityReadinessParity(t *testing.T, fixture compatibilityParityFixture) {
-	t.Helper()
-	legacyReadiness, err := fixture.compatibility.InspectRuntime(context.Background(), "compatibility-model")
-	if err != nil {
-		t.Fatalf("compatibility InspectRuntime: %v", err)
-	}
-	scopedReadiness, err := fixture.root.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
-		Scope: fixture.opened.Scope, Name: "compatibility-model", Operation: "generate",
-	})
-	if err != nil {
-		t.Fatalf("GetModelReadiness: %v", err)
-	}
-	if !reflect.DeepEqual(legacyReadiness, scopedReadiness.Readiness) {
-		t.Fatalf(
-			"readiness parity = (legacy %#v, scoped %#v)",
-			legacyReadiness,
-			scopedReadiness.Readiness,
-		)
-	}
+func (b rootReadinessBoundary) GetModelReadiness(ctx context.Context, request models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+	return b.query(ctx, request)
 }
 
 func TestRootClosesScopeAndPreservesClosedClassification(t *testing.T) {
@@ -671,32 +361,6 @@ func TestRootClosesScopeAndPreservesClosedClassification(t *testing.T) {
 		models.GetModelReadinessRequest{Scope: opened.Scope, Name: "closed-model"},
 	); !errors.Is(err, models.ErrRuntimeScopeClosed) {
 		t.Fatalf("GetModelReadiness closed scope error = %v, want ErrRuntimeScopeClosed", err)
-	}
-}
-
-type compatibilityParityHost struct {
-	constructionModelHost
-	snapshot modelhost.ReadinessSnapshot
-}
-
-func (host *compatibilityParityHost) InspectReadiness(
-	context.Context,
-	*models.RuntimeConfig,
-	string,
-) (modelhost.ReadinessSnapshot, error) {
-	return host.snapshot, nil
-}
-
-func readinessSnapshot(runtime models.Runtime) modelhost.ReadinessSnapshot {
-	return modelhost.ReadinessSnapshot{
-		Identity: modelhost.Identity{
-			Name:                runtime.Identity,
-			Locality:            runtime.Locality,
-			SupportedOperations: runtime.SupportedOperations,
-		},
-		ReadinessState: runtime.ReadinessState,
-		LifecycleState: runtime.LifecycleState,
-		Diagnostics:    runtime.Diagnostics,
 	}
 }
 
@@ -790,7 +454,7 @@ func newScopedCatalogRoot(t *testing.T) *Root {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	return &Root{runtimeScopes: scopes, catalog: catalog}
+	return &Root{runtimeScopes: scopes, catalog: catalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, invokeLocal: inertScopedLocalExecution{}.InvokeLocal, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 }
 
 func scopedCatalogWorker(name, model, operation string) models.RuntimeWorker {
