@@ -88,3 +88,11 @@ test('transport policy debt requires its exact compiler source and owner', () =>
   assert.deepEqual(orphanTimingKeys(key, metadata.replace('policy_test.go', 'other_test.go'), 'm/'), [key]);
   assert.deepEqual(orphanTimingKeys(key, 'm/pkg/transports/a', 'm/'), [key]);
 });
+
+test('recorded transport sites require their exact compiler source and owner', () => {
+  const key = 'transport-recorded-site|pkg/transports/a|pkg/transports/a/adapter.go#transport-lifecycle#context.WithCancel::count=1';
+  const metadata = 'm/pkg/transports/a||||adapter.go';
+  assert.deepEqual(orphanTimingKeys(key, metadata, 'm/'), []);
+  assert.deepEqual(orphanTimingKeys(key, metadata.replace('adapter.go', 'other.go'), 'm/'), [key]);
+  assert.deepEqual(orphanTimingKeys(key, 'm/pkg/transports/other||||adapter.go', 'm/'), [key]);
+});

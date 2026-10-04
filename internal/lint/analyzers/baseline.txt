@@ -3165,3 +3165,12 @@ test-cross-owner-policy|pkg/services/system_initialization_test|pkg/services/sys
 test-cross-owner-policy|tests/functional/factory/packaged/catalog|tests/functional/factory/packaged/catalog/override_test.go#pkg/services/factory_definitions.MapDir::count=2
 test-cross-owner-policy|tests/functional/internal/support|tests/functional/internal/support/acp_agent_profile.go#pkg/services/operator_settings.DefaultConfigPath::count=1
 test-cross-owner-policy|tests/functional/operator_settings/root_composition_test|tests/functional/operator_settings/root_composition/operator_config_activation_test.go#pkg/services/operator_settings.DefaultConfigPath::count=1
+
+# Exact observed transport debt sites; original rule IDs remain unchanged.
+transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/prompt_stream.go#transport-concurrency#sync.Mutex::count=2
+transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/prompt_stream.go#transport-lifecycle#time.NewTimer::count=1
+transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/prompt_stream.go#transport-platform-selection#pkg/platform/logging.EnsureLogger::count=1
+transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-concurrency#make(chan)::count=2
+transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-concurrency#sync.Mutex::count=1
+transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-platform-selection#pkg/platform/logging.EnsureLogger::count=2
+transport-recorded-site|pkg/transports/cli/run|pkg/transports/cli/run/factory_invocation_input.go#transport-lifecycle#context.WithCancel::count=1

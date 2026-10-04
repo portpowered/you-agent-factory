@@ -224,11 +224,9 @@ func filterRecordedScanResult(result scanResult, baseline recordedBoundaryBaseli
 func newRecordedScanResult(result scanResult) scanResult {
 	return scanResult{
 		serviceConstructionBaselineCount:    result.serviceConstructionBaselineCount,
-		transportBehaviorBaselineCount:      result.transportBehaviorBaselineCount,
 		productionDefaultBaselineCount:      result.productionDefaultBaselineCount,
 		petriPublicSurfaceBaselineCount:     result.petriPublicSurfaceBaselineCount,
 		recordedServiceConstructionFindings: append([]serviceConstructionFinding(nil), result.recordedServiceConstructionFindings...),
-		recordedTransportBehaviorFindings:   append([]transportBehaviorFinding(nil), result.recordedTransportBehaviorFindings...),
 		recordedProductionDefaultFindings:   append([]productionDefaultFinding(nil), result.recordedProductionDefaultFindings...),
 		recordedPetriPublicSurfaceFindings:  append([]petriPublicSurfaceFinding(nil), result.recordedPetriPublicSurfaceFindings...),
 	}
@@ -253,9 +251,6 @@ func filterRecordedServiceFindings(visible, recorded *scanResult, baseline recor
 }
 
 func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
-	visible.transportBehaviorFindings, recorded.transportBehaviorFindings = splitRecordedFindings(visible.transportBehaviorFindings, func(finding transportBehaviorFinding) string {
-		return boundaryFindingFingerprint("transport-behavior", finding)
-	}, baseline)
 	visible.constructedServiceEdgesFindings, recorded.constructedServiceEdgesFindings = splitRecordedFindings(visible.constructedServiceEdgesFindings, func(finding constructedServiceEdgesFinding) string {
 		return boundaryFindingFingerprint("constructed-service-edge", finding)
 	}, baseline)
@@ -269,7 +264,6 @@ func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recor
 
 func clearVisibleRecordedFindings(visible *scanResult) {
 	visible.recordedServiceConstructionFindings = nil
-	visible.recordedTransportBehaviorFindings = nil
 	visible.recordedProductionDefaultFindings = nil
 	visible.recordedPetriPublicSurfaceFindings = nil
 }
@@ -315,8 +309,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.serviceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "external-implementation", result.externalImplementationFindings)
-	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.transportBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.recordedTransportBehaviorFindings)
 	addBoundaryFindingFingerprints(fingerprints, "constructed-service-edge", result.constructedServiceEdgesFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.productionDefaultFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.recordedProductionDefaultFindings)

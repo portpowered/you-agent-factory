@@ -14,13 +14,6 @@ var (
 
 func main() {
 	cfg := parseConfig()
-	if cfg.writeTransportBehaviorBaseline {
-		if err := createTransportBehaviorBaseline(cfg); err != nil {
-			fmt.Fprintln(stderrWriter, err)
-			exitFunc(1)
-		}
-		return
-	}
 	if cfg.writeProductionDefaultBaseline {
 		if err := createProductionDefaultBaseline(cfg); err != nil {
 			fmt.Fprintln(stderrWriter, err)

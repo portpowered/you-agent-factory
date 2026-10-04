@@ -134,3 +134,18 @@ func filterByClass[T any](findings []T, want boundarySourceClass, class func(T) 
 	}
 	return filtered
 }
+
+func bytesContainGeneratedMarker(content []byte) bool {
+	const marker = "Code generated "
+	const suffix = " DO NOT EDIT."
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "package ") {
+			return false
+		}
+		if strings.HasPrefix(trimmed, "// "+marker) && strings.Contains(trimmed, suffix) {
+			return true
+		}
+	}
+	return false
+}

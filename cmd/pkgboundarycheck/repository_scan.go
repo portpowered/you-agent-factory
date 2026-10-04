@@ -134,27 +134,6 @@ func scanRepositoryTransportBoundaries(repoRoot string, result *scanResult) erro
 	if err != nil {
 		return err
 	}
-	findings, err := scanTransportBehavior(repoRoot)
-	if err != nil {
-		return err
-	}
-	baseline, err := loadTransportBehaviorBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
-	result.transportBehaviorFindings, result.staleTransportBehaviorEntries, err =
-		partitionTransportBehaviorFindings(findings, baseline)
-	if err != nil {
-		return err
-	}
-	result.recordedTransportBehaviorFindings = recordedFindingsFromPartition(
-		findings,
-		result.transportBehaviorFindings,
-		func(finding transportBehaviorFinding) string {
-			return transportBehaviorKey(finding.filePath, finding.kind, finding.symbol)
-		},
-	)
-	result.transportBehaviorBaselineCount = len(baseline.Entries)
 	return nil
 }
 

@@ -107,6 +107,7 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 			transportFindings(pass, file, importer, test, add)
 		}
 	}
+	reportTransportRecordedSites(pass, unit, found, hasTests)
 	reportAgainstBaseline(pass, unit, behaviorRuleNames, found, hasTests)
 	return nil, nil
 }

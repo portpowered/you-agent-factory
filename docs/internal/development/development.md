@@ -868,3 +868,9 @@ Successful graph saves converge the document plane and live snapshot without a f
 - [Dashboard UI Bun Validation](dashboard-ui-bun-validation.md)
 - [Agent Factory Intent](../intents/agent-factory.md)
 - [Standards Index](../standards/STANDARDS.md)
+
+Transport behavior rules run through the compiler-backed `Behavior` analyzer.
+The legacy transport walker and its JSON baseline are retired. Existing
+package-level transport debt also requires exact `transport-recorded-site`
+source/symbol/count keys in the shared analyzer baseline; neighboring files and
+additional occurrences fail. Compiler metadata rejects removed source owners.

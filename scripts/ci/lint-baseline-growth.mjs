@@ -28,7 +28,7 @@ export function parseBaseline(text) {
 
 // Compiler metadata alone identifies vanished units; no source inventory is read.
 function ownsCompilerMetadata(key) {
-  return /^(testsleep-|service-root-|service-container-go-file\||functional-test-|test-cross-owner-policy\||test-transport-owner-policy\||deprecated-runtime-api-)/u.test(key);
+  return /^(testsleep-|service-root-|service-container-go-file\||functional-test-|test-cross-owner-policy\||test-transport-owner-policy\||transport-recorded-site|deprecated-runtime-api-)/u.test(key);
 }
 
 function targetFiles(key) {
