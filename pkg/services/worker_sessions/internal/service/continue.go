@@ -978,7 +978,8 @@ func (r *registry) directAttemptProgress(
 		if (fragment.DispatchID != "" && fragment.DispatchID != attemptID) ||
 			(fragment.Correlation.DispatchID != "" && fragment.Correlation.DispatchID != attemptID) ||
 			(fragment.Correlation.AttemptID != "" && fragment.Correlation.AttemptID != attemptID) ||
-			(fragment.Correlation.RuntimeID != "" && fragment.Correlation.RuntimeID != correlation.RuntimeID) {
+			(fragment.Correlation.RuntimeID != "" && fragment.Correlation.RuntimeID != correlation.RuntimeID) ||
+			!runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
 			r.logger.Warn("direct Worker progress rejected", "workerSessionID", sessionID, "attemptID", attemptID, "outcome", "correlation_mismatch")
 			return
 		}

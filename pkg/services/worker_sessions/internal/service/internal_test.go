@@ -6780,7 +6780,7 @@ func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 }
 
 func TestKeyedRuntimeDirectExecutionPublishesThroughOwnedAttempt(t *testing.T) {
-	for _, mismatch := range []string{"dispatch", "logical", "physical", "runtime", "legacy"} {
+	for _, mismatch := range []string{"dispatch", "logical", "physical", "runtime", "factory", "generation", "request", "trace", "legacy"} {
 		t.Run(mismatch, func(t *testing.T) {
 			t.Parallel()
 			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
@@ -6805,6 +6805,10 @@ func TestKeyedRuntimeDirectExecutionPublishesThroughOwnedAttempt(t *testing.T) {
 				t.Fatal(err)
 			}
 			request := validStartRequest("direct-progress-worker", "direct-progress-dispatch")
+			request.Execution.Execution.FactorySessionID = "direct-factory"
+			request.Execution.Execution.GenerationID = "direct-generation"
+			request.Execution.Execution.Dispatch.Execution.RequestID = "direct-request"
+			request.Execution.Execution.Dispatch.Execution.TraceID = "direct-trace"
 			result, err := service.InvokeSession(context.Background(), request)
 			if err != nil || result.Session.State != workersessions.StateCompleted {
 				t.Fatalf("direct invocation: %#v, %v", result, err)
@@ -6907,6 +6911,14 @@ func assertDirectProgressRejectsForeignCorrelation(t *testing.T, sink *perRuntim
 		foreign.Correlation.AttemptID = "peer-physical"
 	case "runtime":
 		foreign.Correlation.RuntimeID = "peer-runtime"
+	case "factory":
+		foreign.Correlation.FactorySessionID = "peer-factory"
+	case "generation":
+		foreign.Correlation.GenerationID = "peer-generation"
+	case "request":
+		foreign.Correlation.RequestID = "peer-request"
+	case "trace":
+		foreign.Correlation.TraceID = "peer-trace"
 	case "legacy":
 		// Legacy source fragments can omit correlation; their owned publisher
 		// supplies physical identity without a dispatch-index lookup.
@@ -6917,7 +6929,7 @@ func assertDirectProgressRejectsForeignCorrelation(t *testing.T, sink *perRuntim
 	before := sink.requestsFor("")
 	publish(foreign)
 	if !reflect.DeepEqual(before, sink.requestsFor("")) {
-		t.Fatal("foreign direct progress published before correlation rejection")
+		t.Error("foreign direct progress published before correlation rejection")
 	}
 }
 
