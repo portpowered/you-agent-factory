@@ -10,6 +10,8 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
@@ -64,7 +66,7 @@ func TestIsRemovableCacheAbsenceClassifiesAssetAbsenceErrors(t *testing.T) {
 func TestRuntimeServicePullModelForScopeValidatesAndDelegates(t *testing.T) {
 	t.Parallel()
 
-	runtime := &runtimeService{}
+	runtime := &localExecutionFixture{}
 	if _, err := runtime.PullModelForScope(context.Background(), models.PullModelRequest{}); !errors.Is(err, models.ErrNotFound) {
 		t.Fatalf("empty pull request error = %v, want ErrNotFound", err)
 	}
@@ -945,4 +947,38 @@ func TestKnownRealtimeVoiceReferenceFailsBeforeBackendActivation(t *testing.T) {
 	if err != nil || prepared.Inputs[1].Content != "reference bytes" {
 		t.Fatalf("custom VibeVoice prepared reference = %#v, error = %v", prepared, err)
 	}
+}
+
+func newLocalExecutor(
+	host modelhost.Host,
+	runtime localmodels.Runtime,
+	resources *localmodels.ResourceLimiter,
+	hooks modelseffects.LocalRuntimeHooks,
+	now func() time.Time,
+) (*localExecutor, error) {
+	if isNilDependency(host) {
+		return nil, missingDependencyError("local executor model host")
+	}
+	return newLocalExecutorWithLeases(
+		func(ctx context.Context, _ models.RuntimeScopeRef, config *models.RuntimeConfig, name, holder string) (modelhost.Lease, error) {
+			return host.AcquireLease(ctx, config, name, modelhost.LeaseOptions{Holder: holder})
+		},
+		func(ctx context.Context, _ models.RuntimeScopeRef, id string) error {
+			return host.ReleaseLease(ctx, id)
+		},
+		runtime, resources, hooks, now,
+	)
+}
+
+func newLocalExecutionFixture(config models.RuntimeConfigLoader, host modelhost.Host,
+	assets localmodels.AssetPuller, runtime localmodels.Runtime, resources *localmodels.ResourceLimiter) (*localExecutionFixture, error) {
+	service, err := NewService(config, host, assets, zap.NewNop(), time.Now, nil)
+	if err != nil {
+		return nil, err
+	}
+	executor, err := newLocalExecutor(host, runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		return nil, err
+	}
+	return &localExecutionFixture{Service: service, local: executor}, nil
 }

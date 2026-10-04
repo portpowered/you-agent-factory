@@ -44,27 +44,6 @@ type localExecutionEntry struct {
 	handle localmodels.Handle
 }
 
-func newLocalExecutor(
-	host modelhost.Host,
-	runtime localmodels.Runtime,
-	resources *localmodels.ResourceLimiter,
-	hooks modelseffects.LocalRuntimeHooks,
-	now func() time.Time,
-) (*localExecutor, error) {
-	if isNilDependency(host) {
-		return nil, missingDependencyError("local executor model host")
-	}
-	return newLocalExecutorWithLeases(
-		func(ctx context.Context, _ models.RuntimeScopeRef, config *models.RuntimeConfig, name, holder string) (modelhost.Lease, error) {
-			return host.AcquireLease(ctx, config, name, modelhost.LeaseOptions{Holder: holder})
-		},
-		func(ctx context.Context, _ models.RuntimeScopeRef, id string) error {
-			return host.ReleaseLease(ctx, id)
-		},
-		runtime, resources, hooks, now,
-	)
-}
-
 func newLocalExecutorWithLeases(
 	acquire func(context.Context, models.RuntimeScopeRef, *models.RuntimeConfig, string, string) (modelhost.Lease, error),
 	release func(context.Context, models.RuntimeScopeRef, string) error,

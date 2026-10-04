@@ -17,7 +17,6 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"go.uber.org/zap"
 )
 
 func TestServiceOwnsLeaseAndLocalModelInvocation(t *testing.T) {
@@ -264,12 +263,11 @@ func TestRootCloseRuntimeScopeDuringLocalLoadPreventsLateInvocation(t *testing.T
 			})
 			host := &leaseTestHost{}
 			resources := mustResourceLimiter(t)
-			bound, err := newRuntimeWithHostEdges(scope, func() *models.RuntimeConfig { return config },
-				zap.NewNop(), time.Now, nil, nil, nil, modelseffects.LocalRuntimeHooks{}, leaseTestAssets{}, runtime, resources, nil, host)
+			bound, err := newLocalExecutionFixture(func() *models.RuntimeConfig { return config }, host, leaseTestAssets{}, runtime, resources)
 			if err != nil {
 				t.Fatal(err)
 			}
-			root := &Root{runtimeScopes: scopes, resources: resources, runtimeHost: &shutdownTrackingRuntimeHost{}, localExecution: compatibilityLocalExecution{bound.(*runtimeService)}}
+			root := &Root{runtimeScopes: scopes, resources: resources, runtimeHost: &shutdownTrackingRuntimeHost{}, localExecution: compatibilityLocalExecution{bound}}
 			done := make(chan error, 1)
 			go func() { _, err := root.InvokeLocal(t.Context(), request); done <- err }()
 			awaitCloseRaceSignal(t, runtime.started, "local load started")
@@ -283,7 +281,7 @@ func TestRootCloseRuntimeScopeDuringLocalLoadPreventsLateInvocation(t *testing.T
 				}
 			}
 			close(runtime.resume)
-			assertClosedLocalLoad(t, done, runtime, host, bound.(*runtimeService).local)
+			assertClosedLocalLoad(t, done, runtime, host, bound.local)
 		})
 	}
 }
@@ -411,12 +409,8 @@ func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
 	host := &leaseTestHost{}
 	runtime := &leaseTestRuntime{}
 	assets := leaseTestAssets{}
-	bound, err := newRuntimeWithHostEdges(
-		models.RuntimeScopeRef{},
-		func() *modelRuntimeConfig { return loaded },
-		zap.NewNop(), time.Now, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
-		assets, runtime, mustResourceLimiter(t), nil, host,
-	)
+	bound, err := newLocalExecutionFixture(func() *modelRuntimeConfig { return loaded }, host,
+		assets, runtime, mustResourceLimiter(t))
 	if err != nil {
 		t.Fatalf("new bound runtime: %v", err)
 	}
@@ -437,7 +431,7 @@ func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
 	}
 
 	root := &Root{
-		runtimeScopes: scopes, localExecution: compatibilityLocalExecution{bound.(*runtimeService)},
+		runtimeScopes: scopes, localExecution: compatibilityLocalExecution{bound},
 	}
 	result, err := root.InvokeLocal(context.Background(), models.LocalInvocationRequest{
 		Scope:  scope,
@@ -945,7 +939,7 @@ func TestRuntimeServiceInvokeLocalSelectsConfigurationPerCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := &runtimeService{Service: &Service{assetPuller: operationConfigAssets{}, runtimeConfigLookup: func() *models.RuntimeConfig {
+	runtime := &localExecutionFixture{Service: &Service{assetPuller: operationConfigAssets{}, runtimeConfigLookup: func() *models.RuntimeConfig {
 		calls++
 		return config
 	}}, local: executor}

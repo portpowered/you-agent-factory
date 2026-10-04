@@ -888,7 +888,7 @@ func (inertScopedLocalExecution) InvokeLocal(context.Context, models.LocalInvoca
 func (inertScopedLocalExecution) CloseScope(models.RuntimeScopeRef) {}
 func (inertScopedLocalExecution) Close()                            {}
 
-type compatibilityLocalExecution struct{ *runtimeService }
+type compatibilityLocalExecution struct{ *localExecutionFixture }
 
 func (e compatibilityLocalExecution) CloseScope(scope models.RuntimeScopeRef) {
 	e.local.CloseScope(scope)

@@ -89,40 +89,6 @@ func TestRootLegacyOperationsClassifyMissingRuntimeBinding(t *testing.T) {
 	}
 }
 
-func TestRuntimeServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	svc := &runtimeService{}
-	_, err := svc.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "OpenRuntimeScope", err)
-	_, err = svc.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "CloseRuntimeScope", err)
-	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
-	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
-	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
-	_, err = svc.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{})
-	assertContractOnlyUnsupported(t, "ResolveModelReference", err)
-	_, err = svc.InvokeModel(ctx, models.InvokeModelRequest{})
-	assertContractOnlyUnsupported(t, "InvokeModel", err)
-	result, err := svc.InvokeLocal(ctx, models.LocalInvocationRequest{})
-	if err != nil || result.Handled {
-		t.Fatalf("InvokeLocal result = %#v, error = %v, want declined no-op", result, err)
-	}
-	_, err = svc.InvokeLocal(ctx, models.LocalInvocationRequest{
-		Worker: models.LocalWorker{
-			Type:          models.RuntimeWorkerTypeInference,
-			ModelLocality: models.RuntimeModelLocalityLocal,
-		},
-	})
-	if !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("managed InvokeLocal error = %v, want ErrNotFound", err)
-	}
-}
-
 func projectTestModelsResources(resources []modelRuntimeResource) []modelRuntimeResource {
 	result := make([]modelRuntimeResource, len(resources))
 	for i, resource := range resources {
@@ -976,4 +942,28 @@ func (a *lateResolutionAssets) ResolveModelCache(ctx context.Context, config *mo
 		<-a.resume
 	}
 	return a.operationSelectedAssets.ResolveModelCache(ctx, config, worker)
+}
+
+// localExecutionFixture adapts the isolated executor to Root's operation port.
+// Production resolves scopes through the completed shared execution owner.
+type localExecutionFixture struct {
+	*Service
+	local *localExecutor
+}
+
+func (s *localExecutionFixture) PullModelForScope(ctx context.Context, request models.PullModelRequest) (models.PullResult, error) {
+	if err := models.ValidatePullModelRequest(request); err != nil {
+		return models.PullResult{}, err
+	}
+	return s.PullModel(ctx, request.Name)
+}
+
+func (s *localExecutionFixture) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+	if err := models.ValidateLocalInvocationRequest(request); err != nil {
+		return models.LocalInvocationResult{}, err
+	}
+	if s.local == nil || !request.Worker.UsesManagedRuntime() {
+		return models.LocalInvocationResult{}, nil
+	}
+	return s.local.InvokeLocal(ctx, request, s.runtimeConfig(), s.assetPuller)
 }
