@@ -105,7 +105,6 @@ platform-services|pkg/platform/contentstaging|pkg/services/work
 service-subpackage-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire
 service-subpackage-test|pkg/services/factory_visualization/wire|pkg/services/recordings/wire
 service-subpackage-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire
-service-subpackage-test|pkg/services/worker_sessions/wire_test|pkg/services/events/wire
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire
 service-subpackage-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire

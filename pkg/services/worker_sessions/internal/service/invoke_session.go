@@ -749,16 +749,7 @@ type observation struct {
 
 func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string, direct ...bool) time.Time {
 	directValue := len(direct) > 0 && direct[0]
-	return r.ensureObservationWithFactorySession(id, attemptID, turnID, workIDs, directValue, "")
-}
-
-func (r *registry) ensureObservationWithFactorySession(
-	id, attemptID, turnID string,
-	workIDs []string,
-	direct bool,
-	factorySessionID string,
-) time.Time {
-	return r.ensureObservationWithClock(id, attemptID, turnID, workIDs, direct, factorySessionID, r.clock)
+	return r.ensureObservationWithClock(id, attemptID, turnID, workIDs, directValue, "", r.clock)
 }
 
 func (r *registry) ensureObservationWithClock(

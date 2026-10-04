@@ -229,7 +229,7 @@ func TestInvokeRetryAndObservationBoundaryGuards(t *testing.T) {
 		t.Fatalf("ensureObservation() overwrote existing attempt = %q", got)
 	}
 	registry.sessions["worker-factory"] = workersessions.Session{ID: "worker-factory", State: workersessions.StateRunning}
-	registry.ensureObservationWithFactorySession("worker-factory", "attempt-factory", "turn-factory", []string{"work-factory"}, false, " session-factory ")
+	registry.ensureObservationWithClock("worker-factory", "attempt-factory", "turn-factory", []string{"work-factory"}, false, " session-factory ", registry.clock)
 	projectedFactory := baseObservation("worker-factory", registry.sessions["worker-factory"], registry.observations["worker-factory"])
 	if projectedFactory.FactorySessionID != "session-factory" {
 		t.Fatalf("Factory Session attribution = %q, want trimmed session-factory", projectedFactory.FactorySessionID)

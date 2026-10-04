@@ -9421,13 +9421,14 @@ func TestListObservationsUsesFactorySessionAndWorkAssociations(t *testing.T) {
 		session.ProviderSessionAssociation.DispatchID = attemptID
 		session.ProviderSessionAssociation.AttemptID = attemptID
 		registry.sessions[id] = session
-		registry.ensureObservationWithFactorySession(
+		registry.ensureObservationWithClock(
 			id,
 			attemptID,
 			"turn-"+id,
 			[]string{workID},
 			false,
 			factorySessionID,
+			registry.clock,
 		)
 		registry.observations[id].startedAt = startedAt
 	}

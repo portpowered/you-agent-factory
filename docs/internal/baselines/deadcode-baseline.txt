@@ -768,7 +768,6 @@ pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_result_hook.go: unreachable func: recordedFailure
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: handedOffToWorkers
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: newRecordedWorkerSessionObservation
-pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: startThroughWorkerSessions
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: workerSessionDispatchOutcome
 pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go: unreachable func: continuationFromLegacySession
 pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go: unreachable func: workInputsFromDispatch
@@ -2151,13 +2150,12 @@ pkg/services/work/transports/mcp/tool.go: unreachable func: ToolDefinition.Marsh
 pkg/services/work/wire/wire.go: unreachable func: NewService
 pkg/services/work/wire/wire.go: unreachable func: validateNewServiceInputs
 pkg/services/worker_sessions/internal/service/classify.go: unreachable func: safeDetailWithDiagnostics
+pkg/services/worker_sessions/internal/service/execution_handoff.go: unreachable func: registry.registerServerOwnedSupervision
+pkg/services/worker_sessions/internal/service/execution_handoff.go: unreachable func: registry.registerSupervision
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.driveInvocation
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.ensureObservation
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.transitionToStarting
-pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: registry.registerServerOwnedSupervision
-pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: registry.registerSupervision
 pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: supervision.installCancelFailure
-pkg/services/worker_sessions/publish.go: unreachable func: ProviderSessionObservationPublisher.WithLogger
 pkg/services/worker_sessions/transports/cli/continue.go: unreachable func: NewControl
 pkg/services/worker_sessions/transports/cli/service.go: unreachable func: readInvokeRequest
 pkg/services/worker_sessions/transports/http/adapter.go: unreachable func: NewAdapter
