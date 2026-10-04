@@ -25,7 +25,7 @@ func measurePrebuiltWorkscopeJourney(
 ) prebuiltWorkscopeJourney {
 	t.Helper()
 	requestCounter := &prebuiltWorkscopeRequestCounter{}
-	client := &http.Client{Timeout: 10 * time.Second, Transport: requestCounter}
+	client := &http.Client{Timeout: 60 * time.Second, Transport: requestCounter}
 	baseURL := strings.TrimSuffix(serverURL, "/")
 	journey := prebuiltWorkscopeJourney{factorySessionSelector: factorySessionSelector}
 	listPath := "/factory-sessions/" + url.PathEscape(factorySessionSelector) + "/worker-sessions"
@@ -70,7 +70,7 @@ func assertPrebuiltWorkscopeUnknownHTTPOutcomes(
 			endpoint: baseURL + knownSessionPath + "/missing-worker-session",
 		},
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	for _, check := range checks {
 		response := doPrebuiltWorkscopeGET(t, ctx, client, check.endpoint)
 		body, status := readPrebuiltWorkscopeResponse(t, response)

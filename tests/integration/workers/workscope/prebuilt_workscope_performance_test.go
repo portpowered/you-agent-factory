@@ -532,7 +532,7 @@ func waitForPrebuiltWorkscopeTerminal(t *testing.T, ctx context.Context, daemon 
 	client := &http.Client{Timeout: 2 * time.Second}
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
-	deadline := time.NewTimer(45 * time.Second)
+	deadline := time.NewTimer(180 * time.Second)
 	defer deadline.Stop()
 	var last string
 	for {

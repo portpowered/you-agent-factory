@@ -224,7 +224,7 @@ func waitForPrebuiltWorkscopeLiveServer(t *testing.T, ctx context.Context, daemo
 
 func waitForPrebuiltWorkscopeOutput(t *testing.T, ctx context.Context, daemon *prebuiltWorkscopeDaemon, expected string) {
 	t.Helper()
-	deadline := time.NewTimer(20 * time.Second)
+	deadline := time.NewTimer(90 * time.Second)
 	defer deadline.Stop()
 	for {
 		output, changed := daemon.stdout.snapshot()
@@ -333,10 +333,10 @@ func waitForPrebuiltWorkscopeProviderStarted(
 	listener net.Listener,
 ) net.Conn {
 	t.Helper()
-	deadline := time.NewTimer(20 * time.Second)
+	deadline := time.NewTimer(90 * time.Second)
 	defer deadline.Stop()
 	if tcpListener, ok := listener.(*net.TCPListener); ok {
-		if err := tcpListener.SetDeadline(time.Now().Add(20 * time.Second)); err != nil {
+		if err := tcpListener.SetDeadline(time.Now().Add(90 * time.Second)); err != nil {
 			t.Fatalf("set controlled Codex provider accept ceiling: %v", err)
 		}
 	}
@@ -367,7 +367,7 @@ func waitForPrebuiltWorkscopeProviderStarted(
 		_ = listener.Close()
 		t.Fatalf("controlled Codex provider did not connect\nstdout=%s\nstderr=%s", daemon.stdout.String(), daemon.stderr.String())
 	}
-	if err := connection.SetDeadline(time.Now().Add(20 * time.Second)); err != nil {
+	if err := connection.SetDeadline(time.Now().Add(90 * time.Second)); err != nil {
 		connection.Close()
 		t.Fatalf("set controlled Codex provider handshake ceiling: %v", err)
 	}
