@@ -84,8 +84,8 @@ type streamingCLIHTTPProtocol struct {
 	clihttp.Protocol
 }
 
-func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
-	protocol, err := clihttp.NewProtocol(&http.Client{Timeout: standardCLIHTTPTimeout}, platformclock.Real{})
+func provideStandardCLIHTTPProtocol(source platformclock.Source) (standardCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{Timeout: standardCLIHTTPTimeout}, source)
 	if err != nil {
 		return standardCLIHTTPProtocol{}, fmt.Errorf("build standard CLI HTTP protocol: %w", err)
 	}
@@ -96,8 +96,8 @@ func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
 // its own request lifetime. The HTTP client has no fixed timeout; the request
 // context still carries explicit caller cancellation, while the Models asset
 // service retains its bounded dependency timeout and retry policy.
-func provideModelsPullCLIHTTPProtocol() (modelsPullCLIHTTPProtocol, error) {
-	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
+func provideModelsPullCLIHTTPProtocol(source platformclock.Source) (modelsPullCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, source)
 	if err != nil {
 		return modelsPullCLIHTTPProtocol{}, fmt.Errorf("build Models pull CLI HTTP protocol: %w", err)
 	}
@@ -123,16 +123,16 @@ func provideRemoteInvocationOperation(
 	return runcli.NewRemoteInvocation(transport.Protocol)
 }
 
-func provideExtendedCLIHTTPProtocol() (extendedCLIHTTPProtocol, error) {
-	protocol, err := clihttp.NewProtocol(&http.Client{Timeout: extendedCLIHTTPTimeout}, platformclock.Real{})
+func provideExtendedCLIHTTPProtocol(source platformclock.Source) (extendedCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{Timeout: extendedCLIHTTPTimeout}, source)
 	if err != nil {
 		return extendedCLIHTTPProtocol{}, fmt.Errorf("build extended CLI HTTP protocol: %w", err)
 	}
 	return extendedCLIHTTPProtocol{Protocol: protocol, timeout: extendedCLIHTTPTimeout}, nil
 }
 
-func provideStreamingCLIHTTPProtocol() (streamingCLIHTTPProtocol, error) {
-	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
+func provideStreamingCLIHTTPProtocol(source platformclock.Source) (streamingCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, source)
 	if err != nil {
 		return streamingCLIHTTPProtocol{}, fmt.Errorf("build streaming CLI HTTP protocol: %w", err)
 	}
@@ -885,8 +885,8 @@ func provideShowHumanApprovalOperation(
 	return workcli.NewShowHumanApproval(transport.Protocol)
 }
 
-func provideWatchCLIHTTPProtocol() (watchCLIHTTPProtocol, error) {
-	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
+func provideWatchCLIHTTPProtocol(source platformclock.Source) (watchCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, source)
 	if err != nil {
 		return watchCLIHTTPProtocol{}, fmt.Errorf("build watch CLI HTTP protocol: %w", err)
 	}

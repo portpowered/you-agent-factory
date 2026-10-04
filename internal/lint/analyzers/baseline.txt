@@ -1847,8 +1847,6 @@ testsleep-deadline-test|pkg/platform/metrics|pkg/platform/metrics/runtime_metric
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_cancellation_unix_test.go::TestExecCommandRunner_ContextCancelReturnsWhenDescendantKeepsPipeOpen::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::2
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::1
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::2
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_grace_unix_test.go::reapCommandHelperLeader::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_test.go::TestExecCommandRunner_ContextDeadlineReturnsSystemError::deadline::1
 testsleep-deadline-test|pkg/platform/taskgroup|pkg/platform/taskgroup/task_group_test.go::TestGroupDoneClosesAfterEveryTaskReturnsRegardlessOfOutcome::deadline::1
