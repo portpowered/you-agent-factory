@@ -460,8 +460,6 @@ testsleep-deadline-test|pkg/services/recordings/internal|pkg/services/recordings
 testsleep-deadline-test|pkg/services/system_initialization/internal/workflow|pkg/services/system_initialization/internal/workflow/workflow_concurrency_test.go::TestInitializeBootstrapsDifferentCustomerHomesConcurrently::deadline::1
 testsleep-deadline-test|pkg/services/system_initialization/internal/workflow|pkg/services/system_initialization/internal/workflow/workflow_concurrency_test.go::TestInitializeSerializesOnlyBootstrapForTheSameCustomerHome::deadline::1
 testsleep-deadline-test|pkg/services/system_initialization/internal/workflow|pkg/services/system_initialization/internal/workflow/workflow_concurrency_test.go::TestInitializeWaitingForCustomerHomeHonorsCancellation::deadline::1
-testsleep-deadline-test|pkg/services/webhooks/internal/service|pkg/services/webhooks/internal/service/service_test_helpers_test.go::receiveRequest::deadline::1
-testsleep-deadline-test|pkg/services/webhooks/internal/service|pkg/services/webhooks/internal/service/service_test_helpers_test.go::waitForSubscriptions::deadline::1
 testsleep-deadline-test|pkg/services/webhooks/internal/service|pkg/services/webhooks/internal/service/service_test.go::receiveDeadLetter::deadline::1
 testsleep-deadline-test|pkg/services/webhooks/internal/service|pkg/services/webhooks/internal/service/service_test.go::TestServiceBoundsReceiverResponseBodyReads::deadline::1
 testsleep-deadline-test|pkg/services/webhooks/internal/service|pkg/services/webhooks/internal/service/service_test.go::TestServiceCancellationStopsRetryWithoutDeadLetter::deadline::1
