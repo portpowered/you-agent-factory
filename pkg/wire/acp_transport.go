@@ -166,8 +166,8 @@ func mapACPFactorySessionStart(requestID, factoryTargetID, workingRoot, factoryD
 // rejected before any provider runs. An ACP client cannot pass `--provider`,
 // so the environment is the only layer it has.
 //
-// Reading the process environment directly matches how this file already
-// resolves its own wire-log configuration.
+// Operator-default selection remains separate from the wire-log configuration
+// captured at the process construction boundary.
 func acpOperatorDefaultsEnvironment() operatorsettings.Defaults {
 	return operatorsettings.Defaults{
 		WorkerModelProvider: strings.TrimSpace(os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider)),
@@ -196,25 +196,24 @@ func provideACPServer(
 	)
 }
 
-// ACP wire recording is on by default. The point of the artifact is that a
-// customer who hits a problem already has the evidence; a recorder they must
-// know to enable before reproducing is one they will not have running when it
-// matters.
-const (
-	acpWireLogEnvironment    = "YOU_ACP_WIRE_LOG"
-	acpWireLogDirEnvironment = "YOU_ACP_WIRE_LOG_DIR"
-	acpWireLogDisabledValue  = "off"
-)
+// ACPWireLogSettings is configuration captured at the caller boundary before
+// graph construction. It contains no effects or service collaborators.
+type ACPWireLogSettings struct {
+	Disabled  bool
+	Directory string
+}
 
 // provideACPWireRecorder constructs the per-connection ACP wire transcript
-// opener.
+// opener. Recording is enabled by default so diagnostic evidence is available
+// when a customer encounters a problem.
 //
-// The environment is read here, in the composition root, rather than inside
-// the transport or any service. The recorder writes only to its own file
+// The caller boundary captures configuration once before graph construction.
+// The recorder writes only to its own file
 // handle, so it structurally cannot reach the protocol stream that `you server
 // acp` reserves on stdout.
 func provideACPWireRecorder(
 	edges serviceedges.Edges,
+	settings ACPWireLogSettings,
 	paths platformruntimeartifact.Reserver,
 	clock runtimeArtifactClock,
 	resolveHomeDir acpServerResolveHomeDir,
@@ -222,14 +221,14 @@ func provideACPWireRecorder(
 	if edges.ACPWireRecorder != nil {
 		return edges.ACPWireRecorder, nil
 	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv(acpWireLogEnvironment)), acpWireLogDisabledValue) {
-		return nil, nil
+	if settings.Disabled {
+		return func(string) (acp.WireTranscript, error) { return nil, acp.ErrWireRecordingDisabled }, nil
 	}
 	opener, err := wiretranscript.NewOpener(paths, wireTranscriptClock(clock))
 	if err != nil {
 		return nil, err
 	}
-	root := strings.TrimSpace(os.Getenv(acpWireLogDirEnvironment))
+	root := settings.Directory
 	return func(connectionID string) (acp.WireTranscript, error) {
 		directory := root
 		if directory == "" {

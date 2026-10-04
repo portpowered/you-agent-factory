@@ -4,16 +4,154 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"slices"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow"
 )
+
+// No OS process participates: controlled exit observations prove owner wait
+// policy and stream release; delivered process-tree cleanup belongs to IR01.
+func TestAttemptTeardownUsesInjectedScheduler(t *testing.T) {
+	for _, outcome := range []string{"graceful", "forced-exit", "kill-timeout", "caller-cancel"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			scheduler := newTeardownScheduler()
+			stdin, stdout := &teardownStream{}, &teardownStream{}
+			logger := &teardownLogger{}
+			handles := &attemptHandles{
+				stdin: stdin, stdout: stdout, finished: make(chan error, 1),
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := make(chan error, 1)
+			owner := &Service{scheduler: scheduler, logger: logger}
+			go func() { done <- owner.terminate(ctx, handles) }()
+			grace := awaitTeardownTimer(t, scheduler, 500*time.Millisecond)
+			timers := []*teardownTimer{grace}
+			if outcome == "graceful" {
+				handles.finished <- nil
+			} else {
+				if outcome == "caller-cancel" {
+					cancel()
+				} else {
+					scheduler.clock.SetTick(500)
+				}
+				timers = append(timers, awaitTeardownTimer(t, scheduler, 2*time.Second))
+				if outcome == "kill-timeout" {
+					scheduler.clock.SetTick(2500)
+				} else {
+					handles.finished <- nil
+				}
+			}
+			assertTeardownOutcome(t, outcome, <-done, stdin, stdout, timers)
+			assertTeardownLogs(t, outcome, logger)
+		})
+	}
+}
+
+func assertTeardownOutcome(t *testing.T, outcome string, err error, stdin, stdout *teardownStream, timers []*teardownTimer) {
+	t.Helper()
+	switch outcome {
+	case "caller-cancel":
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("teardown = %v, want caller cancellation", err)
+		}
+	case "kill-timeout":
+		if err == nil || err.Error() != "ACP process did not exit after termination" {
+			t.Fatalf("teardown = %v, want kill-wait failure", err)
+		}
+	default:
+		if err != nil {
+			t.Fatalf("teardown = %v, want successful exit", err)
+		}
+	}
+	if stdin.closes.Load() != 1 || stdout.closes.Load() != 1 {
+		t.Fatal("teardown did not release both streams once")
+	}
+	for _, timer := range timers {
+		if !timer.stopped.Load() {
+			t.Fatal("teardown left its scheduler timer running")
+		}
+	}
+}
+
+type teardownStream struct{ closes atomic.Int32 }
+
+func (*teardownStream) Read([]byte) (int, error)    { return 0, io.EOF }
+func (*teardownStream) Write(p []byte) (int, error) { return len(p), nil }
+func (stream *teardownStream) Close() error         { stream.closes.Add(1); return nil }
+
+type teardownTimer struct {
+	platformclock.Timer
+	duration time.Duration
+	stopped  atomic.Bool
+}
+
+func (timer *teardownTimer) Stop() bool { timer.stopped.Store(true); return timer.Timer.Stop() }
+
+type teardownScheduler struct {
+	clock   *platformclock.Deterministic
+	created chan *teardownTimer
+}
+
+func newTeardownScheduler() *teardownScheduler {
+	return &teardownScheduler{clock: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *teardownTimer, 4)}
+}
+func (scheduler *teardownScheduler) Now() time.Time { return scheduler.clock.Now() }
+func (scheduler *teardownScheduler) After(duration time.Duration) <-chan time.Time {
+	return scheduler.clock.NewTimer(duration).C()
+}
+
+func TestTeardownSchedulerAfterUsesLogicalTime(t *testing.T) {
+	t.Parallel()
+	scheduler := newTeardownScheduler()
+	after := scheduler.After(500 * time.Millisecond)
+	scheduler.clock.SetTick(499)
+	select {
+	case <-after:
+		t.Fatal("After fired before its logical deadline")
+	default:
+	}
+	scheduler.clock.SetTick(500)
+	select {
+	case observed := <-after:
+		if !observed.Equal(scheduler.Now()) {
+			t.Fatalf("After = %v, want logical time %v", observed, scheduler.Now())
+		}
+	default:
+		t.Fatal("After did not fire at its logical deadline")
+	}
+}
+func (scheduler *teardownScheduler) NewTimer(duration time.Duration) platformclock.Timer {
+	timer := &teardownTimer{Timer: scheduler.clock.NewTimer(duration), duration: duration}
+	scheduler.created <- timer
+	return timer
+}
+func awaitTeardownTimer(t *testing.T, scheduler *teardownScheduler, duration time.Duration) *teardownTimer {
+	t.Helper()
+	select {
+	case timer := <-scheduler.created:
+		if timer.duration != duration {
+			t.Fatalf("timer duration = %v, want %v", timer.duration, duration)
+		}
+		return timer
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for an observed injected-timer creation; never drives the tested outcome
+		t.Fatal("teardown did not reach its scheduler wait")
+		return nil
+	}
+}
 
 // fakeSessionPeer stands in for a real ACP agent process for cancel-seam
 // tests: it reads JSON-RPC lines directly over an in-process io.Pipe (no
@@ -68,14 +206,14 @@ func newPipedConnection(t *testing.T, peer *fakeSessionPeer) *acpsdk.ClientSideC
 func TestServiceClaimAndTryCancelResolveAliasAndDelegateToAttempt(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Aliases: []string{"custom"}, Transport: "stdio", Command: "agent acp",
-	}}, nil, nil, platformprocess.NewParentOwnedStdio)
+	}}, nil, nil, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	svc := serviceValue.(*Service)
 	target := svc.providers["custom-acp"]
 	attempt := target.newAttempt(providers.ExecuteRequest{AttemptID: "attempt-1"})
-	t.Cleanup(attempt.release)
+	t.Cleanup(func() { svc.releaseAttempt(attempt) })
 
 	peer := newFakeSessionPeer()
 	connection := newPipedConnection(t, peer)
@@ -110,7 +248,7 @@ func TestServiceClaimAndTryCancelResolveAliasAndDelegateToAttempt(t *testing.T) 
 	// session, and not a replacement attempt that reuses the identical
 	// canonical provider and attempt ID while the control is still in flight.
 	replacement := target.newAttempt(providers.ExecuteRequest{AttemptID: "attempt-1"})
-	t.Cleanup(replacement.release)
+	t.Cleanup(func() { svc.releaseAttempt(replacement) })
 	replacementPeer := newFakeSessionPeer()
 	replacementConnection := newPipedConnection(t, replacementPeer)
 	replacementSession := replacement.window.Begin("attempt-1", acpsdk.SessionId("session-2"), replacementConnection)
@@ -185,5 +323,30 @@ func assertStaleGenerationDeliversNothing(
 	replacement.window.End(replacementSession, true)
 	if result := <-replacementCancel; result.err != nil || !result.accepted {
 		t.Fatalf("TryCancel(replacement generation) = (%v, %v), want (true, nil)", result.accepted, result.err)
+	}
+}
+
+// Each attempt owns its diagnostic sink; reading follows the joined teardown.
+type teardownLogger struct {
+	logging.NoopLogger
+	reasons []string
+}
+
+func (logger *teardownLogger) Verbose(_ string, fields ...any) {
+	for index := 0; index+1 < len(fields); index += 2 {
+		if fields[index] == "cleanup_reason" {
+			logger.reasons = append(logger.reasons, fields[index+1].(string))
+		}
+	}
+}
+
+func assertTeardownLogs(t *testing.T, outcome string, logger *teardownLogger) {
+	t.Helper()
+	want := []string{"cancel", "post_run"}
+	if outcome == "graceful" {
+		want = []string{"post_run"}
+	}
+	if !slices.Equal(logger.reasons, want) {
+		t.Fatalf("cleanup diagnostics = %v, want %v", logger.reasons, want)
 	}
 }

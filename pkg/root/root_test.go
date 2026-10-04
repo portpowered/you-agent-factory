@@ -3,12 +3,17 @@ package root
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/spf13/cobra"
 )
 
@@ -113,7 +118,7 @@ func TestNormalizeProcessTimeRejectsTypedNil(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			clock, scheduler, err := normalizeProcessTime(test.clock, test.scheduler)
-			if err == nil || !strings.Contains(err.Error(), test.field+" must not be typed-nil") {
+			if err == nil || err.Error() != test.field+" must not be typed-nil; omit it to select the default" {
 				t.Fatalf("expected actionable %s error, got %v", test.field, err)
 			}
 			if clock != nil || scheduler != nil {
@@ -128,6 +133,7 @@ func TestBuildProcessRejectsInvalidContextAndTimeBeforeComposition(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var typedNil *platformclock.Deterministic
+	var nilFunction nowOnlyProcessClock
 	for _, test := range []struct {
 		name    string
 		ctx     context.Context
@@ -136,13 +142,15 @@ func TestBuildProcessRejectsInvalidContextAndTimeBeforeComposition(t *testing.T)
 	}{
 		{"nil-context", nil, serviceedges.Edges{}, "context is required"},
 		{"cancelled-context", ctx, serviceedges.Edges{Clock: typedNil}, "context canceled"},
-		{"invalid-clock", context.Background(), serviceedges.Edges{Clock: typedNil}, "Clock must not be typed-nil"},
-		{"invalid-scheduler", context.Background(), serviceedges.Edges{ProcessScheduler: typedNil}, "ProcessScheduler must not be typed-nil"},
+		{"invalid-clock", context.Background(), serviceedges.Edges{Clock: typedNil}, "Clock must not be typed-nil; omit it to select the default"},
+		{"invalid-clock-function", context.Background(), serviceedges.Edges{Clock: nilFunction}, "Clock must not be typed-nil; omit it to select the default"},
+		{"invalid-scheduler", context.Background(), serviceedges.Edges{ProcessScheduler: typedNil}, "ProcessScheduler must not be typed-nil; omit it to select the default"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			test.edges.RecordingsRootObserver = func(recordings.Service) { panic("constructor observed rejected time override") }
 			process, err := BuildProcess(test.ctx, test.edges)
-			if process != nil || err == nil || !strings.Contains(err.Error(), test.message) {
+			if process != nil || err == nil || err.Error() != "build application process: "+test.message {
 				t.Fatalf("BuildProcess invalid input = %v, %v", process, err)
 			}
 			if test.name == "cancelled-context" && !errors.Is(err, context.Canceled) {
@@ -158,4 +166,138 @@ func TestMain(m *testing.M) {
 	// the cost of repeated Execute calls.
 	cobra.MousetrapHelpText = ""
 	m.Run()
+}
+
+func TestConstructionEffectPresence(t *testing.T) {
+	t.Parallel()
+	var pointer *int
+	var function func()
+	var channel chan int
+	var values []int
+	var mapping map[string]int
+	tests := []struct {
+		name    string
+		value   any
+		missing bool
+	}{
+		{"nil", nil, true}, {"pointer", pointer, true},
+		{"function", function, true}, {"channel", channel, true},
+		{"slice", values, true}, {"map", mapping, true},
+		{"valid pointer", new(int), false}, {"value", 0, false},
+		{"disabled function", func() { panic("must not invoke") }, false},
+		{"empty slice", []int{}, false}, {"empty map", map[string]int{}, false},
+		{"valid channel", make(chan int), false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := isNilConstructionEffect(test.value); got != test.missing {
+				t.Fatalf("missing = %v, want %v", got, test.missing)
+			}
+		})
+	}
+}
+
+type uncalledContext struct{ context.Context }
+type uncalledRunner struct{ platformprocess.CommandRunner }
+type uncalledClock struct{ platformclock.Source }
+type uncalledProcessClock struct{ platformprocess.Clock }
+type uncalledDirectory struct {
+	platformfilesystem.WorkingDirectory
+}
+
+func TestBuildProcessRejectsMissingRegistrationIntegration(t *testing.T) {
+	t.Parallel()
+	edges := serviceedges.Edges{
+		RecordingsRootObserver: func(recordings.Service) { panic("constructor ran") },
+	}
+	// Allocate a zero registration through the caller's Edges contract without
+	// importing the Providers-private construction package. Its omitted
+	// Integration is invalid even though top-level optional effects may be nil.
+	registrations := reflect.ValueOf(&edges.ProviderRegistrations).Elem()
+	registrations.Set(reflect.MakeSlice(registrations.Type(), 1, 1))
+	process, err := BuildProcess(context.Background(), edges)
+	if process != nil || err == nil || !strings.Contains(err.Error(), "integration is required") {
+		t.Fatalf("BuildProcess = (%v, %v), want integration required", process, err)
+	}
+}
+
+func TestACPWireLogSettingsCaptureNormalizedConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, disabled := range []string{"off", " OFF ", "on", ""} {
+		t.Run(disabled, func(t *testing.T) {
+			calls := 0
+			settings := resolveACPWireLogSettings(func(key string) string {
+				calls++
+				switch key {
+				case "YOU_ACP_WIRE_LOG":
+					return disabled
+				case "YOU_ACP_WIRE_LOG_DIR":
+					return " /owned/transcripts "
+				default:
+					t.Fatalf("unexpected lookup %q", key)
+					return ""
+				}
+			})
+			if settings.Disabled != strings.EqualFold(strings.TrimSpace(disabled), "off") ||
+				settings.Directory != "/owned/transcripts" || calls != 2 {
+				t.Fatalf("settings = %+v, lookups = %d", settings, calls)
+			}
+		})
+	}
+}
+
+func TestBuildProcessRejectsInvalidOverridesBeforeEffects(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		edges serviceedges.Edges
+		want  string
+	}{
+		{"early", serviceedges.Edges{ProviderCommandRunner: (*uncalledRunner)(nil)}, "Edges.ProviderCommandRunner"},
+		{"middle", serviceedges.Edges{FactorySessionsWorkingDirectory: (*uncalledDirectory)(nil)}, "Edges.FactorySessionsWorkingDirectory"},
+		{"clock", serviceedges.Edges{Clock: (*uncalledClock)(nil)}, "Clock must not be typed-nil; omit it to select the default"},
+		{"scheduler", serviceedges.Edges{ProcessScheduler: (*platformclock.Deterministic)(nil)}, "ProcessScheduler must not be typed-nil"},
+		{"late", serviceedges.Edges{FactoryVisualizationSink: factoryvisualization.SinkFunc(nil)}, "Edges.FactoryVisualizationSink"},
+		{"first error", serviceedges.Edges{ProviderCommandRunner: (*uncalledRunner)(nil), Clock: (*uncalledClock)(nil)}, "Edges.ProviderCommandRunner"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Valid early effects must remain untouched even for a late invalid port.
+			test.edges.PlatformProcessClock = &uncalledProcessClock{}
+			test.edges.RecordingsRootObserver = func(recordings.Service) { panic("constructor observer invoked") }
+			process, err := BuildProcess(context.Background(), test.edges)
+			if process != nil || err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("BuildProcess = (%v, %v), want %q", process, err, test.want)
+			}
+		})
+	}
+}
+
+func TestBuildProcessRejectsMissingAndCancelledContext(t *testing.T) {
+	t.Parallel()
+	for _, ctx := range []context.Context{nil, (*uncalledContext)(nil)} {
+		process, err := BuildProcess(ctx, serviceedges.Edges{})
+		if process != nil || err == nil || err.Error() != "build application process: context is required" {
+			t.Fatalf("BuildProcess = (%v, %v), want context required", process, err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	process, err := BuildProcess(ctx, serviceedges.Edges{})
+	if process != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("BuildProcess = (%v, %v), want cancellation cause", process, err)
+	}
+}
+
+func TestConstructionOverridesAllowOmissionAndValidEffects(t *testing.T) {
+	t.Parallel()
+	for _, edges := range []serviceedges.Edges{
+		{},
+		{ProviderCommandRunner: &uncalledRunner{}, Clock: &uncalledClock{}},
+		{FactoryVisualizationSink: factoryvisualization.SinkFunc(func(factoryvisualization.View) { panic("must not invoke") })},
+	} {
+		if err := validateConstructionOverrides(edges); err != nil {
+			t.Fatalf("validateConstructionOverrides = %v", err)
+		}
+	}
 }

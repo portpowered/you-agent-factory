@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 )
 
 type commandProcessTree struct {
@@ -39,7 +41,7 @@ func commandProcessPGID(cmd *exec.Cmd, tree *commandProcessTree) int {
 	return cmd.Process.Pid
 }
 
-func terminateCommandProcessGroup(cmd *exec.Cmd, tree *commandProcessTree, grace time.Duration, clock Clock, logCtx commandProcessCleanupContext) error {
+func terminateCommandProcessGroup(cmd *exec.Cmd, tree *commandProcessTree, grace time.Duration, clock platformclock.Source, logCtx commandProcessCleanupContext) error {
 	if cmd == nil || cmd.Process == nil {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "process already exited")
 		return nil
@@ -94,11 +96,11 @@ func terminateCommandProcessGroup(cmd *exec.Cmd, tree *commandProcessTree, grace
 	return nil
 }
 
-func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock Clock, logCtx commandProcessCleanupContext) error {
+func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock platformclock.Source, logCtx commandProcessCleanupContext) error {
 	return terminateCommandProcessGroup(cmd, tree, 0, clock, logCtx)
 }
 
-func closeCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock Clock, logCtx commandProcessCleanupContext) {
+func closeCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock platformclock.Source, logCtx commandProcessCleanupContext) {
 	if cmd == nil {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "missing command")
 		return

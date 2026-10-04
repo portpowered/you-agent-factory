@@ -107,6 +107,7 @@ func TestExecuteNormalizesCancellationDuringCatalogLookup(t *testing.T) {
 				adapterCalls++
 				return providers.ExecuteResult{Content: "must not escape"}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {

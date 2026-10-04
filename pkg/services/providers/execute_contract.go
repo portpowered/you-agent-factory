@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -655,4 +656,52 @@ func (result ContinueResult) Clone() ContinueResult {
 	cloned.Reference = result.Reference.Clone()
 	cloned.Result = result.Result.Clone()
 	return cloned
+}
+
+// CommandRunner is the Providers-owned subprocess effect used by provider
+// adapters. The composition root may project a platform or request-scoped
+// runner into this contract, but Providers never consumes a Workers command
+// interface directly. Composition supplies both operations, projecting buffered
+// runners to a completed output chunk before adapter construction.
+type CommandRunner struct {
+	Run          func(context.Context, CommandRequest) (CommandResult, error)
+	RunStreaming func(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+}
+
+// OutputChunkObserver receives output from one provider subprocess effect and
+// returns an error when the consumer cannot accept the chunk.
+type OutputChunkObserver func(stream string, chunk []byte) error
+
+const (
+	OutputStreamStdout = "stdout"
+	OutputStreamStderr = "stderr"
+)
+
+// CommandRequest contains policy-free process inputs plus the Providers
+// attempt correlation needed by composition-owned effect adapters.
+type CommandRequest struct {
+	Command                  string
+	Args                     []string
+	Stdin                    []byte
+	Env                      []string
+	WorkDir                  string
+	FactorySessionID         string
+	DispatchID               string
+	AttemptID                string
+	TransitionID             string
+	WorkerType               string
+	WorkstationName          string
+	ProjectID                string
+	InputTokens              []any
+	InputBindings            map[string][]string
+	Execution                work.ExecutionMetadata
+	ExecutionLogger          logging.Logger
+	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
+}
+
+// CommandResult is the observable result of one provider subprocess effect.
+type CommandResult struct {
+	Stdout   []byte
+	Stderr   []byte
+	ExitCode int
 }

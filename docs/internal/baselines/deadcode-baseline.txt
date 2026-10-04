@@ -1492,7 +1492,6 @@ pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/d
 pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/token_usage.go: unreachable func: computeTotalTokens
 pkg/services/provider_sessions/wire/wire.go: unreachable func: NewForRoots
 pkg/services/providers/internal/service/attempt_registry.go: unreachable func: liveAttemptRegistry.contains
-pkg/services/providers/internal/service/service.go: unreachable func: New
 pkg/services/providers/internal/services/acp/internal/service/progress.go: unreachable func: completedPromptProgress
 pkg/services/providers/internal/services/acp/internal/service/progress.go: unreachable func: failedPromptProgress
 pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/cleaner.go: unreachable func: LoadTerminalCleaningCorpus
@@ -1504,9 +1503,6 @@ pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/
 pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/mock.go: unreachable func: MockSession.Run
 pkg/services/providers/internal/services/execution/internal/adapters/agy/final.go: unreachable func: ParseFinalOutputForTest
 pkg/services/providers/internal/services/execution/internal/commandenv/environment.go: unreachable func: AutomationDefaults
-pkg/services/providers/internal/services/execution/wire/wire.go: unreachable func: BuiltInDependenciesFromRunner
-pkg/services/providers/internal/services/execution/wire/wire.go: unreachable func: BuiltInDependenciesFromWorkersRunner
-pkg/services/providers/internal/services/execution/wire/wire.go: unreachable func: NewBuiltInService
 pkg/services/providers/internal/testutil/execution/conformance.go: unreachable func: Observation.Clone
 pkg/services/providers/internal/testutil/execution/conformance.go: unreachable func: Run
 pkg/services/providers/internal/testutil/execution/conformance.go: unreachable func: assertFailure
@@ -1585,13 +1581,7 @@ pkg/services/providers/wire/registration_contract.go: unreachable func: Progress
 pkg/services/providers/wire/registration_contract.go: unreachable func: ProgressingIntegration.Stats
 pkg/services/providers/wire/registration_contract.go: unreachable func: SuccessfulCompletion
 pkg/services/providers/wire/registration_contract.go: unreachable func: cloneManifest
-pkg/services/providers/wire/wire.go: unreachable func: ACPIntegrationsFromRuntimeCatalog
-pkg/services/providers/wire/wire.go: unreachable func: CatalogOption
 pkg/services/providers/wire/wire.go: unreachable func: DefaultPTYSessionConfig
-pkg/services/providers/wire/wire.go: unreachable func: NewFactory
-pkg/services/providers/wire/wire.go: unreachable func: WithLogger
-pkg/services/providers/wire/wire.go: unreachable func: catalogOption.apply
-pkg/services/providers/wire/wire.go: unreachable func: loggerOption.apply
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: ApplyJavaScriptProjectionFacts
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: resultFromJavaScriptProjection
 pkg/services/recordings/internal/contracts/contracts.go: unreachable func: LiveRecordingTargetPlannerFunc.PlanLiveRecordingTarget

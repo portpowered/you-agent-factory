@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
@@ -14,7 +17,12 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 	t.Parallel()
 
 	var root providers.Service
-	root, err := providerswire.NewService()
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -49,7 +57,12 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 func TestRootCatalogDelegation_RegistersCodexAdapter(t *testing.T) {
 	t.Parallel()
 
-	service, err := providerswire.NewService()
+	service, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -74,16 +87,21 @@ func TestProvidersRootWireBoundaryPublishesExternalRegistrationThroughService(t 
 	t.Parallel()
 
 	integration := providerswire.ProgressingExternalIntegration("sealed-external", "sealed output")
-	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
-		Manifest: providerswire.Manifest{
-			ID:                           "sealed-external",
-			DisplayName:                  providerswire.LocalizedValue{Value: "Sealed External"},
-			ImplementationAvailability:   providerswire.ImplementationExternallySupplied,
-			TechnicalSupportLevel:        providerswire.SupportProduction,
-			MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{PromptSubmission: true},
-		},
-		Integration: integration,
-	}))
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{Registrations: []providerswire.Registration{providerswire.Registration{
+			Manifest: providerswire.Manifest{
+				ID:                           "sealed-external",
+				DisplayName:                  providerswire.LocalizedValue{Value: "Sealed External"},
+				ImplementationAvailability:   providerswire.ImplementationExternallySupplied,
+				TechnicalSupportLevel:        providerswire.SupportProduction,
+				MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{PromptSubmission: true},
+			},
+			Integration: integration,
+		}}})
 	if err != nil {
 		t.Fatalf("providers/wire.NewService() error = %v", err)
 	}
@@ -131,17 +149,22 @@ func TestProvidersRootWireBoundaryRejectsExternalBypassBeforeInvocation(t *testi
 	t.Parallel()
 
 	integration := providerswire.ProgressingExternalIntegration("sealed-incapable", "must not execute")
-	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
-		Manifest: providerswire.Manifest{
-			ID:                         "sealed-incapable",
-			ImplementationAvailability: providerswire.ImplementationExternallySupplied,
-			TechnicalSupportLevel:      providerswire.SupportProduction,
-			MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{
-				PromptSubmission: true,
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{Registrations: []providerswire.Registration{providerswire.Registration{
+			Manifest: providerswire.Manifest{
+				ID:                         "sealed-incapable",
+				ImplementationAvailability: providerswire.ImplementationExternallySupplied,
+				TechnicalSupportLevel:      providerswire.SupportProduction,
+				MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{
+					PromptSubmission: true,
+				},
 			},
-		},
-		Integration: integration,
-	}))
+			Integration: integration,
+		}}})
 	if err != nil {
 		t.Fatalf("providers/wire.NewService() error = %v", err)
 	}
@@ -172,18 +195,23 @@ func TestProvidersRootWireBoundaryRejectsNegotiatedExternalBypassBeforeInvocatio
 		negotiated: providerswire.NewCapabilitySet(providerswire.CapabilityPromptSubmission),
 		content:    "must not execute",
 	}
-	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
-		Manifest: providerswire.Manifest{
-			ID:                         string(integration.identity),
-			ImplementationAvailability: providerswire.ImplementationExternallySupplied,
-			TechnicalSupportLevel:      providerswire.SupportProduction,
-			MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{
-				PromptSubmission: true,
-				PermissionBypass: true,
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{Registrations: []providerswire.Registration{providerswire.Registration{
+			Manifest: providerswire.Manifest{
+				ID:                         string(integration.identity),
+				ImplementationAvailability: providerswire.ImplementationExternallySupplied,
+				TechnicalSupportLevel:      providerswire.SupportProduction,
+				MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{
+					PromptSubmission: true,
+					PermissionBypass: true,
+				},
 			},
-		},
-		Integration: integration,
-	}))
+			Integration: integration,
+		}}})
 	if err != nil {
 		t.Fatalf("providers/wire.NewService() error = %v", err)
 	}
@@ -207,7 +235,12 @@ func TestProvidersRootWireBoundaryRejectsNegotiatedExternalBypassBeforeInvocatio
 func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidation(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService()
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("providers/wire.NewService() error = %v", err)
 	}
@@ -241,7 +274,12 @@ func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidatio
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			service, constructErr := providerswire.NewService(providerswire.WithRegistrations(test.registration))
+			service, constructErr := newTestProvidersService(providerswire.IdentityCatalogProbe,
+				platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+				nil,
+				nil,
+				nil,
+				providerswire.Configuration{Registrations: []providerswire.Registration{test.registration}})
 			if constructErr == nil || service != nil || !strings.Contains(constructErr.Error(), test.want) {
 				t.Fatalf("NewService(%s) = (%#v, %v), want nil service and error containing %q", test.name, service, constructErr, test.want)
 			}
@@ -287,4 +325,63 @@ func (integration *negotiatedExternalIntegration) Capabilities(context.Context, 
 func (integration *negotiatedExternalIntegration) Invoke(ctx context.Context, _ providerswire.InvocationRequest, writer providerswire.ResponseWriter) error {
 	integration.invokeCalls++
 	return writer.Close(ctx, providerswire.SuccessfulCompletion(providerswire.Response{Content: integration.content}))
+}
+
+// newTestProvidersService assembles the fixture's explicit sibling owners.
+func newTestProvidersService(probe providerswire.CatalogProbeOperation, scheduler platformclock.TimerSource, logger logging.Logger, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, antigravity providerswire.AgyEffect, codex providerswire.CodexEffect, claude providerswire.ClaudeEffect, configuration providerswire.Configuration) (providers.Service, error) {
+	config, err := providerswire.PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := providerswire.NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	// Absent fixture routes receive completed command effects with a disabled edge.
+	if antigravity == nil {
+		antigravity = providerswire.NewAgyCommandEffect((disabledNativeRunner{"Antigravity"}).commandEffect(), platformclock.Real{}, scheduler)
+	}
+	if codex == nil {
+		codex = providerswire.NewCodexEffect((disabledNativeRunner{"Codex"}).commandEffect(), platformclock.Real{})
+	}
+	if claude == nil {
+		claude = providerswire.NewClaudeEffect((disabledNativeRunner{"Claude"}).commandEffect(), platformclock.Real{})
+	}
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := providerswire.NewAttemptExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
+}
+
+type disabledNativeRunner struct{ name string }
+
+func (runner disabledNativeRunner) Run(context.Context, providers.CommandRequest) (providers.CommandResult, error) {
+	return providers.CommandResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: runner.name + " native execution is unavailable",
+	}
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner disabledNativeRunner) RunStreaming(ctx context.Context, request providers.CommandRequest, observe providers.OutputChunkObserver) (providers.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providers.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (runner disabledNativeRunner) commandEffect() providers.CommandRunner {
+	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }

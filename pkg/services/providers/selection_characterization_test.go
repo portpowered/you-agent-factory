@@ -5,8 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
@@ -161,11 +162,14 @@ func TestSelectionContract_ValidatePrerequisitesUsesCatalogAuthority(t *testing.
 func newSelectionRoot(t *testing.T, entries ...providers.Descriptor) providers.Service {
 	t.Helper()
 
-	root, err := providerswire.NewService(
-		providerswire.CatalogOption(catalogwire.WithDescriptors(entries...)),
-	)
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{CatalogDescriptors: entries})
 	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
+		t.Fatalf("newTestProvidersService() = %v", err)
 	}
 	return root
 }

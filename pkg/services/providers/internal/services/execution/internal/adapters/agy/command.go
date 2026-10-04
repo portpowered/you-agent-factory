@@ -24,13 +24,9 @@ const (
 
 // NewCommandEffect binds the canonical AGY print-mode invocation to the
 // Providers command-runner boundary. The command runner owns process
-// creation; this adapter owns only AGY's argv and timeout policy.
-
-func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
-	runner := providerservice.AdaptCommandRunner(candidate)
-	if runner == nil || clock == nil {
-		return nil
-	}
+// creation; this adapter owns only AGY's argv and timeout policy. Composition
+// supplies the completed runner, duration source and scheduler.
+func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) Effect {
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,
@@ -46,7 +42,7 @@ func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
 		}
 
 		timeout := effectivePrintTimeout(request.PrintTimeout)
-		commandContext, cancel := context.WithTimeout(normalizeContext(ctx), timeout)
+		commandContext, cancel := printTimeoutContext(normalizeContext(ctx), scheduler, timeout)
 		defer cancel()
 		result, runErr := runCommand(commandContext, runner, command, observe)
 		effectResult := EffectResult{
@@ -64,6 +60,51 @@ func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
 		return effectResult, nil
 	})
 }
+
+// printTimeoutContext keeps the runner's deadline error identity while the
+// supplied scheduler owns delivery. Cleanup joins the timer watcher before
+// releasing the attempt, including when the command finishes before its limit.
+func printTimeoutContext(parent context.Context, scheduler platformclock.TimerSource, timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancelCause(parent)
+	deadline := scheduler.Now().Add(timeout)
+	if parentDeadline, ok := parent.Deadline(); ok && parentDeadline.Before(deadline) {
+		deadline = parentDeadline
+	}
+	timer := scheduler.NewTimer(timeout)
+	joined := make(chan struct{})
+	go func() {
+		defer close(joined)
+		select {
+		case <-ctx.Done():
+		case <-timer.C():
+			cancel(printTimeoutCause{})
+		}
+	}()
+	return printDeadlineContext{Context: ctx, deadline: deadline}, func() {
+		cancel(context.Canceled)
+		timer.Stop()
+		<-joined
+	}
+}
+
+type printDeadlineContext struct {
+	context.Context
+	deadline time.Time
+}
+
+func (ctx printDeadlineContext) Deadline() (time.Time, bool) { return ctx.deadline, true }
+
+func (ctx printDeadlineContext) Err() error {
+	if _, expired := context.Cause(ctx.Context).(printTimeoutCause); expired {
+		return context.DeadlineExceeded
+	}
+	return ctx.Context.Err()
+}
+
+type printTimeoutCause struct{}
+
+func (printTimeoutCause) Error() string { return context.DeadlineExceeded.Error() }
+func (printTimeoutCause) Unwrap() error { return context.DeadlineExceeded }
 
 func buildCommand(request execution.ContinuationRequest) (providerservice.CommandRequest, error) {
 	workDir := strings.TrimSpace(request.WorkingDirectory)
@@ -147,23 +188,12 @@ func runCommand(
 	command providerservice.CommandRequest,
 	observe func([]byte) error,
 ) (providerservice.CommandResult, error) {
-	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, providerservice.CommandRequest, providerservice.OutputChunkObserver) (providerservice.CommandResult, error)
-	}); ok {
-		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
-			if strings.TrimSpace(stream) != providerservice.OutputStreamStdout || len(chunk) == 0 {
-				return nil
-			}
-			return observe(chunk)
-		})
-	}
-	result, err := runner.Run(ctx, command)
-	if len(result.Stdout) > 0 {
-		if observeErr := observe(result.Stdout); err == nil {
-			err = observeErr
+	return runner.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
+		if strings.TrimSpace(stream) != providerservice.OutputStreamStdout || len(chunk) == 0 {
+			return nil
 		}
-	}
-	return result, err
+		return observe(chunk)
+	})
 }
 
 func nativeCommandError(ctx context.Context, err error) error {

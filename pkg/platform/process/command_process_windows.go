@@ -10,6 +10,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 )
 
 // jobobjectBasicAccountingInformation mirrors JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
@@ -76,7 +78,7 @@ func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 // Post-run cleanup closes the job handle after this call; JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
 // terminates any survivors when the handle is released. Children started with
 // CREATE_BREAKAWAY_FROM_JOB or that detach to a new job may escape cleanup.
-func terminateCommandJobGroup(job windows.Handle, grace time.Duration, clock Clock, logCtx commandProcessCleanupContext) error {
+func terminateCommandJobGroup(job windows.Handle, grace time.Duration, clock platformclock.Source, logCtx commandProcessCleanupContext) error {
 	if job == 0 {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "job handle not attached")
 		return nil
@@ -129,7 +131,7 @@ func terminateCommandJobGroup(job windows.Handle, grace time.Duration, clock Clo
 	return nil
 }
 
-func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock Clock, logCtx commandProcessCleanupContext) error {
+func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock platformclock.Source, logCtx commandProcessCleanupContext) error {
 	if tree != nil && tree.job != 0 {
 		return terminateCommandJobGroup(tree.job, 0, clock, logCtx)
 	}
@@ -148,7 +150,7 @@ func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock 
 	return nil
 }
 
-func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree, clock Clock, logCtx commandProcessCleanupContext) {
+func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree, clock platformclock.Source, logCtx commandProcessCleanupContext) {
 	if tree == nil || tree.job == 0 {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "job handle not attached")
 		return

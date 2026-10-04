@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -205,16 +207,31 @@ func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
 
 // TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand proves normal initialization owns packaged Factory setup.
 func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	if err := os.Remove(fixture.configPath); err != nil {
 		t.Fatalf("remove seeded operator config: %v", err)
 	}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: inertCommandRunner{},
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			panic("unexpected listener activation")
+		},
+		BrowserOpener: func(context.Context, string) error { panic("unexpected browser activation") },
+	})
+	if _, err := os.Stat(fixture.configPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("construction activated configuration bootstrap: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(fixture.homeDir, ".you-agent-factory", "factories")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("construction activated packaged Factory installation: %v", err)
+	}
+	assertReusableHelpCommands(t, fixture, process)
 	var stdout bytes.Buffer
 	missingFactory := filepath.Join(fixture.workingDir, "missing-initialization-factory.json")
 	args := []string{
 		"you", "run", "--factory", missingFactory,
 	}
-	err := fixture.execute(serviceedges.Edges{}, &stdout, args...)
+	err := fixture.executeOn(process, &stdout, args...)
 	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
 		t.Fatalf("Process.Execute(run missing Factory) error = %v; stdout=%q", err, stdout.String())
 	}
@@ -234,12 +251,26 @@ func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing
 	}
 
 	firstConfig := fixture.readConfig()
-	err = fixture.execute(serviceedges.Edges{}, io.Discard, args...)
+	err = fixture.executeOn(process, io.Discard, args...)
 	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
 		t.Fatalf("Process.Execute(run missing Factory repeat) error = %v", err)
 	}
 	if got := fixture.readConfig(); got != firstConfig {
 		t.Fatalf("repeat initialization rewrote operator config:\nfirst:\n%s\nsecond:\n%s", firstConfig, got)
+	}
+}
+
+func assertReusableHelpCommands(t *testing.T, fixture initFixture, process support.Process) {
+	t.Helper()
+	var initHelp, runHelp bytes.Buffer
+	if err := fixture.executeOn(process, &initHelp, "you", "init", "--help"); err != nil {
+		t.Fatalf("Execute(init help): %v", err)
+	}
+	if err := fixture.executeOn(process, &runHelp, "you", "run", "--help"); err != nil {
+		t.Fatalf("Execute(run help): %v", err)
+	}
+	if !strings.Contains(initHelp.String(), "you init") || !strings.Contains(runHelp.String(), "you run") || initHelp.String() == runHelp.String() {
+		t.Fatalf("invocation help output was not isolated: init=%q, run=%q", initHelp.String(), runHelp.String())
 	}
 }
 
@@ -445,6 +476,11 @@ func (fixture initFixture) execute(
 	if err != nil {
 		return err
 	}
+	return fixture.executeOn(process, stdout, args...)
+}
+
+func (fixture initFixture) executeOn(process support.Process, stdout io.Writer, args ...string) error {
+	fixture.t.Helper()
 	return process.Execute(root.Input{
 		Args: args,
 		Env: append(
@@ -458,6 +494,12 @@ func (fixture initFixture) execute(
 		Context:          fixture.t.Context(),
 		WorkingDirectory: fixture.workingDir,
 	})
+}
+
+type inertCommandRunner struct{}
+
+func (inertCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	panic("unexpected provider or sidecar execution")
 }
 
 func assertOperatorSelectionsPreserved(t *testing.T, document, phase string) {

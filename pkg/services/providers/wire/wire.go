@@ -1,12 +1,11 @@
 // Package wire is the Providers service composition boundary.
 //
-// Wire performs construction only, returns the singular providers.Service root
-// interface, and starts no lifecycle components. Parent-private Catalog and
-// Execution owner wiring stays inside the owner service assembly path; peers
-// depend on Service rather than owner internals or construction ports. The
+// Wire exposes focused inert constructors for completed private roles.
+// Canonical composition assembles these once; the Providers root consumes them
+// directly. Peers depend on Service rather than private construction roles. The
 // process-edge registration contract in this package is for root composition,
-// not a second peer-facing Providers service. Missing required construction
-// ports fail with a deterministic construction error and a nil service.
+// not a second peer-facing Providers service. Required collaborators are
+// completed by composition before they reach the internal consumers.
 package wire
 
 import (
@@ -20,9 +19,10 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	acpwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire"
-	builtinswire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -61,16 +61,38 @@ const (
 )
 
 // NewAgyPTYAllocator constructs the Providers-owned PTY implementation.
-func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (PTYAllocator, error) {
-	return executionwire.NewAgyPTYAllocator(host, clock)
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source, scheduler platformclock.TimerSource) (PTYAllocator, error) {
+	return executionwire.NewAgyPTYAllocator(host, clock, scheduler)
 }
 
-// AgyPTYPlatformDependencies are platform facts required for the built-in Agy
-// PTY execution adapter.
-type AgyPTYPlatformDependencies struct {
-	Allocator any
-	Locator   platformprocess.ExecutableLocator
-	Inspector platformfilesystem.PathInspector
+// AgyEffect exposes the completed AGY execution collaborator to composition.
+type AgyEffect = executionwire.AgyEffect
+
+// Native effect aliases expose individually completed command collaborators.
+type CodexEffect = executionwire.CodexEffect
+type ClaudeEffect = executionwire.ClaudeEffect
+
+// NewCodexEffect constructs one Codex command effect.
+func NewCodexEffect(runner CommandRunner, clock platformclock.Source) CodexEffect {
+	return executionwire.NewCodexEffect(runner, clock)
+}
+
+// NewClaudeEffect constructs one Claude command effect.
+func NewClaudeEffect(runner CommandRunner, clock platformclock.Source) ClaudeEffect {
+	return executionwire.NewClaudeEffect(runner, clock)
+}
+
+// NewAgyCommandEffect constructs one AGY print-mode effect.
+func NewAgyCommandEffect(runner CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) AgyEffect {
+	return executionwire.NewAgyCommandEffect(runner, clock, scheduler)
+}
+
+// AgyPTYPolicy contains detached native-session policy, without host effects.
+type AgyPTYPolicy = executionwire.AgyPTYPolicy
+
+// NewAgyPTYEffect constructs one native effect over individually supplied ports.
+func NewAgyPTYEffect(allocator PTYAllocator, locator platformprocess.ExecutableLocator, inspector platformfilesystem.PathInspector, clock platformclock.Source, policy AgyPTYPolicy) AgyEffect {
+	return executionwire.NewAgyPTYEffect(allocator, locator, inspector, clock, policy)
 }
 
 // CatalogCapabilityOverride supplies an authoritative capability view for one
@@ -90,248 +112,88 @@ func (override CatalogCapabilityOverride) Clone() CatalogCapabilityOverride {
 	}
 }
 
-// Option configures Providers root construction.
-type Option interface {
-	apply(*wireOptions)
+// CatalogProbeOperation is the completed catalog readiness projection.
+type CatalogProbeOperation = catalog.ProbeOperation
+
+// IdentityCatalogProbe preserves detached catalog facts without readiness I/O.
+func IdentityCatalogProbe(ctx context.Context, descriptor providers.Descriptor) (providers.Descriptor, error) {
+	return catalogwire.IdentityProbe(ctx, descriptor)
 }
 
-type wireOptions struct {
-	catalog           []catalogwire.Option
-	commandRunner     providerservice.CommandRunner
-	agyCommandRunner  providerservice.CommandRunner
-	agyCommandClock   platformclock.Source
-	agyPTYPlatform    AgyPTYPlatformDependencies
-	acpIntegrations   []providers.ACPIntegration
-	commandFactory    platformprocess.CommandFactory
-	executableLocator platformprocess.ExecutableLocator
-	stdioPipes        platformprocess.StdioPipeFactory
-	registrations     ProviderRegistrations
-	logger            logging.Logger
+// Configuration contains detached registration and catalog values. It owns no
+// service collaborators or runtime resources.
+type Configuration struct {
+	CatalogDescriptors []providers.Descriptor
+	CatalogOverrides   []CatalogCapabilityOverride
+	ACPIntegrations    []providers.ACPIntegration
+	Registrations      ProviderRegistrations
 }
 
-type registrationsOption struct {
-	registrations ProviderRegistrations
-}
-
-func (option registrationsOption) apply(config *wireOptions) {
-	config.registrations = append(ProviderRegistrations(nil), option.registrations...)
-}
-
-// WithRegistrations contributes process-edge compatibility integrations.
-// Provider execution still crosses the singular providers.Service boundary.
-func WithRegistrations(registrations ...Registration) Option {
-	return registrationsOption{registrations: registrations}
-}
-
-type executableLocatorOption struct {
-	locator platformprocess.ExecutableLocator
-}
-
-func (o executableLocatorOption) apply(opts *wireOptions) { opts.executableLocator = o.locator }
-
-// WithExecutableLocator injects ACP executable preflight discovery.
-func WithExecutableLocator(locator platformprocess.ExecutableLocator) Option {
-	return executableLocatorOption{locator: locator}
-}
-
-type acpIntegrationsOption struct{ integrations []providers.ACPIntegration }
-
-func (o acpIntegrationsOption) apply(opts *wireOptions) {
-	opts.acpIntegrations = append([]providers.ACPIntegration(nil), o.integrations...)
-}
-
-// WithACPIntegrations contributes configured ACP identities and commands.
-func WithACPIntegrations(integrations ...providers.ACPIntegration) Option {
-	return acpIntegrationsOption{integrations: integrations}
-}
-
-type commandFactoryOption struct {
-	factory platformprocess.CommandFactory
-}
-
-func (o commandFactoryOption) apply(opts *wireOptions) { opts.commandFactory = o.factory }
-
-// WithCommandFactory injects the only process-creation edge used by ACP.
-func WithCommandFactory(factory platformprocess.CommandFactory) Option {
-	return commandFactoryOption{factory: factory}
-}
-
-type stdioPipesOption struct {
-	factory platformprocess.StdioPipeFactory
-}
-
-func (o stdioPipesOption) apply(opts *wireOptions) { opts.stdioPipes = o.factory }
-
-// WithStdioPipeFactory injects the parent-owned ACP standard-stream channel
-// factory. Canonical composition selects it here; this package never defaults
-// it, so an ACP execution that reached Providers without one reports a missing
-// channel dependency instead of opening a host pipe from inside the service.
-func WithStdioPipeFactory(factory platformprocess.StdioPipeFactory) Option {
-	return stdioPipesOption{factory: factory}
-}
-
-type catalogOption struct {
-	value catalogwire.Option
-}
-
-func (o catalogOption) apply(opts *wireOptions) {
-	opts.catalog = append(opts.catalog, o.value)
-}
-
-// CatalogOption adapts a catalog subservice option for root construction.
-func CatalogOption(option catalogwire.Option) Option {
-	return catalogOption{value: option}
-}
-
-type catalogCapabilityOverridesOption struct {
-	overrides []CatalogCapabilityOverride
-}
-
-func (option catalogCapabilityOverridesOption) apply(config *wireOptions) {
-	overrides := make([]catalog.CapabilityOverride, 0, len(option.overrides))
-	for _, override := range option.overrides {
-		overrides = append(overrides, catalog.CapabilityOverride{
-			Provider:     override.Provider,
-			Capabilities: append([]providers.Capability(nil), override.Capabilities...),
-		})
-	}
-	config.catalog = append(config.catalog, catalogwire.WithCapabilityOverrides(overrides...))
-}
-
-// WithCatalogCapabilityOverrides supplies route-specific static capability
-// facts without adding or replacing a provider registration.
-func WithCatalogCapabilityOverrides(overrides ...CatalogCapabilityOverride) Option {
-	cloned := make([]CatalogCapabilityOverride, len(overrides))
-	for index, override := range overrides {
-		cloned[index] = override.Clone()
-	}
-	return catalogCapabilityOverridesOption{overrides: cloned}
-}
-
-type commandRunnerOption struct {
-	runner platformprocess.CommandRunner
-}
-
-func (o commandRunnerOption) apply(opts *wireOptions) {
-	opts.commandRunner = executionwire.AdaptPlatformCommandRunner(o.runner)
-}
-
-// WithCommandRunner injects the shared streaming subprocess runner used by
-// built-in Codex and Claude command effects.
-func WithCommandRunner(runner platformprocess.CommandRunner) Option {
-	return commandRunnerOption{runner: runner}
-}
-
-type commandEffectRunnerOption struct {
-	runner providerservice.CommandRunner
-}
-
-func (o commandEffectRunnerOption) apply(opts *wireOptions) {
-	opts.commandRunner = o.runner
-}
-
-type agyCommandRunnerOption struct {
-	runner any
-}
-
-func (o agyCommandRunnerOption) apply(opts *wireOptions) {
-	opts.agyCommandRunner = providerservice.AdaptCommandRunner(o.runner)
-}
-
-// WithAgyCommandRunner injects the Providers command-runner effect used by
-// canonical AGY print-mode execution. The PTY option remains available for
-// direct compatibility tests and hosts that intentionally select that seam.
-func WithAgyCommandRunner(runner any) Option {
-	return agyCommandRunnerOption{runner: runner}
-}
-
-type agyCommandClockOption struct {
-	clock platformclock.Source
-}
-
-func (o agyCommandClockOption) apply(opts *wireOptions) { opts.agyCommandClock = o.clock }
-
-// WithAgyCommandClock injects the timing source used by AGY command
-// diagnostics and duration facts.
-func WithAgyCommandClock(clock platformclock.Source) Option {
-	return agyCommandClockOption{clock: clock}
-}
-
-type agyPTYPlatformOption struct {
-	platform AgyPTYPlatformDependencies
-}
-
-func (o agyPTYPlatformOption) apply(opts *wireOptions) {
-	opts.agyPTYPlatform = o.platform
-}
-
-// WithAgyPTY injects the platform facts required for the built-in Agy PTY
-// execution adapter.
-func WithAgyPTY(platform AgyPTYPlatformDependencies) Option {
-	return agyPTYPlatformOption{platform: platform}
-}
-
-// WithWorkersCommandRunner is retained as a source-compatible migration
-// option. Its value is projected immediately into the Providers command
-// effect and is never stored as a Workers contract.
-func WithWorkersCommandRunner(runner any) Option {
-	return commandEffectRunnerOption{runner: providerservice.AdaptCommandRunner(runner)}
-}
-
-type loggerOption struct {
-	logger logging.Logger
-}
-
-func (o loggerOption) apply(opts *wireOptions) { opts.logger = o.logger }
-
-// WithLogger injects the safe structured logger the constructed root uses for
-// accepted-intent and terminal-outcome operation records, including
-// ControlAttempt. A nil or omitted logger falls back to logging.NoopLogger.
-func WithLogger(logger logging.Logger) Option {
-	return loggerOption{logger: logger}
-}
-
-// NewService constructs one inert Providers root over sibling Catalog and
-// Execution capabilities sharing the same private catalog identity authority.
-// Missing required composition inputs fail with a deterministic construction
-// error and a nil service.
-func NewService(options ...Option) (providers.Service, error) {
-	var config wireOptions
-	for _, option := range options {
-		if option != nil {
-			option.apply(&config)
-		}
-	}
+// PrepareConfiguration projects package defaults and explicit construction data.
+// It performs no readiness, command, channel or lifecycle effects.
+func PrepareConfiguration(config Configuration) (Configuration, error) {
 	packaged, err := PackagedACPIntegrations()
 	if err != nil {
-		return nil, err
+		return Configuration{}, err
 	}
-	acp := effectiveACPIntegrations(packaged, config.acpIntegrations)
-	descriptors, err := packagedACPDescriptors(acp)
+	integrations := effectiveACPIntegrations(packaged, config.ACPIntegrations)
+	descriptors, err := packagedACPDescriptors(integrations)
 	if err != nil {
-		return nil, err
+		return Configuration{}, err
 	}
-	for _, registration := range config.registrations {
+	for _, registration := range config.Registrations {
 		descriptors = append(descriptors, registrationDescriptor(registration.Manifest))
 	}
-	config.catalog = append(config.catalog, catalogwire.WithDescriptors(descriptors...))
-	catalogService, err := catalogwire.NewService(config.catalog...)
+	detached := make([]providers.Descriptor, len(config.CatalogDescriptors))
+	for i, descriptor := range config.CatalogDescriptors {
+		detached[i] = descriptor.Clone()
+	}
+	overrides := make([]CatalogCapabilityOverride, len(config.CatalogOverrides))
+	for i, override := range config.CatalogOverrides {
+		overrides[i] = override.Clone()
+	}
+	return Configuration{
+		CatalogDescriptors: append(detached, descriptors...),
+		CatalogOverrides:   overrides,
+		ACPIntegrations:    integrations,
+		Registrations:      append(ProviderRegistrations(nil), config.Registrations...),
+	}, nil
+}
+
+// These aliases expose completed private roles to canonical composition.
+type CatalogService = catalog.Service
+type ExecutionService = execution.ContinuationService
+type ACPService = acp.ContinuationService
+type Lifecycle = providerservice.Lifecycle
+type ExecutionRegistration = execution.Registration
+
+// NewCatalogService constructs only the catalog over the supplied projection.
+func NewCatalogService(probe CatalogProbeOperation, descriptors []providers.Descriptor, overrides []CatalogCapabilityOverride) (CatalogService, error) {
+	projected := make([]catalog.CapabilityOverride, len(overrides))
+	for i, override := range overrides {
+		projected[i] = catalog.CapabilityOverride{Provider: override.Provider, Capabilities: append([]providers.Capability(nil), override.Capabilities...)}
+	}
+	return catalogwire.NewService(probe, descriptors, projected)
+}
+
+// NewACPService constructs only the configured ACP owner, without starting peers.
+func NewACPService(integrations []providers.ACPIntegration, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, scheduler platformclock.TimerSource, logger logging.Logger) (ACPService, error) {
+	return acpwire.NewService(integrations, commandFactory, locator, stdioPipes, scheduler, logger)
+}
+
+// NewAttemptExecutionService constructs only normalized execution over completed routes.
+func NewAttemptExecutionService(catalogService CatalogService, registrations []ExecutionRegistration) (ExecutionService, error) {
+	return executionwire.NewService(catalogService, registrations...)
+}
+
+// NewService receives completed siblings and the exact close capability. It
+// neither constructs a secondary graph nor selects execution effects.
+func NewService(catalogService CatalogService, executionService ExecutionService, acpService ACPService, packagedACP []providers.ACPIntegration, logger logging.Logger, lifecycle Lifecycle) (providers.Service, error) {
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, packagedACP, logger, lifecycle)
 	if err != nil {
 		return nil, err
 	}
-	return newRootWithOptions(
-		catalogService,
-		config.commandRunner,
-		config.agyCommandRunner,
-		config.agyCommandClock,
-		config.agyPTYPlatform,
-		acp,
-		config.commandFactory,
-		config.executableLocator,
-		config.stdioPipes,
-		config.logger,
-		config.registrations...,
-	)
+	return root, nil
 }
 
 func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]providers.Descriptor, error) {
@@ -357,11 +219,7 @@ func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]provider
 // Providers. Composition uses this exact source when materializing a new
 // operator configuration so init and runtime discovery cannot drift.
 func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
-	packaged, err := builtinswire.NewService()
-	if err != nil {
-		return nil, err
-	}
-	return packaged.ACPIntegrations(), nil
+	return ACPIntegrationsFromRuntimeCatalog(modelproviders.RuntimeACPJSON())
 }
 
 // ACPIntegrationsFromRuntimeCatalog projects a generated package-owned
@@ -370,34 +228,13 @@ func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
 // able to validate and diagnose alternate generated documents without starting
 // any provider process.
 func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegration, error) {
-	packaged, err := builtinswire.NewServiceFromRuntimeCatalog(document)
-	if err != nil {
-		return nil, err
-	}
-	return packaged.ACPIntegrations(), nil
+	return catalogdata.DecodeACPIntegrations(document)
 }
 
-func newRootWithOptions(
-	catalogService catalog.Service,
-	commandRunner providerservice.CommandRunner,
-	agyCommandRunner providerservice.CommandRunner,
-	agyCommandClock platformclock.Source,
-	agyPTYPlatform AgyPTYPlatformDependencies,
-	acpIntegrations []providers.ACPIntegration,
-	commandFactory platformprocess.CommandFactory,
-	executableLocator platformprocess.ExecutableLocator,
-	stdioPipes platformprocess.StdioPipeFactory,
-	logger logging.Logger,
-	externalRegistrations ...Registration,
-) (providers.Service, error) {
-	if catalogService == nil {
-		return nil, fmt.Errorf("construct Providers: catalog is required")
-	}
-	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, agyCommandClock, agyPTYPlatform)
-	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes)
-	if err != nil {
-		return nil, err
-	}
+// ExecutionRegistrations binds completed native and ACP effects to detached
+// route values, preserving identity collision and capability validation.
+func ExecutionRegistrations(antigravity AgyEffect, codex CodexEffect, claude ClaudeEffect, acpService ACPService, acpIntegrations []providers.ACPIntegration, externalRegistrations ProviderRegistrations) ([]ExecutionRegistration, error) {
+	registrations := executionwire.BuiltInRegistrations(antigravity, codex, claude)
 	for _, integration := range acpIntegrations {
 		registrations = append(registrations, executionwire.NewACPRegistration(integration.Name, acpService))
 	}
@@ -416,21 +253,7 @@ func newRootWithOptions(
 		}
 		registrations = append(registrations, attempt)
 	}
-	executionService, err := executionwire.NewService(
-		catalogService,
-		registrations...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return providerservice.NewWithACP(
-		catalogService,
-		executionService,
-		acpService,
-		acpIntegrations,
-		logger,
-		acpService,
-	)
+	return registrations, nil
 }
 
 func validateExternalRegistrationCapabilities(registration Registration) error {
@@ -482,6 +305,7 @@ func externalRegistrationAttempt(registration Registration) (execution.Registrat
 	}
 	return execution.Registration{
 		Provider: providers.ID(registration.Manifest.ID),
+		Continue: executionwire.NewUnsupportedContinuation(),
 		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 			writer := &externalResponseWriter{}
 			invocation := InvocationRequest{
@@ -535,29 +359,6 @@ func (writer *externalResponseWriter) Close(_ context.Context, completion Comple
 	return nil
 }
 
-func executionserviceRegistrations(
-	commandRunner providerservice.CommandRunner,
-	agyCommandRunner providerservice.CommandRunner,
-	agyCommandClock platformclock.Source,
-	agyPTYPlatform AgyPTYPlatformDependencies,
-) []execution.Registration {
-	if agyCommandClock == nil {
-		agyCommandClock = platformclock.Real{}
-	}
-	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromCommandRunner(
-		commandRunner,
-		executionwire.BuiltInRunnerPlatformDependencies{
-			AgyCommandRunner: agyCommandRunner,
-			AgyCommandClock:  agyCommandClock,
-			AgyPTY: executionwire.AgyPTYPlatformDependencies{
-				Allocator: providerservice.AdaptPTYAllocator(agyPTYPlatform.Allocator),
-				Locator:   agyPTYPlatform.Locator,
-				Inspector: agyPTYPlatform.Inspector,
-			},
-		},
-	))
-}
-
 func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) []providers.ACPIntegration {
 	values := make([]providers.ACPIntegration, len(packaged))
 	for index, value := range packaged {
@@ -600,11 +401,4 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}}
-}
-
-// NewFactory returns an inert constructor used for operator-configured ACP catalogs.
-func NewFactory(commandFactory platformprocess.CommandFactory, options ...Option) providers.Factory {
-	return func(integrations []providers.ACPIntegration) (providers.Service, error) {
-		return NewService(append(options, WithCommandFactory(commandFactory), WithACPIntegrations(integrations...))...)
-	}
 }

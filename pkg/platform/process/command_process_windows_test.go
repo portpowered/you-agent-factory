@@ -140,3 +140,29 @@ func TestParentOwnedStdioOpenRollback(t *testing.T) {
 		})
 	}
 }
+
+// A released tree needs no OS effects. Each cleanup operation must still emit
+// its terminal diagnostic only through the logger supplied by that caller.
+func TestSubprocessTreeWithEffectsIsolatesCleanupLogs(t *testing.T) {
+	t.Parallel()
+	cancelLogger, closeLogger := &recordingCommandLogger{}, &recordingCommandLogger{}
+	clock := &coverageProcessClock{times: []time.Time{time.Unix(42, 0)}}
+	if err := TerminateSubprocessTreeWithEffects(nil, SubprocessTree{}, clock, cancelLogger); err != nil {
+		t.Fatalf("terminate released tree: %v", err)
+	}
+	CloseSubprocessTreeWithEffects(nil, SubprocessTree{}, clock, closeLogger)
+	for _, scenario := range []struct {
+		logger *recordingCommandLogger
+		reason commandProcessCleanupReason
+	}{
+		{cancelLogger, commandProcessCleanupReasonCancel}, {closeLogger, commandProcessCleanupReasonPostRun},
+	} {
+		logs := commandCleanupCompletedLogs(scenario.logger)
+		if len(logs) != 1 {
+			t.Fatalf("%s cleanup records = %d, want 1", scenario.reason, len(logs))
+		}
+		if logs[0].fields["cleanup_reason"] != string(scenario.reason) || logs[0].fields["outcome"] != string(commandProcessCleanupOutcomeNoOp) {
+			t.Fatalf("%s cleanup fields = %#v", scenario.reason, logs[0].fields)
+		}
+	}
+}

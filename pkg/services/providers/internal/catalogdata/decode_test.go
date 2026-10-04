@@ -1,4 +1,4 @@
-package service
+package catalogdata
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 const validCatalogDocument = `{
@@ -21,13 +23,11 @@ const validCatalogDocument = `{
   }]
 }`
 
-func TestNewBuildsDetachedRuntimeProjection(t *testing.T) {
-	service, err := New([]byte(validCatalogDocument))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+func TestDecodeACPIntegrationsBuildsDetachedRuntimeProjection(t *testing.T) {
+	t.Parallel()
+	document := []byte(validCatalogDocument)
+	first := decodeCatalog(t, document)
 
-	first := service.ACPIntegrations()
 	want := []struct {
 		ID                    string
 		Name                  string
@@ -59,13 +59,27 @@ func TestNewBuildsDetachedRuntimeProjection(t *testing.T) {
 	}
 	first[0].Aliases[0] = "mutated"
 	first[0].Arguments[0] = "mutated"
-	second := service.ACPIntegrations()
+	second := decodeCatalog(t, []byte(validCatalogDocument))
 	if second[0].Aliases[0] != "cursor-test" || second[0].Arguments[0] != "acp" {
 		t.Fatalf("ACPIntegrations() retained caller mutation: %#v", second[0])
 	}
+	clear(document)
+	if first[0].Command != "cursor-agent acp" || first[0].Name != "cursor-acp" {
+		t.Fatalf("DecodeACPIntegrations() retained document memory: %#v", first[0])
+	}
 }
 
-func TestNewLoadsLosslessQuotedRuntimeArguments(t *testing.T) {
+func decodeCatalog(t *testing.T, document []byte) []providers.ACPIntegration {
+	t.Helper()
+	integrations, err := DecodeACPIntegrations(document)
+	if err != nil {
+		t.Fatalf("DecodeACPIntegrations() error = %v", err)
+	}
+	return integrations
+}
+
+func TestDecodeACPIntegrationsLoadsLosslessQuotedRuntimeArguments(t *testing.T) {
+	t.Parallel()
 	wantExecutable := `agent'\tool`
 	wantArguments := []string{"hello world", "semi;colon", "quote's"}
 	document, err := json.Marshal(catalogDocument{ACP: []catalogACPIntegration{{
@@ -84,11 +98,11 @@ func TestNewLoadsLosslessQuotedRuntimeArguments(t *testing.T) {
 		t.Fatalf("marshal catalog document: %v", err)
 	}
 
-	service, err := New(document)
+	first, err := DecodeACPIntegrations(document)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("DecodeACPIntegrations() error = %v", err)
 	}
-	integration := service.ACPIntegrations()[0]
+	integration := first[0]
 	if integration.Command != `'agent'\''\tool' 'hello world' 'semi;colon' 'quote'\''s'` {
 		t.Fatalf("integration command = %q, want lossless command", integration.Command)
 	}
@@ -97,7 +111,8 @@ func TestNewLoadsLosslessQuotedRuntimeArguments(t *testing.T) {
 	}
 }
 
-func TestNewRejectsMalformedPackagedACPEntries(t *testing.T) {
+func TestDecodeACPIntegrationsRejectsMalformedPackagedACPEntries(t *testing.T) {
+	t.Parallel()
 	const base = `{
   "acp": [{
     "name": "cursor-acp",
@@ -167,15 +182,17 @@ func TestNewRejectsMalformedPackagedACPEntries(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := New([]byte(test.mutate(base)))
+			t.Parallel()
+			_, err := DecodeACPIntegrations([]byte(test.mutate(base)))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("New() error = %v, want containing %q", err, test.want)
+				t.Fatalf("DecodeACPIntegrations() error = %v, want containing %q", err, test.want)
 			}
 		})
 	}
 }
 
-func TestNewRejectsIdentityAndAliasCollisions(t *testing.T) {
+func TestDecodeACPIntegrationsRejectsIdentityAndAliasCollisions(t *testing.T) {
+	t.Parallel()
 	const baseEntry = `{
     "name": "%s",
     "aliases": %s,
@@ -224,15 +241,17 @@ func TestNewRejectsIdentityAndAliasCollisions(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := New([]byte(test.doc))
+			t.Parallel()
+			_, err := DecodeACPIntegrations([]byte(test.doc))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("New() error = %v, want containing %q", err, test.want)
+				t.Fatalf("DecodeACPIntegrations() error = %v, want containing %q", err, test.want)
 			}
 		})
 	}
 }
 
-func TestNewRejectsRuntimeProjectionBindingDrift(t *testing.T) {
+func TestDecodeACPIntegrationsRejectsRuntimeProjectionBindingDrift(t *testing.T) {
+	t.Parallel()
 	const base = `{
   "acp": [{
     "name": "cursor-acp",
@@ -288,9 +307,10 @@ func TestNewRejectsRuntimeProjectionBindingDrift(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := New([]byte(test.mutate(base)))
+			t.Parallel()
+			_, err := DecodeACPIntegrations([]byte(test.mutate(base)))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("New() error = %v, want containing %q", err, test.want)
+				t.Fatalf("DecodeACPIntegrations() error = %v, want containing %q", err, test.want)
 			}
 		})
 	}

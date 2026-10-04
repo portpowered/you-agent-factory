@@ -38,7 +38,7 @@ import (
 
 // InjectBundle is the single application-process injector. Callers provide
 // production defaults or functional overrides through the same typed inputs.
-func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process, error) {
+func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings ACPWireLogSettings) (*application.Process, error) {
 	cliObserver := provideCLIObserver(edges2)
 	namedPathFileSystem := provideFactoryDefinitionNamedPathFileSystem(edges2)
 	namedPathResolver, err := provideFactoryDefinitionNamedPathResolver(namedPathFileSystem)
@@ -807,7 +807,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir(edges2)
 	v186 := provideChatSessionsResponseBridge(chatsessionsService, factorysessionsService, eventsService, loggingLogger)
 	responseBridge := provideACPServerResponseBridge(v186)
-	v187, err := provideACPWireRecorder(edges2, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
+	v187, err := provideACPWireRecorder(edges2, acpWireLogSettings, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
 	if err != nil {
 		return nil, err
 	}
