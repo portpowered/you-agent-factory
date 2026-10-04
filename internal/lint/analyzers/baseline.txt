@@ -120,7 +120,6 @@ service-construction-test|pkg/services/factory_sessions/internal/service|pkg/ser
 service-construction-test|pkg/services/factory_sessions_test|pkg/services/work.NewInvocationPolicyService
 service-construction-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire.NewProjectionService
 service-construction-test|pkg/services/factory_visualization/wire|pkg/services/recordings/wire.NewProjectionService
-service-construction-test|pkg/services/operator_settings/transports/cli/initsetup_test|pkg/services/providers/wire.NewService
 service-construction-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/worker_sessions/wire_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire.NewService
