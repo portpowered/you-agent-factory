@@ -8,7 +8,6 @@ import (
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -22,7 +21,7 @@ func TestServiceDeletionProof_WireConstructsPublishedControlObservationDispatch(
 	t.Parallel()
 
 	ctx := context.Background()
-	service, err := factoryruntimewire.NewService(
+	service, err := newCompletedRuntimeRoot(
 		func() string { return "del-run-service-proof-id" },
 		nil,
 		nil,

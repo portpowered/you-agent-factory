@@ -10,7 +10,6 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -150,7 +149,7 @@ func wireFoldServiceWithHostedRuntime(
 ) factoryruntime.Service {
 	t.Helper()
 
-	service, err := factoryruntimewire.NewService(
+	service, err := newCompletedRuntimeRoot(
 		func() string { return "fold-runtime-wire-id" },
 		nil,
 		nil,

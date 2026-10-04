@@ -7,15 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
-	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
-	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -59,39 +55,17 @@ type runtimeActivationCleanupState struct {
 	close     func(context.Context) error
 }
 
-// NewRoot constructs the inert Factory Runtime root from construction ports. It
-// composes accepted parent-private owners and starts no lifecycle, sidecars,
-// Workers publication, or checkpoint recovery activity.
+// NewRoot retains completed owners and allocates only keyed activation state.
 func NewRoot(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflowDefinitions,
-	workflowRuntime factoryruntime.JavaScriptWorkflowRuntime,
-	clock factoryruntime.Clock,
-	workersPublisher dispatchplanning.WorkersPublisher,
-	workersCanceler dispatchplanning.WorkersCanceler,
-	scheduler platformclock.TimerSource,
+	orchestration orchestration.Service,
+	instanceHost instancehost.Service,
+	dispatchPlan dispatchplanning.Service,
 ) (*Root, error) {
-	if newID == nil {
-		return nil, fmt.Errorf("construct Factory Runtime: ID generator is required")
-	}
-	if clock == nil {
-		return nil, fmt.Errorf("construct Factory Runtime: clock is required")
-	}
-	if workersPublisher == nil {
-		return nil, fmt.Errorf("construct Factory Runtime: Workers publisher is required")
-	}
-	instanceHost, err := instancehostwire.New(instancehost.Dependencies{Clock: clock, Scheduler: scheduler})
-	if err != nil {
-		return nil, err
-	}
 	return &Root{
-		orchestration: orchestrationwire.New(newID, workflows, workflowRuntime),
-		instanceHost:  instanceHost,
-		dispatchPlan:  dispatchplanningwire.New(workersPublisher, workersCanceler),
-		active:        make(map[string]*runtimeActivationState),
-		failed:        make(map[string]*runtimeActivationCleanupState),
-		activating:    make(map[string]bool),
-		deactivating:  make(map[string]bool),
+		orchestration: orchestration, instanceHost: instanceHost, dispatchPlan: dispatchPlan,
+		active:     make(map[string]*runtimeActivationState),
+		failed:     make(map[string]*runtimeActivationCleanupState),
+		activating: make(map[string]bool), deactivating: make(map[string]bool),
 	}, nil
 }
 
@@ -527,7 +501,7 @@ func (r *Root) InvokeWorker(
 }
 
 func (r *Root) delegate() factoryruntime.Service {
-	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+	if r == nil {
 		return nil
 	}
 	r.mu.RLock()
@@ -542,7 +516,7 @@ func (r *Root) delegate() factoryruntime.Service {
 }
 
 func (r *Root) serviceForRuntime(runtimeID string) factoryruntime.Service {
-	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+	if r == nil {
 		return nil
 	}
 	r.mu.RLock()
@@ -558,7 +532,7 @@ func (r *Root) serviceForRuntime(runtimeID string) factoryruntime.Service {
 // Work and event boundary. It mirrors delegate's single-active rule and
 // returns nil when no activation published one.
 func (r *Root) activeIngress() factoryruntime.APIFactory {
-	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+	if r == nil {
 		return nil
 	}
 	r.mu.RLock()
@@ -575,7 +549,7 @@ func (r *Root) activeIngress() factoryruntime.APIFactory {
 // ingressForRuntime returns the named Runtime's declared migration-only Work
 // and event boundary, or nil when that Runtime is not active.
 func (r *Root) ingressForRuntime(runtimeID string) factoryruntime.APIFactory {
-	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+	if r == nil {
 		return nil
 	}
 	r.mu.RLock()

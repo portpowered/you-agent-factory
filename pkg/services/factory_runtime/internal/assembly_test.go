@@ -13,8 +13,12 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
+	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -295,7 +299,7 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 }
 
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil, nil)
+	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
 		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
 	}
@@ -306,7 +310,7 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{}, nil)
+	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Worker Sessions factory is required") {
 		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
 	}
@@ -317,7 +321,7 @@ func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil, nil)
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
 		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
 	}
@@ -329,7 +333,7 @@ func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	workerService := stubWorkersService{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService, platformclock.Real{})
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService, platformclock.Real{}, nil)
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}
@@ -345,7 +349,7 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 	t.Parallel()
 
 	clock := clockwork.NewFakeClock()
-	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock, Scheduler: platformclock.Real{}})
+	lifecycle, err := newAssemblyTestHost(clock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("instancehostwire.New() error = %v", err)
 	}
@@ -358,7 +362,7 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 func TestBoundRuntimeServiceUsesPublishedEngineForWideOperations(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewRoot(
+	root, err := newCompletedRoot(
 		func() string { return "runtime-test-id" },
 		nil,
 		nil,
@@ -388,7 +392,7 @@ func TestBoundRuntimeServiceUsesPublishedEngineForWideOperations(t *testing.T) {
 func TestBoundRuntimeServiceUsesPublishedEngineForLegacyWorkSnapshot(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewRoot(
+	root, err := newCompletedRoot(
 		func() string { return "runtime-test-id" },
 		nil,
 		nil,
@@ -556,7 +560,7 @@ func assertBoundRuntimeNotActive(t *testing.T, root *Root, ctx context.Context, 
 
 func newBoundControlRoot(t *testing.T) *Root {
 	t.Helper()
-	root, err := NewRoot(
+	root, err := newCompletedRoot(
 		func() string { return "bound-control-id" }, nil, nil,
 		clockwork.NewFakeClockAt(time.Date(2026, time.October, 3, 0, 0, 0, 0, time.UTC)),
 		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
@@ -722,4 +726,19 @@ func (service *wideOperationRuntimeFake) SubscribeFactoryEvents(
 ) (*interfaces.FactoryEventStream, error) {
 	service.eventCalls++
 	return nil, nil
+}
+
+func newAssemblyTestHost(clock factoryruntime.Clock, scheduler platformclock.TimerSource) (instancehost.Service, error) {
+	lifecycle, err := factoryhost.NewLifecycleService(clock, scheduler)
+	if err != nil {
+		return nil, err
+	}
+	return instancehostwire.New(clock, scheduler, lifecycle)
+}
+func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime, clock factoryruntime.Clock, publisher dispatchplanning.WorkersPublisher, canceler dispatchplanning.WorkersCanceler, scheduler platformclock.TimerSource) (*Root, error) {
+	host, err := newAssemblyTestHost(clock, scheduler)
+	if err != nil {
+		return nil, err
+	}
+	return NewRoot(orchestrationwire.New(newID, workflows, runtime), host, dispatchplanningwire.New(publisher, canceler))
 }

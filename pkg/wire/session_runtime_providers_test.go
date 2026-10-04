@@ -297,7 +297,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	}
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
-		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
+		provideOrchestrationJavaScriptExecution(provideRuntimeOrchestration(provideFactoryRuntimeIDGenerator(edges), workflows)),
 		writer,
 		stores,
 		syncWaits,

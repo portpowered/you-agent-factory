@@ -46,7 +46,7 @@ func (h *Host) Start(
 	if existing, ok := h.handles[instanceID]; ok && !existing.Completed() {
 		h.mu.Unlock()
 		if !handle.Completed() {
-			_ = h.lifecycle.Stop(handle)
+			_ = h.lifecycle.StopWithClock(handle, h.clock)
 		}
 		return nil, fmt.Errorf(
 			"factory runtime instance %s already has an active hosted handle",
@@ -65,7 +65,7 @@ func (h *Host) WaitForStart(ctx context.Context, handle factoryruntime.RuntimeRu
 	}
 	if err := factoryhost.WaitForStart(ctx, concrete, h.scheduler); err != nil {
 		h.removeHandle(concrete)
-		stopErr := h.lifecycle.Stop(concrete)
+		stopErr := h.lifecycle.StopWithClock(concrete, h.clock)
 		return errors.Join(err, stopErr)
 	}
 	return nil

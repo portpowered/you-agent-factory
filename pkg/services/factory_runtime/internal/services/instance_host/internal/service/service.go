@@ -19,7 +19,7 @@ type Host struct {
 	scheduler platformclock.TimerSource
 	lifecycle *factoryhost.LifecycleService
 
-	mu      sync.Mutex
+	mu      *sync.Mutex
 	handles map[string]*factoryhost.Handle
 }
 
@@ -28,20 +28,23 @@ var _ instancehost.Service = (*Host)(nil)
 // New constructs an inert instance host that allocates handle state without
 // starting a hosted run loop, attaching sidecars, publishing a replacement, or
 // finalizing artifacts.
-func New(dependencies instancehost.Dependencies) (instancehost.Service, error) {
-	if dependencies.Clock == nil {
+func New(clock factoryruntime.Clock, scheduler platformclock.TimerSource, lifecycle *factoryhost.LifecycleService) (instancehost.Service, error) {
+	if clock == nil {
 		return nil, fmt.Errorf("%w: clock is required", instancehost.ErrInvalidDependencies)
 	}
-	lifecycle, err := factoryhost.NewLifecycleService(dependencies.Clock, dependencies.Scheduler)
-	if err != nil {
-		return nil, err
+	if scheduler == nil {
+		return nil, fmt.Errorf("%w: scheduler is required", instancehost.ErrInvalidDependencies)
 	}
-	return &Host{
-		clock:     dependencies.Clock,
-		scheduler: dependencies.Scheduler,
-		lifecycle: lifecycle,
-		handles:   make(map[string]*factoryhost.Handle),
-	}, nil
+	if lifecycle == nil {
+		return nil, fmt.Errorf("%w: lifecycle is required", instancehost.ErrInvalidDependencies)
+	}
+	return &Host{clock: clock, scheduler: scheduler, lifecycle: lifecycle, mu: &sync.Mutex{}, handles: make(map[string]*factoryhost.Handle)}, nil
+}
+
+// Scope preserves the invocation's fact time over the same handle registry and
+// lock. This compatibility view retires with the keyed activation migration.
+func (h *Host) Scope(clock factoryruntime.Clock) instancehost.Service {
+	return &Host{clock: clock, scheduler: h.scheduler, lifecycle: h.lifecycle, mu: h.mu, handles: h.handles}
 }
 
 func (h *Host) StopSidecars(handle factoryruntime.RuntimeRun) {
@@ -53,5 +56,5 @@ func (h *Host) PublishReplacement(
 	current factoryruntime.RuntimeRun,
 	replacement factoryruntime.RuntimeRecord,
 ) error {
-	return h.lifecycle.PublishReplacement(ctx, current, replacement)
+	return h.lifecycle.PublishReplacementWithClock(ctx, current, replacement, h.clock)
 }

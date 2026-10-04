@@ -13,28 +13,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
+func TestNewLifecycleRejectsMissingTimeSources(t *testing.T) {
 	t.Parallel()
-
-	valid := validNewServiceInputs()
-	tests := []struct {
-		name   string
-		mutate func(*newServiceInputs)
+	for _, test := range []struct {
+		name      string
+		clock     factoryruntime.Clock
+		scheduler platformclock.TimerSource
 	}{
-		{name: "ID generator", mutate: func(in *newServiceInputs) { in.newID = nil }},
-		{name: "clock", mutate: func(in *newServiceInputs) { in.clock = nil }},
-		{name: "Workers publisher", mutate: func(in *newServiceInputs) { in.workersPublisher = nil }},
-	}
-	for _, test := range tests {
+		{"clock", nil, platformclock.Real{}}, {"scheduler", clockwork.NewFakeClock(), nil},
+	} {
 		t.Run(test.name, func(t *testing.T) {
-			inputs := valid
-			test.mutate(&inputs)
-			service, err := inputs.callNewService()
-			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
+			lifecycle, err := NewLifecycle(test.clock, test.scheduler)
+			if err == nil || lifecycle != nil {
+				t.Fatalf("NewLifecycle = %v, %v; want missing %s", lifecycle, err, test.name)
 			}
 		})
 	}
@@ -191,15 +182,15 @@ func validNewServiceInputs() newServiceInputs {
 }
 
 func (in newServiceInputs) callNewService() (factoryruntime.Service, error) {
-	return NewService(
-		in.newID,
-		in.workflows,
-		in.workflowRuntime,
-		in.clock,
-		in.workersPublisher,
-		in.workersCanceler,
-		platformclock.Real{},
-	)
+	lifecycle, err := NewLifecycle(in.clock, platformclock.Real{})
+	if err != nil {
+		return nil, err
+	}
+	host, err := NewInstanceHost(in.clock, platformclock.Real{}, lifecycle)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(NewOrchestration(in.newID, in.workflows, in.workflowRuntime), host, NewDispatchPlanning(in.workersPublisher, in.workersCanceler))
 }
 
 type recordingClock struct{ calls int }

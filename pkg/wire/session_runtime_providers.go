@@ -720,18 +720,12 @@ func (capability runtimeMetricsQueryCapability) RuntimeMetricsQuery() any {
 	return capability.query
 }
 
-func provideOrchestrationJavaScriptExecution(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflows,
-) factoryruntime.OrchestrationJavaScriptExecution {
-	return factoryruntimewire.NewOrchestrationJavaScriptExecution(newID, workflows)
+func provideOrchestrationJavaScriptExecution(service factoryruntimewire.Orchestration) factoryruntime.OrchestrationJavaScriptExecution {
+	return factoryruntimewire.NewOrchestrationJavaScriptExecution(service)
 }
 
-func provideOrchestrationCompilation(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflows,
-) factoryruntime.OrchestrationCompilation {
-	return factoryruntimewire.NewOrchestrationCompilation(newID, workflows)
+func provideOrchestrationCompilation(service factoryruntimewire.Orchestration) factoryruntime.OrchestrationCompilation {
+	return factoryruntimewire.NewOrchestrationCompilation(service)
 }
 
 func provideFactorySessionExecutionFactory(

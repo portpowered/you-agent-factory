@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -28,7 +27,7 @@ func TestMain(m *testing.M) {
 
 func newTestHost(t *testing.T) *Host {
 	t.Helper()
-	host, err := New(instancehost.Dependencies{Clock: clockwork.NewFakeClock(), Scheduler: platformclock.Real{}})
+	host, err := newHostWithLifecycle(clockwork.NewFakeClock(), platformclock.Real{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -206,7 +205,7 @@ func TestWaitForStartFailureCleansUpHandleWithoutOrphan(t *testing.T) {
 		TimerSource: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond),
 		created:     make(chan time.Duration, 2),
 	}
-	service, err := New(instancehost.Dependencies{Clock: clockwork.NewFakeClock(), Scheduler: scheduler})
+	service, err := newHostWithLifecycle(clockwork.NewFakeClock(), scheduler)
 	if err != nil {
 		t.Fatal(err)
 	}

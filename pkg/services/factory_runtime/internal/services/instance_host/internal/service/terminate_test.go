@@ -125,13 +125,9 @@ func TestStopActiveHostedInstanceStopsSidecarsRunLoopAndFinalizesArtifacts(t *te
 	}()
 
 	clock := clockwork.NewFakeClockAt(finishedAt)
-	host.clock = clock
-	host.lifecycle, err = factoryhost.NewLifecycleService(clock, platformclock.Real{})
-	if err != nil {
-		t.Fatalf("NewLifecycleService() error = %v", err)
-	}
+	scoped := host.Scope(clock)
 
-	stopErr := host.Stop(handle)
+	stopErr := scoped.Stop(handle)
 	if stopErr != nil {
 		t.Fatalf("Stop() error = %v, want ordinary shutdown cancellation normalized", stopErr)
 	}

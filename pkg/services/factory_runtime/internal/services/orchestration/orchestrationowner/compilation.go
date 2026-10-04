@@ -7,7 +7,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 )
 
 type compilationAdapter struct {
@@ -15,15 +14,8 @@ type compilationAdapter struct {
 }
 
 // NewCompilation constructs the Runtime orchestration compile port.
-func NewCompilation(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflowDefinitions,
-	runtime factoryruntime.JavaScriptWorkflowRuntime,
-) factoryruntime.OrchestrationCompilation {
-	if newID == nil {
-		return nil
-	}
-	return &compilationAdapter{service: orchestrationwire.New(newID, workflows, runtime)}
+func NewCompilation(service orchestration.Service) factoryruntime.OrchestrationCompilation {
+	return &compilationAdapter{service: service}
 }
 
 func (a *compilationAdapter) Compile(
