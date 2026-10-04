@@ -19,6 +19,8 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
+	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
+	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 
 	"go.uber.org/goleak"
@@ -27,19 +29,19 @@ import (
 func TestAgyNewRegistrationBindsCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 
-	registration := agy.NewRegistration(nil)
+	registration := agy.NewRegistration(disabledAgyEffect())
 	if registration.Provider != providers.IDAntigravity {
 		t.Fatalf("Provider = %q, want %q", registration.Provider, providers.IDAntigravity)
 	}
 	if registration.Attempt == nil {
-		t.Fatal("Attempt = nil, want unavailable attempt")
+		t.Fatal("Attempt = nil, want completed attempt")
 	}
 }
 
-func TestAgyRootFailsClosedWhenEffectAbsent(t *testing.T) {
+func TestAgyRootPreservesDisabledEffectFailure(t *testing.T) {
 	t.Parallel()
 
-	root := newAgyRoot(t, nil)
+	root := newAgyRoot(t, disabledAgyEffect())
 	result, err := root.Execute(
 		t.Context(),
 		providers.ExecuteRequest{
@@ -50,14 +52,25 @@ func TestAgyRootFailsClosedWhenEffectAbsent(t *testing.T) {
 	assertAgyDependencyFailure(t, result, err)
 }
 
-func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
+func TestAgyBuiltInRegistrationPreservesDisabledEffectFailure(t *testing.T) {
 	t.Parallel()
 
 	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
-	executionService, err := executionwire.NewService(catalog, executionwire.BuiltInRegistrations(nil, nil, nil)...)
+	rejectPeer := func() error {
+		t.Fatal("disabled AGY attempt invoked a peer effect")
+		return nil
+	}
+	registrations := executionwire.BuiltInRegistrations(disabledAgyEffect(),
+		codex.EffectFunc(func(context.Context, execution.ContinuationRequest, func([]byte) error) (codex.EffectResult, error) {
+			return codex.EffectResult{}, rejectPeer()
+		}),
+		claude.EffectFunc(func(context.Context, execution.ContinuationRequest, func([]byte) error) (claude.EffectResult, error) {
+			return claude.EffectResult{}, rejectPeer()
+		}))
+	executionService, err := executionwire.NewService(catalog, registrations...)
 	if err != nil {
 		t.Fatalf("NewBuiltInService() = %v", err)
 	}
@@ -379,6 +392,15 @@ func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 		t.Fatal(err)
 	}
 	return root
+}
+
+func disabledAgyEffect() agy.Effect {
+	return agy.EffectFunc(func(context.Context, execution.ContinuationRequest, func([]byte) error) (agy.EffectResult, error) {
+		return agy.EffectResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "Antigravity native execution is unavailable",
+		}
+	})
 }
 
 // TestMain fails the package when a test leaves goroutines running, which

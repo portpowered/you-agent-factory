@@ -15,7 +15,6 @@ import (
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
@@ -101,15 +100,6 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 				t.Fatalf("NewService() = (%v, %v), want construction error", service, err)
 			}
 		})
-	}
-}
-
-func TestBuiltInRegistrationsExplicitAbsentEffects(t *testing.T) {
-	t.Parallel()
-
-	registrations := executionservice.BuiltInRegistrations(nil, nil, nil)
-	if len(registrations) != 3 {
-		t.Fatalf("BuiltInRegistrations(nil, nil, nil) = %d registrations, want antigravity/codex/claude", len(registrations))
 	}
 }
 
