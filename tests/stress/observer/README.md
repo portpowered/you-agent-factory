@@ -4,9 +4,11 @@ This is the test-only observation enabler authorized by OWNER option b on
 2026-10-03T22:45Z. It adds no production API or tracked Go package. The collector
 and owner instrumentation exist only in the Go overlay prepared below.
 
-Current delivery establishes owner calibration, report validation and the
-original-pin admitted Q0/Q1/Q2 scenario below. Matching candidate lifecycle
-evidence and authoritative method amendments remain unfinished. Do not call these tests a P01,
+This support establishes owner calibration, report validation and matching
+original-pin/candidate admitted Q0/Q1/Q2 scenarios below. The authorized
+method amendments are in the governing plan's
+[amendment record](../../../docs/internal/development/plans/flat-injection/inprocess-baseline-observer.md).
+Do not call these tests a P01,
 FI-A6, full RQ-2 or retention pass.
 
 ## Prepare and verify
@@ -155,6 +157,32 @@ CLI shutdown/flush, and VAL01 owns aggregate Project acceptance.
 Independent review repeats focused normal/race/report/Q0 commands on a clean
 exact-head checkout and reports the observed property and remaining edges in
 a PR comment, and repeats the original-pin procedure above for OBS-PIN.
-OBS-FINAL/OBS-VAL and method amendments remain the next story.
+For OBS-FINAL, repeat the identical lifecycle selector against the candidate:
+
+```powershell
+$env:GOPROXY = 'off'
+$candidateOutput = Join-Path (Get-Location).Path '.artifacts/observer-candidate'
+python tests/stress/observer/prepare.py --source-workspace . --output $candidateOutput --mode candidate
+$overlay = Join-Path $candidateOutput 'overlay.json'
+$artifact = Join-Path $candidateOutput 'observer.test.exe'
+go test -c -overlay $overlay -p 1 -o $artifact ./tests/stress/observer
+git rev-parse HEAD
+git status --porcelain
+go version
+go version -m $artifact
+Get-FileHash -Algorithm SHA256 $overlay,$artifact
+$env:OBSERVER_MANIFEST = Join-Path $candidateOutput 'manifest.json'
+$env:OBSERVER_ARTIFACT_SHA256 = (Get-FileHash -Algorithm SHA256 $artifact).Hash.ToLower()
+$env:OBSERVER_REPORT = Join-Path $candidateOutput 'smoke.json'
+& $artifact '-test.run=^TestInProcessOwnerLifecycleSmoke$' '-test.count=1' '-test.short=false' '-test.timeout=5m' '-test.v'
+```
+
+OBS-VAL uses a clean exact-head checkout, the focused normal/race/report checks,
+and sequential original-pin/candidate runs of this same scenario. Publish the
+factory validation-loopback report in a PR comment, including source/tool SHA,
+overlay/backing/artifact hashes, full output, checkpoints, cleanup failures,
+goroutine residuals, and PASS/FAIL/BLOCKED for each owned criterion. Do not
+repair code during independent validation. Composed zero Models activity
+keeps RQ-2-COMPOSED-CAPACITY BLOCKED; P01/I01/VAL01 remain later gates.
 Review owns terminal CI, current-main reconciliation and
 immediate lint/pkg-file-count before merge.

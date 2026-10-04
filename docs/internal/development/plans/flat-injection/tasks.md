@@ -1,5 +1,7 @@
 # Flat-injection task packets
 
+Authority: OWNER option b, 2026-10-03T22:45Z. All acceptance outside the observation technology remains unchanged. See [exact method amendments](inprocess-baseline-observer.md).
+
 Status: planned; no implementation or test results are claimed. Revised by the blind validation review ([validation-review.md](validation-review.md)): packets T27–T31 were added by splitting T10, T15, T18, T20 and T22, and every packet gained a "Validation-review coverage and scope" block naming existing tests, characterization prerequisites and focused commands. Parent: [plan.md](plan.md). Impact: [inventory.md](inventory.md). Core before/after contracts: [contracts.md](contracts.md). Enforcement: [lint.md](lint.md). Each packet is self-contained and corresponds to a behavior or bounded shared capability.
 
 v1.1 delivery rule (AM14/AM15) applies to every packet: narrow changed-package tests/lint precede early push/open PR; required CI owns broad test-functional/test-full/verify-pr. Historical local broad-suite push instructions are superseded. Author handoff is not independent validation, terminal CI or merge.
@@ -2376,7 +2378,7 @@ This lane removes the `pkg/wire/hosted_sources.go:78` webhook default; T26 remov
 
 **Concrete decomposition:** Compare 10 valid baseline/final construction and start/stop samples with median/p95/range. Run dedicated 100-cycle retention stress with 10-minute limit and prebuilt CLI shutdown/flush smoke. Report BLOCKED if baseline cannot be reproduced; no invented performance result.
 
-**Amendment v1.1:** AM10: final P01 comparison consumes T27 exact pinned baseline and the independently reviewed FI-PREREQ-BASELINE-OBS runbook. Count the same private owners/checkpoints with matching methodology; no public session-count substitution, changed pin or invented measurement.
+**Amendment v1.1 / OWNER22:45Z:** AM10: final P01 comparison consumes T27 exact pinned-source baseline and the independently reviewed FI-PREREQ-BASELINE-OBS in-process observer runbook. Read the same private owners and Q0/Q1/Q2 checkpoints with matching test-overlay instrumentation and overhead accounting. Attest final source/tool/overlay/artifact identities separately; no public session-count substitution, changed pin, dropped sample/range, altered 10-percent median/p95 threshold, changed retention, or invented measurement.
 
 **Contract and configuration excerpts:** No runtime interface/config delta. T20 changes checker semantics/fixtures in lint.md; T22 changes evidence procedures. No generated public consumers.
 
@@ -2893,7 +2895,7 @@ This is a bounded enabling task. It must exist before any behavior lane changes 
 
 **Dependencies:** FI-PREREQ-BASELINE-OBS (read-only observation authority and demonstrated feasibility). Schedule that prerequisite first.
 
-AM10: baseline stays pinned to `95e213cfb35b50236fd7a34ad66c797d2ee7b5b6`. Lifecycle driving uses public BuildProcess/Execute/session boundaries; private handle/lease/capacity observations require the independent read-only baseline observer runbook in inventory.md. Prove access, synchronization, nonmutation and matching timing before reporting P01. Tool/seam feasibility is unresolved at FI-PREREQ-BASELINE-OBS; unsupported access remains BLOCKED. No baseline production instrumentation or public session-count substitute is permitted.
+AM10 / OWNER22:45Z: baseline source stays pinned to `95e213cfb35b50236fd7a34ad66c797d2ee7b5b6`. Lifecycle driving uses public BuildProcess/Execute and explicit-session open/replace/close boundaries. FI-PREREQ-BASELINE-OBS supplies synchronized program-owned instance-host handles, Models lease records with status, each capacityHolders integer and total, and live goroutines through an authorized test-only hook or existing metrics/diagnostics. No new public API. Prove complete owner access, nonmutation, Q0/Q1/Q2 and matching final observation/overhead; identify every overlay hash, build command and artifact separately from original source. Unsupported observation remains a finding. No public-session count substitute or fabricated P01 result. All timing/sample/range/100-cycle retention requirements remain unchanged.
 
 **Parallel and shared-surface ownership:** This lane owns `tests/stress/lifecycle_profile_test.go` and the baseline record. It changes no production code.
 

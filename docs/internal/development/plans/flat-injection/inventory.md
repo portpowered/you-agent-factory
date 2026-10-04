@@ -1,5 +1,7 @@
 # Flat injection impact inventory
 
+Authority: OWNER option b, 2026-10-03T22:45Z. All acceptance outside the observation technology remains unchanged. See [exact method amendments](inprocess-baseline-observer.md).
+
 This is the impact inventory for [the plan](./plan.md), not a substitute for its behavior lanes, acceptance criteria, or task packets. Each row names the file/container, its concrete problem, and the intended decomposition. Task IDs identify ownership of the cleanup (the validation review reassigned per-owner fallback rows from T23/T21 to the lane that rewrites the same function, split T10/T15/T18/T20/T22 into T27–T31, and gave `pkg/wire/wire.go` integration to the per-lane composition steward); an implementation may cross these files to prove one behavior.
 
 The inventory combines the construction-path audit with the clock/logger and required-dependency follow-up. File links were checked against the working tree on 2026-10-02. Named symbols are the stable anchors; recorded line numbers are audit locators and may move during implementation. “Active” means a production composition or operational surface; it does not mean every optional feature is exercised by every process. “Compatibility/test” means an alternate construction seam with no production caller found in this audit. “Caller-check” means caller reachability must be settled before deletion. Runtime state allocation and lifecycle resource acquisition are separate from reusable service construction.
@@ -257,7 +259,7 @@ AM01–AM17 dispatch authority is the [plan amendment table](plan.md#authorized-
 
 ### P01 counted resources at pinned baseline
 
-Pin: `95e213cfb35b50236fd7a34ad66c797d2ee7b5b6`. FI engineering baseline-observation owner must deliver an external read-only observer runbook for this exact artifact; feasibility remains unresolved, not certified here. Synchronization and map access must be proved without production instrumentation, exports, mutation or alternative public counts. Unsupported observation is BLOCKED.
+Pin: `95e213cfb35b50236fd7a34ad66c797d2ee7b5b6`. FI engineering baseline-observation owner delivers a synchronized in-process observer runbook using an authorized test-only hook or existing metrics/diagnostics, with no new public API. OWNER22:45Z retires external-reader acquisition and permits test-only observation, changing no resource meanings, sample count, timing/range or retention obligation. Actual private-map records and integer values are copied under owner locks without mutation. Original source, overlay bytes, tool and instrumented artifact have separate identities. Unsupported observation remains a finding, never a zero or P01 PASS.
 
 | Count | Exact owner at pin | Checkpoints and meaning |
 | --- | --- | --- |
