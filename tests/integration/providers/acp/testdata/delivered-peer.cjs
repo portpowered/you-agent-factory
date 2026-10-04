@@ -3,10 +3,10 @@ const readline = require("node:readline");
 const mode = process.argv[2];
 const fs = require("node:fs");
 const attempts = process.argv[3];
-const earlyFailure = mode === "initialize-disconnect-once" && !fs.existsSync(attempts);
-if (mode === "initialize-disconnect-once") {
-  fs.appendFileSync(attempts, earlyFailure ? "initialize-disconnect\n" : "success\n");
-  process.on("exit", () => fs.appendFileSync(attempts + ".exits", earlyFailure ? "initialize-disconnect\n" : "success\n"));
+const earlyFailure = mode === "initialize-failure-once" && !fs.existsSync(attempts);
+if (mode === "initialize-failure-once") {
+  fs.appendFileSync(attempts, earlyFailure ? "initialize-failure\n" : "success\n");
+  process.on("exit", () => fs.appendFileSync(attempts + ".exits", earlyFailure ? "initialize-failure\n" : "success\n"));
 }
 let disconnect = mode === "prompt-disconnect" || mode === "prompt-secret-disconnect";
 if (mode === "disconnect-once") {
@@ -46,7 +46,7 @@ input.on("line", (line) => {
   const request = JSON.parse(line);
   if (request.method === "initialize") {
     if (earlyFailure) {
-      process.stderr.write("early initialize disconnect\n", () => process.exit(0));
+      flushAndExit(JSON.stringify({jsonrpc: "2.0", id: request.id, error: {code: -32602, message: "fixture initialize refused"}}) + "\n");
       return;
     }
     const reply = result(request.id, {

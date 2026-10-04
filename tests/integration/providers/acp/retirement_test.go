@@ -29,7 +29,7 @@ func testDeliveredACPEarlyFailureRecovery(t *testing.T) {
 	directory := t.TempDir()
 	env := builtcliacceptance.ProcessEnvForIsolatedHome(directory)
 	journal := filepath.Join(directory, "launches.txt")
-	launch := fmt.Sprintf("%q %q initialize-disconnect-once %q", node, peer, journal)
+	launch := fmt.Sprintf("%q %q initialize-failure-once %q", node, peer, journal)
 	_, stderr, err := invokeCLI(ctx, binary, directory, env,
 		"workers", "acp", "add", "--name", "opencode", "--transport", "stdio", "--argument", launch)
 	if err != nil {
@@ -42,8 +42,8 @@ func testDeliveredACPEarlyFailureRecovery(t *testing.T) {
 	if first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("early failure = %#v", first)
 	}
-	assertDeliveredLaunchJournal(t, journal, "initialize-disconnect\n")
-	assertDeliveredLaunchJournal(t, journal+".exits", "initialize-disconnect\n")
+	assertDeliveredLaunchJournal(t, journal, "initialize-failure\n")
+	assertDeliveredLaunchJournal(t, journal+".exits", "initialize-failure\n")
 	var dispatches factoryapi.ListFactorySessionDispatchesResponse
 	if err := json.Unmarshal(deliveredACPRead(t, ctx, client, baseURL+"/factory-sessions/"+first.SessionId+"/dispatches"), &dispatches); err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func testDeliveredACPEarlyFailureRecovery(t *testing.T) {
 		t.Fatalf("early failure dispatches = %#v", dispatches)
 	}
 	failure := dispatches.Dispatches[0].FailureDetail
-	if !strings.Contains(failure.Message, `ACP provider "opencode" disconnected before responding; retry the request`) {
+	if failure.Reason != factoryapi.WorkFailureTypeUnknown || failure.Message != `ACP provider "opencode" initialize failed: fixture initialize refused` {
 		t.Fatalf("initialize failure classification = %#v", failure)
 	}
 	second := invokeDeliveredACPWorkflow(t, ctx, client, baseURL, "early-recovery")
@@ -60,7 +60,7 @@ func testDeliveredACPEarlyFailureRecovery(t *testing.T) {
 		t.Fatalf("fresh recovery = %#v", second)
 	}
 	assertDeliveredSessionResult(t, ctx, client, baseURL, second.SessionId, "delivered EOF primary result")
-	assertDeliveredLaunchJournal(t, journal, "initialize-disconnect\nsuccess\n")
+	assertDeliveredLaunchJournal(t, journal, "initialize-failure\nsuccess\n")
 	readDeliveredSessionEvents(t, ctx, client, baseURL, first.SessionId)
 	readDeliveredSessionEvents(t, ctx, client, baseURL, second.SessionId)
 }
@@ -116,11 +116,13 @@ func testDeliveredACPFactoryCancelPeer(t *testing.T) {
 		t.Fatalf("selected process exit while B stays active = %q, error=%v", line, err)
 	}
 	assertDeliveredSessionStatus(t, ctx, client, baseURL, sessions["survivor"], factoryapi.FactorySessionDurableLifecycleStatusRunning)
+	waitDeliveredRetirementSession(t, ctx, client, baseURL, "cancelled", sessions["cancelled"])
 	readDeliveredSessionEvents(t, ctx, client, baseURL, sessions["cancelled"])
 	assertDeliveredSessionStatus(t, ctx, client, baseURL, sessions["cancelled"], factoryapi.FactorySessionDurableLifecycleStatusCanceled)
 	if _, err := io.WriteString(connections["survivor"], "release\n"); err != nil {
 		t.Fatal(err)
 	}
+	waitDeliveredRetirementSession(t, ctx, client, baseURL, "survivor", sessions["survivor"])
 	events := readDeliveredSessionEvents(t, ctx, client, baseURL, sessions["survivor"])
 	if strings.Contains(events, "delivered EOF primary result cancelled") {
 		t.Fatal("B received A's result events")
@@ -270,4 +272,16 @@ func admitDeliveredRetirementPeer(t *testing.T, ctx context.Context, client *htt
 		t.Fatalf("real prompt readiness = %q, error=%v", line, err)
 	}
 	return admission.SessionId, connection, reader, pid
+}
+
+// Replaying the normalized request on the supported sync route waits for the
+// existing session. Durable event reads are finite history, not a live waiter.
+func waitDeliveredRetirementSession(t *testing.T, ctx context.Context, client *http.Client, baseURL, requestID, sessionID string) {
+	t.Helper()
+	request := deliveredRetirementRequest(t, ctx, client, baseURL, requestID)
+	var result factoryapi.FactorySessionSyncExecutionResponse
+	deliveredRetirementPost(t, ctx, client, baseURL+"/factory-sessions/sync", request, &result)
+	if result.SessionId != sessionID || result.SyncOutcome != factoryapi.FactorySessionSyncOutcomeCompleted {
+		t.Fatalf("idempotent session wait = %#v", result)
+	}
 }
