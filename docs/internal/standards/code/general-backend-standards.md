@@ -226,14 +226,11 @@ Repository Go size and complexity enforcement:
   suppression, ratchet behavior, and configuration/history errors. This is a
   lint/static gate rather than an application functional test.
 
-Repository package-size policy:
+Repository package-shape policy:
 
-- Checked backend package directories under `pkg/` **MUST NOT** contain more than 15 counted Go files.
-- Counted files are hand-maintained `.go` files in the same package directory, including package-local `_test.go` files.
-- Generated Go files, vendored code, and non-owned fixture roots such as `testdata` are excluded from the package file-count gate.
-- When `make pkg-file-count` or `make lint` reports an oversized package, contributors **SHOULD** split files by durable package responsibility or remove dead files. Broad permanent exceptions for oversized `pkg/` packages are prohibited.
-- Existing audited package-size debt **MAY** remain only in the exact deletion-only baseline, which blocks new oversized packages, count increases, and stale entries while requiring every reduction to lower or remove the recorded count.
-- Run `make pkg-file-count` for the focused package-size check, or `make lint` before review for the full backend lint path that includes this gate.
+- Contributors **SHOULD** split packages by durable responsibility and remove dead files. A fixed per-directory Go file budget is no longer enforced.
+- The golangci migration retires `pkg-file-count`, its filesystem walker, and `backend-package-file-count.json`; file count is not a replacement analyzer rule.
+- File length, function length, and complexity remain governed by the pinned built-in rules above. Dependency direction and service shape retain their separate lint gates.
 
 
 ### 6. Error Handling and Contracts
