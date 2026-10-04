@@ -100,6 +100,7 @@ func applyOwnedControl(ctx context.Context, runtime factoryruntime.Service, oper
 type SessionScopeControl interface {
 	CancelLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	StopLiveSession(context.Context, string) error
+	StopLiveGeneration(context.Context, *livesession.LiveSession) error
 }
 
 type scopeControl struct {
@@ -126,12 +127,21 @@ func (c *scopeControl) StopLiveSession(ctx context.Context, sessionID string) er
 	if err != nil {
 		return err
 	}
+	return c.StopLiveGeneration(ctx, session)
+}
+
+// StopLiveGeneration preserves the captured run and fact clock during close.
+func (c *scopeControl) StopLiveGeneration(ctx context.Context, session *livesession.LiveSession) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	bound := runtimebinding.SessionStateFrom(session)
 	if bound == nil {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
+	id := session.ID
 	bound.Logger.Info("stopping live Factory Session runtime", zap.String("session_id", id))
-	err = c.stop(bound.Handle, bound.Clock)
+	err := c.stop(bound.Handle, bound.Clock)
 	if errors.Is(err, context.Canceled) || errors.Is(err, factoryruntime.ErrAlreadyStopped) || errors.Is(err, factoryruntime.ErrNotRunning) {
 		err = nil
 	}

@@ -664,11 +664,22 @@ func StopSession(
 	if session == nil {
 		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
+	return StopSessionGeneration(state, runtimeState, session, stop)
+}
+
+// StopSessionGeneration keeps all shutdown effects on the captured generation,
+// even when a replacement is published before shutdown begins.
+func StopSessionGeneration(
+	state *sessionruntime.Service,
+	runtimeState *State,
+	session *livesession.LiveSession,
+	stop func(RuntimeHandle) error,
+) error {
 	handle := HandleFromSession(session)
 	if handle == nil {
 		return fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
-	sessionID = session.ID
+	sessionID := session.ID
 	binding := BindingForSession(session)
 	var cleanupErrs []error
 	if stop != nil {
