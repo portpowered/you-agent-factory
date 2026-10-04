@@ -340,6 +340,18 @@ Rules:
 - Integration tests **MUST** consume an artifact compiled once by the invoking
   build or release lane. They **MUST NOT** compile inside test setup and
   **MUST** keep the real-boundary case set intentionally small.
+- `make golangci` enforces the functional OS boundary with depguard (`os/exec`
+  imports) and type-aware forbidigo (`Command`/`CommandContext`). These rules
+  cover functional scenarios and helpers, excluding shared
+  `tests/functional/internal/support` and testdata. Existing sites use the
+  `origin/main` merge-base ratchet; new or moved sites fail. Real OS proof
+  belongs in integration. Backend Lint owns this enforcement.
+- `make golangci` enforces functional composition through depguard (secondary
+  composition imports), forbidigo (retired harness helpers), and the shared
+  Layering/Behavior analyzers (dedicated-provider imports, provider-local support,
+  and configuration callbacks). Provider scenarios use canonical shared support
+  and exact public effect ports. Required Backend Lint owns static enforcement;
+  functional coverage preserves its runtime selection and concurrency budget.
 - Inventory, package-shape, dependency-direction, source-topology, and similar
   structural enforcement **MUST** be implemented as lint or static checks, not
   runtime tests, unless that structure is itself a published customer contract.
@@ -388,7 +400,7 @@ Fixed sleeps and short fixed deadlines are the dominant source of CI-load flakes
 - Tests **MUST** wait for an event, channel, or observable condition, not for elapsed time. Poll a condition (for example the functional `WaitFor...` support helpers) instead of `time.Sleep`.
 - Code under test that depends on time **MUST** take the injectable `pkg/platform/clock` source, and tests **SHOULD** use `clock.Deterministic` so time advances only when the test says so.
 - A timeout in a test is a failure ceiling, not an expectation. It **MUST** be generous (tens of seconds or more) so a loaded host does not trip it, and a test **MUST NOT** assert that elapsed time falls inside a tight window.
-- `make test-sleep-check` (part of `make lint`) ratchets `time.Sleep`, literal deadlines of five seconds or less (`time.After`, `time.NewTimer`, `context.WithTimeout`/`WithDeadline`), and elapsed-time comparisons against `docs/internal/baselines/test-sleep-deadline-baseline.json`. New sites fail the check; removing sites never does. Regenerate the baseline only to remove entries (`go run ./cmd/testsleepcheck -regenerate`). A genuinely necessary site may be exempted inline with `//nolint:testsleep // reason`; the reason is mandatory.
+- `make golangci` (part of `make lint`) runs the compiler-backed `testsleep` analyzer through `cmd/repolint`. It ratchets `time.Sleep`, literal deadlines of five seconds or less (`time.After`, `time.NewTimer`, `time.AfterFunc`, `context.WithTimeout`/`WithDeadline`), and elapsed-time comparisons in tests and test helpers. Exact debt in `internal/lint/analyzers/baseline.txt` retains file, declaration, kind and occurrence; moving lines preserves debt, new sites fail, and removing sites requires deleting stale keys. Compiler metadata also rejects allowances for vanished package owners. Only a newly migrated rule may seed existing observed debt once; established rules cannot gain keys. A genuinely necessary site may be exempted inline with `//nolint:testsleep // reason`; the reason is mandatory.
 
 ### 8. CI/CD and Automated Enforcement
 
