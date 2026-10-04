@@ -257,21 +257,8 @@ func (r *registry) prepareInvocation(
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
-		r.logger.Info(
-			"worker session recording opening rejected",
-			"sessionID", req.ID,
-			"attemptID", attemptID,
-			"outcome", "failed",
-			"error", err.Error(),
-		)
-		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
-		return invocationPreparation{
-			session:  final,
-			terminal: true,
-			failure:  workersessions.ErrStartOpeningPublication,
-		}, nil
+		return r.rejectOpening(ctx, req.ID, attemptID, "start_worker_recording", err, workersessions.ErrStartOpeningPublication), nil
 	}
-
 	if err := r.publishOpeningRecord(
 		ctx,
 		req.ID,
@@ -280,21 +267,12 @@ func (r *registry) prepareInvocation(
 		providerIdentityForExecution(req.Execution.Execution),
 		workerRecording,
 	); err != nil {
-		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
-		return invocationPreparation{
-			session:  final,
-			terminal: true,
-			failure:  workersessions.ErrStartOpeningPublication,
-		}, nil
+		return r.rejectOpening(ctx, req.ID, attemptID, "publish_opening_record", err, workersessions.ErrStartOpeningPublication), nil
 	}
 	if options.verifyTopicReady {
 		if err := r.ensureOpeningTopicReady(ctx, req.ID); err != nil {
-			final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
-			return invocationPreparation{
-				session:  final,
-				terminal: true,
-				failure:  errors.Join(workersessions.ErrStartOpeningPublication, workersessions.ErrEventTopicUnavailable),
-			}, nil
+			return r.rejectOpening(ctx, req.ID, attemptID, "ensure_opening_topic_ready", err,
+				errors.Join(workersessions.ErrStartOpeningPublication, workersessions.ErrEventTopicUnavailable)), nil
 		}
 	}
 	if options.serverOwned && r.isStopping() {
@@ -310,6 +288,26 @@ func (r *registry) prepareInvocation(
 	}
 
 	return r.registerInvocationSupervision(ctx, req, options)
+}
+
+// rejectOpening logs the underlying opening failure at Warn (the runtime
+// logger drops Info) and terminalizes the session before Workers admission.
+func (r *registry) rejectOpening(
+	ctx context.Context, id, attemptID, stage string, cause, failure error,
+) invocationPreparation {
+	r.logger.Warn(
+		"worker session opening publication rejected",
+		"sessionID", id,
+		"attemptID", attemptID,
+		"outcome", "failed",
+		"stage", stage,
+		"error", cause.Error(),
+	)
+	return invocationPreparation{
+		session:  r.terminalizeInvocationBeforeAdmission(ctx, id, attemptID),
+		terminal: true,
+		failure:  failure,
+	}
 }
 
 func (r *registry) registerInvocationSupervision(

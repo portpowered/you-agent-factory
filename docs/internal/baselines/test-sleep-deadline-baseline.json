@@ -3711,12 +3711,6 @@
       "count": 1
     },
     {
-      "file": "tests/functional/workers/inference/recording_recovery_test.go",
-      "function": "waitWSRFT009Signal",
-      "kind": "deadline",
-      "count": 1
-    },
-    {
       "file": "tests/functional/workers/transports/cli/run/modes/adverse_modes_test.go",
       "function": "TestCLIRunTimeoutRecoversOnSameProcess",
       "kind": "deadline",
@@ -3795,32 +3789,8 @@
       "count": 1
     },
     {
-      "file": "tests/integration/models/managed_process/production_lifecycle_test.go",
-      "function": "productionManagedHTTPStatus",
-      "kind": "deadline",
-      "count": 1
-    },
-    {
-      "file": "tests/integration/models/model_invoke/explicit_server_adverse_test.go",
-      "function": "runBuiltExplicitServerCancellation",
-      "kind": "deadline",
-      "count": 3
-    },
-    {
-      "file": "tests/integration/models/omni_media_probe/runner_test.go",
-      "function": "TestProbeRunnerSerializesConcurrentHeavyAdmissions",
-      "kind": "deadline",
-      "count": 2
-    },
-    {
       "file": "tests/integration/models/platform_conformance/runner_test.go",
       "function": "startControlledProcess",
-      "kind": "deadline",
-      "count": 1
-    },
-    {
-      "file": "tests/integration/models/platform_conformance/runner_test.go",
-      "function": "testControlledTimeout",
       "kind": "deadline",
       "count": 1
     },

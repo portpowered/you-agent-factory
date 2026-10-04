@@ -270,7 +270,7 @@ func TestWireFoldPreservesHostedPollerComposition(t *testing.T) {
 		ports.logger, clockwork.NewFakeClock(), nil, nil, "", store,
 	)
 
-	service, err := automationswire.NewService(
+	service, err := newTestAutomationService(
 		ports.logger,
 		ports.clock,
 		ports.commandRunner,

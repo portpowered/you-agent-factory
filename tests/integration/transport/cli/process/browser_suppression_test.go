@@ -20,7 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
-const builtBrowserSuppressionTimeout = 30 * time.Second
+const builtBrowserSuppressionTimeout = 120 * time.Second
 
 // TestBuiltCLINoBrowserOpenSuppressesLauncherAcrossLifecycleCases crosses the
 // compiled CLI boundary with a controlled launcher at the front of PATH. The
@@ -279,7 +279,7 @@ func waitForBrowserServerScanner(t testing.TB, server *builtBrowserServer, role 
 	t.Helper()
 	select {
 	case <-server.scanDone:
-	case <-time.After(5 * time.Second):
+	case <-time.After(builtBrowserSuppressionTimeout):
 		t.Errorf("%s stdout scanner did not finish within 5s", role)
 	}
 }

@@ -6,10 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -27,16 +29,23 @@ type automationFixture struct {
 }
 
 func newAutomationService(fixture automationFixture) *automationinternal.Service {
-	return automationinternal.New(
-		fixture.Logger,
-		fixture.Clock,
-		fixture.CommandRunner,
-		fixture.WorkflowID,
-		fixture.DefaultFactoryDir,
-		fixture.HostedPollers,
-		fixture.ResolveTemplates,
-		automationWorkstationExecutionPolicy(),
-	)
+	if fixture.Logger == nil {
+		fixture.Logger = zap.NewNop()
+	}
+	if fixture.CommandRunner == nil {
+		fixture.CommandRunner = unusedAutomationCommandRunner{}
+	}
+	scheduler, ok := fixture.Clock.(clockwork.Clock)
+	if !ok || scheduler == nil {
+		scheduler = clockwork.NewRealClock()
+	}
+	policy := automationWorkstationExecutionPolicy()
+	cursors := automationswire.NewCursorScopes(nil)
+	scripts := automationswire.NewScriptPollers(fixture.Logger, scheduler, fixture.CommandRunner, fixture.ResolveTemplates, policy, cursors)
+	cron, watchers := automationswire.NewCron(), automationswire.NewFilesystemWatchers()
+	lifecycle := automationswire.NewSourceLifecycle(fixture.Logger, scheduler, scripts, cron, watchers, fixture.HostedPollers, cursors, policy)
+	return automationswire.NewService(fixture.Logger, scheduler, lifecycle, automationswire.NewReconciliation(lifecycle),
+		scripts, cron, watchers, fixture.HostedPollers, policy, cursors, false, fixture.WorkflowID, fixture.DefaultFactoryDir, "")
 }
 
 type programmableHostedPollers struct {
@@ -102,4 +111,11 @@ func automationWorkstationExecutionPolicy() factorydefinitions.WorkstationExecut
 			}
 		},
 	}
+}
+
+// This fixture fails unexpected command execution instead of hiding a missing edge.
+type unusedAutomationCommandRunner struct{}
+
+func (unusedAutomationCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("unexpected automation command execution")
 }

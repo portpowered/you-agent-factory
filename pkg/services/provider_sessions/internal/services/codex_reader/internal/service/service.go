@@ -2,33 +2,32 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	codexreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 type reader struct {
-	dependencies codexreader.Dependencies
+	files           providersessionsinternal.FileSystem
+	walkDirectory   providersessionsinternal.CodexWalkDirectory
+	resolveSymlinks providersessionsinternal.CodexResolveSymlinks
+	sessionsRoot    string
 }
 
 var _ codexreader.Service = (*reader)(nil)
 
 // New constructs the parent-private Codex reader from fixed storage effects.
-func New(dependencies codexreader.Dependencies) (codexreader.Service, error) {
-	if dependencies.Files == nil {
-		return nil, fmt.Errorf("provider-session filesystem is required")
-	}
-	if dependencies.WalkDirectory == nil {
-		return nil, fmt.Errorf("provider-session Codex directory walker is required")
-	}
-	if dependencies.ResolveSymlinks == nil {
-		return nil, fmt.Errorf("provider-session Codex symlink resolver is required")
-	}
-	dependencies.SessionsRoot = filepath.Clean(dependencies.SessionsRoot)
-	return &reader{dependencies: dependencies}, nil
+// The owning Provider Sessions constructor validates the required effects.
+func New(files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CodexWalkDirectory, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, sessionsRoot string) (codexreader.Service, error) {
+	return &reader{
+		files:           files,
+		walkDirectory:   walkDirectory,
+		resolveSymlinks: resolveSymlinks,
+		sessionsRoot:    filepath.Clean(sessionsRoot),
+	}, nil
 }
 
 func (r *reader) Details(
@@ -46,10 +45,10 @@ func (r *reader) Details(
 	}
 	return loadDetails(
 		ctx,
-		r.dependencies.Files,
-		r.dependencies.WalkDirectory,
-		r.dependencies.ResolveSymlinks,
-		r.dependencies.SessionsRoot,
+		r.files,
+		r.walkDirectory,
+		r.resolveSymlinks,
+		r.sessionsRoot,
 		session.ID,
 	)
 }

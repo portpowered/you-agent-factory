@@ -25,9 +25,6 @@ func New(
 	paths factorydefinitions.NamedPathResolver,
 	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 ) *Service {
-	if paths == nil || fileSystem == nil {
-		return nil
-	}
 	return &Service{paths: paths, fileSystem: fileSystem}
 }
 
@@ -35,9 +32,6 @@ func (s *Service) ListNamedFactories(
 	_ context.Context,
 	request factorydefinitions.ListNamedFactoriesRequest,
 ) (factorydefinitions.ListNamedFactoriesResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.ListNamedFactoriesResult{}, err
-	}
 	entries, err := internalnamedfactories.List(s.paths, s.fileSystem, request.RootDir)
 	if err != nil {
 		return factorydefinitions.ListNamedFactoriesResult{}, err
@@ -49,9 +43,6 @@ func (s *Service) GetNamedFactory(
 	_ context.Context,
 	request factorydefinitions.GetNamedFactoryRequest,
 ) (factorydefinitions.GetNamedFactoryResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.GetNamedFactoryResult{}, err
-	}
 	factoryDir, err := internalnamedfactories.Resolve(
 		s.paths,
 		s.fileSystem,
@@ -82,9 +73,6 @@ func (s *Service) ResolveNamedFactory(
 	_ context.Context,
 	request factorydefinitions.ResolveNamedFactoryRequest,
 ) (factorydefinitions.ResolveNamedFactoryResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.ResolveNamedFactoryResult{}, err
-	}
 	resolution, err := internalnamedfactories.ResolveAcrossRoots(
 		s.paths,
 		request.ProjectRoot,
@@ -104,9 +92,6 @@ func (s *Service) DeleteNamedFactory(
 	_ context.Context,
 	request factorydefinitions.DeleteNamedFactoryRequest,
 ) (factorydefinitions.DeleteNamedFactoryResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.DeleteNamedFactoryResult{}, err
-	}
 	canonical, err := canonicalName(request.Name)
 	if err != nil {
 		return factorydefinitions.DeleteNamedFactoryResult{}, err
@@ -138,9 +123,6 @@ func (s *Service) GetCurrentFactoryPointer(
 	_ context.Context,
 	request factorydefinitions.GetCurrentFactoryPointerRequest,
 ) (factorydefinitions.GetCurrentFactoryPointerResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.GetCurrentFactoryPointerResult{}, err
-	}
 	name, err := s.paths.ReadCurrentPointer(request.RootDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -165,9 +147,6 @@ func (s *Service) SetCurrentFactoryPointer(
 	_ context.Context,
 	request factorydefinitions.SetCurrentFactoryPointerRequest,
 ) (factorydefinitions.SetCurrentFactoryPointerResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.SetCurrentFactoryPointerResult{}, err
-	}
 	canonical, err := canonicalName(request.Name)
 	if err != nil {
 		return factorydefinitions.SetCurrentFactoryPointerResult{}, err
@@ -184,16 +163,6 @@ func (s *Service) SetCurrentFactoryPointer(
 		return factorydefinitions.SetCurrentFactoryPointerResult{}, err
 	}
 	return factorydefinitions.SetCurrentFactoryPointerResult{Name: canonical}, nil
-}
-
-func (s *Service) requirePorts() error {
-	if s == nil || s.paths == nil {
-		return fmt.Errorf("named Factory path resolver is required")
-	}
-	if s.fileSystem == nil {
-		return fmt.Errorf("named Factory catalog filesystem is required")
-	}
-	return nil
 }
 
 func canonicalName(name string) (string, error) {

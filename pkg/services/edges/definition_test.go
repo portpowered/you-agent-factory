@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"go.uber.org/zap"
 	"io"
 	"io/fs"
 	"reflect"
@@ -871,4 +872,23 @@ func (*edgeDirectoryReplacementStore) Restore(string, string) {}
 
 func (*stubProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{}, nil
+}
+
+func TestMergeProcessLogger(t *testing.T) {
+	t.Parallel()
+	original, override := zap.NewNop(), zap.NewNop()
+	for _, test := range []struct {
+		name              string
+		replacement, want *zap.Logger
+	}{
+		{"omitted", nil, original}, {"override", override, override},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := Merge(Edges{ProcessLogger: original}, Edges{ProcessLogger: test.replacement})
+			if got.ProcessLogger != test.want {
+				t.Fatal("Merge did not preserve the selected process backend")
+			}
+		})
+	}
 }

@@ -8,8 +8,8 @@ import (
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -29,8 +29,7 @@ import (
 )
 
 var platformSet = wire.NewSet(
-	// TODO: remove this when we figure out how to appropriately inject the logging.
-	logging.NewDefaultLogger,
+	provideProcessLogger,
 )
 
 var apiSet = wire.NewSet(
@@ -191,7 +190,20 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
-	provideAutomationHostedSourceInputs,
+	provideAutomationHostedClock,
+	provideAutomationHostedHTTPClient,
+	provideAutomationHostedSecretResolver,
+	provideAutomationHostedCheckpointStore,
+	provideAutomationsCursorFileSystem,
+	provideAutomationsHostedPollers,
+	provideAutomationsClock,
+	provideAutomationsScriptPollers,
+	provideAutomationsOwner,
+	automationswire.NewCursorScopes,
+	automationswire.NewSourceLifecycle,
+	automationswire.NewReconciliation,
+	automationswire.NewCron,
+	automationswire.NewFilesystemWatchers,
 	provideAutomationsCommandRunner,
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
@@ -317,6 +329,9 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionCompilation,
+	provideFactoryDefinitionRuntimeSnapshot,
+	provideFactoryDefinitionValidationOwner,
 	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
@@ -335,6 +350,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryCatalogOperation,
 	provideEffectiveFactoryDefinitionsService,
 	factorydefinitionswire.NewCatalogPathsService,
+	factorydefinitionswire.NewCatalogService,
 )
 
 var workerServiceSet = wire.NewSet(

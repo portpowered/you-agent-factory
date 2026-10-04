@@ -13,7 +13,7 @@ func TestSourceLifecycleCancellationBeforeStartDoesNotCreateSource(t *testing.T)
 	t.Parallel()
 
 	effects := &recordingEffects{}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	identity := sourceIdentity("cancel-before-start")
@@ -49,7 +49,7 @@ func TestSourceLifecycleStartCancellationPreservesPendingObservation(t *testing.
 	t.Parallel()
 
 	effects := &recordingEffects{startErr: context.Canceled}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("cancel-start")
 
 	result, err := service.StartSource(
@@ -86,7 +86,7 @@ func TestSourceLifecycleStopCancellationPreservesRunningObservation(t *testing.T
 			automations.ObservedLifecycleRunning,
 		},
 	}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("cancel-stop")
 	startAndWait(t, service, identity)
 
@@ -116,7 +116,7 @@ func TestSourceLifecycleWaitCancellationPreservesStartingObservation(t *testing.
 	t.Parallel()
 
 	effects := &recordingEffects{waitErr: context.Canceled}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("cancel-wait")
 	started, err := service.StartSource(
 		context.Background(),
@@ -159,7 +159,7 @@ func TestSourceLifecycleCancellationBeforeStopAndWaitIsEffectFree(t *testing.T) 
 			automations.ObservedLifecycleRunning,
 		},
 	}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("cancel-before-operations")
 	startAndWait(t, service, identity)
 	before := effects.counts()
@@ -217,7 +217,7 @@ func TestSourceLifecycleEffectFailuresAreStableAndIsolated(t *testing.T) {
 
 	startFailure := errors.New("start unavailable")
 	effects := &recordingEffects{startErr: startFailure}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	failedIdentity := sourceIdentity("failed")
 
 	failed, err := service.StartSource(
@@ -294,7 +294,7 @@ func TestSourceLifecycleStopFailureIsStableUntilDesiredStateChanges(t *testing.T
 			automations.ObservedLifecycleRunning,
 		},
 	}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("stop-failed")
 	startAndWait(t, service, identity)
 
@@ -333,7 +333,7 @@ func TestSourceLifecycleObservedTerminalStateDoesNotRepeatWait(t *testing.T) {
 			automations.ObservedLifecycleFailed,
 		},
 	}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("wait-failed")
 	if _, err := service.StartSource(
 		context.Background(),
@@ -377,7 +377,7 @@ func TestSourceLifecycleObservedCancellationIsCommittedAndStable(t *testing.T) {
 			automations.ObservedLifecycleCancelled,
 		},
 	}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("wait-cancelled")
 	started, err := service.StartSource(
 		context.Background(),

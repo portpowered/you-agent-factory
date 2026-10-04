@@ -208,7 +208,7 @@ func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testi
 	if err != nil {
 		t.Fatalf("Marshal versioned payload: %v", err)
 	}
-	if _, err := persistNamedFactoryForTest(sessionRoot, "alpha", versioned, factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(sessionRoot, "alpha", versioned, factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
 	if err := definitionTestNamedPaths.WriteCurrentPointer(sessionRoot, "alpha"); err != nil {
@@ -395,7 +395,7 @@ func validateDefinitionSnapshotForTest(
 		snapshot,
 		loader,
 		func(snapshot *factorydefinitions.FactorySnapshot, loader factorydefinitions.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapEditableFactorySnapshot(snapshot, loader, testCanonicalFactoryLoader)
+			return validationentry.MapEditableFactorySnapshot(snapshot, loader)
 		},
 		testFactoryDefinitionValidator(),
 	)
@@ -486,7 +486,7 @@ func (h *splitLayoutSaveHost) PrepareFactoryLayoutPayload(
 		context.Background(),
 		segment,
 		payload,
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, testCanonicalFactoryLoader),
 	)
 }
 func (h *splitLayoutSaveHost) PersistNamedFactoryWithPrepared(

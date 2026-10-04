@@ -661,6 +661,7 @@ func assertStory003ControlledSourceHTTPFailure(t *testing.T, serverURL string) {
 		httpFailureResponse.Outcome == factoryapi.ModelPullOutcomeALREADYPRESENT {
 		t.Fatalf("POST /models/%s/pull retained a success compatibility outcome: %#v", story003ModelName, httpFailureResponse)
 	}
+	assertStory003ServerSurvivesFailedPull(t, serverURL)
 	t.Logf("controlled source failure HTTP status=%d body=%s", httpFailure.StatusCode, strings.TrimSpace(string(httpFailureBody)))
 }
 

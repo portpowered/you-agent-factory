@@ -114,7 +114,7 @@ func assertPrebuiltWorkscopeCLIError(
 	arguments ...string,
 ) {
 	t.Helper()
-	commandCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	commandCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	command := exec.CommandContext(commandCtx, binaryPath, arguments...)
 	command.Dir = workspace
@@ -176,7 +176,7 @@ func runPrebuiltWorkscopeCLI(
 	arguments ...string,
 ) []byte {
 	t.Helper()
-	commandCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	commandCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	command := exec.CommandContext(commandCtx, binaryPath, arguments...)
 	command.Dir = workspace

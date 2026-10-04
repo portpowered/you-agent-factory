@@ -37,6 +37,13 @@ func TestValidateFactory_RejectsInvalidPayloadBeforeValidationInvoked(t *testing
 			wantMessage: "invalid request payload",
 		},
 		{
+			name:        "typed_field",
+			body:        `{"name":42}`,
+			wantStatus:  http.StatusBadRequest,
+			wantCode:    "BAD_REQUEST",
+			wantMessage: "invalid request payload",
+		},
+		{
 			name:        "empty",
 			body:        "",
 			wantStatus:  http.StatusBadRequest,
@@ -58,8 +65,8 @@ func TestValidateFactory_RejectsInvalidPayloadBeforeValidationInvoked(t *testing
 			t.Parallel()
 
 			validation := &httpDefinitionsValidationFake{}
-			handler := factorydefinitionshttp.NewHandlerFromRoot(
-				factorydefinitionshttp.RootBinding{Validation: validation},
+			handler := factorydefinitionshttp.NewHandler(
+				&httpDefinitionsRootFake{}, validation,
 				zap.NewNop(),
 			)
 			recorder := httptest.NewRecorder()
@@ -91,8 +98,8 @@ func TestValidateFactory_AcceptsUnknownFieldsWithWarning(t *testing.T) {
 
 	core, logs := observer.New(zap.WarnLevel)
 	validation := &capturingValidationFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.New(core),
 	)
 	body := strings.Replace(
@@ -151,11 +158,18 @@ func TestValidateFactory_EncodesValidationTargetsFromFakeRoot(t *testing.T) {
 					ID:       "planner",
 					Location: factorydefinitions.ValidationSubjectLocationDefinition,
 				},
+			}, {
+				Code: "factory.validation.warning", Severity: factorydefinitions.ValidationSeverityWarning,
+				Message: "stub warning finding", Path: "workers[0].model",
+				Subject: factorydefinitions.ValidationSubject{
+					Type: factorydefinitions.ValidationSubjectTypeWorker, ID: "planner",
+					Location: factorydefinitions.ValidationSubjectLocationDefinition,
+				},
 			}},
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -176,27 +190,20 @@ func TestValidateFactory_EncodesValidationTargetsFromFakeRoot(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(result.Targets) != 1 {
-		t.Fatalf("targets = %#v, want one encoded finding", result.Targets)
+	if len(result.Targets) != 2 {
+		t.Fatalf("targets = %#v, want error and warning findings", result.Targets)
 	}
-	target := result.Targets[0]
-	if target.Code != "factory.validation.stub" {
-		t.Fatalf("target code = %q, want factory.validation.stub", target.Code)
+	path := "workers[0].model"
+	subject := factoryapi.FactoryValidationSubject{
+		Type: factoryapi.FactoryValidationSubjectTypeWorker, Id: "planner",
+		Location: factoryapi.FactoryValidationSubjectLocationDefinition,
 	}
-	if target.Message != "stub validation finding" {
-		t.Fatalf("target message = %q, want stub validation finding", target.Message)
+	want := []factoryapi.FactoryValidationTarget{
+		{Code: "factory.validation.stub", Severity: factoryapi.FactoryValidationSeverityError, Message: "stub validation finding", Path: &path, Subject: subject},
+		{Code: "factory.validation.warning", Severity: factoryapi.FactoryValidationSeverityWarning, Message: "stub warning finding", Path: &path, Subject: subject},
 	}
-	if target.Severity != factoryapi.FactoryValidationSeverityError {
-		t.Fatalf("target severity = %q, want error", target.Severity)
-	}
-	if target.Path == nil || *target.Path != "workers[0].model" {
-		t.Fatalf("target path = %#v, want workers[0].model", target.Path)
-	}
-	if target.Subject.Type != factoryapi.FactoryValidationSubjectTypeWorker {
-		t.Fatalf("subject type = %q, want WORKER", target.Subject.Type)
-	}
-	if target.Subject.Id != "planner" {
-		t.Fatalf("subject id = %q, want planner", target.Subject.Id)
+	if !reflect.DeepEqual(result.Targets, want) {
+		t.Fatalf("target representations = %#v, want %#v", result.Targets, want)
 	}
 }
 
@@ -204,8 +211,9 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 	t.Parallel()
 
 	validation := &capturingValidationFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	root := &httpDefinitionsRootFake{}
+	handler := factorydefinitionshttp.NewHandler(
+		root, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -221,6 +229,9 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 	if !validation.invoked {
 		t.Fatal("ValidateSubmittedDefinition was not invoked")
 	}
+	if root.validateStructuralInvoked || validation.ctx != request.Context() {
+		t.Fatal("override precedence or request context propagation changed")
+	}
 	if validation.request.Config == nil {
 		t.Fatal("decoded Config is nil")
 	}
@@ -230,6 +241,15 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 	if len(validation.request.Config.WorkTypes) != 1 || validation.request.Config.WorkTypes[0].Name != "task" {
 		t.Fatalf("decoded work types = %#v, want task work type", validation.request.Config.WorkTypes)
 	}
+	wantTaxonomy := factorydefinitions.SubmittedDefinitionTaxonomy{
+		Workers: []factorydefinitions.SubmittedWorkerTaxonomy{{Name: "planner", Type: "MODEL_WORKER"}},
+		Workstations: []factorydefinitions.SubmittedWorkstationTaxonomy{{
+			Name: "plan-task", Type: "MODEL_WORKSTATION", Behavior: "STANDARD", Worker: "planner", Index: 0,
+		}},
+	}
+	if !reflect.DeepEqual(validation.request.Taxonomy, wantTaxonomy) {
+		t.Fatalf("mapped taxonomy = %#v, want %#v", validation.request.Taxonomy, wantTaxonomy)
+	}
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("response = %d %s, want 200", recorder.Code, recorder.Body.String())
 	}
@@ -237,14 +257,16 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 
 type capturingValidationFake struct {
 	invoked bool
+	ctx     context.Context
 	request factorydefinitions.SubmittedDefinitionValidationRequest
 }
 
 func (fake *capturingValidationFake) ValidateSubmittedDefinition(
-	_ context.Context,
+	ctx context.Context,
 	request factorydefinitions.SubmittedDefinitionValidationRequest,
 ) (factorydefinitions.ValidationResult, error) {
 	fake.invoked = true
+	fake.ctx = ctx
 	fake.request = request
 	return factorydefinitions.ValidationResult{}, nil
 }

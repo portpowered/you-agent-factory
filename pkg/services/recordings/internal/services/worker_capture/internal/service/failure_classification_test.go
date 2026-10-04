@@ -139,3 +139,7 @@ func containsDiagnosticPair(fields []any, key, want string) bool {
 	}
 	return false
 }
+
+func (logger *captureDiagnosticLogger) Warn(message string, fields ...any) {
+	logger.Info(message, fields...)
+}

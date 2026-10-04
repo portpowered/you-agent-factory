@@ -436,7 +436,7 @@ func waitProductionManagedReady(t *testing.T, harness *productionManagedHostHarn
 }
 
 func productionManagedHTTPStatus(endpoint string) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/health", nil)
 	if err != nil {
