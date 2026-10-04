@@ -244,10 +244,7 @@ func (r *registry) BeginRuntimeAttempt(
 	if r == nil {
 		return nil, workersessions.ErrStartAdmissionFailed
 	}
-	if err := (workersessions.InvokeSessionRequest{
-		ID:        req.ID,
-		Execution: req.Execution,
-	}).Validate(); err != nil {
+	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	ctx = runtimeAttemptContext(ctx)

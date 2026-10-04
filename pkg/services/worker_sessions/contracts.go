@@ -10,15 +10,37 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// RuntimeAttemptKey identifies a logical dispatch within one runtime. It is
+// process-local and does not replace a Worker Session or physical attempt ID.
+type RuntimeAttemptKey struct {
+	RuntimeID  string
+	DispatchID string
+}
+
 // RuntimeAttemptRequest asks Worker Sessions to open the durable observation
 // window for an attempt whose admission and execution remain owned by
 // Factory Runtime. ID is the Worker Session identity; AttemptID is the
 // physical attempt identity written into lifecycle records. An empty
 // AttemptID uses the request dispatch ID.
 type RuntimeAttemptRequest struct {
+	Key       RuntimeAttemptKey
 	ID        string
 	AttemptID string
 	Execution workers.WorkstationDispatchRequest
+}
+
+// Validate rejects contradictory routing before opening a topic or capture.
+// Legacy blank runtime correlation remains blank; callers with a resolved
+// runtime supply it in both the key and execution request.
+func (r RuntimeAttemptRequest) Validate() error {
+	if err := (InvokeSessionRequest{ID: r.ID, Execution: r.Execution}).Validate(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(r.Key.DispatchID) != strings.TrimSpace(r.Execution.Execution.Dispatch.DispatchID) ||
+		strings.TrimSpace(r.Key.RuntimeID) != strings.TrimSpace(r.Execution.Execution.RuntimeID) {
+		return ErrProviderSessionAssociationAttemptMismatch
+	}
+	return nil
 }
 
 // RuntimeAttempt is the durable lifecycle handle returned after the opening

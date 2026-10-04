@@ -96,9 +96,16 @@ func runtimeAttemptPreparation(
 		if strings.TrimSpace(request.WorkstationName) != workers.ProviderInvocationRoute {
 			admissionRequest = runtimeAttemptAdmissionRequest(request, executeRequest)
 		}
+		if strings.TrimSpace(admissionRequest.Execution.RuntimeID) == "" {
+			admissionRequest.Execution.RuntimeID = strings.TrimSpace(executeRequest.Correlation.RuntimeID)
+		}
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
+				Key: workersessions.RuntimeAttemptKey{
+					RuntimeID:  executeRequest.Correlation.RuntimeID,
+					DispatchID: executeRequest.Correlation.DispatchID,
+				},
 				ID:        sessionID,
 				AttemptID: executeRequest.Correlation.AttemptID,
 				Execution: admissionRequest,

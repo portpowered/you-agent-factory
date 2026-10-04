@@ -421,7 +421,8 @@ func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsApp
 		clock: now, capture: capture,
 		service: service.(*registry),
 		request: workersessions.RuntimeAttemptRequest{
-			ID: "worker-" + suffix, AttemptID: "physical-" + suffix,
+			Key: workersessions.RuntimeAttemptKey{DispatchID: perRuntimeLogicalDispatchID},
+			ID:  "worker-" + suffix, AttemptID: "physical-" + suffix,
 			Execution: dispatchHandoff(perRuntimeLogicalDispatchID),
 		},
 	}
@@ -748,9 +749,53 @@ func assertPerRuntimeRejectedOpening(t *testing.T, fixture *perRuntimeAttemptFix
 	}
 }
 
+func TestKeyedRuntime_RejectsContradictoryAdmissionBeforeOpening(t *testing.T) {
+	for _, key := range []workersessions.RuntimeAttemptKey{
+		{RuntimeID: "other-runtime", DispatchID: "candidate-dispatch"},
+		{RuntimeID: "candidate-runtime", DispatchID: "other-dispatch"},
+		{},
+	} {
+		t.Run(fmt.Sprintf("runtime=%s/dispatch=%s", key.RuntimeID, key.DispatchID), func(t *testing.T) {
+			t.Parallel()
+			eventStore := newEventsAppender()
+			sink := &perRuntimeAppendCapture{EventsAppender: eventStore}
+			peer := newPerRuntimeAttemptFixture(t, "peer", sink)
+			before := assertPerRuntimeAttemptState(t, peer, workersessions.StateRunning)
+			observation := assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
+			appends := sink.requestsFor("")
+			request := workersessions.RuntimeAttemptRequest{
+				Key: key, ID: "candidate-worker", AttemptID: "candidate-physical",
+				Execution: dispatchHandoff("candidate-dispatch"),
+			}
+			request.Execution.Execution.RuntimeID = "candidate-runtime"
+			attempt, err := peer.service.BeginRuntimeAttempt(context.Background(), request)
+			if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+				t.Fatalf("BeginRuntimeAttempt = %v, %v; want nil/attempt mismatch", attempt, err)
+			}
+			if _, err := peer.service.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+				t.Fatalf("rejected admission reserved its identity: %v", err)
+			}
+			if after := sink.requestsFor(""); !reflect.DeepEqual(appends, after) {
+				t.Fatalf("rejected admission appended records: %#v", after)
+			}
+			assertPerRuntimePeerUnchanged(t, peer, sink, before, observation, "", appends)
+			read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(request.ID))
+			if len(read.Records) != 0 {
+				t.Fatalf("rejected admission opened a retained topic: %#v", read.Records)
+			}
+			publishPerRuntimeProgress(t, peer, sink)
+			if err := peer.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeFirstTerminal(t, peer, sink, workersessions.StateCompleted)
+		})
+	}
+}
+
 func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-1"},
 		ID:        "worker-1",
 		AttemptID: "attempt-1",
 		Execution: dispatchHandoff("dispatch-1"),
@@ -801,6 +846,7 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 func TestCancel_RuntimeAttemptBoundaryFailureDoesNotClaimApplied(t *testing.T) {
 	registry := newTestRegistry(t)
 	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-cancel-failure"},
 		ID:        "worker-cancel-failure",
 		AttemptID: "attempt-cancel-failure",
 		Execution: dispatchHandoff("dispatch-cancel-failure"),
@@ -838,6 +884,7 @@ func TestCancel_RuntimeAttemptRepeatNoopRetainsAdmittedDispatchID(t *testing.T) 
 	)
 	registry := newTestRegistry(t)
 	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: dispatchID},
 		ID:        workerID,
 		AttemptID: "attempt-terminal-cancel",
 		Execution: dispatchHandoff(dispatchID),
@@ -877,7 +924,8 @@ func TestRuntimeAttempt_ProviderAssociationRetainsPhysicalIdentity(t *testing.T)
 			t.Parallel()
 			r := newRuntimeIdentityRegistry(t)
 			request := workersessions.RuntimeAttemptRequest{
-				ID: "worker-physical", AttemptID: "physical-retry-2",
+				Key: workersessions.RuntimeAttemptKey{DispatchID: "logical-dispatch"},
+				ID:  "worker-physical", AttemptID: "physical-retry-2",
 				Execution: dispatchHandoff("logical-dispatch"),
 			}
 			request.Execution.Execution.Dispatch.Execution.RequestID = "turn-physical"
@@ -940,7 +988,8 @@ func TestRuntimeAttempt_CancellationBindingCannotReplaceOwnedResource(t *testing
 	r := newRuntimeIdentityRegistry(t)
 	for _, id := range []string{"target", "peer"} {
 		attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
-			ID: id, AttemptID: "physical-" + id, Execution: dispatchHandoff("dispatch-" + id),
+			Key: workersessions.RuntimeAttemptKey{DispatchID: "dispatch-" + id},
+			ID:  id, AttemptID: "physical-" + id, Execution: dispatchHandoff("dispatch-" + id),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -985,6 +1034,7 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 		r.events = &runtimeAttemptBrokenAppender{err: errors.New("opening publication failed")}
 
 		_, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-opening-failure"},
 			ID:        "worker-opening-failure",
 			Execution: dispatchHandoff("dispatch-opening-failure"),
 		})
@@ -1014,6 +1064,7 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 	t.Run("same logical dispatch cannot have two owners", func(t *testing.T) {
 		r := newTestRegistry(t)
 		first, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-shared"},
 			ID:        "worker-owner",
 			Execution: dispatchHandoff("dispatch-shared"),
 		})
@@ -1021,6 +1072,7 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 			t.Fatalf("first BeginRuntimeAttempt() error = %v, want nil", err)
 		}
 		if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-shared"},
 			ID:        "worker-other",
 			Execution: dispatchHandoff("dispatch-shared"),
 		}); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
@@ -1037,6 +1089,7 @@ func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *tes
 	const dispatchID = "usage-without-observation-dispatch"
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: dispatchID},
 		ID:        sessionID,
 		AttemptID: dispatchID,
 		Execution: dispatchHandoff(dispatchID),
@@ -1093,6 +1146,7 @@ func TestBeginRuntimeAttempt_InitializesOwnershipMapsWithNilContext(t *testing.T
 	r.mu.Unlock()
 
 	attempt, err := r.BeginRuntimeAttempt(nil, workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-map-init"},
 		ID:        "worker-map-init",
 		AttemptID: "attempt-map-init",
 		Execution: dispatchHandoff("dispatch-map-init"),
@@ -1115,6 +1169,7 @@ func TestBeginRuntimeAttempt_InitializesOwnershipMapsWithNilContext(t *testing.T
 func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing.T) {
 	r := newTestRegistry(t)
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-invalid"},
 		Execution: dispatchHandoff("dispatch-invalid"),
 	}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Fatalf("invalid BeginRuntimeAttempt() error = %v, want ErrInvalidSessionID", err)
@@ -1125,6 +1180,7 @@ func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing
 		t.Fatalf("transitionToStarting() error = %v, want nil", err)
 	}
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-already-starting"},
 		ID:        "worker-already-starting",
 		Execution: dispatchHandoff("dispatch-already-starting"),
 	}); !errors.Is(err, workersessions.ErrSessionNotStartable) {
@@ -1150,6 +1206,7 @@ func TestBeginRuntimeAttempt_FinalClaimRaceTerminalizesTheAttempt(t *testing.T) 
 		dispatchID: "dispatch-final-race",
 	}
 	_, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-final-race"},
 		ID:        "worker-final-race",
 		Execution: dispatchHandoff("dispatch-final-race"),
 	})
@@ -6400,6 +6457,7 @@ func TestStop_CollectsTerminationAndDriverWaitFailures(t *testing.T) {
 func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapterFailure(t *testing.T) {
 	registry := newTestRegistry(t)
 	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{DispatchID: "dispatch-adapter-error"},
 		ID:        "worker-adapter-error",
 		AttemptID: "attempt-adapter-error",
 		Execution: dispatchHandoff("dispatch-adapter-error"),
