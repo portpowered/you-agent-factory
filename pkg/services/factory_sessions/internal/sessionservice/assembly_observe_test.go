@@ -146,9 +146,13 @@ func TestInvocationAuthoritySelectsAddressedGenerationAndPreservesTypedErrors(t 
 		if _, err := authority.Observe(context.Background(), id, sessioninvocation.SessionInvocationWaitInput{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 			t.Fatalf("observe(%q): %v", id, err)
 		}
-		if waiter, release := authority.WaitSession(context.Background(), id); waiter != nil || release != nil {
-			t.Fatalf("missing waiter(%q) allocated", id)
+		waiter, release := authority.WaitSession(context.Background(), id)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := waiter(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("fallback waiter(%q): %v", id, err)
 		}
+		release()
 	}
 }
 
@@ -531,5 +535,31 @@ func TestSessionScopeControlPeerProgressWhileCancellationIsBlocked(t *testing.T)
 	}
 	if a.controls != 1 || b.controls != 1 || a.last.ControlID != request.RequestID || b.last.ControlID != request.RequestID || len(aMetrics.outcomes) != 1 || len(bMetrics.outcomes) != 1 {
 		t.Fatalf("independent correlation/effects: A=%#v B=%#v metrics=%v/%v", a.last, b.last, aMetrics.outcomes, bMetrics.outcomes)
+	}
+}
+
+func TestInvocationAuthorityMissingSubscriptionUsesSelectedFallbackTimer(t *testing.T) {
+	t.Parallel()
+	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
+	state := newWorkResolverSessionState()
+	selected := invocationTimerReady{TimerSource: scheduler, ready: make(chan struct{}, 1)}
+	authority := NewInvocationAuthority(state, selected, nil)
+	waiter, release := authority.WaitSession(t.Context(), "missing")
+	defer release()
+	done := make(chan error, 1)
+	go func() { done <- waiter(t.Context()) }()
+	select {
+	case <-selected.ready:
+	case <-t.Context().Done():
+		t.Fatal("selected fallback timer did not open")
+	}
+	scheduler.SetTick(250)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("fallback: %v", err)
+		}
+	case <-t.Context().Done():
+		t.Fatal("selected timer did not wake fallback")
 	}
 }

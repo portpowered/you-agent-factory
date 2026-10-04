@@ -10,13 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// The invocation projection rebuild can be substantial for long-running,
-// multi-agent Factories. A 10 ms poll cadence repeatedly rebuilt the same
-// event-derived world state while providers were still working and consumed a
-// full CPU core in live packaged-factory trials. Keep cancellation responsive
-// without turning an idle synchronous invocation into a busy wait.
-const sessionInvocationPollInterval = 250 * time.Millisecond
-
 // A timed-out invocation still owes its Factory Session a cancel-on-timeout
 // control request, and the expired wait context cannot bound that call. The
 // control context stays detached from cancellation so the request is still
@@ -60,13 +53,13 @@ func (o *SessionOwner) waitForResult(
 ) (FactoryInvocationResult, error) {
 	waitCtx, cancel := invocationWaitContext(ctx, input.TimeoutMillis)
 	defer cancel()
-	waitNext, releaseWaiter := o.acquireInvocationWaiter(waitCtx, sessionID)
+	waitNext, releaseWaiter := o.authority.WaitSession(waitCtx, sessionID)
 	defer releaseWaiter()
 
 	packaged := o.specialCase != nil && o.specialCase.Active(input.FactoryConfig)
 	loggedActive := false
 	for {
-		observation, err := o.observe(waitCtx, sessionID, input)
+		observation, err := o.authority.Observe(waitCtx, sessionID, input)
 		if err != nil {
 			return o.waitErrorResult(sessionID, input, err)
 		}
@@ -312,7 +305,7 @@ func (o *SessionOwner) waitErrorResult(
 		failureClass = "cancellation"
 	}
 	o.recordFailure(sessionID, input, result, failureClass)
-	if result.Status == interfaces.InvocationTerminalStatusTimedOut && input.CancelOnTimeout && o.cancelOnTimeout != nil {
+	if result.Status == interfaces.InvocationTerminalStatusTimedOut && input.CancelOnTimeout {
 		// The cancel-on-timeout control must run even though the invocation wait
 		// already expired, so it detaches from the canceled wait context. Give
 		// cooperative control paths a deadline rather than waiting indefinitely.
@@ -324,7 +317,7 @@ func (o *SessionOwner) waitErrorResult(
 			completed := make(chan error, 1)
 			go func() {
 				defer func() { <-sessionTimeoutCancelSlots }()
-				_, err := o.cancelOnTimeout(cancelCtx, sessionID, factorysessions.ControlRequest{
+				_, err := o.controls.CancelLiveFactorySession(cancelCtx, sessionID, factorysessions.ControlRequest{
 					RequestID: input.RequestID,
 					Reason:    "invocation wait timed out",
 				})
@@ -354,39 +347,6 @@ func (o *SessionOwner) recordFailure(
 	if o.telemetry != nil {
 		o.telemetry.InvocationFailed(input.FactoryConfig, input.InputSource, result.ErrorCode)
 		o.telemetry.LogInvocationFailed(sessionID, input, result, failureClass)
-	}
-}
-
-// acquireInvocationWaiter opens the wait mechanism for one invocation wait
-// loop. An event-driven session waiter takes precedence when its opener is
-// wired and yields a waiter; otherwise the per-iteration fallback wait applies
-// unchanged. The returned release always frees waiter resources exactly once.
-func (o *SessionOwner) acquireInvocationWaiter(
-	ctx context.Context,
-	sessionID string,
-) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter) {
-	if o.waitSessionFn != nil {
-		if waiter, release := o.waitSessionFn(ctx, sessionID); waiter != nil {
-			if release == nil {
-				release = func() {}
-			}
-			return waiter, release
-		}
-	}
-	return o.waitNext, func() {}
-}
-
-func (o *SessionOwner) waitNext(ctx context.Context) error {
-	if o.waitNextFn != nil {
-		return o.waitNextFn(ctx)
-	}
-	timer := time.NewTimer(sessionInvocationPollInterval)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
 	}
 }
 

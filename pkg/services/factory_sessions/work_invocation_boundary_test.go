@@ -50,18 +50,19 @@ func TestWorkInvocationBoundary_PreparesInputThroughWorkService(t *testing.T) {
 	recording := newRecordingInvocationWorkService()
 	sourceKind := factorysessions.InvocationInputSourceKindText
 	owner := legacyinvocation.NewSessionOwner(
-		func(string) (*factorydefinitions.FactoryConfig, error) {
-			return &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
-				Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
-			}}}, nil
+		boundaryInvocationAuthority{
+			func(string) (*factorydefinitions.FactoryConfig, error) {
+				return &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
+					Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
+				}}}, nil
+			},
+			func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+				return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+			},
+			func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+				return legacyinvocation.SessionInvocationObservation{}, nil
+			},
 		},
-		func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
-			return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
-		},
-		func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
-			return legacyinvocation.SessionInvocationObservation{}, nil
-		},
-		nil,
 		nil,
 		nil,
 		nil,
@@ -103,14 +104,15 @@ func TestWorkInvocationBoundary_ResolvesPrimaryResultThroughWorkService(t *testi
 	recording := newRecordingInvocationWorkService()
 	observation := completedSessionInvocationObservation("request-1", "trace-1", "done")
 	owner := legacyinvocation.NewSessionOwner(
-		func(string) (*factorydefinitions.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
-		func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
-			return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+		boundaryInvocationAuthority{
+			func(string) (*factorydefinitions.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
+			func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+				return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+			},
+			func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+				return observation, nil
+			},
 		},
-		func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
-			return observation, nil
-		},
-		nil,
 		nil,
 		nil,
 		nil,
@@ -169,4 +171,23 @@ func completedSessionInvocationObservation(requestID, traceID, text string) lega
 		}},
 		TerminalWorkByID: map[string]factorydefinitions.FactoryTerminalWork{item.ID: {WorkItem: item, Status: "done"}},
 	}}
+}
+
+type boundaryInvocationAuthority struct {
+	config  func(string) (*factorydefinitions.FactoryConfig, error)
+	submit  func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	observe func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error)
+}
+
+func (a boundaryInvocationAuthority) FactoryConfig(id string) (*factorydefinitions.FactoryConfig, error) {
+	return a.config(id)
+}
+func (a boundaryInvocationAuthority) SubmitWork(ctx context.Context, id string, req work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+	return a.submit(ctx, id, req)
+}
+func (a boundaryInvocationAuthority) Observe(ctx context.Context, id string, input legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+	return a.observe(ctx, id, input)
+}
+func (a boundaryInvocationAuthority) WaitSession(context.Context, string) (legacyinvocation.SessionInvocationWaiter, legacyinvocation.ReleaseSessionInvocationWaiter) {
+	return func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }, func() {}
 }

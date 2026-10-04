@@ -10,8 +10,6 @@ import (
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	legacyopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/invocation"
-	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
 )
@@ -42,13 +40,4 @@ func NewOperation(
 		logger,
 		presentations,
 	)
-}
-
-// New constructs an inert invocation service and exposes only its contract.
-func New(deps invocationservice.Dependencies) (invocationservice.Service, error) {
-	service, err := internalservice.New(deps)
-	if err != nil {
-		return nil, err
-	}
-	return service, nil
 }

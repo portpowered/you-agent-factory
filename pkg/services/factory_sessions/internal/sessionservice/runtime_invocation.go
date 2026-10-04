@@ -17,7 +17,6 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
-	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -34,12 +33,10 @@ func NewInvocationOwner(
 	if fs == nil {
 		return nil, fmt.Errorf("session runtime is required")
 	}
-	return invocationwire.New(invocationservice.Dependencies{
-		FactoryConfig: authority.FactoryConfig,
-		SubmitWork:    authority.SubmitWork,
-		Observe:       authority.Observe,
-		WaitSession:   authority.WaitSession,
-		Telemetry: packagedtts.NewTelemetry(
+	return sessioninvocation.NewSessionOwner(
+		authority,
+		fs.scopeControl,
+		packagedtts.NewTelemetry(
 			ttsObservability,
 			func(metric sessioninvocation.SessionInvocationMetric) {
 				fs.recordInvocationMetric(metric.Name, metric.Labels)
@@ -48,18 +45,12 @@ func NewInvocationOwner(
 				invocationruntime.WriteLogRecord(fs.logger, record)
 			},
 		),
-		SpecialCase:   packagedtts.NewSpecialCase(ttsObservability),
-		Interpolation: interpolation,
-		WorkTypes:     invocationWorkTypes,
-		InputFiles:    inputFiles,
-		Work:          work.NewInvocationPolicyService(),
-		CancelOnTimeout: func(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-			if fs == nil {
-				return factorysessions.LifecycleControlResult{}, fmt.Errorf("Factory Session runtime is required")
-			}
-			return fs.requireSessionGateway().CancelLiveFactorySession(ctx, sessionID, request)
-		},
-	})
+		packagedtts.NewSpecialCase(ttsObservability),
+		interpolation,
+		invocationWorkTypes,
+		inputFiles,
+		work.NewInvocationPolicyService(),
+	), nil
 }
 
 func (fs *SessionRuntime) recordInvocationMetric(name string, labels map[string]string) {
@@ -78,12 +69,7 @@ const invocationWaiterFallbackInterval = 250 * time.Millisecond
 
 // InvocationAuthority reads and admits Work against the addressed live generation.
 // It has no dependency on the opening owner, gateway, or invocation engine.
-type InvocationAuthority interface {
-	FactoryConfig(string) (*interfaces.FactoryConfig, error)
-	SubmitWork(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	Observe(context.Context, string, sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error)
-	WaitSession(context.Context, string) (sessioninvocation.SessionInvocationWaiter, sessioninvocation.ReleaseSessionInvocationWaiter)
-}
+type InvocationAuthority = sessioninvocation.InvocationAuthority
 
 type invocationAuthority struct {
 	state     *sessionruntime.Service
@@ -125,17 +111,17 @@ func (a *invocationAuthority) Observe(ctx context.Context, sessionID string, inp
 func (a *invocationAuthority) WaitSession(ctx context.Context, sessionID string) (sessioninvocation.SessionInvocationWaiter, sessioninvocation.ReleaseSessionInvocationWaiter) {
 	activeFactory, err := runtimebinding.FactoryForSession(a.state, sessionID)
 	if err != nil {
-		return nil, nil
+		return newEventDrivenInvocationWaiter(nil, a.scheduler), func() {}
 	}
 	ingress, ok := runtimebinding.WorkAndEventIngressForService(activeFactory)
 	if !ok {
-		return nil, nil
+		return newEventDrivenInvocationWaiter(nil, a.scheduler), func() {}
 	}
 	subscribeCtx, cancel := context.WithCancel(ctx)
 	stream, err := ingress.SubscribeFactoryEvents(subscribeCtx, nil, interfaces.FactoryEventReconnectScope{SessionID: sessionID, HistoryLimit: 1})
 	if err != nil || stream == nil {
 		cancel()
-		return nil, nil
+		return newEventDrivenInvocationWaiter(nil, a.scheduler), func() {}
 	}
 	wake := make(chan struct{}, 1)
 	go relayInvocationWakeEvents(stream.Events, wake)

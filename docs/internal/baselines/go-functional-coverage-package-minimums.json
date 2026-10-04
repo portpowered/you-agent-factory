@@ -975,10 +975,6 @@
       "minimum": 60.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/internal/service",
-      "minimum": 57.89
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire",
       "minimum": 80.00
     },
