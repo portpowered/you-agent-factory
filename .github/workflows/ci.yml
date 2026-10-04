@@ -478,7 +478,7 @@ jobs:
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
       - name: Record functional flake ledger
-        if: always() && matrix.suite == 'functional'
+        if: always() && matrix.suite == 'functional' && hashFiles('scripts/ci/flake-ledger-summary.mjs') != ''
         run: node scripts/ci/flake-ledger-summary.mjs --ledger .artifacts/functional-test-viz/flake-ledger.json
       - name: Upload functional flake ledger
         if: always() && matrix.suite == 'functional'
