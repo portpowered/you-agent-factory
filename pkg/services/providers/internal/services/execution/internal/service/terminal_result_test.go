@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -15,6 +16,42 @@ const (
 	terminalResultSecret = "terminal-result-secret"
 	terminalResumeID     = "resume-session-secret"
 )
+
+func TestContinueRejectsInvalidAdapterResult(t *testing.T) {
+	t.Parallel()
+	for _, session := range []providers.SessionRef{
+		{Provider: providers.IDCodex, Kind: providers.SessionIDKind},
+		{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "foreign-session"},
+	} {
+		t.Run(string(session.Provider), func(t *testing.T) {
+			t.Parallel()
+			service, err := executionwire.NewService(mustCatalog(t), execution.Registration{
+				Provider: providers.IDCodex,
+				Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+					t.Fatal("continuation dispatched ordinary attempt")
+					return providers.ExecuteResult{}, nil
+				},
+				Continue: func(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+					return providers.ExecuteResult{Content: "untrusted result", SessionRef: &session}, nil
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := service.Continue(t.Context(), execution.ContinuationRequest{
+				ExecuteRequest: providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "invalid-result"},
+				ResumeSession:  &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: terminalResumeID},
+			})
+			if !reflect.DeepEqual(result, providers.ExecuteResult{}) || !errors.Is(err, providers.ErrExecuteFailed) {
+				t.Fatalf("Continue = (%#v, %v), want zero result and execution failure", result, err)
+			}
+			assertContinuationExecuteFailure(t, err, providers.ExecuteFailureKindUnknown)
+			if strings.Contains(err.Error(), terminalResumeID) {
+				t.Fatalf("failure leaked resume reference: %v", err)
+			}
+		})
+	}
+}
 
 func TestExecutePreservesNormalizedResultAndError(t *testing.T) {
 	t.Parallel()
@@ -264,6 +301,7 @@ func mustTerminalTupleService(
 			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
 				return nativeResult, nativeFailure
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {

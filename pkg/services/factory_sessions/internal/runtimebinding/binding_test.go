@@ -676,6 +676,65 @@ func registerTestSession(state *sessionruntime.Service, sessionID string) *lives
 	return state.Resolve(sessionID)
 }
 
+type startupActivationClose func(context.Context) error
+
+func (close startupActivationClose) Close(ctx context.Context) error { return close(ctx) }
+
+func TestFailStartupClosesActivationBeforeRetirementAndRetainsIncompleteCleanup(t *testing.T) {
+	t.Parallel()
+	startupErr := errors.New("listener failed")
+	cleanupErr := errors.New("cleanup failed")
+	for _, phase := range []string{"success", "stop failure", "activation failure"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			sessions := newRuntimeBindingState()
+			session := registerTestSession(sessions, "failed-start")
+			handle := runtimebinding.HandleFromSession(session)
+			var active runtimebinding.State
+			active.SetActive(t.Context(), session.ID, handle)
+			closed := false
+			runtimebinding.SessionStateFrom(session).Activation = startupActivationClose(func(ctx context.Context) error {
+				assertStartupCleanupBeforeRetirement(t, ctx, handle, sessions.Resolve(session.ID))
+				closed = true
+				if phase == "activation failure" {
+					return cleanupErr
+				}
+				return nil
+			})
+			stop := func(got factory.RuntimeRun) error {
+				if got != handle {
+					t.Fatal("startup rollback stopped another session")
+				}
+				if phase == "stop failure" {
+					return cleanupErr
+				}
+				got.CancelRun()
+				return got.Wait()
+			}
+			err := runtimebinding.FailStartup(sessions, &active, session.ID, handle, stop, startupErr)
+			if !errors.Is(err, startupErr) || active.Active() != nil {
+				t.Fatalf("rollback error = %v, active = %#v; want original failure and no active selection", err, active.Active())
+			}
+			if phase == "success" {
+				if !closed || sessions.Resolve(session.ID) != nil || errors.Is(err, cleanupErr) {
+					t.Fatal("successful rollback did not clean and retire its session")
+				}
+				return
+			}
+			if !errors.Is(err, cleanupErr) || sessions.Resolve(session.ID) == nil || closed != (phase == "activation failure") {
+				t.Fatalf("incomplete rollback error = %v, closed = %t; want retained record and cleanup failure", err, closed)
+			}
+		})
+	}
+}
+
+func assertStartupCleanupBeforeRetirement(t *testing.T, ctx context.Context, handle factory.RuntimeRun, session *livesession.LiveSession) {
+	t.Helper()
+	if ctx.Err() != nil || !handle.Completed() || session == nil {
+		t.Fatal("activation cleanup must follow runtime join and precede retirement with a live cleanup context")
+	}
+}
+
 type streamGenerationService struct {
 	factory.Service
 	streamGenerationID string

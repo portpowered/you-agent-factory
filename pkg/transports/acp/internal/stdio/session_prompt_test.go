@@ -322,7 +322,7 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
+	server := New(testLogger(), faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver, testInvocationScope)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -371,7 +371,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending"},
 		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
+	firstServer := New(testLogger(), faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver, testInvocationScope)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -385,7 +385,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 	// A brand-new Server, sharing only the underlying store (not the failed
 	// firstServer instance or its wrapper), stands in for a restarted
 	// transport process.
-	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
+	secondServer := New(testLogger(), store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver, testInvocationScope)
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "second message"))
@@ -483,7 +483,7 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
+	server := New(testLogger(), faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver, testInvocationScope)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -551,7 +551,7 @@ func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPr
 			SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
 		},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
+	server := New(testLogger(), faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver, testInvocationScope)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -677,7 +677,7 @@ func TestAcceptedCancelFlightClosesWhenReplacementCannotStart(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			base, session, turn := newActiveBoundControlSession(t, "fs-replacement")
 			factoryTarget := &fakeFactoryTargetService{cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted, startErr: tt.startErr}
-			server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, tt.resolver)
+			server := New(testLogger(), base, nil, factoryTarget, nil, nil, nil, nil, tt.resolver, testInvocationScope)
 			registry := &promptFlightRegistry{}
 			server.handleSessionCancel(contextWithCancelFlights(context.Background(), registry), cancelNotificationEnvelope(t, "cancel-replacement", session.ID))
 			flight := registry.cancelForTurn(session.ID, turn.ID)
@@ -705,7 +705,7 @@ func TestCompletedCancelFlightSuppressesDuplicateDownstreamControl(t *testing.T)
 	}
 	first.finishCancel(true)
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, nil)
+	server := New(testLogger(), base, nil, factoryTarget, nil, nil, nil, nil, nil, testInvocationScope)
 	server.handleSessionCancel(contextWithCancelFlights(context.Background(), registry), cancelNotificationEnvelope(t, "duplicate-cancel", session.ID))
 	if len(factoryTarget.cancelCalls) != 0 {
 		t.Fatalf("duplicate cancellation reached Factory Sessions %d times", len(factoryTarget.cancelCalls))
@@ -715,7 +715,7 @@ func TestCompletedCancelFlightSuppressesDuplicateDownstreamControl(t *testing.T)
 func TestAcceptedCancelWaitsForCapturedInvocationBeforeReplacement(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-cancel-order")
 	factoryTarget := &fakeFactoryTargetService{cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted}
-	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, testStartResolver)
+	server := New(testLogger(), base, nil, factoryTarget, nil, nil, nil, nil, testStartResolver, testInvocationScope)
 	registry := &promptFlightRegistry{}
 	invocationCtx, cancelInvocation := context.WithCancel(context.Background())
 	defer cancelInvocation()

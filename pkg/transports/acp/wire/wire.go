@@ -35,10 +35,10 @@ func NewServer(
 	responseBridge acp.ResponseBridge,
 	wireRecorder acp.WireRecorder,
 	startResolver acp.FactorySessionStartResolver,
-	invocationScope ...acp.InvocationScopeFactory,
+	invocationScope acp.InvocationScopeFactory,
 ) acp.Server {
 	return stdio.New(
 		logger, chatSessions, catalog, factorySessions, eventsService,
-		resolveHomeDir, responseBridge, wireRecorder, startResolver, invocationScope...,
+		resolveHomeDir, responseBridge, wireRecorder, startResolver, invocationScope,
 	)
 }

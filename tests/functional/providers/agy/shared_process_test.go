@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -108,9 +111,24 @@ type agySharedProcessFixture struct {
 	routes   map[string]*agySharedCommandRoute
 	roleMu   sync.Mutex
 	roleHost *agySharedRoleHost
+	ptyHost  agyUnusedPTYHost
 
 	closeOnce sync.Once
 	closeErr  error
+}
+
+// Command selection must remain usable even when the legacy host cannot
+// allocate. Counters observe only the replaceable OS edge, never PTY internals.
+type agyUnusedPTYHost struct{ calls atomic.Int32 }
+
+func (host *agyUnusedPTYHost) Allocate(context.Context) (platformpty.Allocation, error) {
+	host.calls.Add(1)
+	return nil, platformpty.ErrUnsupportedPlatform
+}
+
+func (host *agyUnusedPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
+	host.calls.Add(1)
+	return nil, nil, platformpty.ErrUnsupportedPlatform
 }
 
 type agySharedRoleHost struct {
@@ -173,6 +191,7 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	}()
 
 	fixture.registerDirectRoutes(t)
+	fixture.registerOverrideRoute(t)
 	fixture.registerGoldenRoutes(t)
 	fixture.registerRoleRoutes(t)
 	fixture.registerRecoveryRoute(t)
@@ -182,12 +201,34 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      fixture.api.start,
 		ProviderCommandRunner: fixture.runner,
+		AgyPTYHost:            &fixture.ptyHost,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess(shared AGY fixture): %v", err)
 	}
 	fixture.process = process
 	return fixture
+}
+
+func (fixture *agySharedProcessFixture) registerOverrideRoute(t *testing.T) {
+	t.Helper()
+	route := fixture.newRouteDirectories(t, "one-shot-overrides")
+	copyAgyDirectory(t, support.LegacyFixtureDir(t, "executor_success"), route.workDir)
+	support.UpdateFactoryConfig(t, route.workDir, func(config map[string]any) {
+		config["workTypes"].([]any)[0].(map[string]any)["handlingBehavior"] = []string{"DEFAULT"}
+	})
+	registered, err := fixture.runner.registerOutcomes("one-shot-overrides", route.workDir, agySharedCommandOutcome{
+		result: platformprocess.CommandResult{Stdout: []byte(`{"event":"result","result":{"conversation_id":"agy-overrides","status":"SUCCESS","response":"override answer COMPLETE","duration_seconds":1.0,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}` + "\n")},
+	})
+	if err != nil {
+		t.Fatalf("register AGY override route: %v", err)
+	}
+	registered.homeDir = route.homeDir
+	fixture.routes[registered.selector] = registered
+	// Leave selection to invocation defaults so CLI versus environment precedence
+	// is observable at the provider command edge, without changing authored policy.
+	support.WriteAgentConfig(t, fixture.routes["one-shot-overrides"].workDir, "worker",
+		"---\ntype: MODEL_WORKER\nstopToken: COMPLETE\ntimeout: 2m\n---\nProcess the input task.\n")
 }
 
 func (fixture *agySharedProcessFixture) registerDirectRoutes(t *testing.T) {

@@ -41,9 +41,6 @@ func NewManagerWithDependencies(sessions SessionResolver, observer Observer, reg
 // NewManagerWithResponseService routes publication, lifecycle, and diagnostics
 // through the owner-private response-stream capability.
 func NewManagerWithResponseService(sessions SessionResolver, observer Observer, registry *responsestream.Registry, responses responsestreamservice.Service) *Manager {
-	if registry == nil {
-		return nil
-	}
 	return &Manager{sessions: sessions, observer: observer, registry: registry, responses: responses}
 }
 

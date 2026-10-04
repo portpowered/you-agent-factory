@@ -7,7 +7,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 )
 
 type compilationAdapter struct {
@@ -15,24 +14,14 @@ type compilationAdapter struct {
 }
 
 // NewCompilation constructs the Runtime orchestration compile port.
-func NewCompilation(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflowDefinitions,
-	runtime factoryruntime.JavaScriptWorkflowRuntime,
-) factoryruntime.OrchestrationCompilation {
-	if newID == nil {
-		return nil
-	}
-	return &compilationAdapter{service: orchestrationwire.New(newID, workflows, runtime)}
+func NewCompilation(service orchestration.Service) factoryruntime.OrchestrationCompilation {
+	return &compilationAdapter{service: service}
 }
 
 func (a *compilationAdapter) Compile(
 	ctx context.Context,
 	req factoryruntime.OrchestrationCompileRequest,
 ) (factoryruntime.OrchestrationCompileResult, error) {
-	if a == nil || a.service == nil {
-		return factoryruntime.OrchestrationCompileResult{}, fmt.Errorf("orchestration compilation is required")
-	}
 	result, err := a.service.Compile(ctx, orchestration.CompileRequest{
 		Config:       req.Config,
 		FactoryDir:   req.FactoryDir,
@@ -50,9 +39,6 @@ func (a *compilationAdapter) CompilePetriNet(
 	ctx context.Context,
 	req factoryruntime.OrchestrationCompileRequest,
 ) (*state.Net, error) {
-	if a == nil || a.service == nil {
-		return nil, fmt.Errorf("orchestration compilation is required")
-	}
 	result, err := a.service.Compile(ctx, orchestration.CompileRequest{
 		Config:       req.Config,
 		FactoryDir:   req.FactoryDir,

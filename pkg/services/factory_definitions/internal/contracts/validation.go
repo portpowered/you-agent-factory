@@ -117,13 +117,12 @@ type SubmittedWorkstationTaxonomy struct {
 // Definitions-owned validation operation. Representation adapters map public
 // payloads into detached values and never contribute policy findings.
 type DefinitionValidationRequest struct {
-	Profile                ValidationProfile
-	Config                 *FactoryConfig
-	CanonicalPayload       []byte
-	CanonicalFactoryLoader CanonicalFactoryJSONLoader
-	WorkstationLoader      WorkstationLoader
-	WorkflowSourceReader   WorkflowSourceReader
-	SubmittedTaxonomy      SubmittedDefinitionTaxonomy
+	Profile              ValidationProfile
+	Config               *FactoryConfig
+	CanonicalPayload     []byte
+	WorkstationLoader    WorkstationLoader
+	WorkflowSourceReader WorkflowSourceReader
+	SubmittedTaxonomy    SubmittedDefinitionTaxonomy
 }
 
 // DefinitionValidationOperation owns validation-profile selection, canonical

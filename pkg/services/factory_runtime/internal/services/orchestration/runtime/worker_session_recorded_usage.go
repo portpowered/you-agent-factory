@@ -70,6 +70,9 @@ func recordedOptionalInt(metadata map[string]string, key string) *int {
 	return &parsed
 }
 
+// recordedDispatchFact projects one dispatch. Callers projecting many
+// dispatches build one recordedDispatchEventIndex over the history so it is
+// read once, not once per dispatch.
 func recordedDispatchFact(
 	dispatchID string,
 	association recordedDispatchAssociation,
@@ -77,7 +80,7 @@ func recordedDispatchFact(
 	completed map[string]interfaces.FactoryWorldDispatchCompletion,
 	providerSessions []interfaces.FactoryWorldProviderSessionRecord,
 	active map[string]interfaces.FactoryWorldDispatch,
-	events []interfaces.FactoryEvent,
+	index recordedDispatchEventIndex,
 ) recordedDispatchObservation {
 	fact := recordedDispatchObservation{
 		workerSessionID: association.workerSessionID,
@@ -100,7 +103,7 @@ func recordedDispatchFact(
 	if dispatch, ok := completed[dispatchID]; ok {
 		fact.state = recordedDispatchObservationState(dispatch.Result)
 		fact.startedAt = firstRecordedTime(dispatch.StartedAt, fact.startedAt)
-		fact.endedAt = recordedDispatchEnd(dispatch, events, dispatchID)
+		fact.endedAt = recordedDispatchEnd(dispatch, index, dispatchID)
 		fact.workIDs = firstRecordedWorkIDs(dispatch.WorkItemIDs, fact.workIDs)
 		fact.failure = recordedDispatchFailureWithDiagnostics(dispatch.Result, fact.state, dispatch.Diagnostics)
 		fact.tokenUsage = recordedTokenUsageFromDiagnostics(dispatch.Diagnostics)
@@ -124,7 +127,7 @@ func recordedDispatchFact(
 		}
 		break
 	}
-	if interruption, ok := recordedDispatchInterruption(events, dispatchID); ok && !fact.state.Terminal() {
+	if interruption, ok := index.interruptions[dispatchID]; ok && !fact.state.Terminal() {
 		fact.state = workersessions.StateFailed
 		fact.workIDs = firstRecordedWorkIDs(interruption.workIDs, fact.workIDs)
 		endedAt := interruption.interruptedAt
@@ -144,7 +147,7 @@ func recordedDispatchFact(
 			Detail: reason,
 		}
 	}
-	fact.stateSequence, fact.stateSequenceKnown = recordedDispatchStateCursor(events, dispatchID)
+	fact.stateSequence, fact.stateSequenceKnown = index.stateCursor(dispatchID)
 	return fact
 }
 
@@ -796,66 +799,62 @@ func (s *recordedWorkerSessionObservation) confirmedObservation(
 // event for the dispatch. It is the cursor responsible for the projected
 // Worker Session state or terminal outcome, rather than merely the association
 // event that made the Worker Session addressable.
+// recordedDispatchEventIndex holds the per-dispatch facts that projecting a
+// Worker Session needs from canonical history. It is built in one pass over
+// ordered events so a work-scoped list costs O(events + dispatches) instead of
+// re-cloning, re-sorting, and re-scanning the whole history for every dispatch.
+type recordedDispatchEventIndex struct {
+	interruptions map[string]recordedDispatchInterruptionFact
+	cursors       map[string]int64
+	responseTimes map[string]time.Time
+}
+
+func newRecordedDispatchEventIndex(ordered []interfaces.FactoryEvent) recordedDispatchEventIndex {
+	index := recordedDispatchEventIndex{
+		interruptions: make(map[string]recordedDispatchInterruptionFact),
+		cursors:       make(map[string]int64),
+		responseTimes: make(map[string]time.Time),
+	}
+	for _, event := range ordered {
+		dispatchID := strings.TrimSpace(stringPointerValue(event.Context.DispatchID))
+		if dispatchID == "" {
+			continue
+		}
+		switch event.Type {
+		case interfaces.FactoryEventTypeDispatchInterrupted:
+			var payload interfaces.DispatchInterruptedEventPayload
+			if json.Unmarshal(event.Payload, &payload) == nil {
+				index.interruptions[dispatchID] = recordedDispatchInterruptionFact{
+					workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
+					interruptedAt: payload.InterruptedAt,
+					eventTime:     event.Context.EventTime,
+					reason:        payload.Reason,
+				}
+			}
+			index.cursors[dispatchID] = int64(event.Context.Sequence)
+		case interfaces.FactoryEventTypeDispatchResponse:
+			index.responseTimes[dispatchID] = event.Context.EventTime.UTC()
+			index.cursors[dispatchID] = int64(event.Context.Sequence)
+		case interfaces.FactoryEventTypeDispatchRequest,
+			interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			interfaces.FactoryEventTypeDispatchQueued,
+			interfaces.FactoryEventTypeDispatchReconciled:
+			index.cursors[dispatchID] = int64(event.Context.Sequence)
+		}
+	}
+	return index
+}
+
+func (index recordedDispatchEventIndex) stateCursor(dispatchID string) (int64, bool) {
+	sequence, found := index.cursors[strings.TrimSpace(dispatchID)]
+	return sequence, found
+}
+
 type recordedDispatchInterruptionFact struct {
 	workIDs       []string
 	interruptedAt time.Time
 	eventTime     time.Time
 	reason        string
-}
-
-func recordedDispatchInterruption(
-	events []interfaces.FactoryEvent,
-	dispatchID string,
-) (recordedDispatchInterruptionFact, bool) {
-	var fact recordedDispatchInterruptionFact
-	found := false
-	for _, event := range events {
-		if event.Type != interfaces.FactoryEventTypeDispatchInterrupted ||
-			stringPointerValue(event.Context.DispatchID) != dispatchID {
-			continue
-		}
-		var payload interfaces.DispatchInterruptedEventPayload
-		if json.Unmarshal(event.Payload, &payload) != nil {
-			continue
-		}
-		fact = recordedDispatchInterruptionFact{
-			workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
-			interruptedAt: payload.InterruptedAt,
-			eventTime:     event.Context.EventTime,
-			reason:        payload.Reason,
-		}
-		found = true
-	}
-	return fact, found
-}
-func recordedDispatchStateCursor(
-	events []interfaces.FactoryEvent,
-	dispatchID string,
-) (int64, bool) {
-	dispatchID = strings.TrimSpace(dispatchID)
-	if dispatchID == "" {
-		return 0, false
-	}
-	var (
-		sequence int64
-		found    bool
-	)
-	for _, event := range cloneAndSortFactoryEvents(events) {
-		if stringPointerValue(event.Context.DispatchID) != dispatchID {
-			continue
-		}
-		switch event.Type {
-		case interfaces.FactoryEventTypeDispatchRequest,
-			interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
-			interfaces.FactoryEventTypeDispatchQueued,
-			interfaces.FactoryEventTypeDispatchResponse,
-			interfaces.FactoryEventTypeDispatchInterrupted,
-			interfaces.FactoryEventTypeDispatchReconciled:
-			sequence = int64(event.Context.Sequence)
-			found = true
-		}
-	}
-	return sequence, found
 }
 
 // cloneFactoryEventsInOrder keeps a detached copy without changing the

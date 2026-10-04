@@ -10,7 +10,6 @@ import (
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
-	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 )
@@ -23,14 +22,11 @@ func newRootCompileServiceForPeer(t *testing.T) factoryroot.Service {
 
 	composition := factorydefinitioncomposition
 	loader := composition.Loader()
-	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
-		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
-	})
-	if err != nil {
-		t.Fatalf("compilationwire.NewService: %v", err)
-	}
+	compilation := compilationwire.NewService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		compilationcanonical.EncodeFactoryPort(),
+	)
 	return factorydefinition.NewWithCompilation(nil, compilation)
 }
 

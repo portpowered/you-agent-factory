@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
@@ -23,21 +24,29 @@ const privatePrompt = "run; rm -rf / | cat"
 type stubPTYSession struct {
 	launch agypty.ProcessLaunch
 	result agypty.SessionResult
+	run    func(context.Context) (agypty.SessionResult, error)
+	closes int
 }
 
-func (s *stubPTYSession) Run(context.Context) (agypty.SessionResult, error) {
+func (s *stubPTYSession) Run(ctx context.Context) (agypty.SessionResult, error) {
+	if s.run != nil {
+		return s.run(ctx)
+	}
 	return s.result, nil
 }
 
-func (s *stubPTYSession) Close() error { return nil }
+func (s *stubPTYSession) Close() error { s.closes++; return nil }
 
 type stubAllocator struct {
 	sessions []*stubPTYSession
 	result   agypty.SessionResult
+	run      func(context.Context) (agypty.SessionResult, error)
+	config   agypty.SessionConfig
 }
 
-func (a *stubAllocator) Allocate(_ context.Context, launch agypty.ProcessLaunch, _ agypty.SessionConfig) (agypty.PTYSession, error) {
-	session := &stubPTYSession{launch: launch, result: a.result}
+func (a *stubAllocator) Allocate(_ context.Context, launch agypty.ProcessLaunch, config agypty.SessionConfig) (agypty.PTYSession, error) {
+	a.config = config
+	session := &stubPTYSession{launch: launch, result: a.result, run: a.run}
 	a.sessions = append(a.sessions, session)
 	return session, nil
 }
@@ -76,28 +85,16 @@ func (i fakeExecutableInfo) ModTime() time.Time { return time.Time{} }
 func (i fakeExecutableInfo) IsDir() bool        { return i.directory }
 func (i fakeExecutableInfo) Sys() any           { return nil }
 
-func executableDependencies(
-	locations map[string]string,
-	existingPaths ...string,
-) agy.ExecutableDependencies {
-	locator := fakeExecutableLocator(locations)
+func executableInspector(existingPaths ...string) fakeExecutableInspector {
 	inspector := make(fakeExecutableInspector, len(existingPaths))
 	for _, path := range existingPaths {
 		inspector[path] = fakeExecutableInfo{}
 	}
-	return agy.ExecutableDependencies{Locator: locator, Inspector: inspector}
+	return inspector
 }
 
 func continuationRequest(request providers.ExecuteRequest) execution.ContinuationRequest {
 	return execution.ContinuationRequest{ExecuteRequest: request}
-}
-
-func TestPTYEffectRequiresAllocator(t *testing.T) {
-	t.Parallel()
-
-	if effect := agy.NewPTYEffect(agy.PTYEffectOptions{FactoryRoot: t.TempDir()}); effect != nil {
-		t.Fatal("NewPTYEffect() without allocator = non-nil, want nil")
-	}
 }
 
 func TestPTYEffectRejectsSeparateReasoningEffort(t *testing.T) {
@@ -109,11 +106,9 @@ func TestPTYEffectRejectsSeparateReasoningEffort(t *testing.T) {
 		t.Fatalf("write executable: %v", err)
 	}
 	allocator := &stubAllocator{}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              allocator,
-		Executable:             executable,
-		ExecutableDependencies: executableDependencies(nil, executable),
+	effect := agy.NewPTYEffect(allocator, fakeExecutableLocator(nil), executableInspector(executable), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  executable,
 	})
 	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:        providers.IDAntigravity,
@@ -145,11 +140,9 @@ func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 		t.Fatalf("write executable: %v", err)
 	}
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             executable,
-		ExecutableDependencies: executableDependencies(nil, executable),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(executable), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  executable,
 	})
 	if effect == nil {
 		t.Fatal("NewPTYEffect() returned nil")
@@ -201,11 +194,9 @@ func TestPTYEffectExecutesThroughInjectedNativePTY(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "Agy adapter response"}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  "agy",
 	})
 	const prompt = "summarize this; preserve argv boundaries"
 	var observed []byte
@@ -246,11 +237,9 @@ func TestPTYEffectPreservesPromptMetacharactersInArgv(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "Hello from Agy"}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
@@ -276,11 +265,9 @@ func TestPTYEffectTimeoutCleansCaptureBeforeObserve(t *testing.T) {
 		TimedOut: true,
 		RawBytes: raw,
 	}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            t.TempDir(),
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: t.TempDir(),
+		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:    providers.IDAntigravity,
@@ -317,38 +304,15 @@ func (a *timeoutCleaningAllocator) Allocate(_ context.Context, _ agypty.ProcessL
 	return &timeoutCleaningSession{result: a.result}, nil
 }
 
-func TestPTYEffectFailsClosedWithoutExecutableEffects(t *testing.T) {
-	t.Parallel()
-
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot: t.TempDir(),
-		Allocator:   &stubAllocator{},
-		Executable:  "agy",
-	})
-	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
-		Provider:    providers.IDAntigravity,
-		AttemptID:   "dispatch-agy-missing-effects",
-		UserMessage: "hello",
-	}), func([]byte) error { return nil })
-	var attemptFailure execution.AttemptFailure
-	if !errors.As(err, &attemptFailure) ||
-		attemptFailure.NativeError == nil ||
-		!strings.Contains(attemptFailure.NativeError.Error(), "executable locator is required") {
-		t.Fatalf("missing locator error = %v", err)
-	}
-}
-
 func TestPTYEffectResolvesBareExecutableThroughInjectedSearchPath(t *testing.T) {
 	t.Parallel()
 
 	factoryRoot := t.TempDir()
 	resolved := filepath.Join("toolchain", "agy")
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            factoryRoot,
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(map[string]string{"agy": resolved}, resolved),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(map[string]string{"agy": resolved}), executableInspector(resolved), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: factoryRoot,
+		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
@@ -378,11 +342,9 @@ func TestPTYEffectDispatchContextIsPreservedInLaunch(t *testing.T) {
 	t.Parallel()
 
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}}
-	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot:            t.TempDir(),
-		Allocator:              mock,
-		Executable:             "agy",
-		ExecutableDependencies: executableDependencies(nil),
+	effect := agy.NewPTYEffect(mock, fakeExecutableLocator(nil), executableInspector(), platformclock.Real{}, agy.PTYPolicy{
+		FactoryRoot: t.TempDir(),
+		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:        providers.IDAntigravity,
@@ -397,5 +359,74 @@ func TestPTYEffectDispatchContextIsPreservedInLaunch(t *testing.T) {
 	launch := mock.lastLaunch()
 	if !slices.Contains(launch.Env, "GIT_TERMINAL_PROMPT=0") {
 		t.Fatalf("env = %#v, want automation defaults", launch.Env)
+	}
+}
+
+func TestPTYEffectUsesInjectedClockAndClosesTerminalSession(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		runErr     error
+		observeErr error
+		cancel     bool
+	}{
+		{name: "success"},
+		{name: "run failure", runErr: errors.New("provider failed")},
+		{name: "timeout", runErr: context.DeadlineExceeded},
+		{name: "cancellation", cancel: true},
+		{name: "observer failure", observeErr: errors.New("observer failed")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			allocator := &stubAllocator{run: func(ctx context.Context) (agypty.SessionResult, error) {
+				clock.SetTick(37)
+				if tc.cancel {
+					cancel()
+					return agypty.SessionResult{}, ctx.Err()
+				}
+				return agypty.SessionResult{CleanedText: "answer"}, tc.runErr
+			}}
+			effect := agy.NewPTYEffect(allocator, fakeExecutableLocator(nil), executableInspector(), clock,
+				agy.PTYPolicy{FactoryRoot: t.TempDir()})
+			result, err := effect.Execute(ctx, continuationRequest(providers.ExecuteRequest{
+				UserMessage: "hello",
+			}), func([]byte) error { return tc.observeErr })
+			if result.DurationMillis != 37 {
+				t.Fatalf("duration = %d, want injected 37ms", result.DurationMillis)
+			}
+			wantFailure := tc.runErr != nil || tc.observeErr != nil || tc.cancel
+			if (err != nil) != wantFailure {
+				t.Fatalf("error = %v, want failure %v", err, wantFailure)
+			}
+			if len(allocator.sessions) != 1 || allocator.sessions[0].closes != 1 {
+				t.Fatalf("sessions = %#v, want one closed session", allocator.sessions)
+			}
+			if allocator.config != agypty.DefaultSessionConfig() {
+				t.Fatalf("session config = %#v, want default policy", allocator.config)
+			}
+		})
+	}
+}
+
+func TestPTYEffectPreservesExplicitSessionPolicy(t *testing.T) {
+	t.Parallel()
+	policy := agypty.DefaultSessionConfig()
+	policy.HardTimeout = 17 * time.Minute
+	allocator := &stubAllocator{}
+	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
+	effect := agy.NewPTYEffect(allocator, fakeExecutableLocator(nil), executableInspector(), clock,
+		agy.PTYPolicy{FactoryRoot: t.TempDir(), SessionConfig: policy})
+	_, err := effect.Execute(t.Context(), continuationRequest(providers.ExecuteRequest{
+		UserMessage: "hello",
+	}), func([]byte) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allocator.config != policy {
+		t.Fatalf("session config = %#v, want %#v", allocator.config, policy)
 	}
 }

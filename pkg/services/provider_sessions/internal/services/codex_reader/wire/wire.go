@@ -2,13 +2,14 @@
 package wire
 
 import (
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	codexreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader"
 	codexreaderservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/internal/service"
 )
 
 // NewService constructs the inert Codex reader used by Provider Sessions.
-func NewService(dependencies codexreader.Dependencies) (codexreader.Service, error) {
-	return codexreaderservice.New(dependencies)
+func NewService(files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CodexWalkDirectory, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, sessionsRoot string) (codexreader.Service, error) {
+	return codexreaderservice.New(files, walkDirectory, resolveSymlinks, sessionsRoot)
 }
 
 // DefaultSessionsRoot returns the conventional Codex session storage root.

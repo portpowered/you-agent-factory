@@ -20,68 +20,44 @@ import (
 // Service fulfills the published Providers root contract.
 type Service struct {
 	catalog     catalog.Service
-	execution   execution.Service
-	acp         acp.Service
+	execution   execution.ContinuationService
+	acp         acp.ContinuationService
 	packagedACP []providers.ACPIntegration
-	lifecycles  []providerLifecycle
+	lifecycle   Lifecycle
 	logger      logging.Logger
 	attempts    *liveAttemptRegistry
 }
 
-type providerLifecycle interface {
+// Lifecycle is the completed close capability supplied by composition.
+type Lifecycle interface {
 	Close(context.Context) error
 }
 
 var _ providers.Service = (*Service)(nil)
 
-// New constructs an inert Providers root facade over its two private sibling
-// capabilities. logger is the direct, required operation-logging
-// abstraction; callers with no operation logging pass logging.NoopLogger{}.
-func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (*Service, error) {
-	return newService(catalogService, executionService, nil, nil, logger, nil)
-}
-
 // NewWithACP constructs the production Providers root with its persistent ACP
-// subservice and exact lifecycle roles. logger is the direct, required
+// subservice and exact lifecycle role. logger is the direct, required
 // operation-logging abstraction; callers with no operation logging pass
-// logging.NoopLogger{}.
+// logging.NoopLogger{}. acpService is completed even for native-only hosts,
+// which supply an explicit disabled ACP implementation. Both execution roles
+// include continuation; unsupported operations are supplied explicitly rather
+// than discovered or substituted while dispatching an attempt. Required ports
+// are completed by composition before this internal constructor is called.
 func NewWithACP(
 	catalogService catalog.Service,
-	executionService execution.Service,
-	acpService acp.Service,
+	executionService execution.ContinuationService,
+	acpService acp.ContinuationService,
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
-	lifecycles ...providerLifecycle,
+	lifecycle Lifecycle,
 ) (*Service, error) {
-	return newService(catalogService, executionService, acpService, packagedACP, logger, lifecycles)
-}
-
-func newService(
-	catalogService catalog.Service,
-	executionService execution.Service,
-	acpService acp.Service,
-	packagedACP []providers.ACPIntegration,
-	logger logging.Logger,
-	lifecycles []providerLifecycle,
-) (*Service, error) {
-	if catalogService == nil {
-		return nil, fmt.Errorf("construct Providers: catalog is required")
-	}
-	if executionService == nil {
-		return nil, fmt.Errorf("construct Providers: execution is required")
-	}
-	for index, lifecycle := range lifecycles {
-		if lifecycle == nil {
-			return nil, fmt.Errorf("construct Providers: lifecycle %d is required", index)
-		}
-	}
 	return &Service{
 		catalog:     catalogService,
 		execution:   executionService,
 		acp:         acpService,
 		packagedACP: cloneACPIntegrations(packagedACP),
-		lifecycles:  append([]providerLifecycle(nil), lifecycles...),
-		logger:      logging.EnsureLogger(logger),
+		lifecycle:   lifecycle,
+		logger:      logger,
 		attempts:    newLiveAttemptRegistry(),
 	}, nil
 }
@@ -97,9 +73,6 @@ func (s *Service) ListProviders(
 	byID := make(map[providers.ID]int, len(listed.Providers))
 	for index, descriptor := range listed.Providers {
 		byID[descriptor.ID] = index
-	}
-	if s.acp == nil {
-		return listed, nil
 	}
 	for _, integration := range s.acp.Integrations() {
 		descriptor := acpDescriptor(integration)
@@ -122,18 +95,16 @@ func (s *Service) GetProvider(
 	ctx context.Context,
 	request providers.GetProviderRequest,
 ) (providers.GetProviderResult, error) {
-	if s.acp != nil {
-		if canonical, ok := s.acp.Resolve(request.ID); ok {
-			if descriptor, err := s.catalog.GetProvider(ctx, providers.GetProviderRequest{ID: canonical}); err == nil {
-				if integration, found := s.activeACPIntegration(canonical); found {
-					descriptor.Provider = applyACPBypassCapability(descriptor.Provider, integration)
-				}
-				return descriptor, nil
+	if canonical, ok := s.acp.Resolve(request.ID); ok {
+		if descriptor, err := s.catalog.GetProvider(ctx, providers.GetProviderRequest{ID: canonical}); err == nil {
+			if integration, found := s.activeACPIntegration(canonical); found {
+				descriptor.Provider = applyACPBypassCapability(descriptor.Provider, integration)
 			}
-			for _, integration := range s.acp.Integrations() {
-				if integration.Name == canonical {
-					return providers.GetProviderResult{Provider: acpDescriptor(integration)}, nil
-				}
+			return descriptor, nil
+		}
+		for _, integration := range s.acp.Integrations() {
+			if integration.Name == canonical {
+				return providers.GetProviderResult{Provider: acpDescriptor(integration)}, nil
 			}
 		}
 	}
@@ -162,34 +133,32 @@ func (s *Service) dispatch(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
-	if s.acp != nil {
-		if canonical, ok := s.acp.Resolve(request.Provider); ok {
-			if request.ReasoningEffort != "" {
-				return providers.ExecuteResult{}, providers.ExecuteFailure{
-					Kind: providers.ExecuteFailureKindInvalidRequest,
-					Message: fmt.Sprintf(
-						"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
-						canonical,
-					),
-				}
+	if canonical, ok := s.acp.Resolve(request.Provider); ok {
+		if request.ReasoningEffort != "" {
+			return providers.ExecuteResult{}, providers.ExecuteFailure{
+				Kind: providers.ExecuteFailureKindInvalidRequest,
+				Message: fmt.Sprintf(
+					"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
+					canonical,
+				),
 			}
-			request.Provider = canonical
-			// Only the packaged OpenCode ACP integration has a known permission
-			// bypass contract. Other ACP peers must continue to receive permission
-			// requests with the conservative deny policy, even when callers set the
-			// generic skipPermissions option.
-			request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
-			if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
-				return providers.ExecuteResult{}, err
-			}
-			control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
-			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
-			if bindErr != nil {
-				return providers.ExecuteResult{}, bindErr
-			}
-			defer release()
-			return s.acp.Execute(ctx, canonical, request)
 		}
+		request.Provider = canonical
+		// Only the packaged OpenCode ACP integration has a known permission
+		// bypass contract. Other ACP peers must continue to receive permission
+		// requests with the conservative deny policy, even when callers set the
+		// generic skipPermissions option.
+		request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
+		if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
+			return providers.ExecuteResult{}, err
+		}
+		control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
+		release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
+		if bindErr != nil {
+			return providers.ExecuteResult{}, bindErr
+		}
+		defer release()
+		return s.acp.Execute(ctx, canonical, request)
 	}
 	canonicalProvider, err := s.catalog.ResolveProviderID(request.Provider)
 	if err != nil {
@@ -231,37 +200,28 @@ func (s *Service) dispatchContinuation(
 	request providers.ExecuteRequest,
 	reference providers.SessionRef,
 ) (providers.ExecuteResult, error) {
-	if s.acp != nil {
-		if canonical, ok := s.acp.Resolve(request.Provider); ok {
-			if request.ReasoningEffort != "" {
-				return providers.ExecuteResult{}, providers.ExecuteFailure{
-					Kind: providers.ExecuteFailureKindInvalidRequest,
-					Message: fmt.Sprintf(
-						"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
-						canonical,
-					),
-				}
+	if canonical, ok := s.acp.Resolve(request.Provider); ok {
+		if request.ReasoningEffort != "" {
+			return providers.ExecuteResult{}, providers.ExecuteFailure{
+				Kind: providers.ExecuteFailureKindInvalidRequest,
+				Message: fmt.Sprintf(
+					"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
+					canonical,
+				),
 			}
-			request.Provider = canonical
-			request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
-			if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
-				return providers.ExecuteResult{}, err
-			}
-			control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
-			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
-			if bindErr != nil {
-				return providers.ExecuteResult{}, bindErr
-			}
-			defer release()
-			continuation, ok := s.acp.(acp.ContinuationService)
-			if !ok {
-				return providers.ExecuteResult{}, providers.ExecuteFailure{
-					Kind:    providers.ExecuteFailureKindDependency,
-					Message: "ACP provider continuation is unavailable",
-				}
-			}
-			return continuation.Continue(ctx, canonical, request, reference)
 		}
+		request.Provider = canonical
+		request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
+		if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
+			return providers.ExecuteResult{}, err
+		}
+		control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
+		release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
+		if bindErr != nil {
+			return providers.ExecuteResult{}, bindErr
+		}
+		defer release()
+		return s.acp.Continue(ctx, canonical, request, reference)
 	}
 	canonicalProvider, err := s.catalog.ResolveProviderID(request.Provider)
 	if err != nil {
@@ -327,14 +287,7 @@ func (s *Service) executeNativeContinuation(
 	defer func() {
 		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
 	}()
-	continuation, ok := s.execution.(execution.ContinuationService)
-	if !ok {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindDependency,
-			Message: "provider continuation adapter is unavailable",
-		}
-	}
-	return continuation.Continue(attemptCtx, execution.ContinuationRequest{
+	return s.execution.Continue(attemptCtx, execution.ContinuationRequest{
 		ExecuteRequest: request,
 		ResumeSession:  &reference,
 	})
@@ -576,19 +529,17 @@ func (s *Service) resolveContinuationProvider(
 			Reference: reference.Clone(),
 		}
 	}
-	if s.acp != nil {
-		if resolved, ok := s.acp.Resolve(reference.Provider); ok {
-			for _, integration := range s.acp.Integrations() {
-				if integration.Name != resolved {
-					continue
-				}
-				if negotiated, known := s.acp.NegotiatedCapabilities(resolved); known {
-					return resolved, negotiated.LoadSession, nil
-				}
-				return resolved, descriptorHasCapability(acpDescriptor(integration), providers.CapabilitySessionResume), nil
+	if resolved, ok := s.acp.Resolve(reference.Provider); ok {
+		for _, integration := range s.acp.Integrations() {
+			if integration.Name != resolved {
+				continue
 			}
-			return resolved, false, nil
+			if negotiated, known := s.acp.NegotiatedCapabilities(resolved); known {
+				return resolved, negotiated.LoadSession, nil
+			}
+			return resolved, descriptorHasCapability(acpDescriptor(integration), providers.CapabilitySessionResume), nil
 		}
+		return resolved, false, nil
 	}
 	resolved, err := s.catalog.ResolveProviderID(reference.Provider)
 	if err != nil {
@@ -649,23 +600,21 @@ func (s *Service) validatePermissionBypass(provider providers.ID, requested bool
 }
 
 func (s *Service) permissionDescriptor(provider providers.ID) (providers.Descriptor, error) {
-	if s.acp != nil {
-		if canonical, ok := s.acp.Resolve(provider); ok {
-			// A package-owned catalog descriptor is the authoritative static
-			// capability fact for a packaged ACP integration. The conservative
-			// runtime fallback below is only for operator-configured integrations
-			// that have no published catalog entry.
-			if descriptor, err := s.catalog.RegistrationProvider(canonical); err == nil {
-				if integration, ok := s.activeACPIntegration(canonical); ok {
-					descriptor = applyACPBypassCapability(descriptor, integration)
-				}
-				return descriptor, nil
-			}
+	if canonical, ok := s.acp.Resolve(provider); ok {
+		// A package-owned catalog descriptor is the authoritative static
+		// capability fact for a packaged ACP integration. The conservative
+		// runtime fallback below is only for operator-configured integrations
+		// that have no published catalog entry.
+		if descriptor, err := s.catalog.RegistrationProvider(canonical); err == nil {
 			if integration, ok := s.activeACPIntegration(canonical); ok {
-				return acpDescriptor(integration), nil
+				descriptor = applyACPBypassCapability(descriptor, integration)
 			}
-			return providers.Descriptor{}, providers.ErrUnknownProvider
+			return descriptor, nil
 		}
+		if integration, ok := s.activeACPIntegration(canonical); ok {
+			return acpDescriptor(integration), nil
+		}
+		return providers.Descriptor{}, providers.ErrUnknownProvider
 	}
 	return s.catalog.RegistrationProvider(provider)
 }
@@ -736,20 +685,11 @@ func (s *Service) ControlAttempt(
 }
 
 func (s *Service) ConfigureACPIntegrations(ctx context.Context, configured []providers.ACPIntegration) error {
-	if s.acp == nil {
-		return fmt.Errorf("configure ACP integrations: ACP service is unavailable")
-	}
 	return s.acp.Configure(ctx, effectiveACPIntegrations(s.packagedACP, configured))
 }
 
 func (s *Service) Close(ctx context.Context) error {
-	var first error
-	for _, lifecycle := range s.lifecycles {
-		if err := lifecycle.Close(ctx); err != nil && first == nil {
-			first = err
-		}
-	}
-	return first
+	return s.lifecycle.Close(ctx)
 }
 
 func cloneACPIntegrations(values []providers.ACPIntegration) []providers.ACPIntegration {
@@ -822,9 +762,6 @@ func applyACPBypassCapability(descriptor providers.Descriptor, integration provi
 }
 
 func (s *Service) activeACPIntegration(provider providers.ID) (providers.ACPIntegration, bool) {
-	if s.acp == nil {
-		return providers.ACPIntegration{}, false
-	}
 	for _, integration := range s.acp.Integrations() {
 		if integration.Name == provider {
 			return integration, true

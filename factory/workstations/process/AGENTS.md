@@ -28,7 +28,7 @@ do not implement work explicitly listed as forked/delegated, and do not claim a
 delegated story's acceptance evidence merely because its routing disposition is
 recorded as `passes:true`.
 3. If there is task items that are not yet complete, please implement the task as much as possible. Then update the progress.txt/prd.json.
-4. If all tasks are done, please submit a PR via the gh CLI. Make named {{ (index .Inputs 0).Name }}. Set the description as the prd.json file that we used.
+4. If all retained current-slice tasks are done, please submit a non-draft PR via the gh CLI. Make named {{ (index .Inputs 0).Name }}. Set the description as the prd.json file that we used.
 5. if there exists a PR already, then please check the comments on said pr, address them, then resubmit a new pr based on the latest feedback.
 6. If the PR for this work item is already MERGED, the lane is DONE: return the
 canonical JSON decision envelope with `decision` set to `ACCEPTED` immediately.
@@ -37,21 +37,24 @@ belong to new work items filed by the operator, never to this lane. Do not push
 new commits to a merged branch.
 
 17. Respond finally with the canonical raw JSON decision envelope defined below.
-17.1. Set `decision` to `ACCEPTED` only when all items in the PRD have been
-marked as passes:true, except that a browser criterion may remain recorded as
+17.1. Set `decision` to `ACCEPTED` only when all retained current-slice items in the PRD have been
+marked as passes:true. Explicitly deferred independent stories remain
+unsatisfied and owned by their named successor; they do not block this
+retained slice. Every retained criterion and blocker still requires completion.
+The only evidence waiver is that a browser criterion may remain recorded as
 unavailable after the one supported browser availability check when every
-non-browser story and acceptance criterion passes and no code change or
+retained non-browser story and acceptance criterion passes and no code change or
 blocking feedback remains. For that browser limitation, the final head must be
 pushed, a pull request must be open or opened in that session, and required CI
 must have started before returning the envelope. All relevant PR conversation
 comments must be addressed, and the PR must be updated to the latest commits so
 the task is ready to move into review. READY FOR REVIEW means: final head
-pushed, PR open, required CI STARTED on that head. It does NOT mean merged and
+pushed, PR open and non-draft, required CI STARTED on that head. It does NOT mean merged and
 does NOT mean CI finished — the review workstation owns terminal CI and the
 merge. If the PRD's acceptance criteria mention "merged", that is the overall
 work item's finish line owned by review, never a reason for you to keep looping.
 17.2. Set `decision` to `CONTINUE` when you completed this iteration but the
-task still has remaining story work, unresolved feedback, or PR follow-up; this
+task still has remaining retained story work, unresolved feedback, or PR follow-up; this
 is ordinary partial progress and stays on the process continue path.
 17.3. Set `decision` to `REJECTED` only when the owning workflow gives an
 explicit rejection, such as a review-owned correction or an invalid plan
@@ -63,7 +66,10 @@ a valid decision.
 
 ## Important
 
-- Work on ONE story per iteration
+- Work on ONE story per iteration. Unfinished independent stories may be
+  deferred only with their ID, remaining outcome, reason, and named successor
+  handoff recorded in progress.txt and the PR body. Do not defer inseparable
+  current-slice work or mark deferred criteria passes:true.
 - Treat that story as one behavior slice or justified bounded enabler. Implement
   the contract, backend, UI, tests, and documentation together when they are
   jointly required for its observable outcome; do not defer the story's direct
@@ -93,11 +99,17 @@ a valid decision.
   verdict; if it does not improve, continue with the next bounded optimization.
   Actual behavior regressions caused by the diff remain blocking.
 - Commit frequently
-- Push early and keep pushing. Once a story's commits pass narrow checks (the
-  targeted `go test -run` on the touched packages plus the changed lint target),
-  push, and open the PR (as a draft if stories remain); keep pushing as each
-  further story lands. Keep local verification under about 10 minutes per
-  visit; hosted CI is the arbiter and covers the rest. Do not run
+- Push early and keep pushing. After a compilable increment passes focused
+  tests and applicable changed lint checks, push it.
+  Open its PR with `gh pr create` without `--draft`.
+  If its existing PR is a draft, run `gh pr ready <n>` at this first increment.
+  After every push, run `gh pr merge <n> --squash` to arm merge or enqueue it.
+  Record unfinished independent stories as deferred to a successor.
+  Name each story, remaining outcome, reason, and successor handoff.
+  Never use unfinished stories as a reason to retain a draft.
+  Never mark deferred criteria satisfied or leave current-slice blockers unresolved.
+  Keep local verification under about 10 minutes per visit.
+  Hosted CI is the arbiter and covers the rest. Do not run
   `make verify-pr`, `make test-functional`, `make test-full`, `make lint`,
   `make test`, or any `-race` run locally (native `-race` does not work on this
   Windows host; hosted CI's race jobs are the evidence). A race in code the PR
@@ -105,16 +117,19 @@ a valid decision.
   baselines or `go list ./...` in the repository ROOT checkout (untracked files
   there break package discovery); run them in your worktree. A lane that must
   stop on a contract conflict still pushes its verified commits and opens a
-  draft PR naming the blocker; never end FAILED holding unpushed verified work.
-- Keep CI green: fix failures your diff caused. If a required check fails on a
-  test in a package your diff does not touch and it reproduces on the base
-  SHA, record the run URL + test name in a PR COMMENT, rerun failed jobs ONCE,
-  and move on — baseline flakes are owned by dedicated deflake lanes; do not
-  burn your session re-proving them.
+  non-draft PR naming the blocker; never claim an unresolved current-slice
+  blocker is ready for acceptance. Never end FAILED holding unpushed verified work.
+- Keep CI green: fix failures your diff caused. Untouched-package required-CI
+  failures are review-owned recovery: review reruns failed jobs once, merges
+  current origin/main if still red, pushes, and re-arms squash merge.
+  Record any observed run URL and test name in a PR COMMENT; never wait for,
+  poll, or re-check terminal CI after the implementation finish line.
+  Finish once the final head is pushed, the PR is open and non-draft, CI has started, and
+  all blocking review feedback is addressed. MERGED belongs to review.
 - This worker starts without the Playwright MCP, the Chrome DevTools MCP, or the computer-use tooling, to save host memory. When a story needs live browser evidence, run a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. It loads the full browser tooling for that step only. That nested session is the supported browser tool for the check below. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 - Browser/screenshot verification: attempt the required browser tool (dev-browser skill, Playwright MCP, or whichever the PRD names) using its single supported connection/availability check ONCE per session. If it returns no available instance, record that exact result in progress.txt ONE time and mark the affected PRD item's evidence as "live browser verification unavailable in this environment" rather than passes:true. Do NOT retry the same connection/availability check within the session, and do NOT spend a subsequent session re-attempting a check that already returned unavailable in a prior session unless the PRD or an operator note explicitly asks you to recheck. An unavailable browser tool is a system limitation, not a task to solve; use other permitted automated evidence when the PRD allows it, and continue only with actionable remaining stories or acceptance criteria.
 
-  When that one unavailable result has been recorded, continue in the same session only if actionable stories or acceptance criteria remain. If every other story and acceptance criterion is passing, no code change or blocking feedback remains, the final head is pushed, and a pull request is open or is opened in that session, start the required CI and emit `ACCEPTED` in that same session once CI has started. Do not return `CONTINUE` solely because the browser criterion is waived. Re-running or re-confirming unchanged tests, typecheck, lint, pull-request state, or CI state is not moving on to another PRD item and must not schedule another process visit when no actionable work remains. After this process finish line, do not wait for or re-check terminal CI; review owns terminal CI, conflicts, waiver judgment, and merge.
+  When that one unavailable result has been recorded, continue in the same session only if actionable stories or acceptance criteria remain. If every other retained story and acceptance criterion is passing, no code change or blocking feedback remains, the final head is pushed, and a pull request is open or is opened in that session, start the required CI and emit `ACCEPTED` in that same session once CI has started. Do not return `CONTINUE` solely because the browser criterion is waived. Re-running or re-confirming unchanged tests, typecheck, lint, pull-request state, or CI state is not moving on to another PRD item and must not schedule another process visit when no actionable work remains. After this process finish line, do not wait for or re-check terminal CI; review owns terminal CI, conflicts, waiver judgment, and merge.
 - NEVER commit CI results, audit notes, or verification records onto your
   branch: each such commit creates a new head, invalidates the CI run it
   describes, and restarts CI. Evidence about a CI run belongs in a PR comment.
@@ -125,9 +140,12 @@ a valid decision.
   loop. One rerun of failed jobs per unchanged head, maximum. Never wait for
   CI to FINISH before ending `ACCEPTED`: after your final push, the
   `ci-wait` gate between process and review owns waiting for terminal CI.
-- Sync with origin/main ONLY when GitHub reports a real conflict, or when the
-  reviewer asks for one because of a real conflict. New commits on main are
-  not by themselves a reason for another sync pass.
+- Sync with origin/main when GitHub reports a real conflict or when review
+  requests conflict reconciliation. Review also owns the explicit
+  untouched-required-check recovery exception: after one failed-job rerun
+  remains red solely in untouched packages, review merges origin/main,
+  pushes, and re-arms squash merge without needing a conflict.
+  New commits on main alone remain no reason for another sync pass.
 - prd.json and progress.txt are untracked worktree scaffolding and must NEVER
   appear in your PR diff. Never `git add -f` them. If your branch already
   tracks them from an old base, `git rm` them during your next rebase.
@@ -181,8 +199,10 @@ Only add patterns that are **general and reusable**, not story-specific details.
 
 Before asking, check whether the standing rules already answer the question.
 Questions about evidence, authority, or untouched-package CI are answered by
-the rules: merge on green, and failures in untouched packages are
-operator-owned. Decide for yourself; do not ask the mailbox about them. Also:
+the rules: merge on green; review owns the one-rerun, merge-main, push and
+squash-re-arm recovery for proven untouched-package failures. Process stops
+at its implementation finish line. Do not ask the mailbox for permission
+to perform that recovery. Also:
 if the packet contradicts repository reality and a
 conservative reading exists that weakens no acceptance criterion, raises no
 baseline and widens no scope, take it, record it (in `progress.txt` and the PR body), and

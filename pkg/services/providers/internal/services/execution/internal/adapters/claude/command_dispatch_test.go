@@ -6,11 +6,13 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 )
@@ -19,7 +21,7 @@ func TestCommandEffectRendersProviderNeutralReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(runner, platformclock.Real{})
+	effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -52,7 +54,7 @@ func TestCommandEffectRendersResumeSessionFlag(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(runner, platformclock.Real{})
+	effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -100,7 +102,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffort(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runner := testutil.NewProviderCommandRunner()
-			effect := claude.NewCommandEffect(runner, platformclock.Real{})
+			effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 			_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:        providers.IDClaude,
 				AttemptID:       "claude-invalid-effort-dispatch",
@@ -126,9 +128,9 @@ type failingStartCommandRunner struct{ err error }
 
 func (r failingStartCommandRunner) Run(
 	context.Context,
-	platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{}, r.err
+	providerservice.CommandRequest,
+) (providerservice.CommandResult, error) {
+	return providerservice.CommandResult{}, r.err
 }
 
 func TestCommandEffectDeclaresAnOversizedCommandLineSpawnFailure(t *testing.T) {
@@ -141,8 +143,7 @@ func TestCommandEffectDeclaresAnOversizedCommandLineSpawnFailure(t *testing.T) {
 		CommandLineLimit:  platformprocess.WindowsCommandLineLimit,
 		Cause:             errors.New("The filename or extension is too long."),
 	}
-	effect := claude.NewCommandEffect(
-		failingStartCommandRunner{err: startErr},
+	effect := claude.NewCommandEffect((failingStartCommandRunner{err: startErr}).commandEffect(),
 		platformclock.Real{},
 	)
 	if effect == nil {
@@ -200,7 +201,7 @@ func TestCommandEffectKeepsAnOversizedPromptOffTheCommandLine(t *testing.T) {
 
 			prompt := strings.Repeat("u", tc.payloadSize)
 			runner := testutil.NewProviderCommandRunner()
-			effect := claude.NewCommandEffect(runner, platformclock.Real{})
+			effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 			_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 				ExecuteRequest: providers.ExecuteRequest{
 					Provider:     providers.IDClaude,
@@ -247,7 +248,7 @@ func TestCommandEffectPreservesFlagsWhenThePromptMovesToStdin(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(runner, platformclock.Real{})
+	effect := claude.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 		ExecuteRequest: providers.ExecuteRequest{
 			Provider:        providers.IDClaude,
@@ -274,4 +275,125 @@ func TestCommandEffectPreservesFlagsWhenThePromptMovesToStdin(t *testing.T) {
 	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
 		t.Fatalf("command args = %#v, want %#v", got, want)
 	}
+}
+
+// The runner advances only the supplied clock: elapsed host time cannot satisfy
+// this assertion, including on unsuccessful attempts.
+func TestCommandEffectUsesInjectedRunnerAndClockOnTerminalPaths(t *testing.T) {
+	t.Parallel()
+	observerErr := errors.New("observer stopped")
+	for _, tc := range []struct {
+		name       string
+		runErr     error
+		observeErr error
+		wantKind   providers.ExecuteFailureKind
+	}{
+		{name: "success"},
+		{name: "timeout", runErr: context.DeadlineExceeded, wantKind: providers.ExecuteFailureKindTimeout},
+		{name: "cancellation", runErr: context.Canceled, wantKind: providers.ExecuteFailureKindCanceled},
+		{name: "observer failure", observeErr: observerErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond)
+			calls := 0
+			runner := terminalCommandRunner(func(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+				calls++
+				if request.FactorySessionID != "owned-session" || request.Command != "claude" {
+					t.Fatalf("command = %#v, want owned session and provider", request)
+				}
+				clock.SetTick(37)
+				return providerservice.CommandResult{Stdout: []byte("delivered"), Stderr: []byte("private diagnostic")}, tc.runErr
+			})
+			effect := claude.NewCommandEffect((runner).commandEffect(), clock)
+			var observed strings.Builder
+			result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
+				Provider:    providers.IDClaude,
+				UserMessage: "perform work",
+				Correlation: providers.ExecuteCorrelation{FactorySessionID: "owned-session"},
+			}}, func(chunk []byte) error {
+				observed.Write(chunk)
+				return tc.observeErr
+			})
+			if calls != 1 || result.DurationMillis != 37 || observed.String() != "delivered" {
+				t.Fatalf("calls = %d, duration = %d, stdout = %q", calls, result.DurationMillis, observed.String())
+			}
+			if tc.wantKind != "" {
+				var failure providers.ExecuteFailure
+				if !errors.As(err, &failure) || failure.Kind != tc.wantKind {
+					t.Fatalf("error = %v, want %s", err, tc.wantKind)
+				}
+			} else if !errors.Is(err, tc.observeErr) {
+				t.Fatalf("error = %v, want %v", err, tc.observeErr)
+			}
+		})
+	}
+}
+
+type terminalCommandRunner func(context.Context, providerservice.CommandRequest) (providerservice.CommandResult, error)
+
+func (runner terminalCommandRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	return runner(ctx, request)
+}
+
+// fixtureCommandRunner projects the controlled buffered platform fake into the
+// component's direct Providers command port. Production selects its own bridge.
+func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
+	return bufferedFixtureRunner{runner: runner}.commandEffect()
+}
+
+type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
+
+func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	result, err := r.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin, Env: request.Env,
+		WorkDir: request.WorkDir, ExecutionScopeID: request.FactorySessionID,
+		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r failingStartCommandRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner terminalCommandRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r bufferedFixtureRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (r failingStartCommandRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
+}
+
+func (runner terminalCommandRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
+}
+
+func (r bufferedFixtureRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
 }

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -25,18 +27,45 @@ import (
 
 // newConfiguredProvidersService always installs the shell-free Antigravity
 // print-mode command effect. An injected serviceedges.Edges.AgyPTYHost exists
-// only to satisfy the legacy PTY allocator construction port and must never
-// suppress the canonical command adapter; the command effect unconditionally
-// takes priority over the legacy PTY effect in executionwire's built-in
-// dependency selection.
+// for hosts that intentionally select the legacy PTY seam. Composition keeps
+// command effects ahead of legacy PTY before supplying the completed effect.
 func newConfiguredProvidersService(
-	options []providerswire.Option,
+	configuration providerswire.Configuration,
 	agyRunner platformprocess.CommandRunner,
+	legacyAgy providerswire.AgyEffect,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	logger logging.Logger,
+	commandFactory platformprocess.CommandFactory,
+	locator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
 ) (providers.Service, error) {
-	options = append(options, providerswire.WithAgyCommandRunner(
-		workerswire.NewProviderCommandRunner(agyRunner),
-	))
-	return providerswire.NewService(options...)
+	runner := workerswire.NewProviderCommandRunner(agyRunner)
+	antigravity := legacyAgy
+	if agyRunner != nil {
+		antigravity = providerswire.NewAgyCommandEffect(runner, clock, scheduler)
+	}
+	config, err := providerswire.PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := providerswire.NewCatalogService(providerswire.IdentityCatalogProbe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, providerswire.NewCodexEffect(runner, clock), providerswire.NewClaudeEffect(runner, clock), acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := providerswire.NewAttemptExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
 }
 
 type modelsProcessLauncher struct {

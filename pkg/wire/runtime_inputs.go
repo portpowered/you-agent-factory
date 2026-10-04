@@ -22,6 +22,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -63,7 +64,9 @@ func provideRunInputPathInspector() platformfilesystem.PathInspector {
 type runtimeArtifactClock func() time.Time
 type runtimeArtifactIDGenerator func() string
 
-func provideRuntimeArtifactClock() runtimeArtifactClock             { return time.Now }
+func provideRuntimeArtifactClock(source platformclock.Source) runtimeArtifactClock {
+	return source.Now
+}
 func provideRuntimeArtifactIDGenerator() runtimeArtifactIDGenerator { return uuid.NewString }
 
 func provideRuntimeLoggerFactory() factoryruntime.RuntimeLoggerFactory {
@@ -295,10 +298,7 @@ func provideSessionStartRequestFactory() runcli.SessionStartRequestFactory {
 // invocation data and observation fallbacks; they do not re-read Edges or
 // manufacture replacement runners.
 func provideFactoryRuntimeClock(edges serviceedges.Edges) factoryruntime.Clock {
-	if edges.Clock != nil {
-		return edges.Clock
-	}
-	return platformclock.Real{}
+	return edges.Clock
 }
 
 func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) factorysessionwire.ProviderOverrideService {
@@ -376,13 +376,23 @@ func provideAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocato
 func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
 	clock := edges.AgyPTYClock
 	if clock == nil {
+		clock = edges.Clock
+	}
+	if clock == nil {
 		clock = platformclock.Real{}
+	}
+	scheduler, ok := clock.(platformclock.TimerSource)
+	if !ok {
+		scheduler, ok = edges.Clock.(platformclock.TimerSource)
+		if !ok {
+			scheduler = platformclock.Real{}
+		}
 	}
 	host := edges.AgyPTYHost
 	if host == nil {
 		host = platformpty.NewHost()
 	}
-	return providerswire.NewAgyPTYAllocator(host, clock)
+	return providerswire.NewAgyPTYAllocator(host, clock, scheduler)
 }
 
 func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {
@@ -437,20 +447,26 @@ func provideWorkService(
 	inspectPath work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
-	durability work.CompletedFlushSequenceReader,
+	stateAccess workwire.StateAccess,
+	preparation work.RequestPreparationService,
+	invocationPreparation work.InvocationInputPreparation,
 ) work.Service {
-	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer, durability)
+	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer, stateAccess, preparation, invocationPreparation)
+}
+
+func provideWorkSessionResolver(runtimes factorysessionwire.RuntimeAssembly) workwire.RuntimeSessionResolver {
+	return workwire.NewRuntimeSessionResolver(runtimes)
 }
 
 // provideWorkDurabilityReader adapts the narrow Recordings lifecycle
 // capability to Work's sequence-only consumer contract. The root graph still
 // injects one capability; Work never receives the broad Recordings service.
-func provideWorkDurabilityReader(service recordings.Service) work.CompletedFlushSequenceReader {
+func provideWorkDurabilityReader(service recordings.Service) (work.CompletedFlushSequenceReader, error) {
 	reader, ok := service.(recordings.CompletedFlushWatermarkReader)
 	if !ok || reader == nil {
-		return nil
+		return nil, errors.New("construct Work: Recordings completed-flush watermark reader is required")
 	}
-	return recordingsWorkDurabilityReader{reader: reader}
+	return recordingsWorkDurabilityReader{reader: reader}, nil
 }
 
 type recordingsWorkDurabilityReader struct {
@@ -460,9 +476,6 @@ type recordingsWorkDurabilityReader struct {
 func (reader recordingsWorkDurabilityReader) CompletedFlushSequence(
 	streamGenerationID string,
 ) (int64, bool) {
-	if reader.reader == nil {
-		return 0, false
-	}
 	cursor, ok := reader.reader.CompletedFlushWatermark(streamGenerationID)
 	return int64(cursor.Sequence), ok
 }
@@ -638,3 +651,39 @@ func bindWatchReconnectWait(scheduler platformclock.TimerSource) workcli.Reconne
 		}
 	}
 }
+
+// provideRuntimePreparationWorkstationLoader retains ordinary runtime default loading.
+func provideRuntimePreparationWorkstationLoader() factorydefinitions.WorkstationLoader {
+	return nil
+}
+
+func provideRuntimeRequestInvocationFiles(files factoryruntimewire.InputFileSystem) factorydefinitions.FileReader {
+	return files.ReadFile
+}
+
+func provideRuntimeRequestPrompts(service workers.Service) factoryruntimewire.RequestPromptRenderer {
+	prompts, _ := service.(factoryruntimewire.RequestPromptRenderer)
+	return prompts
+}
+
+func provideRuntimeRequestTemplateFields(service workers.Service) factoryruntimewire.RequestTemplateFieldResolver {
+	fields, _ := service.(factoryruntimewire.RequestTemplateFieldResolver)
+	return fields
+}
+
+func provideRuntimeRequestArtifactFiles(files factoryruntimewire.InputFileSystem) factoryruntimewire.ExpectedArtifactFileSystem {
+	artifacts, _ := files.(factoryruntimewire.ExpectedArtifactFileSystem)
+	return artifacts
+}
+
+// Production calls Resolve; its session Workers wrapper supplies progress on execution.
+func provideRuntimeRequestProgress() workers.ProgressPublisher {
+	return func(workers.ProgressFragment) {}
+}
+
+func provideRuntimeRequestLogger(baseLogger *zap.Logger, loggerFactory factoryruntime.RuntimeLoggerFactory) factoryruntime.Logger {
+	return loggerFactory(baseLogger, false)
+}
+
+// Current Work reads use live sessions; historical reads keep their existing separate snapshot root.
+func provideWorkSnapshotReader() workwire.SnapshotReader { return nil }

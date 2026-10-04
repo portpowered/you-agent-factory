@@ -101,10 +101,6 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 			knownWorkTypes[workType] = true
 		}
 	}
-	clock := config.Clock
-	if clock == nil {
-		clock = clockwork.NewRealClock()
-	}
 	debounceWindow := config.DebounceWindow
 	if debounceWindow <= 0 {
 		debounceWindow = defaultDebounceWindow
@@ -119,7 +115,7 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 		walkDirectory:     config.WalkDirectory,
 		workRequestIDs:    config.WorkRequestIDs,
 		newWatcher:        newFSNotifyEventWatcher,
-		clock:             clock,
+		clock:             config.Clock,
 		debounceWindow:    debounceWindow,
 		handledIdentities: config.HandledIdentities,
 	}
@@ -134,15 +130,14 @@ func (fw *watcher) Watch(ctx context.Context) error {
 	}
 	defer watcher.Close()
 
-	if err := fw.watchExistingDirs(watcher); err != nil {
+	scheduler := newDebounceScheduler(fw.clock, fw.debounceWindow)
+	defer scheduler.cancelAll()
+	if err := fw.discoverDirectory(ctx, watcher, scheduler, fw.dir); err != nil {
 		return err
 	}
 
 	fw.logger.Info("file watcher started",
 		zap.String("dir", fw.dir))
-
-	scheduler := newDebounceScheduler(fw.clock, fw.debounceWindow)
-	defer scheduler.cancelAll()
 
 	for {
 		select {
@@ -166,7 +161,7 @@ func (fw *watcher) Watch(ctx context.Context) error {
 			}
 			if info.IsDir() {
 				if event.Op&fsnotify.Create != 0 {
-					if err := watcher.Add(event.Name); err != nil {
+					if err := fw.discoverDirectory(ctx, watcher, scheduler, event.Name); err != nil {
 						fw.logger.Warn("failed to watch new directory",
 							zap.String("path", event.Name), zap.Error(err))
 					}
@@ -174,18 +169,7 @@ func (fw *watcher) Watch(ctx context.Context) error {
 				continue
 			}
 
-			path := event.Name
-			scheduler.schedule(path, func() {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				if err := fw.handleFile(ctx, path); err != nil {
-					fw.logger.Error("failed to handle file",
-						zap.String("path", path), zap.Error(err))
-				}
-			})
+			fw.scheduleInput(ctx, scheduler, event.Name)
 		case err, ok := <-watcher.Errors():
 			if !ok {
 				return nil
@@ -360,47 +344,63 @@ func (fw *watcher) validatePreseedRequests(workRequests []work.WorkRequest) erro
 	return nil
 }
 
-// watchExistingDirs adds the root and all existing subdirectories to the watcher,
-// walking 2 levels deep (work-type then channel).
-func (fw *watcher) watchExistingDirs(watcher fileEventWatcher) error {
-	if err := watcher.Add(fw.dir); err != nil {
-		return fmt.Errorf("watch %s: %w", fw.dir, err)
-	}
-
-	entries, err := fw.files.ReadDir(fw.dir)
-	if err != nil {
-		return fmt.Errorf("read dir %s: %w", fw.dir, err)
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+// discoverDirectory registers each directory before reading its contents. Files
+// published before registration are discovered by the scan; later files arrive
+// through events. Both paths share debounce and handled-identity suppression.
+func (fw *watcher) discoverDirectory(ctx context.Context, watcher fileEventWatcher, scheduler *debounceScheduler, dir string) error {
+	return fw.walkDirectory(dir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		subdir := filepath.Join(fw.dir, entry.Name())
-		if err := watcher.Add(subdir); err != nil {
-			fw.logger.Warn("failed to watch subdirectory",
-				zap.String("path", subdir), zap.Error(err))
-			continue
-		}
-
-		// Also watch channel subdirectories.
-		channelEntries, err := fw.files.ReadDir(subdir)
-		if err != nil {
-			fw.logger.Warn("failed to read work-type subdirectory",
-				zap.String("path", subdir), zap.Error(err))
-			continue
-		}
-		for _, ch := range channelEntries {
-			if ch.IsDir() {
-				channelDir := filepath.Join(subdir, ch.Name())
-				if err := watcher.Add(channelDir); err != nil {
-					fw.logger.Warn("failed to watch channel directory",
-						zap.String("path", channelDir), zap.Error(err))
-				}
+		if walkErr != nil {
+			if path == dir {
+				return walkErr
 			}
+			fw.logger.Warn("failed to discover input path", zap.String("path", path), zap.Error(walkErr))
+			return nil
 		}
+		rel, err := filepath.Rel(fw.dir, path)
+		if err != nil {
+			return err
+		}
+		depth := len(strings.Split(filepath.ToSlash(rel), "/"))
+		if rel == "." {
+			depth = 0
+		}
+		if entry.IsDir() {
+			if depth > 2 {
+				return fs.SkipDir
+			}
+			if err := watcher.Add(path); err != nil {
+				if path == fw.dir {
+					return fmt.Errorf("watch %s: %w", path, err)
+				}
+				fw.logger.Warn("failed to watch input directory", zap.String("path", path), zap.Error(err))
+				return fs.SkipDir
+			}
+		} else if depth == 3 {
+			fw.scheduleInput(ctx, scheduler, path)
+		}
+		return nil
+	})
+}
+
+func (fw *watcher) scheduleInput(ctx context.Context, scheduler *debounceScheduler, path string) {
+	if isTempFile(filepath.Base(path)) {
+		return
 	}
-	return nil
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext != JSON_EXTENSION && ext != MD_EXTENSION {
+		return
+	}
+	scheduler.schedule(path, func() {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := fw.handleFile(ctx, path); err != nil {
+			fw.logger.Error("failed to handle file", zap.String("path", path), zap.Error(err))
+		}
+	})
 }
 
 func isWatchedFileEvent(op fsnotify.Op) bool {
@@ -617,7 +617,7 @@ func (fw *watcher) readFileWithRetry(path string, maxRetries int, delay time.Dur
 			return content, nil
 		}
 		if i < maxRetries-1 {
-			time.Sleep(delay)
+			fw.clock.Sleep(delay)
 		}
 	}
 	return content, nil

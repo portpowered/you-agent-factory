@@ -194,8 +194,12 @@ func resolveRuntimeExecutionSelection(
 	}
 	selection.worktreeFactoryDirectory = selection.factoryDirectory
 	if cfg != nil {
+		selection.worktreeFactoryDirectory = firstRuntimeValue(cfg.requestRuntimeBaseDir, selection.worktreeFactoryDirectory)
+	}
+	if cfg != nil {
 		if runtimeLookup, ok := cfg.runtimeConfig.(interfaces.RuntimeConfigLookup); ok && runtimeLookup != nil {
 			selection.worktreeFactoryDirectory = firstRuntimeValue(
+				strings.TrimSpace(cfg.requestRuntimeBaseDir),
 				strings.TrimSpace(runtimeLookup.RuntimeBaseDir()),
 				selection.factoryDirectory,
 			)
@@ -583,11 +587,17 @@ func applyRuntimeConfigSelection(
 	cfg *runtimeConfig,
 	selection *runtimeExecutionSelection,
 ) {
-	configLookup, ok := cfg.runtimeConfig.(interfaces.RuntimeConfigLookup)
-	if !ok || selection.factoryDirectory != "" {
+	if selection.factoryDirectory != "" {
 		return
 	}
-	selection.factoryDirectory = strings.TrimSpace(configLookup.FactoryDir())
+	selection.factoryDirectory = strings.TrimSpace(cfg.requestFactoryDirectory)
+	configLookup, ok := cfg.runtimeConfig.(interfaces.RuntimeConfigLookup)
+	if !ok {
+		return
+	}
+	if selection.factoryDirectory == "" {
+		selection.factoryDirectory = strings.TrimSpace(configLookup.FactoryDir())
+	}
 	if selection.runnerID == "" {
 		if factoryConfig := configLookup.FactoryConfig(); factoryConfig != nil {
 			selection.runnerID = strings.TrimSpace(factoryConfig.Runner)
@@ -894,7 +904,8 @@ func resolveRuntimeWorkstationDefinition(
 	if !found || workstation == nil {
 		return workstation, found, nil
 	}
-	interpolated, err := interpolateRuntimeWorkstationConfig(cfg, workstation, invocation)
+	detached := interfaces.CloneWorkstationConfig(*workstation)
+	interpolated, err := interpolateRuntimeWorkstationConfig(cfg, &detached, invocation)
 	return interpolated, found, err
 }
 
@@ -905,14 +916,18 @@ func resolveRuntimeWorkerDefinition(
 	invocation *work.InvocationArguments,
 ) (*interfaces.FactoryWorkerConfig, bool) {
 	worker, found := lookup.Worker(selection.workerName)
-	if found || workstation == nil {
-		return worker, found
+	if !found && workstation != nil {
+		workstationWorkerName := resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation)
+		if selection.workerName == "" {
+			selection.workerName = strings.TrimSpace(workstationWorkerName)
+		}
+		worker, found = lookup.Worker(workstationWorkerName)
 	}
-	workstationWorkerName := resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation)
-	if selection.workerName == "" {
-		selection.workerName = strings.TrimSpace(workstationWorkerName)
+	if worker != nil {
+		detached := interfaces.CloneWorkerConfig(*worker)
+		worker = &detached
 	}
-	return lookup.Worker(workstationWorkerName)
+	return worker, found
 }
 
 func runtimeSelectionIsTopologyNoop(

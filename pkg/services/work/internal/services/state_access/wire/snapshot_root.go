@@ -8,7 +8,7 @@ import (
 // snapshot-backed reads when no live session adapter is available. Composition
 // selects which owner supplies the reader.
 func NewSnapshotRootService(snapshots stateaccess.SnapshotReader) stateaccess.Service {
-	return NewService(nilSessionResolver{}, snapshots)
+	return NewService(nilSessionResolver{}, snapshots, nil)
 }
 
 type nilSessionResolver struct{}

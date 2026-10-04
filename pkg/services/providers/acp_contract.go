@@ -18,7 +18,3 @@ func (integration ACPIntegration) Clone() ACPIntegration {
 	integration.Arguments = append([]string(nil), integration.Arguments...)
 	return integration
 }
-
-// Factory constructs the singular Providers root with invocation-scoped ACP
-// configuration. Construction is inert; commands start only during Execute.
-type Factory func([]ACPIntegration) (Service, error)

@@ -198,14 +198,39 @@ Default review thresholds:
 - Files that accumulate multiple unrelated responsibilities **SHOULD** be split.
 - New package-level variables **SHOULD** be reviewed with extra scrutiny.
 
-Repository package-size policy:
+Repository Go size and complexity enforcement:
 
-- Checked backend package directories under `pkg/` **MUST NOT** contain more than 15 counted Go files.
-- Counted files are hand-maintained `.go` files in the same package directory, including package-local `_test.go` files.
-- Generated Go files, vendored code, and non-owned fixture roots such as `testdata` are excluded from the package file-count gate.
-- When `make pkg-file-count` or `make lint` reports an oversized package, contributors **SHOULD** split files by durable package responsibility or remove dead files. Broad permanent exceptions for oversized `pkg/` packages are prohibited.
-- Existing audited package-size debt **MAY** remain only in the exact deletion-only baseline, which blocks new oversized packages, count increases, and stale entries while requiring every reduction to lower or remove the recorded count.
-- Run `make pkg-file-count` for the focused package-size check, or `make lint` before review for the full backend lint path that includes this gate.
+- `make golangci` runs pinned golangci-lint v2.11.4 and the shared `repolint`
+  analyzer. Its built-in size rules apply to handwritten Go under `cmd/`,
+  `internal/`, `pkg/`, and `tests/`, including `_test.go` files.
+- Revive `file-length-limit` allows 1000 lines after excluding comment and
+  blank lines. Revive `function-length` allows 100 physical lines inside a
+  function's braces (including comments and blanks); statement counting is
+  disabled. Gocyclo reports cyclomatic complexity greater than 15.
+- Generated files are excluded through the committed configuration. Only the
+  two named revive rules are enabled; revive's default rules are disabled.
+- The changed-line ratchet uses the merge base with `origin/main` and requires
+  fetched history. The canonical target checks that prerequisite explicitly,
+  including for clean input. It accepts unchanged debt and keeps
+  `whole-files: false`.
+  Function length and complexity report at the declaration, so body-only
+  growth can be filtered when that line is unchanged. In the pinned revive
+  version, file length reports at the file's final line. Moving or changing a
+  reported location can expose old debt again.
+- A necessary exemption **MUST** use a narrowly scoped `//nolint:revive` or
+  `//nolint:gocyclo` with an actionable reason. The former size checkers and
+  their exemption-budget ledger are retired; their old directives are inert.
+- `make lint-migration-smoke LINT_MIGRATION_COHORT=size` exercises the actual
+  pinned configuration in disposable modules and git histories, observing
+  accepted limits, deliberate violations, generated exclusions, narrow
+  suppression, ratchet behavior, and configuration/history errors. This is a
+  lint/static gate rather than an application functional test.
+
+Repository package-shape policy:
+
+- Contributors **SHOULD** split packages by durable responsibility and remove dead files. A fixed per-directory Go file budget is no longer enforced.
+- The golangci migration retires `pkg-file-count`, its filesystem walker, and `backend-package-file-count.json`; file count is not a replacement analyzer rule.
+- File length, function length, and complexity remain governed by the pinned built-in rules above. Dependency direction and service shape retain their separate lint gates.
 
 
 ### 6. Error Handling and Contracts
@@ -315,6 +340,18 @@ Rules:
 - Integration tests **MUST** consume an artifact compiled once by the invoking
   build or release lane. They **MUST NOT** compile inside test setup and
   **MUST** keep the real-boundary case set intentionally small.
+- `make golangci` enforces the functional OS boundary with depguard (`os/exec`
+  imports) and type-aware forbidigo (`Command`/`CommandContext`). These rules
+  cover functional scenarios and helpers, excluding shared
+  `tests/functional/internal/support` and testdata. Existing sites use the
+  `origin/main` merge-base ratchet; new or moved sites fail. Real OS proof
+  belongs in integration. Backend Lint owns this enforcement.
+- `make golangci` enforces functional composition through depguard (secondary
+  composition imports), forbidigo (retired harness helpers), and the shared
+  Layering/Behavior analyzers (dedicated-provider imports, provider-local support,
+  and configuration callbacks). Provider scenarios use canonical shared support
+  and exact public effect ports. Required Backend Lint owns static enforcement;
+  functional coverage preserves its runtime selection and concurrency budget.
 - Inventory, package-shape, dependency-direction, source-topology, and similar
   structural enforcement **MUST** be implemented as lint or static checks, not
   runtime tests, unless that structure is itself a published customer contract.
@@ -363,7 +400,7 @@ Fixed sleeps and short fixed deadlines are the dominant source of CI-load flakes
 - Tests **MUST** wait for an event, channel, or observable condition, not for elapsed time. Poll a condition (for example the functional `WaitFor...` support helpers) instead of `time.Sleep`.
 - Code under test that depends on time **MUST** take the injectable `pkg/platform/clock` source, and tests **SHOULD** use `clock.Deterministic` so time advances only when the test says so.
 - A timeout in a test is a failure ceiling, not an expectation. It **MUST** be generous (tens of seconds or more) so a loaded host does not trip it, and a test **MUST NOT** assert that elapsed time falls inside a tight window.
-- `make test-sleep-check` (part of `make lint`) ratchets `time.Sleep`, literal deadlines of five seconds or less (`time.After`, `time.NewTimer`, `context.WithTimeout`/`WithDeadline`), and elapsed-time comparisons against `docs/internal/baselines/test-sleep-deadline-baseline.json`. New sites fail the check; removing sites never does. Regenerate the baseline only to remove entries (`go run ./cmd/testsleepcheck -regenerate`). A genuinely necessary site may be exempted inline with `//nolint:testsleep // reason`; the reason is mandatory.
+- `make golangci` (part of `make lint`) runs the compiler-backed `testsleep` analyzer through `cmd/repolint`. It ratchets `time.Sleep`, literal deadlines of five seconds or less (`time.After`, `time.NewTimer`, `time.AfterFunc`, `context.WithTimeout`/`WithDeadline`), and elapsed-time comparisons in tests and test helpers. Exact debt in `internal/lint/analyzers/baseline.txt` retains file, declaration, kind and occurrence; moving lines preserves debt, new sites fail, and removing sites requires deleting stale keys. Compiler metadata also rejects allowances for vanished package owners. Only a newly migrated rule may seed existing observed debt once; established rules cannot gain keys. A genuinely necessary site may be exempted inline with `//nolint:testsleep // reason`; the reason is mandatory.
 
 ### 8. CI/CD and Automated Enforcement
 

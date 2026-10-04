@@ -10,6 +10,7 @@ import (
 )
 
 type sourceRecord struct {
+	runtimeID   string
 	mu          sync.Mutex
 	kind        string
 	desired     automations.DesiredLifecycleState
@@ -19,6 +20,14 @@ type sourceRecord struct {
 
 func (s *service) StartSource(
 	ctx context.Context,
+	request automations.StartSourceRequest,
+) (automations.StartSourceResult, error) {
+	return s.StartSourceForRuntime(ctx, "", request)
+}
+
+func (s *service) StartSourceForRuntime(
+	ctx context.Context,
+	runtimeID string,
 	request automations.StartSourceRequest,
 ) (automations.StartSourceResult, error) {
 	if err := validateStartRequest(request); err != nil {
@@ -32,7 +41,7 @@ func (s *service) StartSource(
 			),
 		}, cancelledOperationError("StartSource", err)
 	}
-	record, err := s.recordForStart(request)
+	record, err := s.recordForStart(runtimeID, request)
 	if err != nil {
 		return automations.StartSourceResult{}, err
 	}
@@ -43,7 +52,7 @@ func (s *service) StartSource(
 	if err != nil || effect == nil {
 		return result, err
 	}
-	if err := s.effects.Start(ctx, *effect); err != nil {
+	if err := s.lifecycle.Start(ctx, *effect); err != nil {
 		record.mu.Lock()
 		outcome, terminalErr := commitStartFailure(record, *effect, prior, err)
 		record.mu.Unlock()
@@ -85,10 +94,6 @@ func (s *service) planStartLocked(
 	if result, done := existingStartResult(record); done {
 		return result, nil, lifecycleSnapshot{}, record.terminalErr
 	}
-	if s.effects.Start == nil {
-		return automations.StartSourceResult{}, nil, lifecycleSnapshot{},
-			unavailableEffectsError("StartSource")
-	}
 
 	prior := lifecycleSnapshot{
 		desired:     record.desired,
@@ -98,7 +103,7 @@ func (s *service) planStartLocked(
 	record.desired = automations.DesiredLifecycleRunning
 	record.observation.State = automations.ObservedLifecycleStarting
 	record.terminalErr = nil
-	effect := reconciliation.StartEffect{Kind: record.kind, Observation: record.observation}
+	effect := reconciliation.StartEffect{RuntimeID: record.runtimeID, Kind: record.kind, Observation: record.observation}
 	return automations.StartSourceResult{Outcome: lifecycleOutcome(
 		record.desired, record.observation, automations.ConvergenceStatusProgressing, false,
 	)}, &effect, prior, nil
@@ -180,12 +185,20 @@ func (s *service) StopSource(
 	ctx context.Context,
 	request automations.StopSourceRequest,
 ) (automations.StopSourceResult, error) {
+	return s.StopSourceForRuntime(ctx, "", request)
+}
+
+func (s *service) StopSourceForRuntime(
+	ctx context.Context,
+	runtimeID string,
+	request automations.StopSourceRequest,
+) (automations.StopSourceResult, error) {
 	if !validSourceIdentity(request.Identity) {
 		return automations.StopSourceResult{}, invalidOperationError(
 			"StopSource", "malformed source identity",
 		)
 	}
-	record, ok := s.findRecord(request.Identity)
+	record, ok := s.findRecord(runtimeID, request.Identity)
 	if !ok {
 		return automations.StopSourceResult{}, operationError(
 			"StopSource", automations.ErrorCodeNotFound, automations.ErrNotFound,
@@ -199,7 +212,7 @@ func (s *service) StopSource(
 	if err != nil || effect == nil {
 		return result, err
 	}
-	if err := s.effects.Stop(ctx, *effect); err != nil {
+	if err := s.lifecycle.Stop(ctx, *effect); err != nil {
 		record.mu.Lock()
 		outcome, terminalErr := commitStopFailure(record, *effect, prior, err)
 		record.mu.Unlock()
@@ -252,11 +265,6 @@ func (s *service) planStopLocked(
 		}
 	}
 
-	if s.effects.Stop == nil {
-		return automations.StopSourceResult{}, nil, lifecycleSnapshot{},
-			unavailableEffectsError("StopSource")
-	}
-
 	prior := lifecycleSnapshot{
 		desired:     record.desired,
 		observation: record.observation,
@@ -265,7 +273,7 @@ func (s *service) planStopLocked(
 	record.desired = automations.DesiredLifecycleStopped
 	record.observation.State = automations.ObservedLifecycleStopping
 	record.terminalErr = nil
-	effect := reconciliation.StopEffect{Observation: record.observation}
+	effect := reconciliation.StopEffect{RuntimeID: record.runtimeID, Observation: record.observation}
 	return automations.StopSourceResult{
 		Outcome: lifecycleOutcome(
 			record.desired,
@@ -317,12 +325,20 @@ func (s *service) WaitSource(
 	ctx context.Context,
 	request automations.WaitSourceRequest,
 ) (automations.WaitSourceResult, error) {
+	return s.WaitSourceForRuntime(ctx, "", request)
+}
+
+func (s *service) WaitSourceForRuntime(
+	ctx context.Context,
+	runtimeID string,
+	request automations.WaitSourceRequest,
+) (automations.WaitSourceResult, error) {
 	if !validSourceIdentity(request.Identity) || !validDesired(request.Desired) {
 		return automations.WaitSourceResult{}, invalidOperationError(
 			"WaitSource", "malformed source identity or desired state",
 		)
 	}
-	record, ok := s.findRecord(request.Identity)
+	record, ok := s.findRecord(runtimeID, request.Identity)
 	if !ok {
 		return automations.WaitSourceResult{}, operationError(
 			"WaitSource", automations.ErrorCodeNotFound, automations.ErrNotFound,
@@ -337,7 +353,7 @@ func (s *service) WaitSource(
 		return result, err
 	}
 
-	observation, effectErr := s.effects.Wait(ctx, *effect)
+	observation, effectErr := s.lifecycle.Wait(ctx, *effect)
 	record.mu.Lock()
 	result, err = commitWaitLocked(request.Desired, *effect, observation, effectErr, record)
 	record.mu.Unlock()
@@ -373,11 +389,9 @@ func (s *service) planWaitLocked(
 			),
 		}, nil, record.terminalErr
 	}
-	if s.effects.Wait == nil {
-		return automations.WaitSourceResult{}, nil, unavailableEffectsError("WaitSource")
-	}
 
 	effect := reconciliation.WaitEffect{
+		RuntimeID:   record.runtimeID,
 		Desired:     request.Desired,
 		Observation: record.observation,
 	}
@@ -442,7 +456,7 @@ func (s *service) SourceStatus(
 			"SourceStatus", "malformed source identity",
 		)
 	}
-	record, ok := s.findRecord(request.Identity)
+	record, ok := s.findRecord("", request.Identity)
 	if !ok {
 		return automations.SourceStatusResult{}, operationError(
 			"SourceStatus", automations.ErrorCodeNotFound, automations.ErrNotFound,
@@ -501,7 +515,10 @@ func (s *service) recordByInstanceID(op, instanceID string) (*sourceRecord, erro
 	}
 	s.recordsMu.RLock()
 	defer s.recordsMu.RUnlock()
-	for _, record := range s.records {
+	for key, record := range s.records {
+		if key.runtimeID != "" {
+			continue
+		}
 		record.mu.Lock()
 		matches := record.observation.InstanceID == instanceID
 		record.mu.Unlock()
@@ -516,12 +533,13 @@ func (s *service) recordByInstanceID(op, instanceID string) (*sourceRecord, erro
 }
 
 func (s *service) recordForStart(
+	runtimeID string,
 	request automations.StartSourceRequest,
 ) (*sourceRecord, error) {
-	key := identityKey{
+	key := sourceKey{runtimeID: runtimeID, identityKey: identityKey{
 		automationID: request.Identity.AutomationID,
 		sourceID:     request.Identity.SourceID,
-	}
+	}}
 	s.recordsMu.Lock()
 	defer s.recordsMu.Unlock()
 	if existing, ok := s.records[key]; ok {
@@ -533,12 +551,13 @@ func (s *service) recordForStart(
 		observation = *request.Resume
 	}
 	record := &sourceRecord{
+		runtimeID:   runtimeID,
 		kind:        request.Kind,
 		desired:     automations.DesiredLifecycleRunning,
 		observation: observation,
 		terminalErr: observationTerminalError("StartSource", observation.State),
 	}
-	if owner, exists := s.instanceOwnerLocked(observation.InstanceID); exists && owner != key {
+	if owner, exists := s.instanceOwnerLocked(runtimeID, observation.InstanceID); exists && owner != key {
 		return nil, operationError(
 			"StartSource", automations.ErrorCodeConflict, automations.ErrConflict,
 			"resume instance belongs to another source",
@@ -548,8 +567,11 @@ func (s *service) recordForStart(
 	return record, nil
 }
 
-func (s *service) instanceOwnerLocked(instanceID string) (identityKey, bool) {
+func (s *service) instanceOwnerLocked(runtimeID, instanceID string) (sourceKey, bool) {
 	for key, record := range s.records {
+		if key.runtimeID != runtimeID {
+			continue
+		}
 		record.mu.Lock()
 		matches := record.observation.InstanceID == instanceID
 		record.mu.Unlock()
@@ -557,11 +579,11 @@ func (s *service) instanceOwnerLocked(instanceID string) (identityKey, bool) {
 			return key, true
 		}
 	}
-	return identityKey{}, false
+	return sourceKey{}, false
 }
 
-func (s *service) findRecord(identity automations.SourceIdentity) (*sourceRecord, bool) {
-	key := identityKey{automationID: identity.AutomationID, sourceID: identity.SourceID}
+func (s *service) findRecord(runtimeID string, identity automations.SourceIdentity) (*sourceRecord, bool) {
+	key := sourceKey{runtimeID: runtimeID, identityKey: identityKey{automationID: identity.AutomationID, sourceID: identity.SourceID}}
 	s.recordsMu.RLock()
 	defer s.recordsMu.RUnlock()
 	record, ok := s.records[key]

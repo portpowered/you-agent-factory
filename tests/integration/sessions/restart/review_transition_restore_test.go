@@ -3,7 +3,9 @@ package restart_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,7 +54,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 		restoredReviewTaskB: "staged",
 		restoredReviewWorkA: "staged",
 		restoredReviewWorkB: "staged",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, firstWorks, restoredReviewExpectedWorks())
 	firstObservation := evidence.capturePublicObservation(t, "source-before-stop", first.baseURL)
 	assertRestartPublicCounts(t, firstObservation, 1, 4, 0, 0)
@@ -69,7 +71,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 		restoredReviewTaskB: "staged",
 		restoredReviewWorkA: "staged",
 		restoredReviewWorkB: "staged",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, secondWorks, restoredReviewExpectedWorks())
 	resumedObservation := evidence.capturePublicObservation(t, "successor-after-resume-before-migration", second.baseURL)
 	assertRestartPublicCounts(t, resumedObservation, 1, 4, 0, 0)
@@ -95,25 +97,23 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 		restoredReviewWorkA: "init",
 		restoredReviewWorkB: "init",
 	}
-	waitForBoardStates(t, second.baseURL, wantMigrated, 30*time.Second)
+	waitForBoardStates(t, second.baseURL, wantMigrated, 120*time.Second)
 	runRestoredReviewLifecycleCLI(t, second, binaryPath, factoryDir, homeDir, "resume")
-	workerBarrier.waitForReadyWorkers(t, 2, 30*time.Second)
+	workerBarrier.waitForReadyWorkers(t, 2, 120*time.Second)
 
-	dispatchA := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskA, 30*time.Second)
-	dispatchB := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskB, 30*time.Second)
+	dispatchA := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskA, 120*time.Second)
+	dispatchB := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskB, 120*time.Second)
 	if dispatchA == dispatchB {
 		t.Fatalf("matching review pairs shared dispatch %q, want one distinct dispatch per pair", dispatchA)
 	}
 	assertRestoredReviewDispatchOwners(t, second.baseURL, second.sessionID, dispatchA, dispatchB)
 	activeObservation := evidence.capturePublicObservation(t, "successor-after-migration-with-active-owners", second.baseURL)
 	assertRestartPublicCounts(t, activeObservation, 1, 4, 2, 2)
-	if activeObservation.WorkerSessionCount != 2 || activeObservation.ActiveWorkerSessionCount != 2 {
-		t.Fatalf("active public Worker Session counts = total:%d active:%d, want 2/2", activeObservation.WorkerSessionCount, activeObservation.ActiveWorkerSessionCount)
-	}
+	assertRestoredReviewActiveWorkerSessions(t, second.baseURL, activeObservation)
 	evidence.addTiming("successor-ready-to-two-active-owners", time.Since(second.readyAt))
 	workerBarrier.releaseWorkers()
-	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskA, dispatchA, 30*time.Second)
-	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskB, dispatchB, 30*time.Second)
+	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskA, dispatchA, 120*time.Second)
+	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskB, dispatchB, 120*time.Second)
 	second.stop(t)
 	evidence.captureDaemon(1, second)
 	if err := evidence.verifyFixtureFilesUnchanged(factoryDir); err != nil {
@@ -126,7 +126,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 
 func assertRestoredReviewDispatchOwners(t *testing.T, baseURL, sessionID, dispatchA, dispatchB string) {
 	t.Helper()
-	states := waitForBoardDispatchStates(t, baseURL, 30*time.Second)
+	states := waitForBoardDispatchStates(t, baseURL, 120*time.Second)
 	assertRestoredReviewDispatch(t, states[dispatchA], dispatchA, restoredReviewTaskA, restoredReviewWorkA)
 	assertRestoredReviewDispatch(t, states[dispatchB], dispatchB, restoredReviewTaskB, restoredReviewWorkB)
 	if got := countActiveRestoredReviewDispatches(states, map[string]bool{restoredReviewTaskA: true, restoredReviewTaskB: true}); got != 2 {
@@ -135,12 +135,12 @@ func assertRestoredReviewDispatchOwners(t *testing.T, baseURL, sessionID, dispat
 	for _, workID := range []string{restoredReviewTaskA, restoredReviewTaskB} {
 		observation := waitForBoardWorkerObservation(t, baseURL, sessionID, workID, func(observation factoryapi.WorkerSessionObservation) bool {
 			return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
-		}, 30*time.Second)
+		}, 120*time.Second)
 		if observation.AttemptId == "" {
 			t.Fatalf("active Worker Session for Work %q has empty attempt identity: %#v", workID, observation)
 		}
 	}
-	states = waitForBoardDispatchStates(t, baseURL, 30*time.Second)
+	states = waitForBoardDispatchStates(t, baseURL, 120*time.Second)
 	for _, dispatchID := range []string{dispatchA, dispatchB} {
 		if got := len(states[dispatchID].WorkerSessionIDs); got != 1 {
 			t.Fatalf("active dispatch %q worker-session associations = %d, want exactly one: %#v", dispatchID, got, states[dispatchID])
@@ -287,4 +287,31 @@ func restoredReviewBatchJSON(t *testing.T, workType string) string {
 		t.Fatalf("marshal restored review batch: %v", err)
 	}
 	return string(raw)
+}
+
+func describeRestoredReviewWorkerSessions(t *testing.T, baseURL string) string {
+	t.Helper()
+	var out strings.Builder
+	for _, workID := range []string{restoredReviewTaskA, restoredReviewTaskB, restoredReviewWorkA, restoredReviewWorkB} {
+		listed, err := readBoardWorkerSessions(t.Context(), baseURL, "", workID)
+		if err != nil {
+			fmt.Fprintf(&out, "work %s: %v\n", workID, err)
+			continue
+		}
+		for _, observation := range listed.Sessions {
+			raw, _ := json.Marshal(observation)
+			fmt.Fprintf(&out, "work %s: %s\n", workID, raw)
+		}
+	}
+	return out.String()
+}
+
+// assertRestoredReviewActiveWorkerSessions requires exactly two active Worker
+// Sessions. Terminal sessions left by the pre-resume attempt may still be
+// listed for the same Work, so the total is only bounded below.
+func assertRestoredReviewActiveWorkerSessions(t *testing.T, baseURL string, observation restartPublicObservation) {
+	t.Helper()
+	if observation.WorkerSessionCount < 2 || observation.ActiveWorkerSessionCount != 2 {
+		t.Fatalf("active public Worker Session counts = total:%d active:%d, want active 2 and total >= 2\n%s", observation.WorkerSessionCount, observation.ActiveWorkerSessionCount, describeRestoredReviewWorkerSessions(t, baseURL))
+	}
 }

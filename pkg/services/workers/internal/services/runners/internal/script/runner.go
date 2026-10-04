@@ -38,15 +38,6 @@ type Config struct {
 	RequestSelected  bool
 }
 
-// Dependencies are the exact effects used by one Script Runner.
-type Dependencies struct {
-	CommandRunner workerprocess.CommandRunner
-	FactoryDocs   workers.FactoryDocsLoader
-	Now           func() time.Time
-	Publish       workers.ProgressPublisher
-	Record        workers.ScriptEventRecorder
-}
-
 type runner struct {
 	command          string
 	args             []string
@@ -60,40 +51,25 @@ type runner struct {
 
 var _ workers.Runner = (*runner)(nil)
 
-// New validates and snapshots a Script Runner and its exact execution edges.
-func New(config Config, dependencies Dependencies) (workers.Runner, error) {
-	if strings.TrimSpace(config.Command) == "" && !config.RequestSelected {
-		return nil, misconfigured("script command is required", nil)
-	}
-	if dependencies.CommandRunner == nil {
-		return nil, misconfigured("script command runner is required", nil)
-	}
-	commandRunner, ok := dependencies.CommandRunner.(workerprocess.StreamingCommandRunner)
-	if !ok {
-		return nil, misconfigured("script command runner must support streaming", nil)
-	}
-	if dependencies.FactoryDocs == nil {
-		return nil, misconfigured("script Factory docs loader is required", nil)
-	}
-	if dependencies.Now == nil {
-		return nil, misconfigured("script clock is required", nil)
-	}
-	if dependencies.Publish == nil {
-		return nil, misconfigured("script progress publisher is required", nil)
-	}
-	if dependencies.Record == nil {
-		return nil, misconfigured("script event recorder is required", nil)
-	}
+// New snapshots a Script Runner with five already validated execution effects.
+func New(
+	config Config,
+	commandRunner workerprocess.StreamingCommandRunner,
+	factoryDocs workers.FactoryDocsLoader,
+	now func() time.Time,
+	publish workers.ProgressPublisher,
+	record workers.ScriptEventRecorder,
+) workers.Runner {
 	return &runner{
 		command:          config.Command,
 		args:             append([]string(nil), config.Args...),
 		factoryDirectory: strings.TrimSpace(config.FactoryDirectory),
 		commandRunner:    commandRunner,
-		factoryDocs:      dependencies.FactoryDocs,
-		now:              dependencies.Now,
-		publish:          dependencies.Publish,
-		record:           dependencies.Record,
-	}, nil
+		factoryDocs:      factoryDocs,
+		now:              now,
+		publish:          publish,
+		record:           record,
+	}
 }
 
 func (r *runner) Execute(
@@ -632,14 +608,6 @@ func cloneAnyValues(values []any) ([]any, error) {
 func badRequest(message string, cause error) error {
 	return workers.NewProviderError(
 		workers.WorkFailureTypePermanentBadRequest,
-		message,
-		cause,
-	)
-}
-
-func misconfigured(message string, cause error) error {
-	return workers.NewProviderError(
-		workers.WorkFailureTypeMisconfigured,
 		message,
 		cause,
 	)

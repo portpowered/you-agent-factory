@@ -21,7 +21,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -119,52 +118,61 @@ type invocationRuntime interface {
 	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
 }
 
-// NewService constructs the temporary T11 compatibility Root from completed
-// fixed leaves. ProcessDependencies forwarding remains owned by T11.
+// NewService supplies completed leaves and individually selected effects to Root.
 func NewService(
 	runtimeScopes RuntimeScopes, assets Assets, catalog Catalog, runtimeHost RuntimeHost, inference Inference,
-	processLauncher HostProcessLauncher, hostHTTP HostHTTPDoer, hostClock HostClock,
-	runtimeRunner platformprocess.CommandRunner, runtimeHTTP RuntimeHTTPDoer,
-	runtimeInspect RuntimeInspectFile, runtimeTempDir RuntimeTempDirectory, runtimeTempFile RuntimeCreateTempFile,
+	resources *ResourceLimiter,
+	localExecution ScopedLocalExecution,
 	logger *zap.Logger, now func() time.Time, pullMetrics PullMetricsRecorder,
-	hostLogger HostDiagnosticLogger, hostMetrics HostMetricsRecorder, localHooks LocalRuntimeHooks,
-	runtimeEvidence RuntimeEvidenceRecorder, legacyRevisionOverride func(context.Context, string) (string, error),
+	runtimeEvidence RuntimeEvidenceRecorder, resolveRevision func(context.Context, string) (string, error),
 	backendResolver BackendArtifactResolver, assetPlatform models.AssetHostPlatform,
 ) (models.Service, error) {
-	if err := validateCompatibilityRuntimeEffects(runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, now); err != nil {
-		return nil, err
+	if isNilDependency(localExecution) {
+		return nil, fmt.Errorf("construct Models: scoped local execution is required")
 	}
-	launcher, clock, createTempFile := adaptConstructionPorts(processLauncher, hostClock, runtimeTempFile)
 	return modelsservice.NewRoot(
-		launcher, hostHTTP, clock, runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
-		localmodels.TempDirectory(runtimeTempDir), createTempFile,
+		resources, localExecution.PullModelForScope, localExecution.InvokeLocal,
+		localExecution.CloseScope, localExecution.Close,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
-		modelseffects.ProcessDependencies{
-			Logger: logger, Clock: now, PullMetrics: pullMetrics, RuntimeEvidence: runtimeEvidence,
-			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
-			ResolveHuggingFaceRevision: legacyRevisionOverride, ResolveBackendArtifact: backendResolver,
-			BackendArtifactPlatform: assetPlatform,
-		},
+		logger, now, pullMetrics, runtimeEvidence,
+		resolveRevision, backendResolver, assetPlatform,
 	)
 }
 
-// The caller-facing compatibility adapter preserves the old Root's construction
-// failures while T11 still owns its runtime effect consumption.
-func validateCompatibilityRuntimeEffects(runner platformprocess.CommandRunner, client RuntimeHTTPDoer,
-	inspect RuntimeInspectFile, temp RuntimeTempDirectory, create RuntimeCreateTempFile, now func() time.Time) error {
+// LocalRuntime is the completed, inert local execution adapter shared by scopes.
+type LocalRuntime = localmodels.Runtime
+
+// ResourceLimiter retains only scoped reservation state, independently of execution behavior.
+type ResourceLimiter = localmodels.ResourceLimiter
+
+type ScopedLocalExecution = modelsservice.ScopedLocalExecution
+
+func NewScopedLocalExecution(scopes RuntimeScopes, assets Assets, host RuntimeHost,
+	runtime LocalRuntime, resources *ResourceLimiter, hooks LocalRuntimeHooks,
+	now func() time.Time) (ScopedLocalExecution, error) {
+	return modelsservice.NewScopedLocalExecution(scopes, assets, host, runtime, resources, hooks, now)
+}
+
+func NewResourceLimiter(hooks LocalRuntimeHooks, now func() time.Time) (*ResourceLimiter, error) {
+	return localmodels.NewResourceLimiter(hooks, now)
+}
+
+func NewLocalRuntime(runner platformprocess.CommandRunner, client RuntimeHTTPDoer,
+	inspect RuntimeInspectFile, temp RuntimeTempDirectory, create RuntimeCreateTempFile) (LocalRuntime, error) {
 	for _, required := range []struct {
 		value any
 		name  string
 	}{
 		{runner, "model runtime command runner"}, {client, "model runtime HTTP client"},
 		{inspect, "model runtime file inspector"}, {temp, "model runtime temporary directory resolver"},
-		{create, "model runtime temporary file creator"}, {now, "process clock"},
+		{create, "model runtime temporary file creator"},
 	} {
 		if isNilDependency(required.value) {
-			return fmt.Errorf("construct Models: %s is required", required.name)
+			return nil, fmt.Errorf("construct Models: %s is required", required.name)
 		}
 	}
-	return nil
+	return localmodels.NewOmniVoiceRuntime(runner, client, localmodels.InspectFile(inspect),
+		localmodels.TempDirectory(temp), runtimeTempFileAdapter{next: create}.create)
 }
 
 func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.RuntimeAssetEndpoints {
@@ -178,26 +186,6 @@ func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.Runtim
 		resolved.APIBaseURL = overrides.APIBaseURL
 	}
 	return resolved
-}
-
-func adaptConstructionPorts(
-	processLauncher HostProcessLauncher,
-	hostClock HostClock,
-	runtimeTempFile RuntimeCreateTempFile,
-) (modelhost.ProcessLauncher, modelhost.Clock, localmodels.CreateTempFile) {
-	var launcher modelhost.ProcessLauncher
-	if processLauncher != nil {
-		launcher = hostProcessLauncher{next: processLauncher}
-	}
-	var clock modelhost.Clock
-	if hostClock != nil {
-		clock = hostClockAdapter{next: hostClock}
-	}
-	var createTempFile localmodels.CreateTempFile
-	if runtimeTempFile != nil {
-		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
-	}
-	return launcher, clock, createTempFile
 }
 
 // NewCatalogReadinessQuery connects readiness to the selected Assets role.
@@ -261,27 +249,6 @@ func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
 // NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.
 func NewInvocationArtifactExporter(fileSystem InvocationArtifactFileSystem) (InvocationArtifactExporter, error) {
 	return inferencewire.NewInvocationArtifactExporter(fileSystem)
-}
-
-type hostProcessLauncher struct {
-	next modelseffects.HostProcessLauncher
-}
-
-func (a hostProcessLauncher) Start(ctx context.Context, spec modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
-	process, err := a.next.Start(ctx, modelseffects.HostProcessStartSpec{
-		Command: spec.Command, Args: spec.Args, Env: spec.Env, WorkDir: spec.WorkDir, HealthEndpoint: spec.HealthEndpoint,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return process, nil
-}
-
-type hostClockAdapter struct{ next modelseffects.HostClock }
-
-func (a hostClockAdapter) Now() time.Time { return a.next.Now() }
-func (a hostClockAdapter) NewTimer(duration time.Duration) modelhost.Timer {
-	return a.next.NewTimer(duration)
 }
 
 type runtimeTempFileAdapter struct {
@@ -439,12 +406,25 @@ func NewInvocationRuntime(
 	return inferenceRuntime(options)
 }
 
-// NewInference consumes completed roles and the selected artifact/time effects.
+type InvocationArtifactRegistrar = inferencewire.InvocationArtifactRegistrar
+
+// NewInvocationArtifactRegistrar supplies the completed Inference resource.
+func NewInvocationArtifactRegistrar(fileSystem InvocationArtifactFileSystem) (*InvocationArtifactRegistrar, error) {
+	return inferencewire.NewInvocationArtifactRegistrar(fileSystem)
+}
+
+// NewExecutionDeadline selects the existing Models execution policy.
+func NewExecutionDeadline() func() time.Duration {
+	return inferencewire.NewExecutionDeadline()
+}
+
+// NewInference consumes completed roles and selected time policy.
 func NewInference(scopes RuntimeScopes, assets Assets, catalog Catalog, host RuntimeHost,
-	runtime InvocationRuntime, fileSystem InvocationArtifactFileSystem, now func() time.Time,
+	runtime InvocationRuntime, registrar *InvocationArtifactRegistrar, now func() time.Time,
+	executionDeadline func() time.Duration,
 ) (Inference, error) {
 	if now == nil {
 		return nil, fmt.Errorf("construct Models: process clock is required")
 	}
-	return inferencewire.NewService(scopes, assets, catalog, host, runtime, fileSystem, now)
+	return inferencewire.NewService(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
 }

@@ -42,7 +42,6 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
@@ -75,9 +74,10 @@ func provideTerminalLoggerBuilder() terminalpolicy.LoggerBuilder {
 
 func provideLiveRecordingTargetPlanner(
 	reserver runtimeartifact.Reserver,
+	source platformclock.Source,
 ) recordings.LiveRecordingTargetPlanner {
 	return recordingswire.NewLiveRecordingTargetPlanner(
-		platformclock.Real{},
+		source,
 		reserver,
 		filepath.Join,
 	)
@@ -86,6 +86,7 @@ func provideLiveRecordingTargetPlanner(
 func provideCLIRunDefaults(
 	recordingTargets recordings.LiveRecordingTargetPlanner,
 	recordingsCLI recordingscli.Adapter,
+	source platformclock.Source,
 ) runcli.RunConfig {
 	return runcli.RunConfig{
 		RuntimeLogConfig:            logging.DefaultRuntimeLogConfig(),
@@ -93,7 +94,7 @@ func provideCLIRunDefaults(
 		RecordingTargetPlanner:      recordingTargets,
 		CanonicalSessionIDGenerator: uuid.NewString,
 		RecordingsCLI:               recordingsCLI,
-		Clock:                       platformclock.Real{},
+		Clock:                       source,
 	}
 }
 
@@ -302,31 +303,8 @@ func provideOperatorSettingsLogger(logger *zap.Logger) logging.Logger {
 	return logging.NewZapLogger(logger, false)
 }
 
-func provideOperatorSettingsService(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	providerCatalog operatorsettings.ProviderCatalog,
-	decode operatorsettings.ConfigDecoder,
-	diagnosticDecode operatorsettings.ConfigDiagnosticsDecoder,
-	encode operatorsettings.ConfigEncoder,
-	idGenerator operatorsettings.IDGenerator,
-	providersRoot providers.Service,
-	logger logging.Logger,
-) (operatorsettings.Service, error) {
-	return settingswire.NewServiceFromConfigDocument(
-		operatorsettings.ConfigDocumentService{
-			Files:                 files,
-			CreateTemp:            createTemp,
-			Providers:             providerCatalog,
-			Decoder:               decode,
-			DiagnosticDecoder:     diagnosticDecode,
-			Encoder:               encode,
-			PreserveUnknownFields: globalconfigmapping.PreserveUnknownFields,
-		},
-		providersRoot,
-		idGenerator,
-		logger,
-	)
+func provideOperatorSettingsDocumentPreserver() operatorsettings.ConfigDocumentPreserver {
+	return globalconfigmapping.PreserveUnknownFields
 }
 
 func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettings.IDGenerator {
@@ -382,16 +360,12 @@ func provideSystemInitializationService(
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
 	packagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	loadOperatorConfig operatorsettings.ConfigLoader,
-	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
+	settings operatorsettings.Service,
 	inspectPath systeminitializationwire.InspectPath,
 	logger logging.Logger,
 ) (systeminitialization.Service, error) {
 	return systeminitializationwire.NewService(
-		systeminitializationwire.OperatorSettingsFunctions{
-			Load:   loadOperatorConfig,
-			Ensure: ensureOperatorBackendScope,
-		},
+		settings,
 		packagedCatalog,
 		factorydefinitionswire.NewPackagedFactoryInstaller(
 			persistence,
@@ -469,20 +443,17 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 	}
 }
 
-func provideFactoryRuntimeClockResolver() factoryruntime.ClockResolver {
+func provideFactoryRuntimeClockResolver(processClock factoryruntime.Clock) factoryruntime.ClockResolver {
 	return func(clock factoryruntime.Clock) factoryruntime.Clock {
 		if clock != nil {
 			return clock
 		}
-		return platformclock.Real{}
+		return processClock
 	}
 }
 
 func provideFactoryRuntimeMetricsClock(edges serviceedges.Edges) platformclock.TimerSource {
-	if clock, ok := edges.Clock.(platformclock.TimerSource); ok {
-		return clock
-	}
-	return platformclock.Real{}
+	return edges.ProcessScheduler
 }
 
 func providePprofCommandLineReader() platformhttpserver.CommandLineReader {
@@ -537,6 +508,7 @@ func provideFactoryVisualizationFactory() factoryvisualization.RuntimeFactory {
 
 func provideWorkContentStagingService(
 	edges serviceedges.Edges,
+	source platformclock.Source,
 ) (work.ContentStagingService, error) {
 	filesystem := edges.WorkContentStagingFileSystem
 	if filesystem == nil {
@@ -548,7 +520,7 @@ func provideWorkContentStagingService(
 	}
 	clock := edges.WorkContentStagingClock
 	if clock == nil {
-		clock = platformclock.Real{}
+		clock = source
 	}
 	return workwire.NewContentStagingService(filesystem, random, clock, 0)
 }
@@ -739,4 +711,12 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {
 	return factoryvisualizationwire.NewResponsePresentation()
+}
+
+// provideProcessLogger selects the process backend once, independently of CLI output policy.
+func provideProcessLogger(edges serviceedges.Edges) (*zap.Logger, error) {
+	if edges.ProcessLogger != nil {
+		return edges.ProcessLogger, nil
+	}
+	return logging.NewDefaultLogger()
 }

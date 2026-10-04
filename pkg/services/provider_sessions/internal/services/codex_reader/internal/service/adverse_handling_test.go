@@ -390,6 +390,7 @@ func (r errorReader) Read([]byte) (int, error) {
 type errorOpenFileSystem struct {
 	base      providersessionsinternal.FileSystem
 	openError error
+	statError error
 }
 
 func (f *errorOpenFileSystem) Open(path string) (io.ReadCloser, error) {
@@ -400,7 +401,67 @@ func (f *errorOpenFileSystem) Open(path string) (io.ReadCloser, error) {
 }
 
 func (f *errorOpenFileSystem) Stat(path string) (fs.FileInfo, error) {
+	if f.statError != nil {
+		return nil, f.statError
+	}
 	return f.base.Stat(path)
+}
+
+func TestReaderDetailsRetainsValidEntryBeforeTruncatedEOF(t *testing.T) {
+	root, id := writeCodexJSONLFixture(t, `{"type":"event_msg","payload":{"type":"agent_message","message":"kept"}}`+"\n"+`{"type":"response_item","payload":`)
+	reader := newTestReader(t, testFiles, testWalkDirectory, testResolveSymlinks, root)
+	detail, err := reader.Details(context.Background(), codexSessionRef(id))
+	if err != nil {
+		t.Fatalf("Details: %v", err)
+	}
+	if detail.ProviderSession.ID != id || len(detail.Transcript) != 1 || stringValue(detail.Transcript[0].Text) != "kept" {
+		t.Fatalf("detail = %#v, want exact identity and retained valid entry", detail)
+	}
+	if detail.Parse.MalformedLineCount != 1 || len(detail.Parse.ParseErrors) != 1 || detail.Parse.ParseErrors[0].Message != diagnosticTruncatedJSONEvent {
+		t.Fatalf("parse = %#v, want one truncated diagnostic", detail.Parse)
+	}
+}
+
+type cancelingReadFileSystem struct {
+	providersessionsinternal.FileSystem
+	cancel context.CancelFunc
+	closed bool
+}
+
+func (f *cancelingReadFileSystem) Open(path string) (io.ReadCloser, error) {
+	file, err := f.FileSystem.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return &cancelingReadStream{ReadCloser: file, owner: f}, nil
+}
+
+type cancelingReadStream struct {
+	io.ReadCloser
+	owner *cancelingReadFileSystem
+}
+
+func (s *cancelingReadStream) Read(p []byte) (int, error) {
+	n, err := s.ReadCloser.Read(p)
+	s.owner.cancel()
+	return n, err
+}
+
+func (s *cancelingReadStream) Close() error {
+	s.owner.closed = true
+	return s.ReadCloser.Close()
+}
+
+func TestReaderDetailsCancellationDuringReadClosesStream(t *testing.T) {
+	root, id := writeCodexJSONLFixture(t, representativeCodexJSONL())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := &cancelingReadFileSystem{FileSystem: testFiles, cancel: cancel}
+	reader := newTestReader(t, files, testWalkDirectory, testResolveSymlinks, root)
+	_, err := reader.Details(ctx, codexSessionRef(id))
+	if !errors.Is(err, context.Canceled) || !files.closed {
+		t.Fatalf("Details = %v, stream closed=%v; want cancellation and closed stream", err, files.closed)
+	}
 }
 
 func overrideCodexInspectionLimits(lines int, bytes int64, transcript int, diagnostics int) func() {

@@ -13,12 +13,60 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+func TestRuntimeSnapshotConstructionAndRejectedRequestsHaveNoEffects(t *testing.T) {
+	t.Parallel()
+	effects := 0
+	resolver := runtimesnapshotwire.NewService(
+		func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			effects++
+			return newTestLoadedSource(), nil
+		},
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			effects++
+			return newTestLoadedSource(), nil
+		},
+		func() factorydefinitions.WorkstationLoader { effects++; return &testWorkstationLoader{} },
+		func(string) ([]byte, error) { effects++; return nil, nil },
+	)
+	if effects != 0 {
+		t.Fatalf("construction invoked %d effects", effects)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, test := range []struct {
+		name    string
+		ctx     context.Context
+		request factorydefinitions.ResolveRuntimeSnapshotRequest
+		code    factorydefinitions.RuntimeSnapshotDiagnosticCode
+		cause   error
+	}{
+		{"nil context", nil, factorydefinitions.ResolveRuntimeSnapshotRequest{}, factorydefinitions.RuntimeSnapshotDiagnosticInvalidRequest, nil},
+		{"canceled", ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{Canonical: []byte(`{}`)}, factorydefinitions.RuntimeSnapshotDiagnosticCanceled, context.Canceled},
+		{"no source", context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{}, factorydefinitions.RuntimeSnapshotDiagnosticInvalidRequest, nil},
+		{"conflicting sources", context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{Canonical: []byte(`{}`), FactoryDir: "factory"}, factorydefinitions.RuntimeSnapshotDiagnosticInvalidRequest, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := resolver.ResolveRuntimeSnapshot(test.ctx, test.request)
+			var failure *factorydefinitions.RuntimeSnapshotResolutionError
+			if !errors.As(err, &failure) || failure.Diagnostic.Code != test.code {
+				t.Fatalf("failure = %v, want code %s", err, test.code)
+			}
+			if test.cause != nil && !errors.Is(err, test.cause) {
+				t.Fatalf("failure lost cause %v: %v", test.cause, err)
+			}
+			if !reflect.DeepEqual(result, factorydefinitions.ResolveRuntimeSnapshotResult{}) || effects != 0 {
+				t.Fatalf("rejected request produced result or effects: result=%#v effects=%d", result, effects)
+			}
+		})
+	}
+}
+
 func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
 	t.Parallel()
 
 	source := newTestLoadedSource()
 	var receivedCanonical []byte
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			receivedCanonical = payload
 			return source, nil
@@ -29,9 +77,6 @@ func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	request := factorydefinitions.ResolveRuntimeSnapshotRequest{
 		Canonical:        []byte(`{"name":"detached"}`),
@@ -74,7 +119,7 @@ func TestResolveRuntimeSnapshotInterpolatesInvocationValuesBeforeDetaching(t *te
 	source.config.Workers[0].ModelProvider = "${provider}"
 	source.config.Workers[0].Body = "document=${document}"
 	var readPath string
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return source, nil
 		},
@@ -87,9 +132,6 @@ func TestResolveRuntimeSnapshotInterpolatesInvocationValuesBeforeDetaching(t *te
 			return []byte("resolved document"), nil
 		}),
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	arguments := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
 		"provider": {Values: []string{"codex"}},
@@ -129,7 +171,7 @@ func TestResolveRuntimeSnapshotTracksSensitiveRenderedSpans(t *testing.T) {
 	source.config.Workstations[0].Body = "station-visible secret=${secret}"
 	delete(source.prompts, "worker:agent")
 	delete(source.prompts, "workstation:cron-agent")
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return source, nil
 		},
@@ -139,9 +181,6 @@ func TestResolveRuntimeSnapshotTracksSensitiveRenderedSpans(t *testing.T) {
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	secret := "secret-value"
 	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
@@ -208,7 +247,7 @@ func TestResolveRuntimeSnapshotAllowsLogicalWorkstationsDuringOneShotResolution(
 		Name: "logical-failure",
 		Type: factorydefinitions.WorkstationTypeLogical,
 	}}
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return source, nil
 		},
@@ -218,9 +257,6 @@ func TestResolveRuntimeSnapshotAllowsLogicalWorkstationsDuringOneShotResolution(
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
 		Canonical: []byte(`{"name":"logical"}`),
@@ -289,7 +325,7 @@ func TestResolveRuntimeSnapshotEquivalentRequestsProduceEquivalentValues(t *test
 	t.Parallel()
 
 	source := newTestLoadedSource()
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return source, nil
 		},
@@ -299,9 +335,6 @@ func TestResolveRuntimeSnapshotEquivalentRequestsProduceEquivalentValues(t *test
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	first, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
 		FactoryDir:       "/factories/alpha",
@@ -326,7 +359,7 @@ func TestResolveRuntimeSnapshotRejectsInvalidRequestBeforeLoading(t *testing.T) 
 	t.Parallel()
 
 	called := false
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			called = true
 			return nil, nil
@@ -338,11 +371,8 @@ func TestResolveRuntimeSnapshotRejectsInvalidRequestBeforeLoading(t *testing.T) 
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
-	_, err = resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+	_, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
 		FactoryDir: "/factories/alpha",
 		Canonical:  []byte(`{"name":"conflict"}`),
 	})
@@ -358,7 +388,7 @@ func TestResolveRuntimeSnapshotPreservesTypedLoaderFailure(t *testing.T) {
 	t.Parallel()
 
 	cause := factorydefinitions.ErrInvalidNamedFactory
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, cause
 		},
@@ -368,11 +398,8 @@ func TestResolveRuntimeSnapshotPreservesTypedLoaderFailure(t *testing.T) {
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
-	_, err = resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+	_, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
 		Canonical: []byte(`{"name":"invalid"}`),
 	})
 	if !errors.Is(err, factorydefinitions.ErrInvalidRuntimeSnapshotDefinition) {
@@ -473,7 +500,7 @@ func newInvocationSnapshotFixture(t *testing.T) invocationSnapshotFixture {
 		arguments:         arguments,
 		workstationLoader: &testWorkstationLoader{},
 	}
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			fixture.receivedWorkstationLoader = loader
 			return source, nil
@@ -486,10 +513,7 @@ func newInvocationSnapshotFixture(t *testing.T) invocationSnapshotFixture {
 		func() factorydefinitions.WorkstationLoader { return fixture.workstationLoader },
 		factorydefinitions.FileReader(func(string) ([]byte, error) { return nil, nil }),
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	fixture.result, err = resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
 		SourcePath:       "  /factories/alpha  ",
 		ExecutionBaseDir: "  /execution/base  ",
 		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
@@ -501,6 +525,7 @@ func newInvocationSnapshotFixture(t *testing.T) invocationSnapshotFixture {
 	if err != nil {
 		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
 	}
+	fixture.result = result
 	return fixture
 }
 
@@ -539,7 +564,7 @@ func TestResolveRuntimeSnapshotClassifiesEveryAutomationSourceKind(t *testing.T)
 			Type: factorydefinitions.WorkstationTypeHumanApproval,
 		},
 	)
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return source, nil
 		},
@@ -549,9 +574,6 @@ func TestResolveRuntimeSnapshotClassifiesEveryAutomationSourceKind(t *testing.T)
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
 		Canonical: []byte(`{"name":"automation"}`),
@@ -688,7 +710,7 @@ func newRuntimeSnapshotFailureResolver(
 	cancelAfterLoad context.CancelFunc,
 ) runtimeSnapshotResolver {
 	t.Helper()
-	resolver, err := runtimesnapshotwire.NewService(
+	resolver := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			if cancelAfterLoad != nil {
 				cancelAfterLoad()
@@ -704,27 +726,7 @@ func newRuntimeSnapshotFailureResolver(
 		func() factorydefinitions.WorkstationLoader { return nil },
 		nil,
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 	return resolver
-}
-
-func TestNewRuntimeSnapshotServiceRejectsMissingSourceLoaders(t *testing.T) {
-	t.Parallel()
-
-	validCanonical := factorydefinitions.CanonicalFactoryJSONLoader(func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-		return newTestLoadedSource(), nil
-	})
-	validFactory := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-		return newTestLoadedSource(), nil
-	})
-	if _, err := runtimesnapshotwire.NewService(nil, validFactory, nil, nil); err == nil {
-		t.Fatal("NewService(nil canonical loader) succeeded, want construction failure")
-	}
-	if _, err := runtimesnapshotwire.NewService(validCanonical, nil, nil, nil); err == nil {
-		t.Fatal("NewService(nil Factory loader) succeeded, want construction failure")
-	}
 }
 
 func assertRuntimeSnapshotFailure(

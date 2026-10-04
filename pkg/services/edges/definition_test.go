@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"go.uber.org/zap"
 	"io"
 	"io/fs"
 	"reflect"
@@ -37,6 +38,52 @@ var (
 	_ recordings.RecordingReadFile            = Edges{}.RecordingReadFile
 	_ recordings.RecordingOpenFile            = Edges{}.RecordingOpenFile
 )
+
+func TestMergePreservesProcessSchedulerAndSpecializedClocks(t *testing.T) {
+	t.Parallel()
+	base := time.Unix(42, 0).UTC()
+	defaultClock := platformclock.NewDeterministic(base, time.Second)
+	replacement := platformclock.NewDeterministic(base.Add(time.Hour), time.Second)
+	specialized := platformclock.NewDeterministic(base.Add(2*time.Hour), time.Second)
+	defaults := Edges{
+		Clock: defaultClock, ProcessScheduler: defaultClock,
+		AgyPTYClock: specialized, PlatformProcessClock: specialized,
+		FactoryDefinitionClock: specialized, FactoryWebhookClock: specialized,
+	}
+	for _, test := range []struct {
+		name          string
+		replacements  Edges
+		wantClock     platformclock.Source
+		wantScheduler platformclock.TimerSource
+	}{
+		{"omitted", Edges{}, defaultClock, defaultClock},
+		{"clock-only", Edges{Clock: replacement}, replacement, defaultClock},
+		{"scheduler-only", Edges{ProcessScheduler: replacement}, defaultClock, replacement},
+		{"both", Edges{Clock: replacement, ProcessScheduler: replacement}, replacement, replacement},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := Merge(defaults, test.replacements)
+			if got.Clock != test.wantClock || got.ProcessScheduler != test.wantScheduler {
+				t.Fatal("Merge did not preserve explicit clock/scheduler overlays")
+			}
+			if got.AgyPTYClock != specialized || got.PlatformProcessClock != specialized ||
+				got.FactoryDefinitionClock != specialized || got.FactoryWebhookClock != specialized {
+				t.Fatal("process time overlay changed a specialized owner clock")
+			}
+		})
+	}
+}
+
+func TestMergeRetainsTypedNilTimeOverridesForBoundaryValidation(t *testing.T) {
+	t.Parallel()
+	var invalid *platformclock.Deterministic
+	got := Merge(Edges{Clock: platformclock.Real{}, ProcessScheduler: platformclock.Real{}}, Edges{
+		Clock: invalid, ProcessScheduler: invalid,
+	})
+	if got.Clock != invalid || got.ProcessScheduler != invalid {
+		t.Fatal("Merge hid invalid typed-nil overrides behind defaults")
+	}
+}
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
@@ -825,4 +872,23 @@ func (*edgeDirectoryReplacementStore) Restore(string, string) {}
 
 func (*stubProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{}, nil
+}
+
+func TestMergeProcessLogger(t *testing.T) {
+	t.Parallel()
+	original, override := zap.NewNop(), zap.NewNop()
+	for _, test := range []struct {
+		name              string
+		replacement, want *zap.Logger
+	}{
+		{"omitted", nil, original}, {"override", override, override},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := Merge(Edges{ProcessLogger: original}, Edges{ProcessLogger: test.replacement})
+			if got.ProcessLogger != test.want {
+				t.Fatal("Merge did not preserve the selected process backend")
+			}
+		})
+	}
 }

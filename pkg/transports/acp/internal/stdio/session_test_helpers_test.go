@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/contextscope"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -20,6 +22,10 @@ import (
 	"testing"
 	"time"
 )
+
+func testLogger() logging.Logger { return logging.NoopLogger{} }
+
+func testInvocationScope(ctx context.Context) acp.InvocationScope { return contextscope.New(ctx) }
 
 type fakeChatSessionsService struct {
 	mu                                sync.Mutex
@@ -707,7 +713,9 @@ func newTestServerWithFactoryTarget(
 	homeDir string,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, nil, nil, testStartResolver)
+	return New(testLogger(),
+		chatSessions, catalog, factoryTarget, nil, resolveHomeDir, nil, nil, testStartResolver, testInvocationScope,
+	)
 }
 func newTestServerWithResponseBridge(
 	chatSessions *fakeChatSessionsService,
@@ -717,7 +725,9 @@ func newTestServerWithResponseBridge(
 	responseBridge acp.ResponseBridge,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, responseBridge, nil, testStartResolver)
+	return New(testLogger(),
+		chatSessions, catalog, factoryTarget, nil, resolveHomeDir, responseBridge, nil, testStartResolver, testInvocationScope,
+	)
 }
 func numberIdentityEnvelope(t *testing.T, connID identity.ConnectionID, wireID int64, method string, params string) envelope.Envelope {
 	t.Helper()

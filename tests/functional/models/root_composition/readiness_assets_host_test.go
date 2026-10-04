@@ -282,11 +282,12 @@ type recordingModelHostLauncher struct {
 	endpoint  string
 	exclusive bool
 	active    bool
+	commands  map[string]int
 }
 
 func (launcher *recordingModelHostLauncher) Start(
-	context.Context,
-	serviceedges.HostProcessStartSpec,
+	_ context.Context,
+	spec serviceedges.HostProcessStartSpec,
 ) (interface {
 	HealthEndpoint() string
 	Wait() error
@@ -298,6 +299,10 @@ func (launcher *recordingModelHostLauncher) Start(
 		return nil, fmt.Errorf("model host fixture: previous process is still active")
 	}
 	launcher.calls++
+	if launcher.commands == nil {
+		launcher.commands = make(map[string]int)
+	}
+	launcher.commands[spec.Command]++
 	launcher.active = true
 	endpoint := launcher.endpoint
 	launcher.mu.Unlock()
@@ -311,6 +316,12 @@ func (launcher *recordingModelHostLauncher) Start(
 			launcher.mu.Unlock()
 		},
 	}, nil
+}
+
+func (launcher *recordingModelHostLauncher) CallsForCommand(command string) int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.commands[command]
 }
 
 func (launcher *recordingModelHostLauncher) Calls() int {

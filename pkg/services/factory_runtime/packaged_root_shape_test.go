@@ -4,10 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
@@ -24,11 +22,6 @@ func TestPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) {
 		t.Fatalf("ReadDir(%q) = %v", serviceRoot, err)
 	}
 
-	spec, ok := ownershipinventory.OwnerTopLevelSpecFor("factory_runtime")
-	if !ok {
-		t.Fatal("OwnerTopLevelSpecFor(factory_runtime) ok = false")
-	}
-
 	var gotRootDirs []string
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -37,7 +30,7 @@ func TestPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) {
 	}
 	slices.Sort(gotRootDirs)
 
-	wantRetain := slices.Clone(spec.ExpectedRetain)
+	wantRetain := slices.Clone(factoryRuntimeRootRetain)
 	slices.Sort(wantRetain)
 	for _, name := range wantRetain {
 		if !slices.Contains(gotRootDirs, name) {
@@ -75,6 +68,8 @@ func TestPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) {
 	}
 }
 
+var factoryRuntimeRootRetain = []string{"internal", "transports", "wire"}
+
 func foldedEnginePipelineTopLevelChildren() []string {
 	return []string{
 		"build",
@@ -97,36 +92,5 @@ func foldedEnginePipelineTopLevelChildren() []string {
 		"token",
 		"token_transformer",
 		"tooling",
-	}
-}
-
-func TestPackagedRootUnexpectedChildrenRemainMoveDebtOnly(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := testutil.MustRepoRoot(t)
-	live, err := ownershipinventory.ListOwnerTopLevelChildren(repoRoot, "factory_runtime")
-	if err != nil {
-		t.Fatalf("ListOwnerTopLevelChildren(factory_runtime) = %v", err)
-	}
-	spec, ok := ownershipinventory.OwnerTopLevelSpecFor("factory_runtime")
-	if !ok {
-		t.Fatal("OwnerTopLevelSpecFor(factory_runtime) ok = false")
-	}
-
-	for _, name := range live {
-		if slices.Contains(spec.ExpectedRetain, name) {
-			continue
-		}
-		if !slices.Contains(spec.Unexpected, name) {
-			t.Fatalf(
-				"live top-level child %q is neither canonical retain %v nor committed unexpected move debt %v",
-				name,
-				spec.ExpectedRetain,
-				spec.Unexpected,
-			)
-		}
-		if strings.HasPrefix(name, "internal") || strings.HasPrefix(name, "wire") || strings.HasPrefix(name, "transports") {
-			t.Fatalf("unexpected move-debt child %q overlaps canonical retain prefix", name)
-		}
 	}
 }

@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
+
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -224,7 +226,15 @@ type Edges struct {
 	RecordingsWorkSnapshotReaderObserver func(interface {
 		ReadWorkSnapshot(context.Context, string) (work.ReadSnapshot, error)
 	})
-	Clock                            platformclock.Source
+	// ProcessLogger is an optional host override; nil means omitted.
+	ProcessLogger *zap.Logger
+	// Clock controls default process timestamps. BuildProcess selects Real when
+	// omitted and rejects typed-nil overrides.
+	Clock platformclock.Source
+	// ProcessScheduler controls default process deadlines. An explicit scheduler
+	// wins; otherwise BuildProcess uses Clock's TimerSource capability, or Real
+	// for a legacy Now-only Clock. Specialized owner clock overrides still win.
+	ProcessScheduler                 platformclock.TimerSource
 	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
@@ -632,8 +642,14 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.SystemInitializationInspectPath != nil {
 		defaults.SystemInitializationInspectPath = replacements.SystemInitializationInspectPath
 	}
+	if replacements.ProcessLogger != nil {
+		defaults.ProcessLogger = replacements.ProcessLogger
+	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock
+	}
+	if replacements.ProcessScheduler != nil {
+		defaults.ProcessScheduler = replacements.ProcessScheduler
 	}
 	if replacements.ACPWireRecorder != nil {
 		defaults.ACPWireRecorder = replacements.ACPWireRecorder

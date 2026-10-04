@@ -13,8 +13,12 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
+	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -295,7 +299,7 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 }
 
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil, nil)
+	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
 		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
 	}
@@ -306,7 +310,7 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{}, nil)
+	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{}, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Worker Sessions factory is required") {
 		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
 	}
@@ -317,7 +321,7 @@ func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil, nil)
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
 		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
 	}
@@ -329,7 +333,7 @@ func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	workerService := stubWorkersService{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService, platformclock.Real{})
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService, platformclock.Real{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}
@@ -345,7 +349,7 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 	t.Parallel()
 
 	clock := clockwork.NewFakeClock()
-	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
+	lifecycle, err := newAssemblyTestHost(clock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("instancehostwire.New() error = %v", err)
 	}
@@ -358,13 +362,14 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 func TestBoundRuntimeServiceUsesPublishedEngineForWideOperations(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewRoot(
+	root, err := newCompletedRoot(
 		func() string { return "runtime-test-id" },
 		nil,
 		nil,
 		clockwork.NewFakeClock(),
 		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
 		nil,
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
@@ -387,13 +392,14 @@ func TestBoundRuntimeServiceUsesPublishedEngineForWideOperations(t *testing.T) {
 func TestBoundRuntimeServiceUsesPublishedEngineForLegacyWorkSnapshot(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewRoot(
+	root, err := newCompletedRoot(
 		func() string { return "runtime-test-id" },
 		nil,
 		nil,
 		clockwork.NewFakeClock(),
 		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
 		nil,
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
@@ -554,13 +560,14 @@ func assertBoundRuntimeNotActive(t *testing.T, root *Root, ctx context.Context, 
 
 func newBoundControlRoot(t *testing.T) *Root {
 	t.Helper()
-	root, err := NewRoot(
+	root, err := newCompletedRoot(
 		func() string { return "bound-control-id" }, nil, nil,
 		clockwork.NewFakeClockAt(time.Date(2026, time.October, 3, 0, 0, 0, 0, time.UTC)),
 		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
 		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
@@ -719,4 +726,113 @@ func (service *wideOperationRuntimeFake) SubscribeFactoryEvents(
 ) (*interfaces.FactoryEventStream, error) {
 	service.eventCalls++
 	return nil, nil
+}
+
+func newAssemblyTestHost(clock factoryruntime.Clock, scheduler platformclock.TimerSource) (instancehost.Service, error) {
+	lifecycle, err := factoryhost.NewLifecycleService(clock, scheduler)
+	if err != nil {
+		return nil, err
+	}
+	return instancehostwire.New(clock, scheduler, lifecycle)
+}
+
+// This component cell associates Root's published binding with the engine in
+// an actual hosted handle. Provider execution and public session isolation are
+// separate functional properties; no application graph is constructed here.
+func TestBoundRuntimeControlsReachActivatedPhysicalHandle(t *testing.T) {
+	t.Parallel()
+	root := newBoundControlRoot(t)
+	ctx := t.Context()
+	var bindings [2]factoryruntime.RuntimeBinding
+	var handles [2]factoryruntime.RuntimeRun
+	var engines [2]*boundHostedEngine
+	for i, identity := range []string{"first", "second"} {
+		engine := &boundHostedEngine{boundControlRuntimeFake: newBoundControlRuntimeFake(identity, false), started: make(chan struct{})}
+		engines[i] = engine
+		request := factoryruntime.RuntimeActivationRequest{
+			RuntimeID: "runtime-" + identity, FactorySessionID: "session-" + identity,
+			Snapshot: interfaces.RuntimeSnapshot{
+				FactoryDir: "/factories/" + identity, RuntimeBaseDir: "/runtime/" + identity,
+				DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}, EffectiveFactory: interfaces.FactoryConfig{Name: identity},
+			},
+		}
+		result, err := root.Activate(ctx, request, func(ctx context.Context, request factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+			scope := root.instanceHost.Scope(clockwork.NewFakeClock())
+			bundle := &factoryhost.Bundle{RuntimeInstanceID: request.RuntimeID, FactorySessionID: request.FactorySessionID, Factory: engine}
+			run, err := scope.Start(ctx, bundle)
+			if err != nil {
+				return nil, err
+			}
+			handles[i] = run
+			t.Cleanup(func() { _ = scope.Stop(run) })
+			// Run admission is a signal, not a readiness poll or wall-time delay.
+			select {
+			case <-engine.started:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			return &factoryruntime.RuntimeActivation{Service: bundle.RuntimeService(), Close: func(context.Context) error { return scope.Stop(run) }}, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		bindings[i] = result.Binding
+	}
+	assertBoundRuntimeNotActive(t, root, ctx, "unknown-runtime", factoryruntime.RuntimeDeactivationRequest{RuntimeID: "unknown-runtime"})
+	for i := range engines {
+		assertBoundRuntimeControls(t, ctx, bindings[i], engines[i].boundControlRuntimeFake, engines[1-i].boundControlRuntimeFake)
+	}
+	// The process Host also controls the same engine registered by the scope.
+	before := len(engines[0].calls)
+	if _, err := root.instanceHost.Pause(ctx, handles[0]); err != nil || len(engines[0].calls) != before+1 {
+		t.Fatalf("process Host Pause = %v; calls %d, want %d", err, len(engines[0].calls), before+1)
+	}
+	assertSelectedPhysicalHandleStopped(t, ctx, root, bindings, handles, engines)
+}
+
+func assertSelectedPhysicalHandleStopped(t *testing.T, ctx context.Context, root *Root, bindings [2]factoryruntime.RuntimeBinding, handles [2]factoryruntime.RuntimeRun, engines [2]*boundHostedEngine) {
+	t.Helper()
+	if _, err := bindings[0].Deactivate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !handles[0].Completed() || !errors.Is(handles[0].Result(), context.Canceled) || handles[1].Completed() {
+		t.Fatalf("selected/peer runs = %v/%v; selected result %v", handles[0].Completed(), handles[1].Completed(), handles[0].Result())
+	}
+	for _, control := range engines[0].controlCases() {
+		if _, err := control.invoke(ctx, bindings[0].Service()); !errors.Is(err, factoryruntime.ErrNotRunning) {
+			t.Fatalf("stale %s = %v, want ErrNotRunning", control.method, err)
+		}
+	}
+	if _, err := root.instanceHost.Resume(ctx, handles[0]); !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("stale physical Resume = %v, want ErrNotRunning", err)
+	}
+	assertBoundRuntimeControls(t, ctx, bindings[1], engines[1].boundControlRuntimeFake, engines[0].boundControlRuntimeFake)
+	if _, err := bindings[1].Deactivate(ctx); err != nil || !handles[1].Completed() {
+		t.Fatalf("peer Deactivate = %v; completed %v", err, handles[1].Completed())
+	}
+}
+
+type boundHostedEngine struct {
+	factoryhost.Engine // Unused engine operations are outside this component cell.
+	*boundControlRuntimeFake
+	started chan struct{}
+}
+
+func (engine *boundHostedEngine) Run(ctx context.Context) error {
+	close(engine.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (*boundHostedEngine) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error) {
+	return &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet]{
+		RuntimeStatus: interfaces.RuntimeStatusActive, FactoryState: string(interfaces.FactoryStateRunning),
+	}, nil
+}
+func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime, clock factoryruntime.Clock, publisher dispatchplanning.WorkersPublisher, canceler dispatchplanning.WorkersCanceler, scheduler platformclock.TimerSource) (*Root, error) {
+	host, err := newAssemblyTestHost(clock, scheduler)
+	if err != nil {
+		return nil, err
+	}
+	return NewRoot(orchestrationwire.New(newID, workflows, runtime), host, dispatchplanningwire.New(publisher, canceler))
 }

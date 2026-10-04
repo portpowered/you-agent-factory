@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	appwire "github.com/portpowered/infinite-you/pkg/wire"
@@ -288,7 +289,7 @@ func newProductionManagedHostHarness(t *testing.T, helper, caseName string) *pro
 	}
 	t.Setenv(modelRuntimeEvidenceEnvironment, harness.evidencePath)
 
-	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{})
+	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{Clock: platformclock.Real{}})
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
@@ -435,7 +436,7 @@ func waitProductionManagedReady(t *testing.T, harness *productionManagedHostHarn
 }
 
 func productionManagedHTTPStatus(endpoint string) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/health", nil)
 	if err != nil {

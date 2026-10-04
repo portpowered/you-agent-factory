@@ -94,7 +94,7 @@ func materializePackagedGoalFactory(t *testing.T, globalRoot string) string {
 	if !ok {
 		t.Fatalf("generated packaged Factory catalog is missing %s", PackagedFactoryName)
 	}
-	factoryDir, err := factorydefinitioncomposition.PersistNamedFactory(globalRoot, PackagedFactoryName, definition.JSON, factoryvalidation.New(nil))
+	factoryDir, err := factorydefinitioncomposition.PersistNamedFactory(globalRoot, PackagedFactoryName, definition.JSON, factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON))
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

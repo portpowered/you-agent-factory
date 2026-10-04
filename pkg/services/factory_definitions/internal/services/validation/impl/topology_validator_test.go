@@ -1,7 +1,6 @@
 package impl
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -949,8 +948,7 @@ func ruleWorkerWorkstationBehaviorCompatibility(
 	cfg *factorydefinitions.FactoryConfig,
 ) []Finding {
 	return FactoryDefinitionFindings(
-		New(nil).
-			WorkerWorkstationBehaviorCompatibility(context.Background(), cfg),
+		WorkerWorkstationBehaviorCompatibilityTargets(cfg),
 	)
 }
 
@@ -959,8 +957,7 @@ func ruleWorkTypeHandlingBehavior(
 	requireDefault bool,
 ) []Finding {
 	return FactoryDefinitionFindings(
-		New(nil).
-			WorkTypeHandlingBehavior(context.Background(), cfg, requireDefault),
+		WorkTypeHandlingBehaviorTargets(cfg, WorkTypeHandlingBehaviorOptions{RequireDefault: requireDefault}),
 	)
 }
 
@@ -968,8 +965,6 @@ func ruleCanonicalFactoryDefinitionValidation(
 	cfg *factorydefinitions.FactoryConfig,
 ) []Finding {
 	return FactoryDefinitionFindings(
-		New(nil).
-			Validate(context.Background(), cfg, nil).
-			Targets,
+		Validate(cfg).Targets,
 	)
 }

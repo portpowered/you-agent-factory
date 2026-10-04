@@ -16,14 +16,15 @@ const ptyCaptureDrainTimeout = 250 * time.Millisecond
 // platformSession holds an allocated platform PTY for one supervised Agy child.
 // Story 002 implements Run with capture, timeout, and cleanup.
 type platformSession struct {
-	launch ProcessLaunch
-	cfg    SessionConfig
-	kind   PTYKind
-	pty    platformpty.Allocation
-	host   platformpty.Host
-	clock  platformclock.Source
-	mu     sync.Mutex
-	closed bool
+	launch    ProcessLaunch
+	cfg       SessionConfig
+	kind      PTYKind
+	pty       platformpty.Allocation
+	host      platformpty.Host
+	clock     platformclock.Source
+	scheduler platformclock.TimerSource
+	mu        sync.Mutex
+	closed    bool
 }
 
 func (s *platformSession) Close() error {
@@ -53,23 +54,19 @@ func newPlatformSession(
 	pty platformpty.Allocation,
 	host platformpty.Host,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 ) (*platformSession, error) {
 	if pty == nil {
 		return nil, errors.New("agypty: PTY allocation is required")
 	}
-	if clock == nil {
-		return nil, ErrClockRequired
-	}
-	if host == nil {
-		return nil, ErrHostRequired
-	}
 	return &platformSession{
-		launch: launch,
-		cfg:    cfg,
-		kind:   kind,
-		pty:    pty,
-		host:   host,
-		clock:  clock,
+		launch:    launch,
+		cfg:       cfg,
+		kind:      kind,
+		pty:       pty,
+		host:      host,
+		clock:     clock,
+		scheduler: scheduler,
 	}, nil
 }
 
@@ -94,15 +91,12 @@ func (s *platformSession) Run(ctx context.Context) (SessionResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if s.host == nil {
-		return SessionResult{}, ErrHostRequired
-	}
 	defer closeSessionPTY(s)
 	proc, reader, err := s.host.Start(platformProcessLaunch(s.launch), s.pty)
 	if err != nil {
 		return SessionResult{}, err
 	}
-	return executeSessionRun(ctx, s.cfg, reader, proc, s.clock)
+	return executeSessionRun(ctx, s.cfg, reader, proc, s.clock, s.scheduler)
 }
 
 func executeSessionRun(
@@ -111,15 +105,13 @@ func executeSessionRun(
 	reader io.ReadCloser,
 	proc platformpty.Process,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 ) (SessionResult, error) {
 	if reader == nil {
 		return SessionResult{}, errors.New("agypty: PTY reader is required")
 	}
 	if proc == nil {
 		return SessionResult{}, errors.New("agypty: supervised process is required")
-	}
-	if clock == nil {
-		return SessionResult{}, ErrClockRequired
 	}
 
 	defer closePTYReader(reader)
@@ -141,8 +133,8 @@ func executeSessionRun(
 
 	readDone := startPTYCapture(reader, cfg, &mu, &buf, &capacityHit, &lastByteAt, clock)
 
-	timer := time.NewTimer(timeUntilTimeout(clock.Now(), readLastByteAt(&mu, &lastByteAt), hardDeadline, cfg))
-	defer timer.Stop()
+	timer := scheduler.NewTimer(timeUntilTimeout(clock.Now(), readLastByteAt(&mu, &lastByteAt), hardDeadline, cfg))
+	defer func() { timer.Stop() }()
 
 	var (
 		timedOut bool
@@ -154,22 +146,23 @@ func executeSessionRun(
 		select {
 		case waitErr = <-waitDone:
 			timer.Stop()
-			return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, runErr)
+			return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, runErr, scheduler)
 		case <-ctx.Done():
 			timer.Stop()
 			_ = proc.Terminate()
 			waitErr = <-waitDone
-			return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, ctx.Err())
-		case <-timer.C:
+			return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, ctx.Err(), scheduler)
+		case <-timer.C():
 			lastByte := readLastByteAt(&mu, &lastByteAt)
 			now := clock.Now()
 			if sessionRunTimedOut(now, hardDeadline, cfg, lastByte) {
 				timedOut = true
 				_ = proc.Terminate()
 				waitErr = <-waitDone
-				return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, nil)
+				return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, nil, scheduler)
 			}
-			timer.Reset(timeUntilTimeout(now, lastByte, hardDeadline, cfg))
+			timer.Stop()
+			timer = scheduler.NewTimer(timeUntilTimeout(now, lastByte, hardDeadline, cfg))
 		}
 	}
 }
@@ -243,8 +236,9 @@ func finishSessionRun(
 	waitErr error,
 	proc platformpty.Process,
 	runErr error,
+	scheduler platformclock.TimerSource,
 ) (SessionResult, error) {
-	drainPTYCapture(reader, readDone)
+	drainPTYCapture(reader, readDone, scheduler)
 	mu.Lock()
 	resultBuf := append([]byte(nil), (*buf)...)
 	hit := *capacityHit
@@ -255,13 +249,13 @@ func finishSessionRun(
 // drainPTYCapture lets terminal bytes already buffered by the OS reach the
 // capture goroutine after the child exits. The bounded fallback still closes
 // readers that do not report EOF on their own.
-func drainPTYCapture(reader io.ReadCloser, readDone <-chan struct{}) {
-	timer := time.NewTimer(ptyCaptureDrainTimeout)
+func drainPTYCapture(reader io.ReadCloser, readDone <-chan struct{}, scheduler platformclock.TimerSource) {
+	timer := scheduler.NewTimer(ptyCaptureDrainTimeout)
 	defer timer.Stop()
 	select {
 	case <-readDone:
 		return
-	case <-timer.C:
+	case <-timer.C():
 		closePTYReader(reader)
 		<-readDone
 	}

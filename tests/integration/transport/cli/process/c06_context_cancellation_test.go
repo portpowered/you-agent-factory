@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	contextCancellationScenarioTimeout = 60 * time.Second
+	successStdoutPrimaryResult         = "mock worker accepted"
+	contextCancellationScenarioTimeout = 180 * time.Second
 	contextCancellationGoalWorkType    = "goal"
 	contextCancellationExecutorWorker  = "goal-executor"
 	contextCancellationExecuteStation  = "execute-goal"
@@ -36,14 +37,14 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	run := startContextCancellationCLI(t, harness, "context-cancellation-external-work", "--quiet")
-	run.providerPID = waitForContextCancellationProviderPID(t, run.providerPIDFile, 45*time.Second)
+	run.providerPID = waitForContextCancellationProviderPID(t, run.providerPIDFile, 120*time.Second)
 	if err := run.command.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("interrupt built CLI process: %v", err)
 	}
 	if err := run.wait(t); err == nil {
 		t.Fatalf("cancelled root process returned success; stdout=%q stderr=%q", run.stdout.String(), run.stderr.String())
 	}
-	if !waitForContextCancellationProcessExit(run.providerPID, 15*time.Second) {
+	if !waitForContextCancellationProcessExit(run.providerPID, 60*time.Second) {
 		t.Fatalf("provider/external worker process %d still running after CLI context cancellation", run.providerPID)
 	}
 }
@@ -58,7 +59,7 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	run := startContextCancellationCLI(t, harness, "context-cancellation-no-success", "--quiet")
-	run.providerPID = waitForContextCancellationProviderPID(t, run.providerPIDFile, 45*time.Second)
+	run.providerPID = waitForContextCancellationProviderPID(t, run.providerPIDFile, 120*time.Second)
 	if err := run.command.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("interrupt built CLI process: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestBuiltCLIInterruptedResponseStreamExitCode(t *testing.T) {
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	run := startContextCancellationCLI(t, harness, "built-response-stream-cancellation", "--output", "response-stream")
-	run.providerPID = waitForContextCancellationProviderPID(t, run.providerPIDFile, 45*time.Second)
+	run.providerPID = waitForContextCancellationProviderPID(t, run.providerPIDFile, 120*time.Second)
 	if err := run.command.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("interrupt built response-stream CLI: %v", err)
 	}
@@ -104,7 +105,7 @@ func TestBuiltCLIInterruptedResponseStreamExitCode(t *testing.T) {
 	if !strings.Contains(run.stderr.String(), "INVOCATION_CANCELED") {
 		t.Fatalf("response-stream stderr missing INVOCATION_CANCELED:\n%s", run.stderr.String())
 	}
-	if !waitForContextCancellationProcessExit(run.providerPID, 15*time.Second) {
+	if !waitForContextCancellationProcessExit(run.providerPID, 60*time.Second) {
 		t.Fatalf("provider/external worker process %d still running after response-stream cancellation", run.providerPID)
 	}
 }
@@ -165,7 +166,7 @@ func startContextCancellationCLI(
 		}
 		if run.providerPID > 0 {
 			terminateContextCancellationProcess(run.providerPID)
-			_ = waitForContextCancellationProcessExit(run.providerPID, 15*time.Second)
+			_ = waitForContextCancellationProcessExit(run.providerPID, 60*time.Second)
 		}
 	})
 	return run

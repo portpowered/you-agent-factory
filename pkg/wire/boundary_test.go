@@ -23,6 +23,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
@@ -38,7 +39,7 @@ import (
 func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 	t.Parallel()
 
-	providersService, err := provideProvidersService(serviceedges.Edges{})
+	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -77,16 +78,17 @@ func TestProvideWorkStopSummaryProjectorDelegatesToFactorySessions(t *testing.T)
 	}
 }
 
-func TestFactoryRuntimeClockResolverPreservesOverrideAndSelectsPlatformDefault(t *testing.T) {
+func TestFactoryRuntimeClockResolverPreservesOverrideAndSelectsProcessSource(t *testing.T) {
 	t.Parallel()
 
-	resolver := provideFactoryRuntimeClockResolver()
+	processClock := platformclock.NewDeterministic(time.Unix(100, 0), time.Second)
+	resolver := provideFactoryRuntimeClockResolver(processClock)
 	override := &wireTestClock{}
 	if got := resolver(override); got != override {
 		t.Fatalf("resolved override = %#v, want original clock", got)
 	}
-	if _, ok := resolver(nil).(platformclock.Real); !ok {
-		t.Fatalf("resolved default = %T, want platform clock", resolver(nil))
+	if got := resolver(nil); got != processClock || !got.Now().Equal(processClock.Now()) {
+		t.Fatalf("resolved default = %v, want selected process clock", got)
 	}
 }
 
@@ -106,21 +108,36 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 		t.Fatalf("construct events service: %v", err)
 	}
 
+	identity, err := factorysessionwire.NewIdentity(func(path string) (string, error) { return path, nil }, func() (string, error) { return t.TempDir(), nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses, err := factorysessionwire.NewResponseStreams(func() string { return "response-event-test-id" }, nil, eventsService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := factorysessionwire.NewSessionRegistry()
+	responseRegistry, err := factorysessionwire.NewResponseStreamRegistry(responses, &wireTestClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := factorysessionwire.NewSessionState(registry, responseRegistry, &wireTestClock{}, func() string { return "response-event-test-id" }, func() string { return "session-test-id" }, responses)
+	streams := factorysessionwire.NewStreamManager(state, factorysessionwire.NewStreamObserver(), responseRegistry, responses)
 	assembly, err := provideFactorySessionsAssembly(
+		registry, state, streams,
 		factoryruntime.NewSessionResultProjectionOperation(),
 		nil,
 		nil,
 		nil,
 		func() string { return "response-event-test-id" },
-		nil,
 		func() string { return "session-test-id" },
 		func() (string, error) { return t.TempDir(), nil },
 		platformfilesystem.Local{},
 		namedPathResolver,
 		factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
-		func(path string) (string, error) { return path, nil },
-		eventsService,
+		identity,
+		responses,
 		&wireTestClock{},
 		factorysessionwire.NewLiveChangeCoordinator(),
 		nil,
@@ -669,7 +686,7 @@ func writeControlledArchiveModel(t *testing.T) (string, []byte) {
 func openVerifiedArchiveScope(t *testing.T) (models.Service, models.RuntimeScopeRef, *verifiedArchiveProcessLauncher) {
 	t.Helper()
 	launcher := &verifiedArchiveProcessLauncher{}
-	service, err := newModelsServiceFixture(serviceedges.Edges{
+	service, err := newModelsServiceFixture(selectedTestTimeEdges(serviceedges.Edges{
 		ModelAssetHostPlatform: models.AssetHostPlatform{
 			OperatingSystem: "windows",
 			Architecture:    "amd64",
@@ -677,7 +694,7 @@ func openVerifiedArchiveScope(t *testing.T) (models.Service, models.RuntimeScope
 		ModelHostProcessLauncher:      launcher,
 		ModelHostProtocolNegotiator:   verifiedArchiveProtocolNegotiator{},
 		ModelHostCompatibilityChecker: verifiedArchiveCompatibilityChecker{},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
@@ -974,4 +991,12 @@ type verifiedArchiveCompatibilityChecker struct{}
 
 func (verifiedArchiveCompatibilityChecker) Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error {
 	return nil
+}
+
+// Direct provider fixtures supply the same selected pair required by Wire;
+// construction through root.BuildProcess performs this selection in production.
+func selectedTestTimeEdges(overrides serviceedges.Edges) serviceedges.Edges {
+	return serviceedges.Merge(serviceedges.Edges{
+		Clock: platformclock.Real{}, ProcessScheduler: platformclock.Real{},
+	}, overrides)
 }

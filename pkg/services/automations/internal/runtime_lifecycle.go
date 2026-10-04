@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"go.uber.org/zap"
 )
@@ -21,7 +22,8 @@ type runtimeInstance struct {
 	factorySessionID string
 	snapshot         interfaces.RuntimeSnapshot
 	activationInputs runtimeActivationInputIdentity
-	owner            *Service
+	workflowID       string
+	cursorScope      scriptpollers.CursorScope
 	runtimeConfig    *runtimeSnapshotConfig
 	watcher          automations.FilesystemWatcher
 	watcherRoot      string
@@ -34,6 +36,8 @@ type runtimeInstance struct {
 	mu       sync.Mutex
 	starting bool
 	started  bool
+	cursorMu sync.Mutex
+	released bool
 }
 
 type runtimeSnapshotConfig struct {
@@ -144,7 +148,7 @@ func (s *Service) ActivateRuntime(
 	delete(s.runtimeActivating, normalized.RuntimeID)
 	if existing := s.runtimes[normalized.RuntimeID]; existing != nil {
 		s.runtimeMu.Unlock()
-		instance.stop(context.Background())
+		s.stopRuntimeInstance(context.Background(), instance)
 		if runtimeActivationMatches(existing, normalized) {
 			return automations.RuntimeActivationResult{
 				RuntimeID:  normalized.RuntimeID,
@@ -181,10 +185,10 @@ func (s *Service) getCursorFromActiveRuntime(
 	s.runtimeMu.Unlock()
 
 	for _, instance := range instances {
-		if instance == nil || instance.owner == nil || instance.owner == s {
+		if instance == nil {
 			continue
 		}
-		result, err := instance.owner.GetCursor(ctx, request)
+		result, err := s.getRuntimeCursor(ctx, instance, request)
 		if err == nil {
 			return result, true, nil
 		}
@@ -221,7 +225,7 @@ func (s *Service) StartRuntime(ctx context.Context, runtimeID string) error {
 	instance.starting = true
 	instance.mu.Unlock()
 
-	startErr := instance.start(ctx)
+	startErr := s.startRuntimeInstance(ctx, instance)
 	instance.mu.Lock()
 	instance.starting = false
 	if startErr == nil {
@@ -232,8 +236,8 @@ func (s *Service) StartRuntime(ctx context.Context, runtimeID string) error {
 		return nil
 	}
 
+	s.stopRuntimeInstance(context.Background(), instance)
 	s.removeRuntime(runtimeID, instance)
-	instance.stop(context.Background())
 	return startErr
 }
 
@@ -266,7 +270,7 @@ func (s *Service) DeactivateRuntime(
 		}, nil
 	}
 
-	if err := instance.stop(ctx); err != nil {
+	if err := s.stopRuntimeInstance(ctx, instance); err != nil {
 		return automations.RuntimeDeactivationResult{}, runtimeLifecycleError(
 			"DeactivateRuntime", automations.ErrorCodeFailed, err,
 		)
@@ -353,14 +357,9 @@ func (s *Service) buildRuntimeInstance(
 	if strings.TrimSpace(workflowID) == "" {
 		workflowID = s.workflowID
 	}
-	owner := NewWithCursorFileSystem(
-		s.logger(), s.clock, s.commandRunner(), workflowID, request.Snapshot.FactoryDir,
-		s.hostedPollers, s.resolveTemplates, s.executionPolicy, s.cursorFileSystem,
-	)
-	if owner == nil {
-		return nil, runtimeLifecycleError(
-			"ActivateRuntime", automations.ErrorCodeFailed, fmt.Errorf("runtime Automations owner is unavailable"),
-		)
+	cursorScope := scriptpollers.CursorScope{RuntimeID: request.RuntimeID}
+	if s.persistRuntimeCursors {
+		cursorScope.BaseDir = strings.TrimSpace(request.Snapshot.FactoryDir)
 	}
 	runtimeCtx, cancel := context.WithCancel(ctx)
 	instance := &runtimeInstance{
@@ -368,7 +367,8 @@ func (s *Service) buildRuntimeInstance(
 		factorySessionID: request.FactorySessionID,
 		snapshot:         request.Snapshot,
 		activationInputs: newRuntimeActivationInputIdentity(request.Inputs),
-		owner:            owner,
+		workflowID:       workflowID,
+		cursorScope:      cursorScope,
 		runtimeConfig:    config,
 		submit:           request.Inputs.Submitter,
 		startSchedulers:  request.Inputs.StartSchedulers,
@@ -381,15 +381,15 @@ func (s *Service) buildRuntimeInstance(
 		watcherConfig := runtimeFilesystemConfig(
 			request.Snapshot.FactoryDir,
 			filesystemInputs,
-			s.logger(),
+			s.loggerValue,
 			request.Inputs.Submitter,
 		)
 		instance.watcherRoot = watcherConfig.Dir
-		instance.watcher = owner.NewFilesystemWatcher(watcherConfig)
+		instance.watcher = s.NewFilesystemWatcher(watcherConfig)
 	}
 	if instance.watcher != nil {
 		if err := instance.watcher.PreseedInputs(ctx); err != nil {
-			instance.stop(context.Background())
+			s.stopRuntimeInstance(context.Background(), instance)
 			return nil, runtimeLifecycleError("ActivateRuntime", automations.ErrorCodeFailed, fmt.Errorf("preseed inputs: %w", err))
 		}
 	}
@@ -446,23 +446,20 @@ func runtimeFilesystemConfig(
 	}
 }
 
-func (instance *runtimeInstance) start(ctx context.Context) error {
-	if instance == nil || instance.owner == nil {
+func (s *Service) startRuntimeInstance(ctx context.Context, instance *runtimeInstance) error {
+	if instance == nil {
 		return runtimeLifecycleError("StartRuntime", automations.ErrorCodeFailed, fmt.Errorf("runtime Automations owner is unavailable"))
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if instance.startSchedulers {
-		if err := instance.owner.StartSchedulerSidecarsForRuntime(
-			instance.ctx,
-			&instance.sidecars,
-			instance.snapshot.FactoryDir,
-			instance.runtimeConfig.FactoryConfig(),
-			instance.runtimeConfig,
-			instance.submit,
-		); err != nil {
-			instance.stop(context.Background())
+		identity := runtimeSchedulerIdentity(instance.workflowID, instance.snapshot.FactoryDir)
+		configuration := s.schedulerConfiguration(identity, instance.snapshot.FactoryDir,
+			instance.runtimeConfig.FactoryConfig(), instance.runtimeConfig, instance.submit,
+			instance.workflowID, instance.cursorScope)
+		if err := s.startConfiguredSchedulerSource(instance.ctx, &instance.sidecars, configuration); err != nil {
+			s.stopRuntimeInstance(context.Background(), instance)
 			return runtimeLifecycleError("StartRuntime", automations.ErrorCodeFailed, err)
 		}
 	}
@@ -470,13 +467,13 @@ func (instance *runtimeInstance) start(ctx context.Context) error {
 		instance.sidecars.Add(1)
 		go func() {
 			defer instance.sidecars.Done()
-			instance.observeWatcherTermination(instance.watcher.Watch(instance.ctx))
+			s.observeWatcherTermination(instance, instance.watcher.Watch(instance.ctx))
 		}()
 	}
 	return nil
 }
 
-func (instance *runtimeInstance) observeWatcherTermination(err error) {
+func (s *Service) observeWatcherTermination(instance *runtimeInstance, err error) {
 	if instance == nil {
 		return
 	}
@@ -491,7 +488,7 @@ func (instance *runtimeInstance) observeWatcherTermination(err error) {
 		zap.String("runtime_id", instance.runtimeID),
 		zap.String("watch_root", instance.watcherRoot),
 	}
-	logger := instance.owner.logger()
+	logger := s.loggerValue
 	if err != nil {
 		logger.Error("filesystem watcher stopped with error", append(fields, zap.Error(err))...)
 		return
@@ -502,7 +499,7 @@ func (instance *runtimeInstance) observeWatcherTermination(err error) {
 	)
 }
 
-func (instance *runtimeInstance) stop(ctx context.Context) error {
+func (s *Service) stopRuntimeInstance(ctx context.Context, instance *runtimeInstance) error {
 	if instance == nil || instance.cancel == nil {
 		return nil
 	}
@@ -510,6 +507,7 @@ func (instance *runtimeInstance) stop(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		instance.sidecars.Wait()
+		s.releaseRuntimeCursorScope(instance)
 		close(done)
 	}()
 	if ctx == nil {
@@ -520,6 +518,27 @@ func (instance *runtimeInstance) stop(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// Cursor reads and release exclude each other after supervision has joined.
+// A retained old instance cannot recreate or release a replacement's scope.
+func (s *Service) getRuntimeCursor(ctx context.Context, instance *runtimeInstance, request automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	instance.cursorMu.Lock()
+	defer instance.cursorMu.Unlock()
+	if instance.released {
+		return automations.GetCursorResult{}, automations.ErrNotFound
+	}
+	return s.scriptPollers.GetCursorForScope(ctx, instance.cursorScope, request)
+}
+
+func (s *Service) releaseRuntimeCursorScope(instance *runtimeInstance) {
+	instance.cursorMu.Lock()
+	defer instance.cursorMu.Unlock()
+	if !instance.released {
+		_ = s.lifecycle.ReleaseRuntimeSource(context.Background(), instance.runtimeID)
+		s.cursors.ReleaseScope(instance.cursorScope)
+		instance.released = true
 	}
 }
 

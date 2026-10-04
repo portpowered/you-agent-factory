@@ -21,7 +21,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -42,6 +41,11 @@ var (
 
 // Existing component fixtures supply the same separately selected roles as Wire.
 func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
+	edges = selectedTestTimeEdges(edges)
+	processLogger, err := provideProcessLogger(edges)
+	if err != nil {
+		return nil, err
+	}
 	scopes, err := provideModelRuntimeScopes()
 	if err != nil {
 		return nil, err
@@ -73,7 +77,11 @@ func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
 		return nil, err
 	}
 	now := provideModelNow(edges)
-	inference, err := provideModelInference(scopes, assets, catalog, host, runtime, now)
+	registrar, err := modelswire.NewInvocationArtifactRegistrar(modelswire.NewInertInvocationArtifactFileSystem())
+	if err != nil {
+		return nil, err
+	}
+	inference, err := provideModelInference(scopes, assets, catalog, host, runtime, registrar, now, modelswire.NewExecutionDeadline())
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +89,21 @@ func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return provideModelsService(edges, scopes, assets, catalog, host, inference, provideModelHostLauncher(edges, source),
-		provideModelHostHTTP(edges), provideModelHostClock(edges), runner, provideModelRuntimeHTTP(edges), inspect, temp, create,
-		now, provideModelHostLogger(), provideModelHostMetrics(edges), evidence, resolver, provideModelAssetHostPlatform(edges))
+	localRuntime, err := provideModelLocalRuntime(runner, provideModelRuntimeHTTP(edges), inspect, temp, create)
+	if err != nil {
+		return nil, err
+	}
+	resources, err := provideModelResourceLimiter(now)
+	if err != nil {
+		return nil, err
+	}
+	execution, err := provideModelScopedLocalExecution(scopes, assets, host, localRuntime, resources, now)
+	if err != nil {
+		return nil, err
+	}
+	return provideModelsService(edges, scopes, assets, catalog, host, inference, resources,
+		now, execution, evidence, resolver, provideModelAssetRevision(edges), provideModelAssetHostPlatform(edges), processLogger)
 }
-
 func newModelAssetsFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes) (modelswire.Assets, error) {
 	coordination, err := provideModelAssetCoordination(edges)
 	if err != nil {
@@ -97,11 +115,14 @@ func newModelAssetsFixture(edges serviceedges.Edges, scopes modelswire.RuntimeSc
 		provideModelAssetReadFile(edges), provideModelAssetReadDirectory(edges), provideModelAssetCreateFile(edges), provideModelAssetOpenFile(edges),
 		provideModelAssetResolveEnvironment(edges), provideModelAssetRevision(edges), coordination)
 }
-
 func newModelHostFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	source modelRuntimeEvidenceSource, evidence modelswire.RuntimeEvidenceRecorder) (modelswire.RuntimeHost, error) {
 	state := modelswire.NewSlotState()
-	clock, logger, metrics := provideModelHostClock(edges), provideModelHostLogger(), provideModelHostMetrics(edges)
+	processLogger, err := provideProcessLogger(edges)
+	if err != nil {
+		return nil, err
+	}
+	clock, logger, metrics := provideModelHostClock(edges), provideModelHostLogger(processLogger), provideModelHostMetrics(edges)
 	coordinator := provideModelSlotCoordinator(state, scopes, clock, logger, metrics)
 	leases, err := modelswire.NewHostLeases(clock, provideModelSlotFacts(state, scopes, assets), coordinator)
 	if err != nil {
@@ -115,10 +136,8 @@ func newModelHostFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScop
 	return provideModelRuntimeHost(scopes, assets, leases, state, provideModelHostLauncher(edges, source), provideModelHostHTTP(edges), clock,
 		logger, metrics, provideModelAssetHostPlatform(edges), provideModelHostProtocol(edges, symlinks), compatibility, symlinks, evidence)
 }
-
 func TestModelsServiceIsConstructedOnceAndOpensRuntimeScopeOnSameRoot(t *testing.T) {
 	t.Parallel()
-
 	root, err := newModelsServiceFixture(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
@@ -177,10 +196,8 @@ func (f *portableFileSystemOverride) WalkDir(string, fs.WalkDirFunc) error {
 	f.walked = true
 	return nil
 }
-
 func TestFactoryDefinitionPortableFileSystemPreservesOverrideAndSelectsDefault(t *testing.T) {
 	t.Parallel()
-
 	selectedDefault := provideFactoryDefinitionPortableFileSystem(serviceedges.Edges{})
 	if _, ok := selectedDefault.(platformfilesystem.Local); !ok {
 		t.Fatalf("default portable filesystem = %T, want platform local adapter", selectedDefault)
@@ -203,21 +220,17 @@ func TestFactoryDefinitionPortableFileSystemPreservesOverrideAndSelectsDefault(t
 		t.Fatal("portable directory walker override was not selected")
 	}
 }
-
 func (s *invocationArtifactFileSystemOverride) Open(path string) (io.ReadCloser, error) {
 	s.opened = path
 	return io.NopCloser(bytes.NewBufferString("audio")), nil
 }
-
 func (s *invocationArtifactFileSystemOverride) Create(path string) (io.WriteCloser, error) {
 	s.created = path
 	s.output = &artifactWriteCloser{}
 	return s.output, nil
 }
-
 func TestModelInvocationEdgesPreserveOverridesAndSelectPlatformDefaults(t *testing.T) {
 	t.Parallel()
-
 	if _, ok := provideFactorySessionsWorkingDirectory(serviceedges.Edges{}).(platformfilesystem.Local); !ok {
 		t.Fatalf("default working-directory edge = %T, want platform filesystem adapter", provideFactorySessionsWorkingDirectory(serviceedges.Edges{}))
 	}
@@ -243,10 +256,8 @@ func TestModelInvocationEdgesPreserveOverridesAndSelectPlatformDefaults(t *testi
 		t.Fatalf("model invocation timeout = %v, want %v", got, factorysessions.DefaultModelInvocationTimeout)
 	}
 }
-
 func TestModelAssetHostPlatformPreservesOverrideAndSelectsProcessDefault(t *testing.T) {
 	t.Parallel()
-
 	// Managed backend selection now accepts published CUDA archives on both
 	// desktop platforms, so a detected GPU selects the CUDA accelerator
 	// everywhere a CUDA-capable archive can be published.
@@ -273,7 +284,6 @@ func TestModelAssetHostPlatformPreservesOverrideAndSelectsProcessDefault(t *test
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 	t.Parallel()
-
 	process := &modelEdgeManagedProcess{healthEndpoint: "http://model-host/health"}
 	var gotSpec serviceedges.HostProcessStartSpec
 	launcher := adaptModelHostProcessLauncher(&modelEdgeProcessLauncher{
@@ -343,10 +353,8 @@ func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 		t.Fatalf("adapted pull metric = %#v, want copied edge metric", recorder.metric)
 	}
 }
-
 func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 	t.Parallel()
-
 	cases := []struct {
 		name  string
 		edges serviceedges.Edges
@@ -376,10 +384,8 @@ func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 		})
 	}
 }
-
 func TestModelsCompositionSanitizesOptionalHostProcessDiagnosticAtWireBoundary(t *testing.T) {
 	t.Parallel()
-
 	private := "token=private endpoint=https://private.example.test/model prompt=secret"
 	var gotSpec serviceedges.HostProcessStartSpec
 	process := &modelEdgeManagedProcess{
@@ -407,7 +413,6 @@ func TestModelsCompositionSanitizesOptionalHostProcessDiagnosticAtWireBoundary(t
 		assertWireDiagnosticCauseRejected(t, source, process, code, private)
 	}
 }
-
 func requireWireDiagnosticSource(
 	t *testing.T,
 	process modelswire.HostManagedProcess,
@@ -419,7 +424,6 @@ func requireWireDiagnosticSource(
 	}
 	return source
 }
-
 func assertWireDiagnosticSnapshot(
 	t *testing.T,
 	source modelswire.HostManagedProcessDiagnosticSource,
@@ -442,7 +446,6 @@ func assertWireDiagnosticSnapshot(
 		t.Fatalf("wire diagnostic snapshot leaked private cause: %#v", snapshot)
 	}
 }
-
 func assertWireDiagnosticCauseRejected(
 	t *testing.T,
 	source modelswire.HostManagedProcessDiagnosticSource,
@@ -457,10 +460,8 @@ func assertWireDiagnosticCauseRejected(
 		t.Fatalf("unsupported wire cause %q crossed boundary: %#v, ready=%t", code, got, ready)
 	}
 }
-
 func TestManagedProcessCauseReducerUsesOnlySafeCodes(t *testing.T) {
 	t.Parallel()
-
 	cases := []struct {
 		name    string
 		marker  string
@@ -492,7 +493,6 @@ func TestManagedProcessCauseReducerUsesOnlySafeCodes(t *testing.T) {
 		})
 	}
 }
-
 func TestModelsCompositionRejectsMissingAssetStagingCoordination(t *testing.T) {
 	t.Parallel()
 
@@ -505,7 +505,6 @@ func TestModelsCompositionRejectsMissingAssetStagingCoordination(t *testing.T) {
 		t.Fatalf("provideModelsService() error = %v, want missing staging coordination diagnostic", err)
 	}
 }
-
 func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 	t.Parallel()
 
@@ -515,7 +514,6 @@ func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 	assertAdaptedGRPCConnection(t, request)
 	assertAdaptedOptionalPorts(t)
 }
-
 func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
 	return modelswire.HostProtocolNegotiationRequest{
 		Configuration: modelswire.ResolvedHostConfiguration{
@@ -527,7 +525,6 @@ func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
 		},
 	}
 }
-
 func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProtocolNegotiationRequest) {
 	t.Helper()
 	protocol := &modelEdgeProtocolNegotiator{}
@@ -549,7 +546,6 @@ func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProto
 		t.Fatalf("protocol result = %#v, want ready pinned result", result)
 	}
 }
-
 func assertAdaptedCompatibility(t *testing.T, request modelswire.HostProtocolNegotiationRequest) {
 	t.Helper()
 	compatibility := &modelEdgeCompatibilityChecker{}
@@ -563,7 +559,6 @@ func assertAdaptedCompatibility(t *testing.T, request modelswire.HostProtocolNeg
 		t.Fatalf("edge compatibility request = %#v, want exact projection", compatibility.request)
 	}
 }
-
 func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNegotiationRequest) {
 	t.Helper()
 	connection := &modelEdgeGRPCConnection{}
@@ -584,7 +579,6 @@ func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNe
 		t.Fatalf("dialed connection state = %#v, want request and close", connection)
 	}
 }
-
 func equalStringSlices(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
@@ -596,7 +590,6 @@ func equalStringSlices(left, right []string) bool {
 	}
 	return true
 }
-
 func assertAdaptedOptionalPorts(t *testing.T) {
 	t.Helper()
 	if adaptModelHostProtocolNegotiator(nil) != nil {
@@ -628,7 +621,6 @@ func (process *modelEdgeManagedProcess) Stop(context.Context) error {
 	process.stopped = true
 	return nil
 }
-
 func (process *modelEdgeManagedProcess) DiagnosticSnapshot() (serviceedges.HostProcessDiagnosticSnapshot, bool) {
 	return process.diagnostic, process.diagnosticReady
 }
@@ -746,71 +738,67 @@ func (connection *modelEdgeGRPCConnection) Negotiate(
 		Ready:           true,
 	}, nil
 }
-
 func (connection *modelEdgeGRPCConnection) Close() error {
 	connection.closed = true
 	return nil
 }
 
 type modelsCLICompositionRootStub struct {
-	modelservice.Service
-	openRuntime  func(context.Context, modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error)
-	closeRuntime func(context.Context, modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error)
+	models.Service
+	openRuntime  func(context.Context, models.OpenRuntimeScopeRequest) (models.OpenRuntimeScopeResult, error)
+	closeRuntime func(context.Context, models.CloseRuntimeScopeRequest) (models.CloseRuntimeScopeResult, error)
 }
 
 func (stub modelsCLICompositionRootStub) OpenRuntimeScope(
 	ctx context.Context,
-	request modelservice.OpenRuntimeScopeRequest,
-) (modelservice.OpenRuntimeScopeResult, error) {
+	request models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
 	if stub.openRuntime == nil {
-		return modelservice.OpenRuntimeScopeResult{}, errors.New("unexpected standalone Models scope open")
+		return models.OpenRuntimeScopeResult{}, errors.New("unexpected standalone Models scope open")
 	}
 	return stub.openRuntime(ctx, request)
 }
-
 func (stub modelsCLICompositionRootStub) CloseRuntimeScope(
 	ctx context.Context,
-	request modelservice.CloseRuntimeScopeRequest,
-) (modelservice.CloseRuntimeScopeResult, error) {
+	request models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
 	if stub.closeRuntime == nil {
-		return modelservice.CloseRuntimeScopeResult{}, errors.New("unexpected standalone Models scope close")
+		return models.CloseRuntimeScopeResult{}, errors.New("unexpected standalone Models scope close")
 	}
 	return stub.closeRuntime(ctx, request)
 }
 
 type modelsCLICompositionScopeSourceStub struct {
 	factorysessionwire.InvocationOperation
-	request modelservice.PresentationScopeRequest
-	scope   modelservice.PresentationScope
+	request models.PresentationScopeRequest
+	scope   models.PresentationScope
 	err     error
 	calls   int
 }
 
 func (stub *modelsCLICompositionScopeSourceStub) OpenModelsCatalogScope(
 	_ context.Context,
-) (modelservice.PresentationScope, error) {
+) (models.PresentationScope, error) {
 	return stub.scope, nil
 }
-
 func (stub *modelsCLICompositionScopeSourceStub) OpenModelsPresentationScope(
 	_ context.Context,
-	request modelservice.PresentationScopeRequest,
-) (modelservice.PresentationScope, error) {
+	request models.PresentationScopeRequest,
+) (models.PresentationScope, error) {
 	stub.calls++
 	stub.request = request
 	return stub.scope, stub.err
 }
-
 func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing.T) {
 	t.Parallel()
 
-	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:invoke")
+	scope, err := (models.RuntimeScopeRef{}).Parse("wire:models:invoke")
 	if err != nil {
 		t.Fatalf("parse Models runtime scope: %v", err)
 	}
 	logger := zap.NewNop()
 	source := &modelsCLICompositionScopeSourceStub{
-		scope: modelservice.PresentationScope{Scope: scope},
+		scope: models.PresentationScope{Scope: scope},
 	}
 	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source, nil)
 	if err != nil {
@@ -842,11 +830,11 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 	if opened.Scope != scope {
 		t.Fatalf("opened scope = %q, want %q", opened.Scope, scope)
 	}
-	want := modelservice.PresentationScopeRequest{
+	want := models.PresentationScopeRequest{
 		FactoryDir:       config.FactoryDir,
 		WorkingDirectory: config.WorkingDirectory,
 		HomeDir:          config.HomeDir,
-		OperatorDefaults: modelservice.PresentationOperatorDefaults{
+		OperatorDefaults: models.PresentationOperatorDefaults{
 			WorkerModelProvider: config.OperatorDefaults.WorkerModelProvider,
 			WorkerModel:         config.OperatorDefaults.WorkerModel,
 		},
@@ -858,24 +846,23 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 		t.Fatalf("presentation scope request = %#v, want %#v", source.request, want)
 	}
 }
-
 func TestModelsInvokeStandaloneScopeProjectsOperatorModelOverlay(t *testing.T) {
 	t.Parallel()
 
-	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:standalone-overlay")
+	scope, err := (models.RuntimeScopeRef{}).Parse("wire:models:standalone-overlay")
 	if err != nil {
 		t.Fatalf("parse standalone overlay scope: %v", err)
 	}
 	home := t.TempDir()
 	fixtureSource := "hf://fixture/models/llm.gguf@0000000000000000000000000000000000000000"
-	var openRequest modelservice.OpenRuntimeScopeRequest
+	var openRequest models.OpenRuntimeScopeRequest
 	root := modelsCLICompositionRootStub{
-		openRuntime: func(_ context.Context, request modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+		openRuntime: func(_ context.Context, request models.OpenRuntimeScopeRequest) (models.OpenRuntimeScopeResult, error) {
 			openRequest = request
-			return modelservice.OpenRuntimeScopeResult{Scope: scope}, nil
+			return models.OpenRuntimeScopeResult{Scope: scope}, nil
 		},
-		closeRuntime: func(_ context.Context, request modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error) {
-			return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+		closeRuntime: func(_ context.Context, request models.CloseRuntimeScopeRequest) (models.CloseRuntimeScopeResult, error) {
+			return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 		},
 	}
 	loader := func(path string) (operatorsettings.Config, error) {
@@ -883,7 +870,7 @@ func TestModelsInvokeStandaloneScopeProjectsOperatorModelOverlay(t *testing.T) {
 			t.Fatalf("operator config path = %q, want %q", path, operatorsettings.DefaultConfigPath(home))
 		}
 		return operatorsettings.Config{Models: map[string]operatorsettings.ModelConfig{
-			modelservice.BuiltInModelNameLLM: {Source: &fixtureSource},
+			models.BuiltInModelNameLLM: {Source: &fixtureSource},
 		}}, nil
 	}
 	composition, err := provideModelsCLIComposition(
@@ -904,14 +891,13 @@ func TestModelsInvokeStandaloneScopeProjectsOperatorModelOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompositionOpenInvokeScopeWithModelCache() error = %v", err)
 	}
-	if overlay := openRequest.Config.OperatorModels[modelservice.BuiltInModelNameLLM]; overlay.Source == nil || *overlay.Source != fixtureSource {
+	if overlay := openRequest.Config.OperatorModels[models.BuiltInModelNameLLM]; overlay.Source == nil || *overlay.Source != fixtureSource {
 		t.Fatalf("standalone Models operator overlay = %#v, want fixture source %q", overlay, fixtureSource)
 	}
 	if err := opened.Close(context.Background()); err != nil {
 		t.Fatalf("close standalone overlay scope: %v", err)
 	}
 }
-
 func TestModelsCatalogWithoutCacheIncludesCustomOperatorModel(t *testing.T) {
 	t.Parallel()
 
@@ -925,18 +911,18 @@ func TestModelsCatalogWithoutCacheIncludesCustomOperatorModel(t *testing.T) {
 	if err := os.WriteFile(configPath, []byte(configJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:custom-catalog")
+	scope, err := (models.RuntimeScopeRef{}).Parse("wire:models:custom-catalog")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var openRequest modelservice.OpenRuntimeScopeRequest
+	var openRequest models.OpenRuntimeScopeRequest
 	root := modelsCLICompositionRootStub{
-		openRuntime: func(_ context.Context, request modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+		openRuntime: func(_ context.Context, request models.OpenRuntimeScopeRequest) (models.OpenRuntimeScopeResult, error) {
 			openRequest = request
-			return modelservice.OpenRuntimeScopeResult{Scope: scope}, nil
+			return models.OpenRuntimeScopeResult{Scope: scope}, nil
 		},
-		closeRuntime: func(_ context.Context, request modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error) {
-			return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+		closeRuntime: func(_ context.Context, request models.CloseRuntimeScopeRequest) (models.CloseRuntimeScopeResult, error) {
+			return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 		},
 	}
 	sourceScope := &modelsCLICompositionScopeSourceStub{err: factorydefinitions.ErrFactoryLayoutNotFound}
@@ -965,8 +951,7 @@ func TestModelsCatalogWithoutCacheIncludesCustomOperatorModel(t *testing.T) {
 		t.Fatalf("close catalog scope: %v", err)
 	}
 }
-
-func assertCustomCatalogOverlay(t *testing.T, overlays map[string]modelservice.ModelOverlay, source string) {
+func assertCustomCatalogOverlay(t *testing.T, overlays map[string]models.ModelOverlay, source string) {
 	t.Helper()
 	overlay, ok := overlays["index-tts2.5"]
 	if !ok {
@@ -978,7 +963,7 @@ func assertCustomCatalogOverlay(t *testing.T, overlays map[string]modelservice.M
 	if overlay.Backend == nil || *overlay.Backend != "localai-audio-cpp" {
 		t.Fatalf("custom catalog backend = %v, want localai-audio-cpp", overlay.Backend)
 	}
-	if overlay.LoadPolicy == nil || *overlay.LoadPolicy != modelservice.LoadPolicyOnDemand {
+	if overlay.LoadPolicy == nil || *overlay.LoadPolicy != models.LoadPolicyOnDemand {
 		t.Fatalf("custom catalog load policy = %v, want ON_DEMAND", overlay.LoadPolicy)
 	}
 	if !reflect.DeepEqual(overlay.Operations, []string{"TTS"}) {

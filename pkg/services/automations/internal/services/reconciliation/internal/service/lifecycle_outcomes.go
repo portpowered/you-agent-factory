@@ -116,13 +116,6 @@ func invalidOperationError(op, reason string) *automations.Error {
 	)
 }
 
-func unavailableEffectsError(op string) *automations.Error {
-	return operationError(
-		op, automations.ErrorCodeNotReady, automations.ErrNotReady,
-		"source supervision effects are not configured",
-	)
-}
-
 func operationError(
 	op string,
 	code automations.ErrorCode,

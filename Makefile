@@ -207,9 +207,6 @@ FUNCTIONAL_TEST_GO ?= $(GO)
 # can be reported by its compact terminal verdict step. An unset path preserves
 # the historical fail-fast target behavior.
 FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
-BACKEND_SIZE_ROOT ?= .
-PACKAGE_MAINT_ROOT ?= .
-PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
 PACKAGE_BOUNDARY_ALL ?= 0
 PACKAGE_BOUNDARY_BASE_REF ?=
@@ -217,7 +214,6 @@ PACKAGE_STRUCTURE_ROOT ?= .
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
 # "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
 # Entries are keyed by source content, never by checkout path, so a fresh worktree
@@ -242,7 +238,16 @@ endif
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary functional-os-boundary-check pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check test-sleep-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode fmt-check contracts-check
+# Local `make lint` runs LINT_TARGETS_BASE, adds the UI gates only when ui/
+# differs from the merge-base with origin/main (or has untracked files), and
+# leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
+# complete inventory. Override LINT_TARGETS to select targets explicitly.
+LINT_TARGETS_BASE := vet pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci-lint-run repolint lint-migration-smoke retired-surface-check fmt-check contracts-check
+LINT_TARGETS_UI := ui-lint ui-deadcode
+LINT_TARGETS_CI_ONLY := deadcode
+LINT_FULL ?=
+LINT_UI_CHANGED = $(shell base=$$(git merge-base HEAD origin/main 2>/dev/null) && { git diff --quiet $$base -- ui && test -z "$$(git ls-files --others --exclude-standard ui)" || echo 1; } || echo 1)
+LINT_TARGETS ?= $(if $(or $(strip $(CI)),$(strip $(LINT_FULL)),$(strip $(LINT_UI_CHANGED))),$(LINT_TARGETS_UI) )$(LINT_TARGETS_BASE)$(if $(or $(strip $(CI)),$(strip $(LINT_FULL))), $(LINT_TARGETS_CI_ONLY))
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -282,11 +287,12 @@ define run_timed_step
 endef
 
 
+.PHONY: golangci golangci-lint-run repolint lint-baseline-growth lint-migration-smoke
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-localai-runner-v2-component test-localai-runner-v2-prebuilt test-integration-models-managed-process build-integration-models-managed-process-helper test-integration-models-asr-live-correlation build-integration-models-asr-live-correlation-harness test-contract test-stress test-release
-.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-os-boundary-check functional-test-viz
+.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-backend-conformance test-backend-conformance-live test-root-process-acceptance long-tests long-tests-managed-runtime
@@ -313,9 +319,9 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: test-sleep-check backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check test-functional-resumed-successor-artifact
+.PHONY: lint-full pkg-boundary pkg-structure service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
-.PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
+.PHONY: retired-surface-check readme-check deadcode dashboard-verify
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
@@ -571,7 +577,7 @@ test-acp-provider-prebuilt:
 	$(GO) test ./tests/integration/providers/acp -run '^TestPrebuiltACPDeliveredResultsSurvivePeerExit$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/lint-baseline-growth.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -587,7 +593,6 @@ test-unit-latency-budget:
 
 regenerate-shared-ci-baselines:
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget -mode regenerate -skip-unit-latency -root . $(if $(strip $(BASELINE_REGEN_DEADCODE_REPORT)),-deadcode-report "$(BASELINE_REGEN_DEADCODE_REPORT)",)
-	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze
 	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run "^TestWriteProductionInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run "^TestWriteProductionInputsInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .
@@ -605,7 +610,7 @@ test-localai-runner-v2-component:
 test-localai-runner-v2-prebuilt: export YOU_OMNI_PREFLIGHT_REQUIRED := 1
 test-localai-runner-v2-prebuilt: export INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT := 1
 test-localai-runner-v2-prebuilt:
-	$(GO) test ./tests/integration/models/omni_media_probe -run '^TestProbeRunnerV2PrebuiltCLIHandoff$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/internal/localai/omni_media_probe -run '^TestProbeRunnerV2PrebuiltCLIHandoff$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/tts_clean_install ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/cancel ./tests/integration/workers/interrupt -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -674,12 +679,10 @@ test-contract:
 # Cache-aware developer feedback; use test-functional-fresh for an
 # unconditional rerun.
 test-functional:
-	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
 
 # CI-equivalent and flake-investigation path: force every package to execute.
 test-functional-fresh:
-	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 # The resumed-successor witness consumes operator-staged immutable artifacts;
@@ -688,15 +691,9 @@ test-functional-fresh:
 test-functional-resumed-successor-artifact:
 	$(GO) test -tags=factoryartifact ./tests/functional/sessions/root_composition -run '^TestResumedSuccessorResponseScopeAndWorkAdmission$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-functional-boundary-check:
-	$(GO) run ./cmd/functionalboundarycheck
-
-functional-os-boundary-check:
-	$(call run_lint_checker,./cmd/functionalosboundarycheck,-root "." -baseline "docs/internal/baselines/functional-os-spawn-baseline.json" -inventory "docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json")
-
 # functional-test-viz is the single functional-report entrypoint. It runs the
-# configured fresh functional coverage tier exactly once (including its
-# boundary check), renders and publishes the Markdown catalog when running in
+# configured fresh functional coverage tier exactly once, renders and publishes
+# the Markdown catalog when running in
 # GitHub Actions, retains the complete command stream in command.log, and prints
 # only pkg/ coverage plus functional-package latencies to the terminal. Artifacts
 # land under .artifacts/functional-test-viz/.
@@ -935,15 +932,9 @@ test-unit-coverage:
 		-timing-summary "$(GO_UNIT_COVERAGE_TIMING_OUTPUT)" \
 		-log "$(GO_UNIT_COVERAGE_LOG)"
 
-# test-functional-coverage always runs functional-boundary-check first so the
-# required CI Backend Functional Coverage lane (and any local/alias caller of
-# this target) cannot succeed without a successful boundary check. The
-# instrumented gocoveragecheck invocation leaves test-count policy to Go, so an
-# eligible repeat may be served from the test cache; use test-functional-fresh
-# for an explicit fresh ordinary-functional run. Boundary failures exit
-# non-zero before gocoveragecheck starts.
+# Instrumented coverage preserves Go test caching and the functional lane budget.
+# Required Backend Lint owns static functional-boundary enforcement.
 test-functional-coverage:
-	$(MAKE) functional-boundary-check
 	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE)"
 	@set +e; \
 	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
@@ -990,8 +981,8 @@ artifact-contract-closeout:
 lint:
 	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
-backend-size:
-	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
+lint-full:
+	$(MAKE) lint LINT_FULL=1
 
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
@@ -1001,24 +992,14 @@ backend-dependency-graph:
 architecture:
 	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
 
-pkg-maint:
-	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")
-
-pkg-file-count:
-	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
-
 pkg-boundary:
 	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
-	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 pkg-structure:
 	$(call run_lint_checker,./cmd/pkgstructurecheck,-root "$(PACKAGE_STRUCTURE_ROOT)")
 
 service-cycle-check:
 	$(call run_lint_checker,./cmd/servicecyclecheck,-root ".")
-
-package-target-manifest-check:
-	$(call run_lint_checker,./cmd/packagetargetmanifestcheck,-root ".")
 
 packaged-factory-source-check:
 	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
@@ -1044,23 +1025,55 @@ model-provider-package-generate:
 model-provider-package-check:
 	node scripts/model-provider-package.mjs check
 
-ownership-boundary-check:
-	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
-ownership-inventory-check:
-	$(call run_lint_checker,./cmd/ownershipinventorycheck,)
+# golangci-lint is pinned to an exact version and run with go run, like the
+# deadcode tool. v2.11.4 is the newest release whose go.mod needs go 1.25.0.
+# Ratchet: issues.new-from-merge-base in .golangci.yml, so origin/main must be
+# fetched (Backend Lint checks out with fetch-depth 0).
+GOLANGCI_LINT_VERSION ?= v2.11.4
+GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+# Tag union under which the repolint analyzers see every Go file once.
+REPOLINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
+REPOLINT_DIR ?= .artifacts/repolint
+REPOLINT_BASELINE := internal/lint/analyzers/baseline.txt
+ifeq ($(OS),Windows_NT)
+REPOLINT_BIN := $(REPOLINT_DIR)/repolint.exe
+else
+REPOLINT_BIN := $(REPOLINT_DIR)/repolint
+endif
 
-durable-runtime-construction-check:
-	$(call run_lint_checker,./cmd/durableruntimeconstructioncheck,-root ".")
+# golangci runs both halves: the built-in golangci-lint linters and the
+# repository's go/analysis analyzers (cmd/repolint) through go vet -vettool.
+golangci: golangci-lint-run repolint
 
-logging-boundary-check:
-	$(call run_lint_checker,./cmd/loggingboundarycheck,-root ".")
+LINT_MIGRATION_COHORT ?= all
 
-test-sleep-check:
-	$(call run_lint_checker,./cmd/testsleepcheck,-root ".")
+lint-migration-smoke:
+	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(GOLANGCI_LINT)"
 
-compatibility-alias-check:
-	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")
+golangci-lint-run:
+	@git merge-base HEAD origin/main
+	$(GOLANGCI_LINT) run ./...
+
+.PHONY: repolint-build
+repolint-build:
+	@mkdir -p $(REPOLINT_DIR)
+	$(GO) test ./internal/lint/analyzers
+	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
+
+repolint: lint-baseline-growth
+	$(GO) vet -vettool=$(abspath $(REPOLINT_BIN)) -layering.check-stale=false -behavior.check-stale=false -construction.check-stale=false -petripublic.check-stale=false ./...
+	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
+	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt" --collect-tags "$(REPOLINT_TAGS)" --go "$(GO)"
+
+# New rule IDs seed once; established rule IDs never admit new keys.
+lint-baseline-growth: repolint-build
+	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; \
+	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
+		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; \
+	git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base" || exit 1; \
+	"$(REPOLINT_BIN)" -baseline-growth="$(REPOLINT_DIR)/baseline.base"
+
 
 retired-surface-check:
 	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")

@@ -4,12 +4,13 @@ package wire
 
 import (
 	"context"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -18,8 +19,11 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -28,8 +32,8 @@ import (
 )
 
 var platformSet = wire.NewSet(
-	// TODO: remove this when we figure out how to appropriately inject the logging.
-	logging.NewDefaultLogger,
+	provideProcessLogger,
+	wire.FieldsOf(new(edges.Edges), "Clock"),
 )
 
 var apiSet = wire.NewSet(
@@ -51,6 +55,13 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
 	factorysessionwire.NewLiveChangeCoordinator,
+	factorysessionwire.NewIdentity,
+	factorysessionwire.NewResponseStreams,
+	factorysessionwire.NewSessionRegistry,
+	factorysessionwire.NewResponseStreamRegistry,
+	factorysessionwire.NewSessionState,
+	factorysessionwire.NewStreamObserver,
+	factorysessionwire.NewStreamManager,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
@@ -59,7 +70,11 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,
 	provideChatSessionsService,
-	provideOperatorSettingsService,
+	settingswire.NewDocumentService,
+	settingswire.NewResolutionService,
+	settingswire.NewService,
+	settingswire.NewCLIService,
+	provideOperatorSettingsDocumentPreserver,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
 	provideACPServerFactorySessionStartResolver,
@@ -84,12 +99,19 @@ var servicesSet = wire.NewSet(
 	factoryvisualizationwire.NewRuntimeSinkOwner,
 	factorysessionwire.NewOpeningPresentationOwner,
 	provideWorkContentStagingService,
-	work.NewContentPreparation,
-	work.NewRequestPreparationService,
+	workwire.NewContentPolicy,
+	workwire.NewContentPreparation,
+	workwire.NewRequestContentBridge,
+	workwire.NewRequestPolicy,
+	workwire.NewRequestPreparationService,
 	work.NewSingleWorkTargetPreparation,
 	work.NewListRequestPreparation,
 	work.NewFactoryRequestBatchPreparation,
-	work.NewInvocationInputPreparation,
+	workwire.NewInvocationInputPolicy,
+	workwire.NewInvocationInputAdapter,
+	provideWorkSessionResolver,
+	workwire.NewStateAccess,
+	provideWorkSnapshotReader,
 	provideWorkersMockWorkersConfigFileSystem,
 	provideWorkersMockWorkersConfigDiagnosticsLoader,
 	provideRuntimeArtifactClock,
@@ -140,8 +162,14 @@ var servicesSet = wire.NewSet(
 	provideModelSlotCoordinator,
 	provideModelRuntimeHost,
 	provideModelInvocationRuntime,
+	provideModelLocalRuntime,
+	provideModelResourceLimiter,
+	modelswire.NewInertInvocationArtifactFileSystem,
+	modelswire.NewInvocationArtifactRegistrar,
+	modelswire.NewExecutionDeadline,
 	provideModelInference,
 	provideModelsService,
+	provideModelScopedLocalExecution,
 	modelswire.NewCatalogReadinessQuery,
 	modelswire.NewCatalog,
 	modelswire.NewSlotState,
@@ -190,7 +218,20 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
-	provideAutomationHostedSourceInputs,
+	provideAutomationHostedClock,
+	provideAutomationHostedHTTPClient,
+	provideAutomationHostedSecretResolver,
+	provideAutomationHostedCheckpointStore,
+	provideAutomationsCursorFileSystem,
+	provideAutomationsHostedPollers,
+	provideAutomationsClock,
+	provideAutomationsScriptPollers,
+	provideAutomationsOwner,
+	automationswire.NewCursorScopes,
+	automationswire.NewSourceLifecycle,
+	automationswire.NewReconciliation,
+	automationswire.NewCron,
+	automationswire.NewFilesystemWatchers,
 	provideAutomationsCommandRunner,
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
@@ -201,13 +242,31 @@ var servicesSet = wire.NewSet(
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
-	provideFactoryWebhooksService,
+	provideFactoryWebhookHTTPClient,
+	provideFactoryWebhookSecretResolver,
+	provideFactoryWebhookClock,
+	provideFactoryWebhookDeadLetterAppender,
+	webhookswire.NewService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
+	provideRecordingClock,
+	provideRecordingSnapshotWriter,
+	provideRecordingPublication,
+	provideRecordingReadFile,
+	recordingswire.NewRuntimeLedgerRouter,
+	recordingswire.RuntimeLedger,
+	recordingswire.NewProjectionService,
+	recordingswire.NewRecordingLifecycleOwner,
+	recordingswire.NewCanonicalLedgerOwner,
+	recordingswire.NewArtifactsExportOwner,
+	recordingswire.NewReplayOwner,
+	recordingswire.NewHistoricalQueryOwner,
+	recordingswire.NewRecordingFlushTickerFactory,
+	factorydefinitionswire.FactorySnapshotJSONDecoder,
 	provideRecordingsRoot,
 	provideRecordingsRuntimeScopeService,
 	provideReplayArtifactStorage,
@@ -271,8 +330,21 @@ var servicesSet = wire.NewSet(
 	provideEditableFactoryValidator,
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewRuntimeFactory,
+	provideRuntimePreparationWorkstationLoader,
+	factoryruntimewire.NewRuntimePreparation,
+	provideRuntimeRequestInvocationFiles,
+	provideRuntimeRequestPrompts,
+	provideRuntimeRequestTemplateFields,
+	provideRuntimeRequestArtifactFiles,
+	provideRuntimeRequestProgress,
+	provideRuntimeRequestLogger,
+	factoryruntimewire.NewWorkstationRequestExecutor,
 	factoryruntimewire.NewAssembly,
 	provideFactoryRuntimeRoot,
+	provideRuntimeOrchestration,
+	provideRuntimeDispatchPlanning,
+	factoryruntimewire.NewLifecycle,
+	factoryruntimewire.NewInstanceHost,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.ProviderSessionsPorts), "*"),
 	wire.Struct(new(factorysessionwire.FactoryRuntimePorts), "*"),
@@ -302,6 +374,9 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionCompilation,
+	provideFactoryDefinitionRuntimeSnapshot,
+	provideFactoryDefinitionValidationOwner,
 	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
@@ -320,6 +395,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryCatalogOperation,
 	provideEffectiveFactoryDefinitionsService,
 	factorydefinitionswire.NewCatalogPathsService,
+	factorydefinitionswire.NewCatalogService,
 )
 
 var workerServiceSet = wire.NewSet(
@@ -458,6 +534,7 @@ var BundleSet = wire.NewSet(
 func InjectBundle(
 	ctx context.Context,
 	edges edges.Edges,
+	acpWireLogSettings ACPWireLogSettings,
 ) (*initializerapplication.Process, error) {
 	wire.Build(
 		BundleSet,

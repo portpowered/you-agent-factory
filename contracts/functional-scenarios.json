@@ -1411,10 +1411,15 @@
       "name": "listWorkerSessions",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/transports/http/worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/listWorkerSessionsBySessionId",
@@ -1725,10 +1730,15 @@
       "name": "terminateWorkerSession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/transports/http/worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/upsertWorkRequestBySessionId",

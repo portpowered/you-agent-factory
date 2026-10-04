@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -21,31 +22,16 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 // TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly proves
-// the exact provider function registered in this graph's servicesSet returns
-// a functional, independently isolated chat_sessions.Service, and that
-// InjectBundle itself still succeeds with that provider registered. This
-// test deliberately does NOT claim to prove InjectBundle-composed injection:
-// no consumer in this repository currently declares a dependency on
-// chatsessions.Service (the eventual real consumer is ACP transport
-// dispatch, which is explicitly out of this PRD's scope), so Wire's
-// generated InjectBundle body does not call provideChatSessionsService. The
-// sibling provideChatSessionsFactoryTargetCatalogService provider below is
-// in the same registered-but-uncalled shape, but that sibling shape remains
-// an open, unresolved reviewer objection on its own PR (#1736), not an
-// accepted precedent -- do not cite it as one. A forced, unread field on an
-// unrelated transport's operations struct would not make this any more
-// "composed"; it would only add dead state, which is why this test proves
-// the provider directly instead.
+// the focused production provider constructs isolated Chat Session stores.
+// ACP consumes this provider in the generated production graph; composed
+// protocol behavior is covered in the functional Chat Sessions lane.
 func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *testing.T) {
 	t.Parallel()
-
-	if _, err := InjectBundle(context.Background(), serviceedges.Edges{}); err != nil {
-		t.Fatalf("InjectBundle() error = %v", err)
-	}
 
 	zapLogger, err := logging.NewDefaultLogger()
 	if err != nil {
@@ -57,14 +43,14 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 		t.Fatalf("provideEventsService() error = %v", err)
 	}
 
-	first, err := provideChatSessionsService(eventsService, logger)
+	first, err := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 	if err != nil {
 		t.Fatalf("provideChatSessionsService() error = %v", err)
 	}
 	if first == nil {
 		t.Fatal("provideChatSessionsService() = nil, want a constructed chat_sessions.Service")
 	}
-	second, err := provideChatSessionsService(eventsService, logger)
+	second, err := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 	if err != nil {
 		t.Fatalf("provideChatSessionsService() second call error = %v", err)
 	}
@@ -135,11 +121,11 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 
 	edges := serviceedges.Edges{}
 	files := provideOperatorSettingsFileSystem(edges)
-	providersRoot, err := provideProvidersService(edges)
+	providersRoot, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	operatorSettings, err := provideOperatorSettingsService(
+	operatorSettings, err := newOperatorSettingsTestService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
@@ -151,7 +137,7 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 		logger,
 	)
 	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+		t.Fatalf("newOperatorSettingsTestService() error = %v", err)
 	}
 	return operatorSettings
 }
@@ -159,7 +145,7 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 // TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph
 // proves the exact provider chain pkg/wire registers for the Chat Sessions
 // Factory target-catalog root (provideChatSessionsFactoryTargetCatalogService
-// consuming the same provideOperatorSettingsService chain and canonical
+// consuming the same settingswire.NewService chain and canonical
 // process logger as every other canonical consumer) performs direct single
 // injection with no dependency bag, threads a real logger into the
 // operation's started/finished logs, observes live Factory Definitions
@@ -346,7 +332,7 @@ func newChatSessionsIdentityTestServices(t *testing.T) (chatsessions.Service, ev
 	if err != nil {
 		t.Fatalf("provideEventsService() error = %v", err)
 	}
-	chatSessionsService, err := provideChatSessionsService(eventsService, logger)
+	chatSessionsService, err := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 	if err != nil {
 		t.Fatalf("provideChatSessionsService() error = %v", err)
 	}
@@ -818,5 +804,63 @@ func TestChatSessionsSequencingIdentity_EvictedPositionProducesGapWithoutFabrica
 	}
 	if afterRejected.Session.Version != finalSession.Session.Version {
 		t.Fatalf("Session.Version changed after a rejected acknowledgement: got %d, want unchanged %d", afterRejected.Session.Version, finalSession.Session.Version)
+	}
+}
+
+func TestChatSessionTurnFactsUseSelectedSource(t *testing.T) {
+	t.Parallel()
+	source := &timestampTestSource{}
+	base := time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+	source.nanos.Store(base.UnixNano())
+	logger := logging.NewZapLogger(zap.NewNop(), false)
+	eventsService, err := provideEventsService(logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := provideChatSessionsService(eventsService, logger, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "selected-clock", JSONRPCStringID: "create"}
+	created, err := service.CreateSession(t.Context(), chatsessions.CreateSessionRequest{RequestID: identity, WorkingRoot: "/workspace/project", InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/goal"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertChatTimestampFacts(t, created.Session, base, base)
+	admittedAt := base.Add(time.Second)
+	source.nanos.Store(admittedAt.UnixNano())
+	identity.JSONRPCStringID = "turn"
+	admitted, err := service.StartTurn(t.Context(), chatsessions.StartTurnRequest{RequestID: identity, SessionID: created.Session.ID, ExpectedVersion: created.Session.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertChatTimestampFacts(t, admitted.Session, base, admittedAt)
+	terminalAt := base.Add(2 * time.Second)
+	source.nanos.Store(terminalAt.UnixNano())
+	for _, state := range []chatsessions.TurnState{chatsessions.TurnStateRunning, chatsessions.TurnStateCompleted} {
+		_, err = service.AdvanceTurn(t.Context(), chatsessions.AdvanceTurnRequest{SessionID: created.Session.ID, TurnID: admitted.Turn.ID, Next: state})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	final, err := service.GetSession(t.Context(), chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertChatTimestampFacts(t, final.Session, base, terminalAt)
+	assertChatTimestampFacts(t, created.Session, base, base)
+	assertChatTimestampFacts(t, admitted.Session, base, admittedAt)
+	source.nanos.Store(base.Add(3 * time.Second).UnixNano())
+	retried, err := service.StartTurn(t.Context(), chatsessions.StartTurnRequest{RequestID: identity, SessionID: created.Session.ID, ExpectedVersion: final.Session.Version})
+	if err != nil || retried.Turn.ID != admitted.Turn.ID {
+		t.Fatalf("retry = %#v, %v", retried, err)
+	}
+	assertChatTimestampFacts(t, retried.Session, base, terminalAt)
+}
+
+func assertChatTimestampFacts(t *testing.T, session chatsessions.Session, createdAt, updatedAt time.Time) {
+	t.Helper()
+	if !session.CreatedAt.Equal(createdAt) || !session.UpdatedAt.Equal(updatedAt) {
+		t.Fatalf("session facts = %#v, want created %v updated %v", session, createdAt, updatedAt)
 	}
 }

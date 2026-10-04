@@ -10,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 type invokeContinueStaticCommandRouteEntry struct {
@@ -196,87 +195,3 @@ func (route *invokeContinueStaticCommandRoute) entry(
 }
 
 var _ platformprocess.CommandRunner = (*invokeContinueStaticCommandRoute)(nil)
-
-type invokeContinueProviderRouter struct {
-	fallback                    providers.Service
-	unsupported                 providers.Service
-	unsupportedWorkingDirectory string
-}
-
-func (router *invokeContinueProviderRouter) Execute(
-	ctx context.Context,
-	request providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	if router.matchesUnsupported(request.WorkingDirectory) {
-		return router.unsupported.Execute(ctx, request)
-	}
-	return router.fallback.Execute(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) Continue(
-	ctx context.Context,
-	request providers.ContinueRequest,
-) (providers.ContinueResult, error) {
-	if router.matchesUnsupported(request.Attempt.WorkingDirectory) {
-		return router.unsupported.Continue(ctx, request)
-	}
-	return router.fallback.Continue(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) ContinueReference(
-	ctx context.Context,
-	request providers.ContinueReferenceRequest,
-) (providers.ContinueReferenceResult, error) {
-	if router.matchesUnsupported(request.Attempt.WorkingDirectory) {
-		return router.unsupported.ContinueReference(ctx, request)
-	}
-	return router.fallback.ContinueReference(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) matchesUnsupported(workingDirectory string) bool {
-	return router != nil && router.unsupported != nil && filepath.Clean(workingDirectory) == filepath.Clean(router.unsupportedWorkingDirectory)
-}
-
-func (router *invokeContinueProviderRouter) ListProviders(
-	ctx context.Context,
-	request providers.ListProvidersRequest,
-) (providers.ListProvidersResult, error) {
-	return router.fallback.ListProviders(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) GetProvider(
-	ctx context.Context,
-	request providers.GetProviderRequest,
-) (providers.GetProviderResult, error) {
-	return router.fallback.GetProvider(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) ResolveIdentity(
-	ctx context.Context,
-	request providers.ResolveIdentityRequest,
-) (providers.ResolveIdentityResult, error) {
-	return router.fallback.ResolveIdentity(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) ResolveSelection(
-	ctx context.Context,
-	request providers.ResolveSelectionRequest,
-) (providers.ResolveSelectionResult, error) {
-	return router.fallback.ResolveSelection(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) ValidatePrerequisites(
-	ctx context.Context,
-	request providers.ValidatePrerequisitesRequest,
-) error {
-	return router.fallback.ValidatePrerequisites(ctx, request)
-}
-
-func (router *invokeContinueProviderRouter) ControlAttempt(
-	ctx context.Context,
-	request providers.ControlAttemptRequest,
-) (providers.ControlAttemptResult, error) {
-	return router.fallback.ControlAttempt(ctx, request)
-}
-
-var _ providers.Service = (*invokeContinueProviderRouter)(nil)

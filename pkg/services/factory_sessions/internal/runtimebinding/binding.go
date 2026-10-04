@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
-	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -574,20 +573,6 @@ func StreamGenerationID(session *livesession.LiveSession) string {
 	return ""
 }
 
-// NewStreamManager composes provider response streams from the canonical
-// Session registry and Factory Runtime telemetry resolver.
-func NewStreamManager(state *sessionruntime.Service) *sessionstream.Manager {
-	if state == nil {
-		return nil
-	}
-	return sessionstream.NewManagerWithResponseService(
-		state,
-		sessionruntime.NewResponseStreamObserver(ResponseStreamRuntimeFromSessionHandle),
-		state.ResponseStreams(),
-		state.ResponseEventService(),
-	)
-}
-
 func ResponseStreamRuntimeFromSessionHandle(handle any) (factory.MetricsEmitter, *zap.Logger) {
 	state, _ := handle.(*SessionState)
 	if state == nil {
@@ -711,8 +696,9 @@ func StopSession(
 	return nil
 }
 
-// FailStartup clears active selection, unregisters the startup session, and
-// joins runtime-stop failure with the original readiness error.
+// FailStartup stops the failed runtime and closes its activation before
+// retiring the record. Incomplete cleanup retains the record for a later close.
+// The original readiness error is preserved alongside any cleanup failure.
 func FailStartup(
 	state *sessionruntime.Service,
 	runtimeState *State,
@@ -722,14 +708,19 @@ func FailStartup(
 	startupErr error,
 ) error {
 	runtimeState.ClearActive()
+	if handle != nil && stop != nil {
+		if stopErr := stop(handle); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+			return errors.Join(startupErr, stopErr)
+		}
+	}
 	if state != nil {
+		bound := SessionStateFrom(state.Resolve(sessionID))
+		if bound != nil && bound.Activation != nil {
+			if err := bound.Activation.Close(context.Background()); err != nil {
+				return errors.Join(startupErr, err)
+			}
+		}
 		state.Unregister(sessionID)
-	}
-	if handle == nil || stop == nil {
-		return startupErr
-	}
-	if stopErr := stop(handle); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-		return errors.Join(startupErr, stopErr)
 	}
 	return startupErr
 }

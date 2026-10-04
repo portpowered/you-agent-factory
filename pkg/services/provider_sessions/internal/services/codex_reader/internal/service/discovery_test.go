@@ -235,12 +235,7 @@ func newTestReader(
 	root string,
 ) codexreader.Service {
 	t.Helper()
-	reader, err := New(codexreader.Dependencies{
-		Files:           files,
-		WalkDirectory:   walk,
-		ResolveSymlinks: resolve,
-		SessionsRoot:    root,
-	})
+	reader, err := New(files, walk, resolve, root)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -249,4 +244,39 @@ func newTestReader(
 
 func codexSessionRef(id string) providers.SessionRef {
 	return providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: id}
+}
+
+func TestReaderDetailsStorageFailuresRemainSafe(t *testing.T) {
+	root, id := writeCodexJSONLFixture(t, representativeCodexJSONL())
+	privateError := fmt.Errorf("permission denied: %s/private/credentials", root)
+	for _, fault := range []string{"stat", "walk", "open", "root symlink", "candidate symlink"} {
+		t.Run(fault, func(t *testing.T) {
+			files := &errorOpenFileSystem{base: testFiles}
+			walk := testWalkDirectory
+			resolve := testResolveSymlinks
+			switch fault {
+			case "stat":
+				files.statError = privateError
+			case "walk":
+				walk = func(string, fs.WalkDirFunc) error { return privateError }
+			case "open":
+				files.openError = privateError
+			default:
+				resolve = func(path string) (string, error) {
+					if fault == "root symlink" || strings.HasSuffix(path, ".jsonl") {
+						return "", privateError
+					}
+					return filepath.EvalSymlinks(path)
+				}
+			}
+			reader := newTestReader(t, files, walk, resolve, root)
+			detail, err := reader.Details(context.Background(), codexSessionRef(id))
+			if !errors.Is(err, providersessions.ErrSessionStorageUnavailable) {
+				t.Fatalf("Details = %v, want ErrSessionStorageUnavailable", err)
+			}
+			if strings.Contains(err.Error(), root) || strings.Contains(err.Error(), "credentials") || len(detail.Transcript) != 0 {
+				t.Fatalf("unsafe result: detail=%#v error=%v", detail, err)
+			}
+		})
+	}
 }

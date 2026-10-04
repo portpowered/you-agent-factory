@@ -27,13 +27,6 @@ type managedRuntimeSummary struct {
 	operations []managedruntime.Operation
 }
 
-func buildManagedRuntime(summary managedRuntimeSummary, diagnostics map[string]string) managedruntime.Runtime {
-	return buildManagedRuntimeProjection(managedRuntimeProjection{
-		summary:         summary,
-		baseDiagnostics: diagnostics,
-	})
-}
-
 func buildManagedRuntimeProjection(input managedRuntimeProjection) managedruntime.Runtime {
 	readiness, lifecycle := managedRuntimeStates(input)
 	managedDiagnostics := managedRuntimeDiagnostics(input.summary, input.baseDiagnostics, readiness, lifecycle)
@@ -309,27 +302,6 @@ func (inspector fixedRuntimeCacheInspector) InspectRuntimeCache(
 	string,
 ) (RuntimeCacheInspection, error) {
 	return inspector.inspection, nil
-}
-
-// EnsureManagedRuntimeReadyForInvocation classifies one managed runtime using
-// the same catalog readiness projection as discovery and inspect before
-// invocation proceeds.
-func EnsureManagedRuntimeReadyForInvocation(
-	runtimeCfg *models.RuntimeConfig,
-	modelName string,
-	runtimeCacheInspector RuntimeCacheInspector,
-	sourceResolver ManagedRuntimeSourceResolver,
-) (managedruntime.Runtime, error) {
-	managed, err := ManagedRuntimeReadinessForFactory(
-		runtimeCfg, modelName, runtimeCacheInspector, sourceResolver,
-	)
-	if err != nil {
-		return managedruntime.Runtime{}, err
-	}
-	if invocationErr := managed.InvocationError(); invocationErr != nil {
-		return managed, invocationErr
-	}
-	return managed, nil
 }
 
 const (
