@@ -183,7 +183,7 @@ func readConcurrentWorkerSessions(
 		if result.err != nil {
 			t.Fatalf("concurrent JSON list for Work %q: %v\nstderr:\n%s", result.workID, result.err, result.stderr)
 		}
-		assertConcurrentWorkerSessionObservation(t, result.response, expected[result.workID])
+		assertConcurrentWorkerSessionObservation(t, result.response, expected[result.workID], support.GetDefaultSession(t, server.URL()).Id)
 	}
 }
 
@@ -199,7 +199,7 @@ func assertConcurrentWorkerSessionDispatchesCompleted(
 	}
 	for _, dispatch := range expected {
 		response := support.ListDefaultSessionWorkerSessions(t, server.URL(), dispatch.workID)
-		assertRouteCharacterizationObservation(t, "REST after concurrent reads", response, dispatch)
+		assertRouteCharacterizationObservation(t, "REST after concurrent reads", response, dispatch, support.GetDefaultSession(t, server.URL()).Id)
 	}
 }
 
@@ -284,6 +284,7 @@ func assertConcurrentWorkerSessionObservation(
 	t *testing.T,
 	response factoryapi.ListWorkerSessionsResponse,
 	expected routeCharacterizationDispatch,
+	factorySessionID string,
 ) {
 	t.Helper()
 	if len(response.Sessions) != 1 {
@@ -296,8 +297,8 @@ func assertConcurrentWorkerSessionObservation(
 	if observation.State != factoryapi.WorkerSessionObservationStateStarting && observation.State != factoryapi.WorkerSessionObservationStateRunning {
 		t.Fatalf("concurrent Worker Session state for Work %q = %q, want STARTING or RUNNING", expected.workID, observation.State)
 	}
-	if observation.FactorySessionId == nil || *observation.FactorySessionId != factorysessions.DefaultSessionID {
-		t.Fatalf("concurrent Factory Session identity for Work %q = %#v, want %q", expected.workID, observation.FactorySessionId, factorysessions.DefaultSessionID)
+	if observation.FactorySessionId == nil || *observation.FactorySessionId != factorySessionID {
+		t.Fatalf("concurrent Factory Session identity for Work %q = %#v, want %q", expected.workID, observation.FactorySessionId, factorySessionID)
 	}
 	if observation.WorkId == nil || *observation.WorkId != expected.workID || len(observation.WorkIds) != 1 || observation.WorkIds[0] != expected.workID {
 		t.Fatalf("concurrent Work identity for Work %q = workId:%v workIds:%v, want exact Work", expected.workID, observation.WorkId, observation.WorkIds)

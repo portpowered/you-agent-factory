@@ -452,10 +452,7 @@ func scopeWorkerSessionObservation(
 		!(scope.defaultScope && actualSessionID == defaultFactorySessionAlias) {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
-	observation.FactorySessionID = scope.requestedID
-	if observation.FactorySessionID == "" {
-		observation.FactorySessionID = expectedSessionID
-	}
+	observation.FactorySessionID = expectedSessionID
 	return observation, nil
 }
 
