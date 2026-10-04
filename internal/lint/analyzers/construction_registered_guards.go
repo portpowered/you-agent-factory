@@ -10,11 +10,10 @@ import (
 
 // Guard provenance follows declared required parameters, classified receivers
 // and constructor result fields through same-package helper calls.
-func scanRegisteredConstructionGuards(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues,
+func scanRegisteredConstructionGuards(pass *analysis.Pass, registry ConstructionRegistry, helpers *registeredGuardHelpers,
+	stored map[ConstructionSymbol]map[*types.Var]string,
 	add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
 ) {
-	helpers := registeredConstructionHelpers(pass, values)
-	stored := registeredConstructionStorage(pass, registry, values, helpers)
 	for _, constructor := range registry.Constructors {
 		origins := helpers.requiredOrigins(constructor, registry.Types, stored[constructor.Symbol])
 		for _, fn := range helpers.functions {

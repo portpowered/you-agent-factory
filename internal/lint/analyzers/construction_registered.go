@@ -14,7 +14,7 @@ import (
 )
 
 // RegisteredConstruction migrates qualified construction calls and references.
-// The legacy scanner still owns getter and provider provenance
+// The legacy scanner still owns provider provenance
 // until their typed replacements are complete. Report mode never enables an owner.
 var RegisteredConstruction = registeredConstructionAnalyzer(RepositoryConstructionRegistry())
 
@@ -33,7 +33,7 @@ func registeredConstructionAnalyzer(registry ConstructionRegistry) *analysis.Ana
 		Name:       "registeredconstruction",
 		Doc:        "resolve classified construction calls and unresolved references with go/types",
 		ResultType: reflect.TypeOf([]ConstructionFinding{}),
-		FactTypes:  []analysis.Fact{new(registeredConstructionKindFact)},
+		FactTypes:  []analysis.Fact{new(registeredConstructionKindFact), new(registeredGetterFact)},
 		Run:        func(pass *analysis.Pass) (any, error) { return runRegisteredConstruction(pass, registry) },
 	}
 }
@@ -69,8 +69,11 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 				hint: fmt.Sprintf("set=%s mode=%s; inject the classified collaborator through its focused provider", constructor.CapabilitySet, mode)})
 		}
 	}
-	scanRegisteredConstructionBags(pass, registry, add)
-	scanRegisteredConstructionGuards(pass, registry, values, add)
+	typeset := scanRegisteredConstructionBags(pass, registry, add)
+	helpers := registeredConstructionHelpers(pass, values)
+	stored := registeredConstructionStorage(pass, registry, values, helpers)
+	scanRegisteredConstructionGuards(pass, registry, helpers, stored, add)
+	getters := registeredConstructionGetters(pass, registry, helpers, stored, typeset)
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
 			continue
@@ -88,6 +91,9 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 				}
 				markRegisteredCallee(called, call.Fun)
 				callee := values.resolve(pass, call.Fun, map[types.Object]bool{})
+				if getter, ok := getters[callee]; ok {
+					add(caller, callee, getter.Constructor, getter.Rule, call.Pos())
+				}
 				for _, constructor := range registry.Constructors {
 					if constructor.Symbol != callee || !registeredProhibitedKind(constructor, registry.Types) {
 						continue
@@ -118,6 +124,10 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 					return false
 				}
 				callee := values.resolve(pass, expr, map[types.Object]bool{})
+				if getter, ok := getters[callee]; ok {
+					add(caller, callee, getter.Constructor, "unresolved-service-getter-reference", expr.Pos())
+					return false
+				}
 				for _, constructor := range registry.Constructors {
 					if constructor.Symbol == callee && registeredProhibitedKind(constructor, registry.Types) {
 						add(caller, callee, constructor, "unresolved-construction-reference", expr.Pos())
@@ -129,7 +139,8 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 		}
 	}
 	reportAgainstBaseline(pass, unit, setOf("registered-construction", "unresolved-construction-reference", "required-dependency-bag",
-		"required-dependency-guard", "required-receiver-guard", "required-dependency-assertion-guard", "unresolved-required-dependency-guard"), blocking, false)
+		"required-dependency-guard", "required-receiver-guard", "required-dependency-assertion-guard", "unresolved-required-dependency-guard",
+		"service-getter-locator", "unresolved-service-getter-locator", "unresolved-service-getter-reference"), blocking, false)
 	return findings, nil
 }
 

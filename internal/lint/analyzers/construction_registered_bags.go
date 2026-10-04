@@ -29,7 +29,7 @@ type registeredBagTypes struct {
 
 func scanRegisteredConstructionBags(pass *analysis.Pass, registry ConstructionRegistry,
 	add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
-) {
+) registeredBagTypes {
 	typeset := registeredBagTypes{pass: pass, registry: registry, declared: map[*types.TypeName]types.Type{}}
 	authored := map[*types.Func]bool{}
 	for _, file := range pass.Files {
@@ -76,6 +76,7 @@ func scanRegisteredConstructionBags(pass *analysis.Pass, registry ConstructionRe
 			}
 		}
 	}
+	return typeset
 }
 
 func (s registeredBagTypes) explicitKind(obj *types.TypeName) ConstructionKind {
