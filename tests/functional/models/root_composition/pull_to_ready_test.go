@@ -131,6 +131,99 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	)
 }
 
+// T11-PULL: invocation selection must be operation data on the reusable
+// process. Separate profiles and working directories retain mutable customer
+// ownership; only the scenario's causally ordered cold/warm calls serialize.
+func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *testing.T) {
+	t.Parallel()
+	backendBody := []byte("scoped pull backend")
+	backend := pullToReadyBackendSelection(backendBody)
+	clients := map[string]*pullToReadyAssetClient{}
+	type selection struct {
+		home, directory, repository string
+		body                        []byte
+	}
+	selections := []selection{}
+	for _, name := range []string{"selected", "peer"} {
+		home := t.TempDir()
+		repository := "fixture/" + name
+		body := []byte("scoped pull " + name + " weights")
+		source := "hf://" + repository + "/" + pullToReadyAsset + "@" + pullToReadyRevision
+		writeGenericModelSourceOverride(t, home, pullToReadyModelName, source, "localai-whisper")
+		client := newPullToReadyAssetClientForRepository(body, backendBody, backend.Location, repository)
+		clients[repository] = client
+		config := builtInOnlyModelFactoryConfig()
+		config["name"] = "scoped-pull-" + name
+		selections = append(selections, selection{home, functionalScaffoldFactory(t, config), repository, body})
+	}
+	edges := pullToReadyEdges(clients[selections[0].repository], selections[0].home, backend)
+	edges.ModelAssetHTTPClient = scopedPullAssetClient{clients: clients}
+	process := buildPullToReadyProcess(t, edges)
+	for round := 0; round < 2; round++ {
+		for _, selected := range selections {
+			cache := filepath.Join(selected.home, "managed-cache")
+			pull := executeScopedPullSelection(t, process, selected.home, selected.directory, "pull")
+			if round == 0 {
+				assertPullToReadySuccess(t, pull, selected.body, cache)
+			} else {
+				assertPullToReadyAlreadyPresent(t, pull, selected.body, cache)
+			}
+			inspect := executeScopedPullSelection(t, process, selected.home, selected.directory, "inspect")
+			assertPullToReadyInspect(t, inspect, cache, selected.body)
+			var detail factoryapi.ModelDetail
+			decodePullToReadyJSON(t, inspect.raw, &detail)
+			if detail.ManagedRuntime.CachePath == nil {
+				t.Fatal("selected inspect omitted cache path")
+			}
+			data, err := os.ReadFile(filepath.Join(*detail.ManagedRuntime.CachePath, pullToReadyAsset))
+			if err != nil || !bytes.Equal(data, selected.body) {
+				t.Fatalf("selected persisted weights = %q, %v, want %q", data, err, selected.body)
+			}
+			assertPullToReadySafeOutput(t, map[string]string{"pull": pull.raw, "inspect": inspect.raw}, string(selected.body), string(backendBody), backend.Location)
+			t.Logf("T11-PULL round=%d repository=%s cache=%s downloadedFacts=%d readiness=READY", round, selected.repository, cache, pull.downloadedBytes)
+		}
+	}
+	for _, selected := range selections {
+		client := clients[selected.repository]
+		// The repeated pull/inspect only read the persisted assets: one model
+		// transfer per selection and one shared-backend transfer in this fixture.
+		want := int64(len(selected.body))
+		if selected.repository == selections[0].repository {
+			want += int64(2 * len(backendBody))
+		}
+		if client.TransferBytes() != want {
+			t.Fatalf("repository %s transferred %d bytes, want %d cold-only bytes", selected.repository, client.TransferBytes(), want)
+		}
+	}
+}
+
+func executeScopedPullSelection(t *testing.T, process rootProcess, home, directory, command string) pullToReadyCapture {
+	t.Helper()
+	arguments := []string{"models", command, pullToReadyModelName}
+	inputs := support.FakeInputs(t.Context(), append([]string{"you", "--json"}, arguments...))
+	inputs.Input.Env = isolatedModelEnvironment(home, filepath.Join(home, "managed-cache"))
+	inputs.Input.WorkingDirectory = directory
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("selected %s: %v\nstdout=%s\nstderr=%s", command, err, inputs.Stdout(), inputs.Stderr())
+	}
+	return pullToReadyCapture{raw: inputs.Stdout(), downloadedBytes: pullToReadyDownloadedBytes(t, arguments, inputs.Stdout()), cacheBytes: pullToReadyCacheBytes(t, arguments, inputs.Stdout())}
+}
+
+// The edge routes immutable request identities, never switches a global
+// active selection. Backend bytes are identical in both isolated caches.
+type scopedPullAssetClient struct {
+	clients map[string]*pullToReadyAssetClient
+}
+
+func (client scopedPullAssetClient) Do(request *http.Request) (*http.Response, error) {
+	for repository, selected := range client.clients {
+		if strings.HasPrefix(request.URL.Path, "/models/"+repository) || strings.HasPrefix(request.URL.Path, "/"+repository+"/resolve/") {
+			return selected.Do(request)
+		}
+	}
+	return client.clients["fixture/selected"].Do(request)
+}
+
 // rootProcess keeps the test's public process capability narrow while allowing
 // the test to close the exact process returned by root.BuildProcess.
 type rootProcess interface {
@@ -407,6 +500,7 @@ func assertPullToReadyMissingInspect(t *testing.T, capture pullToReadyCapture) {
 }
 
 type pullToReadyAssetClient struct {
+	repository string
 	manifest   []byte
 	model      []byte
 	backend    []byte
@@ -418,6 +512,10 @@ type pullToReadyAssetClient struct {
 }
 
 func newPullToReadyAssetClient(modelBody, backendBody []byte, backendURL string) *pullToReadyAssetClient {
+	return newPullToReadyAssetClientForRepository(modelBody, backendBody, backendURL, "ggerganov/whisper.cpp")
+}
+
+func newPullToReadyAssetClientForRepository(modelBody, backendBody []byte, backendURL, repository string) *pullToReadyAssetClient {
 	digest := sha256.Sum256(modelBody)
 	manifest, err := json.Marshal(map[string]any{
 		"sha": pullToReadyRevision,
@@ -434,6 +532,7 @@ func newPullToReadyAssetClient(modelBody, backendBody []byte, backendURL string)
 		panic(fmt.Sprintf("marshal pull-to-ready manifest: %v", err))
 	}
 	return &pullToReadyAssetClient{
+		repository: repository,
 		manifest:   manifest,
 		model:      append([]byte(nil), modelBody...),
 		backend:    append([]byte(nil), backendBody...),
@@ -449,9 +548,9 @@ func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response,
 	client.requests = append(client.requests, request.Method+" "+request.URL.String())
 	var body []byte
 	switch request.URL.Path {
-	case "/models/ggerganov/whisper.cpp":
+	case "/models/" + client.repository:
 		body = client.manifest
-	case "/ggerganov/whisper.cpp/resolve/" + pullToReadyRevision + "/" + pullToReadyAsset:
+	case "/" + client.repository + "/resolve/" + pullToReadyRevision + "/" + pullToReadyAsset:
 		body = client.model
 	default:
 		if request.URL.String() == client.backendURL {
@@ -465,7 +564,7 @@ func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response,
 		}, nil
 	}
 	if request.Method == http.MethodGet &&
-		(request.URL.Path == "/ggerganov/whisper.cpp/resolve/"+pullToReadyRevision+"/"+pullToReadyAsset || request.URL.String() == client.backendURL) {
+		(request.URL.Path == "/"+client.repository+"/resolve/"+pullToReadyRevision+"/"+pullToReadyAsset || request.URL.String() == client.backendURL) {
 		client.transfers.Add(int64(len(body)))
 	}
 	return &http.Response{
