@@ -13,7 +13,6 @@ type scanResult struct {
 	recordedTransportBehaviorFindings   []transportBehaviorFinding
 	staleTransportBehaviorEntries       []transportBehaviorBaselineEntry
 	transportBehaviorBaselineCount      int
-	functionalProcessEdgeFindings       []functionalProcessEdgeFinding
 	constructedServiceEdgesFindings     []constructedServiceEdgesFinding
 	productionDefaultFindings           []productionDefaultFinding
 	recordedProductionDefaultFindings   []productionDefaultFinding

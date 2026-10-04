@@ -179,10 +179,6 @@ func scanRepositoryTransportBoundaries(repoRoot string, result *scanResult) erro
 
 func scanRepositoryProcessBoundaries(repoRoot string, result *scanResult) error {
 	var err error
-	result.functionalProcessEdgeFindings, err = scanFunctionalProcessEdges(repoRoot)
-	if err != nil {
-		return err
-	}
 	result.constructedServiceEdgesFindings, err = scanConstructedServiceEdges(repoRoot)
 	if err != nil {
 		return err

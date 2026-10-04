@@ -16,7 +16,7 @@ import (
 // intentionally not a rule; architecture prose remains a review authority.
 var ProcessEdges = &analysis.Analyzer{
 	Name: "processedges",
-	Doc:  "enforce exact Process Edges types, Models imports and root interface",
+	Doc:  "enforce exact Process Edges types, Models imports, root interface and functional process ports",
 	Run:  runProcessEdges,
 }
 
@@ -50,6 +50,9 @@ func runProcessEdges(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 	owner := strings.TrimSuffix(unit, "_test")
+	for _, file := range pass.Files {
+		checkFunctionalProcessPorts(pass, file, unit)
+	}
 	if !under(owner, "pkg/services/edges") && owner != "pkg/services/models" {
 		return nil, nil
 	}
@@ -78,6 +81,32 @@ func runProcessEdges(pass *analysis.Pass) (any, error) {
 		}
 	}
 	return nil, nil
+}
+
+// Functional scenarios and their exact shared command fake consume the
+// policy-free Platform port, rather than Workers-owned process contracts.
+// Generated files remain in scope, as in the retired checker.
+func checkFunctionalProcessPorts(pass *analysis.Pass, file *ast.File, unit string) {
+	path := serviceSource(pass, unit, file)
+	if !functionalSource(path) && path != "internal/testutil/provider_command_runner.go" {
+		return
+	}
+	ast.Inspect(file, func(node ast.Node) bool {
+		id, ok := node.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		obj := pass.TypesInfo.Uses[id]
+		if obj == nil || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() ||
+			obj.Pkg().Path() != modulePrefix+"pkg/services/workers" {
+			return true
+		}
+		switch obj.Name() {
+		case "CommandRunner", "CommandRequest", "CommandResult":
+			pass.Reportf(id.Pos(), "functional-workers-process-port: %s -> pkg/services/workers.%s; inject pkg/platform/process.CommandRunner at edges.Edges and observe public Factory Events, Work or Factory Session projections", path, obj.Name())
+		}
+		return true
+	})
 }
 
 func allowedProcessEdgeType(file, name string) bool {

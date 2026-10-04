@@ -22,7 +22,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	writeTransportBehaviorFindings(writer, findings.transportBehaviorFindings)
 	writeTransportBehaviorFindings(writer, findings.recordedTransportBehaviorFindings)
 	writeStaleTransportBehaviorBaselineEntries(writer, findings.staleTransportBehaviorEntries)
-	writeFunctionalProcessEdgeFindings(writer, findings.functionalProcessEdgeFindings)
 	writeConstructedServiceEdgesFindings(writer, findings.constructedServiceEdgesFindings)
 	writeProductionDefaultFindings(writer, findings.productionDefaultFindings)
 	writeProductionDefaultFindings(writer, findings.recordedProductionDefaultFindings)

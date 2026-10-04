@@ -259,9 +259,6 @@ func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recor
 	visible.transportBehaviorFindings, recorded.transportBehaviorFindings = splitRecordedFindings(visible.transportBehaviorFindings, func(finding transportBehaviorFinding) string {
 		return boundaryFindingFingerprint("transport-behavior", finding)
 	}, baseline)
-	visible.functionalProcessEdgeFindings, recorded.functionalProcessEdgeFindings = splitRecordedFindings(visible.functionalProcessEdgeFindings, func(finding functionalProcessEdgeFinding) string {
-		return boundaryFindingFingerprint("functional-process-edge", finding)
-	}, baseline)
 	visible.constructedServiceEdgesFindings, recorded.constructedServiceEdgesFindings = splitRecordedFindings(visible.constructedServiceEdgesFindings, func(finding constructedServiceEdgesFinding) string {
 		return boundaryFindingFingerprint("constructed-service-edge", finding)
 	}, baseline)
@@ -324,7 +321,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	addBoundaryFindingFingerprints(fingerprints, "external-implementation", result.externalImplementationFindings)
 	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.transportBehaviorFindings)
 	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.recordedTransportBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "functional-process-edge", result.functionalProcessEdgeFindings)
 	addBoundaryFindingFingerprints(fingerprints, "constructed-service-edge", result.constructedServiceEdgesFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.productionDefaultFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.recordedProductionDefaultFindings)

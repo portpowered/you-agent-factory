@@ -241,6 +241,11 @@ contract rules: no Models-wire imports (including tests and descendants), only
 Models' `service_contract.go:Service` interface. These checks consume compiler
 files, including generated production declarations. Package documentation is
 reviewed as architecture prose; literal documentation phrases are not gated.
+It also rejects Workers' `CommandRunner`, `CommandRequest` and `CommandResult`
+in functional sources and the exact shared `provider_command_runner.go` fake.
+Compiler identities cover aliases and dot imports without confusing local
+lookalikes; Platform process ports remain allowed. Generated sources stay in
+scope and every occurrence is rejected without debt allowances.
 The `ProviderOwnership` analyzer owns zero-debt Providers leaf effect and
 catalog/execution ownership. Compiler-resolved types preserve the exact Workers
 request bridge and direct leaf aggregation allowances, rejecting redeclarations,
