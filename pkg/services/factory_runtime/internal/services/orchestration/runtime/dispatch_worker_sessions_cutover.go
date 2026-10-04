@@ -21,6 +21,10 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type runtimeSessionInvoker interface {
+	InvokeRuntimeSession(context.Context, workersessions.RuntimeAttemptRequest, workersessions.RetryPolicy, workers.Service, platformclock.Source, platformclock.TimerSource) (workersessions.InvokeSessionResult, error)
+}
+
 // startThroughWorkerSessions reserves identity and preserves the dispatch shape.
 func startThroughWorkerSessions(
 	ctx context.Context,

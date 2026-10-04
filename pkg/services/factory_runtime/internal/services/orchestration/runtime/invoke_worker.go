@@ -622,6 +622,10 @@ func (f *factoryImpl) InvokeWorker(
 	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
 		return factory.InvokeWorkerResult{}, factory.ErrNotRunning
 	}
+	opener, ok := f.cfg.workerSessions.(runtimeSessionInvoker)
+	if !ok {
+		return factory.InvokeWorkerResult{}, factory.ErrNotRunning
+	}
 
 	dispatchID := strings.TrimSpace(req.DispatchID)
 	sessionID, err := f.reserveWorkerSession(ctx, dispatchID)
@@ -635,7 +639,7 @@ func (f *factoryImpl) InvokeWorker(
 	// executor. The Worker Session identity is the one already minted uniquely
 	// per attempt, and for every Worker but a resumed one it is that same
 	// caller ID.
-	execution := providerInvocationExecutionRequest(f, req, sessionID)
+	execution := providerInvocationExecutionRequest(f, req, dispatchID)
 	recordDispatchWorkerSessionAssociation(
 		f.eventHistory,
 		f.currentTick(),
@@ -657,13 +661,18 @@ func (f *factoryImpl) InvokeWorker(
 	stopWatching := f.cancelSessionWhenCallerStops(ctx, sessionID)
 	defer stopWatching()
 
-	result, err := f.cfg.workerSessions.InvokeSession(
+	result, err := opener.InvokeRuntimeSession(
 		context.WithoutCancel(ctx),
-		workersessions.InvokeSessionRequest{
+		workersessions.RuntimeAttemptRequest{
+			Key:       workersessions.RuntimeAttemptKey{RuntimeID: execution.Execution.RuntimeID, DispatchID: dispatchID},
 			ID:        sessionID,
+			AttemptID: sessionID,
 			Execution: execution,
-			Retry:     workersessions.RetryPolicy{MaxAttempts: req.MaxAttempts},
 		},
+		workersessions.RetryPolicy{MaxAttempts: req.MaxAttempts},
+		f.cfg.workerExecution,
+		f.cfg.clock,
+		f.cfg.workerAttemptScheduler,
 	)
 	if err != nil {
 		return factory.InvokeWorkerResult{}, err
