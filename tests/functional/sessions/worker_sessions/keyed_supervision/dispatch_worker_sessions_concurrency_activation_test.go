@@ -1,4 +1,4 @@
-package root_composition_test
+package keyed_supervision_test
 
 import (
 	"context"
@@ -590,11 +590,32 @@ func TestFactorySessionsEqualFirstDispatchDefaultWorkerIdentityCharacterization(
 	}
 }
 
+func keyedSupervisionFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "keyed-supervision",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name": "process", "worker": "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
 func identityServer(t *testing.T) (*identityFixture, *identityCharacterizationRunner, *identityRecordingWriter) {
 	t.Helper()
 	runner := &identityCharacterizationRunner{admitted: make(chan struct{}), release: make(chan struct{})}
 	capture := &identityRecordingWriter{root: t.TempDir(), storage: platformreplay.NewLocal(runtime.GOOS)}
-	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
+	dir := support.ScaffoldFactory(t, keyedSupervisionFactoryConfig())
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE=", "HOMEPATH="+home)
 	server := &identityFixture{env: env, dir: dir}
@@ -627,7 +648,7 @@ func identityCLI(t *testing.T, server *identityFixture, args ...string) string {
 
 func identityOpenSession(t *testing.T, server *identityFixture, marker string) string {
 	t.Helper()
-	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
+	dir := support.ScaffoldFactory(t, keyedSupervisionFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", "---\nmodel: test-model\nstopToken: COMPLETE\ntype: MODEL_WORKER\n---\nPerform the owned "+marker+" witness.\n")
 	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nPerform "+marker+".\n")
 	var opened factoryapi.OpenFactorySessionResponse

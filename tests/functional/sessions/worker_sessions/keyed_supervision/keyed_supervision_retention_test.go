@@ -1,4 +1,4 @@
-package root_composition_test
+package keyed_supervision_test
 
 import (
 	"bufio"
@@ -149,7 +149,7 @@ func (r *keyedRetentionRunner) Run(ctx context.Context, req platformprocess.Comm
 func keyedRetentionServer(t *testing.T, runner *keyedRetentionRunner) (*identityFixture, *identityRecordingWriter) {
 	t.Helper()
 	capture := &identityRecordingWriter{root: t.TempDir(), storage: platformreplay.NewLocal(runtime.GOOS)}
-	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
+	dir := support.ScaffoldFactory(t, keyedSupervisionFactoryConfig())
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE=", "HOMEPATH="+home)
 	server := &identityFixture{env: env, dir: dir}
@@ -264,6 +264,20 @@ func keyedRetentionWorkerCursor(t *testing.T, server *identityFixture, factoryID
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("Worker cursor HTTP status %d", response.StatusCode)
 	}
+	positions, complete := keyedRetentionReadWorkerSuffix(t, response, factoryID, workerID)
+	var expected []int64
+	for _, event := range events {
+		if event.ReplaySummary == nil && event.Event.Position > cursor.Position {
+			expected = append(expected, event.Event.Position)
+		}
+	}
+	if !complete || !reflect.DeepEqual(positions, expected) {
+		t.Fatalf("Worker cursor suffix=%v complete=%t, want %v complete=true", positions, complete, expected)
+	}
+}
+
+func keyedRetentionReadWorkerSuffix(t *testing.T, response *http.Response, factoryID, workerID string) ([]int64, bool) {
+	t.Helper()
 	scanner := bufio.NewScanner(response.Body)
 	var positions []int64
 	complete := false
@@ -287,15 +301,7 @@ func keyedRetentionWorkerCursor(t *testing.T, server *identityFixture, factoryID
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
 	}
-	var expected []int64
-	for _, event := range events {
-		if event.ReplaySummary == nil && event.Event.Position > cursor.Position {
-			expected = append(expected, event.Event.Position)
-		}
-	}
-	if !complete || !reflect.DeepEqual(positions, expected) {
-		t.Fatalf("Worker cursor suffix=%v complete=%t, want %v complete=true", positions, complete, expected)
-	}
+	return positions, complete
 }
 
 func keyedRetentionCursor(t *testing.T, server *identityFixture, sessionID string, entry *w4DispatchObservation, cursor int) {

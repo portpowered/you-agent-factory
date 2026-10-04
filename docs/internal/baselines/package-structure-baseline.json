@@ -1009,11 +1009,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_runtime/root_composition/dispatch_worker_sessions_concurrency_activation_test.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/root_composition/doc.go",
       "target": "factory_runtime"
     },
