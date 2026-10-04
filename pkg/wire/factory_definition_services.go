@@ -509,19 +509,26 @@ func provideFactoryDefinitionsRoot(
 // provideFactoryRuntimeRoot composes the singular process-scoped Runtime root.
 // Factory Sessions supplies the activation operation with each request.
 func provideFactoryRuntimeRoot(
-	newID factoryruntime.IDGenerator,
-	workflows factoryruntime.JavaScriptWorkflowDefinitions,
-	clock factoryruntime.Clock,
+	orchestration factoryruntimewire.Orchestration,
+	instanceHost factoryruntimewire.InstanceHost,
+	dispatchPlan factoryruntimewire.DispatchPlanning,
 ) (factorysessionwire.FactoryRuntimeRoot, error) {
-	return factoryruntimewire.NewService(
-		newID,
-		workflows,
-		nil,
-		clock,
-		func(context.Context, workers.WorkstationDispatchRequest) error {
-			return factoryruntime.ErrNotRunning
+	return factoryruntimewire.NewService(orchestration, instanceHost, dispatchPlan)
+}
+
+// provideRuntimeOrchestration completes the process owner with both workflow ports.
+func provideRuntimeOrchestration(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflows) factoryruntimewire.Orchestration {
+	return factoryruntimewire.NewOrchestration(newID, workflows, workflows)
+}
+
+// provideRuntimeDispatchPlanning supplies explicit dormant edges until activation
+// owns per-runtime planning (T15). No missing effect selects a fallback.
+func provideRuntimeDispatchPlanning() factoryruntimewire.DispatchPlanning {
+	return factoryruntimewire.NewDispatchPlanning(
+		func(context.Context, workers.WorkstationDispatchRequest) error { return factoryruntime.ErrNotRunning },
+		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+			return workers.WorkstationDispatchCancelResult{}, factoryruntime.ErrNotRunning
 		},
-		nil,
 	)
 }
 
