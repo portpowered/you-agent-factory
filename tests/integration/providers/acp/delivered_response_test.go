@@ -82,6 +82,8 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 	t.Run("daemon-recovery", testDeliveredACPDaemonRecoversAfterDisconnect)
 	t.Run("daemon-worker-disconnect-recovery", testDeliveredACPWorkerDisconnectRecovery)
 	t.Run("daemon-worker-cancel-peer", testDeliveredACPWorkerCancelPeer)
+	t.Run("daemon-early-failure-recovery", testDeliveredACPEarlyFailureRecovery)
+	t.Run("daemon-factory-cancel-peer", testDeliveredACPFactoryCancelPeer)
 }
 
 // The control socket belongs to the external peer fixture. Its signals prove

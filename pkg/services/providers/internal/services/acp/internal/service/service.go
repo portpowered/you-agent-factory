@@ -397,12 +397,14 @@ func (target *provider) matches(integration providers.ACPIntegration, command Co
 func (target *provider) newAttempt(request providers.ExecuteRequest) *attempt {
 	lifecycle, cancelLifecycle := context.WithCancel(context.Background())
 	owned := &attempt{
-		provider:        target,
-		request:         request,
-		lifecycle:       lifecycle,
-		cancelLifecycle: cancelLifecycle,
-		startupSettled:  make(chan struct{}),
-		teardownChanged: make(chan struct{}),
+		provider:          target,
+		request:           request,
+		lifecycle:         lifecycle,
+		cancelLifecycle:   cancelLifecycle,
+		startupSettled:    make(chan struct{}),
+		teardownChanged:   make(chan struct{}),
+		executionReleased: make(chan struct{}),
+		completion:        make(chan struct{}),
 	}
 	target.mu.Lock()
 	target.attempts = append(target.attempts, owned)
@@ -427,7 +429,8 @@ func (target *provider) claim(attemptID string) (acp.Generation, bool) {
 }
 
 // stopAttempts retires every attempt registered to this provider and then
-// finishes tearing each one down. Cancellation is deliberately a separate pass:
+// initiates bounded teardown for each one. Outstanding joins retain their owner.
+// Cancellation is deliberately a separate pass:
 // an attempt whose teardown has to wait for a peer or an in-flight startup must
 // not hold back the cancellation of its siblings, or one stuck attempt would
 // leave every other same-provider attempt running after this returned.
@@ -518,9 +521,14 @@ type attempt struct {
 	// its own context ends during startup, and the attempt's own release is
 	// then the one caller that must finish the teardown.
 	teardownOwner bool
-	// teardownDone records that nothing is owned anymore - because a teardown
-	// terminated the published process, or because startup settled without ever
-	// publishing one - so no later caller has anything left to do.
+	// Stop completion is bounded; resource completion can remain outstanding.
+	stopSettled       bool
+	stopErr           error
+	completion        chan struct{}
+	executionReleased chan struct{}
+	executionRelease  sync.Once
+	// teardownDone records actual completion of parent, protocol and progress
+	// work, or startup settling without publication. Stop expiry is distinct.
 	teardownDone bool
 	// teardownChanged is closed and replaced on every change of the two
 	// decisions above, so a caller waiting for a teardown it lost wakes for the
@@ -539,26 +547,29 @@ type attempt struct {
 // tree. Teardown and execution may both hold this bundle concurrently, so every
 // field is written before publication and never written again.
 type attemptHandles struct {
-	cmd        *exec.Cmd
-	stdin      io.WriteCloser
-	stdout     io.ReadCloser
-	connection *acpsdk.ClientSideConnection
-	client     *client
-	finished   chan error
-	tree       platformprocess.SubprocessTree
+	cmd            *exec.Cmd
+	stdin          io.WriteCloser
+	stdout         io.ReadCloser
+	connection     *acpsdk.ClientSideConnection
+	client         *client
+	finished       chan struct{}
+	stdio          platformprocess.StdioChannel
+	protocolJoined <-chan struct{}
+	tree           platformprocess.SubprocessTree
 }
 
-// release unregisters this attempt and completes the teardown of the process it
-// owns. It runs on every terminal path of an Execute or Continue, including an
+// release unregisters this attempt and initiates bounded process teardown.
+// A retained owner observes eventual completion when resources remain outstanding. It runs on every terminal path of an Execute or Continue, including an
 // unexpected unwind.
 //
 // Teardown is claimed, not assumed: when a Close or Configure already retired
 // this attempt, either that teardown still owns it - and release waits for the
 // completion it will reach - or that teardown gave it back because its own
 // context ended while startup was still in flight, and release is the caller
-// that must complete it. Releasing an attempt can therefore never leave a
-// published process running, however its retirement was decided.
+// that must stop it. A parent still running after a kill-wait expiry remains
+// owned by the eventual completion goroutine.
 func (service *Service) releaseAttempt(a *attempt) {
+	a.executionRelease.Do(func() { close(a.executionReleased) })
 	a.provider.unregister(a)
 	// Retirement only refuses later launches; the attempt's own terminal path
 	// always offers to complete the teardown, and the claim below decides
@@ -984,14 +995,14 @@ func (service *Service) startAttempt(ctx context.Context, a *attempt, cwd string
 	}
 	stdio.Detach()
 	tree, _ := platformprocess.AttachSubprocessTree(cmd)
-	finished := make(chan error, 1)
-	go func() { finished <- cmd.Wait() }()
+	finished := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(finished) }()
 	requests, responses := stdio.Requests(), stdio.Responses()
 	client := &client{}
 	connection := acpsdk.NewClientSideConnection(client, requests, responses)
 	a.publish(&attemptHandles{
 		cmd: cmd, stdin: requests, stdout: responses,
-		connection: connection, client: client, finished: finished, tree: tree,
+		connection: connection, client: client, finished: finished, tree: tree, stdio: stdio, protocolJoined: connection.Joined(),
 	})
 	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
 		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
@@ -1049,22 +1060,41 @@ func (service *Service) stopAttempt(ctx context.Context, a *attempt) error {
 		a.completeTeardown()
 		return nil
 	}
-	defer a.completeTeardown()
-	return service.terminate(ctx, handles)
+	stopErr := service.terminate(ctx, handles)
+	a.stateMu.Lock()
+	a.stopSettled, a.stopErr = true, stopErr
+	a.signalTeardownLocked()
+	a.stateMu.Unlock()
+	// Keep one completion authority reachable even after a caller's wait expires.
+	go func() {
+		<-handles.finished
+		if handles.protocolJoined != nil {
+			<-handles.protocolJoined
+		}
+		<-a.executionReleased
+		if handles.client != nil {
+			handles.client.release()
+		}
+		platformprocess.CloseSubprocessTreeWithEffects(handles.cmd, handles.tree, service.scheduler, service.logger)
+		a.completeTeardown()
+	}()
+	return stopErr
 }
 
 // acquireTeardown elects the single caller that performs this attempt's process
 // teardown. owned is false, with a nil error, once teardown has completed,
-// because then this attempt owns nothing any caller could terminate. A caller
+// because then this attempt owns nothing any caller could terminate. Once stop
+// settles, later callers observe its retained disposition while joins stay owned. A caller
 // that finds another caller performing the teardown waits for that teardown to
 // complete or hand ownership back, so a handover is always picked up by exactly
 // one caller instead of being dropped between two.
 func (a *attempt) acquireTeardown(ctx context.Context) (bool, error) {
 	for {
 		a.stateMu.Lock()
-		if a.teardownDone {
+		if a.teardownDone || a.stopSettled {
+			err := a.stopErr
 			a.stateMu.Unlock()
-			return false, nil
+			return false, err
 		}
 		if !a.teardownOwner {
 			a.teardownOwner = true
@@ -1081,12 +1111,12 @@ func (a *attempt) acquireTeardown(ctx context.Context) (bool, error) {
 	}
 }
 
-// completeTeardown records that this attempt owns nothing further: either its
-// published process was terminated, or startup settled without ever publishing
-// one. It wakes every caller waiting to learn the teardown's outcome.
+// completeTeardown records that all published resources actually finished,
+// or startup settled without publishing any. It wakes waiting callers.
 func (a *attempt) completeTeardown() {
 	a.stateMu.Lock()
 	a.teardownOwner, a.teardownDone = false, true
+	close(a.completion)
 	a.signalTeardownLocked()
 	a.stateMu.Unlock()
 }
@@ -1164,10 +1194,9 @@ func (service *Service) terminate(ctx context.Context, h *attemptHandles) error 
 			}
 		}
 	}
-	platformprocess.CloseSubprocessTreeWithEffects(h.cmd, h.tree, service.scheduler, service.logger)
 	// The response reader outlives the peer only while the peer is retained;
 	// releasing it here keeps a retired peer from holding an open pipe handle.
-	_ = h.stdout.Close()
+	h.stdio.Close()
 	return stopErr
 }
 

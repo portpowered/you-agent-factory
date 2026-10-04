@@ -570,7 +570,7 @@ test: test-unit test-ci-workflows
 
 .PHONY: test-acp-sdk test-acp-provider-prebuilt
 test-acp-sdk:
-	$(GO) test -race ./third_party/acp-go-sdk/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -race ./third_party/acp-go-sdk/... ./pkg/services/providers/internal/services/acp/internal/service -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-acp-provider-prebuilt: export INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT := 1
 test-acp-provider-prebuilt:
