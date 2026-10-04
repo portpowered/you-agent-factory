@@ -139,11 +139,7 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 	backendBody := []byte("scoped pull backend")
 	backend := pullToReadyBackendSelection(backendBody)
 	clients := map[string]*pullToReadyAssetClient{}
-	type selection struct {
-		home, directory, repository string
-		body                        []byte
-	}
-	selections := []selection{}
+	selections := []scopedPullSelection{}
 	for _, name := range []string{"selected", "peer", "fault"} {
 		home := t.TempDir()
 		repository := "fixture/" + name
@@ -154,33 +150,14 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 		clients[repository] = client
 		config := builtInOnlyModelFactoryConfig()
 		config["name"] = "scoped-pull-" + name
-		selections = append(selections, selection{home, functionalScaffoldFactory(t, config), repository, body})
+		selections = append(selections, scopedPullSelection{home, functionalScaffoldFactory(t, config), repository, body})
 	}
 	edges := pullToReadyEdges(clients[selections[0].repository], selections[0].home, backend)
 	edges.ModelAssetHTTPClient = scopedPullAssetClient{clients: clients}
 	process := buildPullToReadyProcess(t, edges)
 	for round := 0; round < 2; round++ {
 		for _, selected := range selections[:2] {
-			cache := filepath.Join(selected.home, "managed-cache")
-			pull := executeScopedPullSelection(t, process, selected.home, selected.directory, "pull")
-			if round == 0 {
-				assertPullToReadySuccess(t, pull, selected.body, cache)
-			} else {
-				assertPullToReadyAlreadyPresent(t, pull, selected.body, cache)
-			}
-			inspect := executeScopedPullSelection(t, process, selected.home, selected.directory, "inspect")
-			assertPullToReadyInspect(t, inspect, cache, selected.body)
-			var detail factoryapi.ModelDetail
-			decodePullToReadyJSON(t, inspect.raw, &detail)
-			if detail.ManagedRuntime.CachePath == nil {
-				t.Fatal("selected inspect omitted cache path")
-			}
-			data, err := os.ReadFile(filepath.Join(*detail.ManagedRuntime.CachePath, pullToReadyAsset))
-			if err != nil || !bytes.Equal(data, selected.body) {
-				t.Fatalf("selected persisted weights = %q, %v, want %q", data, err, selected.body)
-			}
-			assertPullToReadySafeOutput(t, map[string]string{"pull": pull.raw, "inspect": inspect.raw}, string(selected.body), string(backendBody), backend.Location)
-			t.Logf("T11-PULL round=%d repository=%s cache=%s downloadedFacts=%d readiness=READY", round, selected.repository, cache, pull.downloadedBytes)
+			assertScopedPullSelectionReady(t, process, selected, round, backendBody, backend.Location)
 		}
 	}
 	for _, selected := range selections[:2] {
@@ -196,39 +173,71 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 		}
 	}
 	t.Run("T11-PULL-FAIL preserves peer readiness and retries", func(t *testing.T) {
-		fault := selections[2]
-		client := clients[fault.repository]
-		client.failModel.Store(true)
-		inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "pull", pullToReadyModelName})
-		inputs.Input.Env = isolatedModelEnvironment(fault.home, filepath.Join(fault.home, "managed-cache"))
-		inputs.Input.WorkingDirectory = fault.directory
-		err := process.Execute(inputs.Input)
-		var diagnostic interface{ CLIErrorCode() string }
-		if err == nil || !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "CLI_MODEL_PULL_FAILED" {
-			t.Fatalf("failed selected pull = %T %v, want CLI_MODEL_PULL_FAILED", err, err)
-		}
-		var failed factoryapi.ModelPullResponse
-		decodePullToReadyJSON(t, inputs.Stdout(), &failed)
-		if failed.Outcome != factoryapi.ModelPullOutcomeFAILED || len(failed.DownloadedFiles) != 0 || failed.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED || failed.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
-			t.Fatalf("failed pull published success facts: %#v", failed)
-		}
-		assertPullToReadySafeOutput(t, map[string]string{"error": err.Error(), "stdout": inputs.Stdout(), "stderr": inputs.Stderr()}, "secret-source-body", string(fault.body), backend.Location)
-		missing := executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect")
-		var detail factoryapi.ModelDetail
-		decodePullToReadyJSON(t, missing.raw, &detail)
-		if detail.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING || detail.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
-			t.Fatalf("failed selected readiness = %#v, want MISSING/NOT_INSTALLED", detail.ManagedRuntime)
-		}
-		peer := selections[1]
-		peerCache := filepath.Join(peer.home, "managed-cache")
-		assertPullToReadyAlreadyPresent(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "pull"), peer.body, peerCache)
-		assertPullToReadyInspect(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "inspect"), peerCache, peer.body)
-		client.failModel.Store(false)
-		faultCache := filepath.Join(fault.home, "managed-cache")
-		assertPullToReadySuccess(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "pull"), fault.body, faultCache)
-		assertPullToReadyInspect(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect"), faultCache, fault.body)
-		t.Log("T11-PULL-FAIL: MODEL_PULL_FAILED, no success output, MISSING/NOT_INSTALLED, healthy peer READY, recovered selection READY")
+		assertScopedPullFailureAndRecovery(t, process, selections[2], selections[1], clients, backend.Location)
 	})
+}
+
+type scopedPullSelection struct {
+	home, directory, repository string
+	body                        []byte
+}
+
+func assertScopedPullSelectionReady(t *testing.T, process rootProcess, selected scopedPullSelection, round int, backendBody []byte, backendLocation string) {
+	t.Helper()
+	cache := filepath.Join(selected.home, "managed-cache")
+	pull := executeScopedPullSelection(t, process, selected.home, selected.directory, "pull")
+	if round == 0 {
+		assertPullToReadySuccess(t, pull, selected.body, cache)
+	} else {
+		assertPullToReadyAlreadyPresent(t, pull, selected.body, cache)
+	}
+	inspect := executeScopedPullSelection(t, process, selected.home, selected.directory, "inspect")
+	assertPullToReadyInspect(t, inspect, cache, selected.body)
+	var detail factoryapi.ModelDetail
+	decodePullToReadyJSON(t, inspect.raw, &detail)
+	if detail.ManagedRuntime.CachePath == nil {
+		t.Fatal("selected inspect omitted cache path")
+	}
+	data, err := os.ReadFile(filepath.Join(*detail.ManagedRuntime.CachePath, pullToReadyAsset))
+	if err != nil || !bytes.Equal(data, selected.body) {
+		t.Fatalf("selected persisted weights = %q, %v, want %q", data, err, selected.body)
+	}
+	assertPullToReadySafeOutput(t, map[string]string{"pull": pull.raw, "inspect": inspect.raw}, string(selected.body), string(backendBody), backendLocation)
+	t.Logf("T11-PULL round=%d repository=%s cache=%s downloadedFacts=%d readiness=READY", round, selected.repository, cache, pull.downloadedBytes)
+}
+
+func assertScopedPullFailureAndRecovery(t *testing.T, process rootProcess, fault, peer scopedPullSelection, clients map[string]*pullToReadyAssetClient, backendLocation string) {
+	t.Helper()
+	client := clients[fault.repository]
+	client.failModel.Store(true)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "pull", pullToReadyModelName})
+	inputs.Input.Env = isolatedModelEnvironment(fault.home, filepath.Join(fault.home, "managed-cache"))
+	inputs.Input.WorkingDirectory = fault.directory
+	err := process.Execute(inputs.Input)
+	var diagnostic interface{ CLIErrorCode() string }
+	if err == nil || !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "CLI_MODEL_PULL_FAILED" {
+		t.Fatalf("failed selected pull = %T %v, want CLI_MODEL_PULL_FAILED", err, err)
+	}
+	var failed factoryapi.ModelPullResponse
+	decodePullToReadyJSON(t, inputs.Stdout(), &failed)
+	if failed.Outcome != factoryapi.ModelPullOutcomeFAILED || len(failed.DownloadedFiles) != 0 || failed.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED || failed.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
+		t.Fatalf("failed pull published success facts: %#v", failed)
+	}
+	assertPullToReadySafeOutput(t, map[string]string{"error": err.Error(), "stdout": inputs.Stdout(), "stderr": inputs.Stderr()}, "secret-source-body", string(fault.body), backendLocation)
+	missing := executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect")
+	var detail factoryapi.ModelDetail
+	decodePullToReadyJSON(t, missing.raw, &detail)
+	if detail.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING || detail.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+		t.Fatalf("failed selected readiness = %#v, want MISSING/NOT_INSTALLED", detail.ManagedRuntime)
+	}
+	peerCache := filepath.Join(peer.home, "managed-cache")
+	assertPullToReadyAlreadyPresent(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "pull"), peer.body, peerCache)
+	assertPullToReadyInspect(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "inspect"), peerCache, peer.body)
+	client.failModel.Store(false)
+	faultCache := filepath.Join(fault.home, "managed-cache")
+	assertPullToReadySuccess(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "pull"), fault.body, faultCache)
+	assertPullToReadyInspect(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect"), faultCache, fault.body)
+	t.Log("T11-PULL-FAIL: MODEL_PULL_FAILED, no success output, MISSING/NOT_INSTALLED, healthy peer READY, recovered selection READY")
 }
 
 func executeScopedPullSelection(t *testing.T, process rootProcess, home, directory, command string) pullToReadyCapture {
