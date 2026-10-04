@@ -272,7 +272,7 @@ func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
 				nil,
 				nil,
 				nil,
-				WithCommandRunner(runner),
+				WithCommandEffectRunner(runner),
 				WithAgyCommandRunner(runner))
 			if err != nil {
 				t.Fatal(err)
@@ -299,7 +299,7 @@ type clockCommandRunner struct {
 	calls int
 }
 
-func (runner *clockCommandRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (runner *clockCommandRunner) Run(_ context.Context, request CommandRequest) (CommandResult, error) {
 	runner.calls++
 	runner.clock.SetTick(37)
 	output := "selected clock result"
@@ -311,5 +311,5 @@ func (runner *clockCommandRunner) Run(_ context.Context, request platformprocess
 	case "claude":
 		output = `{"type":"result","subtype":"success","is_error":false,"result":"selected clock result","session_id":"clock-session"}` + "\n"
 	}
-	return platformprocess.CommandResult{Stdout: []byte(output)}, nil
+	return CommandResult{Stdout: []byte(output)}, nil
 }

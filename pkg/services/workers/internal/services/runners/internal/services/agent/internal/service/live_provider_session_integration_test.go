@@ -18,7 +18,6 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 type unavailableProviderSessions struct {
@@ -41,7 +40,7 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 		platformclock.Real{},
 		platformclock.Real{},
 		logging.NoopLogger{}, nil, nil, nil,
-		providerswire.WithWorkersCommandRunner(command))
+		providerswire.WithCommandEffectRunner(command))
 	if err != nil {
 		t.Fatalf("providers wire NewService() error = %v", err)
 	}
@@ -126,22 +125,22 @@ func liveSessionStartRequest() workersessions.InvokeSessionRequest {
 type liveSessionCommandRunner struct {
 	initialSessionObserved chan struct{}
 	mu                     sync.Mutex
-	resume                 workerprocess.CommandRequest
+	resume                 providerswire.CommandRequest
 }
 
 func newLiveSessionCommandRunner() *liveSessionCommandRunner {
 	return &liveSessionCommandRunner{initialSessionObserved: make(chan struct{})}
 }
 
-func (r *liveSessionCommandRunner) Run(ctx context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+func (r *liveSessionCommandRunner) Run(ctx context.Context, request providerswire.CommandRequest) (providerswire.CommandResult, error) {
 	return r.RunStreaming(ctx, request, nil)
 }
 
 func (r *liveSessionCommandRunner) RunStreaming(
 	ctx context.Context,
-	request workerprocess.CommandRequest,
-	observe workerprocess.OutputChunkObserver,
-) (workerprocess.CommandResult, error) {
+	request providerswire.CommandRequest,
+	observe providerswire.OutputChunkObserver,
+) (providerswire.CommandResult, error) {
 	if containsLiveSessionSequence(request.Args, "resume", "codex-live-thread-1") {
 		r.mu.Lock()
 		r.resume = request
@@ -149,12 +148,12 @@ func (r *liveSessionCommandRunner) RunStreaming(
 		r.mu.Unlock()
 		emitLiveSessionChunk(observe, `{"type":"thread.started","thread_id":"codex-live-thread-1"}`+"\n")
 		emitLiveSessionChunk(observe, `{"type":"item.completed","item":{"id":"message-resumed","type":"agent_message","text":"resumed exact output"}}`+"\n")
-		return workerprocess.CommandResult{}, nil
+		return providerswire.CommandResult{}, nil
 	}
 	emitLiveSessionChunk(observe, `{"type":"thread.started","thread_id":"codex-live-thread-1"}`+"\n")
 	close(r.initialSessionObserved)
 	<-ctx.Done()
-	return workerprocess.CommandResult{}, ctx.Err()
+	return providerswire.CommandResult{}, ctx.Err()
 }
 
 func (r *liveSessionCommandRunner) resumeArgs() []string {
@@ -163,9 +162,9 @@ func (r *liveSessionCommandRunner) resumeArgs() []string {
 	return append([]string(nil), r.resume.Args...)
 }
 
-func emitLiveSessionChunk(observe workerprocess.OutputChunkObserver, payload string) {
+func emitLiveSessionChunk(observe providerswire.OutputChunkObserver, payload string) {
 	if observe != nil {
-		observe(workerprocess.OutputStreamStdout, []byte(payload))
+		observe(providerswire.OutputStreamStdout, []byte(payload))
 	}
 }
 

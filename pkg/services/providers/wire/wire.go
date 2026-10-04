@@ -204,17 +204,17 @@ func (o commandEffectRunnerOption) apply(opts *wireOptions) {
 }
 
 type agyCommandRunnerOption struct {
-	runner any
+	runner CommandRunner
 }
 
 func (o agyCommandRunnerOption) apply(opts *wireOptions) {
-	opts.agyCommandRunner = providerservice.AdaptCommandRunner(o.runner)
+	opts.agyCommandRunner = o.runner
 }
 
 // WithAgyCommandRunner injects the Providers command-runner effect used by
 // canonical AGY print-mode execution. The PTY option remains available for
 // direct compatibility tests and hosts that intentionally select that seam.
-func WithAgyCommandRunner(runner any) Option {
+func WithAgyCommandRunner(runner CommandRunner) Option {
 	return agyCommandRunnerOption{runner: runner}
 }
 
@@ -232,11 +232,10 @@ func WithAgyPTYEffect(effect AgyEffect) Option {
 	return agyPTYEffectOption{effect: effect}
 }
 
-// WithWorkersCommandRunner is retained as a source-compatible migration
-// option. Its value is projected immediately into the Providers command
-// effect and is never stored as a Workers contract.
-func WithWorkersCommandRunner(runner any) Option {
-	return commandEffectRunnerOption{runner: providerservice.AdaptCommandRunner(runner)}
+// WithCommandEffectRunner supplies the completed Providers command effect.
+// Later command options retain precedence over earlier options.
+func WithCommandEffectRunner(runner CommandRunner) Option {
+	return commandEffectRunnerOption{runner: runner}
 }
 
 // NewService constructs one inert Providers root over sibling Catalog and

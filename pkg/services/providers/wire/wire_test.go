@@ -486,7 +486,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		platformclock.Real{},
 		logging.NoopLogger{}, nil, nil, nil,
 		WithCommandRunner(platformRunner),
-		WithWorkersCommandRunner(workersRunner),
+		WithCommandEffectRunner(workersRunner),
 		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{})))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -585,7 +585,7 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 		platformclock.NewDeterministic(time.Unix(0, 0), time.Second),
 		platformclock.Real{},
 		logging.NoopLogger{}, nil, nil, nil,
-		WithWorkersCommandRunner(workersRunner),
+		WithCommandEffectRunner(workersRunner),
 		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy})))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -839,8 +839,8 @@ type inertWorkersCommandRunner struct {
 
 func (r *inertWorkersCommandRunner) Run(
 	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
+	_ CommandRequest,
+) (CommandResult, error) {
 	r.calls++
 	panic("workers command runner invoked during inert construction")
 }
@@ -894,10 +894,10 @@ type recordingWorkersCommandRunner struct {
 
 func (r *recordingWorkersCommandRunner) Run(
 	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
+	_ CommandRequest,
+) (CommandResult, error) {
 	r.calls++
-	return platformprocess.CommandResult{}, nil
+	return CommandResult{}, nil
 }
 
 type recordingPTYAllocator struct {

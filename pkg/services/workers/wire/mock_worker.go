@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
@@ -47,70 +48,49 @@ func NewLoggingCommandRunner(
 	)
 }
 
-// NewProviderCommandRunner projects the Workers-private command request onto
-// the Providers-owned effect shape at the composition boundary. The returned
-// value intentionally has an opaque structural shape: Providers adapts it
-// without importing Workers' private command types, while the request-scoped
-// mock configuration continues to flow through context unchanged.
-func NewProviderCommandRunner(next platformprocess.CommandRunner) any {
-	return providerCommandRunner{
-		runner: workerprocess.AdaptPlatformCommandRunner(next),
-	}
+// NewProviderCommandRunner projects the Workers-private runner into the typed
+// Providers effect, retaining request correlation and contextual mock policy.
+func NewProviderCommandRunner(next platformprocess.CommandRunner) providers.CommandRunner {
+	return providerCommandRunner{runner: workerprocess.AdaptPlatformCommandRunner(next)}
 }
 
 type providerCommandRunner struct {
 	runner workerprocess.CommandRunner
 }
 
-type providerCommandRequest struct {
-	Command                  string
-	Args                     []string
-	Stdin                    []byte
-	Env                      []string
-	WorkDir                  string
-	FactorySessionID         string
-	DispatchID               string
-	AttemptID                string
-	TransitionID             string
-	WorkerType               string
-	WorkstationName          string
-	ProjectID                string
-	InputTokens              []any
-	InputBindings            map[string][]string
-	Execution                work.ExecutionMetadata
-	ExecutionLogger          logging.Logger
-	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
-}
-
-func (runner providerCommandRunner) Run(
-	ctx context.Context,
-	request providerCommandRequest,
-) (workerprocess.CommandResult, error) {
+func (runner providerCommandRunner) Run(ctx context.Context, request providers.CommandRequest) (providers.CommandResult, error) {
 	if runner.runner == nil {
-		return workerprocess.CommandResult{}, errors.New("provider command runner is required")
+		return providers.CommandResult{}, errors.New("provider command runner is required")
 	}
-	return runner.runner.Run(ctx, workerCommandRequest(request))
+	result, err := runner.runner.Run(ctx, workerCommandRequest(request))
+	return providers.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
 }
 
-func (runner providerCommandRunner) RunStreaming(
-	ctx context.Context,
-	request providerCommandRequest,
-	observer platformprocess.OutputChunkObserver,
-) (workerprocess.CommandResult, error) {
-	if runner.runner == nil {
-		return workerprocess.CommandResult{}, errors.New("provider command runner is required")
+func (runner providerCommandRunner) RunStreaming(ctx context.Context, request providers.CommandRequest, observer providers.OutputChunkObserver) (providers.CommandResult, error) {
+	var observerErr error
+	publish := func(stream string, chunk []byte) {
+		if observerErr == nil && observer != nil {
+			observerErr = observer(stream, chunk)
+		}
 	}
 	if streaming, ok := runner.runner.(interface {
 		RunStreaming(context.Context, workerprocess.CommandRequest, platformprocess.OutputChunkObserver) (workerprocess.CommandResult, error)
 	}); ok {
-		return streaming.RunStreaming(ctx, workerCommandRequest(request), observer)
+		result, err := streaming.RunStreaming(ctx, workerCommandRequest(request), publish)
+		if err == nil {
+			err = observerErr
+		}
+		return providers.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
 	}
 	result, err := runner.Run(ctx, request)
-	publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+	publishCompleteCommandOutput(publish, result.Stdout, result.Stderr)
+	if err == nil {
+		err = observerErr
+	}
 	return result, err
 }
 
-func workerCommandRequest(request providerCommandRequest) workerprocess.CommandRequest {
+func workerCommandRequest(request providers.CommandRequest) workerprocess.CommandRequest {
 	dispatchID := request.DispatchID
 	if dispatchID == "" {
 		dispatchID = request.AttemptID

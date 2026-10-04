@@ -137,9 +137,7 @@ func runStreaming(
 	command providerservice.CommandRequest,
 	observe func([]byte) error,
 ) (providerservice.CommandResult, error) {
-	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, providerservice.CommandRequest, providerservice.OutputChunkObserver) (providerservice.CommandResult, error)
-	}); ok {
+	if streaming, ok := runner.(providerservice.StreamingCommandRunner); ok {
 		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
 			if strings.TrimSpace(stream) != providerservice.OutputStreamStdout {
 				return nil

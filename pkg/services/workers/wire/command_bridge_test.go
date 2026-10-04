@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
@@ -56,7 +58,7 @@ func TestNewProviderCommandRunnerProjectsRequestsAndBufferedOutput(t *testing.T)
 		},
 	}
 	runner := requireProviderCommandRunner(t, NewProviderCommandRunner(workerprocess.ProjectPlatformCommandRunner(next)))
-	request := providerCommandRequest{
+	request := providers.CommandRequest{
 		Command:          "codex",
 		Args:             []string{"exec", "--json"},
 		Stdin:            []byte("prompt"),
@@ -76,19 +78,20 @@ func TestNewProviderCommandRunnerProjectsRequestsAndBufferedOutput(t *testing.T)
 	if err != nil {
 		t.Fatalf("provider Run() error = %v", err)
 	}
-	if !reflect.DeepEqual(result, next.result) {
+	if !reflect.DeepEqual(result.Stdout, next.result.Stdout) || !reflect.DeepEqual(result.Stderr, next.result.Stderr) || result.ExitCode != next.result.ExitCode {
 		t.Fatalf("provider Run() result = %#v, want %#v", result, next.result)
 	}
 	assertProjectedWorkerRequest(t, next.request, request)
 
 	var chunks []string
-	result, err = runner.RunStreaming(context.Background(), request, func(stream string, chunk []byte) {
+	result, err = runner.RunStreaming(context.Background(), request, func(stream string, chunk []byte) error {
 		chunks = append(chunks, stream+":"+string(chunk))
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("buffered provider RunStreaming() error = %v", err)
 	}
-	if !reflect.DeepEqual(result, next.result) {
+	if !reflect.DeepEqual(result.Stdout, next.result.Stdout) || !reflect.DeepEqual(result.Stderr, next.result.Stderr) || result.ExitCode != next.result.ExitCode {
 		t.Fatalf("buffered provider RunStreaming() result = %#v, want %#v", result, next.result)
 	}
 	if !reflect.DeepEqual(chunks, []string{
@@ -109,15 +112,16 @@ func TestNewProviderCommandRunnerForwardsStreamingOutputAndRejectsMissingRunner(
 	var chunks []string
 	result, err := runner.RunStreaming(
 		context.Background(),
-		providerCommandRequest{Command: "codex", DispatchID: "dispatch-live"},
-		func(stream string, chunk []byte) {
+		providers.CommandRequest{Command: "codex", DispatchID: "dispatch-live"},
+		func(stream string, chunk []byte) error {
 			chunks = append(chunks, stream+":"+string(chunk))
+			return nil
 		},
 	)
 	if err != nil {
 		t.Fatalf("streaming provider RunStreaming() error = %v", err)
 	}
-	if !reflect.DeepEqual(result, next.result) || !reflect.DeepEqual(chunks, []string{"stdout:live"}) {
+	if !reflect.DeepEqual(result.Stdout, next.result.Stdout) || !reflect.DeepEqual(result.Stderr, next.result.Stderr) || result.ExitCode != next.result.ExitCode || !reflect.DeepEqual(chunks, []string{"stdout:live"}) {
 		t.Fatalf("streaming provider result/chunks = %#v/%#v", result, chunks)
 	}
 	if next.request.DispatchID != "dispatch-live" {
@@ -125,10 +129,10 @@ func TestNewProviderCommandRunnerForwardsStreamingOutputAndRejectsMissingRunner(
 	}
 
 	missing := requireProviderCommandRunner(t, NewProviderCommandRunner(nil))
-	if _, err := missing.Run(context.Background(), providerCommandRequest{}); err == nil || !strings.Contains(err.Error(), "provider command runner is required") {
+	if _, err := missing.Run(context.Background(), providers.CommandRequest{}); err == nil || !strings.Contains(err.Error(), "provider command runner is required") {
 		t.Fatalf("missing provider Run() error = %v, want required-runner error", err)
 	}
-	if _, err := missing.RunStreaming(context.Background(), providerCommandRequest{}, nil); err == nil || !strings.Contains(err.Error(), "provider command runner is required") {
+	if _, err := missing.RunStreaming(context.Background(), providers.CommandRequest{}, nil); err == nil || !strings.Contains(err.Error(), "provider command runner is required") {
 		t.Fatalf("missing provider RunStreaming() error = %v, want required-runner error", err)
 	}
 }
@@ -159,21 +163,16 @@ func TestNewProviderFromCommandRunnerReturnsSelectedProvidersService(t *testing.
 	}
 }
 
-type providerCommandRunnerContract interface {
-	Run(context.Context, providerCommandRequest) (workerprocess.CommandResult, error)
-	RunStreaming(context.Context, providerCommandRequest, platformprocess.OutputChunkObserver) (workerprocess.CommandResult, error)
-}
-
-func requireProviderCommandRunner(t *testing.T, candidate any) providerCommandRunnerContract {
+func requireProviderCommandRunner(t *testing.T, candidate providers.CommandRunner) providers.StreamingCommandRunner {
 	t.Helper()
-	runner, ok := candidate.(providerCommandRunnerContract)
+	runner, ok := candidate.(providers.StreamingCommandRunner)
 	if !ok {
-		t.Fatalf("provider command runner = %T, want provider command contract", candidate)
+		t.Fatalf("provider command runner = %T, want streaming provider command contract", candidate)
 	}
 	return runner
 }
 
-func assertProjectedWorkerRequest(t *testing.T, got workerprocess.CommandRequest, want providerCommandRequest) {
+func assertProjectedWorkerRequest(t *testing.T, got workerprocess.CommandRequest, want providers.CommandRequest) {
 	t.Helper()
 	if got.Command != want.Command || !reflect.DeepEqual(got.Args, want.Args) ||
 		!reflect.DeepEqual(got.Stdin, want.Stdin) || !reflect.DeepEqual(got.Env, want.Env) ||
@@ -236,4 +235,43 @@ func (runner *wireStreamingWorkerCommandRunner) RunStreaming(
 		observer(platformprocess.OutputStreamStdout, runner.result.Stdout)
 	}
 	return runner.result, nil
+}
+
+func TestNewProviderCommandRunnerRetainsObserverFailureAndNativeError(t *testing.T) {
+	t.Parallel()
+	observerFailure := errors.New("consumer stopped")
+	nativeFailure := errors.New("command failed")
+	for _, streaming := range []bool{false, true} {
+		name := "buffered"
+		if streaming {
+			name = "streaming"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var next platformprocess.CommandRunner = canonicalCommandRunnerFunc(func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+				return platformprocess.CommandResult{Stdout: []byte("stdout"), Stderr: []byte("stderr"), ExitCode: 7}, nil
+			})
+			if streaming {
+				next = streamingCanonicalCommandRunner{chunk: "stdout"}
+			}
+			runner := requireProviderCommandRunner(t, NewProviderCommandRunner(next))
+			calls := 0
+			result, err := runner.RunStreaming(t.Context(), providers.CommandRequest{}, func(string, []byte) error {
+				calls++
+				return observerFailure
+			})
+			if !errors.Is(err, observerFailure) || calls != 1 || len(result.Stdout) == 0 {
+				t.Fatalf("consumer failure: result=%#v error=%v calls=%d", result, err, calls)
+			}
+		})
+	}
+	next := canonicalCommandRunnerFunc(func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+		return platformprocess.CommandResult{Stdout: []byte("partial"), ExitCode: 9}, nativeFailure
+	})
+	result, err := requireProviderCommandRunner(t, NewProviderCommandRunner(next)).RunStreaming(t.Context(), providers.CommandRequest{}, func(string, []byte) error {
+		return observerFailure
+	})
+	if !errors.Is(err, nativeFailure) || result.ExitCode != 9 || string(result.Stdout) != "partial" {
+		t.Fatalf("native failure: result=%#v error=%v", result, err)
+	}
 }

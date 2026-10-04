@@ -177,7 +177,7 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithWorkersCommandRunner(
+		options = append(options, providerswire.WithCommandEffectRunner(
 			workerswire.NewProviderCommandRunner(loggedRunner),
 		))
 		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
@@ -190,7 +190,7 @@ func provideConfiguredProvidersService(
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		options = append(options, providerswire.WithWorkersCommandRunner(
+		options = append(options, providerswire.WithCommandEffectRunner(
 			workerswire.NewProviderCommandRunner(loggedRunner),
 		))
 		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
@@ -206,7 +206,7 @@ func provideConfiguredProvidersService(
 	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	options = append(options, providerswire.WithWorkersCommandRunner(
+	options = append(options, providerswire.WithCommandEffectRunner(
 		workerswire.NewProviderCommandRunner(loggedRunner),
 	))
 	return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},

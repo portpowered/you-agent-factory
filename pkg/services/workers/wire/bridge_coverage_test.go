@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 )
@@ -74,7 +75,10 @@ func TestWorkersWireProviderRunnerBuffersOutput(t *testing.T) {
 		t.Fatalf("provider command Run() = %#v, %v", result, err)
 	}
 	var chunks []recordedOutputChunk
-	result, err = providerRunner.RunStreaming(context.Background(), request, recordOutputChunks(&chunks))
+	result, err = providerRunner.RunStreaming(context.Background(), request, func(stream string, chunk []byte) error {
+		recordOutputChunks(&chunks)(stream, chunk)
+		return nil
+	})
 	if err != nil || string(result.Stderr) != "stderr" {
 		t.Fatalf("buffered provider RunStreaming() = %#v, %v", result, err)
 	}
@@ -92,7 +96,10 @@ func TestWorkersWireProviderRunnerStreamsOutput(t *testing.T) {
 		t.Fatal("NewProviderCommandRunner() did not return providerCommandRunner")
 	}
 	var chunks []recordedOutputChunk
-	result, err := providerRunner.RunStreaming(context.Background(), providerCoverageCommandRequest(), recordOutputChunks(&chunks))
+	result, err := providerRunner.RunStreaming(context.Background(), providerCoverageCommandRequest(), func(stream string, chunk []byte) error {
+		recordOutputChunks(&chunks)(stream, chunk)
+		return nil
+	})
 	if err != nil || string(result.Stdout) != "streamed provider-worker" {
 		t.Fatalf("streaming provider RunStreaming() = %#v, %v", result, err)
 	}
@@ -110,8 +117,8 @@ func TestWorkersWireProviderRunnerRequiresDelegate(t *testing.T) {
 	}
 }
 
-func providerCoverageCommandRequest() providerCommandRequest {
-	return providerCommandRequest{
+func providerCoverageCommandRequest() providers.CommandRequest {
+	return providers.CommandRequest{
 		Command:                  "provider-worker",
 		Args:                     []string{"--model", "tts"},
 		Stdin:                    []byte("input"),
