@@ -261,7 +261,12 @@ func assertPerRuntimeOpeningAttribution(t *testing.T, fixture *perRuntimeAttempt
 		WorkerSessionID: fixture.request.ID, Topic: workersessions.Topic(fixture.request.ID),
 	}
 	fixture.capture.mu.Lock()
-	requests := append([]recordings.WorkerSessionRecordingRequest(nil), fixture.capture.requests...)
+	var requests []recordings.WorkerSessionRecordingRequest
+	for _, request := range fixture.capture.requests {
+		if request.WorkerSessionID == fixture.request.ID {
+			requests = append(requests, request)
+		}
+	}
 	fixture.capture.mu.Unlock()
 	if !reflect.DeepEqual(requests, []recordings.WorkerSessionRecordingRequest{wantCapture}) {
 		t.Fatalf("recording requests = %#v, want %#v", requests, wantCapture)
@@ -388,9 +393,9 @@ func assertPerRuntimeFirstTerminal(t *testing.T, fixture *perRuntimeAttemptFixtu
 	}
 }
 
-func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
+func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender, peers ...*perRuntimeAttemptFixture) *perRuntimeAttemptFixture {
 	t.Helper()
-	fixture := preparePerRuntimeAttemptFixture(t, suffix, sink)
+	fixture := preparePerRuntimeAttemptFixture(t, suffix, sink, peers...)
 	var err error
 	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
 	if err != nil || fixture.attempt == nil {
@@ -405,17 +410,23 @@ func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppende
 	return fixture
 }
 
-func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
+func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender, peers ...*perRuntimeAttemptFixture) *perRuntimeAttemptFixture {
 	t.Helper()
 	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
 	if suffix == "b" {
 		now = now.Add(time.Hour)
 	}
 	capture := &perRuntimeRecordingCapture{delegate: newInterruptRecordingService()}
-	service, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{},
-		coverageClock{now: now}, unavailableProviderSessions{}, capture)
-	if err != nil {
-		t.Fatalf("New(%s): %v", suffix, err)
+	var service workersessions.Service
+	if len(peers) > 0 {
+		service, capture, now = peers[0].service, peers[0].capture, peers[0].clock
+	} else {
+		var err error
+		service, err = New(unusedExecution{t: t}, sink, logging.NoopLogger{},
+			coverageClock{now: now}, unavailableProviderSessions{}, capture)
+		if err != nil {
+			t.Fatalf("New(%s): %v", suffix, err)
+		}
 	}
 	fixture := &perRuntimeAttemptFixture{
 		clock: now, capture: capture,
@@ -427,6 +438,10 @@ func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsApp
 		},
 	}
 	fixture.request.Execution.Execution.FactorySessionID = "factory-" + suffix
+	if len(peers) > 0 {
+		fixture.request.Key.RuntimeID = "runtime-" + suffix
+		fixture.request.Execution.Execution.RuntimeID = fixture.request.Key.RuntimeID
+	}
 	fixture.request.Execution.Execution.RecordingID = "recording-" + suffix
 	fixture.request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-" + suffix}
 	return fixture
@@ -481,17 +496,12 @@ func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
 	t.Parallel()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
-	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
 	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
 	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
 	assertPerRuntimeOpeningAttribution(t, a, sink)
 	assertPerRuntimeOpeningAttribution(t, b, sink)
 	publishPerRuntimeProgress(t, a, sink)
-	for _, pair := range [][2]*perRuntimeAttemptFixture{{a, b}, {b, a}} {
-		if _, err := pair[0].service.Get(context.Background(), workersessions.GetRequest{ID: pair[1].request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
-			t.Fatalf("peer Get error = %v, want ErrSessionNotFound", err)
-		}
-	}
 	controlA := bindPerRuntimeCancellation(t, a, nil)
 	controlB := bindPerRuntimeCancellation(t, b, nil)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -540,7 +550,7 @@ func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
 	t.Parallel()
 	sink := newEventsAppender()
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
-	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
 	cause := errors.New("injected A-only cancellation failure")
 	controlA := bindPerRuntimeCancellation(t, a, cause)
 	controlB := bindPerRuntimeCancellation(t, b, nil)
@@ -575,7 +585,7 @@ func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T
 	eventStore := newEventsAppender()
 	sink := &perRuntimeAppendCapture{EventsAppender: eventStore}
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
-	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
 	beforeA := assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
 	observationA := assertPerRuntimeObservation(t, a, workersessions.StateRunning)
 	beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
@@ -1090,6 +1100,43 @@ func TestRuntimeAttempt_ProviderAssociationRetainsPhysicalIdentity(t *testing.T)
 			observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
 			if err != nil || observation.State != workersessions.StateCompleted || observation.AttemptID != request.AttemptID {
 				t.Fatalf("retained observation = %#v, %v", observation, err)
+			}
+		})
+	}
+}
+
+func TestKeyedRuntime_ExplicitProviderAssociationSurvivesEqualDispatchPeer(t *testing.T) {
+	for _, fromResult := range []bool{false, true} {
+		t.Run(fmt.Sprintf("from-result=%t", fromResult), func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			a := newPerRuntimeAttemptFixture(t, "a", sink)
+			b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+			for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+				reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-" + fixture.request.ID}
+				result := runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID)
+				if fromResult {
+					result.Result.Continuation = &providers.ContinuationRef{Provider: string(reference.Provider), Kind: reference.Kind, ProviderSessionID: reference.ID}
+				} else {
+					association, err := fixture.service.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+						WorkerSessionID: fixture.request.ID, DispatchID: perRuntimeLogicalDispatchID, Reference: reference,
+					})
+					if err != nil || association.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
+						t.Fatalf("AssociateProviderSession(%s) = %#v, %v", fixture.request.ID, association, err)
+					}
+				}
+				if err := fixture.attempt.Complete(context.Background(), result, nil); err != nil {
+					t.Fatal(err)
+				}
+				session := assertPerRuntimeAttemptState(t, fixture, workersessions.StateCompleted)
+				want := workersessions.ProviderSessionAssociation{
+					WorkerSessionID: fixture.request.ID, TurnID: fixture.request.Execution.Execution.Dispatch.Execution.RequestID,
+					DispatchID: perRuntimeLogicalDispatchID, AttemptID: fixture.request.AttemptID, Reference: reference,
+				}
+				if !reflect.DeepEqual(session.ProviderSessionAssociation, &want) {
+					t.Fatalf("retained association = %#v, want %#v", session.ProviderSessionAssociation, want)
+				}
+				assertPerRuntimeObservation(t, fixture, workersessions.StateCompleted)
 			}
 		})
 	}

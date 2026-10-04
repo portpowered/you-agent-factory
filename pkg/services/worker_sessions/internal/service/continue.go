@@ -755,7 +755,14 @@ func (r *registry) associateProviderSessionLocked(
 	}
 	supervision := r.supervisions[req.WorkerSessionID]
 	_, runtimeOwned := r.runtimeAttempts[req.WorkerSessionID]
-	if (supervision == nil && !runtimeOwned) || r.dispatchOwners[req.DispatchID] != req.WorkerSessionID {
+	attempt := r.runtimeAttemptControls[req.WorkerSessionID]
+	owned := r.dispatchOwners[req.DispatchID] == req.WorkerSessionID
+	if runtimeOwned {
+		// An explicit Worker Session identity resolves its own scoped attempt;
+		// a peer's equal logical dispatch must not redirect this association.
+		owned = attempt != nil && attempt.dispatchID == req.DispatchID && r.runtimeAttemptOwners[attempt.key] == req.WorkerSessionID
+	}
+	if (supervision == nil && !runtimeOwned) || !owned {
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 
@@ -766,7 +773,7 @@ func (r *registry) associateProviderSessionLocked(
 		turnID = supervision.turnID
 		dispatchID = supervision.dispatchID
 		attemptID = dispatchID
-	} else if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
+	} else if attempt != nil {
 		// Runtime owns execution, but its immutable handle still identifies the
 		// physical attempt. A logical dispatch may survive several attempts.
 		dispatchID = attempt.dispatchID

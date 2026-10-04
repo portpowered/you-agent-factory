@@ -112,9 +112,9 @@ func (r *registry) BindRuntimeAttemptCancellation(
 	}
 	r.mu.RLock()
 	attempt := r.runtimeAttemptControls[workerSessionID]
-	owner := r.dispatchOwners[dispatchID]
+	owned := attempt != nil && r.runtimeAttemptOwners[attempt.key] == workerSessionID
 	r.mu.RUnlock()
-	if attempt == nil || owner != workerSessionID || attempt.dispatchID != dispatchID {
+	if !owned || attempt.dispatchID != dispatchID {
 		return errRuntimeAttemptControlUnavailable
 	}
 	attempt.mu.Lock()
