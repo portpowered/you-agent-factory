@@ -320,42 +320,6 @@ func ClassifyFailedInvocation(
 	return primaryResultErrorFromInternal(result), true
 }
 
-func NewInvocationInputPreparation(
-	readFile SubmittedFileReader,
-	inspectPath SubmittedFilePathInspector,
-) InvocationInputPreparation {
-	return newInvocationInputPreparation(readFile, inspectPath)
-}
-
-func newInvocationInputPreparation(
-	readFile SubmittedFileReader,
-	inspectPath SubmittedFilePathInspector,
-) InvocationInputPreparation {
-	return invocationInputPreparationAdapter{readFile: readFile, inspectPath: inspectPath}
-}
-
-type invocationInputPreparationAdapter struct {
-	readFile    SubmittedFileReader
-	inspectPath SubmittedFilePathInspector
-}
-
-func (adapter invocationInputPreparationAdapter) PrepareInvocationInput(
-	ctx context.Context,
-	request InvocationInputPreparationRequest,
-) (PreparedInvocationInput, error) {
-	prepared, err := invocationreturnpolicy.NewInvocationInputPreparation(
-		invocationreturnpolicy.InvocationInputFileReader(adapter.readFile),
-		invocationreturnpolicy.InvocationInputPathInspector(adapter.inspectPath),
-	).PrepareInvocationInput(
-		ctx,
-		invocationInputPreparationRequestToInternal(request),
-	)
-	if err != nil {
-		return PreparedInvocationInput{}, mapInvocationReturnPolicyError(err)
-	}
-	return preparedInvocationInputFromInternal(prepared), nil
-}
-
 func NewInvocationPolicyService() Service {
 	return invocationPolicyServiceAdapter{inner: invocationreturnpolicy.NewPolicyService()}
 }

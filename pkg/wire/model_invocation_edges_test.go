@@ -41,6 +41,7 @@ var (
 
 // Existing component fixtures supply the same separately selected roles as Wire.
 func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
+	edges = selectedTestTimeEdges(edges)
 	processLogger, err := provideProcessLogger(edges)
 	if err != nil {
 		return nil, err

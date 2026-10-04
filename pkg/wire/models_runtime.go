@@ -202,19 +202,11 @@ func provideModelHostClock(edges serviceedges.Edges) modelswire.HostClock {
 	if selected := edges.ModelHostClock; selected != nil {
 		return adaptModelHostClock(selected)
 	}
-	source := edges.Clock
-	if source == nil {
-		source = platformclock.Real{}
-	}
-	return adaptModelHostClock(modelsClock{source: source})
+	return adaptModelHostClock(modelsClock{source: edges.Clock})
 }
 func provideModelNow(edges serviceedges.Edges) modelNow {
 
-	source := edges.Clock
-	if source == nil {
-		source = platformclock.Real{}
-	}
-	return source.Now
+	return edges.Clock.Now
 }
 func provideModelRuntimeRunner(edges serviceedges.Edges) (modelRuntimeRunner, error) {
 

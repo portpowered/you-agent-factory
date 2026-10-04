@@ -790,8 +790,8 @@ func TestBuildProcessRejectsTypedNilRecordingClockBeforeActivation(t *testing.T)
 		RecordingsRootObserver: func(recordings.Service) { observed = true },
 		RecordingWriteFile:     func(string, []byte) error { t.Error("recording activated before invalid clock rejection"); return nil },
 	})
-	if err == nil || process != nil || !strings.Contains(err.Error(), "construct Recordings: clock is required") {
-		t.Fatalf("BuildProcess = %v, %v; want clock construction error", process, err)
+	if err == nil || process != nil || err.Error() != "build application process: Clock must not be typed-nil; omit it to select the default" {
+		t.Fatalf("BuildProcess = %v, %v; want typed-nil Clock rejection at the root boundary", process, err)
 	}
 	if observed {
 		t.Fatal("invalid clock published a usable Recordings root")

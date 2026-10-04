@@ -24,12 +24,13 @@ type Timer interface {
 	Stop() bool
 }
 
-// TimerSource optionally supplies timers that advance with the same logical
-// source as Now. Sources that only implement Source remain valid and receive
-// a real host timer at the consuming service boundary.
+// TimerSource supplies timers that advance with the same source as Now.
+// A legacy Now-only process source remains valid; BuildProcess selects an
+// explicit wall scheduler for it before composition.
 type TimerSource interface {
 	Source
 	NewTimer(time.Duration) Timer
+	After(time.Duration) <-chan time.Time
 }
 
 // Real reads the host wall clock.
@@ -156,6 +157,12 @@ func (c *Deterministic) NewTimer(duration time.Duration) Timer {
 	c.timers[timer] = struct{}{}
 	c.fireDueTimersLocked(c.nowLocked())
 	return timer
+}
+
+// After delivers once when logical time reaches the duration's deadline.
+// Zero and negative durations deliver immediately at the current logical time.
+func (c *Deterministic) After(duration time.Duration) <-chan time.Time {
+	return c.NewTimer(duration).C()
 }
 
 // SetTick updates the logical tick used by Now. Negative ticks clamp to zero.
