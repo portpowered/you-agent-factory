@@ -144,7 +144,7 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 		body                        []byte
 	}
 	selections := []selection{}
-	for _, name := range []string{"selected", "peer"} {
+	for _, name := range []string{"selected", "peer", "fault"} {
 		home := t.TempDir()
 		repository := "fixture/" + name
 		body := []byte("scoped pull " + name + " weights")
@@ -160,7 +160,7 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 	edges.ModelAssetHTTPClient = scopedPullAssetClient{clients: clients}
 	process := buildPullToReadyProcess(t, edges)
 	for round := 0; round < 2; round++ {
-		for _, selected := range selections {
+		for _, selected := range selections[:2] {
 			cache := filepath.Join(selected.home, "managed-cache")
 			pull := executeScopedPullSelection(t, process, selected.home, selected.directory, "pull")
 			if round == 0 {
@@ -183,10 +183,10 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 			t.Logf("T11-PULL round=%d repository=%s cache=%s downloadedFacts=%d readiness=READY", round, selected.repository, cache, pull.downloadedBytes)
 		}
 	}
-	for _, selected := range selections {
+	for _, selected := range selections[:2] {
 		client := clients[selected.repository]
 		// The repeated pull/inspect only read the persisted assets: one model
-		// transfer per selection and one shared-backend transfer in this fixture.
+		// transfer per selection and two backend transfers across the two caches.
 		want := int64(len(selected.body))
 		if selected.repository == selections[0].repository {
 			want += int64(2 * len(backendBody))
@@ -195,6 +195,40 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 			t.Fatalf("repository %s transferred %d bytes, want %d cold-only bytes", selected.repository, client.TransferBytes(), want)
 		}
 	}
+	t.Run("T11-PULL-FAIL preserves peer readiness and retries", func(t *testing.T) {
+		fault := selections[2]
+		client := clients[fault.repository]
+		client.failModel.Store(true)
+		inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "pull", pullToReadyModelName})
+		inputs.Input.Env = isolatedModelEnvironment(fault.home, filepath.Join(fault.home, "managed-cache"))
+		inputs.Input.WorkingDirectory = fault.directory
+		err := process.Execute(inputs.Input)
+		var diagnostic interface{ CLIErrorCode() string }
+		if err == nil || !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "CLI_MODEL_PULL_FAILED" {
+			t.Fatalf("failed selected pull = %T %v, want CLI_MODEL_PULL_FAILED", err, err)
+		}
+		var failed factoryapi.ModelPullResponse
+		decodePullToReadyJSON(t, inputs.Stdout(), &failed)
+		if failed.Outcome != factoryapi.ModelPullOutcomeFAILED || len(failed.DownloadedFiles) != 0 || failed.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED || failed.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
+			t.Fatalf("failed pull published success facts: %#v", failed)
+		}
+		assertPullToReadySafeOutput(t, map[string]string{"error": err.Error(), "stdout": inputs.Stdout(), "stderr": inputs.Stderr()}, "secret-source-body", string(fault.body), backend.Location)
+		missing := executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect")
+		var detail factoryapi.ModelDetail
+		decodePullToReadyJSON(t, missing.raw, &detail)
+		if detail.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING || detail.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+			t.Fatalf("failed selected readiness = %#v, want MISSING/NOT_INSTALLED", detail.ManagedRuntime)
+		}
+		peer := selections[1]
+		peerCache := filepath.Join(peer.home, "managed-cache")
+		assertPullToReadyAlreadyPresent(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "pull"), peer.body, peerCache)
+		assertPullToReadyInspect(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "inspect"), peerCache, peer.body)
+		client.failModel.Store(false)
+		faultCache := filepath.Join(fault.home, "managed-cache")
+		assertPullToReadySuccess(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "pull"), fault.body, faultCache)
+		assertPullToReadyInspect(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect"), faultCache, fault.body)
+		t.Log("T11-PULL-FAIL: MODEL_PULL_FAILED, no success output, MISSING/NOT_INSTALLED, healthy peer READY, recovered selection READY")
+	})
 }
 
 func executeScopedPullSelection(t *testing.T, process rootProcess, home, directory, command string) pullToReadyCapture {
@@ -508,6 +542,7 @@ type pullToReadyAssetClient struct {
 	calls      atomic.Int64
 	transfers  atomic.Int64
 	offline    atomic.Bool
+	failModel  atomic.Bool
 	requests   []string
 }
 
@@ -551,6 +586,9 @@ func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response,
 	case "/models/" + client.repository:
 		body = client.manifest
 	case "/" + client.repository + "/resolve/" + pullToReadyRevision + "/" + pullToReadyAsset:
+		if client.failModel.Load() {
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(strings.NewReader("secret-source-body")), Request: request}, nil
+		}
 		body = client.model
 	default:
 		if request.URL.String() == client.backendURL {
