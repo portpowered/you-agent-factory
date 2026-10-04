@@ -3,6 +3,7 @@ package stdio_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -568,4 +569,97 @@ func wireTranscriptFiles(t *testing.T, root string) []string {
 		t.Fatalf("walk %q: %v", root, err)
 	}
 	return files
+}
+
+// Each recording selection is an immutable effect shape and therefore owns a
+// separate reusable process. Initialize/EOF admits no Factory Session; the
+// prompt/control scenarios in this package retain their explicit sessions.
+func TestServeACPExplicitRecordingRolesPreserveProtocol(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		active  bool
+		failure error
+	}{
+		{name: "disabled", failure: acp.ErrWireRecordingDisabled},
+		{name: "supplied", active: true},
+		{name: "unavailable", failure: errors.New("private recorder error")},
+		{name: "missing resource"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			cwd := t.TempDir()
+			recorder := newRotatingWireRecorder(t, home)
+			var connections []string
+			selected := func(id string) (acp.WireTranscript, error) {
+				connections = append(connections, id)
+				if test.active {
+					return recorder(id)
+				}
+				return nil, test.failure
+			}
+			process := support.BuildProcess(t, serviceedges.Edges{
+				ACPWireRecorder:                    selected,
+				ProviderCommandRunner:              inertACPCommandRunner{},
+				FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+			})
+			if len(connections) != 0 {
+				t.Fatal("construction opened transcript")
+			}
+			var firstOutput string
+			for attempt := 0; attempt < 2; attempt++ {
+				output := executeInitializeAndEOF(t, process, home, cwd)
+				if attempt == 0 {
+					firstOutput = output
+				} else if output != firstOutput {
+					t.Fatalf("reused process changed protocol output: %q != %q", output, firstOutput)
+				}
+			}
+			if len(connections) != 2 || connections[0] == "" || connections[0] == connections[1] {
+				t.Fatalf("connection identities=%v", connections)
+			}
+			if test.active {
+				records := readWireTranscript(t, home)
+				if len(records) != 4 {
+					t.Fatalf("recorded frames=%d, want two inbound/outbound exchanges", len(records))
+				}
+			} else if _, err := os.Stat(wiretranscript.Root(home)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("inactive transcript directory: %v", err)
+			}
+		})
+	}
+}
+
+func executeInitializeAndEOF(t *testing.T, process support.Process, home, cwd string) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	input := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%s}`+"\n", fixtureInitializeParams)
+	err := process.Execute(root.Input{
+		Args:             []string{"you", "server", "acp"},
+		Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+		WorkingDirectory: cwd,
+		Stdin:            strings.NewReader(input), Stdout: &stdout, Stderr: &stderr, Context: t.Context(),
+	})
+	if err != nil {
+		t.Fatalf("Execute(initialize/EOF)=%v", err)
+	}
+	var frame rpcFrame
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &frame); err != nil {
+		t.Fatalf("protocol stdout=%q: %v", stdout.String(), err)
+	}
+	if string(frame.ID) != "1" || frame.Error != nil || len(frame.Result) == 0 {
+		t.Fatalf("initialize response=%+v", frame)
+	}
+	if strings.Contains(stderr.String(), "private recorder error") {
+		t.Fatalf("recorder error exposed on stderr=%q", stderr.String())
+	}
+	return stdout.String()
+}
+
+type inertACPCommandRunner struct{}
+
+func (inertACPCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	panic("unexpected provider dispatch during initialize/EOF")
 }

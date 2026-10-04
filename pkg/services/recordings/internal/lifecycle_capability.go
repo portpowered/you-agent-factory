@@ -737,6 +737,12 @@ type runtimeLedgerRouter struct {
 	typeRecorders []func(factorydefinitions.FactoryEventType)
 }
 
+type RuntimeLedgerRouter = runtimeLedgerRouter
+
+func NewRuntimeLedgerRouter(clock recordings.RecordingClock) *RuntimeLedgerRouter {
+	return newRuntimeLedgerRouter(clock.Now)
+}
+
 func newRuntimeLedgerRouter(now func() time.Time) *runtimeLedgerRouter {
 	fallback := recordingevents.NewRuntimeLedger(nil, now, "recordings-root", nil)
 	return &runtimeLedgerRouter{

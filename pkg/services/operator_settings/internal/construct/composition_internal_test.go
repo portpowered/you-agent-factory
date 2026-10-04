@@ -1,32 +1,31 @@
 package construct_test
 
 import (
-	"strings"
 	"testing"
 
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
-	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
-func TestNewServiceFromConfigDocumentRejectsNilDocumentOwner(t *testing.T) {
-	restore := settingsconstruct.SetConstructResolutionServiceForTests(func() (resolution.Service, error) {
-		return &stubResolutionService{}, nil
-	})
-	t.Cleanup(restore)
-
-	_, err := settingsconstruct.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
-	if err == nil || !strings.Contains(err.Error(), "document ports are required") {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
+func TestCompletedSettingsBoundaryRejectsMissingOwners(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		document   settingswire.DocumentService
+		resolution settingswire.ResolutionService
+		want       string
+	}{
+		{name: "document", want: "construct Operator Settings: document is required"},
+		{name: "resolution", document: settingswire.NewDocumentService(nil, nil, nil, nil, nil, nil, nil),
+			want: "construct Operator Settings: resolution is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root, err := settingswire.NewService(test.document, test.resolution, nil, nil, nil,
+				nil, nil, logging.NoopLogger{}, nil)
+			if err == nil || err.Error() != test.want || root != nil {
+				t.Fatalf("NewService() = %v, %v, want nil root and %q", root, err, test.want)
+			}
+		})
 	}
 }
-
-type stubResolutionService struct{}
-
-func (stubResolutionService) ResolveEffective(
-	operatorsettings.ResolveEffectiveRequest,
-) (operatorsettings.ResolveEffectiveResult, error) {
-	return operatorsettings.ResolveEffectiveResult{}, nil
-}
-
-var _ resolution.Service = (*stubResolutionService)(nil)

@@ -9,6 +9,7 @@ import (
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 func TestSourceLifecycleStartsOnceAndConvergesThroughWait(t *testing.T) {
@@ -19,7 +20,7 @@ func TestSourceLifecycleStartsOnceAndConvergesThroughWait(t *testing.T) {
 			automations.ObservedLifecycleRunning,
 		},
 	}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	request := automations.StartSourceRequest{
 		Identity: sourceIdentity("start"),
 		Kind:     "schedule",
@@ -106,8 +107,8 @@ func TestStartSourceOwnsExactlyOnceActivationAfterStartingIsAuthoritative(t *tes
 	var service reconciliation.Service
 	var activationMu sync.Mutex
 	activationCalls := 0
-	service = reconciliationwire.NewService(reconciliation.Effects{
-		Start: func(ctx context.Context, _ reconciliation.StartEffect) error {
+	service = reconciliationwire.NewService(lifecycleFixture{
+		start: func(ctx context.Context, _ reconciliation.StartEffect) error {
 			status, err := service.SourceStatus(
 				ctx,
 				automations.SourceStatusRequest{Identity: identity},
@@ -169,7 +170,7 @@ func TestSourceLifecycleStopsOnceAndConvergesThroughWait(t *testing.T) {
 			automations.ObservedLifecycleStopped,
 		},
 	}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("stop")
 	startAndWait(t, service, identity)
 
@@ -248,7 +249,7 @@ func TestStopSourceCommitsStoppingBeforeExactlyOnceEffect(t *testing.T) {
 
 	identity := sourceIdentity("owned-stop")
 	effects := newBlockingStopEffects(identity)
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	effects.service = service
 	startAndWait(t, service, identity)
 	running, err := service.SourceStatus(
@@ -322,7 +323,7 @@ func TestStopSourceSuccessDoesNotReportStoppingAfterSupersedingStart(t *testing.
 
 	identity := sourceIdentity("stale-stop-success")
 	effects := newBlockingStopEffects(identity)
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	effects.service = service
 	startAndWait(t, service, identity)
 
@@ -377,7 +378,7 @@ func TestStopSourceFailureDoesNotOverwriteNewerStoppedObservation(t *testing.T) 
 	identity := sourceIdentity("stale-stop-failure")
 	effects := newBlockingStopEffects(identity)
 	effects.stopErr = errors.New("late stop failure")
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	effects.service = service
 	startAndWait(t, service, identity)
 
@@ -435,7 +436,7 @@ func TestStopSourceFailureDoesNotOverwriteSupersedingStart(t *testing.T) {
 	identity := sourceIdentity("superseded-stop-failure")
 	effects := newBlockingStopEffects(identity)
 	effects.stopErr = errors.New("late stop failure")
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	effects.service = service
 	startAndWait(t, service, identity)
 
@@ -503,12 +504,14 @@ func newBlockingStopEffects(identity automations.SourceIdentity) *blockingStopEf
 	}
 }
 
-func (f *blockingStopEffects) bundle() reconciliation.Effects {
-	return reconciliation.Effects{
-		Start: func(context.Context, reconciliation.StartEffect) error { return nil },
-		Stop:  f.stop,
-		Wait:  convergedWait,
-	}
+func (*blockingStopEffects) Start(context.Context, reconciliation.StartEffect) error { return nil }
+
+func (f *blockingStopEffects) Stop(ctx context.Context, effect reconciliation.StopEffect) error {
+	return f.stop(ctx, effect)
+}
+
+func (*blockingStopEffects) Wait(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+	return convergedWait(ctx, effect)
 }
 
 func (f *blockingStopEffects) stop(ctx context.Context, _ reconciliation.StopEffect) error {
@@ -550,7 +553,7 @@ func TestSourceLifecycleConcurrentStartInvokesOneActivation(t *testing.T) {
 	t.Parallel()
 
 	effects := &recordingEffects{}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	request := automations.StartSourceRequest{
 		Identity: sourceIdentity("concurrent"),
 		Kind:     "hosted",
@@ -595,7 +598,7 @@ func TestSourceLifecycleRejectsInvalidOperationsWithoutEffects(t *testing.T) {
 	t.Parallel()
 
 	effects := &recordingEffects{}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	_, err := service.StartSource(context.Background(), automations.StartSourceRequest{
 		Identity: automations.SourceIdentity{AutomationID: "automation", SourceID: " "},
 		Kind:     "schedule",
@@ -645,27 +648,25 @@ func TestSourceLifecycleRejectsInvalidOperationsWithoutEffects(t *testing.T) {
 	}
 }
 
-func TestSourceLifecycleReportsUnavailableEffects(t *testing.T) {
+func TestRequiredLifecycleConstructionAndReconcileAreInert(t *testing.T) {
 	t.Parallel()
-
-	service := reconciliationwire.NewService()
-	identity := sourceIdentity("unavailable-effects")
-	_, err := service.StartSource(context.Background(), automations.StartSourceRequest{
-		Identity: identity,
-		Kind:     "schedule",
+	lifecycle := &recordingEffects{}
+	service := reconciliationwire.NewService(lifecycle)
+	identity := sourceIdentity("inert-lifecycle")
+	result, err := service.Reconcile(context.Background(), automations.ReconcileRequest{
+		Desired: []automations.DesiredSpec{{AutomationID: identity.AutomationID, SourceID: identity.SourceID, Kind: "schedule", State: automations.DesiredLifecycleRunning}},
 	})
-	assertLifecycleError(t, err, automations.ErrorCodeNotReady, automations.ErrNotReady)
-
-	_, err = service.StopSource(context.Background(), automations.StopSourceRequest{
-		Identity: identity,
-	})
-	assertLifecycleError(t, err, automations.ErrorCodeNotReady, automations.ErrNotReady)
-
-	_, err = service.WaitSource(context.Background(), automations.WaitSourceRequest{
-		Identity: identity,
-		Desired:  automations.DesiredLifecycleRunning,
-	})
-	assertLifecycleError(t, err, automations.ErrorCodeNotReady, automations.ErrNotReady)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Outcomes) != 1 || result.Outcomes[0].Action != automations.ConvergenceActionCreated {
+		t.Fatalf("reconciliation outcome = %+v", result)
+	}
+	if got := lifecycle.counts(); got != (effectCounts{}) {
+		t.Fatalf("construction/reconciliation invoked lifecycle effects: %+v", got)
+	}
+	_, err = service.SourceStatus(context.Background(), automations.SourceStatusRequest{Identity: identity})
+	assertLifecycleError(t, err, automations.ErrorCodeNotFound, automations.ErrNotFound)
 }
 
 func TestSourceLifecycleRejectsKindDriftAndForeignWaitObservation(t *testing.T) {
@@ -677,7 +678,7 @@ func TestSourceLifecycleRejectsKindDriftAndForeignWaitObservation(t *testing.T) 
 		InstanceID: "persisted-effect-validation",
 		State:      automations.ObservedLifecycleRunning,
 	}
-	service := reconciliationwire.NewService()
+	service := reconciliationwire.NewService(lifecycleFixture{})
 	if _, err := service.StartSource(context.Background(), automations.StartSourceRequest{
 		Identity: identity,
 		Kind:     "hosted",
@@ -703,11 +704,11 @@ func TestSourceLifecycleRejectsKindDriftAndForeignWaitObservation(t *testing.T) 
 		t.Fatalf("WaitSource outcome = %+v, want idempotent convergence", waited.Outcome)
 	}
 
-	foreignEffects := reconciliation.Effects{
-		Start: func(context.Context, reconciliation.StartEffect) error {
+	foreignEffects := lifecycleFixture{
+		start: func(context.Context, reconciliation.StartEffect) error {
 			return nil
 		},
-		Wait: func(
+		wait: func(
 			_ context.Context,
 			effect reconciliation.WaitEffect,
 		) (automations.SourceObservation, error) {
@@ -747,14 +748,6 @@ type recordingEffects struct {
 	startErr   error
 	stopErr    error
 	waitErr    error
-}
-
-func (f *recordingEffects) bundle() reconciliation.Effects {
-	return reconciliation.Effects{
-		Start: f.Start,
-		Stop:  f.Stop,
-		Wait:  f.Wait,
-	}
 }
 
 func (f *recordingEffects) Start(_ context.Context, effect reconciliation.StartEffect) error {
@@ -910,3 +903,13 @@ func equalStrings(left, right []string) bool {
 	}
 	return true
 }
+
+func (*recordingEffects) ConfigureRuntimeSource(context.Context, sourcelifecycle.RuntimeSourceConfiguration) error {
+	return nil
+}
+func (*recordingEffects) ReleaseRuntimeSource(context.Context, string) error { return nil }
+
+func (*blockingStopEffects) ConfigureRuntimeSource(context.Context, sourcelifecycle.RuntimeSourceConfiguration) error {
+	return nil
+}
+func (*blockingStopEffects) ReleaseRuntimeSource(context.Context, string) error { return nil }

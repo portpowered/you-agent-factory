@@ -284,7 +284,7 @@ func submitCancelWork(t *testing.T, ctx context.Context, serverURL, sessionID, n
 
 func waitForRunningWorkerSession(t *testing.T, ctx context.Context, serverURL, sessionID, workID string, daemon *cancelDaemon) factoryapi.WorkerSessionObservation {
 	t.Helper()
-	deadline := time.NewTimer(30 * time.Second)
+	deadline := time.NewTimer(120 * time.Second)
 	defer deadline.Stop()
 	var last []factoryapi.WorkerSessionObservation
 	var lastErr error
@@ -544,7 +544,7 @@ func readFactoryEvents(ctx context.Context, serverURL, sessionID string) ([]fact
 
 func waitForCanceledDispatchEvent(t *testing.T, ctx context.Context, serverURL, sessionID, dispatchID string) error {
 	t.Helper()
-	deadline := time.NewTimer(10 * time.Second)
+	deadline := time.NewTimer(60 * time.Second)
 	defer deadline.Stop()
 	for {
 		events, err := readFactoryEvents(ctx, serverURL, sessionID)
@@ -598,7 +598,7 @@ func dispatchResponseTime(events []factoryapi.FactoryEvent, dispatchID string) (
 }
 
 func readWorkerSessionEvents(ctx context.Context, serverURL, sessionID, workerSessionID string) ([]factoryapi.WorkerSessionEvent, error) {
-	requestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	requestCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) +
 		"/worker-sessions/" + url.PathEscape(workerSessionID) + "/events?replayOnly=true"

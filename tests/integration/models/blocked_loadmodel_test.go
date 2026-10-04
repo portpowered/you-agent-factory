@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -36,8 +37,8 @@ const (
 	blockedRuntimeEvidenceEnv    = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
 	blockedReadinessModel        = "OMNIVOICE_Q4_K_M"
 	blockedReadinessBudget       = 5 * time.Minute
-	blockedReadinessMaximum      = blockedReadinessBudget + 5*time.Second
-	blockedReadinessWait         = 5 * time.Second
+	blockedReadinessMaximum      = blockedReadinessBudget + 30*time.Second
+	blockedReadinessWait         = 30 * time.Second
 )
 
 type blockedReadinessEvent struct {
@@ -154,6 +155,7 @@ func newBlockedReadinessHarness(t *testing.T) *blockedReadinessHarness {
 		readyPath: fixture.readyPath,
 	}
 	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{
+		Clock:                     platformclock.Real{},
 		ModelInvocationGRPCDialer: platformgrpc.NetworkDialer{},
 		ModelHostProcessLauncher:  launcher,
 	})

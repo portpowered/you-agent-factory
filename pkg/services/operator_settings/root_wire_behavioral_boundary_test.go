@@ -5,14 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
@@ -24,7 +22,6 @@ const rootWireIdentityFixtureRelative = "pkg/services/operator_settings/internal
 // Operator Settings exclusively through operator_settings/wire and proves
 // LoadDocument and ApplyDocumentUpdate preserve the published document results.
 func TestRootWireBehavioralBoundary_PublishedServicePersistsDocumentDefaults(t *testing.T) {
-	internaltestlink.RegisterComposition()
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -83,7 +80,6 @@ func TestRootWireBehavioralBoundary_PublishedServicePersistsDocumentDefaults(t *
 // proves ResolveEffective preserves provider normalization, invocation override
 // precedence, and config path results on the published service root.
 func TestRootWireBehavioralBoundary_PublishedServiceResolvesEffectiveSelection(t *testing.T) {
-	internaltestlink.RegisterComposition()
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -124,21 +120,12 @@ func TestRootWireBehavioralBoundary_PublishedServiceResolvesEffectiveSelection(t
 // constructs Operator Settings through its wire boundary and proves that
 // persisted backend scope identity and stale-scope conflicts remain stable.
 func TestRootWireBehavioralBoundary_PublishedServicePreservesBackendScopeAndConflict(t *testing.T) {
-	internaltestlink.RegisterComposition()
 	t.Parallel()
 
 	const scopeID = "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	configPath := writeRootWireIdentityFixtureToTemp(t)
 
-	root, err := settingswire.NewServiceFromConfigDocument(
-		rootWireConfigDocumentService(),
-		internaltestproviders.StandardCatalog(),
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() = %v", err)
-	}
+	root := newRootWireBehavioralService(t)
 	var service operatorsettings.Service = root
 
 	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{
@@ -183,7 +170,6 @@ func TestRootWireBehavioralBoundary_PublishedServicePreservesBackendScopeAndConf
 // constructs Operator Settings through its wire boundary and proves the
 // published document and effective-resolution errors retain their typed forms.
 func TestRootWireBehavioralBoundary_PublishedServicePreservesTypedFailures(t *testing.T) {
-	internaltestlink.RegisterComposition()
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -264,19 +250,17 @@ func TestRootWireBehavioralBoundary_PublishedServicePreservesTypedFailures(t *te
 func newRootWireBehavioralService(t *testing.T) operatorsettings.Service {
 	t.Helper()
 
-	providersRoot := internaltestproviders.StandardCatalog()
-	service, err := settingswire.NewServiceFromConfigDocument(
-		operatorsettings.ConfigDocumentService{
-			Files:      platformfilesystem.Local{},
-			CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
-			Decoder:    globalconfigmapping.Decode,
-			Encoder:    globalconfigmapping.Encode,
-			Providers:  rootWireProviderCatalog,
-		},
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
+	files := platformfilesystem.Local{}
+	createTemp := func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) }
+	document := settingswire.NewDocumentService(files, createTemp, globalconfigmapping.Decode,
+		globalconfigmapping.Encode, rootWireProviderCatalog, nil, nil)
+	resolution, err := settingswire.NewResolutionService(internaltestproviders.StandardCatalog())
+	if err != nil {
+		t.Fatalf("NewResolutionService() = %v", err)
+	}
+	service, err := settingswire.NewService(document, resolution, files, createTemp,
+		globalconfigmapping.Decode, globalconfigmapping.Encode,
+		func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{}, nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -297,19 +281,6 @@ func rootWireProviderCatalog(value string) (string, bool) {
 	default:
 		return "", false
 	}
-}
-
-func rootWireConfigDocumentService() operatorsettings.ConfigDocumentService {
-	return settingswire.NewConfigDocumentService(
-		platformfilesystem.Local{},
-		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
-		rootWireProviderCatalog,
-		&sync.Mutex{},
-	)
 }
 
 func writeRootWireIdentityFixtureToTemp(t *testing.T) string {

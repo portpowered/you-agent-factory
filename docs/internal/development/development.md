@@ -132,6 +132,10 @@ matching lane config.
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
 
+### Main merge queue
+
+`main` uses a GitHub merge queue. `.github/workflows/ci.yml` also runs on `merge_group` (`checks_requested`), so the required checks (Backend Lint and Verification Policy) report for the queued merge commit. Classification diffs `github.event.merge_group.base_sha` against `head_sha` because merge group events carry no pull request payload. Enqueue a green PR with `gh pr merge <n> --squash`; GitHub tests it against the latest `main` and merges it, so there is no need to rebase a green PR to avoid a stale-green head.
+
 Managed local-model runtime coverage remains an opt-in specialty check through `make long-tests-managed-runtime`. The former end-to-end long-inference workflow and classifier lane have been retired; short and package-level model coverage remain part of their owning verification surfaces.
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.

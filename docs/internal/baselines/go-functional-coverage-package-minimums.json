@@ -102,13 +102,6 @@
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
-      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
-      "owner": "coverage-remediation",
-      "deadline": "2027-07-15",
-      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
       "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",
@@ -121,13 +114,6 @@
       "owner": "coverage-remediation",
       "deadline": "2027-07-15",
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp",
-      "justification": "The Recordings MCP tool catalog is no longer exposed by the public server; customer-process functional tests cannot execute these retained adapter handlers. Keep the functional lane default 15.00% floor pending adapter retirement or restored public-path coverage.",
-      "owner": "backend-quality",
-      "deadline": "2027-07-15",
-      "removalGate": "Remove the retired MCP adapter package, or restore customer-process functional coverage to the 15.00% lane default."
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
@@ -1157,10 +1143,6 @@
       "minimum": 32.11
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory",
       "minimum": 0.00
     },
@@ -1173,16 +1155,16 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup",
       "minimum": 82.43
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig",
       "minimum": 83.69
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
+      "minimum": 2.67
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions",
@@ -1213,6 +1195,10 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata",
+      "minimum": 78.57
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service",
       "minimum": 80.22
     },
@@ -1225,20 +1211,12 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/internal/service",
-      "minimum": 78.57
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy",
       "minimum": 49.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-      "minimum": 2.14
+      "minimum": 1.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",

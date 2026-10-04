@@ -65,7 +65,7 @@ func (stubDefinitionHost) PrepareFactoryLayoutPayload(
 		context.Background(),
 		segment,
 		payload,
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, testCanonicalFactoryLoader),
 	)
 }
 func (stubDefinitionHost) PersistNamedFactoryWithPrepared(
@@ -311,7 +311,7 @@ func (h saveDefinitionHostAdapter) PrepareFactoryLayoutPayload(
 		context.Background(),
 		segment,
 		payload,
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, testCanonicalFactoryLoader),
 	)
 }
 

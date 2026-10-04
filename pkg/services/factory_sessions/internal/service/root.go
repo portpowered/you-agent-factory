@@ -8,8 +8,10 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -24,6 +26,9 @@ var _ roles.RuntimeAssembly = (*Root)(nil)
 // service. The canonical public root is wrapped around this same assembly only
 // after its process-scoped opening capability has been built.
 func NewAssembly(
+	registry sessionregistry.Service,
+	state *sessionruntime.Service,
+	streams legacyservice.StreamManager,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -60,6 +65,7 @@ func NewAssembly(
 		return nil, err
 	}
 	assemblyRole := legacyservice.NewAssembly(
+		registry, state, streams,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,

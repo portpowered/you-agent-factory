@@ -8,16 +8,17 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
-	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
 
 type applicationService struct {
-	runtimes             work.RuntimeResolver
-	readSubmittedFile    work.SubmittedFileReader
-	inspectSubmittedFile work.SubmittedFilePathInspector
-	contentStaging       work.ContentStagingService
-	contentMaterializer  work.ContentMaterializer
-	stateAccess          stateaccess.Service
+	runtimes              work.RuntimeResolver
+	readSubmittedFile     work.SubmittedFileReader
+	inspectSubmittedFile  work.SubmittedFilePathInspector
+	contentStaging        work.ContentStagingService
+	contentMaterializer   work.ContentMaterializer
+	stateAccess           stateaccess.Service
+	preparation           work.RequestPreparationService
+	invocationPreparation work.InvocationInputPreparation
 }
 
 // Compile-time proof that production applicationService seals the published Work
@@ -28,27 +29,26 @@ var (
 )
 
 // NewService constructs the Work root contract for composition. Content staging
-// and materialization may be nil when a caller only needs admission/state-access
-// slices; content methods then return a deterministic configuration error.
+// and materialization are completed capabilities selected by composition.
 func NewService(
 	runtimes work.RuntimeResolver,
 	readSubmittedFile work.SubmittedFileReader,
 	inspectSubmittedFile work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
-	durability ...work.CompletedFlushSequenceReader,
+	stateAccess stateaccess.Service,
+	preparation work.RequestPreparationService,
+	invocationPreparation work.InvocationInputPreparation,
 ) work.FileSubmissionService {
 	return &applicationService{
-		runtimes:             runtimes,
-		readSubmittedFile:    readSubmittedFile,
-		inspectSubmittedFile: inspectSubmittedFile,
-		contentStaging:       contentStaging,
-		contentMaterializer:  contentMaterializer,
-		stateAccess: stateaccesswire.NewService(
-			stateaccesswire.NewRuntimeSessionResolver(runtimes),
-			nil,
-			durability...,
-		),
+		runtimes:              runtimes,
+		readSubmittedFile:     readSubmittedFile,
+		inspectSubmittedFile:  inspectSubmittedFile,
+		contentStaging:        contentStaging,
+		contentMaterializer:   contentMaterializer,
+		stateAccess:           stateAccess,
+		preparation:           preparation,
+		invocationPreparation: invocationPreparation,
 	}
 }
 
@@ -86,9 +86,6 @@ func (s *applicationService) SubmitWorkRequestForSession(
 	sessionID string,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	if s == nil || s.stateAccess == nil {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("Work state access is required")
-	}
 	return s.stateAccess.SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
@@ -96,11 +93,7 @@ func (s *applicationService) PrepareWorkRequest(
 	ctx context.Context,
 	input work.WorkRequestPreparation,
 ) (work.WorkRequest, error) {
-	preparation, err := work.NewRequestPreparationService(work.NewContentPreparation())
-	if err != nil {
-		return work.WorkRequest{}, err
-	}
-	return preparation.PrepareWorkRequest(ctx, input)
+	return s.preparation.PrepareWorkRequest(ctx, input)
 }
 
 func (s *applicationService) MoveWorkForSession(
@@ -110,9 +103,6 @@ func (s *applicationService) MoveWorkForSession(
 	stateName string,
 	requestID string,
 ) (work.OperatorMoveResult, error) {
-	if s == nil || s.stateAccess == nil {
-		return work.OperatorMoveResult{}, fmt.Errorf("Work state access is required")
-	}
 	return s.stateAccess.MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
 }
 
@@ -120,9 +110,6 @@ func (s *applicationService) StageContent(
 	ctx context.Context,
 	request work.StageContentRequest,
 ) (work.StageContentResult, error) {
-	if s == nil || s.contentStaging == nil {
-		return work.StageContentResult{}, fmt.Errorf("Work content staging is required")
-	}
 	return s.contentStaging.StageContent(ctx, request)
 }
 
@@ -130,9 +117,6 @@ func (s *applicationService) PrepareContent(
 	ctx context.Context,
 	items []work.StagedSubmissionItem,
 ) ([]work.WorkContentPart, error) {
-	if s == nil || s.contentStaging == nil {
-		return nil, fmt.Errorf("Work content staging is required")
-	}
 	return s.contentStaging.PrepareContent(ctx, items)
 }
 
@@ -140,16 +124,10 @@ func (s *applicationService) ResolveContent(
 	ctx context.Context,
 	ref string,
 ) (work.ResolvedStagedContent, error) {
-	if s == nil || s.contentStaging == nil {
-		return work.ResolvedStagedContent{}, fmt.Errorf("Work content staging is required")
-	}
 	return s.contentStaging.ResolveContent(ctx, ref)
 }
 
 func (s *applicationService) CleanupContent(ctx context.Context, ref string) error {
-	if s == nil || s.contentStaging == nil {
-		return fmt.Errorf("Work content staging is required")
-	}
 	return s.contentStaging.CleanupContent(ctx, ref)
 }
 
@@ -157,9 +135,6 @@ func (s *applicationService) MaterializeContentURL(
 	ctx context.Context,
 	rawURL string,
 ) (string, work.ContentCleanup, error) {
-	if s == nil || s.contentMaterializer == nil {
-		return "", nil, fmt.Errorf("Work content materializer is required")
-	}
 	return s.contentMaterializer.MaterializeContentURL(ctx, rawURL)
 }
 
@@ -174,10 +149,7 @@ func (s *applicationService) PrepareInvocationInput(
 	ctx context.Context,
 	request work.InvocationInputPreparationRequest,
 ) (work.PreparedInvocationInput, error) {
-	prepared, err := work.NewInvocationInputPreparation(
-		s.readSubmittedFile,
-		s.inspectSubmittedFile,
-	).PrepareInvocationInput(ctx, request)
+	prepared, err := s.invocationPreparation.PrepareInvocationInput(ctx, request)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return work.PreparedInvocationInput{}, err

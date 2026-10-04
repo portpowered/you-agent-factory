@@ -93,6 +93,9 @@ func (runner *controlledACPCommandRunner) Run(
 
 	prompt := string(request.Stdin)
 	switch {
+	case strings.Contains(prompt, "[selected-recovery]"):
+		// The later request wins over the failed turn retained in prompt history.
+		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"selected recovery answer"}`), nil
 	case strings.Contains(prompt, "[cohort-failure]"):
 		return controlledACPResult("not a decision envelope"), nil
 	case strings.Contains(prompt, "[cohort-busy-concurrent]"):

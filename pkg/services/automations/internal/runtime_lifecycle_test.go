@@ -2,14 +2,26 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
+	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -17,8 +29,8 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+func TestRuntimeLifecycle_IsolatesRuntimeStateAndClassifiesDuplicates(t *testing.T) {
+	service := newTestService(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	root := service.Root()
 	ctx := context.Background()
 
@@ -31,9 +43,6 @@ func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
 		t.Fatalf("ActivateRuntime(beta) error = %v", err)
 	}
 
-	if service.runtimes[alpha.RuntimeID] == service.runtimes[beta.RuntimeID] {
-		t.Fatal("runtime activations share an Automations owner")
-	}
 	alpha.Snapshot.EffectiveFactory.Name = "mutated-after-activation"
 	duplicate, err := root.ActivateRuntime(ctx, runtimeActivationRequestForTest("runtime-alpha", "alpha"))
 	if err != nil {
@@ -52,8 +61,8 @@ func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
 	if err != nil || stopped.State != automations.RuntimeLifecycleStopped {
 		t.Fatalf("DeactivateRuntime(alpha) = %#v, %v", stopped, err)
 	}
-	if _, ok := service.runtimes[beta.RuntimeID]; !ok {
-		t.Fatal("deactivating alpha removed beta runtime state")
+	if err := root.StartRuntime(ctx, beta.RuntimeID); err != nil {
+		t.Fatalf("peer runtime after alpha stop = %v", err)
 	}
 	idempotent, err := root.DeactivateRuntime(ctx, automations.RuntimeDeactivationRequest{RuntimeID: alpha.RuntimeID})
 	if err != nil || !idempotent.Idempotent {
@@ -65,7 +74,7 @@ func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_RejectsMissingIdentityWithTypedError(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := newTestService(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	_, err := service.Root().ActivateRuntime(context.Background(), automations.RuntimeActivationRequest{})
 	var typed *automations.Error
 	if !errors.As(err, &typed) || typed.Code != automations.ErrorCodeInvalid {
@@ -74,7 +83,7 @@ func TestRuntimeLifecycle_RejectsMissingIdentityWithTypedError(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := newTestService(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	base := runtimeActivationRequestForTest("runtime-input-conflict", "same")
 	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
 		t.Fatalf("ActivateRuntime(base) error = %v", err)
@@ -98,7 +107,7 @@ func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *tes
 }
 
 func TestRuntimeLifecycle_TreatsEquivalentOpaqueEffectsAsIdempotent(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := newTestService(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	base := runtimeActivationRequestForTest("runtime-opaque-effects", "same")
 	base.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
 	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
@@ -117,7 +126,7 @@ func TestRuntimeLifecycle_TreatsEquivalentOpaqueEffectsAsIdempotent(t *testing.T
 }
 
 func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := newTestService(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	request := runtimeActivationRequestForTest("runtime-scheduler", "scheduler")
 	request.Inputs.StartSchedulers = true
 	request.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
@@ -164,10 +173,10 @@ func TestRuntimeLifecycle_ReportsFilesystemWatcherTermination(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			logCore, observedLogs := observer.New(zap.InfoLevel)
-			instance, cancel := runtimeInstanceForWatcherTest(zap.New(logCore), test.watch)
+			service, instance, cancel := runtimeInstanceForWatcherTest(zap.New(logCore), test.watch)
 			defer cancel()
 
-			if err := instance.start(context.Background()); err != nil {
+			if err := service.startRuntimeInstance(context.Background(), instance); err != nil {
 				t.Fatalf("runtimeInstance.start() error = %v", err)
 			}
 			instance.sidecars.Wait()
@@ -199,12 +208,12 @@ func TestRuntimeLifecycle_ReportsFilesystemWatcherTermination(t *testing.T) {
 
 func TestRuntimeLifecycle_DoesNotReportFilesystemWatcherCancellation(t *testing.T) {
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	instance, cancel := runtimeInstanceForWatcherTest(zap.New(logCore), func(ctx context.Context) error {
+	service, instance, cancel := runtimeInstanceForWatcherTest(zap.New(logCore), func(ctx context.Context) error {
 		<-ctx.Done()
 		return ctx.Err()
 	})
 
-	if err := instance.start(context.Background()); err != nil {
+	if err := service.startRuntimeInstance(context.Background(), instance); err != nil {
 		t.Fatalf("runtimeInstance.start() error = %v", err)
 	}
 	cancel()
@@ -234,12 +243,12 @@ func (w runtimeLifecycleWatcher) Watch(ctx context.Context) error {
 func runtimeInstanceForWatcherTest(
 	logger *zap.Logger,
 	watch func(context.Context) error,
-) (*runtimeInstance, context.CancelFunc) {
+) (*Service, *runtimeInstance, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &runtimeInstance{
+	service := newTestService(logger, clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	return service, &runtimeInstance{
 		runtimeID:   "runtime-watcher-diagnostic",
 		watcherRoot: "/factories/example/inputs",
-		owner:       New(logger, nil, nil, "", "", nil, nil, nil),
 		watcher:     runtimeLifecycleWatcher{watch: watch},
 		ctx:         ctx,
 		cancel:      cancel,
@@ -386,7 +395,7 @@ func TestRuntimeLifecycle_OpaqueIdentityUsesPresenceAndType(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_CleansPendingAndMatchingRegistryEntries(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := newTestService(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	service.runtimeActivating["runtime-pending"] = struct{}{}
 	service.clearRuntimeActivation("runtime-pending")
 	if _, ok := service.runtimeActivating["runtime-pending"]; ok {
@@ -438,7 +447,7 @@ func TestRuntimeLifecycle_ClonesSnapshotConfigCollections(t *testing.T) {
 }
 
 func TestNewFilesystemWatcherUsesServiceOwnerAndHandlesNilOwner(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "workflow", "", nil, nil, nil)
+	service := newTestService(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "workflow", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	watcher := service.NewFilesystemWatcher(automations.FilesystemWatcherConfig{
 		Dir:            t.TempDir(),
 		Files:          watcherInputFilesystem{},
@@ -456,16 +465,10 @@ func TestNewFilesystemWatcherUsesServiceOwnerAndHandlesNilOwner(t *testing.T) {
 	}
 }
 
-func TestServiceDefaultEdgesRemainSafeForNilAndMissingCommandRunner(t *testing.T) {
+func TestNilServiceRootHasNoPublishedCapabilities(t *testing.T) {
 	var nilService *Service
 	if root := nilService.Root(); root.Operations != nil || root.Lifecycle != nil || root.Runtime != nil {
 		t.Fatalf("nil service Root() = %#v, want empty root", root)
-	}
-	if nilService.logger() == nil || nilService.commandRunner() == nil || nilService.supervisorClock() == nil {
-		t.Fatal("nil service default collaborators were not supplied")
-	}
-	if _, err := (unavailableCommandRunner{}).Run(context.Background(), platformprocess.CommandRequest{}); err == nil || err.Error() != "automation command runner is required" {
-		t.Fatalf("unavailable command runner error = %v", err)
 	}
 }
 
@@ -497,5 +500,481 @@ func runtimeActivationRequestForTest(runtimeID, factoryName string) automations.
 			Invocation:       factorydefinitions.RuntimeSnapshotInvocationContext{FactorySessionID: "session-1"},
 			EffectiveFactory: factorydefinitions.FactoryConfig{Name: factoryName},
 		},
+	}
+}
+
+// These characterize owner-local lifecycle behavior before the per-runtime graph
+// is removed. Commands, admission and scheduling are controlled; only the owned
+// cursor persistence uses a test-local filesystem.
+func TestRuntimeLifecycle_ReactivationStopsPriorAdmissionAndResumesCursor(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+	clock := clockwork.NewFakeClock()
+	runner := &lifecycleCursorRunner{calls: make(chan lifecycleCursorCall, 8)}
+	service := newTestServiceWithCursorFileSystem(zap.NewNop(), clock, runner, "", "", nil, nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{}, platformfilesystem.Local{},
+		cronwire.NewService(),
+		fswire.NewService(),
+	)
+	aAdmissions, bAdmissions := make(chan work.WorkRequest, 8), make(chan work.WorkRequest, 8)
+	a := cursorRuntimeRequest(t, "A", "workflow-A", aAdmissions)
+	b := cursorRuntimeRequest(t, "B", "workflow-B", bAdmissions)
+	activateCursorRuntime(t, ctx, service, a)
+	activateCursorRuntime(t, ctx, service, b)
+	for range 2 {
+		call := awaitLifecycleCursorCall(t, ctx, runner)
+		if slices.Contains(call.request.Env, scriptpollers.ScriptPollerCursorEnvVar+"=cursor-A") ||
+			slices.Contains(call.request.Env, scriptpollers.ScriptPollerCursorEnvVar+"=cursor-B") {
+			t.Fatal("fresh command unexpectedly resumed a prior cursor")
+		}
+		id := "B"
+		if call.request.WorkDir == a.Snapshot.FactoryDir {
+			id = "A"
+		} else if call.request.WorkDir != b.Snapshot.FactoryDir {
+			t.Fatalf("unexpected command directory %q", call.request.WorkDir)
+		}
+		call.complete <- cursorPollerOutput(id)
+	}
+	awaitCursorAdmission(t, ctx, aAdmissions, "request-A")
+	awaitCursorAdmission(t, ctx, bAdmissions, "request-B")
+	if err := clock.BlockUntilContext(ctx, 2); err != nil {
+		t.Fatalf("wait for committed polls/backoff: %v", err)
+	}
+	assertLifecycleCursor(t, ctx, service, "workflow-A", "A")
+	stopCursorRuntime(t, ctx, service, a.RuntimeID)
+	clock.Advance(time.Second)
+	bCall := awaitLifecycleCursorCall(t, ctx, runner)
+	assertCursorCommand(t, bCall.request, b.Snapshot.FactoryDir, "B")
+	bCall.complete <- cursorPollerOutput("B")
+	awaitCursorAdmission(t, ctx, bAdmissions, "request-B")
+	if err := clock.BlockUntilContext(ctx, 1); err != nil {
+		t.Fatalf("wait for peer commit: %v", err)
+	}
+	select {
+	case admission := <-aAdmissions:
+		t.Fatalf("A admitted while stopped: %+v", admission)
+	default:
+	}
+	select {
+	case call := <-runner.calls:
+		t.Fatalf("unexpected command while A stopped and B waiting: %+v", call.request)
+	default:
+	}
+	activateCursorRuntime(t, ctx, service, a)
+	assertLifecycleCursor(t, ctx, service, "workflow-A", "A")
+	aCall := awaitLifecycleCursorCall(t, ctx, runner)
+	assertCursorCommand(t, aCall.request, a.Snapshot.FactoryDir, "A")
+	aCall.complete <- cursorPollerOutput("A")
+	awaitCursorAdmission(t, ctx, aAdmissions, "request-A")
+	stopCursorRuntime(t, ctx, service, a.RuntimeID)
+	stopCursorRuntime(t, ctx, service, b.RuntimeID)
+}
+
+func TestRuntimeLifecycle_MemoryRecoveryReleasedAfterStopWithoutAffectingPeerOrReplacement(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service := newTestService(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
+	a := cursorRuntimeRequest(t, "memory-A", "workflow-A", make(chan work.WorkRequest, 1))
+	b := cursorRuntimeRequest(t, "memory-B", "workflow-B", make(chan work.WorkRequest, 1))
+	for _, request := range []automations.RuntimeActivationRequest{a, b} {
+		if _, err := service.ActivateRuntime(ctx, request); err != nil {
+			t.Fatalf("ActivateRuntime: %v", err)
+		}
+		t.Cleanup(func() { stopCursorRuntime(t, ctx, service, request.RuntimeID) })
+		seedRuntimeCursor(t, service, service.runtimes[request.RuntimeID], request.RuntimeID)
+	}
+	old := service.runtimes[a.RuntimeID]
+	stopCursorRuntime(t, ctx, service, a.RuntimeID)
+	assertLifecycleCursor(t, ctx, service, "workflow-B", b.RuntimeID)
+	if _, err := service.ActivateRuntime(ctx, a); err != nil {
+		t.Fatalf("reactivate A: %v", err)
+	}
+	instanceID := scriptpollers.SupervisionFor("workflow-A", internalCanonicalScriptPollerWorkstation().Name).InstanceID
+	_, err := service.Root().GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
+	assertCursorReadError(t, err, automations.ErrorCodeNotFound, automations.ErrNotFound)
+	seedRuntimeCursor(t, service, service.runtimes[a.RuntimeID], "replacement")
+	if err := service.stopRuntimeInstance(ctx, old); err != nil {
+		t.Fatalf("repeat old stop: %v", err)
+	}
+	assertLifecycleCursor(t, ctx, service, "workflow-A", "replacement")
+	assertLifecycleCursor(t, ctx, service, "workflow-B", b.RuntimeID)
+	if _, err := service.getRuntimeCursor(ctx, old, automations.GetCursorRequest{InstanceID: instanceID}); !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("retained stopped instance read = %v, want not found", err)
+	}
+}
+
+type lifecycleCursorCall struct {
+	request  platformprocess.CommandRequest
+	complete chan []byte
+}
+
+type lifecycleCursorRunner struct {
+	calls chan lifecycleCursorCall
+}
+
+func (r *lifecycleCursorRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	call := lifecycleCursorCall{request: request, complete: make(chan []byte, 1)}
+	select {
+	case r.calls <- call:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	select {
+	case stdout := <-call.complete:
+		return platformprocess.CommandResult{Stdout: stdout}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
+func cursorPollerOutput(id string) []byte {
+	output, _ := json.Marshal(map[string]any{
+		"requestId": "request-" + id, "type": "FACTORY_REQUEST_BATCH",
+		"works":  []map[string]string{{"name": "work-" + id, "workTypeName": "task"}},
+		"cursor": "cursor-" + id, "checkpoint": "checkpoint-" + id,
+	})
+	return output
+}
+
+func cursorRuntimeRequest(t *testing.T, id, workflowID string, admissions chan work.WorkRequest) automations.RuntimeActivationRequest {
+	t.Helper()
+	request := runtimeActivationRequestForTest("runtime-"+id, id)
+	request.FactorySessionID = "session-" + id
+	request.Snapshot.Invocation.FactorySessionID = request.FactorySessionID
+	request.Snapshot.Invocation.WorkflowID = workflowID
+	request.Snapshot.FactoryDir = t.TempDir()
+	request.Snapshot.RuntimeBaseDir = request.Snapshot.FactoryDir
+	request.Snapshot.EffectiveFactory.Workers = []factorydefinitions.FactoryWorkerConfig{*internalCanonicalScriptPollerWorker()}
+	request.Snapshot.EffectiveFactory.Workstations = []factorydefinitions.FactoryWorkstationConfig{internalCanonicalScriptPollerWorkstation()}
+	request.Inputs.StartSchedulers = true
+	request.Inputs.Submitter = func(ctx context.Context, request work.WorkRequest) error {
+		select {
+		case admissions <- request:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return request
+}
+
+func activateCursorRuntime(t *testing.T, ctx context.Context, service *Service, request automations.RuntimeActivationRequest) {
+	t.Helper()
+	if _, err := service.ActivateRuntime(ctx, request); err != nil {
+		t.Fatalf("ActivateRuntime(%s): %v", request.RuntimeID, err)
+	}
+	t.Cleanup(func() { stopCursorRuntime(t, context.Background(), service, request.RuntimeID) })
+	if err := service.StartRuntime(ctx, request.RuntimeID); err != nil {
+		t.Fatalf("StartRuntime(%s): %v", request.RuntimeID, err)
+	}
+}
+
+func stopCursorRuntime(t *testing.T, ctx context.Context, service *Service, id string) {
+	t.Helper()
+	result, err := service.DeactivateRuntime(ctx, automations.RuntimeDeactivationRequest{RuntimeID: id})
+	if err != nil || result.State != automations.RuntimeLifecycleStopped {
+		t.Fatalf("DeactivateRuntime(%s): %+v, %v", id, result, err)
+	}
+}
+
+func awaitLifecycleCursorCall(t *testing.T, ctx context.Context, runner *lifecycleCursorRunner) lifecycleCursorCall {
+	t.Helper()
+	select {
+	case call := <-runner.calls:
+		return call
+	case <-ctx.Done():
+		t.Fatalf("wait for command: %v", ctx.Err())
+		return lifecycleCursorCall{}
+	}
+}
+
+func awaitCursorAdmission(t *testing.T, ctx context.Context, admissions <-chan work.WorkRequest, id string) {
+	t.Helper()
+	select {
+	case request := <-admissions:
+		if request.RequestID != id || request.Type != work.WorkRequestTypeFactoryRequestBatch {
+			t.Fatalf("admission = %+v, want batch %s", request, id)
+		}
+	case <-ctx.Done():
+		t.Fatalf("wait for admission %s: %v", id, ctx.Err())
+	}
+}
+
+func assertCursorCommand(t *testing.T, request platformprocess.CommandRequest, dir, id string) {
+	t.Helper()
+	if request.WorkDir != dir || !slices.Contains(request.Env, scriptpollers.ScriptPollerCursorEnvVar+"=cursor-"+id) ||
+		!slices.Contains(request.Env, scriptpollers.ScriptPollerCheckpointEnvVar+"=checkpoint-"+id) {
+		t.Fatalf("resumed command = %+v, want directory %s and %s recovery facts", request, dir, id)
+	}
+}
+
+func assertLifecycleCursor(t *testing.T, ctx context.Context, service *Service, workflowID, id string) {
+	t.Helper()
+	instanceID := scriptpollers.SupervisionFor(workflowID, internalCanonicalScriptPollerWorkstation().Name).InstanceID
+	got, err := service.Root().GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
+	if err != nil || got.AutomationID != workflowID || got.Cursor != automations.Cursor("cursor-"+id) || got.Checkpoint != "checkpoint-"+id {
+		t.Fatalf("GetCursor(%s) = %+v, %v", id, got, err)
+	}
+}
+
+func TestGetCursorWithTwoRuntimesSharingPollerInstanceID(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	files := &cursorReadFaultFileSystem{faults: make(map[string]error)}
+	service := newTestServiceWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "shared-workflow", "", nil, nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files,
+		cronwire.NewService(),
+		fswire.NewService(),
+	)
+	a := cursorRuntimeRequest(t, "shared-A", "shared-workflow", make(chan work.WorkRequest, 1))
+	b := cursorRuntimeRequest(t, "shared-B", "shared-workflow", make(chan work.WorkRequest, 1))
+	for _, request := range []automations.RuntimeActivationRequest{a, b} {
+		if _, err := service.ActivateRuntime(ctx, request); err != nil {
+			t.Fatalf("ActivateRuntime: %v", err)
+		}
+		t.Cleanup(func() { stopCursorRuntime(t, ctx, service, request.RuntimeID) })
+	}
+	seedRuntimeCursor(t, service, service.runtimes[a.RuntimeID], "A")
+	seedRuntimeCursor(t, service, service.runtimes[b.RuntimeID], "B")
+	instanceID := scriptpollers.SupervisionFor("shared-workflow", internalCanonicalScriptPollerWorkstation().Name).InstanceID
+	assertSharedCursorSelection(t, service, instanceID)
+	assertSharedCursorReadFailures(t, service, instanceID, files, a.Snapshot.FactoryDir, b.Snapshot.FactoryDir)
+}
+
+func assertSharedCursorSelection(t *testing.T, service *Service, instanceID string) {
+	t.Helper()
+	ctx := context.Background()
+	request := automations.GetCursorRequest{InstanceID: instanceID}
+	got, err := service.Root().GetCursor(ctx, request)
+	if err != nil || got.AutomationID != "shared-workflow" || got.InstanceID != instanceID ||
+		!((got.Cursor == "cursor-A" && got.Checkpoint == "checkpoint-A") || (got.Cursor == "cursor-B" && got.Checkpoint == "checkpoint-B")) {
+		t.Fatalf("unscoped read = %+v, %v, want complete A or B facts", got, err)
+	}
+	// Map order is intentionally unspecified. A conflicting first candidate
+	// terminates the search even if a later candidate matches ExpectedCursor.
+	request.ExpectedCursor = "cursor-A"
+	got, err = service.Root().GetCursor(ctx, request)
+	if err == nil {
+		if got.Cursor != "cursor-A" || got.Checkpoint != "checkpoint-A" {
+			t.Fatalf("matching read = %+v, want A facts", got)
+		}
+	} else {
+		assertCursorReadError(t, err, automations.ErrorCodeConflict, automations.ErrConflict)
+	}
+	request.ExpectedCursor = "stale"
+	_, err = service.Root().GetCursor(ctx, request)
+	assertCursorReadError(t, err, automations.ErrorCodeConflict, automations.ErrConflict)
+}
+
+func assertSharedCursorReadFailures(t *testing.T, service *Service, instanceID string, files *cursorReadFaultFileSystem, aDir, bDir string) {
+	t.Helper()
+	ctx := context.Background()
+	request := automations.GetCursorRequest{InstanceID: instanceID}
+	// A missing candidate is skipped. Other failures stop the lookup. Force
+	// these permutations at the cursor IO boundary without relying on map order.
+	files.faults[aDir] = fs.ErrNotExist
+	got, err := service.Root().GetCursor(ctx, request)
+	if err != nil || got.Cursor != "cursor-B" || got.Checkpoint != "checkpoint-B" {
+		t.Fatalf("missing A read = %+v, %v, want B facts", got, err)
+	}
+	readErr := errors.New("cursor read unavailable")
+	files.faults[aDir] = readErr
+	got, err = service.Root().GetCursor(ctx, request)
+	if err != nil {
+		assertCursorReadError(t, err, automations.ErrorCodeFailed, readErr)
+	} else if got.Cursor != "cursor-B" || got.Checkpoint != "checkpoint-B" {
+		t.Fatalf("failed A/live B read = %+v, want B facts or first-candidate failure", got)
+	}
+	files.faults[aDir] = fs.ErrNotExist
+	files.faults[bDir] = readErr
+	_, err = service.Root().GetCursor(ctx, request)
+	assertCursorReadError(t, err, automations.ErrorCodeFailed, readErr)
+	files.faults[bDir] = fs.ErrNotExist
+	_, err = service.Root().GetCursor(ctx, request)
+	assertCursorReadError(t, err, automations.ErrorCodeNotFound, automations.ErrNotFound)
+}
+
+type cursorReadFaultFileSystem struct {
+	platformfilesystem.Local
+	faults map[string]error
+	reads  int
+}
+
+func (f *cursorReadFaultFileSystem) ReadFile(path string) ([]byte, error) {
+	f.reads++
+	for dir, err := range f.faults {
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return nil, err
+		}
+	}
+	return f.Local.ReadFile(path)
+}
+
+func assertCursorReadError(t *testing.T, err error, code automations.ErrorCode, sentinel error) {
+	t.Helper()
+	var typed *automations.Error
+	if !errors.As(err, &typed) || typed.Op != scriptpollers.GetCursorOperation || typed.Code != code || !errors.Is(err, sentinel) {
+		t.Fatalf("cursor error = %v, want %s/%s wrapping %v", err, scriptpollers.GetCursorOperation, code, sentinel)
+	}
+}
+
+func seedLifecycleCursor(t *testing.T, service *Service, dir, id string) {
+	t.Helper()
+	poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
+	runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: cursorPollerOutput(id)}}}}
+	err := runScopedScriptPollerFixture(service, context.Background(), runner, internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker), poller, worker,
+		func(context.Context, work.WorkRequest) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("seed poll error = %v, want terminal exit after successful commit", err)
+	}
+}
+
+func TestNewRootWithoutFactoryDirKeepsCursorInMemory(t *testing.T) {
+	t.Parallel()
+	files := &cursorReadFaultFileSystem{faults: map[string]error{".": errors.New("unexpected cursor filesystem use")}}
+	service := newTestServiceWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "memory-workflow", "", nil, nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files,
+		cronwire.NewService(),
+		fswire.NewService(),
+	)
+	seedLifecycleCursor(t, service, t.TempDir(), "memory")
+	assertLifecycleCursor(t, context.Background(), service, "memory-workflow", "memory")
+	if files.reads != 0 {
+		t.Fatalf("blank-base cursor filesystem reads = %d, want memory only", files.reads)
+	}
+	second := newTestServiceWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "memory-workflow", "", nil, nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files,
+		cronwire.NewService(),
+		fswire.NewService(),
+	)
+	instanceID := scriptpollers.SupervisionFor("memory-workflow", internalCanonicalScriptPollerWorkstation().Name).InstanceID
+	_, err := second.Root().GetCursor(context.Background(), automations.GetCursorRequest{InstanceID: instanceID})
+	assertCursorReadError(t, err, automations.ErrorCodeNotFound, automations.ErrNotFound)
+	if files.reads != 0 {
+		t.Fatal("reconstructed blank-base owner consulted durable storage")
+	}
+}
+
+// The injected services are reused across activations, while each watcher and
+// Work admission destination still belongs to its configured runtime.
+func TestRuntimeLifecycle_UsesInjectedCronAndWatcherOperations(t *testing.T) {
+	t.Parallel()
+	clock := clockwork.NewFakeClock()
+	crons := &runtimeCronRecorder{}
+	watchers := &runtimeWatcherRecorder{}
+	service := newTestService(zap.NewNop(), clock, &internalScriptPollerRunner{}, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, crons, watchers)
+	if crons.calls != 0 || len(watchers.roots) != 0 {
+		t.Fatal("construction executed source operations")
+	}
+	for _, name := range []string{"alpha", "beta"} {
+		request := injectedSourceActivation(name)
+		request.Inputs.StartSchedulers = true
+		request.Snapshot.Invocation.WorkflowID = name
+		request.Snapshot.EffectiveFactory.Workstations = []factorydefinitions.FactoryWorkstationConfig{{Name: "clock", Kind: factorydefinitions.WorkstationKindCron, Cron: &factorydefinitions.CronConfig{Every: "1h", TriggerAtStart: true}}}
+		var observed string
+		request.Inputs.Submitter = func(_ context.Context, request work.WorkRequest) error { observed = request.RequestID; return nil }
+		if _, err := service.ActivateRuntime(context.Background(), request); err != nil {
+			t.Fatalf("ActivateRuntime(%s): %v", name, err)
+		}
+		if err := service.Root().StartRuntime(context.Background(), name); err != nil {
+			t.Fatal(err)
+		}
+		if observed != name {
+			t.Fatalf("runtime %s admitted request %q", name, observed)
+		}
+
+		t.Cleanup(func() {
+			_, err := service.DeactivateRuntime(context.Background(), automations.RuntimeDeactivationRequest{RuntimeID: name})
+			if err != nil {
+				t.Errorf("DeactivateRuntime(%s): %v", name, err)
+			}
+		})
+
+	}
+	expectedRoots := []string{filepath.Join("/factories/alpha", factorydefinitions.InputsDir), filepath.Join("/factories/beta", factorydefinitions.InputsDir)}
+	if crons.calls != 2 || !slices.Equal(watchers.roots, expectedRoots) || watchers.preseeds != 2 {
+		t.Fatalf("injected operations: cron=%d roots=%v preseeds=%d", crons.calls, watchers.roots, watchers.preseeds)
+	}
+}
+
+func TestRuntimeLifecycle_InjectedWatcherFailurePreservesPeer(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("controlled preseed failure")
+	watchers := &runtimeWatcherRecorder{failure: failure}
+	service := newTestService(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, &runtimeCronRecorder{}, watchers)
+	peer := runtimeActivationRequestForTest("peer", "peer")
+	if _, err := service.ActivateRuntime(context.Background(), peer); err != nil {
+		t.Fatal(err)
+	}
+	_, err := service.ActivateRuntime(context.Background(), injectedSourceActivation("broken"))
+	if !errors.Is(err, automations.ErrSupervisionFailed) || !strings.Contains(err.Error(), failure.Error()) {
+		t.Fatalf("ActivateRuntime error = %v, want classified injected preseed failure", err)
+	}
+	if err := service.Root().StartRuntime(context.Background(), peer.RuntimeID); err != nil {
+		t.Fatalf("peer StartRuntime: %v", err)
+	}
+	if _, err := service.DeactivateRuntime(context.Background(), automations.RuntimeDeactivationRequest{RuntimeID: peer.RuntimeID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Root().StartRuntime(context.Background(), "broken"); !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("failed activation retained a startable runtime: %v", err)
+	}
+}
+
+func injectedSourceActivation(name string) automations.RuntimeActivationRequest {
+	request := runtimeActivationRequestForTest(name, name)
+	request.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
+	request.Inputs.Filesystem = automations.RuntimeFilesystemInputs{
+		Files: watcherInputFilesystem{}, WalkDirectory: filepath.WalkDir,
+		WorkRequestIDs: func() string { return name },
+	}
+	return request
+}
+
+type runtimeCronRecorder struct {
+	cron.Service
+	calls int
+}
+
+func (r *runtimeCronRecorder) SubmitCronTick(ctx context.Context, submit cron.WorkRequestSubmitter, workflow string, _ factorydefinitions.FactoryWorkstationConfig, _ time.Time) (cron.CronTickSubmission, error) {
+	r.calls++
+	err := submit(ctx, work.WorkRequest{RequestID: workflow})
+	return cron.CronTickSubmission{Submitted: err == nil}, err
+}
+
+type runtimeWatcherRecorder struct {
+	filesystemwatchers.Service
+	roots    []string
+	preseeds int
+	failure  error
+}
+
+func (r *runtimeWatcherRecorder) NewWatcher(config filesystemwatchers.Config) filesystemwatchers.Watcher {
+	r.roots = append(r.roots, config.Dir)
+	return runtimeInjectedWatcher{owner: r}
+}
+
+type runtimeInjectedWatcher struct{ owner *runtimeWatcherRecorder }
+
+func (w runtimeInjectedWatcher) PreseedInputs(context.Context) error {
+	w.owner.preseeds++
+	return w.owner.failure
+}
+func (runtimeInjectedWatcher) Watch(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }
+
+func seedRuntimeCursor(t *testing.T, service *Service, instance *runtimeInstance, id string) {
+	t.Helper()
+	poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
+	runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: cursorPollerOutput(id)}}}}
+	supervision := scriptpollers.SupervisionFor(strings.TrimSpace(instance.workflowID), poller.Name)
+	supervision.CursorScope = instance.cursorScope
+	err := service.scriptPollers.RunScriptPoller(context.Background(), runner,
+		internalScriptPollerLoadedRuntimeConfig(t, instance.snapshot.FactoryDir, poller, worker), poller, worker, supervision,
+		func(context.Context, work.WorkRequest) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("seed poll error = %v", err)
 	}
 }

@@ -29,19 +29,13 @@ func New(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	workstationLoader func() factorydefinitions.WorkstationLoader,
 	readFile factorydefinitions.FileReader,
-) (*Service, error) {
-	if loadCanonical == nil {
-		return nil, fmt.Errorf("canonical Factory loader is required")
-	}
-	if loadFactory == nil {
-		return nil, fmt.Errorf("Factory directory loader is required")
-	}
+) *Service {
 	return &Service{
 		loadCanonical:     loadCanonical,
 		loadFactory:       loadFactory,
 		workstationLoader: workstationLoader,
 		readFile:          readFile,
-	}, nil
+	}
 }
 
 // ResolveRuntimeSnapshot loads, validates, and deeply detaches one Factory
@@ -68,10 +62,7 @@ func (s *Service) ResolveRuntimeSnapshot(
 	}
 
 	var loaded factorydefinitions.MutableLoadedFactorySource
-	var workstationLoader factorydefinitions.WorkstationLoader
-	if s.workstationLoader != nil {
-		workstationLoader = s.workstationLoader()
-	}
+	workstationLoader := s.workstationLoader()
 	if hasCanonical {
 		canonical := append([]byte(nil), request.Canonical...)
 		loaded, err = s.loadCanonical(canonical, workstationLoader)

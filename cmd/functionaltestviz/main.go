@@ -86,7 +86,7 @@ func parseConfig() config {
 
 func run(cfg config, stdout, stderr io.Writer) error {
 	if cfg.runSuite {
-		return runFunctionalSuite(cfg, stdout, stderr)
+		return runFunctionalSuite(cfg, stdout, stderr, runLoggedCommand)
 	}
 	generateCfg := functionaltestviz.GenerateConfig{
 		RepositoryRoot:      cfg.repositoryRoot,

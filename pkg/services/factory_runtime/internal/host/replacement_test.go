@@ -2,13 +2,13 @@ package host_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -17,28 +17,32 @@ import (
 )
 
 func TestStartReplacement_StopsReplacementWhenReadinessFails(t *testing.T) {
+	t.Parallel()
 	factoryStub := &blockingLifecycleFactory{}
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStatePaused),
 	})
 
-	_, err := factoryhost.StartReplacement(
-		context.Background(),
-		context.Background(),
-		&factoryhost.Bundle{
-			Factory: factoryStub,
-			Logger:  zap.NewNop(),
-		},
-		clockwork.NewFakeClock(),
-		nil,
-		false,
-	)
-	if err == nil {
-		t.Fatal("expected readiness failure")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("StartReplacement error = %v, want deadline exceeded", err)
+	scheduler := &readinessTimers{created: make(chan *readinessTimer, 8)}
+	recording := &terminalRecording{}
+	result := make(chan error, 1)
+	serviceCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_, err := factoryhost.StartReplacement(context.Background(), serviceCtx,
+			&factoryhost.Bundle{Factory: factoryStub, Logger: zap.NewNop(), Recording: recording},
+			clockwork.NewFakeClock(), scheduler, nil, false)
+		result <- err
+	}()
+	deadline := scheduler.next(t, time.Second)
+	poll := scheduler.next(t, 10*time.Millisecond)
+	deadline.fired <- time.Time{}
+	awaitReadiness(t, result, context.DeadlineExceeded)
+	deadline.assertStopped(t)
+	poll.assertStopped(t)
+	if recording.finalizeCalls != 1 {
+		t.Fatalf("replacement finalization calls = %d, want canceled run joined and finalized", recording.finalizeCalls)
 	}
 }
 
@@ -67,6 +71,7 @@ func TestStartReplacement_AttachesSidecarsAfterReadinessInServiceMode(t *testing
 			Logger:  zap.NewNop(),
 		},
 		clockwork.NewFakeClock(),
+		platformclock.Real{},
 		func(_ context.Context, replacement *factoryhost.Handle) error {
 			if replacement == nil {
 				t.Fatal("replacement handle is required")
@@ -102,6 +107,7 @@ func TestStartReplacement_StopsReplacementWhenSidecarAttachFails(t *testing.T) {
 			Logger:  zap.NewNop(),
 		},
 		clockwork.NewFakeClock(),
+		platformclock.Real{},
 		func(context.Context, *factoryhost.Handle) error {
 			return fmt.Errorf("sidecar startup failed")
 		},

@@ -46,7 +46,7 @@ func TestActiveFlushCharacterizesDefaultCadenceAndCompleteV1Rewrites(t *testing.
 					payload: append([]byte(nil), payload...),
 				}
 				return nil
-			},
+			}, nil, nil,
 		),
 		func(interval time.Duration) recordings.RecordingFlushTicker {
 			observedInterval = interval
@@ -112,7 +112,7 @@ func TestFinishRecordingCharacterizesJoinedFinalPersistenceAndNoPostStopWrite(t 
 					payload: append([]byte(nil), payload...),
 				}
 				return nil
-			},
+			}, nil, nil,
 		),
 		func(time.Duration) recordings.RecordingFlushTicker {
 			return manualTickerHandle(ticker)

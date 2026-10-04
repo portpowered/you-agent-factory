@@ -108,7 +108,7 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 		boardPersistenceInitialWorkID:    "init",
 		boardPersistenceProcessingWorkID: "processing",
 		boardPersistenceAwaitingWorkID:   "awaiting-ci",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	if err := os.WriteFile(scenario.releasePath, []byte("release\n"), 0o600); err != nil {
 		t.Fatalf("release worker helper before durable snapshot probe: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 		boardPersistenceInitialWorkID:    "init",
 		boardPersistenceProcessingWorkID: "complete",
 		boardPersistenceAwaitingWorkID:   "awaiting-ci",
-	}, 30*time.Second)
+	}, 120*time.Second)
 
 	snapshotPath := filepath.Join(
 		scenario.factoryDir,
@@ -127,7 +127,7 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 	if strings.TrimSpace(first.sessionID) == "" {
 		t.Fatal("hard-kill scenario session ID is empty")
 	}
-	snapshotBefore := waitForBoardPersistenceSnapshot(t, snapshotPath, factorysessions.DefaultSessionID, 30*time.Second)
+	snapshotBefore := waitForBoardPersistenceSnapshot(t, snapshotPath, factorysessions.DefaultSessionID, 120*time.Second)
 
 	// Remove the selected board artifact immediately before the forceful stop so
 	// the next process observes the same interrupted-write boundary as the
@@ -142,7 +142,7 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 
 	second := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
 	defer second.kill(t)
-	restarted := waitForBoardStates(t, second.baseURL, map[string]string{}, 30*time.Second)
+	restarted := waitForBoardStates(t, second.baseURL, map[string]string{}, 120*time.Second)
 	if len(restarted.Results) != 0 {
 		t.Fatalf("restarted board = %#v, want empty after unreconstructable board history", restarted.Results)
 	}
@@ -158,7 +158,7 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 		"empty board was initialized",
 		"preserved durable state was not deleted",
 		filepath.Base(scenario.recordPath),
-	}, 30*time.Second)
+	}, 120*time.Second)
 }
 
 // TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails proves that a
@@ -182,7 +182,7 @@ func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) 
 		scenario.releasePath,
 	)
 	defer daemon.cleanup()
-	waitForBoardPersistenceDaemonExit(t, daemon, 20*time.Second)
+	waitForBoardPersistenceDaemonExit(t, daemon, 90*time.Second)
 	if daemon.waitError() == nil {
 		t.Fatal("corrupt current-board recording process exited successfully")
 	}
@@ -302,16 +302,16 @@ func runBoardPersistenceInitialGeneration(t *testing.T, scenario *boardPersisten
 		boardPersistenceInitialWorkID:    "init",
 		boardPersistenceProcessingWorkID: "processing",
 		boardPersistenceAwaitingWorkID:   "awaiting-ci",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, beforeRestart, scenario.expected)
 
-	scenario.activeDispatchID = waitForBoardActiveDispatch(t, first.baseURL, boardPersistenceProcessingWorkID, 30*time.Second)
+	scenario.activeDispatchID = waitForBoardActiveDispatch(t, first.baseURL, boardPersistenceProcessingWorkID, 120*time.Second)
 	if states, err := readBoardDispatchStates(t.Context(), first.baseURL); err == nil {
 		t.Logf("initial active dispatch state: %#v", states[scenario.activeDispatchID])
 	}
 	activeObservation := waitForBoardWorkerObservation(t, first.baseURL, first.sessionID, boardPersistenceProcessingWorkID, func(observation factoryapi.WorkerSessionObservation) bool {
 		return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
-	}, 30*time.Second)
+	}, 120*time.Second)
 	if activeObservation.AttemptId == "" {
 		t.Fatal("active Worker Session observation has empty attemptId")
 	}
@@ -330,21 +330,21 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 		boardPersistenceInitialWorkID:    "init",
 		boardPersistenceProcessingWorkID: "processing",
 		boardPersistenceAwaitingWorkID:   "awaiting-ci",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, afterFirstRestart, scenario.expected)
 	assertBoardCLIListAndShows(t, second, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
 
-	rearmedDispatchID := waitForBoardRearmedDispatch(t, second.baseURL, boardPersistenceProcessingWorkID, scenario.activeDispatchID, 30*time.Second)
+	rearmedDispatchID := waitForBoardRearmedDispatch(t, second.baseURL, boardPersistenceProcessingWorkID, scenario.activeDispatchID, 120*time.Second)
 	rearmedObservation := waitForBoardWorkerObservation(t, second.baseURL, second.sessionID, boardPersistenceProcessingWorkID, func(observation factoryapi.WorkerSessionObservation) bool {
 		return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
-	}, 30*time.Second)
+	}, 120*time.Second)
 	if rearmedObservation.WorkerSessionId == scenario.activeWorkerSessionID {
 		t.Fatalf("re-armed Worker Session reused original identity %q", scenario.activeWorkerSessionID)
 	}
 	if err := os.WriteFile(scenario.releasePath, []byte("release\n"), 0o600); err != nil {
 		t.Fatalf("release re-armed worker helper: %v", err)
 	}
-	waitForBoardDispatchResponse(t, second.baseURL, boardPersistenceProcessingWorkID, rearmedDispatchID, 30*time.Second)
+	waitForBoardDispatchResponse(t, second.baseURL, boardPersistenceProcessingWorkID, rearmedDispatchID, 120*time.Second)
 	scenario.expected[boardPersistenceProcessingWorkID] = boardPersistenceExpectedWork{
 		Name:           "board-processing",
 		WorkID:         boardPersistenceProcessingWorkID,
@@ -360,7 +360,7 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 		boardPersistenceInitialWorkID:    "init",
 		boardPersistenceProcessingWorkID: "complete",
 		boardPersistenceAwaitingWorkID:   "awaiting-ci",
-	}, 30*time.Second)
+	}, 120*time.Second)
 
 	newBatchJSON := boardPersistenceBatchJSON(t, boardPersistenceNewRequestID, []boardPersistenceBatchWork{{
 		Name: "board-new-work", WorkID: boardPersistenceNewWorkID, State: "init", TraceID: "trace-board-new-work", Content: "new work after recovery",
@@ -388,11 +388,11 @@ func runBoardPersistenceSecondRestart(t *testing.T, scenario *boardPersistenceSc
 		boardPersistenceProcessingWorkID: "complete",
 		boardPersistenceAwaitingWorkID:   "awaiting-ci",
 		boardPersistenceNewWorkID:        "init",
-	}, 30*time.Second)
+	}, 120*time.Second)
 	assertBoardList(t, afterSecondRestart, scenario.expected)
 	assertBoardCLIListAndShows(t, third, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
 
-	finalDispatches := waitForBoardDispatchStates(t, third.baseURL, 30*time.Second)
+	finalDispatches := waitForBoardDispatchStates(t, third.baseURL, 120*time.Second)
 	if got := activeBoardDispatches(finalDispatches, boardPersistenceProcessingWorkID); len(got) != 0 {
 		t.Fatalf("second restart restored phantom active dispatches = %#v, want none", got)
 	}

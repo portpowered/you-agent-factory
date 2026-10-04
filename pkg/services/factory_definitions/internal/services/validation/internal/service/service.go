@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
@@ -34,9 +33,6 @@ func New(
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 ) *Service {
-	if operations == nil || effective == nil || loadCanonical == nil {
-		return nil
-	}
 	return &Service{
 		operations:            operations,
 		effective:             effective,
@@ -50,9 +46,6 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 	ctx context.Context,
 	request factoryroot.ValidateStructuralFactoryDefinitionRequest,
 ) (factoryroot.ValidateStructuralFactoryDefinitionResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
@@ -65,10 +58,9 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
 	profileResult, err := s.operations.ValidateDefinition(ctx, factoryroot.DefinitionValidationRequest{
-		Profile:                factoryroot.ResolveValidationProfile(request.Profile),
-		Config:                 cfg,
-		CanonicalPayload:       canonical,
-		CanonicalFactoryLoader: s.loadCanonical,
+		Profile:          factoryroot.ResolveValidationProfile(request.Profile),
+		Config:           cfg,
+		CanonicalPayload: canonical,
 	})
 	if err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
@@ -87,9 +79,6 @@ func (s *Service) ValidateEffectiveFactoryDefinition(
 	ctx context.Context,
 	request factoryroot.ValidateEffectiveFactoryDefinitionRequest,
 ) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factoryroot.ValidateEffectiveFactoryDefinitionResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factoryroot.ValidateEffectiveFactoryDefinitionResult{}, err
 	}
@@ -181,14 +170,4 @@ func structuralTargetSignature(target factoryroot.ValidationTarget) string {
 		string(target.Subject.Location) + "|" +
 		target.Path + "|" +
 		target.Message
-}
-
-func (s *Service) requirePorts() error {
-	if s == nil || s.operations == nil || s.effective == nil {
-		return fmt.Errorf("Factory Definition validation collaborator is required")
-	}
-	if s.loadCanonical == nil {
-		return fmt.Errorf("canonical Factory loader is required")
-	}
-	return nil
 }

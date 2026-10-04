@@ -8,21 +8,22 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 )
 
-func TestCombinedServiceRealLedgerOverflowReportsGapAndReconnects(t *testing.T) {
+func TestCanonicalOwnerRealLedgerOverflowReportsGapAndReconnects(t *testing.T) {
 	t.Parallel()
 
 	const eventCount = 512
 	now := time.Unix(1_700_000_000, 0).UTC()
 	ledger := NewRuntimeLedger(nil, func() time.Time { return now }, "overflow-generation", nil)
-	svc := NewService(ledger, NewProjectionService())
-	if svc == nil {
-		t.Fatal("NewService returned nil")
-	}
+	svc := canonicalledgerwire.NewService(ledger)
 
 	appendOverflowEvent(t, svc, 0, now)
-	result, err := svc.SubscribeFrom(context.Background(), recordings.SubscribeRequest{})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	result, err := svc.SubscribeFrom(ctx, recordings.SubscribeRequest{})
 	if err != nil {
 		t.Fatalf("SubscribeFrom real ledger: %v", err)
 	}
@@ -78,12 +79,14 @@ func assertOverflowGap(
 
 func assertOverflowReconnect(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	gap recordings.SubscriptionGapFacts,
 	eventCount recordings.CanonicalEventSequence,
 ) {
 	t.Helper()
-	reconnected, err := svc.SubscribeFrom(context.Background(), recordings.SubscribeRequest{
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	reconnected, err := svc.SubscribeFrom(ctx, recordings.SubscribeRequest{
 		Cursor: &gap.ReconnectFrom,
 	})
 	if err != nil {
@@ -97,7 +100,7 @@ func assertOverflowReconnect(
 	}
 }
 
-func appendOverflowEvent(t *testing.T, svc recordings.Service, sequence int, recordedAt time.Time) {
+func appendOverflowEvent(t *testing.T, svc canonicalledger.Service, sequence int, recordedAt time.Time) {
 	t.Helper()
 	result, err := svc.Append(recordings.AppendRecordedEventRequest{
 		Event: recordings.CanonicalEvent{

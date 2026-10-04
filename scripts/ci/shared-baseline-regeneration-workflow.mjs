@@ -7,12 +7,6 @@ import { fileURLToPath } from "node:url";
 export const SHARED_BASELINE_PATHS = Object.freeze([
 	"docs/internal/baselines/deadcode-baseline.txt",
 	"docs/internal/baselines/go-unit-lane-latency-budget.v1.json",
-	"docs/internal/baselines/ownership-inventory.json",
-	"docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json",
-	"docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json",
-	"docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json",
-	"docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json",
-	"docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json",
 	"contracts/testdata/baseline/cli-commands.json",
 	"contracts/testdata/baseline/cli-command-inputs.json",
 	"contracts/testdata/baseline/mcp-tools.json",

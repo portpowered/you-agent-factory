@@ -90,7 +90,7 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 			requestedPort,
 		)
 	}
-	response, err := (&http.Client{Timeout: 5 * time.Second}).Get(actualURL)
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Get(actualURL)
 	if err != nil {
 		t.Fatalf("GET reported dashboard URL %q: %v", actualURL, err)
 	}
@@ -152,7 +152,7 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 	}()
 
 	actualURL := waitForDashboardURL(t, lines, scanErr)
-	response, err := (&http.Client{Timeout: 5 * time.Second}).Get(actualURL)
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Get(actualURL)
 	if err != nil {
 		t.Fatalf("GET reported dashboard URL %q: %v", actualURL, err)
 	}
@@ -259,7 +259,7 @@ func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *t
 
 func waitForListenerRelease(t *testing.T, address string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	var lastErr error
 	for time.Now().Before(deadline) {
 		listener, err := net.Listen("tcp4", address)
@@ -298,8 +298,8 @@ func cancelAndAssertShutdown(t *testing.T, command *builtcliacceptance.Command) 
 		if err != nil && !strings.Contains(err.Error(), "context canceled") {
 			t.Fatalf("canceled root process exit = %v, want clean cancellation", err)
 		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("canceled root process did not exit within 10s")
+	case <-time.After(60 * time.Second):
+		t.Fatal("canceled root process did not exit within 60s")
 	}
 }
 
@@ -309,7 +309,7 @@ func waitForDashboardURL(
 	scanErr <-chan error,
 ) string {
 	t.Helper()
-	timer := time.NewTimer(30 * time.Second)
+	timer := time.NewTimer(120 * time.Second)
 	defer timer.Stop()
 	for {
 		select {

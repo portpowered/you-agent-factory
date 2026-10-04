@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ var testPTYClock platformclock.Source = platformclock.Real{}
 
 func newTestPlatformPTYAllocator(t *testing.T) PTYAllocator {
 	t.Helper()
-	allocator, err := NewAllocator(testPTYHost{}, testPTYClock)
+	allocator, err := NewAllocator(testPTYHost{}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("NewAllocator() error = %v", err)
 	}
@@ -207,7 +208,7 @@ func TestPlatformSession_CloseIsIdempotent(t *testing.T) {
 	session, err := newPlatformSession(ProcessLaunch{
 		Executable: "/bin/agy",
 		Argv:       []string{"/bin/agy", "chat", "hello"},
-	}, DefaultSessionConfig(), PTYKindPOSIX, closeOnlyPTY{}, testPTYHost{}, testPTYClock)
+	}, DefaultSessionConfig(), PTYKindPOSIX, closeOnlyPTY{}, testPTYHost{}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("newPlatformSession() error = %v", err)
 	}
@@ -242,7 +243,7 @@ func TestNormalizeSessionConfig_AppliesDefaultsAndCeiling(t *testing.T) {
 func TestAllocator_ReturnsOwnerSessionFromInjectedHost(t *testing.T) {
 	t.Parallel()
 
-	allocator, err := NewAllocator(testPTYHost{}, testPTYClock)
+	allocator, err := NewAllocator(testPTYHost{}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("NewAllocator() error = %v", err)
 	}
@@ -250,17 +251,6 @@ func TestAllocator_ReturnsOwnerSessionFromInjectedHost(t *testing.T) {
 		Executable: "/bin/agy", Argv: []string{"/bin/agy"},
 	}, DefaultSessionConfig()); err != nil {
 		t.Fatalf("Allocate() error = %v", err)
-	}
-}
-
-func TestAllocator_RejectsMissingHostOrClock(t *testing.T) {
-	t.Parallel()
-
-	if _, err := NewAllocator(nil, testPTYClock); !errors.Is(err, ErrHostRequired) {
-		t.Fatalf("NewAllocator(nil host) error = %v, want %v", err, ErrHostRequired)
-	}
-	if _, err := NewAllocator(testPTYHost{}, nil); !errors.Is(err, ErrClockRequired) {
-		t.Fatalf("NewAllocator(nil clock) error = %v, want %v", err, ErrClockRequired)
 	}
 }
 
@@ -294,7 +284,7 @@ func TestExecuteSessionRun_CapsCaptureAndCleans(t *testing.T) {
 		IdleTimeout:     25 * time.Millisecond,
 		HardTimeout:     5 * time.Second,
 	}
-	result, err := executeSessionRun(context.Background(), cfg, reader, proc, platformclock.Real{})
+	result, err := executeSessionRun(context.Background(), cfg, reader, proc, platformclock.Real{}, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("executeSessionRun() error = %v", err)
 	}
@@ -331,7 +321,7 @@ func TestExecuteSessionRun_HardTimeoutMarksTimedOut(t *testing.T) {
 		IdleTimeout:     time.Hour,
 		HardTimeout:     50 * time.Millisecond,
 	}
-	result, err := executeSessionRun(context.Background(), cfg, reader, proc, platformclock.Real{})
+	result, err := executeSessionRun(context.Background(), cfg, reader, proc, platformclock.Real{}, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("executeSessionRun() error = %v", err)
 	}
@@ -352,7 +342,7 @@ func TestExecuteSessionRun_ResetsTimerBeforeInjectedDeadline(t *testing.T) {
 		MaxCaptureBytes: DefaultMaxCaptureBytes,
 		IdleTimeout:     time.Hour,
 		HardTimeout:     time.Second,
-	}, io.NopCloser(strings.NewReader("")), proc, clock)
+	}, io.NopCloser(strings.NewReader("")), proc, clock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("executeSessionRun() error = %v", err)
 	}
@@ -386,7 +376,7 @@ func TestExecuteSessionRun_CancelTerminatesProcessTree(t *testing.T) {
 		IdleTimeout:     time.Hour,
 		HardTimeout:     time.Hour,
 	}
-	_, err = executeSessionRun(ctx, cfg, reader, proc, platformclock.Real{})
+	_, err = executeSessionRun(ctx, cfg, reader, proc, platformclock.Real{}, platformclock.Real{})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("executeSessionRun() error = %v, want %v", err, context.Canceled)
 	}
@@ -445,7 +435,7 @@ func TestPlatformSessionPTYKind(t *testing.T) {
 	session, err := newPlatformSession(ProcessLaunch{
 		Executable: "/bin/agy",
 		Argv:       []string{"/bin/agy"},
-	}, DefaultSessionConfig(), PTYKindConPTY, closeOnlyPTY{}, testPTYHost{}, testPTYClock)
+	}, DefaultSessionConfig(), PTYKindConPTY, closeOnlyPTY{}, testPTYHost{}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("newPlatformSession() error = %v", err)
 	}
@@ -460,21 +450,9 @@ func TestNewPlatformSession_RejectsNilPTY(t *testing.T) {
 	_, err := newPlatformSession(ProcessLaunch{
 		Executable: "/bin/agy",
 		Argv:       []string{"/bin/agy"},
-	}, DefaultSessionConfig(), PTYKindPOSIX, nil, testPTYHost{}, testPTYClock)
+	}, DefaultSessionConfig(), PTYKindPOSIX, nil, testPTYHost{}, testPTYClock, platformclock.Real{})
 	if err == nil {
 		t.Fatal("newPlatformSession() error = nil, want error")
-	}
-}
-
-func TestNewPlatformSession_RejectsMissingClock(t *testing.T) {
-	t.Parallel()
-
-	_, err := newPlatformSession(ProcessLaunch{
-		Executable: "/bin/agy",
-		Argv:       []string{"/bin/agy"},
-	}, DefaultSessionConfig(), PTYKindPOSIX, closeOnlyPTY{}, testPTYHost{}, nil)
-	if !errors.Is(err, ErrClockRequired) {
-		t.Fatalf("newPlatformSession(nil clock) error = %v, want %v", err, ErrClockRequired)
 	}
 }
 
@@ -600,7 +578,7 @@ func TestPlatformSessionRun_RejectsClosedSession(t *testing.T) {
 	session, err := newPlatformSession(ProcessLaunch{
 		Executable: "/bin/agy",
 		Argv:       []string{"/bin/agy"},
-	}, DefaultSessionConfig(), PTYKindPOSIX, closeOnlyPTY{}, testPTYHost{}, testPTYClock)
+	}, DefaultSessionConfig(), PTYKindPOSIX, closeOnlyPTY{}, testPTYHost{}, testPTYClock, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("newPlatformSession() error = %v", err)
 	}
@@ -618,18 +596,13 @@ func TestExecuteSessionRun_RejectsMissingInputs(t *testing.T) {
 	cfg := DefaultSessionConfig()
 	proc := &sessionProcess{}
 
-	if _, err := executeSessionRun(context.Background(), cfg, nil, proc, testPTYClock); err == nil {
+	if _, err := executeSessionRun(context.Background(), cfg, nil, proc, testPTYClock, platformclock.Real{}); err == nil {
 		t.Fatal("executeSessionRun(nil reader) error = nil, want error")
 	}
 
 	reader := io.NopCloser(strings.NewReader(""))
-	if _, err := executeSessionRun(context.Background(), cfg, reader, nil, testPTYClock); err == nil {
+	if _, err := executeSessionRun(context.Background(), cfg, reader, nil, testPTYClock, platformclock.Real{}); err == nil {
 		t.Fatal("executeSessionRun(nil proc) error = nil, want error")
-	}
-
-	reader = io.NopCloser(strings.NewReader(""))
-	if _, err := executeSessionRun(context.Background(), cfg, reader, proc, nil); !errors.Is(err, ErrClockRequired) {
-		t.Fatalf("executeSessionRun(nil clock) error = %v, want %v", err, ErrClockRequired)
 	}
 }
 
@@ -721,11 +694,142 @@ func TestFinishSessionRun_DrainsBufferedOutputBeforeClosingReader(t *testing.T) 
 	reader := newDelayedDataReader()
 	readDone := startPTYCapture(reader, SessionConfig{MaxCaptureBytes: 1024}, &mu, &captured, &capacityHit, &lastByteAt, testPTYClock)
 
-	result, err := finishSessionRun(reader, readDone, &mu, &captured, &capacityHit, false, nil, nil, nil)
+	result, err := finishSessionRun(reader, readDone, &mu, &captured, &capacityHit, false, nil, nil, nil, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("finishSessionRun() error = %v", err)
 	}
 	if got := result.CleanedText; got != "post-exit-output" {
 		t.Fatalf("CleanedText = %q, want post-exit-output drained after process exit", got)
+	}
+}
+
+// These resource tests use an in-memory process and EOF reader. Every timer
+// creation is observable; advancing time never depends on host scheduling.
+type observedPTYTimer struct {
+	platformclock.Timer
+	stopped atomic.Bool
+	delay   time.Duration
+}
+
+func (timer *observedPTYTimer) Stop() bool {
+	timer.stopped.Store(true)
+	return timer.Timer.Stop()
+}
+
+type observedPTYClock struct {
+	*platformclock.Deterministic
+	created chan *observedPTYTimer
+}
+
+func (clock *observedPTYClock) NewTimer(delay time.Duration) platformclock.Timer {
+	timer := &observedPTYTimer{Timer: clock.Deterministic.NewTimer(delay), delay: delay}
+	clock.created <- timer
+	return timer
+}
+func awaitPTYTimer(t *testing.T, clock *observedPTYClock) *observedPTYTimer {
+	t.Helper()
+	select {
+	case timer := <-clock.created:
+		return timer
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for observed timer creation or resource join; injected ticks drive the outcome
+		t.Fatal("PTY timer was not created")
+		return nil
+	}
+}
+func TestExecuteSessionRunUsesSuppliedTimers(t *testing.T) {
+	for _, outcome := range []string{"success", "cancel", "idle", "hard"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			clock := &observedPTYClock{
+				Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond),
+				created:       make(chan *observedPTYTimer, 8),
+			}
+			proc := newControlledSessionProcess()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cfg := SessionConfig{MaxCaptureBytes: 128, IdleTimeout: time.Second, HardTimeout: time.Second}
+			if outcome == "idle" {
+				cfg.HardTimeout = time.Hour
+			}
+			if outcome == "hard" {
+				cfg.IdleTimeout = time.Hour
+			}
+			type terminal struct {
+				result SessionResult
+				err    error
+			}
+			done := make(chan terminal, 1)
+			go func() {
+				result, err := executeSessionRun(ctx, cfg, io.NopCloser(strings.NewReader("")), proc, clock, clock)
+				done <- terminal{result, err}
+			}()
+			first := awaitPTYTimer(t, clock)
+			if first.delay != 100*time.Millisecond {
+				t.Fatalf("supervision cadence = %v", first.delay)
+			}
+			clock.SetTick(100)
+			replacement := awaitPTYTimer(t, clock)
+			if !first.stopped.Load() || replacement.delay != 100*time.Millisecond {
+				t.Fatal("previous timer must stop before the next supervision timer")
+			}
+			switch outcome {
+			case "success":
+				_ = proc.Terminate()
+			case "cancel":
+				cancel()
+			default:
+				clock.SetTick(1000)
+			}
+			drain := awaitPTYTimer(t, clock)
+			if drain.delay != ptyCaptureDrainTimeout {
+				t.Fatalf("drain duration = %v", drain.delay)
+			}
+			select {
+			case got := <-done:
+				assertPTYTerminalTimers(t, outcome, got.result, got.err, replacement, drain)
+			case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for observed timer creation or resource join; injected ticks drive the outcome
+				t.Fatal("PTY run did not join")
+			}
+		})
+	}
+}
+func assertPTYTerminalTimers(t *testing.T, outcome string, result SessionResult, err error, supervision, drain *observedPTYTimer) {
+	t.Helper()
+	if outcome == "cancel" {
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancel error = %v", err)
+		}
+	} else if err != nil {
+		t.Fatalf("run error = %v", err)
+	}
+	wantTimeout := outcome == "idle" || outcome == "hard"
+	if result.TimedOut != wantTimeout {
+		t.Fatalf("TimedOut = %v, want %v", result.TimedOut, wantTimeout)
+	}
+	if !supervision.stopped.Load() || !drain.stopped.Load() {
+		t.Fatal("terminal path left an owned timer unstopped")
+	}
+}
+func TestDrainPTYCaptureUsesSuppliedBound(t *testing.T) {
+	t.Parallel()
+	clock := &observedPTYClock{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *observedPTYTimer, 1)}
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	readDone := make(chan struct{})
+	go func() { _, _ = io.Copy(io.Discard, reader); close(readDone) }()
+	done := make(chan struct{})
+	go func() { drainPTYCapture(reader, readDone, clock); close(done) }()
+	timer := awaitPTYTimer(t, clock)
+	if timer.delay != ptyCaptureDrainTimeout {
+		t.Fatalf("drain duration = %v", timer.delay)
+	}
+	clock.SetTick(250)
+	select {
+	case <-done:
+		if !timer.stopped.Load() {
+			t.Fatal("drain timer was not stopped")
+		}
+	case <-time.After(5 * time.Second): //nolint:testsleep // failure ceiling for observed timer creation or resource join; injected ticks drive the outcome
+		t.Fatal("drain did not close reader and join capture")
 	}
 }

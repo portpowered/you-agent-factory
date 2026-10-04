@@ -99,14 +99,14 @@ func TestRecordedDispatchFailureProjection(t *testing.T) {
 	completed := interfaces.FactoryWorldDispatchCompletion{DispatchID: "dispatch-1", StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{"work-1"}, Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeFailed), FailureDetail: failureDetail, FailureMetadata: metadata}, ProviderSession: providerMetadata}
 	active := interfaces.FactoryWorldDispatch{DispatchID: "dispatch-1", StartedAt: base.Add(time.Second), WorkItemIDs: []string{"work-2"}}
 	providerRecords := []interfaces.FactoryWorldProviderSessionRecord{{DispatchID: "dispatch-1", ProviderSession: *providerMetadata, WorkItemIDs: []string{"work-3"}, FailureDetail: failureDetail}}
-	fact := recordedDispatchFact("dispatch-1", recordedDispatchAssociation{workerSessionID: "worker-1", turnID: "turn-1", eventTime: base}, map[string]recordedDispatchRequest{"dispatch-1": {workIDs: []string{"work-1"}, startedAt: base}}, map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-1": completed}, providerRecords, map[string]interfaces.FactoryWorldDispatch{"dispatch-1": active}, nil)
+	fact := recordedDispatchFactForTest("dispatch-1", recordedDispatchAssociation{workerSessionID: "worker-1", turnID: "turn-1", eventTime: base}, map[string]recordedDispatchRequest{"dispatch-1": {workIDs: []string{"work-1"}, startedAt: base}}, map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-1": completed}, providerRecords, map[string]interfaces.FactoryWorldDispatch{"dispatch-1": active}, nil)
 	if fact.state != workersessions.StateFailed || fact.provider == nil || len(fact.workIDs) != 1 || fact.failure == nil {
-		t.Fatalf("recordedDispatchFact() = %#v", fact)
+		t.Fatalf("recordedDispatchFactForTest() = %#v", fact)
 	}
 	rejectedCompletion := completed
 	rejectedCompletion.DispatchID = "dispatch-rejected"
 	rejectedCompletion.Result.Outcome = string(workers.OutcomeRejected)
-	rejectedFact := recordedDispatchFact(
+	rejectedFact := recordedDispatchFactForTest(
 		"dispatch-rejected",
 		recordedDispatchAssociation{workerSessionID: "worker-rejected", turnID: "turn-rejected", eventTime: base},
 		nil,
@@ -140,7 +140,7 @@ func TestRecordedDispatchIncompleteOutputProjection(t *testing.T) {
 	incomplete := completed
 	incomplete.DispatchID = "dispatch-incomplete"
 	incomplete.Diagnostics = incompleteDiagnostics
-	incompleteFact := recordedDispatchFact(
+	incompleteFact := recordedDispatchFactForTest(
 		"dispatch-incomplete",
 		recordedDispatchAssociation{workerSessionID: "worker-incomplete", eventTime: base},
 		nil,

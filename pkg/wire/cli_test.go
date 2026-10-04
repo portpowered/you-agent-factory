@@ -540,7 +540,7 @@ func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {
 		return recordings.LiveRecordingTarget{}, nil
 	})
 	recordingsCLI := provideRecordingsCLIAdapter()
-	defaults := provideCLIRunDefaults(planner, recordingsCLI)
+	defaults := provideCLIRunDefaults(planner, recordingsCLI, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 	if defaults.RecordingTargetPlanner == nil {
 		t.Fatal("CLI run defaults dropped the Wire-selected recording target planner")
 	}
@@ -556,7 +556,7 @@ func TestProductionLiveRecordingTargetPlannerIsUsable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provideRuntimeArtifactPathReserver: %v", err)
 	}
-	target, err := provideLiveRecordingTargetPlanner(reserver).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+	target, err := provideLiveRecordingTargetPlanner(reserver, selectedTestTimeEdges(serviceedges.Edges{}).Clock).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
 		HomeDir:            t.TempDir(),
 		CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 		ReportedSessionID:  "~default",
@@ -604,7 +604,7 @@ func TestRootBundleProducesFreshDetachedCLIObservation(t *testing.T) {
 	t.Parallel()
 
 	observations := make([]cliobservation.Result, 0, 2)
-	rootBundle, err := InjectBundle(t.Context(), serviceedges.Edges{CLIObserver: cliobservation.CaptureAppend(&observations)})
+	rootBundle, err := InjectBundle(t.Context(), selectedTestTimeEdges(serviceedges.Edges{CLIObserver: cliobservation.CaptureAppend(&observations)}), ACPWireLogSettings{})
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
@@ -626,7 +626,7 @@ func TestInjectBundleReturnsLazyServiceComposition(t *testing.T) {
 	t.Parallel()
 
 	var observation cliobservation.Result
-	rootBundle, err := InjectBundle(t.Context(), serviceedges.Edges{CLIObserver: cliobservation.Capture(&observation)})
+	rootBundle, err := InjectBundle(t.Context(), selectedTestTimeEdges(serviceedges.Edges{CLIObserver: cliobservation.Capture(&observation)}), ACPWireLogSettings{})
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
@@ -645,7 +645,7 @@ func TestInjectBundlePreservesOverridesInCanonicalLazyComposition(t *testing.T) 
 	runner := &processCommandRunner{}
 	var observation cliobservation.Result
 	overrideEdges := serviceedges.Edges{ProviderCommandRunner: runner, CLIObserver: cliobservation.Capture(&observation)}
-	custom, err := InjectBundle(t.Context(), overrideEdges)
+	custom, err := InjectBundle(t.Context(), selectedTestTimeEdges(overrideEdges), ACPWireLogSettings{})
 	if err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
@@ -956,7 +956,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 	t.Helper()
 
 	edges := serviceedges.Edges{}
-	providersRoot, err := provideProvidersService(edges)
+	providersRoot, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -964,7 +964,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 	if err != nil {
 		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
 	}
-	settings, err := provideOperatorSettingsService(
+	settings, err := newOperatorSettingsTestService(
 		provideOperatorSettingsFileSystem(edges),
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
@@ -976,7 +976,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 		logging.NewZapLogger(zapLogger, false),
 	)
 	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+		t.Fatalf("newOperatorSettingsTestService() error = %v", err)
 	}
 	return settings, providersRoot
 }

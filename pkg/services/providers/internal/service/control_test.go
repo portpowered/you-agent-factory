@@ -6,9 +6,12 @@ import (
 	"sync"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
@@ -85,7 +88,7 @@ func assertNoUnsafeControlLogFields(t *testing.T, fields map[string]any) {
 func mustControlRootService(t *testing.T, logger *recordingControlLogger) *providerservice.Service {
 	t.Helper()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -98,12 +101,13 @@ func mustControlRootService(t *testing.T, logger *recordingControlLogger) *provi
 				executionCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logger)
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logger, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -190,7 +194,7 @@ func TestControlAttempt_ValidationFailsBeforeOutcome(t *testing.T) {
 func TestControlAttempt_InvokesNoExecutionAdapter(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -203,12 +207,13 @@ func TestControlAttempt_InvokesNoExecutionAdapter(t *testing.T) {
 				executionCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -259,13 +264,58 @@ func TestControlAttempt_LogsSafeAcceptedIntentAndTerminalOutcome(t *testing.T) {
 	assertNoUnsafeControlLogFields(t, outcome[0].fields)
 }
 
+func TestControlAttempt_InjectedLoggersStayIsolated(t *testing.T) {
+	t.Parallel()
+	// ControlAttempt owns its registry and does not consult either collaborator.
+	// Supplying inert ports keeps this proof inside the root component.
+	for _, attemptID := range []string{"first-root", "peer-root"} {
+		t.Run(attemptID, func(t *testing.T) {
+			t.Parallel()
+			logger := &recordingControlLogger{}
+			root, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.ContinuationService }{},
+				&stubACPService{}, nil, logger, &stubACPService{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			quietPeer, err := providerservice.NewWithACP(struct{ catalog.Service }{}, struct{ execution.ContinuationService }{},
+				&stubACPService{}, nil, logging.NoopLogger{}, &stubACPService{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := providers.ControlAttemptRequest{
+				Provider: providers.IDCodex, AttemptID: attemptID,
+				Action: providers.ControlActionCancel,
+			}
+			if _, err := root.ControlAttempt(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+			request.AttemptID = "quiet-peer"
+			if _, err := quietPeer.ControlAttempt(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+			for _, message := range []string{"provider control attempt accepted", "provider control attempt outcome"} {
+				entries := logger.entriesFor(message)
+				if len(entries) != 1 || entries[0].fields["attemptID"] != attemptID {
+					t.Fatalf("selected sink contains peer output: %s = %#v", message, entries)
+				}
+				assertNoUnsafeControlLogFields(t, entries[0].fields)
+			}
+		})
+	}
+}
+
 func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *testing.T) {
 	t.Parallel()
 
 	logger := &recordingControlLogger{}
-	root, err := providerswire.NewService(providerswire.WithLogger(logger))
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logger, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
+		t.Fatalf("newTestProvidersService() = %v", err)
 	}
 
 	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
@@ -282,4 +332,63 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 	if len(logger.entriesFor("provider control attempt outcome")) != 1 {
 		t.Fatalf("outcome log entries = %d, want 1 for production-wired root", len(logger.entriesFor("provider control attempt outcome")))
 	}
+}
+
+// newTestProvidersService assembles the fixture's explicit sibling owners.
+func newTestProvidersService(probe providerswire.CatalogProbeOperation, scheduler platformclock.TimerSource, logger logging.Logger, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, antigravity providerswire.AgyEffect, codex providerswire.CodexEffect, claude providerswire.ClaudeEffect, configuration providerswire.Configuration) (providers.Service, error) {
+	config, err := providerswire.PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := providerswire.NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	// Absent fixture routes receive completed command effects with a disabled edge.
+	if antigravity == nil {
+		antigravity = providerswire.NewAgyCommandEffect((disabledNativeRunner{"Antigravity"}).commandEffect(), platformclock.Real{}, scheduler)
+	}
+	if codex == nil {
+		codex = providerswire.NewCodexEffect((disabledNativeRunner{"Codex"}).commandEffect(), platformclock.Real{})
+	}
+	if claude == nil {
+		claude = providerswire.NewClaudeEffect((disabledNativeRunner{"Claude"}).commandEffect(), platformclock.Real{})
+	}
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := providerswire.NewAttemptExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
+}
+
+type disabledNativeRunner struct{ name string }
+
+func (runner disabledNativeRunner) Run(context.Context, providers.CommandRequest) (providers.CommandResult, error) {
+	return providers.CommandResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: runner.name + " native execution is unavailable",
+	}
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner disabledNativeRunner) RunStreaming(ctx context.Context, request providers.CommandRequest, observe providers.OutputChunkObserver) (providers.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providers.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (runner disabledNativeRunner) commandEffect() providers.CommandRunner {
+	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }

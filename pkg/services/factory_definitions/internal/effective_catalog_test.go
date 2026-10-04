@@ -19,10 +19,6 @@ type source struct {
 	packaged []factorydefinitions.EffectiveFactoryCatalogCandidate
 }
 
-type baseService struct {
-	factorydefinitions.Service
-}
-
 func (s source) discovery() factorydefinitions.EffectiveFactoryCatalogDiscovery {
 	return factorydefinitions.EffectiveFactoryCatalogDiscovery{
 		ListRoot:     s.listRoot,
@@ -156,7 +152,7 @@ func TestCatalogCoversEveryPrecedenceCombination(t *testing.T) {
 	}
 }
 
-func TestAttachPublishesEffectiveCatalogOnRootService(t *testing.T) {
+func TestReadOnlyServicePublishesEffectiveCatalog(t *testing.T) {
 	t.Parallel()
 
 	catalog := newCatalog(t, source{
@@ -165,9 +161,9 @@ func TestAttachPublishesEffectiveCatalogOnRootService(t *testing.T) {
 			"/global":  nil,
 		},
 	}.discovery())
-	service, err := factoryinternal.AttachEffectiveCatalog(baseService{}, catalog)
+	service, err := factoryinternal.NewEffectiveCatalogService(catalog)
 	if err != nil {
-		t.Fatalf("attach effective catalog: %v", err)
+		t.Fatalf("construct effective catalog service: %v", err)
 	}
 
 	result, err := service.ListEffectiveFactories(

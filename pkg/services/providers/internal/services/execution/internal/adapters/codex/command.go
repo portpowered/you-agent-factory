@@ -23,13 +23,8 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 	{Name: "VISUAL", Value: "true"},
 }
 
-// NewCommandEffect binds one streaming subprocess runner to the Codex adapter.
-
-func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
-	runner := providerservice.AdaptCommandRunner(candidate)
-	if runner == nil || clock == nil {
-		return nil
-	}
+// NewCommandEffect binds the completed runner and duration source to Codex.
+func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source) Effect {
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,
@@ -125,24 +120,12 @@ func runStreaming(
 	command providerservice.CommandRequest,
 	observe func([]byte) error,
 ) (providerservice.CommandResult, error) {
-	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, providerservice.CommandRequest, providerservice.OutputChunkObserver) (providerservice.CommandResult, error)
-	}); ok {
-		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
-			if strings.TrimSpace(stream) != providerservice.OutputStreamStdout {
-				return nil
-			}
-			return observe(chunk)
-		})
-	}
-	result, err := runner.Run(ctx, command)
-	if len(result.Stdout) > 0 {
-		observeErr := observe(result.Stdout)
-		if err == nil {
-			err = observeErr
+	return runner.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
+		if strings.TrimSpace(stream) != providerservice.OutputStreamStdout {
+			return nil
 		}
-	}
-	return result, err
+		return observe(chunk)
+	})
 }
 
 func nativeCommandError(ctx context.Context, err error) error {

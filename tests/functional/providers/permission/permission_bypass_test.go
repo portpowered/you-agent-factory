@@ -1,6 +1,11 @@
 package permission
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +20,70 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// The immutable incapable route is reused across denial, ordinary success and
+// denial again. Each public one-shot invocation owns its session and streams;
+// only the external command effect and capability publication are controlled.
+func TestDirectProviderCapabilityDenialDoesNotPoisonFreshAttempt(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	home := t.TempDir()
+	workflow := filepath.Join(dir, "direct.js")
+	ordinary := filepath.Join(dir, "ordinary.js")
+	const source = `return (async function () { return await agent.run({
+  prompt: "direct capability proof", label: "direct-child",
+  modelProvider: "codex", model: "test-model", permissions: "%s"
+}); })();`
+	for path, permission := range map[string]string{workflow: "SKIP_PERMISSIONS", ordinary: "DEFAULT"} {
+		if err := os.WriteFile(path, []byte(fmt.Sprintf(source, permission)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("fresh direct attempt COMPLETE"),
+	})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{
+			Provider:     providers.IDCodex,
+			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+		}},
+	})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:testsleep // Cleanup starts after Test.Context cancellation; bound failure while Close drains its owned sessions without relying on elapsed time for success.
+		defer cancel()
+		if err := process.Close(ctx); err != nil {
+			t.Errorf("close direct provider process: %v", err)
+		}
+	})
+	sessions := make(map[string]bool)
+	for _, denied := range []bool{true, false, true} {
+		selected := ordinary
+		if denied {
+			selected = workflow
+		}
+		args := []string{"you", "--json", "run", "--factory", selected}
+		if denied {
+			args = append(args, "--skip-permissions")
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+		inputs := support.FakeInputs(ctx, args)
+		inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
+		inputs.Input.WorkingDirectory = dir
+		before := runner.CallCount()
+		err := process.Execute(inputs.Input)
+		cancel()
+		var outcome struct {
+			SessionID string `json:"sessionId"`
+			Status    string `json:"status"`
+		}
+		if decodeErr := json.Unmarshal([]byte(inputs.Stdout()), &outcome); decodeErr != nil || outcome.SessionID == "" || sessions[outcome.SessionID] {
+			t.Fatalf("direct outcome = %q, decode=%v; want a fresh session", inputs.Stdout(), decodeErr)
+		}
+		sessions[outcome.SessionID] = true
+		assertDirectCapabilityAttempt(t, denied, inputs, err, outcome.Status, runner, before)
+	}
+}
 
 func TestProviderPermissionBypassFunctionalContract(t *testing.T) {
 	// Keep the cases on separate root-built processes: capability overrides are
@@ -104,4 +173,22 @@ func permissionBypassWorkerConfig(provider string) string {
 		"stopToken: COMPLETE\n" +
 		"---\n" +
 		"Process the input task.\n"
+}
+
+func assertDirectCapabilityAttempt(t *testing.T, denied bool, inputs *support.CapturedInputs, err error, status string, runner *support.ShapedProviderCommandRunner, before int) {
+	t.Helper()
+	if denied {
+		if err != nil || status != "FAILED" || runner.CallCount() != before || inputs.Stderr() != "" {
+			t.Fatalf("denied outcome=%q error=%v calls=%d stderr=%q", status, err, runner.CallCount()-before, inputs.Stderr())
+		}
+		return
+	}
+	if err != nil || status != "SUCCEEDED" || !strings.Contains(inputs.Stdout(), "fresh direct attempt COMPLETE") || inputs.Stderr() != "" {
+		t.Fatalf("fresh attempt = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	requests := runner.Requests()
+	if len(requests) != before+1 || requests[before].Command != "codex" ||
+		slices.Contains(requests[before].Args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("fresh command requests = %#v, want one ordinary Codex attempt", requests)
+	}
 }

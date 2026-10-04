@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -22,37 +23,10 @@ import (
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
-func TestNew_RejectsNilCatalog(t *testing.T) {
-	t.Parallel()
-
-	service, err := providerservice.New(nil, &stubExecution{}, logging.NoopLogger{})
-	if err == nil || service != nil {
-		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
-	}
-}
-
-func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
-	t.Parallel()
-
-	catalogService, err := catalogwire.NewService()
-	if err != nil {
-		t.Fatalf("catalogwire.NewService() = %v", err)
-	}
-	var nilExecution execution.Service
-	service, constructionErr := providerservice.New(catalogService, nilExecution, logging.NoopLogger{})
-	if constructionErr == nil || service != nil {
-		t.Fatalf(
-			"New() = (%v, %v), want invalid execution composition error",
-			service,
-			constructionErr,
-		)
-	}
-}
-
 func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -60,7 +34,7 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -93,7 +67,7 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -118,12 +92,13 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 				}
 				return providers.ExecuteResult{Content: "root result"}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -145,12 +120,12 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, []providers.Descriptor{providers.Descriptor{
 		ID:           providers.IDCodex,
 		DisplayName:  "Codex",
 		Availability: providers.AvailabilitySelectable,
 		Readiness:    providers.ReadinessReady,
-	}))
+	}}, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -163,12 +138,13 @@ func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T
 				adapterCalls++
 				return providers.ExecuteResult{Content: "unexpected"}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -210,7 +186,7 @@ func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T
 func TestRootACPRejectsSeparateReasoningEffortAndAcceptsExactModelID(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -219,7 +195,7 @@ func TestRootACPRejectsSeparateReasoningEffortAndAcceptsExactModelID(t *testing.
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "cursor-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -268,7 +244,7 @@ func TestRootRejectsSeparateReasoningEffortForAgy(t *testing.T) {
 func TestCatalogAdvertisedAgyEffortsAreNotRejectedByExecutionPolicy(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -282,12 +258,13 @@ func TestCatalogAdvertisedAgyEffortsAreNotRejectedByExecutionPolicy(t *testing.T
 			) (providers.ExecuteResult, error) {
 				return providers.ExecuteResult{Content: "accepted"}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -339,6 +316,7 @@ func TestRootRejectsMinimalReasoningEffortForClaude(t *testing.T) {
 var _ acp.Service = (*stubACPService)(nil)
 
 type stubACPService struct {
+	unavailableACPContinuation
 	provider        providers.ID
 	integrations    []providers.ACPIntegration
 	executeCalls    int
@@ -389,7 +367,7 @@ func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool,
 func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, []providers.Descriptor{providers.Descriptor{
 		ID:           "cursor-acp",
 		DisplayName:  "Cursor ACP",
 		Availability: providers.AvailabilitySelectable,
@@ -398,7 +376,7 @@ func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 			providers.CapabilityPromptSubmission,
 			providers.CapabilityPermissionBypass,
 		},
-	}))
+	}}, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -407,7 +385,7 @@ func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "cursor-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -432,7 +410,7 @@ func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 func TestRootCustomACPIgnoresSkipPermissions(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -441,7 +419,7 @@ func TestRootCustomACPIgnoresSkipPermissions(t *testing.T) {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "custom-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -474,7 +452,7 @@ func TestRootCustomACPIgnoresSkipPermissions(t *testing.T) {
 func TestRootOpenCodeACPAllowsSkipPermissions(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -490,7 +468,7 @@ func TestRootOpenCodeACPAllowsSkipPermissions(t *testing.T) {
 			ImplementationProfile: "opencode-acp",
 		}},
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -506,7 +484,7 @@ func TestRootOpenCodeACPAllowsSkipPermissions(t *testing.T) {
 func TestRootCustomReplacementForOpenCodeACPIgnoresSkipPermissions(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -522,7 +500,7 @@ func TestRootCustomReplacementForOpenCodeACPIgnoresSkipPermissions(t *testing.T)
 			ImplementationProfile: "custom-opencode-acp",
 		}},
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -548,7 +526,7 @@ func TestRootCustomReplacementForOpenCodeACPIgnoresSkipPermissions(t *testing.T)
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -564,12 +542,13 @@ func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 					Kind: providers.ExecuteFailureKindAuthentication,
 				}
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -607,21 +586,30 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 	}
 }
 
-func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
+func TestRootCatalogPreservesSuppliedUnavailableProjection(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService(providerswire.CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		if descriptor.ID == providers.IDCodex {
-			return catalog.ProbeFacts{}, errors.New("native probe stderr: /Users/customer/.codex/output")
+			descriptor.Readiness = providers.ReadinessUnavailable
+			descriptor.Prerequisites = []providers.Prerequisite{{
+				Kind:        providers.PrerequisiteDependency,
+				Name:        "readiness-probe",
+				Status:      providers.PrerequisiteMissing,
+				Description: "Codex readiness probe failed.",
+			}}
+			return descriptor, nil
 		}
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
-	})))
+		return descriptor, nil
+	}),
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -670,13 +658,18 @@ func TestRootConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := providerswire.NewService(providerswire.CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{}, nil
-	})))
+		return providers.Descriptor{}, nil
+	}),
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -694,13 +687,13 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 
 	probeCalls := 0
 	adapterCalls := 0
-	catalogService, err := catalogwire.NewService(catalogwire.WithProbeQuery(func(
+	catalogService, err := catalogwire.NewService(catalog.ProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{}, nil
-	}))
+		return providers.Descriptor{}, nil
+	}), nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -715,12 +708,13 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 				adapterCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -892,16 +886,15 @@ func (session *mockPTYSession) Close() error { return nil }
 
 func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
-	service, err := providerswire.NewService(
-		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
-		providerswire.WithAgyPTY(providerswire.AgyPTYPlatformDependencies{
-			Allocator: allocator,
-			Locator:   platformprocess.HostExecutableLocator{},
-			Inspector: platformfilesystem.Local{},
-		}),
-	)
+	runner := fixtureCommandRunner(testutil.NewProviderCommandRunner())
+	service, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{}),
+		providerswire.NewCodexEffect(runner, platformclock.Real{}),
+		providerswire.NewClaudeEffect(runner, platformclock.Real{}),
+		providerswire.Configuration{})
 	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	return service
 }
@@ -909,7 +902,12 @@ func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) pr
 func mustRootService(t *testing.T) *providerservice.Service {
 	t.Helper()
 
-	root, err := providerswire.NewService()
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -949,4 +947,48 @@ func (*stubExecution) Execute(
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, nil
+}
+
+// unavailableACPContinuation explicitly preserves the dependency outcome for
+// component fixtures whose ACP peer cannot resume a session.
+type unavailableACPContinuation struct{}
+
+func (unavailableACPContinuation) Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP provider continuation is unavailable"}
+}
+
+func (*stubExecution) Continue(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "provider continuation adapter is unavailable"}
+}
+
+// fixtureCommandRunner projects the controlled buffered platform fake into the
+// component's direct Providers command port. Production selects its own bridge.
+func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
+	return bufferedFixtureRunner{runner: runner}.commandEffect()
+}
+
+type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
+
+func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	result, err := r.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin, Env: request.Env,
+		WorkDir: request.WorkDir, ExecutionScopeID: request.FactorySessionID,
+		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r bufferedFixtureRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (r bufferedFixtureRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
 }

@@ -8,7 +8,8 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/internal/service"
 )
 
 type manualFlushTicker struct {
@@ -428,20 +429,13 @@ func TestConcurrentAcceptanceFlushAndStopRetainOrderedEvents(t *testing.T) {
 func newActiveFlushRoot(
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
-) recordings.Service {
-	return recordingsinternal.NewServiceWithLifecycleEffects(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-		nil,
-		writer,
-		tickers,
-		nil,
-	)
+) recordinglifecycle.Service {
+	return lifecycleservice.New(nil, writer, tickers, fixedRecordingClock{})
 }
 
 func startActiveRecording(
 	t *testing.T,
-	root recordings.Service,
+	root recordinglifecycle.Service,
 	recordingID recordings.RecordingID,
 	interval time.Duration,
 ) recordings.RecordingID {
@@ -461,7 +455,7 @@ func startActiveRecording(
 
 func stopRecording(
 	t *testing.T,
-	root recordings.Service,
+	root recordinglifecycle.Service,
 	recordingID recordings.RecordingID,
 ) {
 	t.Helper()
@@ -474,7 +468,7 @@ func stopRecording(
 
 func recordEvent(
 	t *testing.T,
-	root recordings.Service,
+	root recordinglifecycle.Service,
 	recordingID recordings.RecordingID,
 	event recordings.CanonicalEvent,
 ) {
@@ -505,7 +499,7 @@ func activeFlushEvent(sequence int64) recordings.CanonicalEvent {
 
 func recordingStatus(
 	t *testing.T,
-	root recordings.Service,
+	root recordinglifecycle.Service,
 	recordingID recordings.RecordingID,
 ) recordings.RecordingStatusFacts {
 	t.Helper()
@@ -520,7 +514,7 @@ func recordingStatus(
 
 func assertCompletedFlushWatermark(
 	t *testing.T,
-	root recordings.Service,
+	root recordinglifecycle.Service,
 	want recordings.CanonicalEventCursor,
 	wantAvailable bool,
 ) {

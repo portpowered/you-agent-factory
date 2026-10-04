@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 )
@@ -64,17 +65,17 @@ func TestWorkersWireProviderRunnerBuffersOutput(t *testing.T) {
 	next := canonicalCommandRunnerFunc(func(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 		return platformprocess.CommandResult{Stdout: []byte("stdout"), Stderr: []byte("stderr")}, nil
 	})
-	providerRunner, ok := NewProviderCommandRunner(next).(providerCommandRunner)
-	if !ok {
-		t.Fatal("NewProviderCommandRunner() did not return providerCommandRunner")
-	}
+	providerRunner := NewProviderCommandRunner(next)
 	request := providerCoverageCommandRequest()
 	result, err := providerRunner.Run(context.Background(), request)
 	if err != nil || string(result.Stdout) != "stdout" {
 		t.Fatalf("provider command Run() = %#v, %v", result, err)
 	}
 	var chunks []recordedOutputChunk
-	result, err = providerRunner.RunStreaming(context.Background(), request, recordOutputChunks(&chunks))
+	result, err = providerRunner.RunStreaming(context.Background(), request, func(stream string, chunk []byte) error {
+		recordOutputChunks(&chunks)(stream, chunk)
+		return nil
+	})
 	if err != nil || string(result.Stderr) != "stderr" {
 		t.Fatalf("buffered provider RunStreaming() = %#v, %v", result, err)
 	}
@@ -87,12 +88,12 @@ func TestWorkersWireProviderRunnerBuffersOutput(t *testing.T) {
 func TestWorkersWireProviderRunnerStreamsOutput(t *testing.T) {
 	t.Parallel()
 
-	providerRunner, ok := NewProviderCommandRunner(streamingCanonicalCommandRunner{chunk: "streamed"}).(providerCommandRunner)
-	if !ok {
-		t.Fatal("NewProviderCommandRunner() did not return providerCommandRunner")
-	}
+	providerRunner := NewProviderCommandRunner(streamingCanonicalCommandRunner{chunk: "streamed"})
 	var chunks []recordedOutputChunk
-	result, err := providerRunner.RunStreaming(context.Background(), providerCoverageCommandRequest(), recordOutputChunks(&chunks))
+	result, err := providerRunner.RunStreaming(context.Background(), providerCoverageCommandRequest(), func(stream string, chunk []byte) error {
+		recordOutputChunks(&chunks)(stream, chunk)
+		return nil
+	})
 	if err != nil || string(result.Stdout) != "streamed provider-worker" {
 		t.Fatalf("streaming provider RunStreaming() = %#v, %v", result, err)
 	}
@@ -110,8 +111,8 @@ func TestWorkersWireProviderRunnerRequiresDelegate(t *testing.T) {
 	}
 }
 
-func providerCoverageCommandRequest() providerCommandRequest {
-	return providerCommandRequest{
+func providerCoverageCommandRequest() providers.CommandRequest {
+	return providers.CommandRequest{
 		Command:                  "provider-worker",
 		Args:                     []string{"--model", "tts"},
 		Stdin:                    []byte("input"),

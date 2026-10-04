@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 		result: workerprocess.CommandResult{Stdout: []byte("  completed  \n")},
 	}
 	factoryDirectory := filepath.Join("factory-root", "selected")
-	scriptRunner, err := New(Config{
+	scriptRunner := New(Config{
 		Command:          "scripts/run.sh",
 		FactoryDirectory: factoryDirectory,
 		Args: []string{
@@ -39,15 +40,13 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 			"relative/value",
 			"C:/absolute/tool",
 		},
-	}, testDependencies(commandEdge, func(directory string) (map[string]string, error) {
+	}, commandEdge, func(directory string) (map[string]string, error) {
 		if directory != factoryDirectory {
 			t.Fatalf("Factory docs directory = %q, want %q", directory, factoryDirectory)
 		}
 		return map[string]string{"guide.md": "factory guidance"}, nil
-	}))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	}, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) {},
+	)
 
 	request := validRequest()
 	result, err := scriptRunner.Execute(t.Context(), request)
@@ -97,7 +96,7 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 	commandEdge := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("completed")}}
 	contextFactoryDirectory := filepath.Join("factory-root", "detached")
-	scriptRunner, err := New(Config{
+	scriptRunner := New(Config{
 		Command:          "scripts/run.sh",
 		FactoryDirectory: filepath.Join("factory-root", "configured"),
 		Args: []string{
@@ -106,15 +105,13 @@ func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 			`{{ .Context.WorkDir }}`,
 			`{{ .Context.SessionID }}`,
 		},
-	}, testDependencies(commandEdge, func(directory string) (map[string]string, error) {
+	}, commandEdge, func(directory string) (map[string]string, error) {
 		if directory != contextFactoryDirectory {
 			t.Fatalf("Factory docs directory = %q, want detached context directory %q", directory, contextFactoryDirectory)
 		}
 		return nil, nil
-	}))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	}, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) {},
+	)
 
 	request := validRequest()
 	request.FactoryDirectory = ""
@@ -151,70 +148,60 @@ func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 }
 
 func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
-	t.Run("non-streaming override preserves output and correlation", func(t *testing.T) {
-		constructionRunner := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("construction")}}
-		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
-		request := validRequest()
-		request.Correlation = workers.ExecutionCorrelation{
-			FactorySessionID: "session-detached",
-			RuntimeID:        "runtime-detached",
-			GenerationID:     "generation-detached",
-			DispatchID:       "dispatch-detached",
-			AttemptID:        "attempt-detached",
-		}
-		override := nonStreamingCommandRunner{result: workerprocess.CommandResult{
-			Stdout: []byte("override stdout"),
-			Stderr: []byte("override stderr"),
-		}}
-		var fragments []workers.ProgressFragment
-		var events []workers.ScriptEvent
-		ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), override)
-		ctx = workerexecution.WithProgressPublisher(ctx, func(fragment workers.ProgressFragment) {
-			fragments = append(fragments, fragment)
-		})
-		ctx = workerexecution.WithScriptEventRecorder(ctx, func(event workers.ScriptEvent) {
-			events = append(events, event)
-		})
-
-		result, err := scriptRunner.Execute(ctx, request)
-		if err != nil {
-			t.Fatalf("Execute() error = %v", err)
-		}
-		if result.Content != "override stdout" {
-			t.Fatalf("result content = %q, want override output", result.Content)
-		}
-		if constructionRunner.Calls() != 0 {
-			t.Fatalf("construction command calls = %d, want request override only", constructionRunner.Calls())
-		}
-		if len(fragments) != 2 || fragments[0].Payload != "override stdout" || fragments[1].Payload != "override stderr" {
-			t.Fatalf("request-scoped progress = %#v, want stdout and stderr chunks", fragments)
-		}
-		for _, fragment := range fragments {
-			if fragment.Correlation != request.Correlation {
-				t.Fatalf("progress correlation = %#v, want %#v", fragment.Correlation, request.Correlation)
+	cases := []struct {
+		name   string
+		edge   workerprocess.CommandRunner
+		chunks []outputChunk
+	}{
+		{
+			name: "non-streaming override preserves output and correlation",
+			edge: nonStreamingCommandRunner{result: workerprocess.CommandResult{
+				Stdout: []byte("override stdout"), Stderr: []byte("override stderr"),
+			}},
+			chunks: []outputChunk{{platformprocess.OutputStreamStdout, "override stdout"},
+				{platformprocess.OutputStreamStderr, "override stderr"}},
+		},
+		{
+			name: "streaming override keeps streaming boundary",
+			edge: &streamingCommandEdge{
+				chunks: []outputChunk{{platformprocess.OutputStreamStdout, "streamed"}},
+				result: workerprocess.CommandResult{Stdout: []byte("streamed")},
+			},
+			chunks: []outputChunk{{platformprocess.OutputStreamStdout, "streamed"}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			constructionLog, overrideLog := &observationLog{}, &observationLog{}
+			constructionChunks := []outputChunk{{platformprocess.OutputStreamStdout, "construction"},
+				{platformprocess.OutputStreamStderr, "construction note"}}
+			constructionRunner := &streamingCommandEdge{
+				observations: constructionLog, chunks: constructionChunks,
+				result: workerprocess.CommandResult{Stdout: []byte("construction"), Stderr: []byte("construction note")},
 			}
-		}
-		if len(events) != 2 {
-			t.Fatalf("request-scoped script events = %d, want request and response", len(events))
-		}
-	})
-
-	t.Run("streaming override keeps streaming boundary", func(t *testing.T) {
-		constructionRunner := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("construction")}}
-		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
-		override := &streamingCommandEdge{
-			chunks: []outputChunk{{stream: platformprocess.OutputStreamStdout, payload: "streamed"}},
-			result: workerprocess.CommandResult{Stdout: []byte("streamed")},
-		}
-		ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), override)
-		result, err := scriptRunner.Execute(ctx, validRequest())
-		if err != nil {
-			t.Fatalf("Execute() error = %v", err)
-		}
-		if result.Content != "streamed" || constructionRunner.Calls() != 0 {
-			t.Fatalf("streaming override result/calls = %q/%d, want streamed/0", result.Content, constructionRunner.Calls())
-		}
-	})
+			started := time.Unix(100, 0)
+			clock := &sequenceClock{times: []time.Time{started, started.Add(time.Second),
+				started.Add(2 * time.Second), started.Add(3 * time.Second)}}
+			scriptRunner := New(Config{Command: "echo", Args: []string{"safe-arg"}},
+				constructionRunner, emptyDocs, clock.Now, constructionLog.CaptureProgress, constructionLog.CaptureEvent)
+			request := observedRequest()
+			ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), tc.edge)
+			ctx = workerexecution.WithProgressPublisher(ctx, overrideLog.CaptureProgress)
+			ctx = workerexecution.WithScriptEventRecorder(ctx, overrideLog.CaptureEvent)
+			result, err := scriptRunner.Execute(ctx, request)
+			if err != nil {
+				t.Fatalf("override Execute() error = %v", err)
+			}
+			assertObservedValue(t, "override output", result.Content, tc.chunks[0].payload)
+			assertAttributedObservations(t, overrideLog, request, started, started.Add(time.Second),
+				"echo", []string{"safe-arg"}, tc.chunks)
+			assertObservedValue(t, "construction command calls before default", constructionLog.Values(), []string(nil))
+			assertObservedValue(t, "construction progress before default", len(constructionLog.fragments), 0)
+			assertObservedValue(t, "construction events before default", len(constructionLog.events), 0)
+			assertDefaultExecutionAfterOverride(t, scriptRunner, constructionRunner, constructionLog,
+				overrideLog, request, result, started, constructionChunks, tc.chunks)
+		})
+	}
 }
 
 func TestCommandRunnerWithStreamingFallbackPreservesResultWithoutObserver(t *testing.T) {
@@ -245,17 +232,19 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 			ExitCode: 0,
 		},
 	}
-	started := time.Date(2026, 7, 26, 20, 0, 0, 0, time.UTC)
+	started := time.Date(2026, 7, 26, 20, 0, 0, 0, time.FixedZone("selected", 3600))
 	clock := &sequenceClock{times: []time.Time{started, started.Add(1500 * time.Millisecond)}}
-	dependencies := Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   emptyDocs,
-		Now:           clock.Now,
-		Publish: func(fragment workers.ProgressFragment) {
+	scriptRunner := New(Config{Command: "echo", Args: []string{"safe-arg"}},
+		commandEdge,
+		emptyDocs,
+		clock.Now,
+		func(fragment workers.ProgressFragment) {
+			observations.CaptureProgress(fragment)
 			observations.Append(fragment.Type + ":" + fragment.Payload)
 			fragment.Metadata["stream"] = "mutated"
 		},
-		Record: func(event workers.ScriptEvent) {
+		func(event workers.ScriptEvent) {
+			observations.CaptureEvent(event)
 			switch event.Kind {
 			case workers.ScriptEventKindRequest:
 				observations.Append("request")
@@ -266,12 +255,9 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 				event.Response.Stdout = "mutated"
 			}
 		},
-	}
-	scriptRunner, err := New(Config{Command: "echo", Args: []string{"safe-arg"}}, dependencies)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	request := validRequest()
+	)
+
+	request := observedRequest()
 	request.EnvVars["CI"] = "true"
 	request.EnvVars["SCRIPT_API_TOKEN"] = "fixture-secret"
 
@@ -295,15 +281,15 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 		t.Fatalf("observation order = %#v, want %#v", got, wantOrder)
 	}
 	assertSuccessfulDiagnostics(t, result, 1500*time.Millisecond)
+	assertAttributedObservations(t, observations, request, started, started.Add(1500*time.Millisecond), "echo", []string{"safe-arg"}, commandEdge.chunks)
 	terminal := observations.Terminal()
 	if terminal.Stdout != "firstsecond\n" || terminal.Stderr != "warn-1warn-2" {
 		t.Fatalf("terminal output = stdout %q stderr %q", terminal.Stdout, terminal.Stderr)
 	}
-	if terminal.ExitCode == nil || *terminal.ExitCode != 0 ||
-		terminal.Outcome != workers.ScriptExecutionOutcomeSucceeded ||
-		terminal.DurationMillis != 1500 {
-		t.Fatalf("terminal response = %#v", terminal)
-	}
+	assertObservedValue(t, "success exit code", terminal.ExitCode, intPointer(0))
+	assertObservedValue(t, "success outcome", terminal.Outcome, workers.ScriptExecutionOutcomeSucceeded)
+	assertObservedValue(t, "success duration", terminal.DurationMillis, int64(1500))
+	assertObservedValue(t, "success failure type", terminal.FailureType, (*workers.ScriptFailureType)(nil))
 	if captured := commandEdge.Request(); !reflect.DeepEqual(captured.Args, []string{"safe-arg"}) {
 		t.Fatalf("command args = %#v, want recorder mutation isolated", captured.Args)
 	}
@@ -313,14 +299,14 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 	commandEdge := &streamingCommandEdge{
 		result: workerprocess.CommandResult{Stdout: []byte("stable"), Stderr: []byte("note")},
 	}
-	scriptRunner, err := New(Config{Command: "echo", Args: []string{"one"}}, Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   emptyDocs,
-		Now:           func() time.Time { return time.Unix(100, 0) },
-		Publish: func(fragment workers.ProgressFragment) {
+	scriptRunner := New(Config{Command: "echo", Args: []string{"one"}},
+		commandEdge,
+		emptyDocs,
+		func() time.Time { return time.Unix(100, 0) },
+		func(fragment workers.ProgressFragment) {
 			fragment.Metadata["stream"] = "mutated"
 		},
-		Record: func(event workers.ScriptEvent) {
+		func(event workers.ScriptEvent) {
 			if event.Request != nil {
 				event.Request.Args[0] = "mutated"
 			}
@@ -328,10 +314,7 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 				event.Response.Stdout = "mutated"
 			}
 		},
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	)
 
 	first, err := scriptRunner.Execute(t.Context(), validRequest())
 	if err != nil {
@@ -403,6 +386,15 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 			wantWorkFailure: workers.WorkFailureTypeInternalServerError,
 		},
 		{
+			name:            "command deadline without context cancellation",
+			result:          workerprocess.CommandResult{Stdout: []byte("partial stdout"), Stderr: []byte("partial stderr")},
+			commandErr:      context.DeadlineExceeded,
+			wantMessage:     "execution timeout",
+			wantOutcome:     workers.ScriptExecutionOutcomeTimedOut,
+			wantFailureType: scriptFailureTypePointer(workers.ScriptFailureTypeTimeout),
+			wantWorkFailure: workers.WorkFailureTypeTimeout,
+		},
+		{
 			name: "missing executable",
 			result: workerprocess.CommandResult{
 				Stdout: []byte("partial stdout"),
@@ -456,15 +448,17 @@ func runCommandFailureCase(
 		result: commandResult,
 		err:    commandErr,
 	}
-	started := time.Date(2026, 7, 26, 21, 0, 0, 0, time.UTC)
-	scriptRunner, err := New(Config{Command: "missing-tool"}, Dependencies{
-		CommandRunner: commandEdge,
-		FactoryDocs:   emptyDocs,
-		Now:           (&sequenceClock{times: []time.Time{started, started.Add(2 * time.Second)}}).Now,
-		Publish: func(fragment workers.ProgressFragment) {
+	started := time.Date(2026, 7, 26, 21, 0, 0, 0, time.FixedZone("selected", -7200))
+	scriptRunner := New(Config{Command: "missing-tool"},
+		commandEdge,
+		emptyDocs,
+		(&sequenceClock{times: []time.Time{started, started.Add(2 * time.Second)}}).Now,
+		func(fragment workers.ProgressFragment) {
+			observations.CaptureProgress(fragment)
 			observations.Append(fragment.Type + ":" + fragment.Payload)
 		},
-		Record: func(event workers.ScriptEvent) {
+		func(event workers.ScriptEvent) {
+			observations.CaptureEvent(event)
 			if event.Request != nil {
 				observations.Append("request")
 			}
@@ -473,23 +467,25 @@ func runCommandFailureCase(
 				observations.SetTerminal(*event.Response)
 			}
 		},
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	)
 
-	result, executeErr := scriptRunner.Execute(t.Context(), validRequest())
+	request := observedRequest()
+	result, executeErr := scriptRunner.Execute(t.Context(), request)
 	var failure *workers.ProviderError
-	if !errors.As(executeErr, &failure) ||
-		failure.Type != wantWorkFailure ||
-		failure.Message != wantMessage {
-		t.Fatalf("Execute() error = %#v, want normalized failure type %q message %q", executeErr, wantWorkFailure, wantMessage)
+	if !errors.As(executeErr, &failure) {
+		t.Fatalf("Execute() error = %#v, want ProviderError", executeErr)
 	}
+	assertObservedValue(t, "error type", failure.Type, wantWorkFailure)
+	assertObservedValue(t, "error message", failure.Message, wantMessage)
+	assertObservedValue(t, "error cause", failure.Cause, commandErr)
 	if commandErr != nil && !errors.Is(executeErr, commandErr) {
 		t.Fatalf("Execute() error = %v, want process cause %v", executeErr, commandErr)
 	}
 	assertFailureDiagnostics(t, result.Diagnostics, commandResult, 2*time.Second)
 	assertFailureDiagnostics(t, failure.Diagnostics, commandResult, 2*time.Second)
+	assertObservedValue(t, "failure content", result.Content, strings.TrimSpace(string(commandResult.Stdout)))
+	assertObservedValue(t, "failure timed out", result.Diagnostics.Command.TimedOut, errors.Is(commandErr, context.DeadlineExceeded))
+	assertAttributedObservations(t, observations, request, started, started.Add(2*time.Second), "missing-tool", nil, commandEdge.chunks)
 	assertFailureObservation(t, observations, commandResult, wantOutcome, wantFailureType, wantExitCode)
 
 	result.Diagnostics.Command.Stdout = "mutated"
@@ -518,32 +514,26 @@ func assertFailureObservation(
 		t.Fatalf("observation order = %#v, want %#v", got, wantOrder)
 	}
 	terminal := observations.Terminal()
-	if terminal.Outcome != wantOutcome ||
-		terminal.DurationMillis != 2000 ||
-		!reflect.DeepEqual(terminal.ExitCode, wantExitCode) ||
-		!reflect.DeepEqual(terminal.FailureType, wantFailureType) ||
-		terminal.Stdout != string(result.Stdout) ||
-		terminal.Stderr != string(result.Stderr) {
-		t.Fatalf("terminal response = %#v", terminal)
-	}
+	assertObservedValue(t, "failure outcome", terminal.Outcome, wantOutcome)
+	assertObservedValue(t, "failure duration", terminal.DurationMillis, int64(2000))
+	assertObservedValue(t, "failure exit code", terminal.ExitCode, wantExitCode)
+	assertObservedValue(t, "failure type", terminal.FailureType, wantFailureType)
+	assertObservedValue(t, "failure stdout", terminal.Stdout, string(result.Stdout))
+	assertObservedValue(t, "failure stderr", terminal.Stderr, string(result.Stderr))
 }
 
 func TestRunnerValidationFailureDoesNotRecordOrStartCommand(t *testing.T) {
 	observations := &observationLog{}
 	commandEdge := &streamingCommandEdge{observations: observations}
-	scriptRunner, err := New(
+	scriptRunner := New(
 		Config{Command: "echo", Args: []string{"{{"}},
-		Dependencies{
-			CommandRunner: commandEdge,
-			FactoryDocs:   emptyDocs,
-			Now:           func() time.Time { return time.Unix(0, 0) },
-			Publish:       func(workers.ProgressFragment) { observations.Append("progress") },
-			Record:        func(workers.ScriptEvent) { observations.Append("event") },
-		},
+
+		commandEdge,
+		emptyDocs,
+		func() time.Time { return time.Unix(0, 0) },
+		func(workers.ProgressFragment) { observations.Append("progress") },
+		func(workers.ScriptEvent) { observations.Append("event") },
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
 
 	_, executeErr := scriptRunner.Execute(t.Context(), validRequest())
 	assertFailureType(t, executeErr, workers.WorkFailureTypePermanentBadRequest)
@@ -715,7 +705,16 @@ func TestRunnerRejectsInvalidInputBeforeCommandExecution(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			commandEdge := &captureCommandRunner{}
-			scriptRunner := newTestRunner(t, test.config, commandEdge)
+			var effects []string
+			scriptRunner := New(test.config, commandEdge, func(string) (map[string]string, error) {
+				effects = append(effects, "docs")
+				return nil, nil
+			},
+				func() time.Time { effects = append(effects, "clock"); return time.Time{} },
+				func(workers.ProgressFragment) { effects = append(effects, "progress") },
+				func(workers.ScriptEvent) { effects = append(effects, "record") },
+			)
+
 			request := validRequest()
 			if test.mutate != nil {
 				test.mutate(&request)
@@ -731,44 +730,11 @@ func TestRunnerRejectsInvalidInputBeforeCommandExecution(t *testing.T) {
 			if commandEdge.Calls() != 0 {
 				t.Fatalf("command calls = %d, want 0", commandEdge.Calls())
 			}
-		})
-	}
-}
-
-func TestNewRejectsMissingConfigurationAndEffects(t *testing.T) {
-	tests := []struct {
-		name   string
-		config Config
-		mutate func(*Dependencies)
-	}{
-		{name: "command"},
-		{name: "command runner", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.CommandRunner = nil
-		}},
-		{name: "streaming command runner", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.CommandRunner = nonStreamingCommandRunner{}
-		}},
-		{name: "Factory docs loader", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.FactoryDocs = nil
-		}},
-		{name: "clock", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.Now = nil
-		}},
-		{name: "progress publisher", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.Publish = nil
-		}},
-		{name: "event recorder", config: Config{Command: "echo"}, mutate: func(deps *Dependencies) {
-			deps.Record = nil
-		}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dependencies := testDependencies(&captureCommandRunner{}, emptyDocs)
-			if test.mutate != nil {
-				test.mutate(&dependencies)
+			for _, effect := range effects {
+				if effect != "docs" || test.name != "invalid argument template" {
+					t.Fatalf("unexpected effect before input rejection: %s", effect)
+				}
 			}
-			_, err := New(test.config, dependencies)
-			assertFailureType(t, err, workers.WorkFailureTypeMisconfigured)
 		})
 	}
 }
@@ -786,14 +752,13 @@ func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 			`{{ .Context.Env.RUNTIME }}`,
 		},
 	}
-	scriptRunner, err := New(config, testDependencies(commandEdge, func(string) (map[string]string, error) {
+	scriptRunner := New(config, commandEdge, func(string) (map[string]string, error) {
 		close(docsEntered)
 		<-releaseDocs
 		return map[string]string{}, nil
-	}))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	}, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) {},
+	)
+
 	config.Args[0] = "mutated-config"
 	request := validRequest()
 
@@ -830,26 +795,24 @@ func TestRunnerSnapshotsCallerOwnedDataBeforeInjectedWork(t *testing.T) {
 
 func TestRunnerPreservesPreCanceledContextWithoutCallingEffects(t *testing.T) {
 	commandEdge := &captureCommandRunner{}
-	docsCalls := 0
-	scriptRunner, err := New(
-		Config{Command: "echo"},
-		testDependencies(commandEdge, func(string) (map[string]string, error) {
-			docsCalls++
-			return nil, nil
-		}),
+	var effects []string
+	scriptRunner := New(Config{Command: "echo"},
+		commandEdge,
+		func(string) (map[string]string, error) { effects = append(effects, "docs"); return nil, nil },
+		func() time.Time { effects = append(effects, "clock"); return time.Time{} },
+		func(workers.ProgressFragment) { effects = append(effects, "progress") },
+		func(workers.ScriptEvent) { effects = append(effects, "record") },
 	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = scriptRunner.Execute(ctx, validRequest())
+	result, err := scriptRunner.Execute(ctx, validRequest())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
 	}
-	if commandEdge.Calls() != 0 || docsCalls != 0 {
-		t.Fatalf("effects called after pre-cancellation: command=%d docs=%d", commandEdge.Calls(), docsCalls)
-	}
+	assertObservedValue(t, "pre-canceled result", result, workers.RunnerExecutionResult{})
+	assertObservedValue(t, "pre-canceled command calls", commandEdge.Calls(), 0)
+	assertObservedValue(t, "pre-canceled effects", effects, []string(nil))
 }
 
 func TestEngineNeutralInputAndScriptEventHelpersPreserveBoundaryFacts(t *testing.T) {
@@ -956,17 +919,4 @@ func validRequest() workers.RunnerExecutionRequest {
 			},
 		},
 	}
-}
-
-func newTestRunner(
-	t *testing.T,
-	config Config,
-	commandRunner workerprocess.CommandRunner,
-) workers.Runner {
-	t.Helper()
-	scriptRunner, err := New(config, testDependencies(commandRunner, emptyDocs))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	return scriptRunner
 }

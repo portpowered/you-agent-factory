@@ -49,18 +49,9 @@ func newAuthoringLayoutService(t *testing.T) authoringlayout.Service {
 
 	mapper := factorymapping.NewFactoryConfigMapper()
 	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator: factoryvalidation.New(nil),
+		Validator: factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON),
 		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, func(
-				payload []byte,
-				_ factorydefinitions.WorkstationLoader,
-			) (factorydefinitions.MutableLoadedFactorySource, error) {
-				cfg, decodeErr := mapper.Expand(payload)
-				if decodeErr != nil {
-					return nil, decodeErr
-				}
-				return stubLoadedSource{cfg: cfg}, nil
-			})
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		DecodeFactory:     mapper.Expand,
 		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
@@ -208,7 +199,7 @@ func TestFlattenExpandFactoryLayout_PreservesFactoryIdentityAcrossRoundTrip(t *t
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
 
@@ -290,7 +281,7 @@ func newAuthoringLayoutTestComposition(t *testing.T) factorydefinitiontestcompos
 		SafeLayoutSegment: authoredmapping.SafeFactoryLayoutSegment,
 		SafePromptPath:    authoredmapping.SafePromptFilePath,
 		MapPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,
@@ -372,7 +363,7 @@ func TestCreateNamedFactory_CreatesDurableNamedFactoryLayout(t *testing.T) {
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
@@ -408,7 +399,7 @@ func TestReplaceNamedFactory_ReplacesExistingLayoutAtomically(t *testing.T) {
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
@@ -455,7 +446,7 @@ func TestCreateNamedFactory_RejectsStagingValidationWithoutPartialTarget(t *test
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceWithCorruptingWrite(t, composition, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
@@ -502,7 +493,7 @@ func TestReplaceNamedFactory_PreservesExistingLayoutOnRejectedWrite(t *testing.T
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
 	rootDir := t.TempDir()
 	validPayload := validAlphaPayload(t)

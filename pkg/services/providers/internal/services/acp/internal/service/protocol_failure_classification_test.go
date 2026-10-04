@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -166,7 +168,7 @@ func newProtocolFailureTestService(t *testing.T, starts *atomic.Int32) acp.Conti
 	t.Helper()
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -268,7 +270,7 @@ func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T)
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -295,7 +297,7 @@ func TestDeniedPermissionWithEmptyPromptIsFailure(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -325,7 +327,7 @@ func TestExplicitUnadvertisedModelFailsBeforePrompt(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -355,7 +357,7 @@ func TestACPExecuteObservesProviderSessionWhileAttemptIsLive(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -412,7 +414,7 @@ func TestContinuationResumesExactSessionThroughSessionLoad(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -451,7 +453,7 @@ func TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession(t *testing.
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -485,7 +487,7 @@ func TestMissingExecutableFailsBeforeStartWithWorkFailureType(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), missingLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), missingLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -516,7 +518,7 @@ func TestInitializeFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	var starts atomic.Int32
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio)
+	}}, protocolHelperCommandFactory(&starts), availableLocator{}, platformprocess.NewParentOwnedStdio, platformclock.Real{}, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

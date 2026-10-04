@@ -58,13 +58,13 @@ func New(
 	targets recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
-	clocks ...recordings.RecordingClock,
+	clock recordings.RecordingClock,
 ) *Service {
 	return &Service{
 		targets:        targets,
 		writer:         writer,
 		tickers:        tickers,
-		clock:          firstClock(clocks),
+		clock:          clock,
 		byID:           make(map[string]*recordingSession),
 		durableThrough: make(map[string]recordings.CanonicalEventCursor),
 	}
@@ -87,13 +87,6 @@ func (service *Service) CompletedFlushWatermark(
 	cursor, ok := service.durableThrough[generationID]
 	service.mu.Unlock()
 	return cursor, ok
-}
-
-func firstClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
-	if len(clocks) == 0 {
-		return nil
-	}
-	return clocks[0]
 }
 
 func (service *Service) StartRecording(
@@ -517,8 +510,5 @@ func (service *Service) recordFailureLocked(
 }
 
 func (service *Service) now() time.Time {
-	if service != nil && service.clock != nil {
-		return service.clock.Now().UTC()
-	}
-	return time.Time{}
+	return service.clock.Now().UTC()
 }

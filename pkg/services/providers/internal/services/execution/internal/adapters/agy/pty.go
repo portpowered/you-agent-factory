@@ -7,8 +7,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -19,57 +19,51 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/commandenv"
 )
 
-// ExecutableDependencies are policy-free host effects used to resolve the
-// executable selected by Providers execution policy.
-type ExecutableDependencies struct {
-	Locator   platformprocess.ExecutableLocator
-	Inspector platformfilesystem.PathInspector
-}
-
-// PTYEffectOptions configures the native Agy PTY execution effect.
-type PTYEffectOptions struct {
+// PTYPolicy contains pure execution policy for the native Agy PTY effect.
+type PTYPolicy struct {
 	FactoryRoot   string
-	Allocator     agypty.PTYAllocator
 	Executable    string
 	SessionConfig agypty.SessionConfig
-	ExecutableDependencies
 }
 
-// NewPTYEffect binds one PTY allocator to the Agy adapter.
-func NewPTYEffect(options PTYEffectOptions) Effect {
-	if options.Allocator == nil {
-		return nil
-	}
-	executable := strings.TrimSpace(options.Executable)
+// NewPTYEffect binds completed host effects to the Agy adapter.
+func NewPTYEffect(
+	allocator agypty.PTYAllocator,
+	locator platformprocess.ExecutableLocator,
+	inspector platformfilesystem.PathInspector,
+	clock platformclock.Source,
+	policy PTYPolicy,
+) Effect {
+	executable := strings.TrimSpace(policy.Executable)
 	if executable == "" {
 		executable = "agy"
 	}
-	sessionConfig := options.SessionConfig
+	sessionConfig := policy.SessionConfig
 	if sessionConfig == (agypty.SessionConfig{}) {
 		sessionConfig = agypty.DefaultSessionConfig()
 	}
-	factoryRoot := strings.TrimSpace(options.FactoryRoot)
+	factoryRoot := strings.TrimSpace(policy.FactoryRoot)
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
-		started := time.Now()
+		started := clock.Now()
 		sessionRef := sessionRefFromRequest(request.ResumeSession)
 		launch, err := buildPTYLaunch(request, ptyLaunchConfig{
 			factoryRoot:   factoryRoot,
 			executable:    executable,
-			locator:       options.Locator,
-			inspector:     options.Inspector,
+			locator:       locator,
+			inspector:     inspector,
 			sessionConfig: sessionConfig,
 		})
 		if err != nil {
 			return EffectResult{SessionRef: sessionRef}, orchestrationFailure(err)
 		}
-		result, runErr := runPTY(ctx, options.Allocator, launch, sessionConfig, observe)
+		result, runErr := runPTY(ctx, allocator, launch, sessionConfig, observe)
 		cleaned := cleanedPTYText(result)
 		effectResult := EffectResult{
-			DurationMillis: time.Since(started).Milliseconds(),
+			DurationMillis: clock.Now().Sub(started).Milliseconds(),
 			SessionRef:     sessionRef,
 			CapturedStdout: []byte(cleaned),
 		}
@@ -160,12 +154,6 @@ func resolveExecutable(
 	locator platformprocess.ExecutableLocator,
 	inspector platformfilesystem.PathInspector,
 ) (string, error) {
-	if locator == nil {
-		return "", fmt.Errorf("agy: executable locator is required")
-	}
-	if inspector == nil {
-		return "", fmt.Errorf("agy: executable path inspector is required")
-	}
 	executable = strings.TrimSpace(executable)
 	if executable == "" {
 		executable = "agy"

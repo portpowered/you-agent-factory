@@ -49,4 +49,5 @@ type ValidationOperations interface {
 	Validator
 	DefinitionValidationOperation
 	SubmittedDefinitionValidationOperation
+	EffectiveDefinitionValidationOperation
 }

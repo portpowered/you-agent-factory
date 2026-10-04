@@ -1,5 +1,0 @@
-package api
-
-func testRuntime(service Service) {
-	service.GetSession("session-1")
-}

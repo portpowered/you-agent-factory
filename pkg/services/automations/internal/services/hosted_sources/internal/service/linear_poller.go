@@ -30,8 +30,8 @@ type LinearPoller struct {
 	submitter      Submitter
 }
 
-// NewLinearPoller validates required dependencies and applies production
-// defaults before any poller goroutine is started.
+// NewLinearPoller validates source configuration before any poller goroutine
+// is started. The owning construction boundary supplies the logger.
 func NewLinearPoller(
 	logger *zap.Logger,
 	clock hostedsources.Clock,
@@ -70,7 +70,7 @@ func NewLinearPoller(
 	}
 
 	return &LinearPoller{
-		logger:         defaultLogger(logger),
+		logger:         logger,
 		clock:          clock,
 		httpClient:     httpClient,
 		secretResolver: secretResolver,
@@ -89,11 +89,4 @@ func defaultLinearEndpoint(value string) string {
 		return endpoint
 	}
 	return hostedlinear.DefaultEndpoint
-}
-
-func defaultLogger(logger *zap.Logger) *zap.Logger {
-	if logger != nil {
-		return logger
-	}
-	return zap.NewNop()
 }

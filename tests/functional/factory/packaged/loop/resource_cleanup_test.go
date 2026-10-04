@@ -185,6 +185,15 @@ func runLoopBlockedCancellationCleanup(t *testing.T, fixture *loopSharedFixture)
 	if registrations == 0 || stops != registrations {
 		t.Fatalf("scheduler timer cleanup registrations=%d stops=%d; want one stop per registration", registrations, stops)
 	}
+	// C08g: public stop/delete and runner join above acknowledge this closed
+	// scope before the next logical schedule boundary. This matrix owns the
+	// scheduler alone; no peer scenario can submit into its observation window.
+	fixture.clock.Advance(time.Minute)
+	select {
+	case record := <-fixture.submissions:
+		t.Fatalf("closed loop admitted Work after logical schedule advancement: %#v", record)
+	default:
+	}
 }
 
 func runLoopEarlyAssertionCleanup(t *testing.T, fixture *loopSharedFixture) {

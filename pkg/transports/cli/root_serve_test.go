@@ -13,6 +13,8 @@ import (
 	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	"github.com/portpowered/infinite-you/pkg/platform/contextscope"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
@@ -538,7 +540,10 @@ func (r *readStartSignal) Close() error {
 // left open and never written to, and asserts cancellation unblocks it
 // within a small bounded time instead of hanging.
 func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *testing.T) {
-	server := acpwire.NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := acpwire.NewServer(
+		logging.NoopLogger{}, nil, nil, nil, nil, nil, nil, nil, nil,
+		func(ctx context.Context) acp.InvocationScope { return contextscope.New(ctx) },
+	)
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
 		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
 		sessionResolvedHandlers:  testSessionHandlers(nil, nil),

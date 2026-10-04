@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,21 +21,146 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestNewLifecycleService_RequiresClock(t *testing.T) {
-	t.Parallel()
+// readinessTimers exposes creation and firing separately so readiness can be
+// observed without advancing replay facts or sleeping for a wall-clock poll.
+type readinessTimers struct {
+	created chan *readinessTimer
+}
 
-	service, err := factoryhost.NewLifecycleService(nil)
-	if service != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("NewLifecycleService() = (%v, %v), want nil service and clock dependency error", service, err)
+type readinessTimer struct {
+	duration time.Duration
+	fired    chan time.Time
+	mu       sync.Mutex
+	stopped  bool
+}
+
+func (*readinessTimers) Now() time.Time { panic("readiness must not read fact time") }
+func (s *readinessTimers) After(duration time.Duration) <-chan time.Time {
+	return s.NewTimer(duration).C()
+}
+func (s *readinessTimers) NewTimer(duration time.Duration) platformclock.Timer {
+	timer := &readinessTimer{duration: duration, fired: make(chan time.Time, 1)}
+	s.created <- timer
+	return timer
+}
+func (timer *readinessTimer) C() <-chan time.Time { return timer.fired }
+func (timer *readinessTimer) Stop() bool {
+	timer.mu.Lock()
+	defer timer.mu.Unlock()
+	wasActive := !timer.stopped
+	timer.stopped = true
+	return wasActive
+}
+func (timer *readinessTimer) assertStopped(t *testing.T) {
+	t.Helper()
+	timer.mu.Lock()
+	defer timer.mu.Unlock()
+	if !timer.stopped {
+		t.Fatal("readiness returned with an active timer")
+	}
+}
+func (s *readinessTimers) next(t *testing.T, duration time.Duration) *readinessTimer {
+	t.Helper()
+	// The suite's timeout is the deadlock ceiling; synchronization is entirely
+	// through timer creation and delivery, without a competing wall-clock wait.
+	timer := <-s.created
+	if timer.duration != duration {
+		t.Fatalf("timer duration = %s, want %s", timer.duration, duration)
+	}
+	return timer
+}
+
+func awaitReadiness(t *testing.T, result <-chan error, want error) {
+	t.Helper()
+	err := <-result
+	if !errors.Is(err, want) {
+		t.Fatalf("readiness = %v, want %v", err, want)
 	}
 }
 
-func TestFinalizeArtifacts_RequiresClock(t *testing.T) {
+func TestWaitForStart_UsesControlledPollAndCeiling(t *testing.T) {
 	t.Parallel()
+	for _, outcome := range []string{"running", "deadline", "cancel", "run failure", "incomplete drain"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			engine := &lifecycleObserverFactory{}
+			engine.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{FactoryState: string(interfaces.FactoryStatePaused)})
+			handle := &factoryhost.Handle{Bundle: &factoryhost.Bundle{Factory: engine}, RunDone: make(chan struct{})}
+			scheduler := &readinessTimers{created: make(chan *readinessTimer, 8)}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			result := make(chan error, 1)
+			go func() { result <- factoryhost.WaitForStart(ctx, handle, scheduler) }()
+			deadline := scheduler.next(t, time.Second)
+			poll := scheduler.next(t, 10*time.Millisecond)
+			poll.fired <- time.Time{}
+			nextPoll := scheduler.next(t, 10*time.Millisecond)
+			poll.assertStopped(t)
+			var want error
+			switch outcome {
+			case "running":
+				engine.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{FactoryState: string(interfaces.FactoryStateRunning)})
+				nextPoll.fired <- time.Time{}
+			case "deadline":
+				want = context.DeadlineExceeded
+				deadline.fired <- time.Time{}
+			case "cancel":
+				want = context.Canceled
+				cancel()
+			case "run failure":
+				want = errors.New("controlled run failed")
+				handle.SetRunResult(want)
+			case "incomplete drain":
+				handle.SetRunResult(&factory.IncompleteDrainError{NonTerminalWorkCount: 2})
+			}
+			awaitReadiness(t, result, want)
+			deadline.assertStopped(t)
+			nextPoll.assertStopped(t)
+		})
+	}
+}
 
-	err := factoryhost.FinalizeArtifacts(&factoryhost.Bundle{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("FinalizeArtifacts() error = %v, want required clock error", err)
+func TestLifecycleService_ReadinessUsesSchedulerAndStopUsesReplayFactClock(t *testing.T) {
+	t.Parallel()
+	finishedAt := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	factClock := clockwork.NewFakeClockAt(finishedAt)
+	scheduler := &readinessTimers{created: make(chan *readinessTimer, 8)}
+	lifecycle, err := factoryhost.NewLifecycleService(factClock, scheduler)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recording := &terminalRecording{}
+	engine := &blockingLifecycleFactory{}
+	engine.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{FactoryState: string(interfaces.FactoryStatePaused)})
+	handle, err := lifecycle.Start(context.Background(), &factoryhost.Bundle{Factory: engine, Recording: recording, Logger: zap.NewNop()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lifecycle.Stop(handle) })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- lifecycle.WaitForStart(ctx, handle) }()
+	deadline := scheduler.next(t, time.Second)
+	poll := scheduler.next(t, 10*time.Millisecond)
+	factClock.Advance(24 * time.Hour)
+	select {
+	case err := <-result:
+		t.Fatalf("replay clock advance ended readiness: %v", err)
+	default:
+	}
+	cancel()
+	awaitReadiness(t, result, context.Canceled)
+	deadline.assertStopped(t)
+	poll.assertStopped(t)
+	if err := lifecycle.Stop(handle); err != nil {
+		t.Fatal(err)
+	}
+	if !handle.Completed() {
+		t.Fatal("Stop returned before joining the run")
+	}
+	if !recording.finishedAt.Equal(finishedAt.Add(24 * time.Hour)) {
+		t.Fatalf("recording finished at %s, want selected replay time", recording.finishedAt)
 	}
 }
 
@@ -196,30 +320,6 @@ func TestStopPreservesFailuresAfterCanceledRun(t *testing.T) {
 				t.Fatalf("Stop = %v, lost worker drain failure", err)
 			}
 		})
-	}
-}
-
-func TestStop_RequiresClockBeforeMutatingHandle(t *testing.T) {
-	t.Parallel()
-
-	handle := &factoryhost.Handle{RunDone: make(chan struct{})}
-	err := factoryhost.Stop(handle, nil)
-	if err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("Stop() error = %v, want required clock error", err)
-	}
-	select {
-	case <-handle.RunDone:
-		t.Fatal("Stop() mutated handle before rejecting missing clock")
-	default:
-	}
-}
-
-func TestPublishFactoryChange_RequiresClock(t *testing.T) {
-	t.Parallel()
-
-	err := factoryhost.PublishFactoryChange(context.Background(), nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("PublishFactoryChange() error = %v, want required clock error", err)
 	}
 }
 
@@ -467,7 +567,7 @@ func TestWaitForStart_ReportsRunningReadinessWithoutRootService(t *testing.T) {
 	if handle == nil {
 		t.Fatal("Start returned nil handle")
 	}
-	if err := factoryhost.WaitForStart(context.Background(), handle); err != nil {
+	if err := factoryhost.WaitForStart(context.Background(), handle, platformclock.Real{}); err != nil {
 		t.Fatalf("WaitForStart: %v", err)
 	}
 	handle.CancelRun()
@@ -483,7 +583,7 @@ func TestWaitForStart_AllowsIncompleteDrainToReachHostedTransport(t *testing.T) 
 	}
 	handle.SetRunResult(&factory.IncompleteDrainError{NonTerminalWorkCount: 2})
 
-	if err := factoryhost.WaitForStart(context.Background(), handle); err != nil {
+	if err := factoryhost.WaitForStart(context.Background(), handle, platformclock.Real{}); err != nil {
 		t.Fatalf("WaitForStart: %v, want transport-visible startup", err)
 	}
 }

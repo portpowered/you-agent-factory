@@ -15,7 +15,6 @@ import (
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
@@ -35,27 +34,20 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 		catalog       catalog.Service
 		registrations []execution.Registration
 	}{
-		{name: "nil catalog"},
 		{
 			name:    "invalid provider",
 			catalog: mustCatalog(t),
 			registrations: []execution.Registration{{
-				Attempt: validAttempt,
-			}},
-		},
-		{
-			name:    "nil adapter",
-			catalog: mustCatalog(t),
-			registrations: []execution.Registration{{
-				Provider: providers.IDCodex,
+				Attempt:  validAttempt,
+				Continue: executionwire.NewUnsupportedContinuation(),
 			}},
 		},
 		{
 			name:    "duplicate adapter",
 			catalog: mustCatalog(t),
 			registrations: []execution.Registration{
-				{Provider: providers.IDCodex, Attempt: validAttempt},
-				{Provider: providers.IDCodex, Attempt: validAttempt},
+				{Provider: providers.IDCodex, Attempt: validAttempt, Continue: executionwire.NewUnsupportedContinuation()},
+				{Provider: providers.IDCodex, Attempt: validAttempt, Continue: executionwire.NewUnsupportedContinuation()},
 			},
 		},
 		{
@@ -64,6 +56,7 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			registrations: []execution.Registration{{
 				Provider: "missing",
 				Attempt:  validAttempt,
+				Continue: executionwire.NewUnsupportedContinuation(),
 			}},
 		},
 		{
@@ -79,6 +72,7 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			registrations: []execution.Registration{{
 				Provider: providers.IDCodex,
 				Attempt:  validAttempt,
+				Continue: executionwire.NewUnsupportedContinuation(),
 			}},
 		},
 		{
@@ -94,6 +88,7 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			registrations: []execution.Registration{{
 				Provider: providers.IDCodex,
 				Attempt:  validAttempt,
+				Continue: executionwire.NewUnsupportedContinuation(),
 			}},
 		},
 	}
@@ -105,15 +100,6 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 				t.Fatalf("NewService() = (%v, %v), want construction error", service, err)
 			}
 		})
-	}
-}
-
-func TestBuiltInRegistrationsDefaultToUnavailableEffects(t *testing.T) {
-	t.Parallel()
-
-	registrations := executionservice.BuiltInRegistrations()
-	if len(registrations) != 3 {
-		t.Fatalf("BuiltInRegistrations() = %d registrations, want antigravity/codex/claude", len(registrations))
 	}
 }
 
@@ -244,6 +230,7 @@ func TestContinueFailsClosedAcrossPrivateContinuationBoundaries(t *testing.T) {
 				t.Fatal("ordinary adapter called for catalog lookup failure")
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		})
 		if err != nil {
 			t.Fatalf("NewService() = %v", err)
@@ -254,7 +241,7 @@ func TestContinueFailsClosedAcrossPrivateContinuationBoundaries(t *testing.T) {
 		}
 	})
 
-	t.Run("missing continuation adapter", func(t *testing.T) {
+	t.Run("explicit unsupported continuation", func(t *testing.T) {
 		t.Parallel()
 
 		continuation := mustContinuationService(t, mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
@@ -353,6 +340,7 @@ func TestExecuteRejectsInvalidRequestBeforeCatalogOrAdapterIO(t *testing.T) {
 				adapterCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
@@ -392,6 +380,7 @@ func TestExecuteNeverFallsBackForUnknownUnavailableOrUnregisteredProvider(t *tes
 				codexCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
@@ -442,6 +431,7 @@ func TestExecutePreservesAdapterResultAlongsideFailureWithoutRetry(t *testing.T)
 				return providers.ExecuteResult{Content: "must not escape"},
 					errors.New("secret native attempt failed")
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
@@ -866,6 +856,7 @@ func TestExecuteReturnsDetachedNormalizedSuccess(t *testing.T) {
 			) (providers.ExecuteResult, error) {
 				return native, nil
 			},
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {
@@ -1085,6 +1076,7 @@ func TestExecuteRejectsInvalidOrCrossProviderSuccessSession(t *testing.T) {
 							SessionRef: &test.session,
 						}, nil
 					},
+					Continue: executionwire.NewUnsupportedContinuation(),
 				},
 			)
 			if err != nil {
@@ -1110,7 +1102,7 @@ func TestExecuteRejectsInvalidOrCrossProviderSuccessSession(t *testing.T) {
 func mustCatalog(t *testing.T) catalog.Service {
 	t.Helper()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -1128,6 +1120,7 @@ func mustExecutionService(
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt:  attempt,
+			Continue: executionwire.NewUnsupportedContinuation(),
 		},
 	)
 	if err != nil {

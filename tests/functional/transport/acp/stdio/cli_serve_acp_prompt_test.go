@@ -232,10 +232,7 @@ func writeRPCLine(t *testing.T, w io.Writer, line string) {
 
 func readRPCFrame(t *testing.T, r *bufio.Reader) rpcFrame {
 	t.Helper()
-	line, err := r.ReadString('\n')
-	if err != nil {
-		t.Fatalf("read RPC line: %v", err)
-	}
+	line := readRPCLineBounded(t, r)
 	assertLineIsProtocolFrame(t, line)
 	var frame rpcFrame
 	if err := json.Unmarshal([]byte(line), &frame); err != nil {

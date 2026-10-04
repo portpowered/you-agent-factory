@@ -15,7 +15,7 @@ import (
 )
 
 func TestCorpusInputSchemaContract(t *testing.T) {
-	path := filepath.Join(corpusV2RepositoryRoot(t), "tests", "integration", "models", "omni_media_probe", "corpus-input.schema.json")
+	path := filepath.Join(corpusV2RepositoryRoot(t), "tests", "internal", "localai", "omni_media_probe", "corpus-input.schema.json")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read corpus v2 schema: %v", err)

@@ -1,7 +1,9 @@
 package http_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,12 +42,13 @@ const minimalValidationFactoryBody = `{
   }]
 }`
 
-func TestHandlerFromRoot_ValidateFactoryInvokesSubmittedDefinitionValidationOperation(t *testing.T) {
+func TestHandler_ValidateFactoryInvokesSubmittedDefinitionValidationOperation(t *testing.T) {
 	t.Parallel()
 
 	validation := &httpDefinitionsValidationFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	root := &httpDefinitionsRootFake{}
+	handler := factorydefinitionshttp.NewHandler(
+		root, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -61,6 +64,9 @@ func TestHandlerFromRoot_ValidateFactoryInvokesSubmittedDefinitionValidationOper
 	if !validation.invoked {
 		t.Fatal("ValidateSubmittedDefinition was not invoked through the injected validation operation")
 	}
+	if root.validateStructuralInvoked {
+		t.Fatal("explicit validation override also invoked structural validation")
+	}
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("response = %d %s, want 200 from fake validation operation", recorder.Code, recorder.Body.String())
 	}
@@ -69,12 +75,12 @@ func TestHandlerFromRoot_ValidateFactoryInvokesSubmittedDefinitionValidationOper
 	}
 }
 
-func TestHandlerFromRoot_ValidateFactoryInvokesDefinitionsRootValidateStructural(t *testing.T) {
+func TestHandler_ValidateFactoryInvokesDefinitionsRootValidateStructural(t *testing.T) {
 	t.Parallel()
 
 	root := &httpDefinitionsRootFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -89,6 +95,23 @@ func TestHandlerFromRoot_ValidateFactoryInvokesDefinitionsRootValidateStructural
 
 	if !root.validateStructuralInvoked {
 		t.Fatal("ValidateStructuralFactoryDefinition was not invoked through the injected Definitions root")
+	}
+	if root.structuralContext != request.Context() || root.structuralRequest.Profile != factorydefinitions.ValidationProfileTopology {
+		t.Fatalf("structural validation context/profile changed: %#v", root.structuralRequest)
+	}
+	var canonical map[string]any
+	if err := json.Unmarshal(root.structuralRequest.Canonical, &canonical); err != nil {
+		t.Fatalf("decode structural canonical payload: %v", err)
+	}
+	if canonical["name"] != "alpha" {
+		t.Fatalf("canonical factory = %#v, want alpha", canonical)
+	}
+	explicit := &capturingValidationFake{}
+	explicitHandler := factorydefinitionshttp.NewHandler(&httpDefinitionsRootFake{}, explicit, zap.NewNop())
+	explicitHandler.ValidateFactory(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/factory-validations", strings.NewReader(minimalValidationFactoryBody)))
+	wantCanonical, err := json.Marshal(explicit.request.Config)
+	if err != nil || !bytes.Equal(root.structuralRequest.Canonical, wantCanonical) {
+		t.Fatalf("structural canonical differs from mapped submitted Config: %s, want %s (%v)", root.structuralRequest.Canonical, wantCanonical, err)
 	}
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("response = %d %s, want 200 from fake Definitions root", recorder.Code, recorder.Body.String())
@@ -123,15 +146,19 @@ func (fake *httpDefinitionsValidationFake) ValidateSubmittedDefinition(
 
 type httpDefinitionsRootFake struct {
 	validateStructuralInvoked bool
+	structuralContext         context.Context
+	structuralRequest         factorydefinitions.ValidateStructuralFactoryDefinitionRequest
 }
 
 var _ factorydefinitions.Service = (*httpDefinitionsRootFake)(nil)
 
 func (fake *httpDefinitionsRootFake) ValidateStructuralFactoryDefinition(
-	_ context.Context,
+	ctx context.Context,
 	request factorydefinitions.ValidateStructuralFactoryDefinitionRequest,
 ) (factorydefinitions.ValidateStructuralFactoryDefinitionResult, error) {
 	fake.validateStructuralInvoked = true
+	fake.structuralContext = ctx
+	fake.structuralRequest = request
 	if len(request.Canonical) == 0 {
 		return factorydefinitions.ValidateStructuralFactoryDefinitionResult{}, factorydefinitions.ErrInvalidFactoryDefinitionPayload
 	}

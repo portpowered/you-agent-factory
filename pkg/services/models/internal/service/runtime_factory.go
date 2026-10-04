@@ -9,11 +9,9 @@ import (
 	"sync"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
@@ -23,17 +21,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Root retains the process-wide external effect ports of the injected Models
-// service. It is inert until it is bound to a Factory Session runtime.
+// Root composes completed Models collaborators and scoped resources.
+// It is inert until a customer operation activates the selected scope.
 type Root struct {
-	processLauncher            modelhost.ProcessLauncher
-	hostHTTP                   modelhost.HTTPDoer
-	hostClock                  modelhost.Clock
-	runtimeRunner              platformprocess.CommandRunner
-	runtimeHTTP                localmodels.HTTPDoer
-	runtimeInspect             localmodels.InspectFile
-	runtimeTempDir             localmodels.TempDirectory
-	runtimeTempFile            localmodels.CreateTempFile
+	resources                  *localmodels.ResourceLimiter
+	pullModel                  func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	invokeLocal                func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+	closeScopedExecution       func(models.RuntimeScopeRef)
+	closeExecution             func()
 	runtimeScopes              runtimescopes.Service
 	assets                     scopedassets.Service
 	runtimeHost                runtimehost.Service
@@ -43,53 +38,37 @@ type Root struct {
 	cacheLifecycleMu           sync.Mutex
 	runtimeMu                  sync.RWMutex
 	correlationSequence        uint64
-	runtimeByScope             map[models.RuntimeScopeRef]models.Service
 	catalog                    modelcatalog.Service
-	process                    modelseffects.ProcessDependencies
+	logger                     *zap.Logger
+	now                        func() time.Time
+	pullMetrics                modelseffects.PullMetricsRecorder
+	runtimeEvidence            modelseffects.RuntimeEvidenceRecorder
+	backendArtifactPlatform    models.AssetHostPlatform
 }
 
 var _ models.Service = (*Root)(nil)
 
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func NewRoot(
-	processLauncher modelhost.ProcessLauncher,
-	hostHTTP modelhost.HTTPDoer,
-	hostClock modelhost.Clock,
-	runtimeRunner platformprocess.CommandRunner,
-	runtimeHTTP localmodels.HTTPDoer,
-	runtimeInspect localmodels.InspectFile,
-	runtimeTempDir localmodels.TempDirectory,
-	runtimeTempFile localmodels.CreateTempFile,
+	resources *localmodels.ResourceLimiter,
+	pullModel func(context.Context, models.PullModelRequest) (models.PullResult, error),
+	invokeLocal func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error),
+	closeScopedExecution func(models.RuntimeScopeRef),
+	closeExecution func(),
 	runtimeScopes runtimescopes.Service,
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
 	runtimeHostService runtimehost.Service,
 	inferenceService modelinference.Service,
-	processDependencies ...modelseffects.ProcessDependencies,
+	logger *zap.Logger,
+	now func() time.Time,
+	pullMetrics modelseffects.PullMetricsRecorder,
+	runtimeEvidence modelseffects.RuntimeEvidenceRecorder,
+	resolveRevision func(context.Context, string) (string, error),
+	resolveBackend modelseffects.BackendArtifactResolver,
+	platform models.AssetHostPlatform,
 ) (*Root, error) {
-	if processLauncher == nil {
-		return nil, missingDependencyError("model host process launcher")
-	}
-	if hostHTTP == nil {
-		return nil, missingDependencyError("model host HTTP client")
-	}
-	if hostClock == nil {
-		return nil, missingDependencyError("model host clock")
-	}
-	if runtimeRunner == nil {
-		return nil, missingDependencyError("model runtime command runner")
-	}
-	if runtimeHTTP == nil {
-		return nil, missingDependencyError("model runtime HTTP client")
-	}
-	if runtimeInspect == nil {
-		return nil, missingDependencyError("model runtime file inspector")
-	}
-	if runtimeTempDir == nil {
-		return nil, missingDependencyError("model runtime temporary directory resolver")
-	}
-	if runtimeTempFile == nil {
-		return nil, missingDependencyError("model runtime temporary file creator")
+	if resources == nil {
+		return nil, missingDependencyError("local model resource limiter")
 	}
 	if runtimeScopes == nil {
 		return nil, missingDependencyError("Models Runtime Scopes service")
@@ -106,61 +85,37 @@ func NewRoot(
 	if inferenceService == nil {
 		return nil, missingDependencyError("Models Inference service")
 	}
-	process := modelseffects.ProcessDependencies{}
-	if len(processDependencies) > 0 {
-		process = processDependencies[0]
+	if logger == nil {
+		return nil, missingDependencyError("Models logger")
 	}
-	if process.Logger == nil {
-		process.Logger = zap.NewNop()
-	}
-	process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(
-		process.RuntimeEvidence,
-	)
-	if process.Clock == nil {
+	if now == nil {
 		return nil, missingDependencyError("Models process clock")
 	}
-	resolveRevision := process.ResolveHuggingFaceRevision
+	if pullModel == nil {
+		return nil, missingDependencyError("scoped model pull")
+	}
+	if invokeLocal == nil {
+		return nil, missingDependencyError("scoped local invocation")
+	}
+	if closeScopedExecution == nil {
+		return nil, missingDependencyError("scoped execution close")
+	}
+	if closeExecution == nil {
+		return nil, missingDependencyError("execution close")
+	}
 	if resolveRevision == nil {
-		resolveRevision = defaultHuggingFaceRevision
+		return nil, missingDependencyError("Models revision resolver")
 	}
 	return &Root{
-		processLauncher: processLauncher, hostHTTP: hostHTTP, hostClock: hostClock,
-		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
-		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
+		resources: resources, pullModel: pullModel, invokeLocal: invokeLocal,
+		closeScopedExecution: closeScopedExecution, closeExecution: closeExecution,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
 		resolveHuggingFaceRevision: resolveRevision,
-		resolveBackendArtifact:     process.ResolveBackendArtifact,
-		runtimeByScope:             make(map[models.RuntimeScopeRef]models.Service),
-		process:                    process,
+		resolveBackendArtifact:     resolveBackend,
+		logger:                     logger, now: now, pullMetrics: pullMetrics, runtimeEvidence: runtimeEvidence,
+		backendArtifactPlatform: platform,
 	}, nil
-}
-
-func (o *Root) runtimeForBindingWithAssets(
-	scope models.RuntimeScopeRef,
-	binding models.RuntimeBinding,
-	assets localmodels.AssetPuller,
-) (models.Service, error) {
-	localRuntime, err := localmodels.NewOmniVoiceRuntime(
-		o.runtimeRunner, o.runtimeHTTP, o.runtimeInspect, o.runtimeTempDir, o.runtimeTempFile,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return newRuntimeWithHostEdges(
-		scope,
-		binding.RuntimeConfig,
-		o.process.Logger,
-		o.process.Clock,
-		o.process.PullMetrics,
-		o.process.HostLogger,
-		o.process.HostMetrics,
-		o.process.LocalHooks,
-		assets,
-		localRuntime,
-		o.runtimeHost,
-		nil,
-	)
 }
 
 func (o *Root) OpenRuntimeScope(
@@ -209,12 +164,13 @@ func (o *Root) Close(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("Models runtime host does not support process shutdown")
 	}
+	// Retire admission before the external shutdown/join can block. A late
+	// resolution must not begin invocation while the host is stopping.
+	o.closeExecution()
 	if err := shutdown.Shutdown(ctx); err != nil {
 		return err
 	}
-	o.runtimeMu.Lock()
-	o.runtimeByScope = make(map[models.RuntimeScopeRef]models.Service)
-	o.runtimeMu.Unlock()
+	o.resources.Close()
 	return nil
 }
 
@@ -291,29 +247,34 @@ func (o *Root) PullModelForScope(
 	if err := models.ValidatePullModelRequest(request); err != nil {
 		return models.PullResult{}, err
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
-	runtime, err := o.scopedRuntime(request.Scope)
-	if err != nil {
-		return models.PullResult{}, err
-	}
-	puller, ok := runtime.(interface {
-		PullModel(context.Context, string) (models.PullResult, error)
-	})
-	if !ok {
+	if o == nil || o.runtimeScopes == nil || o.pullModel == nil {
 		return models.PullResult{}, models.ErrUnsupportedOperation
 	}
-	if o.runtimeScopes != nil {
-		binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
-		if err != nil {
-			return models.PullResult{}, runtimeScopeError(err)
-		}
-		_, _, hasOverlay, _ := findOverlay(binding.OperatorModels, strings.ToLower(strings.TrimSpace(request.Name)))
-		if hasOverlay {
-			return o.pullResolvedModelAfterCatalogMiss(ctx, request, models.ErrNotFound)
-		}
+	if request.Scope.IsZero() {
+		return models.PullResult{}, models.ErrRuntimeScopeInvalid
 	}
-	result, err := puller.PullModel(ctx, request.Name)
+	if err := ctx.Err(); err != nil {
+		return models.PullResult{}, err
+	}
+	o.cacheLifecycleMu.Lock()
+	defer o.cacheLifecycleMu.Unlock()
+	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.PullResult{}, runtimeScopeError(err)
+	}
+	started := o.now()
+	o.logger.Info("managed runtime pull started", zap.String("model_name", (models.PullDiagnostics{ModelName: request.Name}).Normalize().ModelName))
+	result, err := o.pullScopedModel(ctx, request, binding)
+	recordManagedRuntimePull(o.logger.With(zap.String("scope", request.Scope.String())), o.pullMetrics, request.Name, result, err, o.now().Sub(started))
+	return result, err
+}
+
+func (o *Root) pullScopedModel(ctx context.Context, request models.PullModelRequest, binding models.RuntimeBinding) (models.PullResult, error) {
+	_, _, hasOverlay, _ := findOverlay(binding.OperatorModels, strings.ToLower(strings.TrimSpace(request.Name)))
+	if hasOverlay {
+		return o.pullResolvedModelAfterCatalogMiss(ctx, request, models.ErrNotFound)
+	}
+	result, err := o.pullModel(ctx, request)
 	if err == nil || !errors.Is(err, models.ErrNotFound) {
 		return result, err
 	}
@@ -531,7 +492,7 @@ func (o *Root) InvokeModel(
 	var invocationEvidence modelseffects.RuntimeEvidenceRecorder
 	if o != nil {
 		invocationEvidence = modelseffects.NewRuntimeEvidenceInvocation(
-			o.process.RuntimeEvidence,
+			o.runtimeEvidence,
 		)
 	}
 	stage := modelseffects.RuntimeStageArtifactResolve
@@ -615,7 +576,7 @@ func (o *Root) prepareJoinedInvocation(
 	}
 	resolved := resolution.Resolved
 	plan.configuration = joinedHostConfiguration(
-		request, resolved, o.process.BackendArtifactPlatform,
+		request, resolved, o.backendArtifactPlatform,
 	)
 	plan.modelName = plan.configuration.ModelName
 	plan.backend = plan.configuration.Backend
@@ -924,19 +885,6 @@ func joinedInvocationFailureResult(result models.InvokeModelResult) models.Invok
 	return result
 }
 
-func joinedAssetPreparationRequest(
-	request models.InvokeModelRequest,
-	modelName string,
-	resolved models.ResolvedModelReference,
-) (models.PrepareModelAssetsRequest, error) {
-	configuration := modelseffects.ResolvedHostConfiguration{
-		Scope: request.Scope, ModelName: modelName,
-		Source:  joinedAssetReference(request.Model, resolved),
-		Backend: strings.TrimSpace(resolved.Definition.Backend),
-	}
-	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
-}
-
 func (o *Root) CancelInvocation(
 	ctx context.Context,
 	request models.CancelInvocationRequest,
@@ -951,9 +899,5 @@ func (o *Root) InvokeLocal(
 	ctx context.Context,
 	request models.LocalInvocationRequest,
 ) (models.LocalInvocationResult, error) {
-	runtime, err := o.scopedRuntime(request.Scope)
-	if err != nil {
-		return models.LocalInvocationResult{}, err
-	}
-	return runtime.InvokeLocal(ctx, request)
+	return o.invokeLocal(ctx, request)
 }

@@ -723,3 +723,17 @@ func (r *registry) logContinuationRejected(req workersessions.ContinueRequest, o
 		"outcome", outcome,
 	)
 }
+
+// interruptSuccessorAdmittedState reports whether a successor snapshot taken
+// after Workers admission is consistent with a successful admission. The
+// snapshot is read after the admission barrier opens, so a fast successor may
+// already have progressed past RUNNING to COMPLETED; that is still an accepted
+// admission, not a mismatch.
+func interruptSuccessorAdmittedState(state workersessions.State) bool {
+	switch state {
+	case workersessions.StateStarting, workersessions.StateRunning, workersessions.StateCompleted:
+		return true
+	default:
+		return false
+	}
+}

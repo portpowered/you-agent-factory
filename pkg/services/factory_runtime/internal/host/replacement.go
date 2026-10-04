@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
@@ -34,6 +35,7 @@ func StartReplacement(
 	serviceCtx context.Context,
 	bundle *Bundle,
 	clock factory.Clock,
+	scheduler platformclock.TimerSource,
 	attachSidecars SidecarStarter,
 	attachSidecarsInServiceMode bool,
 ) (*Handle, error) {
@@ -41,7 +43,7 @@ func StartReplacement(
 		return nil, fmt.Errorf("replacement runtime bundle is required")
 	}
 	handle := Start(serviceCtx, bundle)
-	if err := WaitForStart(readinessCtx, handle); err != nil {
+	if err := WaitForStart(readinessCtx, handle, scheduler); err != nil {
 		_ = Stop(handle, clock)
 		return nil, fmt.Errorf("start replacement Runtime: %w", err)
 	}

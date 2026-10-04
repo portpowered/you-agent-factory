@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
@@ -379,7 +380,7 @@ func TestRuntimeRootDeactivationRetainsStateUntilCleanupSucceeds(t *testing.T) {
 func TestRuntimeRootActivationRequiresPerCallOperation(t *testing.T) {
 	t.Parallel()
 
-	root, err := factoryruntimewire.NewService(
+	root, err := newCompletedRuntimeRoot(
 		func() string { return "runtime-activation-test-id" },
 		nil,
 		nil,
@@ -388,6 +389,7 @@ func TestRuntimeRootActivationRequiresPerCallOperation(t *testing.T) {
 		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -407,7 +409,7 @@ func newRuntimeRoot(
 	Deactivate(context.Context, factoryruntime.RuntimeDeactivationRequest) (factoryruntime.RuntimeDeactivationResult, error)
 } {
 	t.Helper()
-	root, err := factoryruntimewire.NewService(
+	root, err := newCompletedRuntimeRoot(
 		func() string { return "runtime-activation-test-id" },
 		nil,
 		nil,
@@ -416,6 +418,7 @@ func newRuntimeRoot(
 		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -433,4 +436,16 @@ type perCallActivationRoot struct {
 
 func (r *perCallActivationRoot) Activate(ctx context.Context, request factoryruntime.RuntimeActivationRequest) (factoryruntime.RuntimeActivationResult, error) {
 	return r.Root.Activate(ctx, request, r.operation)
+}
+
+func newCompletedRuntimeRoot(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime, clock factoryruntime.Clock, publisher factoryruntimewire.WorkersPublisher, canceler factoryruntimewire.WorkersCanceler, scheduler platformclock.TimerSource) (factoryruntime.Root, error) {
+	lifecycle, err := factoryruntimewire.NewLifecycle(clock, scheduler)
+	if err != nil {
+		return nil, err
+	}
+	host, err := factoryruntimewire.NewInstanceHost(clock, scheduler, lifecycle)
+	if err != nil {
+		return nil, err
+	}
+	return factoryruntimewire.NewService(factoryruntimewire.NewOrchestration(newID, workflows, runtime), host, factoryruntimewire.NewDispatchPlanning(publisher, canceler))
 }

@@ -16,21 +16,27 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/providerpackages"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := NewService()
+	service, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewService() returned nil service")
+		t.Fatal("newTestProvidersService() returned nil service")
 	}
 	var root providers.Service = service
 	if root == nil {
@@ -49,9 +55,14 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewService()
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{
@@ -87,9 +98,14 @@ func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *test
 func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewService()
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	tests := []struct {
 		canonical string
@@ -156,9 +172,14 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 }
 
 func TestNewServiceBuildsUsableRoot(t *testing.T) {
-	root, err := NewService()
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	result, err := root.ListProviders(
 		context.Background(),
@@ -215,14 +236,14 @@ launch: {posture: installed_executable, transport: stdio, command: 'agent''\tool
 		gotArguments = append([]string(nil), arguments...)
 		return exec.Command(os.Args[0], "-test.run=^TestGeneratedRuntimeExecutableReachesCommandFactoryLosslessly$")
 	}
-	root, err := NewService(
-		WithACPIntegrations(integrations...),
-		WithCommandFactory(commandFactory),
-		WithExecutableLocator(fakeExecutableLocator{wantExecutable: wantExecutable}),
-		WithStdioPipeFactory(platformprocess.NewParentOwnedStdio),
-	)
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, commandFactory, fakeExecutableLocator{wantExecutable: wantExecutable}, platformprocess.NewParentOwnedStdio,
+		nil,
+		nil,
+		nil,
+		Configuration{ACPIntegrations: integrations})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 
 	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
@@ -247,13 +268,14 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 	t.Parallel()
 
 	integration := providers.ACPIntegration{ID: "custom-acp", Name: "custom-acp", Transport: "stdio", Command: "custom-agent --acp"}
-	root, err := NewService(
-		WithACPIntegrations(integration),
-		WithCommandFactory(nil),
-		WithExecutableLocator(nil),
-	)
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{ACPIntegrations: []providers.ACPIntegration{integration}})
 	if err != nil {
-		t.Fatalf("NewService(ACP) = %v", err)
+		t.Fatalf("newTestProvidersService(ACP) = %v", err)
 	}
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: integration.Name})
 	if err != nil || got.Provider.ID != integration.Name {
@@ -281,9 +303,69 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 		t.Fatalf("effectiveACPIntegrations(legacy package command) = %#v, want package runtime metadata preserved", legacySaved)
 	}
 
-	factory := NewFactory(nil)
-	if _, err := factory([]providers.ACPIntegration{{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"}}); err == nil {
-		t.Fatal("factory(invalid command) error = nil")
+	if _, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{ACPIntegrations: []providers.ACPIntegration{providers.ACPIntegration{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"}}}); err == nil {
+		t.Fatal("newTestProvidersService(invalid command) error = nil")
+	}
+}
+
+func TestACPConfigurationReusesInertRootAndPreservesCatalogAfterRejection(t *testing.T) {
+	t.Parallel()
+
+	commands := 0
+	channels := 0
+	locator := &inertExecutableLocator{}
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, func(name string, args ...string) *exec.Cmd {
+			commands++
+			return exec.Command(name, args...)
+		}, locator, func() (platformprocess.StdioChannel, error) {
+			channels++
+			return nil, errors.New("unexpected ACP channel creation")
+		},
+		nil,
+		nil,
+		nil,
+		Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := root.(interface {
+		ConfigureACPIntegrations(context.Context, []providers.ACPIntegration) error
+		Close(context.Context) error
+	})
+	t.Cleanup(func() {
+		if err := configuration.Close(context.Background()); err != nil {
+			t.Errorf("Close() = %v", err)
+		}
+	})
+	configured := providers.ACPIntegration{ID: "configured", Name: "configured", Transport: "stdio", Command: "configured-agent acp"}
+	if err := configuration.ConfigureACPIntegrations(context.Background(), []providers.ACPIntegration{configured}); err != nil {
+		t.Fatalf("ConfigureACPIntegrations() = %v", err)
+	}
+	configured.Command = "mutated-agent"
+	configured.Name = "mutated"
+	before, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: "configured"})
+	if err != nil || before.Provider.ID != "configured" {
+		t.Fatalf("GetProvider(configured) = (%#v, %v)", before, err)
+	}
+	invalid := providers.ACPIntegration{ID: "invalid", Name: "invalid", Transport: "stdio", Command: "'"}
+	if err := configuration.ConfigureACPIntegrations(context.Background(), []providers.ACPIntegration{invalid}); err == nil {
+		t.Fatal("ConfigureACPIntegrations(invalid) error = nil")
+	}
+	after, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: "configured"})
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("catalog after rejected configuration = (%#v, %v), want %#v", after, err, before)
+	}
+	if commands != 0 {
+		t.Fatalf("construction/configuration/discovery started %d commands, want 0", commands)
+	}
+	if channels != 0 || locator.calls != 0 {
+		t.Fatalf("construction/configuration/discovery used channels=%d, executable lookups=%d, want zero", channels, locator.calls)
 	}
 }
 
@@ -309,17 +391,17 @@ func TestACPExecutionUsesTheInjectedStdioPipeFactory(t *testing.T) {
 	const id = providers.ID("acp-injected-channel")
 	sentinel := errors.New("injected stdio channel unavailable")
 	calls := 0
-	root, err := NewService(
-		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-channel-agent acp"}),
-		WithCommandFactory(exec.Command),
-		WithExecutableLocator(fakeExecutableLocator{"acp-channel-agent": "/injected/acp-channel-agent"}),
-		WithStdioPipeFactory(func() (platformprocess.StdioChannel, error) {
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, exec.Command, fakeExecutableLocator{"acp-channel-agent": "/injected/acp-channel-agent"}, func() (platformprocess.StdioChannel, error) {
 			calls++
 			return nil, sentinel
-		}),
-	)
+		},
+		nil,
+		nil,
+		nil,
+		Configuration{ACPIntegrations: []providers.ACPIntegration{providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-channel-agent acp"}}})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 
 	request := acpChannelInjectionRequest(t, id)
@@ -348,16 +430,17 @@ func TestACPExecutionWithoutStdioPipeFactoryFailsClosed(t *testing.T) {
 
 	const id = providers.ID("acp-missing-channel")
 	commands := 0
-	root, err := NewService(
-		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-missing-channel-agent acp"}),
-		WithCommandFactory(func(name string, arguments ...string) *exec.Cmd {
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, func(name string, arguments ...string) *exec.Cmd {
 			commands++
 			return exec.Command(name, arguments...)
-		}),
-		WithExecutableLocator(fakeExecutableLocator{"acp-missing-channel-agent": "/injected/acp-missing-channel-agent"}),
-	)
+		}, fakeExecutableLocator{"acp-missing-channel-agent": "/injected/acp-missing-channel-agent"}, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{ACPIntegrations: []providers.ACPIntegration{providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-missing-channel-agent acp"}}})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 
 	request := acpChannelInjectionRequest(t, id)
@@ -381,7 +464,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	platformRunner := &inertPlatformCommandRunner{}
 	workersRunner := &inertWorkersCommandRunner{}
 	agyAllocator := &inertPTYAllocator{}
 	agyLocator := &inertExecutableLocator{}
@@ -391,30 +473,23 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	service, err := NewService(
-		CatalogOption(catalogwire.WithProbeQuery(func(
-			_ context.Context,
-			descriptor providers.Descriptor,
-		) (catalog.ProbeFacts, error) {
-			probeCalls++
-			return catalog.ProbeFacts{
-				Readiness:     descriptor.Readiness,
-				Prerequisites: descriptor.Prerequisites,
-			}, nil
-		})),
-		WithCommandRunner(platformRunner),
-		WithWorkersCommandRunner(workersRunner),
-		WithAgyPTY(AgyPTYPlatformDependencies{
-			Allocator: agyAllocator,
-			Locator:   agyLocator,
-			Inspector: agyInspector,
-		}),
-	)
+	service, err := newTestProvidersService(catalog.ProbeOperation(func(
+		_ context.Context,
+		descriptor providers.Descriptor,
+	) (providers.Descriptor, error) {
+		probeCalls++
+		return descriptor, nil
+	}),
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{}),
+		NewCodexEffect((workersRunner).commandEffect(), platformclock.Real{}),
+		NewClaudeEffect((workersRunner).commandEffect(), platformclock.Real{}),
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewService() returned nil service")
+		t.Fatal("newTestProvidersService() returned nil service")
 	}
 	var root providers.Service = service
 	if root == nil {
@@ -423,9 +498,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 
 	if probeCalls != 0 {
 		t.Fatalf("construction probe calls = %d, want 0", probeCalls)
-	}
-	if platformRunner.calls != 0 {
-		t.Fatalf("platform command runner calls = %d, want inert construction", platformRunner.calls)
 	}
 	if workersRunner.calls != 0 {
 		t.Fatalf("workers command runner calls = %d, want inert construction", workersRunner.calls)
@@ -462,9 +534,14 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewService()
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 
 	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
@@ -485,27 +562,29 @@ func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 	}
 }
 
-func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
+func TestNewServiceUsesCompletedNativeEffects(t *testing.T) {
 	t.Parallel()
 
 	workersRunner := &recordingWorkersCommandRunner{}
+	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
+	policy := DefaultPTYSessionConfig()
+	policy.HardTimeout = 17 * time.Minute
 	agyAllocator := &recordingPTYAllocator{
-		result: PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
+		result:     PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
+		onAllocate: func() { clock.SetTick(37) },
 	}
 	agyPath := filepath.Join(t.TempDir(), "agy")
-	agyLocator := fakeExecutableLocator{string(providers.IDAntigravity): agyPath}
+	agyLocator := fakeExecutableLocator{"agy": agyPath}
 	agyInspector := fakeExecutableInspector{agyPath: fakeExecutableInfo{directory: false}}
 
-	root, err := NewService(
-		WithWorkersCommandRunner(workersRunner),
-		WithAgyPTY(AgyPTYPlatformDependencies{
-			Allocator: agyAllocator,
-			Locator:   agyLocator,
-			Inspector: agyInspector,
-		}),
-	)
+	root, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy}),
+		NewCodexEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
+		NewClaudeEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	if workersRunner.calls != 0 || agyAllocator.calls != 0 {
 		t.Fatalf(
@@ -530,6 +609,15 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	if agyResult.Content != "agy via wire" {
 		t.Fatalf("Execute(agy) content = %q, want injected allocator output", agyResult.Content)
 	}
+	if agyResult.Diagnostics == nil || agyResult.Diagnostics.DurationMillis != 37 {
+		t.Fatalf("PTY duration = %#v, want the supplied effect's 37ms clock", agyResult.Diagnostics)
+	}
+	if agyAllocator.config != policy {
+		t.Fatalf("PTY config = %#v, want detached policy %#v", agyAllocator.config, policy)
+	}
+	if agyAllocator.launch.Executable != agyPath || agyAllocator.closes != 1 {
+		t.Fatalf("PTY launch/close = %#v/%d, want selected executable and joined resource", agyAllocator.launch, agyAllocator.closes)
+	}
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
@@ -537,18 +625,20 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := NewService(CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
-	})))
+		return descriptor, nil
+	}),
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	if probeCalls != 0 {
 		t.Fatalf("construction probe calls = %d, want inert construction", probeCalls)
@@ -608,7 +698,7 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 		var failure providers.ExecuteFailure
 		if !errors.As(executeErr, &failure) ||
 			failure.Kind != providers.ExecuteFailureKindDependency ||
-			!strings.Contains(failure.Message, test.name) {
+			failure.Message != test.name+" native execution is unavailable" {
 			t.Fatalf(
 				"Execute(%q) error = %#v, want dependency failure from bound %s adapter without effects",
 				test.id,
@@ -626,22 +716,24 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 	}
 }
 
-func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
+func TestNewServiceBindsCodexAndClaudeWithDisabledCommandEdges(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := NewService(CatalogOption(catalogwire.WithProbeQuery(func(
+	root, err := newTestProvidersService(catalog.ProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
-	) (catalog.ProbeFacts, error) {
+	) (providers.Descriptor, error) {
 		probeCalls++
-		return catalog.ProbeFacts{
-			Readiness:     descriptor.Readiness,
-			Prerequisites: descriptor.Prerequisites,
-		}, nil
-	})))
+		return descriptor, nil
+	}),
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() = %v", err)
+		t.Fatalf("newTestProvidersService() = %v", err)
 	}
 	if probeCalls != 0 {
 		t.Fatalf("construction probe calls = %d, want 0", probeCalls)
@@ -661,7 +753,7 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 		var failure providers.ExecuteFailure
 		if !errors.As(executeErr, &failure) ||
 			failure.Kind != providers.ExecuteFailureKindDependency ||
-			!strings.Contains(failure.Message, test.name) {
+			failure.Message != test.name+" native execution is unavailable" {
 			t.Fatalf(
 				"Execute(%q) error = %#v, want matching private adapter",
 				test.id,
@@ -671,52 +763,6 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 	}
 	if probeCalls != 2 {
 		t.Fatalf("execution probe calls = %d, want one per explicit selection", probeCalls)
-	}
-}
-
-func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		call func() (providers.Service, error)
-		want string
-	}{
-		{
-			name: "catalog",
-			call: func() (providers.Service, error) {
-				return newRootWithOptions(nil, nil, nil, nil, AgyPTYPlatformDependencies{}, nil, nil, nil, nil, nil)
-			},
-			want: "construct Providers: catalog is required",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			service, err := test.call()
-			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s construction port", test.name)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
-			}
-			if !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.want)
-			}
-		})
-	}
-
-	service, err := NewService()
-	if err != nil {
-		t.Fatalf("NewService() error = %v, want successful construction with required ports", err)
-	}
-	if service == nil {
-		t.Fatal("NewService() returned nil service, want non-nil providers.Service")
-	}
-	var root providers.Service = service
-	if root == nil {
-		t.Fatal("constructed root is not assignable to providers.Service")
 	}
 }
 
@@ -738,8 +784,8 @@ type inertWorkersCommandRunner struct {
 
 func (r *inertWorkersCommandRunner) Run(
 	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
+	_ CommandRequest,
+) (CommandResult, error) {
 	r.calls++
 	panic("workers command runner invoked during inert construction")
 }
@@ -793,35 +839,44 @@ type recordingWorkersCommandRunner struct {
 
 func (r *recordingWorkersCommandRunner) Run(
 	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
+	_ CommandRequest,
+) (CommandResult, error) {
 	r.calls++
-	return platformprocess.CommandResult{}, nil
+	return CommandResult{}, nil
 }
 
 type recordingPTYAllocator struct {
-	calls  int
-	result PTYSessionResult
+	calls      int
+	closes     int
+	result     PTYSessionResult
+	launch     PTYProcessLaunch
+	config     PTYSessionConfig
+	onAllocate func()
 }
 
 func (a *recordingPTYAllocator) Allocate(
 	_ context.Context,
-	_ PTYProcessLaunch,
-	_ PTYSessionConfig,
+	launch PTYProcessLaunch,
+	config PTYSessionConfig,
 ) (PTYSession, error) {
 	a.calls++
-	return &recordingPTYSession{result: a.result}, nil
+	a.launch, a.config = launch, config
+	if a.onAllocate != nil {
+		a.onAllocate()
+	}
+	return &recordingPTYSession{result: a.result, close: func() { a.closes++ }}, nil
 }
 
 type recordingPTYSession struct {
 	result PTYSessionResult
+	close  func()
 }
 
 func (s *recordingPTYSession) Run(context.Context) (PTYSessionResult, error) {
 	return s.result, nil
 }
 
-func (s *recordingPTYSession) Close() error { return nil }
+func (s *recordingPTYSession) Close() error { s.close(); return nil }
 
 type fakeExecutableLocator map[string]string
 
@@ -851,3 +906,33 @@ func (i fakeExecutableInfo) Mode() fs.FileMode  { return 0o755 }
 func (i fakeExecutableInfo) ModTime() time.Time { return time.Time{} }
 func (i fakeExecutableInfo) IsDir() bool        { return i.directory }
 func (i fakeExecutableInfo) Sys() any           { return nil }
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r *inertWorkersCommandRunner) RunStreaming(ctx context.Context, request CommandRequest, observe OutputChunkObserver) (CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r *recordingWorkersCommandRunner) RunStreaming(ctx context.Context, request CommandRequest, observe OutputChunkObserver) (CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (r *inertWorkersCommandRunner) commandEffect() CommandRunner {
+	return CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
+}
+
+func (r *recordingWorkersCommandRunner) commandEffect() CommandRunner {
+	return CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
+}

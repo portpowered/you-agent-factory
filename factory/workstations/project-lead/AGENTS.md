@@ -80,12 +80,41 @@ successor in this Session, naming the retained branch, exact PR head, failure
 evidence, and source-plan criterion. Do not copy old Work IDs into current
 relations or restart the entire historical task.
 
-Use supported event-producing `you work move <work-id> <state>` only for a
-current-Session item whose valid next state is known and which has no active
-dispatch. Record the cause and a stable `--request-id`, then verify the new
-state and owner. Do not move a failed item to `init` without a corrected cause,
-or skip CI, independent review, merge, or acceptance. For a deterministic
-failure, submit a corrected successor or hold with its exact release event.
+Never run `you work move`, Work reset, or Work restore controls.
+This prohibition includes your own lanes, inactive dispatches, and report acknowledgements.
+Never use equivalent API requests or direct state edits to bypass this rule.
+A Work control can make the shared board unresumable.
+Read Work, Worker Sessions, and Factory Events to diagnose the condition.
+Escalate required state repair through the operator mailbox named in your Project rules.
+Include the Factory Session, Work ID, state, dispatch evidence, impact, and requested action.
+Use absolute mailbox paths in the main checkout.
+Record the request and external hold in state.md and progress.md.
+Return the normal non-FAILED decision for this nonfatal operator dependency.
+Do not perform the control yourself, even after an operator answers.
+For a deterministic failure, submit a corrected successor or hold with its exact release event.
+
+## Mailbox-parked lanes
+
+An idea or task in `awaiting-answer` may be waiting for an operator decision.
+The mailbox waiter is a script and holds no `executor-slot`.
+Do not classify this state as stuck from age or an absent agent Worker alone.
+Inspect the last CONTINUE feedback for the `AWAITING_OPERATOR_ANSWER` prefix.
+Resolve the mailbox from the main checkout, never from the lane worktree.
+The main checkout is the parent of `git rev-parse --path-format=absolute --git-common-dir`.
+The mailbox is `<main checkout>/docs/temp/operator-mailbox`.
+Read `requests/<lane>.md`, `responses/<lane>.md`, `waits/<lane>.delivered`,
+and recent waiter output to distinguish an undelivered answer from an old answer.
+The wait window is 60 minutes from the request file's last write.
+An undelivered response or expiry returns the lane to `init` for another visit.
+The lane must read a binding response first or take its recorded no-answer path.
+An unchanged second planner park fails through `reporting-failed`.
+A second task park returns to `init` without another wait.
+Ordinary task CONTINUE returns to `init`.
+Ordinary idea CONTINUE takes the failure route.
+Record valid mailbox waits as parked with their request and release condition.
+If the marker, request, or waiter evidence is inconsistent, escalate through the mailbox.
+Never move, reset, restore, duplicate, or rewrite a parked lane to release it.
+This AM-T0 behavior remains temporary until AM-T11 removes it.
 
 ## Parallel Projects
 
@@ -352,8 +381,9 @@ On any lead visit (initial pass, child wake, or check-in), submit only the
 ready idea and validation items, each tagged with this Project's `project`
 tag, with relations only for real prerequisites. Never add a loopback: no
 project-cycle with dependencies, no `continue` cycle, and no thoughts join.
-Each child wakes you when it finishes. If there is no ready item, inspect and
-repair existing Work without an empty batch.
+Each child wakes you when it finishes.
+If there is no ready item, inspect existing Work without an empty batch.
+Escalate required Work state repair through the operator mailbox.
 Use the relation type and endpoint fields required by the CLI batch contract.
 Do not submit thoughts, plan, task, review, PARENT_CHILD, or SPAWNED_BY; the
 runtime and inner graph own those. The same-name project-cycle is now only a

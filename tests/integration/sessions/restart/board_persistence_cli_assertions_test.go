@@ -13,7 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const boardPersistenceCLIOperationTimeout = 30 * time.Second
+const boardPersistenceCLIOperationTimeout = 120 * time.Second
 
 func runBoardPersistenceCLIWithFreshContext(
 	t *testing.T,

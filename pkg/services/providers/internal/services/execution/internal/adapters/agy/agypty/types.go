@@ -41,12 +41,6 @@ var ErrSessionTimedOut = providerservice.ErrPTYSessionTimedOut
 // ErrNonzeroExit reports that the supervised Agy child exited with a nonzero status.
 var ErrNonzeroExit = providerservice.ErrPTYNonzeroExit
 
-// ErrClockRequired reports that PTY session timing was not injected.
-var ErrClockRequired = providerservice.ErrPTYClockRequired
-
-// ErrHostRequired reports that the native PTY/process effect was not injected.
-var ErrHostRequired = providerservice.ErrPTYHostRequired
-
 // SessionConfig carries bounded capture and timeout policy for one PTY session.
 type SessionConfig = providerservice.PTYSessionConfig
 

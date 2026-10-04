@@ -9,9 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
-	"go.uber.org/zap"
-
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -26,6 +23,7 @@ const ScriptPollerRestartBackoffMin = 25 * time.Millisecond
 // Service owns script command/source polling supervision. Only explicit
 // supervision operations apply injected command, clock, and admission effects.
 type Service interface {
+	GetCursorForScope(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
 	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
 	StartScriptPoller(
 		context.Context,
@@ -45,17 +43,6 @@ type Service interface {
 		ScriptPollerSupervision,
 		automations.WorkRequestSubmitter,
 	) error
-}
-
-// Dependencies supplies runtime edges for script-poller supervision. Construction
-// stores these references without invoking them.
-type Dependencies struct {
-	Logger           func(workstationName, workerName string) *zap.Logger
-	Clock            func() clockwork.Clock
-	CommandRunner    func() platformprocess.CommandRunner
-	ResolveTemplates workers.TemplateFieldResolver
-	ExecutionPolicy  factorydefinitions.WorkstationExecutionPolicyService
-	CursorRecorder   CursorRecorder
 }
 
 // ScriptPollerCommandRequest builds the command invocation for a script poller worker.

@@ -13,6 +13,10 @@ import (
 // The build tag keeps this test seam out of the ordinary package and product
 // API while preserving the production pkg/wire launcher and defaults.
 func NewModelsServiceForManagedProcessIntegration(edges serviceedges.Edges) (models.Service, error) {
+	processLogger, err := provideProcessLogger(edges)
+	if err != nil {
+		return nil, err
+	}
 	scopes, err := provideModelRuntimeScopes()
 	if err != nil {
 		return nil, err
@@ -32,7 +36,7 @@ func NewModelsServiceForManagedProcessIntegration(edges serviceedges.Edges) (mod
 	}
 	evidence := provideModelOrderedRuntimeEvidence(source)
 	launcher, hostHTTP := provideModelHostLauncher(edges, source), provideModelHostHTTP(edges)
-	clock, logger, metrics := provideModelHostClock(edges), provideModelHostLogger(), provideModelHostMetrics(edges)
+	clock, logger, metrics := provideModelHostClock(edges), provideModelHostLogger(processLogger), provideModelHostMetrics(edges)
 	host, err := managedProcessIntegrationHost(edges, scopes, assets, platform, launcher, hostHTTP, clock, logger, metrics, evidence)
 	if err != nil {
 		return nil, err
@@ -48,7 +52,11 @@ func NewModelsServiceForManagedProcessIntegration(edges serviceedges.Edges) (mod
 		return nil, err
 	}
 	now := provideModelNow(edges)
-	inference, err := provideModelInference(scopes, assets, catalog, host, runtime, now)
+	registrar, err := modelswire.NewInvocationArtifactRegistrar(modelswire.NewInertInvocationArtifactFileSystem())
+	if err != nil {
+		return nil, err
+	}
+	inference, err := provideModelInference(scopes, assets, catalog, host, runtime, registrar, now, modelswire.NewExecutionDeadline())
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +64,20 @@ func NewModelsServiceForManagedProcessIntegration(edges serviceedges.Edges) (mod
 	if err != nil {
 		return nil, err
 	}
-	return provideModelsService(edges, scopes, assets, catalog, host, inference, launcher, hostHTTP, clock, runner,
-		provideModelRuntimeHTTP(edges), inspect, temp, create, now, logger, metrics, evidence, resolver, platform)
+	localRuntime, err := provideModelLocalRuntime(runner, provideModelRuntimeHTTP(edges), inspect, temp, create)
+	if err != nil {
+		return nil, err
+	}
+	resources, err := provideModelResourceLimiter(now)
+	if err != nil {
+		return nil, err
+	}
+	execution, err := provideModelScopedLocalExecution(scopes, assets, host, localRuntime, resources, now)
+	if err != nil {
+		return nil, err
+	}
+	return provideModelsService(edges, scopes, assets, catalog, host, inference, resources,
+		now, execution, evidence, resolver, provideModelAssetRevision(edges), platform, processLogger)
 }
 
 // The tagged seam consumes the canonical providers without selecting defaults

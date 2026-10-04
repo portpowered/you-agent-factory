@@ -723,10 +723,12 @@ func genericHTTPInvocationEdges(
 		ModelAssetOpenFile:             assetFiles.Open,
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
-		ModelHostCompatibilityChecker:  compatibility,
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
+	}
+	if compatibility != nil {
+		edges.ModelHostCompatibilityChecker = compatibility
 	}
 	if privateTTS != nil && genericTTS != nil {
 		// This is an explicit controlled TTS effect. Production nil backends

@@ -1,64 +1,42 @@
 package wire
 
 import (
-	"encoding/json"
-	"fmt"
+	"context"
 	"strings"
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestProvideRecordingsRootConstructsThroughRecordingsWire(t *testing.T) {
 	t.Parallel()
-
-	root, err := provideRecordingsRoot(
-		serviceedges.Edges{},
-		recordings.LiveRecordingTargetPlannerFunc(
-			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-				return recordings.LiveRecordingTarget{}, nil
-			},
-		),
-		platformreplay.Local{},
-		nil,
-		nil,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("provideRecordingsRoot() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("provideRecordingsRoot() returned nil root")
-	}
-	var published recordings.Service = root
-	if _, err := published.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: "missing-wire-factory-root",
-	}); err == nil {
-		t.Fatal("LoadReplayRecording() error = nil, want missing recording failure")
+	var observed recordings.Service
+	var snapshotReader recordingswire.WorkSnapshotReader
+	root := testRecordingsRoot(serviceedges.Edges{
+		RecordingsRootObserver: func(service recordings.Service) { observed = service },
+		RecordingsWorkSnapshotReaderObserver: func(reader interface {
+			ReadWorkSnapshot(context.Context, string) (work.ReadSnapshot, error)
+		}) {
+			snapshotReader = reader
+		},
+	}, inertArtifactsOwner{}, inertReplayOwner{})
+	if root == nil || observed != root || snapshotReader == nil {
+		t.Fatal("provideRecordingsRoot did not publish the inert completed root and work reader")
 	}
 }
 
 func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 	t.Parallel()
 
-	root, err := provideRecordingsRoot(
-		serviceedges.Edges{},
-		recordings.LiveRecordingTargetPlannerFunc(
-			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-				return recordings.LiveRecordingTarget{}, nil
-			},
-		),
-		platformreplay.Local{}, nil, nil, nil,
-	)
-	if err != nil {
-		t.Fatalf("provideRecordingsRoot() error = %v", err)
-	}
+	root := testRecordingsRoot(serviceedges.Edges{}, inertArtifactsOwner{}, inertReplayOwner{})
 	opening, err := provideRecordingsRuntimeScopeService(root)
 	if err != nil || opening == nil {
 		t.Fatalf("provideRecordingsRuntimeScopeService(root) = %v, %v; want runtime opening", opening, err)
@@ -112,45 +90,48 @@ func TestDirectJavaScriptHTTPCompositionRejectsMissingRoles(t *testing.T) {
 	}
 }
 
-func wireCompositionRunRequestEvent(
-	id string,
-	sequence recordings.CanonicalEventSequence,
-	scope recordings.CanonicalEventScope,
-	recordedAt time.Time,
-	generationID string,
-) (recordings.CanonicalEvent, error) {
-	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
-		"id": "wire-composition-factory",
-		"workTypes": []map[string]any{
-			{
-				"name": "task",
-				"states": []map[string]string{
-					{"name": "ready", "type": "PROCESSING"},
-				},
-			},
-		},
-	})
-	if err != nil {
-		return recordings.CanonicalEvent{}, fmt.Errorf("factory snapshot: %w", err)
-	}
-	payload, err := json.Marshal(factorydefinitions.RunRequestEventPayload{
-		Factory:    snapshot,
-		RecordedAt: recordedAt,
-	})
-	if err != nil {
-		return recordings.CanonicalEvent{}, fmt.Errorf("run request payload: %w", err)
-	}
-	return recordings.CanonicalEvent{
-		ID:          recordings.CanonicalEventID(id),
-		Kind:        recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeRunRequest),
-		Sequence:    sequence,
-		Scope:       scope,
-		FactoryTick: 0,
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: generationID,
-			Sequence:           sequence,
-		},
-		RecordedAt: recordedAt,
-		Payload:    string(payload),
-	}, nil
+// Unconfigured operations panic. These collaborators are inert completed
+// capabilities, not another graph assembled by the provider tests.
+type inertLedger struct{ recordings.Ledger }
+type inertProjection struct{ recordings.ProjectionService }
+type inertLifecycleOwner struct {
+	recordingswire.RecordingLifecycleOwner
 }
+type inertCanonicalOwner struct {
+	recordingswire.CanonicalLedgerOwner
+}
+type inertHistoricalOwner struct {
+	recordingswire.HistoricalQueryOwner
+}
+type inertArtifactsOwner struct {
+	recordingswire.ArtifactsExportOwner
+}
+type inertReplayOwner struct{ recordingswire.ReplayOwner }
+
+func testRecordingsRoot(edges serviceedges.Edges, artifacts recordingswire.ArtifactsExportOwner, replay recordingswire.ReplayOwner) recordings.Service {
+	return provideRecordingsRoot(edges, inertLedger{}, inertProjection{}, inertLifecycleOwner{},
+		artifacts, replay, inertCanonicalOwner{}, inertHistoricalOwner{}, platformclock.Real{}, logging.NoopLogger{},
+		nil, nil, nil, nil, nil)
+}
+
+func TestRecordingClockPreservesSelectedSourceAndRejectsTypedNil(t *testing.T) {
+	t.Parallel()
+	selected := platformclock.NewDeterministic(time.Unix(123, 456), time.Second)
+	clock, err := provideRecordingClock(provideFactoryRuntimeClock(serviceedges.Edges{Clock: selected}))
+	if err != nil || clock != selected {
+		t.Fatalf("recording clock = %v, %v; want selected process source", clock, err)
+	}
+	if clock, err := provideRecordingClock(provideFactoryRuntimeClock(selectedTestTimeEdges(serviceedges.Edges{}))); err != nil || clock == nil {
+		t.Fatalf("default recording clock = %v, %v; want explicit process source", clock, err)
+	}
+	var absent *nilRecordingClock
+	for _, source := range []recordings.RecordingClock{nil, absent} {
+		if clock, err := provideRecordingClock(source); err == nil || clock != nil {
+			t.Fatalf("absent clock = %v, %v; want construction failure", clock, err)
+		}
+	}
+}
+
+type nilRecordingClock struct{}
+
+func (*nilRecordingClock) Now() time.Time { panic("absent recording clock activated") }

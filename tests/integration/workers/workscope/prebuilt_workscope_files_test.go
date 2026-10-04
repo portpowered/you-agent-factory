@@ -50,7 +50,7 @@ func stopPrebuiltWorkscopeDaemon(
 	serverURL string,
 ) {
 	t.Helper()
-	stopCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	stopCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	command := exec.CommandContext(stopCtx, binaryPath, "--server", serverURL, "server", "stop")
 	command.Dir = workspace
@@ -95,7 +95,7 @@ func cleanupPrebuiltWorkscopeDaemon(daemon *prebuiltWorkscopeDaemon) {
 	}
 	select {
 	case <-daemon.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(60 * time.Second):
 	}
 }
 

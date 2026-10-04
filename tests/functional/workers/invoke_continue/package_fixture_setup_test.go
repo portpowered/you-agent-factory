@@ -15,7 +15,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -268,18 +267,8 @@ func startInvokeContinuePackageProcess(
 	t *testing.T,
 	rootDir, hostDir, homeDir string,
 	route *invokeContinueStaticCommandRoute,
-	unsupportedProvider providers.Service,
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
-	fallbackProvider, err := providerswire.NewService(providerswire.WithCommandRunner(route))
-	if err != nil {
-		return invokeContinueStartedProcess{}, fmt.Errorf("build fixture provider fallback: %w", err)
-	}
-	providerOverride := &invokeContinueProviderRouter{
-		fallback:                    fallbackProvider,
-		unsupported:                 unsupportedProvider,
-		unsupportedWorkingDirectory: filepath.Join(rootDir, "routes", "unsupported-provider"),
-	}
 	api := support.NewProcessAPIServer()
 	apiStopped := make(chan struct{})
 	var apiStopOnce sync.Once
@@ -290,7 +279,6 @@ func startInvokeContinuePackageProcess(
 		// This route is complete before root construction and has no registration
 		// or session-based fallback after the process starts.
 		ProviderCommandRunner: route,
-		ProviderOverride:      providerOverride,
 		ProviderSessionResolveHomeDirectory: func() (string, error) {
 			return homeDir, nil
 		},

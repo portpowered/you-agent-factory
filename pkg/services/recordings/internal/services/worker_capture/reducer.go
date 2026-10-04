@@ -166,19 +166,26 @@ func (WorkerRecordingCodec) ReduceWorkerRecording(history WorkerRecordingHistory
 			return WorkerRecordingProjection{}, err
 		}
 	}
-	if history.ExecutionTerminal != nil {
-		if err := validateExecutionTerminal(*history.ExecutionTerminal); err != nil {
+	return reconcileWorkerRecording(projection, history.ExecutionTerminal)
+}
+
+func reconcileWorkerRecording(projection WorkerRecordingProjection, terminal *WorkerRecordingTerminal) (WorkerRecordingProjection, error) {
+	if terminal != nil {
+		if err := validateExecutionTerminal(*terminal); err != nil {
 			return WorkerRecordingProjection{}, err
 		}
-		projection.ExecutionTerminal = cloneWorkerRecordingTerminal(history.ExecutionTerminal)
-		if projection.Terminal != nil && !sameWorkerRecordingTerminal(projection.Terminal, history.ExecutionTerminal) {
+		projection.ExecutionTerminal = cloneWorkerRecordingTerminal(terminal)
+		if projection.Terminal != nil && !sameWorkerRecordingTerminal(projection.Terminal, terminal) {
 			return WorkerRecordingProjection{}, fmt.Errorf("%w: durable execution terminal disagrees with recorded terminal", ErrWorkerRecordingTerminal)
 		}
 	} else if projection.Terminal != nil {
 		projection.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.Terminal)
 	}
-	projection.Status = classifyWorkerRecordingStatus(projection, history.ExecutionTerminal != nil)
+	projection.Status = classifyWorkerRecordingStatus(projection, terminal != nil)
 	projection.Complete = projection.Status == WorkerRecordingStatusComplete
+	if projection.Status != WorkerRecordingStatusIncomplete {
+		projection.InterruptionReason = ""
+	}
 	if projection.Status == WorkerRecordingStatusDegraded && projection.Degradation == "" {
 		projection.Degradation = "DURABLE_CAPTURE_LOSS"
 	}
@@ -203,7 +210,7 @@ func reduceWorkerRecord(
 	sessionID string,
 	topic events.Topic,
 ) error {
-	if err := validateWorkerRecord(record, topic, identities, index == 0, sessionID); err != nil {
+	if err := validateWorkerRecord(record, topic, identities, index == 0, sessionID, events.AggregateSequence(index+1)); err != nil {
 		return err
 	}
 	identities[record.Identity()] = struct{}{}
@@ -436,6 +443,7 @@ func validateWorkerRecord(
 	identities map[events.AppendIdentity]struct{},
 	opening bool,
 	sessionID string,
+	wantPosition events.AggregateSequence,
 ) error {
 	if err := record.Validate(); err != nil {
 		return fmt.Errorf("%w: malformed record: %w", ErrWorkerRecordingDelivery, err)
@@ -454,7 +462,6 @@ func validateWorkerRecord(
 	if _, exists := identities[record.Identity()]; exists {
 		return fmt.Errorf("%w: source identity %q/%q/%d/%q repeated", ErrWorkerRecordingDuplicate, record.SourceType, record.SourceID, record.SourceSequence, record.SourceEventID)
 	}
-	wantPosition := events.AggregateSequence(len(identities) + 1)
 	if record.ID.Position != wantPosition {
 		return fmt.Errorf("%w: expected aggregate position %d, got %d", ErrWorkerRecordingOrder, wantPosition, record.ID.Position)
 	}
@@ -567,4 +574,25 @@ func cloneSessionLineage(value *workers.SessionLineage) *workers.SessionLineage 
 	}
 	clone := value.Clone()
 	return &clone
+}
+
+// AdvanceWorkerRecording validates only the next record against a committed
+// projection. Duplicate admission belongs to the writer's identity index.
+// The returned Records contains only the new record, never cloned history.
+func (WorkerRecordingCodec) AdvanceWorkerRecording(projection WorkerRecordingProjection, record events.Record) (WorkerRecordingProjection, error) {
+	projection.Records = nil
+	if err := validateWorkerTopic(projection.Topic, projection.WorkerSessionID); err != nil {
+		return WorkerRecordingProjection{}, err
+	}
+	if err := reduceWorkerRecord(&projection, make(map[events.AppendIdentity]struct{}, 1), record, int(projection.LastPosition), projection.WorkerSessionID, projection.Topic); err != nil {
+		return WorkerRecordingProjection{}, err
+	}
+	return reconcileWorkerRecording(projection, projection.ExecutionTerminal)
+}
+
+// FailWorkerRecording reconciles a capture-loss fact without visiting history.
+func (WorkerRecordingCodec) FailWorkerRecording(projection WorkerRecordingProjection, failure string, terminal *WorkerRecordingTerminal) (WorkerRecordingProjection, error) {
+	projection.Records = nil
+	projection.Degradation = strings.TrimSpace(failure)
+	return reconcileWorkerRecording(projection, terminal)
 }

@@ -158,87 +158,20 @@ func (wirePackagedInstaller) EnsurePackagedFactories(
 	return nil, nil
 }
 
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
+func TestNewServiceConstructsWithoutInspectingPaths(t *testing.T) {
 	t.Parallel()
-
-	validSettings := wireOperatorSettings{}
-	validCatalog := factorydefinitions.PackagedFactoryCatalogOperations{
-		List: func(
-			context.Context,
-			factorydefinitions.ListBuiltInPackagedFactoriesRequest,
-		) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
-			return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
+	catalog := factorydefinitions.PackagedFactoryCatalogOperations{
+		List: func(context.Context, factorydefinitions.ListBuiltInPackagedFactoriesRequest) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+			panic("construction listed catalog")
 		},
-		Resolve: func(
-			context.Context,
-			factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
-		) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
-			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
+		Resolve: func(context.Context, factorydefinitions.ResolveBuiltInPackagedFactoryRequest) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+			panic("construction resolved catalog")
 		},
 	}
-	validInstaller := wirePackagedInstaller{}
-	validInspectPath := os.Stat
-	tests := []struct {
-		name              string
-		operatorSettings  OperatorSettings
-		packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
-		packagedInstaller factorydefinitions.PackagedFactoryInstaller
-		inspectPath       InspectPath
-		wantErr           string
-	}{
-		{
-			name:              "operator settings",
-			operatorSettings:  nil,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: validInstaller,
-			inspectPath:       validInspectPath,
-			wantErr:           "construct system initialization: Operator Settings service is required",
-		},
-		{
-			name:              "packaged installer",
-			operatorSettings:  validSettings,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: nil,
-			inspectPath:       validInspectPath,
-			wantErr:           "construct system initialization: Factory Definitions packaged installer is required",
-		},
-		{
-			name:              "packaged catalog",
-			operatorSettings:  validSettings,
-			packagedCatalog:   factorydefinitions.PackagedFactoryCatalogOperations{},
-			packagedInstaller: validInstaller,
-			inspectPath:       validInspectPath,
-			wantErr:           "construct system initialization: Factory Definitions packaged catalog is required",
-		},
-		{
-			name:              "inspect path edge",
-			operatorSettings:  validSettings,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: validInstaller,
-			inspectPath:       nil,
-			wantErr:           "construct system initialization: inspect path edge is required",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			service, err := NewService(
-				test.operatorSettings,
-				test.packagedCatalog,
-				test.packagedInstaller,
-				test.inspectPath,
-			)
-			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
-			}
-			if err.Error() != test.wantErr {
-				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.wantErr)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
-			}
-		})
+	service, err := NewService(wireOperatorSettings{}, catalog, wirePackagedInstaller{},
+		func(string) (fs.FileInfo, error) { panic("construction inspected filesystem") })
+	if err != nil || service == nil {
+		t.Fatalf("NewService = (%v, %v)", service, err)
 	}
 }
 

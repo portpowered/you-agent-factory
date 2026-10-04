@@ -100,7 +100,7 @@ func TestProvideConfiguredProvidersServiceProjectsInjectedStdioPipeFactory(t *te
 		// channel factory reports the failure first.
 		ProvidersExecutableLocator: &wireTestExecutableLocator{},
 	}
-	service, err := provideConfiguredProvidersService(edges, []operatorsettings.ACPIntegration{{
+	service, err := provideConfiguredProvidersService(selectedTestTimeEdges(edges), []operatorsettings.ACPIntegration{{
 		ID: "wire-acp-channel", Name: "wire-acp-channel", Transport: "stdio", Command: "wire-acp-channel-agent acp",
 	}}, nil)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersSe
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
 	}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersSe
 func TestProvideConductorInvocationWithProgressFactory_ExecutesCodexThroughInjectedRunner(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: codexWireTestOutput("child result")})
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -242,7 +242,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsSelectedProvidersS
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
 	}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -268,7 +268,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	provider, err := provideProvidersService(edges)
+	provider, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -295,19 +295,22 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	if err != nil {
 		t.Fatalf("construct events service: %v", err)
 	}
+	responses, err := factorysessionwire.NewResponseStreams(responseEventIDs, responseEventRetentionLimits, eventsService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
-		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
+		provideOrchestrationJavaScriptExecution(provideRuntimeOrchestration(provideFactoryRuntimeIDGenerator(edges), workflows)),
 		writer,
 		stores,
 		syncWaits,
 		sessionIDs,
 		responseEventIDs,
-		responseEventRetentionLimits,
+		responses,
 		allocator,
 		adaptRunner,
 		provideFactoryRuntimeProviderOverride(edges),
-		eventsService,
 		factorysessionwire.NewLiveChangeCoordinator(),
 	)
 
@@ -335,25 +338,37 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	}
 }
 
-func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T) {
+func TestOperatorSettingsCompletedOwnersUseProcessProviderCatalog(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := provideProvidersService(serviceedges.Edges{})
+	providersRoot, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	service, err := settingswire.NewServiceFromHomePorts(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
+	files := platformfilesystem.Local{}
+	document := settingswire.NewDocumentService(files, nil, globalconfigmapping.Decode, nil, nil, nil, nil)
+	resolution, err := settingswire.NewResolutionService(providersRoot)
 	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+		t.Fatalf("NewResolutionService() error = %v", err)
 	}
-	if service == nil {
-		t.Fatal("NewServiceFromHomePorts() = nil, want Operator Settings root")
+	service, err := settingswire.NewService(document, resolution, files, nil, globalconfigmapping.Decode,
+		nil, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{}, nil)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	resolved, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "openai", WorkerModel: "selected-model",
+		},
+	})
+	if err != nil || resolved.Selection.WorkerModelProvider != "CODEX" || resolved.Selection.WorkerModel != "selected-model" {
+		t.Fatalf("ResolveEffective() = %#v, %v, want CODEX/selected-model", resolved.Selection, err)
+	}
+	_, err = service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{WorkerModelProvider: "unsupported-provider"},
+	})
+	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
+		t.Fatalf("unsupported provider error = %v, want ErrResolutionUnsupportedOverride", err)
 	}
 }
 
@@ -362,7 +377,7 @@ func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T
 func TestProvideApplicationProcessLifecycle_ComposesOwnersClose(t *testing.T) {
 	t.Parallel()
 
-	providersService, err := provideProvidersService(serviceedges.Edges{})
+	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -627,11 +642,11 @@ type nonLifecycleProvidersService struct {
 }
 
 func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
-	providersService, err := provideProvidersService(serviceedges.Edges{})
+	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	modelsService, err := newModelsServiceFixture(serviceedges.Edges{})
+	modelsService, err := newModelsServiceFixture(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideModelsService() error = %v", err)
 	}
@@ -764,11 +779,11 @@ func newProductionCleanupStatelessService(
 		WorkersWorktreeFileSystem: statelessWorktreeFileSystem{},
 		WorkersWorktreeGit:        git,
 	}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	modelsService, err := newModelsServiceFixture(edges)
+	modelsService, err := newModelsServiceFixture(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideModelsService() error = %v", err)
 	}

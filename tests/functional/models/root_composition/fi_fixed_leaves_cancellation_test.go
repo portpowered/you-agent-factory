@@ -131,6 +131,124 @@ func (routes *fixedLeafRoutes) registerBlocked(text string) *fixedLeafRoute {
 	return route
 }
 
+// Separate authored reservations allow two workstations to dispatch the same
+// model while its host slot still has capacity one. Removing resource bindings
+// would fail graph validation before reaching the public capacity boundary.
+func openFixedLeafCapacitySession(t *testing.T, baseURL, endpoint string) string {
+	t.Helper()
+	config := fixedLeafFactoryConfig()
+	resources := config["resources"].([]map[string]any)
+	resources = append(resources, map[string]any{"name": "embed-competing-cache", "type": "MODEL",
+		"capacity": 1, "model": "embed", "backend": "localai-llamacpp", "loadPolicy": "ON_DEMAND"})
+	config["resources"] = resources
+	workers := config["workers"].([]map[string]any)
+	workers[0]["command"] = "capacity-embed"
+	workers[0]["args"] = []string{"--grpc-endpoint", endpoint}
+	competing := make(map[string]any)
+	for key, value := range workers[0] {
+		competing[key] = value
+	}
+	competing["name"] = "embed-competing-worker"
+	competing["resources"] = []map[string]any{{"name": "embed-competing-cache", "capacity": 1}}
+	config["workers"] = append(workers, competing)
+	stations := config["workstations"].([]map[string]any)
+	station := make(map[string]any)
+	for key, value := range stations[0] {
+		station[key] = value
+	}
+	station["name"], station["worker"] = "embed-competing", "embed-competing-worker"
+	config["workstations"] = append(stations, station)
+	dir := functionalScaffoldFactory(t, config)
+	for _, name := range []string{"embed", "embed-competing"} {
+		support.WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_INVOKE\n---\nEmbed the selected text.\n")
+	}
+	session := support.OpenFactorySessionAt(t, baseURL, dir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, session) })
+	return session
+}
+
+func runFixedLeafSessionCapacityWithHeldPeer(t *testing.T, baseURL string, routes *fixedLeafRoutes, launcher *recordingModelHostLauncher) {
+	t.Helper()
+	selected, peer := openFixedLeafCapacitySession(t, baseURL, launcher.endpoint), openFixedLeafSession(t, baseURL)
+	holder, peerRoute := routes.registerBlocked("capacity-holder"), routes.registerBlocked("capacity-peer")
+	t.Cleanup(func() { close(holder.release); close(peerRoute.release) })
+	submitFixedLeafWork(t, baseURL, selected, "capacity-holder")
+	selectedScope := waitFixedLeafAccepted(t, holder)
+	submitFixedLeafWork(t, baseURL, peer, "capacity-peer")
+	peerScope := waitFixedLeafAccepted(t, peerRoute)
+	if selectedScope == peerScope {
+		t.Fatal("capacity holder and peer shared a model scope")
+	}
+	rejected := routes.register("capacity-rejected", false)
+	response := invokeFixedLeafSession(t, baseURL, selected, "capacity-rejected", "capacity-rejected")
+	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
+		t.Fatalf("competing capacity response = %#v, want FAILED without output", response)
+	}
+	select {
+	case request := <-rejected.observed:
+		t.Fatalf("capacity refusal allocated a backend invocation: %#v", request)
+	default:
+	}
+	assertFixedLeafCapacityFailure(t, baseURL, selected)
+	if calls := launcher.CallsForCommand("capacity-embed"); calls != 1 {
+		t.Fatalf("capacity refusal host starts = %d, want only holder host", calls)
+	}
+	holder.release <- struct{}{}
+	status := support.WaitForSessionTerminalStatus(t, baseURL, selected, 30*time.Second)
+	if status.Categories.Terminal != 1 || status.Categories.Failed != 1 {
+		t.Fatalf("capacity holder/refusal state = %#v", status)
+	}
+	assertFixedLeafCapacityWork(t, baseURL, selected, holder.output)
+	retry := routes.register("capacity-retry", false)
+	assertFixedLeafSuccess(t, invokeFixedLeafSession(t, baseURL, selected, "capacity-retry", "capacity-retry"), retry.output)
+	if scope := waitFixedLeafAccepted(t, retry); scope != selectedScope {
+		t.Fatalf("capacity retry scope = %s, want %s", scope, selectedScope)
+	}
+	assertFixedLeafModelEvent(t, baseURL, selected, "capacity-retry", false)
+	if calls := launcher.CallsForCommand("capacity-embed"); calls != 1 {
+		t.Fatalf("capacity recovery host starts = %d, want reused holder host", calls)
+	}
+	assertFixedLeafOwnedPeerRecovery(t, baseURL, peer, peerScope, peerRoute, routes)
+}
+
+func assertFixedLeafCapacityWork(t *testing.T, baseURL, session, output string) {
+	t.Helper()
+	completed := 0
+	for _, event := range support.GetFactoryEventsForSessionAt(t, baseURL, session) {
+		if event.Type != "MODEL_RESPONSE" {
+			continue
+		}
+		payload, err := event.Payload.AsModelResponseEventPayload()
+		if err != nil || event.Context.SessionId == nil || *event.Context.SessionId != session {
+			t.Fatalf("capacity Model response = %#v, %v", event, err)
+		}
+		if payload.Outcome == factoryapi.InferenceOutcomeSucceeded && payload.OutputContent != nil {
+			completed++
+			content := []factoryapi.WorkContentPart(*payload.OutputContent)
+			assertFixedLeafSuccess(t, factoryapi.InvocationResponse{Status: factoryapi.InvocationTerminalStatusCompleted,
+				PrimaryResult: &content}, output)
+		}
+	}
+	if completed != 1 {
+		t.Fatalf("completed capacity holder results = %d, want one", completed)
+	}
+}
+
+func assertFixedLeafCapacityFailure(t *testing.T, baseURL, session string) {
+	t.Helper()
+	assertFixedLeafModelEvent(t, baseURL, session, "capacity-rejected", true)
+	for _, event := range support.GetFactoryEventsForSessionAt(t, baseURL, session) {
+		if event.Type != "MODEL_RESPONSE" || event.Context.RequestId == nil || *event.Context.RequestId != "capacity-rejected" {
+			continue
+		}
+		payload, err := event.Payload.AsModelResponseEventPayload()
+		want := "inference failed for worker \"embed-competing-worker\" model \"embed\" operation \"EMBED\": model host capacity exhausted"
+		if err != nil || payload.FailureDetail == nil || payload.FailureDetail.Message != want {
+			t.Fatalf("capacity failure detail = %#v, %v, want %s", payload.FailureDetail, err, want)
+		}
+	}
+}
+
 func waitFixedLeafAccepted(t *testing.T, route *fixedLeafRoute) string {
 	t.Helper()
 	select {
