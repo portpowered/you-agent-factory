@@ -1,16 +1,20 @@
 package runtime_test
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	responseowner "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
 
@@ -255,4 +259,74 @@ func responseEventSessionID(session *livesession.LiveSession) string {
 		return ""
 	}
 	return session.ResponseEvents.FactorySessionID()
+}
+
+type authorityResponses struct {
+	responseowner.Service
+	ids     []string
+	clocks  []factoryruntime.Clock
+	closed  []*responseeventstore.SessionResponseEventStore
+	failure error
+}
+
+func (o *authorityResponses) NewEventStore(id string, clock factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	o.ids = append(o.ids, id)
+	o.clocks = append(o.clocks, clock)
+	if o.failure != nil {
+		return nil, o.failure
+	}
+	return responseeventstore.NewSessionResponseEventStore(id, clock, func() string { return "selected-event" }), nil
+}
+func (o *authorityResponses) Close(store *responseeventstore.SessionResponseEventStore) {
+	o.closed = append(o.closed, store)
+	store.Close()
+}
+func TestSessionAuthorityUsesInjectedRegistryAndResponseOwner(t *testing.T) {
+	t.Parallel()
+	registry := sessionregistry.New()
+	clock := platformclock.Real{}
+	responses := responsestream.NewRegistry(newRuntimeTestResponseStream, clock)
+	owner := &authorityResponses{}
+	state := sessionruntime.NewWithResponseService(registry, responses, nil, clock, func() string { return "event" }, func() string { return "selected-session" }, owner)
+	id := state.Register(sessionruntime.Registration{SessionID: factorysessions.DefaultSessionID, Default: true, AllocateDefaultID: true, Handle: struct{}{}})
+	session := state.Resolve(id)
+	if id != "selected-session" || session == nil || registry.Get(id) != session || len(owner.ids) != 1 || owner.ids[0] != livesession.CanonicalID(session) || owner.clocks[0] != clock {
+		t.Fatalf("registration did not use selected owners: id=%s, allocations=%v", id, owner.ids)
+	}
+	owner.failure = errors.New("store allocation failed")
+	if got := state.Register(sessionruntime.Registration{SessionID: "failed", Handle: struct{}{}}); got != "" || registry.Get("failed") != nil {
+		t.Fatalf("failed allocation registered %q", got)
+	}
+	state.Unregister(id)
+	if registry.Get(id) != nil || len(owner.closed) != 1 || owner.closed[0] != session.ResponseEvents {
+		t.Fatal("unregister did not retire selected response owner")
+	}
+}
+func TestSessionAuthorityPreservesOptionalCloseAndResponseRetirement(t *testing.T) {
+	t.Parallel()
+	for _, withClose := range []bool{false, true} {
+		clock := platformclock.Real{}
+		registry := sessionregistry.New()
+		responses := responsestream.NewRegistry(newRuntimeTestResponseStream, clock)
+		owner := &authorityResponses{}
+		calls := 0
+		var closeSession func(*livesession.LiveSession)
+		if withClose {
+			closeSession = func(*livesession.LiveSession) { calls++ }
+		}
+		state := sessionruntime.NewWithResponseService(registry, responses, closeSession, clock, func() string { return "event" }, func() string { return "session" }, owner)
+		state.Register(sessionruntime.Registration{SessionID: "session", Handle: struct{}{}})
+		old := responses.Streams("session")
+		state.RotateResponseStreams(state.Resolve("session"))
+		if responses.Streams("session") == old {
+			t.Fatal("rotation retained retired streams")
+		}
+		state.Unregister("session")
+		if withClose && calls != 1 || !withClose && calls != 0 || len(owner.closed) != 2 {
+			t.Fatalf("cleanup calls=%d response closes=%d", calls, len(owner.closed))
+		}
+		if _, err := responses.Streams("session").Subscribe("late", 0); err != responsestream.ErrSubscriptionClosed {
+			t.Fatalf("retired stream error=%v", err)
+		}
+	}
 }
