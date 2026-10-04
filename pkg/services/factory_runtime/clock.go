@@ -1,11 +1,9 @@
 package factory
 
-import "time"
+import platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 
 // Clock is the runtime time source used by replay-sensitive factory paths.
-type Clock interface {
-	Now() time.Time
-}
+type Clock = platformclock.Source
 
 // LogicalClock is a clock that can align itself to the current engine tick.
 type LogicalClock interface {
