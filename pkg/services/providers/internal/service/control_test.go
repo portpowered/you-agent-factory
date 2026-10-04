@@ -8,6 +8,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -305,13 +306,14 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 	t.Parallel()
 
 	logger := &recordingControlLogger{}
-	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logger, nil, nil, nil,
 		nil,
 		nil,
-		nil)
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
+		t.Fatalf("newTestProvidersService() = %v", err)
 	}
 
 	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
@@ -328,4 +330,29 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 	if len(logger.entriesFor("provider control attempt outcome")) != 1 {
 		t.Fatalf("outcome log entries = %d, want 1 for production-wired root", len(logger.entriesFor("provider control attempt outcome")))
 	}
+}
+
+// newTestProvidersService assembles the fixture's explicit sibling owners.
+func newTestProvidersService(probe providerswire.CatalogProbeOperation, scheduler platformclock.TimerSource, logger logging.Logger, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, antigravity providerswire.AgyEffect, codex providerswire.CodexEffect, claude providerswire.ClaudeEffect, configuration providerswire.Configuration) (providers.Service, error) {
+	config, err := providerswire.PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := providerswire.NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := providerswire.NewExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
 }

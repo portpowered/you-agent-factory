@@ -611,7 +611,7 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 	t.Parallel()
 
-	root, err := providerswire.NewService(catalogwire.NewProbeOperation(func(
+	root, err := newTestProvidersService(catalogwire.NewProbeOperation(func(
 		_ context.Context,
 		descriptor providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -626,7 +626,8 @@ func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		nil,
-		nil)
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -675,7 +676,7 @@ func TestRootConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	root, err := providerswire.NewService(catalogwire.NewProbeOperation(func(
+	root, err := newTestProvidersService(catalogwire.NewProbeOperation(func(
 		context.Context,
 		providers.Descriptor,
 	) (catalog.ProbeFacts, error) {
@@ -685,7 +686,8 @@ func TestRootConstructionIsInert(t *testing.T) {
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		nil,
-		nil)
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -902,13 +904,14 @@ func (session *mockPTYSession) Close() error { return nil }
 func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
 	runner := executionwire.AdaptPlatformCommandRunner(testutil.NewProviderCommandRunner())
-	service, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+	service, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{}),
 		providerswire.NewCodexEffect(runner, platformclock.Real{}),
-		providerswire.NewClaudeEffect(runner, platformclock.Real{}))
+		providerswire.NewClaudeEffect(runner, platformclock.Real{}),
+		providerswire.Configuration{})
 	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	return service
 }
@@ -916,11 +919,12 @@ func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) pr
 func mustRootService(t *testing.T) *providerservice.Service {
 	t.Helper()
 
-	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		nil,
-		nil)
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}

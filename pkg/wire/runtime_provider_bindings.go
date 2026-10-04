@@ -30,7 +30,7 @@ import (
 // for hosts that intentionally select the legacy PTY seam. Composition keeps
 // command effects ahead of legacy PTY before supplying the completed effect.
 func newConfiguredProvidersService(
-	options []providerswire.Option,
+	configuration providerswire.Configuration,
 	agyRunner platformprocess.CommandRunner,
 	legacyAgy providerswire.AgyEffect,
 	clock platformclock.Source,
@@ -45,10 +45,27 @@ func newConfiguredProvidersService(
 	if agyRunner != nil {
 		antigravity = providerswire.NewAgyCommandEffect(runner, clock, scheduler)
 	}
-	return providerswire.NewService(providerswire.IdentityCatalogProbe, scheduler, logger, commandFactory, locator, stdioPipes,
-		antigravity,
-		providerswire.NewCodexEffect(runner, clock),
-		providerswire.NewClaudeEffect(runner, clock), options...)
+	config, err := providerswire.PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := providerswire.NewCatalogService(providerswire.IdentityCatalogProbe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, providerswire.NewCodexEffect(runner, clock), providerswire.NewClaudeEffect(runner, clock), acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := providerswire.NewExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
 }
 
 type modelsProcessLauncher struct {

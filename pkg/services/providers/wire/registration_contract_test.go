@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -9,8 +10,95 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
+
+func TestNewServiceUsesCompletedOwnersAndSelectedLifecycle(t *testing.T) {
+	t.Parallel()
+	catalogCalls, executionCalls, closeCalls := 0, 0, 0
+	nativeError := errors.New("selected execution error")
+	closeError := errors.New("selected close error")
+	root, err := NewService(
+		completedCatalogFixture{resolve: func(id providers.ID) (providers.ID, error) {
+			catalogCalls++
+			if id != "fixture-alias" {
+				t.Fatalf("catalog input = %q", id)
+			}
+			return "fixture-provider", nil
+		}},
+		completedExecutionFixture{execute: func(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			executionCalls++
+			if request.Provider != "fixture-provider" || request.AttemptID != "fixture-attempt" {
+				t.Fatalf("execution request = %#v", request)
+			}
+			return providers.ExecuteResult{Content: "selected result"}, nativeError
+		}},
+		completedACPFixture{}, nil, logging.NoopLogger{},
+		completedLifecycleFixture{close: func(context.Context) error {
+			closeCalls++
+			return closeError
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if catalogCalls != 0 || executionCalls != 0 || closeCalls != 0 {
+		t.Fatal("construction invoked a supplied operation")
+	}
+	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider: "fixture-alias", AttemptID: "fixture-attempt",
+	})
+	if result.Content != "selected result" || !errors.Is(executeErr, nativeError) || catalogCalls != 1 || executionCalls != 1 {
+		t.Fatalf("Execute() = (%#v, %v), catalog=%d execution=%d", result, executeErr, catalogCalls, executionCalls)
+	}
+	lifecycle := root.(Lifecycle)
+	if err := lifecycle.Close(context.Background()); !errors.Is(err, closeError) || closeCalls != 1 {
+		t.Fatalf("Close() = %v, calls=%d", err, closeCalls)
+	}
+}
+
+type completedCatalogFixture struct {
+	CatalogService
+	resolve func(providers.ID) (providers.ID, error)
+}
+
+func (fixture completedCatalogFixture) ResolveProviderID(id providers.ID) (providers.ID, error) {
+	return fixture.resolve(id)
+}
+
+type completedExecutionFixture struct {
+	execute func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error)
+}
+
+func (fixture completedExecutionFixture) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	return fixture.execute(ctx, request)
+}
+
+type completedACPFixture struct{ ACPService }
+
+func (completedACPFixture) Resolve(providers.ID) (providers.ID, bool) { return "", false }
+
+type completedLifecycleFixture struct{ close func(context.Context) error }
+
+func (fixture completedLifecycleFixture) Close(ctx context.Context) error { return fixture.close(ctx) }
+
+func TestPrepareConfigurationDetachesExplicitCatalogValues(t *testing.T) {
+	t.Parallel()
+	input := Configuration{
+		CatalogDescriptors: []providers.Descriptor{{ID: "fixture-provider", Aliases: []string{"fixture-alias"}}},
+		CatalogOverrides:   []CatalogCapabilityOverride{{Provider: providers.IDCodex, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission}}},
+	}
+	prepared, err := PrepareConfiguration(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.CatalogDescriptors[0].Aliases[0] = "mutated-alias"
+	input.CatalogOverrides[0].Capabilities[0] = providers.CapabilityPermissionBypass
+	if prepared.CatalogDescriptors[0].Aliases[0] != "fixture-alias" || prepared.CatalogOverrides[0].Capabilities[0] != providers.CapabilityPromptSubmission {
+		t.Fatalf("configuration retained caller-owned values: %#v", prepared)
+	}
+}
 
 func TestRegistrationContractValuesDetachAndReportCapabilities(t *testing.T) {
 	t.Parallel()
@@ -144,17 +232,17 @@ func TestNewServiceRejectsManifestIntegrationPermissionBypassMismatch(t *testing
 		},
 	}
 	integration := ProgressingExternalIntegration("mismatch-provider", "must not execute")
-	_, err := NewService(IdentityCatalogProbe,
+	_, err := newTestProvidersService(IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		nil,
 		nil,
-		WithRegistrations(Registration{
+		Configuration{Registrations: []Registration{Registration{
 			Manifest:    manifest,
 			Integration: integration,
-		}))
+		}}})
 	if err == nil || !strings.Contains(err.Error(), `integration maximum capability "permission_bypass" contradicts`) {
-		t.Fatalf("NewService() error = %v, want manifest/integration permission-bypass mismatch", err)
+		t.Fatalf("newTestProvidersService() error = %v, want manifest/integration permission-bypass mismatch", err)
 	}
 	if stats := integration.Stats(); stats.DiscoverCalls != 0 || stats.CapabilityCalls != 0 || stats.InvokeCalls != 0 {
 		t.Fatalf("mismatched integration stats = %#v, want no provider calls during rejected construction", stats)
@@ -188,4 +276,80 @@ func (*permissionBypassIntegration) MaximumCapabilities() CapabilitySet {
 
 func (integration *permissionBypassIntegration) Capabilities(context.Context, InvocationRequest) (CapabilitySet, error) {
 	return integration.MaximumCapabilities(), nil
+}
+
+func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		call func() (providers.Service, error)
+		want string
+	}{
+		{
+			name: "catalog",
+			call: func() (providers.Service, error) {
+				return NewService(nil, nil, nil, nil, logging.NoopLogger{}, nil)
+			},
+			want: "construct Providers: catalog is required",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			service, err := test.call()
+			if err == nil {
+				t.Fatalf("newTestProvidersService() error = nil, want missing %s construction port", test.name)
+			}
+			if service != nil {
+				t.Fatalf("newTestProvidersService() = %#v, want nil service", service)
+			}
+			if !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("newTestProvidersService() error = %q, want %q", err.Error(), test.want)
+			}
+		})
+	}
+
+	service, err := newTestProvidersService(IdentityCatalogProbe,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		Configuration{})
+	if err != nil {
+		t.Fatalf("newTestProvidersService() error = %v, want successful construction with required ports", err)
+	}
+	if service == nil {
+		t.Fatal("newTestProvidersService() returned nil service, want non-nil providers.Service")
+	}
+	var root providers.Service = service
+	if root == nil {
+		t.Fatal("constructed root is not assignable to providers.Service")
+	}
+}
+
+// newTestProvidersService assembles the fixture's explicit sibling owners.
+func newTestProvidersService(probe CatalogProbeOperation, scheduler platformclock.TimerSource, logger logging.Logger, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, antigravity AgyEffect, codex CodexEffect, claude ClaudeEffect, configuration Configuration) (providers.Service, error) {
+	config, err := PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	registrations, err := ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := NewExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
 }

@@ -14,11 +14,13 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
@@ -197,11 +199,12 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 }
 
 func testConfigService() operatorsettings.Service {
-	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+	providersRoot, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		nil,
-		nil)
+		nil,
+		providerswire.Configuration{})
 	if err != nil {
 		panic(err)
 	}
@@ -298,4 +301,29 @@ func (adapter *recordingCLIAdapter) Configure(config operatorsettingscli.Configu
 	adapter.calls++
 	adapter.config = config
 	return adapter.failure
+}
+
+// newTestProvidersService assembles the fixture's explicit sibling owners.
+func newTestProvidersService(probe providerswire.CatalogProbeOperation, scheduler platformclock.TimerSource, logger logging.Logger, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, antigravity providerswire.AgyEffect, codex providerswire.CodexEffect, claude providerswire.ClaudeEffect, configuration providerswire.Configuration) (providers.Service, error) {
+	config, err := providerswire.PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := providerswire.NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := providerswire.NewExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
 }

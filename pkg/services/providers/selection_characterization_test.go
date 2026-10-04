@@ -162,14 +162,14 @@ func TestSelectionContract_ValidatePrerequisitesUsesCatalogAuthority(t *testing.
 func newSelectionRoot(t *testing.T, entries ...providers.Descriptor) providers.Service {
 	t.Helper()
 
-	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+	root, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		nil,
 		nil,
-		providerswire.WithCatalogDescriptors(entries...))
+		providerswire.Configuration{CatalogDescriptors: entries})
 	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
+		t.Fatalf("newTestProvidersService() = %v", err)
 	}
 	return root
 }

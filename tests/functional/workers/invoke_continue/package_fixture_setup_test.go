@@ -273,11 +273,12 @@ func startInvokeContinuePackageProcess(
 	unsupportedProvider providers.Service,
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
-	fallbackProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+	fallbackProvider, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		providerswire.NewCodexEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
-		providerswire.NewClaudeEffect(invokeContinueProviderRunner{route}, platformclock.Real{}))
+		providerswire.NewClaudeEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
+		providerswire.Configuration{})
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("build fixture provider fallback: %w", err)
 	}
@@ -325,4 +326,29 @@ func startInvokeContinuePackageProcess(
 		return invokeContinueStartedProcess{}, fmt.Errorf("wait for package fixture API: %w", err)
 	}
 	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds}, nil
+}
+
+// newTestProvidersService assembles the fixture's explicit sibling owners.
+func newTestProvidersService(probe providerswire.CatalogProbeOperation, scheduler platformclock.TimerSource, logger logging.Logger, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, antigravity providerswire.AgyEffect, codex providerswire.CodexEffect, claude providerswire.ClaudeEffect, configuration providerswire.Configuration) (providers.Service, error) {
+	config, err := providerswire.PrepareConfiguration(configuration)
+	if err != nil {
+		return nil, err
+	}
+	catalogService, err := providerswire.NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
+	if err != nil {
+		return nil, err
+	}
+	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
+	if err != nil {
+		return nil, err
+	}
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
+	if err != nil {
+		return nil, err
+	}
+	executionService, err := providerswire.NewExecutionService(catalogService, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
 }

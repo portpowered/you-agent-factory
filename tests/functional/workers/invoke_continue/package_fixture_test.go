@@ -162,15 +162,15 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		return nil, err
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
-	unsupportedProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
+	unsupportedProvider, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
 		providerswire.NewCodexEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
 		providerswire.NewClaudeEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
-		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
+		providerswire.Configuration{CatalogOverrides: []providerswire.CatalogCapabilityOverride{providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
-		}))
+		}}})
 	if err != nil {
 		return nil, fmt.Errorf("build unsupported continuation provider: %w", err)
 	}

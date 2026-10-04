@@ -1,9 +1,8 @@
 // Package wire is the Providers service composition boundary.
 //
-// Wire performs construction only, returns the singular providers.Service root
-// interface, and starts no lifecycle components. Parent-private Catalog and
-// Execution owner wiring stays inside the owner service assembly path; peers
-// depend on Service rather than owner internals or construction ports. The
+// Wire exposes focused inert constructors for completed private roles.
+// Canonical composition assembles these once; the Providers root consumes them
+// directly. Peers depend on Service rather than private construction roles. The
 // process-edge registration contract in this package is for root composition,
 // not a second peer-facing Providers service. Missing required construction
 // ports fail with a deterministic construction error and a nil service.
@@ -22,6 +21,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	acpwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -112,43 +112,6 @@ func (override CatalogCapabilityOverride) Clone() CatalogCapabilityOverride {
 	}
 }
 
-// Option configures Providers root construction.
-type Option interface {
-	apply(*wireOptions)
-}
-
-type wireOptions struct {
-	catalogDescriptors []providers.Descriptor
-	catalogOverrides   []catalog.CapabilityOverride
-	acpIntegrations    []providers.ACPIntegration
-	registrations      ProviderRegistrations
-}
-
-type registrationsOption struct {
-	registrations ProviderRegistrations
-}
-
-func (option registrationsOption) apply(config *wireOptions) {
-	config.registrations = append(ProviderRegistrations(nil), option.registrations...)
-}
-
-// WithRegistrations contributes process-edge compatibility integrations.
-// Provider execution still crosses the singular providers.Service boundary.
-func WithRegistrations(registrations ...Registration) Option {
-	return registrationsOption{registrations: registrations}
-}
-
-type acpIntegrationsOption struct{ integrations []providers.ACPIntegration }
-
-func (o acpIntegrationsOption) apply(opts *wireOptions) {
-	opts.acpIntegrations = append([]providers.ACPIntegration(nil), o.integrations...)
-}
-
-// WithACPIntegrations contributes configured ACP identities and commands.
-func WithACPIntegrations(integrations ...providers.ACPIntegration) Option {
-	return acpIntegrationsOption{integrations: integrations}
-}
-
 // CatalogProbeOperation is the completed catalog readiness projection.
 type CatalogProbeOperation = catalog.ProbeOperation
 
@@ -157,100 +120,80 @@ func IdentityCatalogProbe(ctx context.Context, descriptor providers.Descriptor) 
 	return catalogwire.IdentityProbe(ctx, descriptor)
 }
 
-type catalogDescriptorsOption struct{ descriptors []providers.Descriptor }
-
-func (o catalogDescriptorsOption) apply(opts *wireOptions) {
-	opts.catalogDescriptors = append(opts.catalogDescriptors, o.descriptors...)
+// Configuration contains detached registration and catalog values. It owns no
+// service collaborators or runtime resources.
+type Configuration struct {
+	CatalogDescriptors []providers.Descriptor
+	CatalogOverrides   []CatalogCapabilityOverride
+	ACPIntegrations    []providers.ACPIntegration
+	Registrations      ProviderRegistrations
 }
 
-// WithCatalogDescriptors contributes detached catalog facts.
-func WithCatalogDescriptors(descriptors ...providers.Descriptor) Option {
-	cloned := make([]providers.Descriptor, len(descriptors))
-	for index, descriptor := range descriptors {
-		cloned[index] = descriptor.Clone()
-	}
-	return catalogDescriptorsOption{descriptors: cloned}
-}
-
-type catalogCapabilityOverridesOption struct {
-	overrides []CatalogCapabilityOverride
-}
-
-func (option catalogCapabilityOverridesOption) apply(config *wireOptions) {
-	overrides := make([]catalog.CapabilityOverride, 0, len(option.overrides))
-	for _, override := range option.overrides {
-		overrides = append(overrides, catalog.CapabilityOverride{
-			Provider:     override.Provider,
-			Capabilities: append([]providers.Capability(nil), override.Capabilities...),
-		})
-	}
-	config.catalogOverrides = append(config.catalogOverrides, overrides...)
-}
-
-// WithCatalogCapabilityOverrides supplies route-specific static capability
-// facts without adding or replacing a provider registration.
-func WithCatalogCapabilityOverrides(overrides ...CatalogCapabilityOverride) Option {
-	cloned := make([]CatalogCapabilityOverride, len(overrides))
-	for index, override := range overrides {
-		cloned[index] = override.Clone()
-	}
-	return catalogCapabilityOverridesOption{overrides: cloned}
-}
-
-// NewService constructs one inert Providers root over sibling Catalog and
-// Execution capabilities sharing the same private catalog identity authority.
-// The caller supplies the completed readiness projection; this boundary never
-// substitutes an identity projection for a missing effect. ACP process,
-// executable discovery and standard streams are supplied directly by composition.
-// Native effects are completed before this consumer is called; it neither
-// constructs command adapters nor selects between command and legacy PTY effects.
-func NewService(
-	probe CatalogProbeOperation,
-	scheduler platformclock.TimerSource,
-	logger logging.Logger,
-	commandFactory platformprocess.CommandFactory,
-	executableLocator platformprocess.ExecutableLocator,
-	stdioPipes platformprocess.StdioPipeFactory,
-	antigravity AgyEffect,
-	codex CodexEffect,
-	claude ClaudeEffect,
-	options ...Option,
-) (providers.Service, error) {
-	var config wireOptions
-	for _, option := range options {
-		if option != nil {
-			option.apply(&config)
-		}
-	}
+// PrepareConfiguration projects package defaults and explicit construction data.
+// It performs no readiness, command, channel or lifecycle effects.
+func PrepareConfiguration(config Configuration) (Configuration, error) {
 	packaged, err := PackagedACPIntegrations()
 	if err != nil {
-		return nil, err
+		return Configuration{}, err
 	}
-	acp := effectiveACPIntegrations(packaged, config.acpIntegrations)
-	descriptors, err := packagedACPDescriptors(acp)
+	integrations := effectiveACPIntegrations(packaged, config.ACPIntegrations)
+	descriptors, err := packagedACPDescriptors(integrations)
 	if err != nil {
-		return nil, err
+		return Configuration{}, err
 	}
-	for _, registration := range config.registrations {
+	for _, registration := range config.Registrations {
 		descriptors = append(descriptors, registrationDescriptor(registration.Manifest))
 	}
-	catalogService, err := catalogwire.NewService(probe, append(config.catalogDescriptors, descriptors...), config.catalogOverrides)
+	detached := make([]providers.Descriptor, len(config.CatalogDescriptors))
+	for i, descriptor := range config.CatalogDescriptors {
+		detached[i] = descriptor.Clone()
+	}
+	overrides := make([]CatalogCapabilityOverride, len(config.CatalogOverrides))
+	for i, override := range config.CatalogOverrides {
+		overrides[i] = override.Clone()
+	}
+	return Configuration{
+		CatalogDescriptors: append(detached, descriptors...),
+		CatalogOverrides:   overrides,
+		ACPIntegrations:    integrations,
+		Registrations:      append(ProviderRegistrations(nil), config.Registrations...),
+	}, nil
+}
+
+// These aliases expose completed private roles to canonical composition.
+type CatalogService = catalog.Service
+type ExecutionService = execution.Service
+type ACPService = acp.ContinuationService
+type Lifecycle = providerservice.Lifecycle
+type ExecutionRegistration = execution.Registration
+
+// NewCatalogService constructs only the catalog over the supplied projection.
+func NewCatalogService(probe CatalogProbeOperation, descriptors []providers.Descriptor, overrides []CatalogCapabilityOverride) (CatalogService, error) {
+	projected := make([]catalog.CapabilityOverride, len(overrides))
+	for i, override := range overrides {
+		projected[i] = catalog.CapabilityOverride{Provider: override.Provider, Capabilities: append([]providers.Capability(nil), override.Capabilities...)}
+	}
+	return catalogwire.NewService(probe, descriptors, projected)
+}
+
+// NewACPService constructs only the configured ACP owner, without starting peers.
+func NewACPService(integrations []providers.ACPIntegration, commandFactory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator, stdioPipes platformprocess.StdioPipeFactory, scheduler platformclock.TimerSource, logger logging.Logger) (ACPService, error) {
+	return acpwire.NewService(integrations, commandFactory, locator, stdioPipes, scheduler, logger)
+}
+
+// NewExecutionService constructs only normalized execution over completed routes.
+func NewExecutionService(catalogService CatalogService, registrations []ExecutionRegistration) (ExecutionService, error) {
+	return executionwire.NewService(catalogService, registrations...)
+}
+
+// NewService receives completed siblings and the exact close capability. It
+// neither constructs a secondary graph nor selects execution effects.
+func NewService(catalogService CatalogService, executionService ExecutionService, acpService ACPService, packagedACP []providers.ACPIntegration, logger logging.Logger, lifecycle Lifecycle) (providers.Service, error) {
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, packagedACP, logger, lifecycle)
 	if err != nil {
 		return nil, err
 	}
-	return newRootWithOptions(
-		catalogService,
-		antigravity,
-		codex,
-		claude,
-		scheduler,
-		acp,
-		commandFactory,
-		executableLocator,
-		stdioPipes,
-		logger,
-		config.registrations...,
-	)
+	return root, nil
 }
 
 func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]providers.Descriptor, error) {
@@ -288,27 +231,10 @@ func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegrat
 	return catalogdata.DecodeACPIntegrations(document)
 }
 
-func newRootWithOptions(
-	catalogService catalog.Service,
-	antigravity AgyEffect,
-	codex CodexEffect,
-	claude ClaudeEffect,
-	scheduler platformclock.TimerSource,
-	acpIntegrations []providers.ACPIntegration,
-	commandFactory platformprocess.CommandFactory,
-	executableLocator platformprocess.ExecutableLocator,
-	stdioPipes platformprocess.StdioPipeFactory,
-	logger logging.Logger,
-	externalRegistrations ...Registration,
-) (providers.Service, error) {
-	if catalogService == nil {
-		return nil, fmt.Errorf("construct Providers: catalog is required")
-	}
+// ExecutionRegistrations binds completed native and ACP effects to detached
+// route values, preserving identity collision and capability validation.
+func ExecutionRegistrations(antigravity AgyEffect, codex CodexEffect, claude ClaudeEffect, acpService ACPService, acpIntegrations []providers.ACPIntegration, externalRegistrations ProviderRegistrations) ([]ExecutionRegistration, error) {
 	registrations := executionwire.BuiltInRegistrations(antigravity, codex, claude)
-	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes, scheduler, logger)
-	if err != nil {
-		return nil, err
-	}
 	for _, integration := range acpIntegrations {
 		registrations = append(registrations, executionwire.NewACPRegistration(integration.Name, acpService))
 	}
@@ -327,21 +253,7 @@ func newRootWithOptions(
 		}
 		registrations = append(registrations, attempt)
 	}
-	executionService, err := executionwire.NewService(
-		catalogService,
-		registrations...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return providerservice.NewWithACP(
-		catalogService,
-		executionService,
-		acpService,
-		acpIntegrations,
-		logger,
-		acpService,
-	)
+	return registrations, nil
 }
 
 func validateExternalRegistrationCapabilities(registration Registration) error {

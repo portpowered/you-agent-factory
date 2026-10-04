@@ -165,10 +165,10 @@ func provideConfiguredProvidersService(
 	if err != nil {
 		return nil, err
 	}
-	options := []providerswire.Option{
-		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
-		providerswire.WithCatalogCapabilityOverrides(edges.ProviderCatalogCapabilityOverrides...),
-		providerswire.WithRegistrations(edges.ProviderRegistrations...),
+	configuration := providerswire.Configuration{
+		ACPIntegrations:  projectACPIntegrations(integrations),
+		CatalogOverrides: edges.ProviderCatalogCapabilityOverrides,
+		Registrations:    edges.ProviderRegistrations,
 	}
 	if workersRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
@@ -176,7 +176,7 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		return newConfiguredProvidersService(options, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+		return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	if edges.ProviderCommandRunner != nil {
@@ -185,7 +185,7 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		return newConfiguredProvidersService(options, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+		return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
@@ -197,7 +197,7 @@ func provideConfiguredProvidersService(
 		provideWorkersAgentToolFileSystem(edges),
 	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-	return newConfiguredProvidersService(options, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+	return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 }
 

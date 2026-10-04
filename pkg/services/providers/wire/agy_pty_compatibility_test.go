@@ -124,13 +124,14 @@ func newLegacyAgyProvidersService(
 	if err != nil {
 		t.Fatalf("NewAgyPTYAllocator() error = %v", err)
 	}
-	service, err := NewService(IdentityCatalogProbe,
+	service, err := newTestProvidersService(IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		NewAgyPTYEffect(allocator, legacyAgyExecutableLocator{path: executable}, platformfilesystem.Local{}, clock, AgyPTYPolicy{}),
 		nil,
-		nil)
+		nil,
+		Configuration{})
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
 	return service
 }
@@ -273,11 +274,12 @@ func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
 			if id == providers.IDClaude {
 				codexRunner, claudeRunner = peer, runner
 			}
-			root, err := NewService(IdentityCatalogProbe,
+			root, err := newTestProvidersService(IdentityCatalogProbe,
 				platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 				nil,
 				NewCodexEffect(codexRunner, clock),
-				NewClaudeEffect(claudeRunner, clock))
+				NewClaudeEffect(claudeRunner, clock),
+				Configuration{})
 			if err != nil {
 				t.Fatal(err)
 			}
