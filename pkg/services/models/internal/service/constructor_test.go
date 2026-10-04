@@ -404,7 +404,16 @@ func scopedLocalRootRequest(scope models.RuntimeScopeRef) models.LocalInvocation
 
 func openScopedLocalRoot(t *testing.T, root *modelsservice.Root, cache, endpoint string) models.RuntimeScopeRef {
 	t.Helper()
-	opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{Config: models.RuntimeScopeConfig{CacheDirectory: cache, Runtime: models.RuntimeConfig{BaseDirectory: cache, FactoryDirectory: endpoint, Resources: []models.RuntimeResource{{Name: "voice", Type: models.RuntimeResourceTypeModel, Model: "voice", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND", Capacity: 1}}, Workers: []models.RuntimeWorker{{Name: "voice", Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal, Args: []string{"--health-endpoint", endpoint}, Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}}}}}})
+	opened, err := root.OpenRuntimeScope(t.Context(), models.OpenRuntimeScopeRequest{Config: models.RuntimeScopeConfig{
+		CacheDirectory: cache,
+		Runtime: models.RuntimeConfig{
+			BaseDirectory: cache, FactoryDirectory: endpoint,
+			Resources: []models.RuntimeResource{{Name: "voice", Type: models.RuntimeResourceTypeModel,
+				Model: "voice", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND", Capacity: 1}},
+			Workers: []models.RuntimeWorker{{Name: "voice", Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
+				Args: []string{"--health-endpoint", endpoint}, Resources: []models.RuntimeResource{{Name: "voice", Capacity: 1}}}},
+		},
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,6 +504,7 @@ func (a scopedLocalRootAssets) ResolveRuntimeCache(ctx context.Context, request 
 type scopedLocalRootHost struct {
 	runtimehost.Service
 	scopes   runtimescopes.Service
+	failure  error
 	mu       sync.Mutex
 	sequence int
 	active   map[string]models.RuntimeScopeRef
@@ -509,6 +519,9 @@ func (h *scopedLocalRootHost) EnsureModelHost(_ context.Context, r models.Ensure
 	return models.EnsureModelHostResult{Host: models.ModelHostSnapshot{Scope: r.Scope, ModelName: r.Name, ReadinessState: models.ReadinessStateReady, Diagnostics: map[string]string{"endpoint": binding.RuntimeConfig().FactoryDirectory}}}, nil
 }
 func (h *scopedLocalRootHost) AcquireModelLease(_ context.Context, r models.AcquireModelLeaseRequest) (models.AcquireModelLeaseResult, error) {
+	if h.failure != nil {
+		return models.AcquireModelLeaseResult{}, h.failure
+	}
 	if err := r.Validate(); err != nil {
 		return models.AcquireModelLeaseResult{}, err
 	}
@@ -537,13 +550,19 @@ func (h *scopedLocalRootHost) ReleaseModelLease(ctx context.Context, r models.Re
 }
 func (*scopedLocalRootHost) Shutdown(context.Context) error { return nil }
 
-type scopedLocalRootRuntime struct{ loads int }
+type scopedLocalRootRuntime struct {
+	loads   int
+	failure error
+}
 
 func (*scopedLocalRootRuntime) Supports(models.RuntimeResource, *models.RuntimeWorker) bool {
 	return true
 }
 func (r *scopedLocalRootRuntime) Load(_ context.Context, q localmodels.LoadRequest) (localmodels.Handle, error) {
 	r.loads++
+	if r.failure != nil {
+		return nil, r.failure
+	}
 	return scopedLocalRootHandle(q.CachePath + "|" + q.ServingEndpoint), nil
 }
 
@@ -551,4 +570,49 @@ type scopedLocalRootHandle string
 
 func (h scopedLocalRootHandle) Invoke(context.Context, localmodels.InvocationRequest) (localmodels.InvocationResponse, error) {
 	return localmodels.InvocationResponse{Content: string(h)}, nil
+}
+
+func TestRootScopedExecutionReleasesCapacityOnFailure(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		failure   error
+		failLease bool
+	}{
+		{"lease", models.ErrHostCapacityExhausted, true}, {"load", errors.New("load failed"), false}, {"cancel-effect", context.Canceled, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root, host, runtime, resources := newScopedLocalRoot(t, nil, nil)
+			scope := openScopedLocalRoot(t, root, "selected-cache", "selected-endpoint")
+			if test.failLease {
+				host.failure = test.failure
+			} else {
+				runtime.failure = test.failure
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			result, err := root.InvokeLocal(ctx, scopedLocalRootRequest(scope))
+			if !errors.Is(err, test.failure) || !result.Handled || result.Content != "" {
+				t.Fatalf("failure result=%#v,%v", result, err)
+			}
+			host.failure, runtime.failure = nil, nil
+			// A retry through the same public Root proves reservation capacity recovered.
+			assertScopedLocalRootInvocation(t, root, ctx, scope, host, resources)
+			host.mu.Lock()
+			defer host.mu.Unlock()
+			expected := 2
+			if test.failLease {
+				expected = 1
+			}
+			if len(host.active) != 0 || len(host.releases) != expected {
+				t.Fatalf("active/released=%d/%d", len(host.active), len(host.releases))
+			}
+			for lease, count := range host.releases {
+				if count != 1 {
+					t.Fatalf("lease %s released %d times", lease, count)
+				}
+			}
+		})
+	}
 }
