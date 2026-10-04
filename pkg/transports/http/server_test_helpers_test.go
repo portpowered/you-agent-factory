@@ -87,34 +87,34 @@ func (f *workRequestPreparationFake) PrepareWorkRequest(
 }
 
 func setWorkRequestPreparationError(srv *Server, message string) {
-	srv.workAdapter = &workAdapter{Adapter: srv.workAdapter.WithAdmissionService(work.AdmissionContentService(
-		newContentStagingFake(),
-		&workRequestPreparationFake{
-			prepare: func(
-				context.Context,
-				work.WorkRequestPreparation,
-			) (work.WorkRequest, error) {
-				return work.WorkRequest{}, &work.RequestPreparationError{Message: message}
-			},
+	root := *srv.workAdapter.Root().(*completeWorkTestRoot)
+	root.staging = newContentStagingFake()
+	root.preparation = &workRequestPreparationFake{
+		prepare: func(
+			context.Context,
+			work.WorkRequestPreparation,
+		) (work.WorkRequest, error) {
+			return work.WorkRequest{}, &work.RequestPreparationError{Message: message}
 		},
-	))}
+	}
+	srv.workAdapter = &workAdapter{Adapter: srv.workAdapter.WithAdmissionService(&root)}
 }
 
 func setWorkRequestPreparationResult(
 	srv *Server,
 	prepare func(work.WorkRequestPreparation) work.WorkRequest,
 ) {
-	srv.workAdapter = &workAdapter{Adapter: srv.workAdapter.WithAdmissionService(work.AdmissionContentService(
-		newContentStagingFake(),
-		&workRequestPreparationFake{
-			prepare: func(
-				_ context.Context,
-				input work.WorkRequestPreparation,
-			) (work.WorkRequest, error) {
-				return prepare(input), nil
-			},
+	root := *srv.workAdapter.Root().(*completeWorkTestRoot)
+	root.staging = newContentStagingFake()
+	root.preparation = &workRequestPreparationFake{
+		prepare: func(
+			_ context.Context,
+			input work.WorkRequestPreparation,
+		) (work.WorkRequest, error) {
+			return prepare(input), nil
 		},
-	))}
+	}
+	srv.workAdapter = &workAdapter{Adapter: srv.workAdapter.WithAdmissionService(&root)}
 }
 
 type contentStagingFake struct {

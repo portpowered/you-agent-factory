@@ -3,10 +3,19 @@ package wire
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	platformcontentstaging "github.com/portpowered/infinite-you/pkg/platform/contentstaging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"reflect"
-	"testing"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // This fixture observes provider forwarding, not the implementation of the
@@ -137,6 +146,98 @@ func TestProvideRecordingsRootForwardsCompletedArtifactOwner(t *testing.T) {
 				if cell.withContext && owner.ctx != ctx {
 					t.Fatal("owner did not receive caller context")
 				}
+			}
+		})
+	}
+}
+
+// timestampTestSource is a Now-only source: runtime logical ticks cannot advance it.
+type timestampTestSource struct{ nanos atomic.Int64 }
+
+func (source *timestampTestSource) Now() time.Time { return time.Unix(0, source.nanos.Load()).UTC() }
+
+func TestSelectedTimestampProvidersUseProcessSource(t *testing.T) {
+	t.Parallel()
+	source := &timestampTestSource{}
+	base := time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+	source.nanos.Store(base.UnixNano())
+	artifactNow := provideRuntimeArtifactClock(source)
+	defaults := provideCLIRunDefaults(nil, provideRecordingsCLIAdapter(), source)
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := provideLiveRecordingTargetPlanner(reserver, source)
+	home := t.TempDir()
+	for index, instant := range []time.Time{base, base.Add(24 * time.Hour)} {
+		source.nanos.Store(instant.UnixNano())
+		if got := artifactNow(); !got.Equal(instant) {
+			t.Fatalf("artifact time = %v, want %v", got, instant)
+		}
+		if got := defaults.Clock.Now(); !got.Equal(instant) {
+			t.Fatalf("CLI time = %v, want %v", got, instant)
+		}
+		id := []string{"7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba", "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3bb"}[index]
+		target, err := planner.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{HomeDir: home, CanonicalSessionID: id, ReportedSessionID: "~default"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		datedSuffix := filepath.Join(instant.Format("2006"), instant.Format("01"), instant.Format("02"), id+".json")
+		if !strings.HasSuffix(target.ServicePath, datedSuffix) || target.ReportedPath != target.ServicePath {
+			t.Fatalf("target = %#v, want shared path ending %q", target, datedSuffix)
+		}
+	}
+}
+
+type timestampStagingFiles struct {
+	platformcontentstaging.FileSystem
+	root string
+}
+
+func (files timestampStagingFiles) MkdirTemp(_ string, pattern string) (string, error) {
+	return os.MkdirTemp(files.root, pattern)
+}
+
+func TestSelectedStagingClockPreservesOverride(t *testing.T) {
+	t.Parallel()
+	for _, overridden := range []bool{false, true} {
+		t.Run(strconv.FormatBool(overridden), func(t *testing.T) {
+			t.Parallel()
+			base := time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+			selected, specialized := &timestampTestSource{}, &timestampTestSource{}
+			selected.nanos.Store(base.UnixNano())
+			specialized.nanos.Store(base.Add(time.Hour).UnixNano())
+			edges := serviceedges.Edges{WorkContentStagingFileSystem: timestampStagingFiles{root: t.TempDir()}}
+			effective := selected
+			if overridden {
+				edges.WorkContentStagingClock = specialized
+				effective = specialized
+			}
+			issuedAt := effective.Now()
+			staging, err := provideWorkContentStagingService(edges, selected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			staged, err := staging.StageContent(t.Context(), work.StageContentRequest{ItemType: "image", FileName: "image.png", MediaType: "image/png", Content: []byte("test image")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := staging.CleanupContent(t.Context(), staged.StagedFileRef); err != nil {
+					t.Error(err)
+				}
+			}()
+			if overridden {
+				selected.nanos.Store(base.Add(2 * time.Hour).UnixNano())
+			}
+			effective.nanos.Store(issuedAt.Add(time.Hour - time.Nanosecond).UnixNano())
+			resolved, err := staging.ResolveContent(t.Context(), staged.StagedFileRef)
+			if err != nil || !resolved.ExpiresAt.Equal(issuedAt.Add(time.Hour)) {
+				t.Fatalf("before expiry = %#v, %v", resolved, err)
+			}
+			effective.nanos.Store(issuedAt.Add(time.Hour).UnixNano())
+			if _, err := staging.ResolveContent(t.Context(), staged.StagedFileRef); !errors.Is(err, work.ErrStagedContentExpired) {
+				t.Fatalf("exact expiry = %v", err)
 			}
 		})
 	}

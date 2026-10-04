@@ -436,20 +436,26 @@ func provideWorkService(
 	inspectPath work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
-	durability work.CompletedFlushSequenceReader,
+	stateAccess workwire.StateAccess,
+	preparation work.RequestPreparationService,
+	invocationPreparation work.InvocationInputPreparation,
 ) work.Service {
-	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer, durability)
+	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer, stateAccess, preparation, invocationPreparation)
+}
+
+func provideWorkSessionResolver(runtimes factorysessionwire.RuntimeAssembly) workwire.RuntimeSessionResolver {
+	return workwire.NewRuntimeSessionResolver(runtimes)
 }
 
 // provideWorkDurabilityReader adapts the narrow Recordings lifecycle
 // capability to Work's sequence-only consumer contract. The root graph still
 // injects one capability; Work never receives the broad Recordings service.
-func provideWorkDurabilityReader(service recordings.Service) work.CompletedFlushSequenceReader {
+func provideWorkDurabilityReader(service recordings.Service) (work.CompletedFlushSequenceReader, error) {
 	reader, ok := service.(recordings.CompletedFlushWatermarkReader)
 	if !ok || reader == nil {
-		return nil
+		return nil, errors.New("construct Work: Recordings completed-flush watermark reader is required")
 	}
-	return recordingsWorkDurabilityReader{reader: reader}
+	return recordingsWorkDurabilityReader{reader: reader}, nil
 }
 
 type recordingsWorkDurabilityReader struct {
@@ -459,9 +465,6 @@ type recordingsWorkDurabilityReader struct {
 func (reader recordingsWorkDurabilityReader) CompletedFlushSequence(
 	streamGenerationID string,
 ) (int64, bool) {
-	if reader.reader == nil {
-		return 0, false
-	}
 	cursor, ok := reader.reader.CompletedFlushWatermark(streamGenerationID)
 	return int64(cursor.Sequence), ok
 }
@@ -637,3 +640,6 @@ func bindWatchReconnectWait(scheduler platformclock.TimerSource) workcli.Reconne
 		}
 	}
 }
+
+// Current Work reads use live sessions; historical reads keep their existing separate snapshot root.
+func provideWorkSnapshotReader() workwire.SnapshotReader { return nil }

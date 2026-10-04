@@ -23,13 +23,9 @@ var _ stateaccess.Service = (*Service)(nil)
 func New(
 	sessions stateaccess.SessionResolver,
 	snapshots stateaccess.SnapshotReader,
-	durability ...work.CompletedFlushSequenceReader,
+	durability work.CompletedFlushSequenceReader,
 ) *Service {
-	var reader work.CompletedFlushSequenceReader
-	if len(durability) > 0 {
-		reader = durability[0]
-	}
-	return &Service{sessions: sessions, snapshots: snapshots, durability: reader}
+	return &Service{sessions: sessions, snapshots: snapshots, durability: durability}
 }
 
 func (s *Service) SubmitWorkRequestForSession(

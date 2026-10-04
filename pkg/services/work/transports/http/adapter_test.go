@@ -43,10 +43,30 @@ func TestAdapter_BindsWorkRootViaFakeRootSeam(t *testing.T) {
 	}
 }
 
-func TestNewAdapter_RejectsNilRoot(t *testing.T) {
+func TestAdapterMissingRootReportsOperationError(t *testing.T) {
 	t.Parallel()
+	_, err := NewAdapter(nil).invokeListWork(context.Background(), "session-1", work.ListOptions{})
+	if err == nil || err.Error() != "work service is required" {
+		t.Fatalf("missing root error = %v", err)
+	}
+}
 
-	if NewAdapter(nil) != nil {
-		t.Fatal("NewAdapter(nil) must return nil")
+func TestAdapterAdmissionBindingUsesCompleteRoot(t *testing.T) {
+	t.Parallel()
+	original := &rootFake{listWork: func(context.Context, string, work.ListOptions) (work.ListResult, error) {
+		return work.ListResult{}, work.ErrWorkNotFound
+	}}
+	replacement := &rootFake{listWork: func(context.Context, string, work.ListOptions) (work.ListResult, error) {
+		return work.ListResult{}, context.Canceled
+	}}
+	adapter := NewAdapter(original)
+	bound := adapter.WithAdmissionService(replacement)
+	_, err := bound.invokeListWork(context.Background(), "session-1", work.ListOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("bound list error = %v", err)
+	}
+	_, err = adapter.invokeListWork(context.Background(), "session-1", work.ListOptions{})
+	if !errors.Is(err, work.ErrWorkNotFound) {
+		t.Fatalf("original list error = %v", err)
 	}
 }
