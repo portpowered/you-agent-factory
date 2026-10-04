@@ -12,7 +12,9 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	responseowner "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -542,5 +544,58 @@ func TestManager_InferenceProgressPublisher_NormalizesFragmentKinds(t *testing.T
 	}
 	if len(initial.Events) != 3 {
 		t.Fatalf("event count = %d, want 3", len(initial.Events))
+	}
+}
+
+type pairedStreamResponses struct {
+	responseowner.Service
+	published, closed int
+}
+
+func (o *pairedStreamResponses) NewPublisher(s *responsestream.SessionResponseStream, observer responsestream.DiagnosticsObserver) *responseowner.Publisher {
+	publisher := responsestream.NewPublisher(s, observer)
+	return &responseowner.Publisher{PublishEvent: publisher.Publish, ReadDiagnostics: publisher.Diagnostics, ReportCompaction: publisher.ReportCompaction}
+}
+func (o *pairedStreamResponses) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+	o.published++
+	return store.Publish(event)
+}
+func (o *pairedStreamResponses) Close(store *responseeventstore.SessionResponseEventStore) {
+	o.closed++
+	store.Close()
+}
+func TestSessionStreamManagerUsesPairedRegistryAndResponseOwner(t *testing.T) {
+	t.Parallel()
+	session := livesession.New("paired", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory", streamTestClock, streamResponseEventID, streamResponseEventID)
+	host := &streamTestHost{session: session}
+	observer := &streamTestHost{}
+	registry := newTestResponseStreamRegistry()
+	owner := &pairedStreamResponses{}
+	manager := stream.NewManagerWithResponseService(host, observer, registry, owner)
+	subscription, err := manager.Subscribe(session.ID, "dispatch", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Detach()
+	manager.InferenceProgressPublisherFactory(nil)(session.ID)(responseFragment("dispatch", "owned"))
+	batch, err := subscription.Next(context.Background())
+	if err != nil || len(batch.Events) != 1 || observer.published != 1 || owner.published != 1 || len(session.ResponseEvents.Events()) != 1 {
+		t.Fatalf("publication: batch=%v error=%v observer=%d owner=%d", batch, err, observer.published, owner.published)
+	}
+	manager.DispatchCompletionObserverFactory()(session.ID)("dispatch")
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("completion error=%v", err)
+	}
+	manager.InferenceProgressPublisherFactory(nil)(session.ID)(canonicalDraftFragment("dispatch", struct{}{}))
+	if observer.degraded != 1 {
+		t.Fatalf("invalid-draft degradation=%d", observer.degraded)
+	}
+	manager.CloseAll(session)
+	if owner.closed != 1 {
+		t.Fatalf("selected response closes=%d", owner.closed)
+	}
+	host.session = nil
+	if _, err := manager.Subscribe("missing", "dispatch", 0); !errors.Is(err, errMissingSession) {
+		t.Fatalf("missing session error=%v", err)
 	}
 }

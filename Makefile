@@ -1048,7 +1048,7 @@ durable-runtime-construction-check:
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 # Tag union under which the repolint analyzers see every Go file once.
-REPOLINT_TAGS ?= functionallong,backendconformance,factoryartifact,managed_process_integration
+REPOLINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 REPOLINT_DIR ?= .artifacts/repolint
 REPOLINT_BASELINE := internal/lint/analyzers/baseline.txt
 ifeq ($(OS),Windows_NT)
@@ -1064,22 +1064,24 @@ golangci: golangci-lint-run repolint
 golangci-lint-run:
 	$(GOLANGCI_LINT) run ./...
 
-repolint:
+.PHONY: repolint-build
+repolint-build:
 	@mkdir -p $(REPOLINT_DIR)
 	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
-	$(GO) vet -testsleep -vettool=$(abspath $(REPOLINT_BIN)) ./...
+
+repolint: lint-baseline-growth
+	$(GO) vet -vettool=$(abspath $(REPOLINT_BIN)) -layering.check-stale=false -behavior.check-stale=false -construction.check-stale=false -petripublic.check-stale=false ./...
 	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
 	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt" --collect-tags "$(REPOLINT_TAGS)" --go "$(GO)"
-	$(MAKE) lint-baseline-growth
 
-# New rule IDs may seed existing debt once; established IDs only shrink.
-lint-baseline-growth:
-	@mkdir -p $(REPOLINT_DIR)
+# New rule IDs seed once; established rule IDs never admit new keys.
+lint-baseline-growth: repolint-build
 	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; \
-	if git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
-		git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base"; \
-	else : > "$(REPOLINT_DIR)/baseline.base"; fi
-	$(NODE) scripts/ci/lint-baseline-growth.mjs --base "$(REPOLINT_DIR)/baseline.base" --head "$(REPOLINT_BASELINE)"
+	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
+		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; \
+	git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base" || exit 1; \
+	"$(REPOLINT_BIN)" -baseline-growth="$(REPOLINT_DIR)/baseline.base"
+
 
 compatibility-alias-check:
 	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")

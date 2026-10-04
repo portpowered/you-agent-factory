@@ -8,7 +8,7 @@ export function parseBaseline(text) {
     const key = raw.trim();
     if (!key || key.startsWith('#')) continue;
     const parts = key.split('|');
-    if (parts.length !== 3 || parts.some(part => !part || part.trim() !== part)) {
+    if (parts.length !== (parts[0] === 'petri-public' ? 4 : 3) || parts.some(part => !part || part.trim() !== part)) {
       throw new Error(`malformed baseline key: ${key}`);
     }
     if (keys.has(key)) throw new Error(`duplicate baseline key: ${key}`);
@@ -24,13 +24,6 @@ export function parseBaseline(text) {
     keys.add(key);
   }
   return keys;
-}
-
-export function compareBaselines(baseText, headText) {
-  const base = parseBaseline(baseText);
-  const head = parseBaseline(headText);
-  const established = new Set([...base].map(key => key.split('|')[0]));
-  return [...head].filter(key => established.has(key.split('|')[0]) && !base.has(key)).sort();
 }
 
 // Compiler metadata alone identifies vanished units; no source inventory is read.
@@ -95,18 +88,16 @@ export function collectTimingUnits(headText, tags, go = 'go', run = spawnSync, h
 
 function main(args) {
   const options = Object.fromEntries(Array.from({ length: args.length / 2 }, (_, i) => [args[2 * i], args[2 * i + 1]]));
-  if (args.length % 2 || !options['--head'] || (!options['--base'] && !options['--units'])) {
-    throw new Error('usage: --head FILE --base FILE, or --head FILE --units FILE [--collect-tags TAGS --go EXECUTABLE]');
+  if (args.length % 2 || !options['--head'] || !options['--units']) {
+    throw new Error('usage: --head FILE --units FILE [--collect-tags TAGS --go EXECUTABLE]');
   }
   const head = readFileSync(options['--head'], 'utf8');
   if (options['--collect-tags']) {
     writeFileSync(options['--units'], collectTimingUnits(head, options['--collect-tags'], options['--go']));
   }
-  const failures = options['--units']
-    ? orphanTimingKeys(head, readFileSync(options['--units'], 'utf8'), options['--module-prefix'] ?? 'github.com/portpowered/infinite-you/')
-    : compareBaselines(readFileSync(options['--base'], 'utf8'), head);
+  const failures = orphanTimingKeys(head, readFileSync(options['--units'], 'utf8'), options['--module-prefix'] ?? 'github.com/portpowered/infinite-you/');
   if (failures.length) throw new Error(`lint baseline rejected keys:\n${failures.join('\n')}`);
-  console.log('lint baseline: established rules did not grow; timing owners are valid when checked');
+  console.log('lint timing ownership: owners and files are valid');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
