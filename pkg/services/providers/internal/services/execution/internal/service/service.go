@@ -58,15 +58,6 @@ func New(
 				providers.ErrProviderUnavailable,
 			)
 		}
-		if registration.Attempt == nil {
-			return nil, fmt.Errorf(
-				"construct Providers Execution: adapter for %q is required",
-				registration.Provider,
-			)
-		}
-		if registration.Continue == nil {
-			registration.Continue = unavailableContinuationAttempt
-		}
 		if _, exists := adapters[registration.Provider]; exists {
 			return nil, fmt.Errorf(
 				"construct Providers Execution: duplicate adapter for %q",
@@ -80,16 +71,6 @@ func New(
 		}
 	}
 	return &service{catalog: catalogService, adapters: adapters}, nil
-}
-
-func unavailableContinuationAttempt(
-	context.Context,
-	execution.ContinuationRequest,
-) (providers.ExecuteResult, error) {
-	return providers.ExecuteResult{}, providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindDependency,
-		Message: "provider continuation adapter is unavailable",
-	}
 }
 
 // Continue performs one validated exact-session adapter attempt. It shares

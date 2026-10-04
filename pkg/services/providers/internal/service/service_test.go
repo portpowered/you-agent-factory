@@ -92,6 +92,7 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 				}
 				return providers.ExecuteResult{Content: "root result"}, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -137,6 +138,7 @@ func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T
 				adapterCalls++
 				return providers.ExecuteResult{Content: "unexpected"}, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -256,6 +258,7 @@ func TestCatalogAdvertisedAgyEffortsAreNotRejectedByExecutionPolicy(t *testing.T
 			) (providers.ExecuteResult, error) {
 				return providers.ExecuteResult{Content: "accepted"}, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -539,6 +542,7 @@ func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 					Kind: providers.ExecuteFailureKindAuthentication,
 				}
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -700,6 +704,7 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 				adapterCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {

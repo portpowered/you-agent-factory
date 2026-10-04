@@ -94,8 +94,17 @@ func (failure AttemptFailure) Unwrap() []error {
 	return causes
 }
 
-// Registration binds one canonical Providers identity to one private adapter
-// attempt.
+// UnsupportedContinuation is the completed operation for adapters that do not
+// support continuing a provider session.
+func UnsupportedContinuation(context.Context, ContinuationRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: "provider continuation adapter is unavailable",
+	}
+}
+
+// Registration binds one canonical Providers identity to completed ordinary and
+// continuation attempts. Composition supplies both operations explicitly.
 type Registration struct {
 	Provider providers.ID
 	Attempt  Attempt

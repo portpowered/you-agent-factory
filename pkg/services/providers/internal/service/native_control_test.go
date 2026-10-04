@@ -48,8 +48,8 @@ func mustControlCapableRootService(t *testing.T, attempt execution.Attempt) *pro
 	}
 	executionService, err := executionwire.NewService(
 		catalogService,
-		execution.Registration{Provider: providers.IDCodex, Attempt: attempt},
-		execution.Registration{Provider: providers.IDClaude, Attempt: attempt},
+		execution.Registration{Provider: providers.IDCodex, Attempt: attempt, Continue: execution.UnsupportedContinuation},
+		execution.Registration{Provider: providers.IDClaude, Attempt: attempt, Continue: execution.UnsupportedContinuation},
 	)
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)

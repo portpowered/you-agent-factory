@@ -36,6 +36,7 @@ func newClaudeConformanceRoot(
 		execution.Registration{
 			Provider: providers.IDClaude,
 			Attempt:  attempt,
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {

@@ -39,22 +39,16 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			name:    "invalid provider",
 			catalog: mustCatalog(t),
 			registrations: []execution.Registration{{
-				Attempt: validAttempt,
-			}},
-		},
-		{
-			name:    "nil adapter",
-			catalog: mustCatalog(t),
-			registrations: []execution.Registration{{
-				Provider: providers.IDCodex,
+				Attempt:  validAttempt,
+				Continue: execution.UnsupportedContinuation,
 			}},
 		},
 		{
 			name:    "duplicate adapter",
 			catalog: mustCatalog(t),
 			registrations: []execution.Registration{
-				{Provider: providers.IDCodex, Attempt: validAttempt},
-				{Provider: providers.IDCodex, Attempt: validAttempt},
+				{Provider: providers.IDCodex, Attempt: validAttempt, Continue: execution.UnsupportedContinuation},
+				{Provider: providers.IDCodex, Attempt: validAttempt, Continue: execution.UnsupportedContinuation},
 			},
 		},
 		{
@@ -63,6 +57,7 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			registrations: []execution.Registration{{
 				Provider: "missing",
 				Attempt:  validAttempt,
+				Continue: execution.UnsupportedContinuation,
 			}},
 		},
 		{
@@ -78,6 +73,7 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			registrations: []execution.Registration{{
 				Provider: providers.IDCodex,
 				Attempt:  validAttempt,
+				Continue: execution.UnsupportedContinuation,
 			}},
 		},
 		{
@@ -93,6 +89,7 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			registrations: []execution.Registration{{
 				Provider: providers.IDCodex,
 				Attempt:  validAttempt,
+				Continue: execution.UnsupportedContinuation,
 			}},
 		},
 	}
@@ -243,6 +240,7 @@ func TestContinueFailsClosedAcrossPrivateContinuationBoundaries(t *testing.T) {
 				t.Fatal("ordinary adapter called for catalog lookup failure")
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		})
 		if err != nil {
 			t.Fatalf("NewService() = %v", err)
@@ -253,7 +251,7 @@ func TestContinueFailsClosedAcrossPrivateContinuationBoundaries(t *testing.T) {
 		}
 	})
 
-	t.Run("missing continuation adapter", func(t *testing.T) {
+	t.Run("explicit unsupported continuation", func(t *testing.T) {
 		t.Parallel()
 
 		continuation := mustContinuationService(t, mustExecutionService(t, func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
@@ -352,6 +350,7 @@ func TestExecuteRejectsInvalidRequestBeforeCatalogOrAdapterIO(t *testing.T) {
 				adapterCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -391,6 +390,7 @@ func TestExecuteNeverFallsBackForUnknownUnavailableOrUnregisteredProvider(t *tes
 				codexCalls++
 				return providers.ExecuteResult{}, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -441,6 +441,7 @@ func TestExecutePreservesAdapterResultAlongsideFailureWithoutRetry(t *testing.T)
 				return providers.ExecuteResult{Content: "must not escape"},
 					errors.New("secret native attempt failed")
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -865,6 +866,7 @@ func TestExecuteReturnsDetachedNormalizedSuccess(t *testing.T) {
 			) (providers.ExecuteResult, error) {
 				return native, nil
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {
@@ -1084,6 +1086,7 @@ func TestExecuteRejectsInvalidOrCrossProviderSuccessSession(t *testing.T) {
 							SessionRef: &test.session,
 						}, nil
 					},
+					Continue: execution.UnsupportedContinuation,
 				},
 			)
 			if err != nil {
@@ -1127,6 +1130,7 @@ func mustExecutionService(
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt:  attempt,
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {

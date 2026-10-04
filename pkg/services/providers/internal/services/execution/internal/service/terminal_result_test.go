@@ -264,6 +264,7 @@ func mustTerminalTupleService(
 			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
 				return nativeResult, nativeFailure
 			},
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {

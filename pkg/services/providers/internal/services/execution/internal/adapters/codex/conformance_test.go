@@ -35,6 +35,7 @@ func newCodexConformanceRoot(
 		execution.Registration{
 			Provider: providers.IDCodex,
 			Attempt:  attempt,
+			Continue: execution.UnsupportedContinuation,
 		},
 	)
 	if err != nil {

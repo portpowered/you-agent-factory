@@ -224,6 +224,36 @@ func TestExternalRegistrationAttemptMapsSuccessAndRejectsInvalidRegistration(t *
 	}
 }
 
+func TestExternalRegistrationCompletesUnsupportedContinuationWithoutInvocation(t *testing.T) {
+	t.Parallel()
+	integration := ProgressingExternalIntegration("sealed", "must not execute")
+	registration, err := externalRegistrationAttempt(Registration{
+		Manifest: Manifest{ID: "sealed"}, Integration: integration,
+	})
+	if err != nil {
+		t.Fatalf("externalRegistrationAttempt() = %v", err)
+	}
+	before := integration.Stats()
+	request := execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{Provider: "sealed", AttemptID: "continue-1"},
+		ResumeSession:  &providers.SessionRef{Provider: "sealed", Kind: providers.SessionIDKind, ID: "session-1"},
+	}
+	for range 2 {
+		result, err := registration.Continue(context.Background(), request)
+		var failure providers.ExecuteFailure
+		if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency ||
+			failure.Message != "provider continuation adapter is unavailable" {
+			t.Fatalf("Continue() error = %#v, want existing unsupported-continuation failure", err)
+		}
+		if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
+			t.Fatalf("Continue() result = %#v, want empty result", result)
+		}
+	}
+	if after := integration.Stats(); !reflect.DeepEqual(after, before) {
+		t.Fatalf("unsupported continuation invoked integration: before %#v, after %#v", before, after)
+	}
+}
+
 func TestNewServiceRejectsManifestIntegrationPermissionBypassMismatch(t *testing.T) {
 	t.Parallel()
 

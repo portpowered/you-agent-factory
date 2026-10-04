@@ -305,6 +305,7 @@ func externalRegistrationAttempt(registration Registration) (execution.Registrat
 	}
 	return execution.Registration{
 		Provider: providers.ID(registration.Manifest.ID),
+		Continue: execution.UnsupportedContinuation,
 		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 			writer := &externalResponseWriter{}
 			invocation := InvocationRequest{
