@@ -4,6 +4,7 @@ package wire
 
 import (
 	"context"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
@@ -226,7 +227,11 @@ var servicesSet = wire.NewSet(
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
-	provideFactoryWebhooksService,
+	provideFactoryWebhookHTTPClient,
+	provideFactoryWebhookSecretResolver,
+	provideFactoryWebhookClock,
+	provideFactoryWebhookDeadLetterAppender,
+	webhookswire.NewService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,

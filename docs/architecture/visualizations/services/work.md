@@ -111,5 +111,4 @@ flowchart LR
 | [`pkg/services/work/transports/cli/submit`](../../../../pkg/services/work/transports/cli/submit) | 964 | 8 | 87.2% | 75.7% |
 | [`pkg/services/work/transports/cli/work`](../../../../pkg/services/work/transports/cli/work) | 90 | 5 | 73.3% | 60.0% |
 | [`pkg/services/work/transports/http`](../../../../pkg/services/work/transports/http) | 1760 | 11 | 80.1% | 62.9% |
-| [`pkg/services/work/transports/mcp`](../../../../pkg/services/work/transports/mcp) | 853 | 11 | 90.0% | XX% |
 | [`pkg/services/work/wire`](../../../../pkg/services/work/wire) | 177 | 1 | XX% | 11.4% |
