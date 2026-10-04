@@ -436,6 +436,11 @@ jobs:
           FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
           FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
+          # Retry at most five failing top-level tests once on this same
+          # commit; a pass on retry is recorded as a flake in the ledger.
+          FUNCTIONAL_FLAKE_RETRY_MAX: "5"
+          FUNCTIONAL_FLAKE_LEDGER: .artifacts/functional-test-viz/flake-ledger.json
+          FUNCTIONAL_FLAKE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_TEST_TIER: "merge-full"
           FUNCTIONAL_TEST_TRIGGER: ${{ github.event_name == 'push' && 'push-main' || 'pull_request' }}
@@ -472,6 +477,17 @@ jobs:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
+      - name: Record functional flake ledger
+        if: always() && matrix.suite == 'functional'
+        run: node scripts/ci/flake-ledger-summary.mjs --ledger .artifacts/functional-test-viz/flake-ledger.json
+      - name: Upload functional flake ledger
+        if: always() && matrix.suite == 'functional'
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-flake-ledger
+          path: .artifacts/functional-test-viz/flake-ledger.json
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Upload functional test diagnostics
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
