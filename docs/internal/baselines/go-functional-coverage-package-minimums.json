@@ -116,13 +116,6 @@
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp",
-      "justification": "The Recordings MCP tool catalog is no longer exposed by the public server; customer-process functional tests cannot execute these retained adapter handlers. Keep the functional lane default 15.00% floor pending adapter retirement or restored public-path coverage.",
-      "owner": "backend-quality",
-      "deadline": "2027-07-15",
-      "removalGate": "Remove the retired MCP adapter package, or restore customer-process functional coverage to the 15.00% lane default."
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
       "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",

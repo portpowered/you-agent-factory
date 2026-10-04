@@ -89,5 +89,4 @@ flowchart LR
 | [`pkg/services/factory_visualization/internal/testing/recordingsstub`](../../../../pkg/services/factory_visualization/internal/testing/recordingsstub) | 311 | 1 | 12.7% | XX% |
 | [`pkg/services/factory_visualization/transports/cli`](../../../../pkg/services/factory_visualization/transports/cli) | 4318 | 9 | 76.8% | 63.1% |
 | [`pkg/services/factory_visualization/transports/http`](../../../../pkg/services/factory_visualization/transports/http) | 1302 | 17 | 85.3% | 23.4% |
-| [`pkg/services/factory_visualization/transports/mcp`](../../../../pkg/services/factory_visualization/transports/mcp) | 917 | 6 | 75.9% | XX% |
 | [`pkg/services/factory_visualization/wire`](../../../../pkg/services/factory_visualization/wire) | 435 | 4 | XX% | 39.8% |

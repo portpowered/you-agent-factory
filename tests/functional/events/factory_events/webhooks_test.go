@@ -494,6 +494,7 @@ func (receiver *functionalWebhookReceiver) requestsSnapshot() []functionalWebhoo
 }
 
 type functionalWebhookSecretResolver struct {
+	failure       error
 	mu            sync.Mutex
 	resolved      []string
 	ready         chan struct{}
@@ -518,7 +519,7 @@ func (resolver *functionalWebhookSecretResolver) resolve(
 	resolver.resolved = append(resolver.resolved, ref)
 	resolver.mu.Unlock()
 	resolver.ready <- struct{}{}
-	return functionalWebhookSecret, nil
+	return functionalWebhookSecret, resolver.failure
 }
 
 type functionalWebhookFailureCommandRunner struct {
