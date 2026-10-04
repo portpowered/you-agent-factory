@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 const legacyCompatPackageRelativePath = "pkg/factory/sessions/responsestream/compat"
@@ -42,13 +40,35 @@ func AssertLegacyCompatMapperDeleted(repoRoot string) error {
 }
 
 func assertNoLegacyCompatImports(repoRoot string) error {
+	shouldSkipDir := func(scanRoot, path string, explicitSkips ...string) bool {
+		rel, err := filepath.Rel(scanRoot, path)
+		if err != nil {
+			return false
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "." {
+			return false
+		}
+		for _, part := range strings.Split(rel, "/") {
+			if strings.HasPrefix(part, ".") {
+				return true
+			}
+		}
+		for _, skip := range explicitSkips {
+			if rel == filepath.ToSlash(filepath.Clean(skip)) {
+				return true
+			}
+		}
+		return false
+	}
+
 	pkgRoot := filepath.Join(repoRoot, "pkg")
 	err := filepath.WalkDir(pkgRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if contractguard.ShouldSkipDir(pkgRoot, path, "generated") {
+			if shouldSkipDir(pkgRoot, path, "generated") {
 				return filepath.SkipDir
 			}
 			if strings.HasSuffix(path, filepath.Join("responsestream", "removalgate")) {
@@ -84,6 +104,28 @@ func assertNoLegacyCompatImports(repoRoot string) error {
 // AssertNoRetiredPrivateContractSymbolsInProductionSurfaces scans supported
 // CLI/API transport production code for retired private-contract parser symbols.
 func AssertNoRetiredPrivateContractSymbolsInProductionSurfaces(repoRoot string) error {
+	shouldSkipDir := func(scanRoot, path string, explicitSkips ...string) bool {
+		rel, err := filepath.Rel(scanRoot, path)
+		if err != nil {
+			return false
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "." {
+			return false
+		}
+		for _, part := range strings.Split(rel, "/") {
+			if strings.HasPrefix(part, ".") {
+				return true
+			}
+		}
+		for _, skip := range explicitSkips {
+			if rel == filepath.ToSlash(filepath.Clean(skip)) {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, relRoot := range productionSurfaceRoots {
 		absRoot := filepath.Join(repoRoot, filepath.FromSlash(relRoot))
 		err := filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
@@ -91,7 +133,7 @@ func AssertNoRetiredPrivateContractSymbolsInProductionSurfaces(repoRoot string) 
 				return walkErr
 			}
 			if entry.IsDir() {
-				if contractguard.ShouldSkipDir(
+				if shouldSkipDir(
 					absRoot,
 					path,
 					"generated",
