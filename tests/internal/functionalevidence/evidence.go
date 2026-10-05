@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/functionalscenarios"
@@ -26,7 +27,15 @@ func Covers(t *testing.T, stableIDs ...string) {
 	if err != nil {
 		t.Fatalf("resolve functional evidence path: %v", err)
 	}
-	reference := filepath.ToSlash(relativePath) + "::" + t.Name()
+	name := t.Name()
+	if wrapped, ok := strings.CutPrefix(name, "TestFunctionalPackages/"); ok {
+		_, original, nested := strings.Cut(wrapped, "/")
+		if !nested {
+			t.Fatal("functional coordinator evidence has no original test identity")
+		}
+		name = original
+	}
+	reference := filepath.ToSlash(relativePath) + "::" + name
 	if err := functionalscenarios.CheckEvidenceDeclaration(repositoryRoot, reference, stableIDs); err != nil {
 		t.Fatalf("verify functional evidence declaration: %v", err)
 	}

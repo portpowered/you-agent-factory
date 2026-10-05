@@ -103,6 +103,11 @@ func prepareCoverageRunWithFunctionalMetadata(
 	if err != nil {
 		return preparedCoverageRun{}, err
 	}
+	if cfg.functionalMonolith {
+		if err := consolidateFunctionalCoveragePlan(cfg, &plan, testPackages, repoRoot, listedPackages, functionalSelection); err != nil {
+			return preparedCoverageRun{}, errors.Join(err, plan.cleanup())
+		}
+	}
 	return preparedCoverageRun{
 		plan:                        plan,
 		repoRoot:                    repoRoot,

@@ -190,7 +190,7 @@ func prepareFunctionalCoverageRunAfterStartWithVerification(cfg config, packages
 	)
 	var ratchetErr error
 	if selectorVerification != nil {
-		ratchetErr = selectorVerification.waitRatchet()
+		ratchetErr = selectorVerification.waitRatchetBeforeSelection()
 	} else {
 		ratchetErr = runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot)
 	}

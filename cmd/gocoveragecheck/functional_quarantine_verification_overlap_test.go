@@ -28,3 +28,36 @@ func TestFunctionalQuarantineSelectorVerificationJoinsBeforeSelectionByDefault(t
 		t.Fatalf("waitBeforeSelection() = %v, want %v", err, wantErr)
 	}
 }
+
+func TestFunctionalQuarantineOverlapDefersRatchetAndRetainsItsFailure(t *testing.T) {
+	verification := newFunctionalQuarantineSelectorVerification(1)
+	verification.overlapCoverage = true
+	verification.done <- nil
+	wantErr := errors.New("quarantined case unexpectedly passed")
+	verification.ratchet = &functionalQuarantineRatchetVerification{
+		done: make(chan functionalQuarantineRatchetResult, 1),
+	}
+	verification.ratchet.done <- functionalQuarantineRatchetResult{err: wantErr}
+
+	if err := verification.waitRatchetBeforeSelection(); err != nil {
+		t.Fatalf("selection joined the overlapping ratchet: %v", err)
+	}
+	if len(verification.ratchet.done) != 1 {
+		t.Fatal("selection consumed the pending ratchet result")
+	}
+	if err := verification.waitAll(); !errors.Is(err, wantErr) {
+		t.Fatalf("final join = %v, want ratchet failure %v", err, wantErr)
+	}
+}
+
+func TestFunctionalQuarantineDefaultSelectionRetainsRatchetFailure(t *testing.T) {
+	verification := newFunctionalQuarantineSelectorVerification(1)
+	wantErr := errors.New("quarantined case unexpectedly passed")
+	verification.ratchet = &functionalQuarantineRatchetVerification{
+		done: make(chan functionalQuarantineRatchetResult, 1),
+	}
+	verification.ratchet.done <- functionalQuarantineRatchetResult{err: wantErr}
+	if err := verification.waitRatchetBeforeSelection(); !errors.Is(err, wantErr) {
+		t.Fatalf("default selection = %v, want %v", err, wantErr)
+	}
+}

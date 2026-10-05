@@ -236,13 +236,19 @@ func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
 		testutil.WriteSeedFile(t, dir, "task", []byte("timeout-payload"))
 		runner := &baseTimeoutThenSuccessCommandRunner{}
 		scenario := fixture.OpenScenario(t, dir, dir, runner)
-		// The timed-out first attempt briefly leaves the task failed before the
-		// retry is dispatched, which is indistinguishable from terminal. Wait
-		// for the retry attempt to start so terminal means the recovered state.
-		waitForBaseRunnerCalls(t, runner, 2, support.ScaledTimeout(10*time.Second))
-		scenario.WaitForTerminal(t, 10*time.Second)
-		listed := scenario.ListWork(t)
+		// A failed timeout projection can appear between retries. Observe the
+		// recovered customer state, rather than treating retry admission as
+		// proof that the subsequent terminal snapshot belongs to success.
+		listed, err := support.WaitForObservation(support.ScaledTimeout(10*time.Second),
+			func() (factoryapi.ListWorkResponse, error) { return scenario.ListWork(t), nil },
+			func(listed factoryapi.ListWorkResponse) bool {
+				return support.CountWorkAtCustomerState(listed, "task:done") == 1
+			})
+		if err != nil {
+			t.Fatalf("observe timeout recovery through public Work: %v", err)
+		}
 		assertBaseSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		assertDispatchTimeoutEventuallyAccepted(t, scenario.FactoryEvents(t))
 		if got := runner.CallCount(); got < 2 {
 			t.Fatalf("timeout recovery provider calls = %d, want at least two", got)
 		}
@@ -278,17 +284,6 @@ func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
 		scenario.Stop(t)
 	})
 
-}
-
-func waitForBaseRunnerCalls(t testing.TB, runner *baseTimeoutThenSuccessCommandRunner, want int, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for runner.CallCount() < want {
-		if time.Now().After(deadline) {
-			t.Fatalf("provider calls = %d, want at least %d within %s", runner.CallCount(), want, timeout)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
 }
 
 func testutilCopySharedFixture(t *testing.T, name string) string {

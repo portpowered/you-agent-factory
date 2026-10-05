@@ -234,6 +234,9 @@ func buildFlakeRetryInvocations(template commandInvocation, failures []flakeFail
 		switch {
 		case index == 0 && arg == "test":
 		case strings.HasPrefix(arg, "-run="), strings.HasPrefix(arg, "-coverprofile="):
+		case len(template.monolithGroups) > 0 && strings.HasPrefix(arg, "-overlay="):
+			// Retry the original package/test directly. The consolidation overlay
+			// only builds the shared executable and is not part of its behavior.
 		case strings.HasPrefix(arg, "-"):
 			flags = append(flags, arg)
 		}

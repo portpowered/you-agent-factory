@@ -28,12 +28,13 @@ var (
 )
 
 type commandInvocation struct {
-	name         string
-	args         []string
-	env          []string
-	dir          string
-	stdoutWriter io.Writer
-	stderrWriter io.Writer
+	name           string
+	args           []string
+	env            []string
+	dir            string
+	stdoutWriter   io.Writer
+	stderrWriter   io.Writer
+	monolithGroups map[string]string
 }
 
 type commandRunnerFunc func(commandInvocation) (string, string, error)
@@ -87,6 +88,7 @@ type config struct {
 	covermode                      string
 	coverpkg                       string
 	functionalQuarantine           string
+	functionalMonolith             bool
 	validateFunctionalQuarantine   bool
 	jobs                           int
 	generateManifest               string
@@ -171,7 +173,7 @@ func execute(cfg config) error {
 	if cfg.packageFloorPolicyIsAdvisory() {
 		writeAdvisoryFloorPolicyBanner()
 	}
-	if cfg.phaseTiming == nil && unitCoveragePhaseTimingEnabled(cfg) {
+	if cfg.phaseTiming == nil && coveragePhaseTimingEnabled(cfg) {
 		cfg.phaseTiming = newCoveragePhaseTimer(stdoutWriter)
 		defer cfg.phaseTiming.emit()
 	}
@@ -233,6 +235,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
 	flag.StringVar(&cfg.functionalQuarantine, "functional-quarantine", "", "strict functional quarantine JSON manifest; discovers and subtracts its package/test selectors")
+	flag.BoolVar(&cfg.functionalMonolith, "functional-monolith", false, "consolidate compatible functional packages using build-only overlays; preserve native fixture exceptions")
 	flag.BoolVar(&cfg.validateFunctionalQuarantine, "validate-functional-quarantine", false, "validate a functional quarantine manifest and its selectors without running coverage")
 	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to runtime CPU count for non-Windows unit coverage, 1 for Windows unit coverage, and 2 for functional coverage")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
@@ -267,6 +270,9 @@ func parseConfig() config {
 }
 
 func validateConfig(cfg config) error {
+	if cfg.functionalMonolith && cfg.suite != functionalCoverageSuite {
+		return errors.New("functional monolith requires the functional suite")
+	}
 	if strings.TrimSpace(cfg.rawFailureDir) != "" {
 		if cfg.suite != functionalCoverageSuite {
 			return fmt.Errorf("configure raw functional failure capture: -suite must be %q (got %q)", functionalCoverageSuite, cfg.suite)

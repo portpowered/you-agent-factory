@@ -1,0 +1,124 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+)
+
+// The native Go process still owns execution and its exit status. This writer
+// removes only coordinator wrappers, keeping every original package/test event
+// for inventory checks, failure capture, streaming and coverage diagnostics.
+type functionalMonolithEventWriter struct {
+	sink    io.Writer
+	groups  map[string]string
+	pending []byte
+	lines   int
+}
+
+func (writer *functionalMonolithEventWriter) Write(data []byte) (int, error) {
+	writer.pending = append(writer.pending, data...)
+	for {
+		index := bytes.IndexByte(writer.pending, '\n')
+		if index < 0 {
+			return len(data), nil
+		}
+		line, err := normalizeFunctionalMonolithEvent(writer.pending[:index], writer.groups)
+		if err != nil {
+			return 0, err
+		}
+		writer.lines++
+		if len(line) > 0 {
+			if _, err := writer.sink.Write(append(line, '\n')); err != nil {
+				return 0, fmt.Errorf("functional coordinator event %s: %w", line, err)
+			}
+		}
+		writer.pending = writer.pending[index+1:]
+	}
+}
+
+func (writer *functionalMonolithEventWriter) flush() error {
+	if len(writer.pending) == 0 {
+		return nil
+	}
+	line, err := normalizeFunctionalMonolithEvent(writer.pending, writer.groups)
+	if err != nil {
+		return err
+	}
+	writer.pending = nil
+	if len(line) == 0 {
+		return nil
+	}
+	_, err = writer.sink.Write(append(line, '\n'))
+	return err
+}
+
+func runFunctionalMonolithCommand(invocation commandInvocation) (string, string, error) {
+	var normalized bytes.Buffer
+	sink := io.Writer(&normalized)
+	if invocation.stdoutWriter != nil {
+		sink = io.MultiWriter(sink, invocation.stdoutWriter)
+	}
+	writer := &functionalMonolithEventWriter{sink: sink, groups: invocation.monolithGroups}
+	invocation.stdoutWriter = writer
+	raw, stderr, err := commandRunner(invocation)
+	// Command-runner doubles may return captured data without streaming it.
+	if writer.lines == 0 && len(writer.pending) == 0 && raw != "" {
+		_, writeErr := writer.Write([]byte(raw))
+		err = errors.Join(err, writeErr)
+	}
+	err = errors.Join(err, writer.flush())
+	if err != nil {
+		// Retain coordinator panic/build diagnostics without attributing its
+		// successful bookkeeping to an extra customer package.
+		stderr += "\n" + raw
+	}
+	return normalized.String(), stderr, err
+}
+
+func normalizeFunctionalMonolithEvent(line []byte, groups map[string]string) ([]byte, error) {
+	var event map[string]json.RawMessage
+	if err := json.Unmarshal(line, &event); err != nil {
+		return line, nil
+	}
+	var pkg, test, action, output string
+	_ = json.Unmarshal(event["Package"], &pkg)
+	if pkg != functionalMonolithPackage {
+		return line, nil
+	}
+	_ = json.Unmarshal(event["Test"], &test)
+	_ = json.Unmarshal(event["Action"], &action)
+	wrapped, ok := strings.CutPrefix(test, "TestFunctionalPackages/")
+	if !ok {
+		// A coordinator panic/build failure must remain visible and fail the
+		// native command; successful coordinator bookkeeping is redundant.
+		if action == "fail" {
+			return line, nil
+		}
+		return nil, nil
+	}
+	group, original, nested := strings.Cut(wrapped, "/")
+	originalPackage, ok := groups[group]
+	if !ok {
+		return nil, fmt.Errorf("unknown functional coordinator group %q", group)
+	}
+	event["Package"], _ = json.Marshal(originalPackage)
+	if !nested {
+		delete(event, "Test")
+		switch action {
+		case "run":
+			event["Action"] = json.RawMessage(`"start"`)
+		case "pause", "cont":
+			return nil, nil
+		}
+	} else {
+		event["Test"], _ = json.Marshal(original)
+	}
+	if json.Unmarshal(event["Output"], &output) == nil {
+		event["Output"], _ = json.Marshal(strings.ReplaceAll(output, "TestFunctionalPackages/"+group+"/", ""))
+	}
+	return json.Marshal(event)
+}

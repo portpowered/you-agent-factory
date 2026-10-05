@@ -5,16 +5,22 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest completed hosted functional measurement, at `02a491c07b`, passed in **5m33.016s for
-the full functional supervisor**, including **4m17.763s for the coverage
-invocation**. It reported 816 final passes, two skips and no final failures;
-unchanged coverage gates and all required verification jobs passed. Providers
-and mock-worker cases failed initially and passed on retry; those recovered
-failures remain in diagnostics. The five-, three- and two-minute merge
-checkpoints remain unmet. The preceding fully passing workflow is `0958ddb01f`, whose supervisor took
-5m07.420s.
-[PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867)
-contains the ongoing changes. Local measurements do not establish hosted latency.
+The five-minute checkpoint merged in
+[PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867), commit
+`0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. Its merge-queue functional supervisor
+passed in **272.327s**, including **215.102s coverage invocation**. An identical
+source tree also took 340.850s; both samples and recovered flakes are retained
+below. The three- and two-minute hosted merge checkpoints remain outstanding.
+
+The next candidate's full four-CPU Linux supervisor passes in **111.55s**, with
+**103.120s coverage invocation**, all **758 selected tests** accounted for,
+756 passes, two skips and no retries. Coverage floors, the selected inventory,
+quarantine verification and compile-probe diagnostics remain enabled. Compatible
+packages use a build-only overlay: 19 packages share an executable and 36
+fixture-sensitive packages keep native binaries. Original source coordinates,
+test identities and evidence declarations are preserved. The coverage trace
+records **37 linker commands**. This is a warm-cache local result, not a hosted
+checkpoint or a cold-build guarantee.
 
 Consolidation has a measured benefit. A controlled build-only comparison reduced
 **136 linker invocations to one**, **160.292s linker CPU to 1.807s**, and warm
@@ -1987,3 +1993,192 @@ including the Windows and unsupported-platform memory helper files. Performance
 measurements stay in the audit harness. The focused pagination/concurrent-fleet
 pair passes three repetitions in 22.420s, and union-tag repository lint reports
 zero issues. These changes do not establish a full-lane latency result.
+
+### First hosted five-minute timing observation and merge gate
+
+Run `37346055096` (`38d312b762`) passes the full functional supervisor in
+**260.106s** (17:26:37.668Z through 17:30:57.774Z), with a **202.865s** coverage
+invocation, 755 final passes and two skips. Quarantine succeeds in 47.869s while
+overlapping coverage. The API package check also succeeds with the corrected
+Make selector. This is the first passing hosted supervisor below five minutes.
+Other required jobs on this revision are cancelled by a subsequent push, so
+this observation does not establish a merged checkpoint. Earlier passing
+320.437s and 332.773s observations remain part of the measured range.
+
+Run `37347513698` (`91b288cfd4`) fails required Backend Lint on three generated
+fixture resets that copy structs containing a Mutex or Once. It also fails the
+required functional verdict: the reduced pagination fixture accidentally made
+an active-fleet sibling's default-page-size assertion expect four instead of
+the public default of twenty. Its recorded supervisor interval is 212.793s and
+invocation is 166.920s, but the final summary retains two failed tests, so this
+is not a passing latency checkpoint even though the supervisor status files
+record zero. The required verdict, not a short elapsed interval, controls merge.
+
+Local corrective commit `676f7a1e05` initializes fresh lock-bearing fixture state
+directly from composite literals rather than copying another value, and makes
+the empty-page assertion accept the selected expected limit. The continuation
+case still checks its explicit four-row limit; the active case retains the
+default twenty-row contract. Three repetitions of all three fleet cases pass
+in 33.442s, and tagged `go vet` passes. The user subsequently authorized the
+corrective push needed to unblock merging, and commit `676f7a1e05` was published.
+The merge request is enabled, but GitHub
+reports `BLOCKED` on the current published head's required checks. Further
+optimization remains separate from the minimal merge correction.
+
+### Package-preserving consolidated build prototype
+
+A private overlay experiment reuses the unit lane's package/bridge construction
+to combine 35 compatible functional packages (426 original top-level tests)
+into one binary, while explicitly leaving 19 custom-TestMain packages native.
+Production exports and original source packages are unchanged. The initial
+warm-dependency build succeeds in 9.37s, with 24.28 user plus 3.28 system CPU
+seconds and 835,476 KiB peak RSS (0.80 GiB). Subsequent coordinator corrections
+relink from cached package archives. This prototype is not shipped and has not
+executed its 19 native exceptions or the canonical supervisor.
+
+The first execution panics because parallel coordinator ancestors prohibit
+existing process-wide `t.Setenv` calls; 412 expected tests remain unexecuted.
+It supplies no complete latency evidence. A repeat preserves serial barriers
+for the four active source packages with global environment/directory mutation:
+bootstrap portability, coverage observability, JavaScript worker scenarios and
+script workers. All 426 expected tests then run, but execution fails in 96.73s
+(96.045s package interval), with 43 failed JSON events including wrappers and
+peak RSS 3,180,728 KiB (3.03 GiB). Existing subprocess fixtures require their
+original test selectors, and the fleet default-limit mistake is also exposed.
+
+A repeat routes unique legacy helper selectors through their exact coordinator
+group and includes the fleet assertion correction. All 426 expected tests run,
+but four original ACP scenario families still fail (ten failed JSON events
+including wrappers): terminal output, permission selection, and new/config RPC
+failures. It takes 98.99s command wall / 98.283s package interval, with 228.93
+user plus 75.18 system CPU seconds and 3,180,512 KiB peak RSS. These failed,
+partial-lane observations demonstrate build feasibility and remaining fixture
+coupling; they do not establish equivalent coverage or a CI checkpoint. Source
+revision registry declarations receive exact temporary coordinator aliases only
+during each private run and are restored in cleanup. No tests are silently
+dropped, no guard is increased, and no native exception is reported as executed.
+
+### Corrected-head hosted retry and runner acquisition
+
+Run `37366971390`, attempt 1, ended with numerous cancelled required checks.
+The Docs Reference check annotation states: "The job was not acquired by Runner
+of type hosted even after multiple attempts". Its job had no runner or steps;
+this cancellation does not measure test execution. The failed-job rerun was
+requested without another source push, and attempt 2 acquired runners.
+
+On the same corrected head `676f7a1e05`, attempt 2's functional check passed.
+The supervisor ran from 22:12:13.417Z to 22:15:53.834Z on 2026-10-05:
+**220.417s total wall time**, including concurrent quarantine and coverage work.
+Quarantine took 42.440s and overlapped the coverage lane. The functional timing
+summary records **169.582s invocation wall time**, 68 expected/observed package
+entries, 757 top-level results, 755 passes, two skips, and zero final failures.
+The workflow flake ledger records one `TestPackagedLoop` failure that passed on
+same-head retry; the failure was an eight-second scheduled-execution readiness
+guard. Retain that retry when interpreting this observation and prioritizing
+future synchronization cleanup.
+
+This successful full functional interval meets five minutes but exceeds the
+three-minute target. At evidence collection, backend lint was still running,
+and the PR was open with auto-merge enabled. A timing observation alone does
+not establish a merged checkpoint.
+
+Attempt 2 ultimately passed every applicable check, including Backend Lint
+(16m8s job duration) and Verification Policy. PR #2867 entered the merge queue
+at 22:30:23Z behind PR #2868. A read-only merge-tree comparison against that
+queued commit exposed a conflict confined to generated `pkg/wire/wire_gen.go`.
+The authored source graph merged cleanly. A separate checkout merged the queued
+commit, regenerated Wire, and passed `go test ./pkg/root ./pkg/wire -short
+-count=1` (root 0.034s, Wire 25.878s). PR #2868 then merged as
+`8284dec71ffaf510c389d3fbb38e16018255c5ae` at 22:39:17Z, and GitHub classified
+our PR as conflicting and removed it from the queue.
+
+Merge correction `6759f55ae3a1f6b82e297b59268e3422abc02b22` merges that live main
+commit and regenerates Wire. Its generated file matches the tested preview
+byte-for-byte; there are no unresolved paths and `git diff --cached --check`
+passes. The correction was pushed under the user's authorization to unblock
+merging. New-head run `37383931843` started, and auto-merge was enabled again.
+The additional optimization prototypes and this unpublished audit were excluded
+from the correction.
+
+The corrected-head functional check in run `37383931843` passed, but was slower:
+supervisor 22:41:36.403Z to 22:47:17.253Z, **340.850s total wall**, with quarantine
+57.969s overlapping coverage. The invocation summary reports **268.630s wall**,
+69 expected/observed package entries, 758 top-level results, 756 passes, two
+skips, and zero final failures. It exceeds both five- and three-minute targets;
+do not carry the previous head's faster interval forward as this head's result.
+The slowest package execution intervals are customer journeys 160.694s,
+CLI/REST journeys 92.031s, packaged invocation 88.159s, factory execution 69.831s,
+Models inference 54.934s, and CLI customer commands 53.550s. These intervals
+overlap and are not independent amounts to add to total wall time. At collection,
+lint and the packaged-factory candidate build were still active, with no failed
+checks. The current priority remains completing the authorized merge before
+publishing more optimization changes.
+
+Merge-queue run `37385807288` tests candidate
+`0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. Git tree IDs confirm its source tree
+is identical to corrected PR head `6759f55ae3`. Its functional check passes in
+**272.327s supervisor wall** (23:00:05.530Z to 23:04:37.857Z), with **215.102s
+invocation wall**, 69/69 expected package entries, 758 results, 756 passes, two
+skips, and zero final failures. Quarantine takes 46.590s and overlaps coverage.
+The same source tree thus has successful 340.850s and 272.327s observations;
+the 68.523s difference is not evidence of an intervening source optimization.
+Both observations and their retry work must remain visible.
+
+The corrected-head run's flake ledger records one review-failure-recovery case
+that passes on same-head retry. The queue run records three recovered cases:
+resume recovery retaining a scenario TCP port, MCP initialization exceeding its
+five-second response guard, and an MCP ACP permission case failing to resolve
+`@you/subagent` from a project/global factory catalog. Each passes on same-head
+retry. These are concrete remaining synchronization, teardown, and isolation
+targets; a green retried verdict does not imply the first attempt was clean.
+At collection, all other queue checks had passed and Backend Lint remained
+active. The queue observation meets five minutes, but not three minutes, and
+the PR had not yet merged.
+
+The queue run ultimately completed successfully with no failed checks. GitHub
+merged PR #2867 at **2026-10-05 23:11:00Z**, as commit
+`0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. This establishes the first merged
+five-minute checkpoint using the queue's 272.327s full supervisor observation,
+with the recovered flakes and slower identical-tree observation disclosed above.
+The three- and two-minute checkpoints remain outstanding. The checkout now
+starts the next optimization branch from that live main commit, retaining this
+audit locally; no additional optimization changes were pushed to unblock merge.
+
+### Next checkpoint: compatible build consolidation
+
+The canonical full Linux supervisor on four pinned CPUs passes in **111.55s**
+(297.68s user + 83.06s system, 2.01 GiB peak RSS). Coverage invocation is
+103.120s: 69/69 original package entries, 758 selected tests, 756 passes, two
+skips, no failures and no retries. The unchanged blocking policy retains its
+existing staged coverage holds. No floor, hold or quarantine selector is edited.
+The build trace records zero compiler commands and 37 linker commands: this
+repeat uses a warm compiler cache. Phase times are list 1.706s, plan 0.893s,
+test including diagnostics 107.048s, canonicalization 0.168s, evaluation 0.014s
+and manifest processing 0.022s. These phases are sequential, while linking and
+test execution overlap inside the test phase.
+
+The overlay merges 19 compatible packages containing 171 original tests.
+Thirty-six packages retain native binaries for custom TestMain, process-global
+state, helper executables or relative/embedded fixtures. Production boundaries
+and source files remain unchanged. Native exceptions execute within the same
+bounded lane; test-level quarantine selection remains native. Normalized JSON
+preserves original test identities, nested names, source locations, failure
+capture and evidence declarations. Missing terminal events and registration
+mismatches fail the lane. A same-head retry uses the original native package.
+
+Failed development samples are not checkpoints: 130.00s had a provider timeout
+recovery observation race and coordinator inventory bookkeeping; 110.14s passed
+all customer cases but failed raw-capture completeness. Both failures are fixed
+and covered by runner checks. Batch admission now waits for the exact accepted
+Work projection; timeout recovery observes successful Work and verifies public
+timeout/recovery events rather than assuming retry admission means completion.
+Obsolete captured-log migration checks and direct internal publisher privacy
+checks are removed; public CLI/REST/replay and live privacy cases remain.
+
+The asynchronous quarantine ratchet previously occupied 30.824s of planning in
+the merged-main local baseline. With overlap enabled it now runs beside coverage
+and is joined before a passing verdict; current planning takes 0.893s. The
+baseline's 208.424s full supervisor failed a batch Work visibility race, so it
+is disclosed as a failed reference rather than a passing comparison. The earlier
+private 427-test prototype was partial and cannot establish a full checkpoint.
+Hosted confirmation and merge remain required for the three-minute milestone.

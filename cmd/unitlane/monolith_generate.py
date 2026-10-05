@@ -1,4 +1,4 @@
-"""Generate build-only overlays for the experimental consolidated Go unit lane.
+"""Generate build-only overlays for consolidated Go test lanes.
 
 No repository source or production export is changed. Native Go registers the
 outer tests; unsupported TestMain, examples, fuzzing and known graph conflicts
@@ -39,6 +39,7 @@ def registrations(source, name, pattern=PAIR):
     return pattern.findall(body)
 
 dest=pathlib.Path(sys.argv[2]);dest.mkdir(parents=True,exist_ok=True)
+functional = len(sys.argv) > 3 and sys.argv[3] == 'functional'
 (dest/'sources').mkdir(exist_ok=True)
 entries=list(objects(pathlib.Path(sys.argv[1])))
 bases={x['ImportPath']:x for x in entries if not x.get('ForTest') and not x['ImportPath'].endswith('.test')}
@@ -48,6 +49,7 @@ excluded={
  MODULE+'/pkg/services/recordings/internal/projections': 'combined private test imports form a cycle through Factory Runtime and Recordings HTTP',
  MODULE+'/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout': 'empty-YAML diagnostic assertion depends on original temporary-directory naming',
 }
+excluded.update({pkg: base['MonolithExcludeReason'] for pkg, base in bases.items() if base.get('MonolithExcludeReason')})
 groups,overlay,bridge_groups,children=[],{},{},{}
 
 def write_if_changed(path, data):
@@ -78,7 +80,7 @@ for index,(pkg,main) in enumerate(sorted(mains.items())):
             content=(pathlib.Path(base['Dir'])/filename).read_text()
             bodies.extend(re.findall(r'func TestMain\(m \*testing.M\)\s*\{([^}]+)\}',content))
         leak_check=len(bodies)==1 and bodies[0].strip()=='goleak.VerifyTestMain(m)' and not example_entries
-        if leak_check:excluded.pop(pkg,None)
+        if leak_check and not functional:excluded.pop(pkg,None)
         else:excluded[pkg]='custom TestMain'
 
     if fuzz_entries:excluded[pkg]='fuzz target: retain native seed execution'
@@ -199,6 +201,13 @@ func BenchmarkUnitPackages(b *testing.B) {
 }
 '''
 main_source=dest/'suite_test.go';write_if_changed(main_source,harness)
+if functional:
+    # Compatible functional groups own explicit sessions and can overlap.
+    # Directory/global-state/helper-process dependencies stay native rather
+    # than rewriting customer paths or changing process-wide state here.
+    harness = harness.replace('TestUnitPackages', 'TestFunctionalPackages')
+    harness = harness.replace('restore,err:=enterPackage(group.Dir,group.Name);if err!=nil {t.Fatal(err)};t.Cleanup(restore)', 't.Parallel()')
+    write_if_changed(main_source, harness)
 overlay[str(ROOT/'pkg/monolithpilot/suite_test.go')]=str(main_source)
 write_if_changed(dest/'overlay.json',json.dumps({'Replace':overlay},indent=2))
 write_if_changed(dest/'groups.json',json.dumps(groups,indent=2))
