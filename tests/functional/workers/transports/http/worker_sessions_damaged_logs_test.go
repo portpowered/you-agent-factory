@@ -4,17 +4,56 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+type capturedReadFault struct {
+	platformreplay.Local
+	unavailable atomic.Bool
+}
+
+func (storage *capturedReadFault) ReadFile(path string) ([]byte, error) {
+	if storage.unavailable.Load() {
+		return nil, errors.New(capturedStorageFault)
+	}
+	return storage.Local.ReadFile(path)
+}
+
+func assertUnreadableCapturedRecovery(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	root := t.TempDir()
+	path := writeLegacyCapturedFixture(t, root, current)
+	local := platformreplay.NewLocal(runtime.GOOS)
+	storage := &capturedReadFault{Local: local}
+	storage.unavailable.Store(true)
+	store, err := recordingwire.NewWorkerRecordingFileWriter(storage, local, local, capturedHostClock{}, filepath.Dir(path), "unreadable-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Edges.WorkerRecordingWriter = store
+	config.Edges.FactorySessionsWorkingDirectory = capturedRecordingDirectory(root)
+	server := support.StartFunctionalAPIServer(t, config)
+	for range 2 {
+		assertUnavailableCapturedRead(t, server, current.WorkerSessionId)
+	}
+	storage.unavailable.Store(false)
+	page := assertLegacyLogsCLIHTTPParity(t, server, current.WorkerSessionId)
+	assertLegacyCapturedEvents(t, page, current)
+}
 
 // Recovery owns a fresh store with one healthy and one identifiable but
 // invalid snapshot. The customer must distinguish unavailable from unknown;
@@ -53,7 +92,12 @@ func assertDamagedCapturedRecovery(t *testing.T, config support.FunctionalAPISer
 
 func assertDamagedCapturedRead(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Helper()
-	response, err := http.Get(server.URL() + "/worker-sessions/damaged-worker/logs")
+	assertUnavailableCapturedRead(t, server, "damaged-worker")
+}
+
+func assertUnavailableCapturedRead(t *testing.T, server *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	response, err := http.Get(server.URL() + "/worker-sessions/" + id + "/logs")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,10 +110,10 @@ func assertDamagedCapturedRead(t *testing.T, server *support.FunctionalAPIServer
 	if err := json.Unmarshal(data, &failure); err != nil || response.StatusCode != http.StatusServiceUnavailable || failure.Code != factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE {
 		t.Fatalf("damaged history response: status=%d body=%s error=%v", response.StatusCode, data, err)
 	}
-	if strings.Contains(string(data), "damaged-recording") || strings.Contains(string(data), "schemaId") {
+	if strings.Contains(string(data), "damaged-recording") || strings.Contains(string(data), "schemaId") || strings.Contains(string(data), "captured-storage-sentinel") {
 		t.Fatal("damaged history leaked storage identity or decoder diagnostics")
 	}
-	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "read", "--worker-session-id", "damaged-worker", "--view", "logs", "--server", server.URL(), "--output", "json"})
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--server", server.URL(), "--output", "json"})
 	if err := server.Execute(t, inputs.Input); err == nil || inputs.Stdout() != "" {
 		t.Fatalf("CLI fabricated a damaged page: error=%v output=%s", err, inputs.Stdout())
 	}

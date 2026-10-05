@@ -103,6 +103,9 @@ func (writer *FileWriter) rebuildCatalog(ctx context.Context) error {
 	err := writer.directory.ScanDirectory(writer.root, 64, func(files []os.DirEntry) error {
 		return writer.indexCatalogFiles(ctx, files)
 	})
+	if canceled := ctx.Err(); canceled != nil {
+		return canceled
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		writer.catalogLoaded = true
 		return nil
@@ -124,7 +127,12 @@ func (writer *FileWriter) indexCatalogFiles(ctx context.Context, files []os.DirE
 		}
 		data, err := writer.storage.ReadFile(filepath.Join(writer.root, file.Name()))
 		if err != nil {
-			continue
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			// Failed reads cannot establish absence. Leave reconstruction retryable
+			// and never expose filesystem errors containing private paths or bytes.
+			return recordings.ErrWorkerRecordingReplay
 		}
 		id, err := writer.recordingFileIdentity(file.Name(), data)
 		if err != nil {

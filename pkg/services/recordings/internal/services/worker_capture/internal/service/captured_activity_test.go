@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,9 +63,10 @@ func assertDamagedCapturedCatalog(t *testing.T, reopened recordings.WorkerRecord
 }
 
 type catalogScanProbe struct {
-	local platformreplay.Local
-	fault error
-	calls int
+	local     platformreplay.Local
+	fault     error
+	calls     int
+	afterScan func()
 }
 
 func (scan *catalogScanProbe) ScanDirectory(path string, batchSize int, visit func([]os.DirEntry) error) error {
@@ -72,7 +74,80 @@ func (scan *catalogScanProbe) ScanDirectory(path string, batchSize int, visit fu
 	if scan.fault != nil {
 		return scan.fault
 	}
-	return scan.local.ScanDirectory(path, batchSize, visit)
+	err := scan.local.ScanDirectory(path, batchSize, visit)
+	if scan.afterScan != nil {
+		scan.afterScan()
+	}
+	return err
+}
+
+type catalogReadProbe struct {
+	platformreplay.Local
+	fault error
+}
+
+func (probe *catalogReadProbe) ReadFile(path string) ([]byte, error) {
+	if probe.fault != nil {
+		return nil, probe.fault
+	}
+	return probe.Local.ReadFile(path)
+}
+
+func TestFileWriterCatalogReadFailureDoesNotCacheAbsence(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	original := journalWriter(t, local)
+	record := journalRecord(t, "unreadable-recording", "unreadable-worker")
+	if err := original.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	storage := &catalogReadProbe{Local: local, fault: errors.New("private-path sentinel-secret")}
+	reader, err := NewFileWriter(storage, local, local, &captureTimeProbe{}, original.root, "retry-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerCapturedActivityRequest{WorkerSessionID: record.WorkerSessionID}
+	for range 2 {
+		page, err := reader.ReadWorkerCapturedActivity(t.Context(), request)
+		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || strings.Contains(err.Error(), "sentinel-secret") || len(page.Records) != 0 {
+			t.Fatalf("unreadable capture became absent or disclosed error: page=%+v error=%v", page, err)
+		}
+	}
+	storage.fault = nil
+	page, err := reader.ReadWorkerCapturedActivity(t.Context(), request)
+	if err != nil || len(page.Records) != 1 || page.Catalog.CommittedPosition != 1 {
+		t.Fatalf("read recovery did not retry catalog: page=%+v error=%v", page, err)
+	}
+}
+
+func TestFileWriterCatalogCanceledScanDoesNotCacheAbsence(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	root := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	scan := &catalogScanProbe{local: local, afterScan: cancel}
+	reader, err := NewFileWriter(local, local, scan, &captureTimeProbe{}, root, "observer-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.LookupWorkerSessionCapture(ctx, "later-worker"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled scan returned %v", err)
+	}
+	// A different store writes only after the canceled read has returned. The
+	// next observer must reconstruct, rather than inherit permanent absence.
+	writer, err := NewFileWriter(local, local, local, &captureTimeProbe{}, root, "writer-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "later-recording", "later-worker")); err != nil {
+		t.Fatal(err)
+	}
+	scan.afterScan = nil
+	page, err := reader.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: "later-worker"})
+	if err != nil || len(page.Records) != 1 || scan.calls != 2 {
+		t.Fatalf("canceled observation poisoned retry: page=%+v scans=%d error=%v", page, scan.calls, err)
+	}
 }
 
 func TestFileWriterCatalogScanRetriesFailureAndCachesLookup(t *testing.T) {

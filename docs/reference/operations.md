@@ -360,6 +360,8 @@ Worker Session, recording generation, and storage profile. The HTTP operation
 is `GET /worker-sessions/{worker_session_id}/logs` with `limit` and `nextToken`.
 Unknown IDs return 404, invalid limits or tokens return 400, and unavailable
 recordings return 503. A selected host failure remains an error.
+If storage cannot be read during catalog recovery, the read returns 503 without
+caching the ID as unknown; retry after storage access recovers.
 An identifiable damaged recording also returns 503 after catalog recovery;
 healthy sibling recordings remain readable. A torn final journal entry is
 excluded from the returned prefix, whose capture health reports the loss.
