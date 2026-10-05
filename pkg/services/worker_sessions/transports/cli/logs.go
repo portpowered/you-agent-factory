@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,7 +46,7 @@ func readLogsPage(config ReadConfig, endpoint string, jsonOutput bool) error {
 	var page factoryapi.WorkerSessionLogPage
 	response, err := config.HTTP.GetJSON(config.Context, endpoint, &page)
 	if err != nil {
-		return emitReadCLIError(config, jsonOutput, newCLIError("FACTORY_UNREACHABLE", "factory not reachable for Worker Session logs", err))
+		return emitReadCLIError(config, jsonOutput, logsTransportError(config.Context, err))
 	}
 	if response.HTTP == nil {
 		return emitReadCLIError(config, jsonOutput, newCLIError("WORKER_SESSION_READ_FAILED", "Worker Session logs returned no HTTP response", nil))
@@ -77,7 +79,7 @@ func readLogsArtifact(config ReadConfig, endpoint string, jsonOutput bool) error
 	}
 	response, err := config.HTTP.Execute(req)
 	if err != nil {
-		return emitReadCLIError(config, jsonOutput, newCLIError("FACTORY_UNREACHABLE", "factory not reachable for Worker Session payload", err))
+		return emitReadCLIError(config, jsonOutput, logsTransportError(config.Context, err))
 	}
 	if response.HTTP == nil {
 		return emitReadCLIError(config, jsonOutput, newCLIError("WORKER_SESSION_READ_FAILED", "Worker Session payload returned no HTTP response", nil))
@@ -87,5 +89,15 @@ func readLogsArtifact(config ReadConfig, endpoint string, jsonOutput bool) error
 		return emitReadCLIError(config, jsonOutput, workerSessionReadHTTPError(response.HTTP, response.HTTP.StatusCode))
 	}
 	_, err = io.Copy(config.Output, response.HTTP.Body)
+	if err != nil && (errors.Is(err, context.Canceled) || errors.Is(config.Context.Err(), context.Canceled)) {
+		return logsTransportError(config.Context, err)
+	}
 	return err
+}
+
+func logsTransportError(ctx context.Context, err error) *CLIError {
+	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		return newCLIError("WORKER_SESSION_LOGS_INTERRUPTED", "worker session logs read interrupted", context.Canceled)
+	}
+	return newCLIError("FACTORY_UNREACHABLE", "factory not reachable for Worker Session logs", err)
 }
