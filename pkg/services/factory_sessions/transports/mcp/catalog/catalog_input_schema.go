@@ -73,17 +73,6 @@ func PrepareCatalogInputSchemaForParity(schema map[string]any) (map[string]any, 
 	return prepared, nil
 }
 
-// VerifyCatalogInputSchemaParity ensures every discovered canonical tool input
-// schema matches the authored catalog after reference resolution and parity
-// normalization without mutating discovery maps.
-func VerifyCatalogInputSchemaParity(catalog []CatalogInputSchema, discovered []mcpfactorysession.ToolDefinition) error {
-	schemas := make([]CatalogInputSchema, 0, len(discovered))
-	for _, tool := range discovered {
-		schemas = append(schemas, CatalogInputSchema{Name: tool.Name, Schema: tool.InputSchema})
-	}
-	return VerifyCatalogInputSchemas(catalog, schemas)
-}
-
 // VerifyCatalogInputSchemas compares service-neutral schema projections.
 func VerifyCatalogInputSchemas(catalog, discovered []CatalogInputSchema) error {
 	byName := make(map[string]map[string]any, len(catalog))

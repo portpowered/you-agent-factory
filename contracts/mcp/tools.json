@@ -1555,6 +1555,40 @@
                   },
                   "type": "array"
                 },
+                "recordedSessions": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "artifactReference": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "enum": [
+                          "V1_JSON",
+                          "V2_JSONL"
+                        ],
+                        "type": "string"
+                      },
+                      "sessionId": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "enum": [
+                          "recorded-history"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "sessionId",
+                      "source",
+                      "artifactReference",
+                      "format"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
                 "scope": {
                   "enum": [
                     "live",
@@ -1576,65 +1610,31 @@
                   },
                   "type": "array"
                 },
-                "recordedSessions": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": [
-                      "sessionId",
-                      "source",
-                      "artifactReference",
-                      "format"
-                    ],
-                    "properties": {
-                      "sessionId": {
-                        "type": "string"
-                      },
-                      "source": {
-                        "type": "string",
-                        "enum": [
-                          "recorded-history"
-                        ]
-                      },
-                      "artifactReference": {
-                        "type": "string"
-                      },
-                      "format": {
-                        "type": "string",
-                        "enum": [
-                          "V1_JSON",
-                          "V2_JSONL"
-                        ]
-                      }
-                    }
-                  }
-                },
                 "warnings": {
-                  "type": "array",
                   "items": {
-                    "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "artifactReference",
-                      "code",
-                      "reason"
-                    ],
                     "properties": {
                       "artifactReference": {
                         "type": "string"
                       },
                       "code": {
-                        "type": "string",
                         "enum": [
                           "UNREADABLE_RECORDING"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "reason": {
                         "type": "string"
                       }
-                    }
-                  }
+                    },
+                    "required": [
+                      "artifactReference",
+                      "code",
+                      "reason"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
                 }
               },
               "type": "object"
@@ -4144,66 +4144,252 @@
         "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
       }
     },
-    "mcp.tool.you.worker_session.list": {
-      "id": "mcp.tool.you.worker_session.list",
-      "name": "you.worker_session.list",
+    "mcp.tool.you.worker_session.control": {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "readOnlyHint": false
+      },
       "documentation": {
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.list",
         "documentation": {
-          "title": {
-            "id": "mcp.tool.you.worker_session.list.title",
-            "canonicalEnglish": "Worker Session list"
-          },
           "description": {
-            "id": "mcp.tool.you.worker_session.list.description",
-            "canonicalEnglish": "List Worker Session observations on the selected host. Maps to GET /worker-sessions."
+            "canonicalEnglish": "Apply one Worker Session control. Maps to POST /worker-sessions/{worker_session_id}/{cancel|terminate|interrupt}.",
+            "id": "mcp.tool.you.worker_session.control.description"
+          },
+          "title": {
+            "canonicalEnglish": "Worker Session control",
+            "id": "mcp.tool.you.worker_session.control.title"
           }
         },
         "examples": [
           {
-            "scope": "all",
-            "limit": 2
+            "operation": "INTERRUPT",
+            "replacementMessage": "Inspect the failing test.",
+            "requestId": "redirect-001",
+            "successorWorkerSessionId": "direct-worker-002",
+            "workerSessionId": "direct-worker-001"
           }
         ],
-        "visibility": "public",
-        "sourceHash": "617be2c030ae4dc83c52bf8034086f1fe8b6a3b0f144446f34c778d57d62bc5f"
-      },
-      "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.list",
-        "state": "active",
-        "since": "1.0.0"
+        "itemId": "mcp.tool.you.worker_session.control",
+        "sourceHash": "e57f6a8bfae236e653f29bb49a25cf809650662d673e9b80d9977517c8f43e0b",
+        "visibility": "public"
       },
-      "transports": [
-        "stdio-json-rpc"
-      ],
       "execution": {
         "mode": "tools-call"
       },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true
+      "handler": {
+        "id": "mcp.handler.you.worker_session.control"
       },
+      "id": "mcp.tool.you.worker_session.control",
       "input": {
+        "arguments": {
+          "mcp.arg.you.worker_session.control.operation": {
+            "constraints": {
+              "enum": [
+                "CANCEL",
+                "TERMINATE",
+                "INTERRUPT"
+              ]
+            },
+            "id": "mcp.arg.you.worker_session.control.operation",
+            "name": "operation",
+            "required": true
+          },
+          "mcp.arg.you.worker_session.control.replacement_message": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.worker_session.control.replacement_message",
+            "name": "replacementMessage",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.control.request_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.worker_session.control.request_id",
+            "name": "requestId",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.control.successor_worker_session_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.worker_session.control.successor_worker_session_id",
+            "name": "successorWorkerSessionId",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.control.worker_session_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.worker_session.control.worker_session_id",
+            "name": "workerSessionId",
+            "required": true
+          }
+        },
         "schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
           "additionalProperties": false,
           "properties": {
-            "scope": {
-              "type": "string",
+            "operation": {
+              "enum": [
+                "CANCEL",
+                "TERMINATE",
+                "INTERRUPT"
+              ],
+              "type": "string"
+            },
+            "replacementMessage": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "requestId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "successorWorkerSessionId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "workerSessionId": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "workerSessionId",
+            "operation"
+          ],
+          "type": "object"
+        }
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.worker_session.control",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "you.worker_session.control",
+      "result": {
+        "examples": [
+          {
+            "content": [
+              {
+                "text": "{\"result\":{\"workerSessionId\":\"direct-worker-001\",\"outcome\":\"NOOP\"}}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "transport": {
+          "allowsOutputSchema": false,
+          "allowsStructuredContent": false,
+          "contentTypes": [
+            "text"
+          ],
+          "textEncoding": "serialized-json"
+        }
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ]
+    },
+    "mcp.tool.you.worker_session.list": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "List Worker Session observations on the selected host. Maps to GET /worker-sessions.",
+            "id": "mcp.tool.you.worker_session.list.description"
+          },
+          "title": {
+            "canonicalEnglish": "Worker Session list",
+            "id": "mcp.tool.you.worker_session.list.title"
+          }
+        },
+        "examples": [
+          {
+            "limit": 2,
+            "scope": "all"
+          }
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.worker_session.list",
+        "sourceHash": "617be2c030ae4dc83c52bf8034086f1fe8b6a3b0f144446f34c778d57d62bc5f",
+        "visibility": "public"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "handler": {
+        "id": "mcp.handler.you.worker_session.list"
+      },
+      "id": "mcp.tool.you.worker_session.list",
+      "input": {
+        "arguments": {
+          "mcp.arg.you.worker_session.list.limit": {
+            "constraints": {
+              "minimum": 1
+            },
+            "id": "mcp.arg.you.worker_session.list.limit",
+            "name": "limit",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.list.next_token": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.worker_session.list.next_token",
+            "name": "nextToken",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.list.scope": {
+            "constraints": {
               "enum": [
                 "direct",
                 "factory",
                 "all"
               ]
             },
+            "id": "mcp.arg.you.worker_session.list.scope",
+            "name": "scope",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.list.state": {
+            "id": "mcp.arg.you.worker_session.list.state",
+            "name": "state",
+            "required": false
+          }
+        },
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "nextToken": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "scope": {
+              "enum": [
+                "direct",
+                "factory",
+                "all"
+              ],
+              "type": "string"
+            },
             "state": {
-              "type": "array",
               "items": {
-                "type": "string",
                 "enum": [
                   "RESERVED",
                   "STARTING",
@@ -4213,363 +4399,177 @@
                   "FAILED",
                   "CANCELED",
                   "TERMINATED"
-                ]
-              }
-            },
-            "limit": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "nextToken": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
-        },
-        "arguments": {
-          "mcp.arg.you.worker_session.list.scope": {
-            "id": "mcp.arg.you.worker_session.list.scope",
-            "name": "scope",
-            "required": false,
-            "constraints": {
-              "enum": [
-                "direct",
-                "factory",
-                "all"
-              ]
+                ],
+                "type": "string"
+              },
+              "type": "array"
             }
           },
-          "mcp.arg.you.worker_session.list.state": {
-            "id": "mcp.arg.you.worker_session.list.state",
-            "name": "state",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.list.limit": {
-            "id": "mcp.arg.you.worker_session.list.limit",
-            "name": "limit",
-            "required": false,
-            "constraints": {
-              "minimum": 1
-            }
-          },
-          "mcp.arg.you.worker_session.list.next_token": {
-            "id": "mcp.arg.you.worker_session.list.next_token",
-            "name": "nextToken",
-            "required": false,
-            "constraints": {
-              "minLength": 1
-            }
-          }
+          "type": "object"
         }
       },
-      "handler": {
-        "id": "mcp.handler.you.worker_session.list"
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.worker_session.list",
+        "since": "1.0.0",
+        "state": "active"
       },
+      "name": "you.worker_session.list",
       "result": {
-        "transport": {
-          "contentTypes": [
-            "text"
-          ],
-          "textEncoding": "serialized-json",
-          "allowsStructuredContent": false,
-          "allowsOutputSchema": false
-        },
         "examples": [
           {
             "content": [
               {
-                "type": "text",
-                "text": "{\"result\":{\"workerSessions\":[],\"nextToken\":null}}"
+                "text": "{\"result\":{\"workerSessions\":[],\"nextToken\":null}}",
+                "type": "text"
               }
             ],
             "isError": false
           }
-        ]
-      }
+        ],
+        "transport": {
+          "allowsOutputSchema": false,
+          "allowsStructuredContent": false,
+          "contentTypes": [
+            "text"
+          ],
+          "textEncoding": "serialized-json"
+        }
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ]
     },
     "mcp.tool.you.worker_session.read": {
-      "id": "mcp.tool.you.worker_session.read",
-      "name": "you.worker_session.read",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "readOnlyHint": true
+      },
       "documentation": {
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.read",
         "documentation": {
-          "title": {
-            "id": "mcp.tool.you.worker_session.read.title",
-            "canonicalEnglish": "Worker Session read"
-          },
           "description": {
-            "id": "mcp.tool.you.worker_session.read.description",
-            "canonicalEnglish": "Read one Worker Session: its observation plus an optional transcript or retained-event view. Maps to GET /worker-sessions/{worker_session_id} and, by view, GET /worker-sessions/{worker_session_id}/transcript or GET /worker-sessions/{worker_session_id}/events?replayOnly=true."
+            "canonicalEnglish": "Read one Worker Session: its observation plus an optional transcript or retained-event view. Maps to GET /worker-sessions/{worker_session_id} and, by view, GET /worker-sessions/{worker_session_id}/transcript or GET /worker-sessions/{worker_session_id}/events?replayOnly=true.",
+            "id": "mcp.tool.you.worker_session.read.description"
+          },
+          "title": {
+            "canonicalEnglish": "Worker Session read",
+            "id": "mcp.tool.you.worker_session.read.title"
           }
         },
         "examples": [
           {
-            "workerSessionId": "direct-worker-001",
-            "view": "summary"
+            "view": "summary",
+            "workerSessionId": "direct-worker-001"
           }
         ],
-        "visibility": "public",
-        "sourceHash": "dcb718a56cb155c2d39be8710212966d4896196c4e3ac541196fa845fb0eaf73"
-      },
-      "lifecycle": {
         "formatVersion": "1.0.0",
         "itemId": "mcp.tool.you.worker_session.read",
-        "state": "active",
-        "since": "1.0.0"
+        "sourceHash": "dcb718a56cb155c2d39be8710212966d4896196c4e3ac541196fa845fb0eaf73",
+        "visibility": "public"
       },
-      "transports": [
-        "stdio-json-rpc"
-      ],
       "execution": {
         "mode": "tools-call"
       },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true
+      "handler": {
+        "id": "mcp.handler.you.worker_session.read"
       },
+      "id": "mcp.tool.you.worker_session.read",
       "input": {
-        "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "workerSessionId"
-          ],
-          "properties": {
-            "workerSessionId": {
-              "type": "string",
+        "arguments": {
+          "mcp.arg.you.worker_session.read.limit": {
+            "constraints": {
+              "maximum": 1000,
+              "minimum": 1
+            },
+            "default": 100,
+            "id": "mcp.arg.you.worker_session.read.limit",
+            "name": "limit",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.read.view": {
+            "constraints": {
+              "enum": [
+                "summary",
+                "transcript",
+                "events"
+              ]
+            },
+            "default": "summary",
+            "id": "mcp.arg.you.worker_session.read.view",
+            "name": "view",
+            "required": false
+          },
+          "mcp.arg.you.worker_session.read.worker_session_id": {
+            "constraints": {
               "minLength": 1
             },
+            "id": "mcp.arg.you.worker_session.read.worker_session_id",
+            "name": "workerSessionId",
+            "required": true
+          }
+        },
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            },
             "view": {
-              "type": "string",
+              "default": "summary",
               "enum": [
                 "summary",
                 "transcript",
                 "events"
               ],
-              "default": "summary"
+              "type": "string"
             },
-            "limit": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 1000,
-              "default": 100
-            }
-          }
-        },
-        "arguments": {
-          "mcp.arg.you.worker_session.read.worker_session_id": {
-            "id": "mcp.arg.you.worker_session.read.worker_session_id",
-            "name": "workerSessionId",
-            "required": true,
-            "constraints": {
-              "minLength": 1
+            "workerSessionId": {
+              "minLength": 1,
+              "type": "string"
             }
           },
-          "mcp.arg.you.worker_session.read.view": {
-            "id": "mcp.arg.you.worker_session.read.view",
-            "name": "view",
-            "required": false,
-            "default": "summary",
-            "constraints": {
-              "enum": [
-                "summary",
-                "transcript",
-                "events"
-              ]
-            }
-          },
-          "mcp.arg.you.worker_session.read.limit": {
-            "id": "mcp.arg.you.worker_session.read.limit",
-            "name": "limit",
-            "required": false,
-            "default": 100,
-            "constraints": {
-              "minimum": 1,
-              "maximum": 1000
-            }
-          }
-        }
-      },
-      "handler": {
-        "id": "mcp.handler.you.worker_session.read"
-      },
-      "result": {
-        "transport": {
-          "contentTypes": [
-            "text"
+          "required": [
+            "workerSessionId"
           ],
-          "textEncoding": "serialized-json",
-          "allowsStructuredContent": false,
-          "allowsOutputSchema": false
-        },
-        "examples": [
-          {
-            "content": [
-              {
-                "type": "text",
-                "text": "{\"result\":{\"session\":{\"workerSessionId\":\"direct-worker-001\"}}}"
-              }
-            ],
-            "isError": false
-          }
-        ]
-      }
-    },
-    "mcp.tool.you.worker_session.control": {
-      "id": "mcp.tool.you.worker_session.control",
-      "name": "you.worker_session.control",
-      "documentation": {
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.control",
-        "documentation": {
-          "title": {
-            "id": "mcp.tool.you.worker_session.control.title",
-            "canonicalEnglish": "Worker Session control"
-          },
-          "description": {
-            "id": "mcp.tool.you.worker_session.control.description",
-            "canonicalEnglish": "Apply one Worker Session control. Maps to POST /worker-sessions/{worker_session_id}/{cancel|terminate|interrupt}."
-          }
-        },
-        "examples": [
-          {
-            "workerSessionId": "direct-worker-001",
-            "operation": "INTERRUPT",
-            "requestId": "redirect-001",
-            "successorWorkerSessionId": "direct-worker-002",
-            "replacementMessage": "Inspect the failing test."
-          }
-        ],
-        "visibility": "public",
-        "sourceHash": "e57f6a8bfae236e653f29bb49a25cf809650662d673e9b80d9977517c8f43e0b"
+          "type": "object"
+        }
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.control",
-        "state": "active",
-        "since": "1.0.0"
+        "itemId": "mcp.tool.you.worker_session.read",
+        "since": "1.0.0",
+        "state": "active"
       },
-      "transports": [
-        "stdio-json-rpc"
-      ],
-      "execution": {
-        "mode": "tools-call"
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": true
-      },
-      "input": {
-        "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "workerSessionId",
-            "operation"
-          ],
-          "properties": {
-            "workerSessionId": {
-              "type": "string",
-              "minLength": 1
-            },
-            "operation": {
-              "type": "string",
-              "enum": [
-                "CANCEL",
-                "TERMINATE",
-                "INTERRUPT"
-              ]
-            },
-            "requestId": {
-              "type": "string",
-              "minLength": 1
-            },
-            "successorWorkerSessionId": {
-              "type": "string",
-              "minLength": 1
-            },
-            "replacementMessage": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
-        },
-        "arguments": {
-          "mcp.arg.you.worker_session.control.worker_session_id": {
-            "id": "mcp.arg.you.worker_session.control.worker_session_id",
-            "name": "workerSessionId",
-            "required": true,
-            "constraints": {
-              "minLength": 1
-            }
-          },
-          "mcp.arg.you.worker_session.control.operation": {
-            "id": "mcp.arg.you.worker_session.control.operation",
-            "name": "operation",
-            "required": true,
-            "constraints": {
-              "enum": [
-                "CANCEL",
-                "TERMINATE",
-                "INTERRUPT"
-              ]
-            }
-          },
-          "mcp.arg.you.worker_session.control.request_id": {
-            "id": "mcp.arg.you.worker_session.control.request_id",
-            "name": "requestId",
-            "required": false,
-            "constraints": {
-              "minLength": 1
-            }
-          },
-          "mcp.arg.you.worker_session.control.successor_worker_session_id": {
-            "id": "mcp.arg.you.worker_session.control.successor_worker_session_id",
-            "name": "successorWorkerSessionId",
-            "required": false,
-            "constraints": {
-              "minLength": 1
-            }
-          },
-          "mcp.arg.you.worker_session.control.replacement_message": {
-            "id": "mcp.arg.you.worker_session.control.replacement_message",
-            "name": "replacementMessage",
-            "required": false,
-            "constraints": {
-              "minLength": 1
-            }
-          }
-        }
-      },
-      "handler": {
-        "id": "mcp.handler.you.worker_session.control"
-      },
+      "name": "you.worker_session.read",
       "result": {
-        "transport": {
-          "contentTypes": [
-            "text"
-          ],
-          "textEncoding": "serialized-json",
-          "allowsStructuredContent": false,
-          "allowsOutputSchema": false
-        },
         "examples": [
           {
             "content": [
               {
-                "type": "text",
-                "text": "{\"result\":{\"workerSessionId\":\"direct-worker-001\",\"outcome\":\"NOOP\"}}"
+                "text": "{\"result\":{\"session\":{\"workerSessionId\":\"direct-worker-001\"}}}",
+                "type": "text"
               }
             ],
             "isError": false
           }
-        ]
-      }
+        ],
+        "transport": {
+          "allowsOutputSchema": false,
+          "allowsStructuredContent": false,
+          "contentTypes": [
+            "text"
+          ],
+          "textEncoding": "serialized-json"
+        }
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ]
     }
   }
 }

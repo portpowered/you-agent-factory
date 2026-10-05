@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
 
 const (
@@ -63,16 +61,6 @@ func CatalogToolIdentitiesFromCatalogDocument(value any) ([]CatalogToolIdentity,
 		return strings.Compare(left.Name, right.Name)
 	})
 	return identities, nil
-}
-
-// VerifyCatalogToolIdentityCompleteness ensures every discovered canonical tool occurs
-// exactly once in the catalog by stable ID and public name and rejects extras and duplicates.
-func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discovered []mcpfactorysession.ToolDefinition) error {
-	identities := make([]CatalogToolIdentity, 0, len(discovered))
-	for _, tool := range discovered {
-		identities = append(identities, CatalogToolIdentity{ID: CatalogToolIDForName(tool.Name), Name: tool.Name})
-	}
-	return VerifyCatalogToolIdentities(catalog, identities)
 }
 
 // VerifyCatalogToolIdentities checks the complete service-neutral identity union.

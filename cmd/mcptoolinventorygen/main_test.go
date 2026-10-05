@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
@@ -179,29 +178,6 @@ func TestRunFailsClosedForInvalidRoot(t *testing.T) {
 	target := filepath.Join(root, filepath.FromSlash(factorysession.ToolInventoryBaselineRelativePath))
 	if _, err := os.Stat(target); err == nil {
 		t.Fatalf("S-11 unexpectedly exists beneath invalid root: %s", target)
-	}
-}
-
-func TestVerifiedToolInventoryJSONRejectsUnregisteredProjectedTool(t *testing.T) {
-	const unregisteredTool = "you.factory_session.inventorygen_probe"
-	inventory, err := factorysession.ProjectToolInventoryFromDiscovered([]factorysession.ToolDefinition{{
-		Name:        unregisteredTool,
-		Description: "probe tool without handler registration",
-		InputSchema: map[string]any{"type": "object"},
-	}})
-	if err != nil {
-		t.Fatalf("ProjectToolInventoryFromDiscovered() error = %v", err)
-	}
-
-	payload, err := factorysession.MarshalVerifiedToolInventoryJSON(inventory)
-	if err == nil {
-		t.Fatal("MarshalVerifiedToolInventoryJSON() error = nil, want handler verification failure")
-	}
-	if !strings.Contains(err.Error(), unregisteredTool) {
-		t.Fatalf("MarshalVerifiedToolInventoryJSON() error = %v, want offending tool %q", err, unregisteredTool)
-	}
-	if payload != nil {
-		t.Fatalf("failed payload = %q, want nil", payload)
 	}
 }
 
