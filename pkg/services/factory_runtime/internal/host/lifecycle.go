@@ -224,7 +224,7 @@ func Stop(handle *Handle, clock factory.Clock) error {
 	// Ordinary run cancellation is expected during shutdown. Remove it before
 	// joining cleanup failures so callers cannot mistake a failed final flush
 	// for benign cancellation. Preserve other causes in a joined run error.
-	return errors.Join(withoutRunCancellation(runErr), FinalizeArtifacts(handle.Bundle, clock))
+	return errors.Join(withoutRunCancellation(runErr), withoutRunCancellation(FinalizeArtifacts(handle.Bundle, clock)))
 }
 
 func withoutRunCancellation(err error) error {
