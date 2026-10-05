@@ -1,4 +1,4 @@
-package customer_lifecycles_test
+package protocol_test
 
 import (
 	"bufio"
@@ -39,20 +39,19 @@ type mcpProtocolPackageFixture struct {
 
 var sharedMCPProtocolFixture mcpProtocolPackageFixture
 
-func initializeTransportmcpprotocolFixture(t *testing.T) {
-	t.Cleanup(func() {
-		exitCode := 0
+// TestMain owns the package-scoped application root used by the two eligible
+// request/error rows. The shutdown row deliberately owns a separate root so
+// its whole-protocol stdio boundary remains an isolated witness.
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
 
-		if err := closeSharedMCPProtocolFixture(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared MCP protocol process: %v\n", err)
-			if exitCode == 0 {
-				exitCode = 1
-			}
+	if err := closeSharedMCPProtocolFixture(); err != nil {
+		fmt.Fprintf(os.Stderr, "close shared MCP protocol process: %v\n", err)
+		if exitCode == 0 {
+			exitCode = 1
 		}
-		if exitCode != 0 {
-			t.Error("customer fixture cleanup failed; see preceding diagnostic")
-		}
-	})
+	}
+	os.Exit(exitCode)
 }
 
 type mcpJSONRPCResponse struct {
@@ -83,7 +82,7 @@ type mcpToolErrorEnvelope struct {
 
 // TestMCPMalformedParametersReturnInvalidParams proves malformed MCP parameters
 // return a JSON-RPC invalid-params error at the public stdio/protocol boundary.
-func testTransportmcpprotocolMCPMalformedParametersReturnInvalidParams(t *testing.T) {
+func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
 	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
 		response := server.exchange(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}`)
@@ -103,7 +102,7 @@ func testTransportmcpprotocolMCPMalformedParametersReturnInvalidParams(t *testin
 // JSON-RPC protocol error, MCP IsError=true, one readable text content equal to
 // the typed error.message, and structuredContent retaining the canonical error
 // envelope.
-func testTransportmcpprotocolMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
+func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
 		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName + `","arguments":{"sessionId":"` + missingFactorySessionID + `"}}}`
@@ -190,7 +189,7 @@ func assertMCPMissingFactorySessionControlErrors(t *testing.T, server *projectRo
 
 // TestMCPServerShutdownClosesStdioCleanly proves MCP server shutdown terminates
 // stdio serve cleanly without hung streams or unclean protocol failures.
-func testTransportmcpprotocolMCPServerShutdownClosesStdioCleanly(t *testing.T) {
+func TestMCPServerShutdownClosesStdioCleanly(t *testing.T) {
 	t.Parallel()
 	// Keep this root isolated: whole-protocol cancellation and stdout EOF are
 	// the lifecycle witness, so sharing the package root would blur ownership.
@@ -456,9 +455,4 @@ func assertProjectRootBackedMCPServerShutdownClean(t *testing.T, server *project
 	if _, err := server.stdout.ReadByte(); err != io.EOF {
 		t.Fatalf("read stdout after shutdown = %v, want EOF (no hung stream)", err)
 	}
-}
-func resettransportmcpprotocol0State() {
-
-	sharedMCPProtocolFixture = mcpProtocolPackageFixture{}
-
 }

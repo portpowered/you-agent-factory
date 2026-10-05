@@ -32,8 +32,8 @@ scenario decisions, including three added on main. Six further CLI packages
 share one customer-command package. Four workflow fixture suites share one
 package, and 28 compatible suites now share Product customer journeys, removing
 27 more binaries while retaining their explicit sessions and public observers.
-Sixteen further fixture-owning suites now share Product customer lifecycles,
-removing another 15 binaries. Their former package setup and shutdown belong to
+Fifteen further fixture-owning suites now share Product customer lifecycles,
+removing another 14 binaries. Their former package setup and shutdown belong to
 parallel parent tests; cleanup runs after their parallel children. Repetition
 resets fixture state, and resume fixtures resolve repository paths explicitly.
 
@@ -46,15 +46,16 @@ each requested checkpoint.
 
 ### Latest fixture consolidation measurement
 
-The additional customer-lifecycle package combines 16 fixture-owning suites:
+The additional customer-lifecycle package combines 15 fixture-owning suites:
 audio artifacts, packaged catalog/classification/CLI–REST parity, review failure
 recovery, operator settings, Factory dispatch/eligibility/session lifecycle,
-CLI discovery/resume/worker lifecycle/modes, MCP protocol, and Work routing.
+CLI discovery/resume/worker lifecycle/modes, and Work routing. MCP protocol
+remains separate after the 16-suite candidate exposed startup contention.
 Only their test packaging changes. Each fixture remains owned by one parallel
 parent and its customer scenarios; independent parents have independent routes,
 sessions, homes and cleanup. Package state resets between repeated runs.
 
-The first full four-CPU Linux coverage run of this layout took **244.70s overall
+The first full four-CPU Linux coverage run of the 16-suite candidate took **244.70s overall
 / 194.208s tests**, and failed. It observed **68 links**, consuming **95.742
 CPU-seconds** with **142.827s of active wall time**, and **1,543 compilations**
 consuming **234.302 CPU-seconds**. The previous synchronized-layout sample had
@@ -85,6 +86,47 @@ of the final customer-lifecycle scenarios pass in 123.771s. Manifest projection
 still validates all 159 reviewed decisions. Catalog fixtures now author their
 known customer paths directly instead of calling the production path-policy
 function to arrange the assertion.
+
+The warm-cache repeat took **174.52s overall / 164.897s tests**, but also
+failed: MCP's initial protocol handshake exceeded five seconds, an unchanged
+Worker Session missing-transcript case returned recording-unavailable, and an
+unchanged mock-worker case failed temporary-directory cleanup. The initial
+UUID and cancellation-attribution failures did not recur. This is another
+failed sample, not achievement of the three-minute checkpoint.
+
+| Warm-cache phase | Invocations | Aggregate CPU seconds | Active wall seconds |
+| --- | ---: | ---: | ---: |
+| Compile | 2 | 4.200 | 11.093 |
+| Link | 65 | 93.965 | 133.330 |
+| Vet | 27 | 0.260 | 1.054 |
+| Entire supervisor | — | 627.560 | 174.520 |
+
+Linking remains costly after dependencies are cached, but its active interval
+overlaps execution. It accounts for approximately 15% of this sample's total
+CPU; eliminating repeated linking alone does not eliminate the remaining
+customer-scenario and harness compute. The two-minute target also requires
+reducing repeated application construction and execution costs.
+
+| Largest package execution in this warm sample | Seconds | Outcome |
+| --- | ---: | --- |
+| Product customer journeys | 126.966 | Pass |
+| Product customer lifecycles | 94.786 | Fail |
+| Packaged Factory invocation | 54.533 | Pass |
+| Factory execution | 52.327 | Pass |
+| Models inference | 47.026 | Pass |
+| Work admission | 39.627 | Pass |
+| MCP stdio | 37.629 | Pass |
+
+An MCP experiment completed public first-run home initialization before
+starting the protocol response guard. Three focused native repetitions passed
+in 14.477s, but full coverage still failed two startup handshakes and the
+unchanged mock-worker cleanup. That run took **167.46s overall / 158.046s tests**
+with 65 links / 85.919 linker CPU-seconds and two compilations / 4.096 CPU-seconds.
+It reported 823 passes, two skips and two top-level failures; it is not a passing
+checkpoint. The extra initialization is not shipped because it did not solve
+the failure. MCP protocol remains in its separate transport package with
+explicit model-cache isolation and its five-second guard unchanged. The other
+15 suites remain consolidated; the final layout needs hosted verification.
 
 The initial measurements below are followed by an [implementation and validation
 update](#implementation-and-validation-update) for the authorized cleanup.
