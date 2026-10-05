@@ -335,16 +335,14 @@ func (s projectionIdentityStub) Normalize(_ context.Context, request sessioniden
 	return sessionidentity.ResolvedIdentity{LogicalSessionKeyID: "logical-" + request.FolderPath}, s.err
 }
 
-func TestSessionProjectionReaderUsesAddressedFactsAndErrors(t *testing.T) {
+func TestSessionHostUsesAddressedFactsAndErrors(t *testing.T) {
 	t.Parallel()
 	state := newWorkResolverSessionState()
 	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.FixedZone("selected", 3600))
-	reader := sessionProjectionReader{
-		state: state, identity: projectionIdentityStub{}, clock: projectionClockStub{now: now},
-		checkpoints: func() factoryruntime.JavaScriptCheckpointStore {
-			return &canonicalInspectionCheckpointStore{}
-		},
+	checkpoints := func() factoryruntime.JavaScriptCheckpointStore {
+		return &canonicalInspectionCheckpointStore{}
 	}
+	reader := SessionServiceHost(state, nil, nil, nil, "", projectionIdentityStub{}, projectionClockStub{now: now}, nil, checkpoints, nil)
 	ctx := context.Background()
 	for _, id := range []string{"first", "peer"} {
 		runtime := &observeStubRuntime{result: factoryruntime.ObserveResult{Observation: factoryruntime.Observation{
@@ -363,7 +361,7 @@ func TestSessionProjectionReaderUsesAddressedFactsAndErrors(t *testing.T) {
 			},
 		}, id == "first")
 	}
-	assertSessionProjectionIdentities(t, reader, now)
+	assertSessionProjectionIdentities(t, state, reader, now)
 	first, peer := state.Resolve("first"), state.Resolve("peer")
 	sessionCheckpointStore(first, nil).Put(factorydefinitions.JavaScriptCheckpointRecord{ID: "first-checkpoint"})
 	got, err := reader.BuildSessionProjectionContext(ctx, first)
@@ -375,17 +373,17 @@ func TestSessionProjectionReaderUsesAddressedFactsAndErrors(t *testing.T) {
 		t.Fatalf("isolated peer projection = %#v, %v", got, err)
 	}
 	// The production adapter reads checkpoints without an opening owner or gateway.
-	host := SessionServiceHost(state, nil, nil, nil, "selected-backend", reader.identity, reader.clock, nil, reader.checkpoints, nil)
+	host := SessionServiceHost(state, nil, nil, nil, "selected-backend", projectionIdentityStub{}, projectionClockStub{now: now}, nil, checkpoints, nil)
 	got, err = host.BuildSessionProjectionContext(ctx, first)
 	if err != nil || got.BackendScopeID != "selected-backend" || len(got.JavaScriptCheckpoints) != 1 {
 		t.Fatalf("host projection without gateway = %#v, %v", got, err)
 	}
-	assertSessionProjectionFailures(t, reader)
+	assertSessionProjectionFailures(t, state, reader)
 }
 
-func assertSessionProjectionIdentities(t *testing.T, reader sessionProjectionReader, now time.Time) {
+func assertSessionProjectionIdentities(t *testing.T, state *sessionruntime.Service, reader Host, now time.Time) {
 	t.Helper()
-	state, ctx := reader.state, context.Background()
+	ctx := context.Background()
 	for _, selector := range []string{factorysessions.DefaultSessionID, "peer", "first"} {
 		session := state.Resolve(selector)
 		got, err := reader.BuildSessionProjectionContext(ctx, session)
@@ -398,9 +396,9 @@ func assertSessionProjectionIdentities(t *testing.T, reader sessionProjectionRea
 	}
 }
 
-func assertSessionProjectionFailures(t *testing.T, reader sessionProjectionReader) {
+func assertSessionProjectionFailures(t *testing.T, state *sessionruntime.Service, reader Host) {
 	t.Helper()
-	state, ctx := reader.state, context.Background()
+	ctx := context.Background()
 	first, peer := state.Resolve("first"), state.Resolve("peer")
 	failure := errors.New("addressed observation failed")
 	first.Runtime.Factory.(*observeStubRuntime).err = failure
@@ -411,8 +409,11 @@ func assertSessionProjectionFailures(t *testing.T, reader sessionProjectionReade
 		t.Fatalf("peer after first failure: %v", err)
 	}
 	first.Runtime.Factory.(*observeStubRuntime).err = nil
-	reader.identity = projectionIdentityStub{err: failure}
-	if _, err := reader.BuildSessionProjectionContext(ctx, first); !errors.Is(err, failure) {
+	if _, err := reader.BuildSessionProjectionContext(ctx, first); err != nil {
+		t.Fatalf("addressed observation retry: %v", err)
+	}
+	failingIdentity := SessionServiceHost(state, nil, nil, nil, "", projectionIdentityStub{err: failure}, nil, nil, nil, nil)
+	if _, err := failingIdentity.BuildSessionProjectionContext(ctx, first); !errors.Is(err, failure) {
 		t.Fatalf("identity error = %v", err)
 	}
 	for _, session := range []*livesession.LiveSession{nil, {ID: "missing"}} {
@@ -423,6 +424,9 @@ func assertSessionProjectionFailures(t *testing.T, reader sessionProjectionReade
 	first.Handle = nil
 	if _, err := reader.BuildSessionProjectionContext(ctx, first); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("gone runtime error = %v", err)
+	}
+	if _, err := reader.BuildSessionProjectionContext(ctx, peer); err != nil {
+		t.Fatalf("peer after addressed runtime removal: %v", err)
 	}
 }
 
