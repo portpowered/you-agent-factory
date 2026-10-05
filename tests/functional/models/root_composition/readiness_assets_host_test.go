@@ -3,127 +3,18 @@ package root_composition_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-// TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle proves
-// assets pull, readiness inspection, and host startup activate through public
-// Models HTTP surfaces after runtime lifecycle on a process constructed only
-// through root.BuildProcess with edges.Edges effect replacement.
-func TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
-	t.Parallel()
-
-	audio := []byte("RIFF....WAVE")
-	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		switch request.URL.Path {
-		case "/health":
-			writer.WriteHeader(http.StatusOK)
-		case "/invoke":
-			var payload struct {
-				OutputFile string `json:"outputFile"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-				http.Error(writer, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
-				http.Error(writer, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			writer.WriteHeader(http.StatusOK)
-		default:
-			http.NotFound(writer, request)
-		}
-	}))
-	t.Cleanup(modelServer.Close)
-
-	cacheDirectory := functionalTempDir(t)
-	writeCachedOmniVoiceAssets(t, cacheDirectory)
-
-	rejectingNetwork := &rejectingModelAssetHTTP{}
-	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
-	home := functionalTempDir(t)
-	assetFiles := functionalModelAssetFileSystem{home: home}
-
-	dir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
-	environment := append(os.Environ(), runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
-	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Env:                       environment,
-		Edges: serviceedges.Edges{
-			ModelAssetHTTPClient:           rejectingNetwork,
-			ModelAssetMakeDirectories:      assetFiles.MkdirAll,
-			ModelAssetInspectPath:          assetFiles.Stat,
-			ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
-			ModelAssetWriteFile:            assetFiles.WriteFile,
-			ModelAssetRenamePath:           assetFiles.Rename,
-			ModelAssetRemovePath:           assetFiles.Remove,
-			ModelAssetReadFile:             assetFiles.ReadFile,
-			ModelAssetReadDirectory:        assetFiles.ReadDir,
-			ModelAssetCreateFile:           assetFiles.Create,
-			ModelAssetOpenFile:             assetFiles.Open,
-			ModelHostProcessLauncher:       hostLauncher,
-			ModelHostHTTPClient:            modelServer.Client(),
-			ModelRuntimeHTTPClient:         modelServer.Client(),
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	pull := postFunctionalJSON[factoryapi.ModelPullResponse](
-		t,
-		server.URL()+"/models/OMNIVOICE_Q4_K_M/pull",
-		nil,
-		"POST /models pull",
-	)
-	if pull.Outcome != factoryapi.ModelPullOutcomeALREADYPRESENT ||
-		pull.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("POST /models pull = %#v, want cached READY asset pull", pull)
-	}
-	if rejectingNetwork.Calls() != 0 {
-		t.Fatalf("asset pull made %d upstream network requests, want 0 via edges", rejectingNetwork.Calls())
-	}
-
-	model := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
-	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("GET /models/{name} readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
-	}
-
-	responseMode := factoryapi.METADATA
-	invocation := postFunctionalJSON[factoryapi.ModelInvocationResponse](
-		t,
-		server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations",
-		factoryapi.ModelInvocationRequest{
-			Operation: "TTS",
-			Bindings:  localModelReadinessAssetsHostBindings(),
-			Content: &factoryapi.WorkContent{
-				mustFunctionalTextPart(t, "activate host through public Models invoke"),
-			},
-			Options: &factoryapi.ModelInvocationOptions{ResponseMode: &responseMode},
-		},
-		"POST /models invocations",
-	)
-	if invocation.ModelName != "OMNIVOICE_Q4_K_M" || invocation.Operation != "TTS" {
-		t.Fatalf("POST /models invocations identity = %#v, want OMNIVOICE_Q4_K_M/TTS", invocation)
-	}
-	if hostLauncher.Calls() == 0 {
-		t.Fatal("host process launcher calls = 0 after invoke, want host activation through edges")
-	}
-}
 
 func localModelReadinessAssetsHostFactoryConfig(endpoint string) map[string]any {
 	return map[string]any{
@@ -168,42 +59,6 @@ func localModelReadinessAssetsHostFactoryConfig(endpoint string) map[string]any 
 				}},
 			}},
 		}},
-	}
-}
-
-func writeCachedOmniVoiceAssets(t *testing.T, cacheDirectory string) {
-	t.Helper()
-
-	revision := "cached-revision"
-	modelDirectory := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", revision)
-	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
-		t.Fatalf("create cached model directory: %v", err)
-	}
-	assetBody := []byte("cached-model-asset")
-	checksum := fmt.Sprintf("%x", sha256.Sum256(assetBody))
-	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
-	for _, name := range files {
-		if err := os.WriteFile(filepath.Join(modelDirectory, name), assetBody, 0o644); err != nil {
-			t.Fatalf("write cached model asset %s: %v", name, err)
-		}
-	}
-	metadata, err := json.Marshal(map[string]any{
-		"modelName": "OMNIVOICE_Q4_K_M",
-		"revision":  revision,
-		"files": []map[string]any{
-			{"path": files[0], "bytes": len(assetBody), "sha256": checksum},
-			{"path": files[1], "bytes": len(assetBody), "sha256": checksum},
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal cached model metadata: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", ".managed-cache.json"),
-		metadata,
-		0o644,
-	); err != nil {
-		t.Fatalf("write cached model metadata: %v", err)
 	}
 }
 

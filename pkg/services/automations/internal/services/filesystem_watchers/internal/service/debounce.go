@@ -17,8 +17,12 @@ type debounceScheduler struct {
 	clock  debounceClock
 	window time.Duration
 	mu     sync.Mutex
-	timers map[string]clockwork.Timer
+	timers map[string]*debounceCall
+	closed bool
+	joined sync.WaitGroup
 }
+
+type debounceCall struct{ timer clockwork.Timer }
 
 func newDebounceScheduler(clock debounceClock, window time.Duration) *debounceScheduler {
 	if window <= 0 {
@@ -27,30 +31,47 @@ func newDebounceScheduler(clock debounceClock, window time.Duration) *debounceSc
 	return &debounceScheduler{
 		clock:  clock,
 		window: window,
-		timers: make(map[string]clockwork.Timer),
+		timers: make(map[string]*debounceCall),
 	}
 }
 
 func (s *debounceScheduler) schedule(key string, fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if existing, ok := s.timers[key]; ok {
-		existing.Stop()
+	if s.closed {
+		return
 	}
-	timer := s.clock.AfterFunc(s.window, func() {
+	if existing, ok := s.timers[key]; ok {
+		if existing.timer.Stop() {
+			s.joined.Done()
+		}
+	}
+	call := &debounceCall{}
+	s.joined.Add(1)
+	call.timer = s.clock.AfterFunc(s.window, func() {
+		defer s.joined.Done()
 		s.mu.Lock()
+		if s.closed || s.timers[key] != call {
+			s.mu.Unlock()
+			return
+		}
 		delete(s.timers, key)
 		s.mu.Unlock()
 		fn()
 	})
-	s.timers[key] = timer
+	s.timers[key] = call
 }
 
 func (s *debounceScheduler) cancelAll() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	for key, timer := range s.timers {
-		timer.Stop()
+	s.closed = true
+	for key, call := range s.timers {
+		if call.timer.Stop() {
+			s.joined.Done()
+		}
 		delete(s.timers, key)
 	}
+	s.mu.Unlock()
+	// Callbacks can use scheduler state while finishing; never join under mu.
+	s.joined.Wait()
 }

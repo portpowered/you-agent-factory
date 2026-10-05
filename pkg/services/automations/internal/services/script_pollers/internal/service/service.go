@@ -119,10 +119,13 @@ func (s *service) superviseScriptPoller(
 			zap.Error(runErr),
 		)
 
+		timer := backoffClock.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-backoffClock.After(backoff):
+		case <-timer.Chan():
+			timer.Stop()
 		}
 	}
 }
