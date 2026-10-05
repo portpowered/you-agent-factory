@@ -180,7 +180,7 @@ func NewReplayInputLoader(
 		openFile:           openFile,
 		loadLegacy:         loadLegacy,
 		loadLegacyMetadata: loadLegacyMetadata,
-		logger:             logging.EnsureLogger(logger),
+		logger:             logger,
 	}
 }
 
