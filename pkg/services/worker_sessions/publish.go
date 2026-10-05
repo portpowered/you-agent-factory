@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -90,6 +91,12 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	if p == nil {
 		return
 	}
+	var err error
+	fragment, err = redactCanonicalFragment(fragment)
+	if err != nil {
+		p.reportRejectedRecord(fragment.DispatchID, workers.Draft{}, err)
+		return
+	}
 	observer, next, forwardUnassociated := p.dependencies()
 	if !providerFragmentAgrees(fragment) {
 		return
@@ -113,6 +120,39 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	if next != nil {
 		next(fragment)
 	}
+}
+
+// Apply the same declared-field policy before both capture and downstream
+// delivery. Redacting only inside PublishRecord leaves the original draft on
+// the Factory response stream. The caller's payload remains detached.
+func redactCanonicalFragment(fragment workers.ProgressFragment) (workers.ProgressFragment, error) {
+	var draft workers.Draft
+	switch value := fragment.CanonicalDraft.(type) {
+	case workers.Draft:
+		draft = workers.CloneDraft(value)
+	case *workers.Draft:
+		if value == nil {
+			return fragment, nil
+		}
+		draft = workers.CloneDraft(*value)
+	default:
+		return fragment, nil
+	}
+	if len(draft.DeclaredSecretJSONPointers) == 0 {
+		return fragment, nil
+	}
+	secrets := make([]recordings.RecordingSecret, len(draft.DeclaredSecretJSONPointers))
+	for index, pointer := range draft.DeclaredSecretJSONPointers {
+		secrets[index] = recordings.RecordingSecret{JSONPointer: pointer, Provenance: recordings.RecordingSecretProvenanceDeclared}
+	}
+	safe, err := recordings.RedactDeclaredSecretText(recordings.RecordingRedactionRequest{Payload: draft.Payload, Secrets: secrets})
+	if err != nil {
+		return fragment, recordings.ErrInvalidRecordingRedactionRequest
+	}
+	draft.Payload = safe.Payload
+	draft.DeclaredSecretJSONPointers = nil
+	fragment.CanonicalDraft = draft
+	return fragment, nil
 }
 
 func (p *ProviderSessionObservationPublisher) dependencies() (Service, workers.ProgressPublisher, bool) {
