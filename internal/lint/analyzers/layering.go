@@ -58,7 +58,9 @@ var layeringRules = []layeringRule{
 			_, _, owner := serviceSplit(e.importer)
 			// Existing service-subpackage, initializer-service and platform-services
 			// rules own their overlapping edges. Internal visibility belongs to Go.
-			return service && rest != "" && !containsSegment(rest, "internal") &&
+			// The legacy walker reported test-only edges without blocking them;
+			// the existing service-subpackage test policy remains authoritative.
+			return !e.test && service && rest != "" && !containsSegment(rest, "internal") &&
 				under(e.importer, "pkg") && !owner && !under(e.importer, "pkg/wire") &&
 				!containsSegment(e.importer, "testdata") && !matchesProtocol(e.importer, e.importee) &&
 				!violatesServiceSubpackage(e) && !under(e.importer, "pkg/initializer") && !under(e.importer, "pkg/platform")
