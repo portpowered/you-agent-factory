@@ -22,6 +22,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
@@ -71,6 +72,8 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
+	defaulted := newInitialOpeningDefaultProviderScenario(t, "", "")
+	parameterized := newInitialOpeningDefaultProviderScenario(t, "", "${model}")
 	checkout := newInitialOpeningWorktreeScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
@@ -145,6 +148,22 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testInitialOpeningWorktreeReuse(t, sessions, checkout, effects)
 	})
+	for name, scenario := range map[string]initialOpeningScenario{
+		"missing settings": defaulted, "absent model invocation parameter": parameterized,
+	} {
+		t.Run("selected operator defaults supply "+name, func(t *testing.T) {
+			t.Parallel()
+			peerHistory := scenario.startPeer(t, sessions)
+			request := scenario.request()
+			request.RuntimeSelection.OperatorDefaults = operatorsettings.ResolvedDefaults{
+				WorkerModelProvider: string(modelprovider.ProviderCodex), WorkerModel: "gpt-5-codex",
+			}
+			startInitialOpeningSession(t, sessions, request)
+			assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+			assertInitialOpeningProviderSelection(t, effects, scenario.candidateDir)
+			assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+		})
+	}
 }
 
 func testInitialOpeningRecordedHistory(t *testing.T, sessions factorysessions.Service, process support.Process, reused initialOpeningScenario, logs *observer.ObservedLogs) {
@@ -297,6 +316,16 @@ func newInitialOpeningProviderScenario(t *testing.T) initialOpeningScenario {
 	for _, dir := range []string{scenario.candidateDir, scenario.peerDir} {
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	}
+	return scenario
+}
+
+func newInitialOpeningDefaultProviderScenario(t *testing.T, provider, model string) initialOpeningScenario {
+	t.Helper()
+	config := initialOpeningFactoryConfig()
+	config["workTypes"].([]map[string]any)[0]["handlingBehavior"] = []string{"DEFAULT"}
+	scenario := initialOpeningScenarioWithConfig(t, config)
+	support.WriteAgentConfig(t, scenario.candidateDir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Provider(provider), model))
+	support.WriteAgentConfig(t, scenario.peerDir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	return scenario
 }
 
