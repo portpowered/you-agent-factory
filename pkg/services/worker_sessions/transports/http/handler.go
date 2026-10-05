@@ -482,7 +482,12 @@ func (h *Handler) StreamWorkerSessionEventsByTopLevelWorkerSessionId(
 		return
 	}
 	replayOnly := params.ReplayOnly != nil && *params.ReplayOnly
-	observation, subscription, err := h.adapter.StreamTopLevelWorkerSessionEvents(r.Context(), string(workerSessionID), replayOnly)
+	cursor, err := WorkerSessionObservationCursorFromAPI(params.AfterPosition, params.AfterSequence, params.StreamGenerationId)
+	if err != nil {
+		h.writeMappedStreamError(w, err)
+		return
+	}
+	observation, subscription, err := h.adapter.StreamTopLevelWorkerSessionEvents(r.Context(), string(workerSessionID), replayOnly, cursor)
 	if err != nil {
 		h.writeMappedStreamError(w, err)
 		return

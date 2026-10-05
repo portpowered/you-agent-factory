@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -57,6 +58,7 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	}
 	assertCapturedPages(t, server, ended)
 	assertCapturedReplayTimes(t, server.URL(), ended)
+	assertCapturedFollowReconnect(t, server.URL(), ended)
 	// Stop the sole writer before reopening this store. A fresh root has no
 	// live Worker registry or provider-native files to recover identity from.
 	server.Close(t)
@@ -248,6 +250,42 @@ func assertCapturedReplayTimes(t *testing.T, baseURL string, page factoryapi.Wor
 		want := page.Events[index].Event
 		if !reflect.DeepEqual(frame.Event, want) {
 			t.Fatalf("SSE and logs differ at record %d: %+v %+v", index, frame.Event, want)
+		}
+	}
+}
+
+// This API-owned cell observes exclusive reconnect at the actual top-level
+// route, using the same root host and controlled execution as captured reads.
+func assertCapturedFollowReconnect(t *testing.T, baseURL string, page factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	if len(page.Events) < 2 {
+		t.Fatal("reconnect fixture needs a committed prefix and tail")
+	}
+	ack := page.Events[0].Event.Position
+	endpoint := fmt.Sprintf("%s/worker-sessions/%s/events?replayOnly=true&after_position=%d", baseURL, url.PathEscape(page.WorkerSessionId), ack)
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("reconnect status=%d: %s", response.StatusCode, body)
+	}
+	frames, err := readWorkerSessionEventStream(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != len(page.Events)-1 {
+		t.Fatalf("reconnect records=%d, want %d after position %d", len(frames), len(page.Events)-1, ack)
+	}
+	for index, frame := range frames {
+		if !reflect.DeepEqual(frame.Event, page.Events[index+1].Event) {
+			t.Fatalf("reconnect duplicated or changed committed record %d: %+v", index, frame)
 		}
 	}
 }

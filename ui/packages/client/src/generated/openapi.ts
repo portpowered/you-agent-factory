@@ -223,7 +223,7 @@ export interface paths {
     };
     /**
      * Stream top-level Worker Session events
-     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true. after_position is exclusive; after_sequence is its compatibility alias. stream_generation_id fences a recorded stream generation. Invalid, future, unavailable, and stale cursors use the same typed errors as scoped event streams.
      */
     get: operations["streamWorkerSessionEventsByTopLevelWorkerSessionId"];
     put?: never;
@@ -8555,6 +8555,12 @@ export interface operations {
       query?: {
         /** @description Drain retained history without registering a live follower. */
         replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
       };
       header?: never;
       path: {

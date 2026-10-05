@@ -367,7 +367,7 @@ paths:
         - Worker Sessions
       operationId: streamWorkerSessionEventsByTopLevelWorkerSessionId
       summary: Stream top-level Worker Session events
-      description: Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+      description: Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true. after_position is exclusive; after_sequence is its compatibility alias. stream_generation_id fences a recorded stream generation. Invalid, future, unavailable, and stale cursors use the same typed errors as scoped event streams.
       parameters:
         - $ref: '#/components/parameters/WorkerSessionID'
         - name: replayOnly
@@ -377,6 +377,9 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/WorkerSessionAfterPosition'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/WorkerSessionStreamGenerationID'
       responses:
         '200':
           description: Retained then live Worker Session event frames.

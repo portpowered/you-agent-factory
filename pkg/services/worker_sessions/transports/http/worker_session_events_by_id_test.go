@@ -73,6 +73,52 @@ func TestStreamWorkerSessionEventsByWorkerSessionIDMapsExclusiveCursor(t *testin
 	}
 }
 
+func TestStreamTopLevelWorkerSessionEventsMapsExclusiveCursor(t *testing.T) {
+	t.Parallel()
+	position := factoryapi.WorkerSessionAfterPosition(7)
+	generation := factoryapi.WorkerSessionStreamGenerationID("generation-1")
+	service := &fakeObservationService{
+		getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-1", State: workersessions.StateRunning},
+		streamByWorkerSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: false}},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(
+		recorder, httptest.NewRequest("GET", "/worker-sessions/worker-1/events", nil), "worker-1",
+		factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{
+			AfterPosition: &position, StreamGenerationId: &generation,
+		},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	request := service.streamByWorkerRequest
+	if request.WorkerSessionID != "worker-1" || request.FactorySessionID != "" || request.Cursor == nil || request.Cursor.Position != 7 || request.Cursor.StreamGenerationID != "generation-1" {
+		t.Fatalf("top-level cursor forwarding: %+v", request)
+	}
+	if !service.streamByWorkerSubscription.closed {
+		t.Fatal("top-level subscription was not closed")
+	}
+}
+
+func TestStreamTopLevelWorkerSessionEventsRejectsConflictingCursorAliases(t *testing.T) {
+	t.Parallel()
+	position := factoryapi.WorkerSessionAfterPosition(7)
+	sequence := factoryapi.AfterSequence(8)
+	service := &fakeObservationService{}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(
+		recorder, httptest.NewRequest("GET", "/events", nil), "worker-1",
+		factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{AfterPosition: &position, AfterSequence: &sequence},
+	)
+	if recorder.Code != http.StatusBadRequest || service.getByWorkerCalled {
+		t.Fatalf("conflicting cursor performed lookup or was accepted: status=%d lookup=%t body=%s", recorder.Code, service.getByWorkerCalled, recorder.Body.String())
+	}
+}
+
 func TestStreamWorkerSessionEventsByWorkerSessionIDRejectsConflictingCursorAliases(t *testing.T) {
 	position := factoryapi.WorkerSessionAfterPosition(7)
 	sequence := factoryapi.AfterSequence(8)

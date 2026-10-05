@@ -10004,6 +10004,15 @@ type ListWorkerSessionsParamsState string
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
 	// ReplayOnly Drain retained history without registering a live follower.
 	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+
+	// AfterPosition Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome.
+	AfterPosition *WorkerSessionAfterPosition `form:"after_position,omitempty" json:"after_position,omitempty"`
+
+	// AfterSequence Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// StreamGenerationId Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history.
+	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
 // ReadWorkerSessionLogsParams defines parameters for ReadWorkerSessionLogs.
@@ -19551,6 +19560,54 @@ func NewStreamWorkerSessionEventsByTopLevelWorkerSessionIdRequest(server string,
 		if params.ReplayOnly != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "replayOnly", runtime.ParamLocationQuery, *params.ReplayOnly); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.AfterPosition != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "after_position", runtime.ParamLocationQuery, *params.AfterPosition); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.AfterSequence != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "after_sequence", runtime.ParamLocationQuery, *params.AfterSequence); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.StreamGenerationId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "stream_generation_id", runtime.ParamLocationQuery, *params.StreamGenerationId); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
