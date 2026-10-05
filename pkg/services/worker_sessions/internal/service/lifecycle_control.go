@@ -313,6 +313,15 @@ func (r *registry) terminateForShutdown(ctx context.Context, id string) (workers
 }
 
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
+	r.mu.RLock()
+	liveIdentity := r.workerIdentityExistsLocked(publicWorkerID(req.ID))
+	r.mu.RUnlock()
+	if !liveIdentity && req.RequestID == "" {
+		return r.archivedStopNoop(ctx, req, action)
+	}
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
@@ -322,6 +331,35 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	return r.stopWithCommittedIntent(ctx, req, action, detachContext, target)
+}
+
+// A terminal recording proves a repeat has no effect. It never recreates an
+// execution handle or writes a new operation over the accepted stop winner.
+func (r *registry) archivedStopNoop(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction) (workersessions.ControlResult, error) {
+	failed := workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}
+	id, scope := publicWorkerID(req.ID), req.FactorySessionID
+	if scope == "" {
+		scope = workerAddressScope(req.ID)
+	}
+	observation, err := r.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: id, FactorySessionID: scope})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		return failed, workersessions.ErrSessionNotFound
+	}
+	if err != nil {
+		return failed, err
+	}
+	if scope != "" && observation.FactorySessionID != scope {
+		return failed, workersessions.ErrSessionNotFound
+	}
+	if !observation.State.Terminal() {
+		return failed, workersessions.ErrObservationProjectionUnavailable
+	}
+	result := workersessions.ControlResult{
+		Session: workersessions.Session{ID: id, State: observation.State}, Action: action,
+		Outcome: workersessions.ControlOutcomeNoop, DispatchID: observation.AttemptID,
+	}
+	r.logger.Info("worker session archived control", "sessionID", id, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	return result, nil
 }
 
 func (r *registry) executeFrozenStop(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool, target frozenControlTarget) (workersessions.ControlResult, error) {

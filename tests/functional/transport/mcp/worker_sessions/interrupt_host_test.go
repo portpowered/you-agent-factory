@@ -167,11 +167,17 @@ func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter) (
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Env:   append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: writer, ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
+		Env: append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: writer,
+			FactorySessionsWorkingDirectory:     interruptRecordingDirectory(dir),
+			ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
 	})
 	return host, runner, dir
 }
+
+type interruptRecordingDirectory string
+
+func (dir interruptRecordingDirectory) Getwd() (string, error) { return string(dir), nil }
 
 func admitInterruptSource(t *testing.T, ctx context.Context, host, dir string, runner *interruptHostRunner) {
 	t.Helper()

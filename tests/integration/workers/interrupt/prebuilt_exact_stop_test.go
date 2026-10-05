@@ -16,8 +16,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// This first I-T4 cell consumes the build lane's artifact. Restart/interrupt
-// recovery is a separate cell owned by story 003, not inferred from live stops.
+// I-T4 consumes the build lane's artifact and reconstructs the selected host
+// over the same profile to observe committed stop facts without live handles.
 func TestExactStopRecoveryPrebuilt(t *testing.T) {
 	binary := resolvePrebuiltArtifact(t)
 	content, err := os.ReadFile(binary)
@@ -44,10 +44,46 @@ func TestExactStopRecoveryPrebuilt(t *testing.T) {
 			fixture.stop(t, "sibling", "terminate", "APPLIED")
 			fixture.assertJoined(t, "sibling")
 			fixture.assertTerminal(t, "sibling", "terminate")
+			fixture.restart(t)
+			fixture.assertTerminal(t, "source", action)
+			fixture.assertTerminal(t, "sibling", "terminate")
+			fixture.assertCLIObservation(t, "source", action)
+			for _, repeat := range []string{"cancel", "terminate"} {
+				fixture.stop(t, "source", repeat, "NOOP")
+				fixture.assertTerminal(t, "source", action)
+			}
+			fixture.assertJoined(t, "source")
+			fixture.assertJoined(t, "sibling")
 			stopInterruptDaemon(t, binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
 			assertInterruptPortAvailable(t, fixture.port)
 		})
 	}
+}
+
+func (fixture *exactStopFixture) restart(t *testing.T) {
+	t.Helper()
+	stopInterruptDaemon(t, fixture.binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
+	assertInterruptPortAvailable(t, fixture.port)
+	fixture.daemon = startInterruptDaemon(t, fixture.ctx, fixture.binary, fixture.dir, fixture.url, fixture.env)
+	waitForInterruptStatus(t, fixture.ctx, fixture.daemon, fixture.url)
+	t.Log("selected host restarted over the same isolated profile and recording directory")
+}
+
+func (fixture *exactStopFixture) assertCLIObservation(t *testing.T, name, action string) {
+	t.Helper()
+	result := runInterruptBinary(t, fixture.ctx, fixture.binary, fixture.dir, fixture.env,
+		"--remote", "--server", fixture.url, "--json", "worker-sessions", "show", "--worker-session-id", "exact-"+name)
+	var observation factoryapi.WorkerSessionObservation
+	state, cause := "CANCELED", "OPERATOR_CANCEL"
+	if action == "terminate" {
+		state, cause = "TERMINATED", "OPERATOR_TERMINATE"
+	}
+	if result.err != nil || json.Unmarshal([]byte(result.stdout), &observation) != nil ||
+		observation.WorkerSessionId != "exact-"+name || string(observation.State) != state ||
+		observation.TerminalCause == nil || string(*observation.TerminalCause) != cause {
+		t.Fatalf("recovered CLI show %s: error=%v stdout=%s stderr=%s", name, result.err, result.stdout, result.stderr)
+	}
+	t.Logf("recovered selected-host CLI show exact-%s: %s", name, strings.TrimSpace(result.stdout))
 }
 
 type exactStopFixture struct {

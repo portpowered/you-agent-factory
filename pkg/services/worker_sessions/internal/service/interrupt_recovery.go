@@ -161,7 +161,13 @@ func (r *registry) interruptReplayCapture(ctx context.Context, id string) (recor
 	if err != nil {
 		return recordings.WorkerControlTarget{}, err
 	}
-	if entry.WorkerSessionID != id || entry.FactorySessionID != "" || entry.RecordingGenerationID == "" || entry.OwnerEpoch == "" {
+	// Factory replacement has never admitted a direct interrupt operation.
+	// Leave its existing active-source validation in charge of the refusal;
+	// a Factory capture alone is not a failed direct replay or store outage.
+	if entry.FactorySessionID != "" {
+		return recordings.WorkerControlTarget{}, os.ErrNotExist
+	}
+	if entry.WorkerSessionID != id || entry.RecordingGenerationID == "" || entry.OwnerEpoch == "" {
 		return recordings.WorkerControlTarget{}, recordings.ErrWorkerControlConflict
 	}
 	return recordings.WorkerControlTarget{RecordingID: entry.RecordingID, WorkerSessionID: entry.WorkerSessionID, RecordingGenerationID: entry.RecordingGenerationID, OwnerEpoch: entry.OwnerEpoch}, nil

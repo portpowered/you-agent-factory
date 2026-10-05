@@ -269,6 +269,7 @@ func newHTTPWorkerSessionsHandler(
 	}
 	resolver := newWorkerSessionsFactorySessionScopeResolver(root)
 	controller := workerSessionControlRouter{
+		archived: logs,
 		sources: func(ctx context.Context) ([]workersessions.Service, error) {
 			return workerSessionObservationSources(ctx, root, presentation.WorkerSessions)
 		},
@@ -347,7 +348,8 @@ func workerSessionObservationSources(
 // Factory Runtime owns sessions opened while dispatching Work, so the
 // process-default registry is only selected when it owns the exact identity.
 type workerSessionControlRouter struct {
-	sources func(context.Context) ([]workersessions.Service, error)
+	sources  func(context.Context) ([]workersessions.Service, error)
+	archived workersessions.Service
 }
 
 func (router workerSessionControlRouter) owner(
@@ -387,6 +389,10 @@ func (router workerSessionControlRouter) control(
 	action workersessions.ControlAction,
 ) (workersessions.ControlResult, error) {
 	owner, err := router.owner(ctx, request)
+	if errors.Is(err, workersessions.ErrSessionNotFound) && request.RequestID == "" &&
+		(action == workersessions.ControlActionCancel || action == workersessions.ControlActionTerminate) && router.archived != nil {
+		owner, err = router.archived, nil
+	}
 	if err != nil {
 		return workersessions.ControlResult{}, err
 	}

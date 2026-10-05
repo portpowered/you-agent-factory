@@ -345,6 +345,11 @@ identity, start time, usage, and capture health. Unknown end times and durations
 remain absent. A history without a captured terminal remains readable through
 `read --view logs`, but its summary is unavailable.
 
+Repeating `cancel` or `terminate` for a captured terminal Worker Session after
+restart returns `NOOP` with its terminal state. This repeat uses the selected
+host's recording and does not restart execution or replace the committed cause.
+An unavailable terminal summary cannot establish a successful stop.
+
 Worker Session summaries expose `terminalCause` when the reason is known.
 Live sessions report no terminal cause. Natural outcomes report `COMPLETED` or
 `FAILED`. `OPERATOR_CANCEL` and `OPERATOR_TERMINATE` require a committed,
