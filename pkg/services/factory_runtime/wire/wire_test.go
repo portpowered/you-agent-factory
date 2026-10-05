@@ -172,7 +172,11 @@ func (in newServiceInputs) callNewService() (factoryruntime.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewService(NewOrchestration(in.newID, in.workflows, in.workflowRuntime), host, NewDispatchPlanning(in.workersPublisher, in.workersCanceler))
+	mapper, err := NewDefinitionMapper(in.newID)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(NewOrchestration(mapper, in.workflows, in.workflowRuntime), host, NewDispatchPlanning(in.workersPublisher, in.workersCanceler))
 }
 
 type recordingClock struct{ calls int }

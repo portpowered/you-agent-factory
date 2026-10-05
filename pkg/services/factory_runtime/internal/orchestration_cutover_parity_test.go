@@ -31,7 +31,7 @@ func TestOrchestrationCompilePetriNetMatchesDefinitionMappingCutover(t *testing.
 	t.Parallel()
 
 	cfg := cutoverPetriFactoryConfig()
-	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, nil, nil))
+	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil))
 	orchestratedNet, err := compiler.CompilePetriNet(context.Background(), factory.OrchestrationCompileRequest{
 		Config: cfg,
 	})
@@ -56,7 +56,7 @@ func TestOrchestrationCompilePetriNetMatchesDefinitionMappingCutover(t *testing.
 func TestOrchestrationCompilePetriNetRejectsUnsupportedKindWithRuntimeDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, nil, nil))
+	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil))
 	_, err := compiler.CompilePetriNet(context.Background(), factory.OrchestrationCompileRequest{
 		Config: &factorydefinitions.FactoryConfig{
 			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
@@ -80,7 +80,7 @@ func TestOrchestrationCompileSelectsJavaScriptKindWithoutPetriNet(t *testing.T) 
 	t.Parallel()
 
 	workflows := cutoverJavaScriptWorkflows()
-	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, workflows, workflows))
+	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows))
 	result, err := compiler.Compile(context.Background(), factory.OrchestrationCompileRequest{
 		Config: cutoverJavaScriptFactoryConfig(`workflow.final("ok");`),
 	})
@@ -166,7 +166,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	bundle, err := factoryinternal.NewRuntimeFactory(
 		nil, nil, nil, nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
-		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, workflows, workflows)),
+		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows)),
 		nil,
 		platformclock.Real{}, testDefinitionMapper(),
 	).Build(

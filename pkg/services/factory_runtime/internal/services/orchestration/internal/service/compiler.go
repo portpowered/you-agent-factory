@@ -10,7 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
 const (
@@ -20,10 +20,15 @@ const (
 	diagnosticCodeJavaScriptMissingSource = "ORCHESTRATION_JAVASCRIPT_MISSING_SOURCE"
 )
 
+// DefinitionMapper compiles one definition into detached per-activation state.
+type DefinitionMapper interface {
+	Map(context.Context, *factorydefinitions.FactoryConfig) (*state.Net, error)
+}
+
 // Compiler selects orchestration kind, compiles activated definitions, and
 // drives private JavaScript execute/resume without exposing VM internals.
 type Compiler struct {
-	newID     factoryruntime.IDGenerator
+	mapper    DefinitionMapper
 	workflows factoryruntime.JavaScriptWorkflowDefinitions
 	runtime   factoryruntime.JavaScriptWorkflowRuntime
 }
@@ -33,11 +38,11 @@ var _ factoryruntime.OrchestrationJavaScriptExecution = (*Compiler)(nil)
 
 // New constructs the parent-private orchestration owner.
 func New(
-	newID factoryruntime.IDGenerator,
+	mapper DefinitionMapper,
 	workflows factoryruntime.JavaScriptWorkflowDefinitions,
 	runtime factoryruntime.JavaScriptWorkflowRuntime,
 ) *Compiler {
-	return &Compiler{newID: newID, workflows: workflows, runtime: runtime}
+	return &Compiler{mapper: mapper, workflows: workflows, runtime: runtime}
 }
 
 // RunJavaScript executes one JavaScript orchestration variant through the
@@ -170,30 +175,18 @@ func (c *Compiler) compilePetri(
 	ctx context.Context,
 	cfg *factorydefinitions.FactoryConfig,
 ) (orchestration.Binding, error) {
-	if c == nil || c.newID == nil {
+	if c == nil || c.mapper == nil {
 		return nil, compileError(
 			orchestration.ErrInvalidDefinition,
 			orchestration.KindPetri,
 			orchestration.Diagnostic{
 				Code:    diagnosticCodeInvalidDefinition,
-				Message: "orchestration compiler ID generator is required",
+				Message: "orchestration definition mapper is required",
 				Path:    "orchestration.petri",
 			},
 		)
 	}
-	mapper, err := definitionmapping.New(c.newID)
-	if err != nil {
-		return nil, compileError(
-			orchestration.ErrInvalidDefinition,
-			orchestration.KindPetri,
-			orchestration.Diagnostic{
-				Code:    diagnosticCodeInvalidDefinition,
-				Message: err.Error(),
-				Path:    "orchestration.petri",
-			},
-		)
-	}
-	net, err := mapper.Map(ctx, cfg)
+	net, err := c.mapper.Map(ctx, cfg)
 	if err != nil {
 		return nil, compileError(
 			orchestration.ErrInvalidDefinition,

@@ -34,8 +34,8 @@ func NewService(orchestration Orchestration, instanceHost InstanceHost, dispatch
 }
 
 // NewOrchestration constructs the inert orchestration owner.
-func NewOrchestration(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime) Orchestration {
-	return orchestrationwire.New(newID, workflows, runtime)
+func NewOrchestration(mapper *DefinitionMapper, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime) Orchestration {
+	return orchestrationwire.New(mapper, workflows, runtime)
 }
 
 // NewLifecycle constructs the completed lifecycle sequencer.

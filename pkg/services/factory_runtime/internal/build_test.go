@@ -681,7 +681,7 @@ func loadedFactoryFixture(dir string) (interfaces.MutableLoadedFactorySource, er
 }
 
 func testOrchestrationCompilation() factory.OrchestrationCompilation {
-	return factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, nil, nil))
+	return factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil))
 }
 
 func testDefinitionMapper() *definitionmapping.Mapper {

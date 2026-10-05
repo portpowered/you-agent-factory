@@ -450,5 +450,9 @@ func newCompletedRuntimeRoot(newID factoryruntime.IDGenerator, workflows factory
 	if err != nil {
 		return nil, err
 	}
-	return factoryruntimewire.NewService(factoryruntimewire.NewOrchestration(newID, workflows, runtime), host, factoryruntimewire.NewDispatchPlanning(publisher, canceler))
+	mapper, err := factoryruntimewire.NewDefinitionMapper(newID)
+	if err != nil {
+		return nil, err
+	}
+	return factoryruntimewire.NewService(factoryruntimewire.NewOrchestration(mapper, workflows, runtime), host, factoryruntimewire.NewDispatchPlanning(publisher, canceler))
 }

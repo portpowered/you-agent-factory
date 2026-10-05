@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	"reflect"
 	"strings"
 	"testing"
@@ -835,5 +836,9 @@ func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime
 	if err != nil {
 		return nil, err
 	}
-	return NewRoot(orchestrationwire.New(newID, workflows, runtime), host, dispatchplanningwire.New(publisher, canceler))
+	mapper, err := definitionmapping.New(newID)
+	if err != nil {
+		return nil, err
+	}
+	return NewRoot(orchestrationwire.New(mapper, workflows, runtime), host, dispatchplanningwire.New(publisher, canceler))
 }

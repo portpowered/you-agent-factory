@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"testing"
 
@@ -38,7 +39,7 @@ func TestNewCompilationUsesSuppliedOwner(t *testing.T) {
 func TestNewCompilationCompilesPetriFactory(t *testing.T) {
 	t.Parallel()
 
-	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testIDGenerator(), nil, nil))
+	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(t), nil, nil))
 	cfg := &factorydefinitions.FactoryConfig{
 		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
@@ -61,4 +62,13 @@ func testIDGenerator() factoryruntime.IDGenerator {
 		next++
 		return fmt.Sprintf("orchestration-owner-test-id-%d", next)
 	}
+}
+
+func testDefinitionMapper(t *testing.T) *definitionmapping.Mapper {
+	t.Helper()
+	mapper, err := definitionmapping.New(testIDGenerator())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mapper
 }
