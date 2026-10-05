@@ -1,12 +1,16 @@
 package interrupt_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -58,6 +62,10 @@ func TestExactStopRecoveryPrebuilt(t *testing.T) {
 			assertInterruptPortAvailable(t, fixture.port)
 		})
 	}
+	t.Run("partial-admission-restart", func(t *testing.T) {
+		t.Parallel()
+		assertPartialInterruptRecovery(t, binary)
+	})
 }
 
 func (fixture *exactStopFixture) restart(t *testing.T) {
@@ -87,18 +95,24 @@ func (fixture *exactStopFixture) assertCLIObservation(t *testing.T, name, action
 }
 
 type exactStopFixture struct {
-	ctx    context.Context
-	binary string
-	dir    string
-	state  string
-	url    string
-	port   int
-	env    []string
-	daemon *interruptDaemon
-	pids   map[string]int
+	ctx        context.Context
+	binary     string
+	dir        string
+	state      string
+	url        string
+	port       int
+	env        []string
+	daemon     *interruptDaemon
+	pids       map[string]int
+	dispatches map[string]string
 }
 
 func startExactStopFixture(t *testing.T, binary string) *exactStopFixture {
+	t.Helper()
+	return startExactStopProviderFixture(t, binary, exactStopProviderPowerShell, exactStopProviderShell)
+}
+
+func startExactStopProviderFixture(t *testing.T, binary, powershell, shell string) *exactStopFixture {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), interruptIntegrationTimeout)
 	t.Cleanup(cancel)
@@ -115,9 +129,9 @@ func startExactStopFixture(t *testing.T, binary string) *exactStopFixture {
 	writeInterruptFactory(t, dir)
 	if runtime.GOOS == "windows" {
 		writeInterruptProviderFile(t, filepath.Join(provider, "codex.cmd"), interruptProviderCommand)
-		writeInterruptProviderFile(t, filepath.Join(provider, "codex.ps1"), exactStopProviderPowerShell)
+		writeInterruptProviderFile(t, filepath.Join(provider, "codex.ps1"), powershell)
 	} else {
-		writeInterruptProviderFile(t, filepath.Join(provider, "codex"), exactStopProviderShell)
+		writeInterruptProviderFile(t, filepath.Join(provider, "codex"), shell)
 	}
 	port, err := builtcliacceptance.ReserveLocalTCPPort()
 	if err != nil {
@@ -128,10 +142,15 @@ func startExactStopFixture(t *testing.T, binary string) *exactStopFixture {
 	daemon := startInterruptDaemon(t, ctx, binary, dir, url, env)
 	waitForInterruptStatus(t, ctx, daemon, url)
 	return &exactStopFixture{ctx: ctx, binary: binary, dir: dir, state: state, url: url,
-		port: port, env: env, daemon: daemon, pids: make(map[string]int)}
+		port: port, env: env, daemon: daemon, pids: make(map[string]int), dispatches: make(map[string]string)}
 }
 
 func (fixture *exactStopFixture) invoke(t *testing.T, name string) {
+	t.Helper()
+	fixture.invokeDispatch(t, name, "exact-"+name+"-dispatch")
+}
+
+func (fixture *exactStopFixture) invokeDispatch(t *testing.T, name, dispatch string) {
 	t.Helper()
 	var document map[string]any
 	if err := json.Unmarshal([]byte(interruptExecutionDocument(fixture.dir)), &document); err != nil {
@@ -142,14 +161,14 @@ func (fixture *exactStopFixture) invoke(t *testing.T, name string) {
 	document["workerSessionId"] = id
 	execution := document["execution"].(map[string]any)
 	execution["userMessage"] = name
-	execution["dispatch"].(map[string]any)["dispatchId"] = id + "-dispatch"
+	execution["dispatch"].(map[string]any)["dispatchId"] = dispatch
 	encoded, err := json.Marshal(document)
 	if err != nil {
 		t.Fatal(err)
 	}
 	result := runInterruptBinary(t, fixture.ctx, fixture.binary, fixture.dir, fixture.env,
 		"--remote", "--server", fixture.url, "--json", "worker-sessions", "invoke",
-		"--request-id", id+"-request", "--worker-session-id", id, "--dispatch-id", id+"-dispatch",
+		"--request-id", id+"-request", "--worker-session-id", id, "--dispatch-id", dispatch,
 		"--execution", string(encoded), "--retry-max-attempts", "1", "--async")
 	var response struct {
 		Accepted        bool   `json:"accepted"`
@@ -159,6 +178,7 @@ func (fixture *exactStopFixture) invoke(t *testing.T, name string) {
 		t.Fatalf("invoke %s: error=%v stdout=%s stderr=%s", id, result.err, result.stdout, result.stderr)
 	}
 	fixture.pids[name] = waitForInterruptPID(t, fixture.ctx, filepath.Join(fixture.state, name+".pid"))
+	fixture.dispatches[name] = dispatch
 	waitForInterruptMarker(t, fixture.ctx, filepath.Join(fixture.state, name+".started"))
 }
 
@@ -179,7 +199,7 @@ func (fixture *exactStopFixture) stop(t *testing.T, name, action, outcome string
 	result := runInterruptBinary(t, fixture.ctx, fixture.binary, fixture.dir, fixture.env,
 		"--remote", "--server", fixture.url, "--json", "worker-sessions", action, "exact-"+name)
 	var response factoryapi.WorkerSessionControlResponse
-	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || string(response.Outcome) != outcome || response.DispatchId != "exact-"+name+"-dispatch" {
+	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || string(response.Outcome) != outcome || response.DispatchId != fixture.dispatches[name] {
 		t.Fatalf("%s %s: error=%v stdout=%s stderr=%s", action, name, result.err, result.stdout, result.stderr)
 	}
 	t.Logf("selected-host CLI %s exact-%s: %s", action, name, strings.TrimSpace(result.stdout))
@@ -204,6 +224,92 @@ func (fixture *exactStopFixture) assertTerminal(t *testing.T, name, action strin
 		t.Fatalf("terminal %s: observation=%#v status=%d error=%v want=%s/%s", name, observation, status, err, state, cause)
 	}
 	t.Logf("HTTP observation exact-%s: state=%s terminalCause=%s", name, state, cause)
+}
+
+// A sibling owns the future dispatch without owning the reserved successor ID.
+// The source must join before continuation detects this admission conflict.
+func assertPartialInterruptRecovery(t *testing.T, binary string) {
+	t.Helper()
+	thread := `{"type":"thread.started","thread_id":"exact-source-thread"}`
+	ps := strings.Replace(exactStopProviderPowerShell, "[Console]::Out.Flush()", "[Console]::WriteLine('"+thread+"')\n[Console]::Out.Flush()", 1)
+	sh := strings.Replace(exactStopProviderShell, "printf '%s' \"$$\"", "printf '%s\\n' '"+thread+"'\nprintf '%s' \"$$\"", 1)
+	ps = strings.Replace(ps, "$name = \"source\"", "if (Test-Path -LiteralPath \"$state\\sibling.started\") { Set-Content -LiteralPath \"$state\\unexpected.marker\" -Value \"third invocation\"; exit 1 }\n$name = \"source\"", 1)
+	sh = strings.Replace(sh, "name=source", "if [ -f \"$state/sibling.started\" ]; then printf unexpected > \"$state/unexpected.marker\"; exit 1; fi\nname=source", 1)
+	fixture := startExactStopProviderFixture(t, binary, ps, sh)
+	fixture.invoke(t, "source")
+	waitForInterruptProviderSession(t, fixture.ctx, fixture.url, "exact-source", "exact-source-thread")
+	fixture.invokeDispatch(t, "sibling", "exact-source-dispatch/continue/exact-successor")
+	first := fixture.partialInterrupt(t)
+	fixture.assertJoined(t, "source")
+	fixture.assertTerminal(t, "source", "cancel")
+	fixture.assertSiblingAlive(t)
+	if repeated := fixture.partialInterrupt(t); !reflect.DeepEqual(first, repeated) {
+		t.Fatalf("live partial replay changed: first=%#v replay=%#v", first, repeated)
+	}
+	fixture.stop(t, "sibling", "terminate", "APPLIED")
+	fixture.assertJoined(t, "sibling")
+	fixture.restart(t)
+	if repeated := fixture.partialInterrupt(t); !reflect.DeepEqual(first, repeated) {
+		t.Fatalf("reconstructed partial replay changed: first=%#v replay=%#v", first, repeated)
+	}
+	fixture.assertTerminal(t, "source", "cancel")
+	fixture.assertCLIObservation(t, "source", "cancel")
+	fixture.assertPartialCLI(t, first)
+	_, status, _ := getInterruptWorker(fixture.ctx, http.DefaultClient, fixture.url, "exact-successor")
+	if status != http.StatusNotFound {
+		t.Fatalf("failed successor became inspectable after restart: HTTP %d", status)
+	}
+	fixture.assertJoined(t, "source")
+	fixture.assertJoined(t, "sibling")
+	if _, err := os.Stat(filepath.Join(fixture.state, "unexpected.marker")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("partial replay executed another provider: %v", err)
+	}
+	stopInterruptDaemon(t, binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
+	assertInterruptPortAvailable(t, fixture.port)
+	t.Log("delivered restart replays exact SUCCESSOR_ADMISSION failure and OPERATOR_CANCEL without successor execution")
+}
+
+func (fixture *exactStopFixture) assertSiblingAlive(t *testing.T) {
+	t.Helper()
+	alive, err := interruptProcessAlive(fixture.pids["sibling"])
+	if err != nil || !alive {
+		t.Fatalf("partial interruption affected sibling: alive=%t error=%v", alive, err)
+	}
+}
+
+func (fixture *exactStopFixture) partialInterrupt(t *testing.T) factoryapi.WorkerSessionInterruptError {
+	t.Helper()
+	payload := []byte(`{"requestId":"exact-partial","successorWorkerSessionId":"exact-successor","replacementMessage":"replacement"}`)
+	request, err := http.NewRequestWithContext(fixture.ctx, http.MethodPost, fixture.url+"/worker-sessions/exact-source/interrupt", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	var result factoryapi.WorkerSessionInterruptError
+	if err != nil || json.Unmarshal(body, &result) != nil || response.StatusCode != http.StatusServiceUnavailable || result.Code != "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED" ||
+		result.Phase != "SUCCESSOR_ADMISSION" || result.Source == nil || result.Source.State != "CANCELED" || result.Successor != nil ||
+		result.RequestId == nil || *result.RequestId != "exact-partial" || result.SuccessorWorkerSessionId == nil || *result.SuccessorWorkerSessionId != "exact-successor" {
+		t.Fatalf("partial interrupt: status=%d error=%v body=%s", response.StatusCode, err, body)
+	}
+	t.Logf("partial interrupt HTTP %d: %s", response.StatusCode, body)
+	return result
+}
+
+func (fixture *exactStopFixture) assertPartialCLI(t *testing.T, expected factoryapi.WorkerSessionInterruptError) {
+	t.Helper()
+	result := runInterruptBinary(t, fixture.ctx, fixture.binary, fixture.dir, fixture.env,
+		"--remote", "--server", fixture.url, "--json", "worker-sessions", "interrupt", "exact-source",
+		"--request-id", "exact-partial", "--successor-worker-session-id", "exact-successor",
+		"--replacement-message", "replacement", "--async")
+	if result.err == nil || !strings.Contains(result.stderr+result.stdout, expected.Code) || !strings.Contains(result.stderr+result.stdout, "SUCCESSOR_ADMISSION") {
+		t.Fatalf("reconstructed CLI partial failure: error=%v stdout=%s stderr=%s", result.err, result.stdout, result.stderr)
+	}
 }
 
 // The provider deliberately emits no thread/session ID. Its first two calls

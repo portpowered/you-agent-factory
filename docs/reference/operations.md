@@ -480,6 +480,11 @@ admission failure leaves the source stopped. Use session inspection for richer
 session metadata. After a host restart, use `--async` to read the saved admission
 result without waiting on a live successor stream. A committed source stop
 retains `OPERATOR_CANCEL` even if successor admission fails.
+For example, if another live Worker already owns the continuation dispatch,
+the interrupt joins its source and reports `SUCCESSOR_ADMISSION` with
+`WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED`. The sibling keeps
+running. Retrying the same tuple after restarting the host returns that saved
+failure, even after the sibling has ended; it does not admit the successor.
 New interruptions capture the execution recipe and exact
 Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
