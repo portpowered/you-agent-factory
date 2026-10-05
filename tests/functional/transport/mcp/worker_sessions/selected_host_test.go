@@ -46,6 +46,10 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runRealHostHistory(t, process)
 	})
+	t.Run("real host history recovery", func(t *testing.T) {
+		t.Parallel()
+		runRealHostHistoryRecovery(t, process)
+	})
 	t.Run("real host interrupt and transcript", func(t *testing.T) {
 		t.Parallel()
 		runRealHostInterrupt(t, process)

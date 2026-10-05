@@ -3,10 +3,14 @@ package workersessions_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +18,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -429,6 +435,151 @@ func historyParityPage(t *testing.T, ctx context.Context, session *mcp.ClientSes
 type historyWorkingDirectory string
 
 func (dir historyWorkingDirectory) Getwd() (string, error) { return string(dir), nil }
+
+// Reopening is sequential because both hosts use the same customer-selected
+// capture directory. The prior-owner prefix is a controlled crash fixture;
+// the ended sibling crosses real admission, capture and joined termination.
+func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "history-recovery")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	runner := controlHostRunner{started: make(chan (<-chan struct{}), 1)}
+	var store recordings.WorkerRecordingStore
+	cfg := support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{
+		ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir),
+		WorkerRecordingStoreObserver: func(value recordings.WorkerRecordingStore) { store = value },
+	}}
+	host := support.StartFunctionalAPIServer(t, cfg)
+	session, ctx := startMCP(t, process, host.URL())
+	done := admitControlWorker(t, ctx, host.URL(), "ended-sibling", runner)
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "ended-sibling", "operation": "TERMINATE"})
+	waitControlSignal(t, done)
+	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
+	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "Factory archive recovery"})
+	select {
+	case done = <-runner.started:
+	case <-ctx.Done():
+		t.Fatal("Factory recovery provider boundary not reached")
+	}
+	factoryPage := historyParityPage(t, ctx, session, host, "active", "factory", "")
+	factoryWorkers := factoryPage["sessions"].([]any)
+	if len(factoryWorkers) != 1 {
+		t.Fatalf("Factory recovery admission: %v", factoryPage)
+	}
+	factoryID := factoryWorkers[0].(map[string]any)["workerSessionId"].(string)
+	postHostJSON(t, ctx, host.URL()+"/factory-sessions/"+opened.Session.Id+"/pause", map[string]any{}, http.StatusOK)
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": factoryID, "operation": "TERMINATE"})
+	waitControlSignal(t, done)
+	seedHistoryCrashCapture(t, ctx, store)
+	prefix := getHost(t, host.URL()+"/worker-sessions/lost-worker/logs")
+	host.Close(t)
+	// Inject a torn final append and an undecodable complete line only after
+	// the original writer is joined. Observe recovery through public reads.
+	injectHistoryCaptureTails(t, dir)
+	// Different owner epoch, identical durable root, no native provider files.
+	reopened := support.StartFunctionalAPIServer(t, cfg)
+	recoveredSession, recoveredCtx := startMCP(t, process, reopened.URL())
+	active := historyParityPage(t, recoveredCtx, recoveredSession, reopened, "active", "all", "")
+	if len(active["sessions"].([]any)) != 0 {
+		t.Fatalf("restart restored an execution owner: %v", active)
+	}
+	archived := historyParityPage(t, recoveredCtx, recoveredSession, reopened, "archived", "all", "")
+	if len(archived["sessions"].([]any)) != 3 {
+		t.Fatalf("restart omitted captured siblings: %v", archived)
+	}
+	factoryArchive := historyParityPage(t, recoveredCtx, recoveredSession, reopened, "archived", "factory", "")
+	if workers := factoryArchive["sessions"].([]any); len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != factoryID || workers[0].(map[string]any)["factorySessionId"] != opened.Session.Id {
+		t.Fatalf("restart lost Factory capture attribution: %v", factoryArchive)
+	}
+	selected := getHost(t, reopened.URL()+"/worker-sessions/lost-worker").(map[string]any)
+	if selected["state"] != "FAILED" || selected["confirmationState"] != "UNCONFIRMED" || selected["recordingHealth"] != "INCOMPLETE" || selected["failure"].(map[string]any)["kind"] != "PROCESS_GONE" {
+		t.Fatalf("unfinished history invented live or complete state: %v", selected)
+	}
+	for _, value := range archived["sessions"].([]any) {
+		observation := value.(map[string]any)
+		if observation["workerSessionId"] == "lost-worker" {
+			assertJSONEqual(t, selected, observation)
+		}
+	}
+	read := callWorker(t, recoveredCtx, recoveredSession, "read", map[string]any{"workerSessionId": "lost-worker"})["result"].(map[string]any)
+	assertJSONEqual(t, selected, read["session"])
+	assertFactoryCLIParity(t, reopened, "lost-worker", selected)
+	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/lost-worker/logs"))
+	assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.control", map[string]any{"workerSessionId": "lost-worker", "operation": "CANCEL"}), "worker_session.not_found", false)
+	assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.read", map[string]any{"workerSessionId": "damaged-worker"}), "worker_session.internal_error", false)
+	assertHistoryReadFailure(t, reopened, "damaged-worker", http.StatusInternalServerError, "PROJECTION_UNAVAILABLE")
+	// An independent profile has no captured identity and cannot consume either
+	// a fleet snapshot or log cursor belonging to the recovered profile.
+	cfg.Edges.FactorySessionsWorkingDirectory = historyWorkingDirectory(t.TempDir())
+	foreign := support.StartFunctionalAPIServer(t, cfg)
+	foreignSession, foreignCtx := startMCP(t, process, foreign.URL())
+	assertHistoryReadFailure(t, foreign, "lost-worker", http.StatusNotFound, "NOT_FOUND")
+	assertToolError(t, callTool(t, foreignCtx, foreignSession, "you.worker_session.read", map[string]any{"workerSessionId": "lost-worker"}), "worker_session.not_found", false)
+	page := callWorker(t, recoveredCtx, recoveredSession, "list", map[string]any{"history": "archived", "limit": 1})["result"].(map[string]any)
+	token := page["paginationContext"].(map[string]any)["nextToken"].(string)
+	assertToolError(t, callTool(t, foreignCtx, foreignSession, "you.worker_session.list", map[string]any{"history": "archived", "nextToken": token}), "worker_session.invalid_request", false)
+}
+
+func seedHistoryCrashCapture(t *testing.T, ctx context.Context, store recordings.WorkerRecordingStore) {
+	t.Helper()
+	opening := events.Record{
+		ID:         events.RecordID{Topic: "worker-session/lost-worker/events", Position: 1},
+		SourceType: "worker_session_lifecycle", SourceID: "lost-worker", SourceSequence: 1,
+		SourceEventID: "started", SchemaID: "workers.draft.v1",
+		Payload: json.RawMessage(`{"kind":"SESSION","phase":"STARTED","provenance":{"delivery":"SYNTHESIZED","fidelity":"LIFECYCLE_ONLY","nativeEventType":"worker_session_lifecycle","representation":"NOTIFICATION"},"payload":{"status":"STARTING","workerSessionId":"lost-worker","attemptId":"lost-attempt"}}`),
+	}
+	if err := store.PersistWorkerRecord(ctx, recordings.WorkerRecordingRecord{RecordingID: "lost-recording", WorkerSessionID: "lost-worker", Record: opening}); err != nil {
+		t.Fatal(err)
+	}
+	damagedOpening := opening.Detached()
+	damagedOpening.ID.Topic = "worker-session/damaged-worker/events"
+	damagedOpening.SourceID = "damaged-worker"
+	damagedOpening.Payload = bytes.ReplaceAll(opening.Payload, []byte("lost-worker"), []byte("damaged-worker"))
+	if err := store.PersistWorkerRecord(ctx, recordings.WorkerRecordingRecord{RecordingID: "damaged-recording", WorkerSessionID: "damaged-worker", Record: damagedOpening}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func injectHistoryCaptureTails(t *testing.T, dir string) {
+	t.Helper()
+	for id, tail := range map[string]string{"lost-recording": `{"uncommitted":`, "damaged-recording": "not json\n"} {
+		digest := sha256.Sum256([]byte(id))
+		path := filepath.Join(dir, ".you-agent-factory", "worker-recordings", hex.EncodeToString(digest[:])+".worker.jsonl")
+		file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, writeErr := file.WriteString(tail)
+		closeErr := file.Close()
+		if writeErr != nil || closeErr != nil {
+			t.Fatalf("inject capture failure: %v %v", writeErr, closeErr)
+		}
+	}
+}
+
+func assertHistoryReadFailure(t *testing.T, host *support.FunctionalAPIServer, id string, status int, code string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, host.URL()+"/worker-sessions/"+id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != status || body["code"] != code {
+		t.Fatalf("selected history error: %d %v", response.StatusCode, body)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "show", "--worker-session-id", id, "--server", host.URL(), "--json"})
+	if err := host.Execute(t, inputs.Input); err == nil || !strings.Contains(inputs.Stderr(), code) {
+		t.Fatalf("CLI selected history error: %v %s", err, inputs.Stderr())
+	}
+}
 
 func cloneHistoryValue(t *testing.T, value any) any {
 	t.Helper()

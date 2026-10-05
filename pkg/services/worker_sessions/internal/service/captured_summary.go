@@ -34,10 +34,16 @@ func (s *LogReader) GetObservationByWorkerSessionID(ctx context.Context, req wor
 		}
 	}
 	// A historical prefix cannot prove that an execution is still running.
-	if page.Catalog.WorkerSessionID != id || page.Terminal == nil {
+	if page.Catalog.WorkerSessionID != id {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	result, err := capturedTerminalIdentity(page, id)
+	if req.FactorySessionID != "" && page.Catalog.FactorySessionID != strings.TrimSpace(req.FactorySessionID) {
+		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+	}
+	result, err := capturedHistoryIdentity(recordings.WorkerCapturedCatalogItem{
+		Catalog: page.Catalog, Opening: page.Opening, Terminal: page.Terminal,
+		Health: page.Health, HealthReason: page.HealthReason, OwnerLost: page.OwnerLost,
+	}, nil)
 	if err != nil {
 		return workersessions.Observation{}, err
 	}

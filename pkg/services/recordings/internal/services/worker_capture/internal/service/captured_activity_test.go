@@ -41,13 +41,16 @@ func TestFileWriterCapturedActiveLossPreservesIncompletePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, current := range []recordings.WorkerCapturedActivityReader{writer, reader} {
+	for index, current := range []recordings.WorkerCapturedActivityReader{writer, reader} {
 		page, err := current.ReadWorkerCapturedActivity(t.Context(), request)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if page.Health != recordings.WorkerRecordingStatusIncomplete || page.HealthReason != "PERSISTENCE_FAILED" || page.Terminal != nil || page.NextToken == "" {
 			t.Fatalf("capture loss hid its health or fabricated terminal: %+v", page)
+		}
+		if page.OwnerLost != (index == 1) {
+			t.Fatalf("owner loss requires a changed known host epoch: %+v", page)
 		}
 		if page.Catalog.CommittedPosition != prefix.Catalog.CommittedPosition || !reflect.DeepEqual(page.Records, prefix.Records) {
 			t.Fatal("capture loss changed committed records/time/watermark")

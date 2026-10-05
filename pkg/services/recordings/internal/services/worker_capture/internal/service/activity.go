@@ -249,7 +249,8 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 		return recordings.WorkerCapturedActivityPage{}, err
 	}
 	page := recordings.WorkerCapturedActivityPage{
-		Catalog: catalog, Opening: session.records[0].Detached(),
+		OwnerLost: session.projection.ExecutionTerminal == nil && session.ownerEpoch != "" && session.ownerEpoch != "historical" && session.ownerEpoch != writer.ownerEpoch,
+		Catalog:   catalog, Opening: session.records[0].Detached(),
 		Health: session.projection.Status, HealthReason: session.projection.Degradation,
 		Terminal: cloneWorkerRecordingTerminal(session.projection.ExecutionTerminal),
 		Records:  make([]recordings.WorkerCapturedRecord, 0, limit),

@@ -68,6 +68,8 @@ type WorkerCapturedActivityRequest struct {
 
 // WorkerCapturedActivityPage contains only an accepted prefix of the journal.
 type WorkerCapturedActivityPage struct {
+	// OwnerLost proves an unfinished capture belongs to an earlier known host epoch.
+	OwnerLost    bool
 	Catalog      WorkerSessionCatalogEntry
 	Health       WorkerRecordingStatus
 	HealthReason string
