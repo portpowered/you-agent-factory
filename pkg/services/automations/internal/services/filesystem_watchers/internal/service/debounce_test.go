@@ -273,35 +273,53 @@ func TestFileWatcher_DebounceCancelDuringWindowSkipsSubmit(t *testing.T) {
 
 func TestFileWatcher_StoppingOneWatcherPreservesPeerPendingAdmission(t *testing.T) {
 	clock := clockwork.NewFakeClock()
+	clockA := &registeringDebounceClock{Clock: clock, registered: make(chan struct{}, 1)}
+	clockB := &registeringDebounceClock{Clock: clock, registered: make(chan struct{}, 1), completed: make(chan struct{}, 1)}
 	dirA, dirB := setupWatchDir(t), setupWatchDir(t)
 	pathA := filepath.Join(dirA, "request", "default", "a.md")
 	pathB := filepath.Join(dirB, "request", "default", "b.md")
-	for path, content := range map[string]string{pathA: "stopped", pathB: "peer"} {
-		if err := writeLocalFile(path, []byte(content)); err != nil {
-			t.Fatal(err)
-		}
-	}
 	submitA := &recordingSubmitter{}
 	submitB := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	eventsA, eventsB := newScriptedEventWatcher(), newScriptedEventWatcher()
-	watchA := newDebouncedTestWatcher(dirA, submitA, clock, eventsA)
-	watchB := newDebouncedTestWatcher(dirB, submitB, clock, eventsB)
+	watchA := newDebouncedTestWatcher(dirA, submitA, clockA, eventsA)
+	watchB := newDebouncedTestWatcher(dirB, submitB, clockB, eventsB)
 	cancelA, doneA := startDebouncedWatch(t, watchA, eventsA)
-	t.Cleanup(cancelA)
+	joinedA := false
+	t.Cleanup(func() {
+		cancelA()
+		if !joinedA {
+			waitForWatchDone(t, doneA)
+		}
+	})
 	cancelB, doneB := startDebouncedWatch(t, watchB, eventsB)
 	t.Cleanup(func() {
 		cancelB()
 		waitForWatchDone(t, doneB)
 	})
-	eventsA.events <- fsnotify.Event{Name: pathA, Op: fsnotify.Create}
-	waitForFakeClockWaiters(t, clock, 1)
-	eventsB.events <- fsnotify.Event{Name: pathB, Op: fsnotify.Create}
-	waitForFakeClockWaiters(t, clock, 2)
+	// Both initial walks are empty. Acknowledge each injected event's own
+	// timer before stopping A or making B eligible on the shared clock.
+	for path, content := range map[string]string{pathA: "stopped", pathB: "peer"} {
+		if err := writeLocalFile(path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	publishDebounceEvent(t, eventsA, clockA, fsnotify.Event{Name: pathA, Op: fsnotify.Create})
+	publishDebounceEvent(t, eventsB, clockB, fsnotify.Event{Name: pathB, Op: fsnotify.Create})
 
 	cancelA()
 	waitForWatchDone(t, doneA)
+	joinedA = true
 	clock.Advance(testDebounceWindow)
-	waitForSubmitCount(t, submitB, 1)
+	select {
+	case <-submitB.submitted:
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; the peer submission is the progress signal.
+		t.Fatal("peer watcher did not submit its pending Work Request")
+	}
+	select {
+	case <-clockB.completed:
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; completion acknowledges the entire peer callback.
+		t.Fatal("peer debounce callback did not complete")
+	}
 	if got := submitA.submitCallCount(); got != 0 {
 		t.Fatalf("stopped watcher admitted %d Work Requests, want 0", got)
 	}

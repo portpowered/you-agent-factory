@@ -2681,11 +2681,6 @@ functional-test-missing-subsection|tests/functional/acceptance|tests/functional/
 functional-test-missing-subsection|tests/functional/acceptance|tests/functional/acceptance/invalid_quiet_outcomes_test.go
 functional-test-missing-subsection|tests/functional/acceptance|tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go
 functional-test-missing-subsection|tests/functional/acceptance|tests/functional/acceptance/provider_outcomes_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/cron_root_composition_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/doc.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/filesystem_watcher_root_composition_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/hosted_sources_root_composition_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/script_poller_root_composition_test.go
 functional-test-missing-subsection|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go
 functional-test-missing-subsection|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/api_export_import_e2e_smoke_test.go
 functional-test-missing-subsection|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/automat_portability_fixture_test.go
