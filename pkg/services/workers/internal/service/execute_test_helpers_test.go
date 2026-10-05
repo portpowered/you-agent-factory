@@ -2,12 +2,17 @@ package service_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -17,8 +22,9 @@ func mustExecuteService(
 	t *testing.T,
 	runner workers.Runner,
 	observe workers.ObservationSink,
+	selectedLogger ...logging.Logger,
 ) *executeservice.Service {
-	return mustExecuteServiceWithEdges(t, runner, observe, nil, nil, nil)
+	return mustExecuteServiceWithEdges(t, runner, observe, nil, nil, nil, selectedLogger...)
 }
 
 func mustExecuteServiceWithEdges(
@@ -28,13 +34,18 @@ func mustExecuteServiceWithEdges(
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
+	selectedLogger ...logging.Logger,
 ) *executeservice.Service {
 	t.Helper()
+	var logger logging.Logger = logging.NoopLogger{}
+	if len(selectedLogger) > 0 {
+		logger = selectedLogger[0]
+	}
 	service, err := executeservice.New(
 		&staticRunners{runner: runner},
 		nil,
 		observe,
-		nil,
+		logger,
 		func() time.Time { return time.Unix(10, 0) },
 		worktree,
 		worktreeRelease,
@@ -47,6 +58,7 @@ func mustExecuteServiceWithEdges(
 }
 
 type recordingWorktree struct {
+	prepares    atomic.Int32
 	preparation workers.FactoryWorktreePreparation
 	release     func(context.Context, workers.FactoryWorktreePreparation) error
 }
@@ -56,6 +68,7 @@ func (worktree *recordingWorktree) Prepare(
 	string,
 	string,
 ) (workers.FactoryWorktreePreparation, error) {
+	worktree.prepares.Add(1)
 	return worktree.preparation, nil
 }
 
@@ -458,4 +471,195 @@ func assertCanceledCheckoutResult(t *testing.T, request workers.ExecuteRequest, 
 	if observations[1].Sequence != 2 || observations[1].Correlation != request.Correlation {
 		t.Fatalf("terminal observation = %#v, want sequence 2 and request correlation", observations[1])
 	}
+}
+
+type executeLogRecord struct {
+	level   string
+	message string
+	fields  map[string]any
+}
+
+type executeCaptureLogger struct {
+	mu      sync.Mutex
+	records []executeLogRecord
+}
+
+func (logger *executeCaptureLogger) Debug(message string, fields ...any) {
+	logger.record("debug", message, fields)
+}
+func (logger *executeCaptureLogger) Error(message string, fields ...any) {
+	logger.record("error", message, fields)
+}
+func (logger *executeCaptureLogger) Verbose(message string, fields ...any) {
+	logger.record("verbose", message, fields)
+}
+func (logger *executeCaptureLogger) Info(message string, fields ...any) {
+	logger.record("info", message, fields)
+}
+func (logger *executeCaptureLogger) Warn(message string, fields ...any) {
+	logger.record("warn", message, fields)
+}
+func (logger *executeCaptureLogger) record(level, message string, fields []any) {
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+	values := make(map[string]any)
+	for i := 0; i < len(fields); i += 2 {
+		values[fields[i].(string)] = fields[i+1]
+	}
+	logger.records = append(logger.records, executeLogRecord{level, message, values})
+}
+
+func assertExecuteLogs(t *testing.T, logger *executeCaptureLogger, correlation workers.ExecutionCorrelation, outcome workers.ExecutionOutcome, categories ...string) {
+	t.Helper()
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+	var warnings []string
+	var info []string
+	for _, record := range logger.records {
+		want := map[string]any{
+			"factory_session_id": correlation.FactorySessionID, "runtime_id": correlation.RuntimeID,
+			"generation_id": correlation.GenerationID, "dispatch_id": correlation.DispatchID,
+			"attempt_id": correlation.AttemptID, "request_id": correlation.RequestID, "trace_id": correlation.TraceID,
+		}
+		switch record.message {
+		case "workers execute started":
+			want["runner_id"] = "script"
+		case "workers execute finished":
+			want["outcome"] = string(outcome)
+			want["duration_ms"] = int64(0)
+		case "workers execute cleanup failed":
+			want["error"] = record.fields["error"]
+		case "workers observation delivery failed":
+			kind := "STARTED"
+			if len(warnings) > 0 {
+				kind = "COMPLETED"
+			}
+			want["kind"] = kind
+			want["error"] = record.fields["error"]
+		default:
+			t.Fatalf("unexpected log: %#v", record)
+		}
+		if !reflect.DeepEqual(record.fields, want) {
+			t.Fatalf("fields = %#v, want %#v", record.fields, want)
+		}
+		wantLevel := "info"
+		if record.message == "workers execute cleanup failed" || record.message == "workers observation delivery failed" {
+			wantLevel = "warn"
+		}
+		if record.level != wantLevel {
+			t.Fatalf("level = %q, want %q", record.level, wantLevel)
+		}
+		if record.level == "warn" {
+			warnings = append(warnings, record.fields["error"].(string))
+		} else {
+			info = append(info, record.message)
+		}
+		if strings.Contains(fmt.Sprint(record), "secret") {
+			t.Fatalf("sensitive log: %#v", record)
+		}
+	}
+	if !reflect.DeepEqual(warnings, categories) {
+		t.Fatalf("warnings = %v, want %v", warnings, categories)
+	}
+	if !reflect.DeepEqual(info, []string{"workers execute started", "workers execute finished"}) {
+		t.Fatalf("info = %v", info)
+	}
+}
+
+func assertSafeCleanupAttempt(t *testing.T, panics, runnerFails bool) {
+	t.Helper()
+	capture := &executeCaptureLogger{}
+	var effects []string
+	var observations []workers.ExecutionObservation
+	workspace := &recordingWorktree{preparation: workers.FactoryWorktreePreparation{CheckoutPath: "secret/path"}}
+	release := func(ctx context.Context, _ workers.FactoryWorktreePreparation) error {
+		if ctx.Err() != nil {
+			t.Errorf("cleanup context = %v", ctx.Err())
+		}
+		effects = append(effects, "release")
+		if panics {
+			panic("secret cleanup panic")
+		}
+		return errors.New("secret cleanup error")
+	}
+	files := &recordingTemporaryFiles{remove: func(string) error { effects = append(effects, "remove"); return nil }}
+	runner := cleanupDiagnosticRunner(runnerFails)
+	service := mustExecuteServiceWithEdges(t, runner, func(_ context.Context, observation workers.ExecutionObservation) error {
+		observations = append(observations, observation)
+		effects = append(effects, string(observation.Kind))
+		return nil
+	}, workspace, release, files, capture)
+	request := validExecuteRequest("dispatch-cleanup-safe", "attempt-cleanup-safe")
+	request.Target.Workspace = workers.WorkspacePolicy{PrepareWorktree: true, FactoryDirectory: "secret/factory", CheckoutIdentifier: "checkout"}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil || result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+		t.Fatalf("result = %#v, err = %v", result, err)
+	}
+	wantType, wantMessage := workers.WorkFailureTypeInternalServerError, "execution cleanup failed"
+	if runnerFails {
+		wantType, wantMessage = workers.WorkFailureTypeUnknown, "prior failure"
+	}
+	if result.Failure.Type != wantType || result.Failure.Message != wantMessage {
+		t.Fatalf("failure = %#v", result.Failure)
+	}
+	if !reflect.DeepEqual(effects, []string{"STARTED", "release", "remove", "FAILED"}) {
+		t.Fatalf("effects = %v", effects)
+	}
+	if len(observations) != 2 || observations[0].Sequence != 1 || observations[1].Sequence != 2 {
+		t.Fatalf("observations = %#v", observations)
+	}
+	category := "cleanup_error"
+	if panics {
+		category = "cleanup_panic"
+	}
+	assertExecuteLogs(t, capture, request.Correlation, result.Outcome, category)
+}
+
+func TestExecuteRequestLoggerSelectionRemainsOptional(t *testing.T) {
+	t.Parallel()
+	for _, selected := range []bool{false, true} {
+		t.Run(fmt.Sprintf("selected=%v", selected), func(t *testing.T) {
+			t.Parallel()
+			diagnostics := &executeCaptureLogger{}
+			requestSink := &executeCaptureLogger{}
+			var selectedSink logging.Logger
+			if selected {
+				selectedSink = requestSink
+			}
+			runner := &stubRunner{execute: func(_ context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+				if request.ExecutionLogger != selectedSink {
+					t.Errorf("request logger = %v, want selected sink", request.ExecutionLogger)
+				}
+				return workers.RunnerExecutionResult{Content: "accepted"}, nil
+			}}
+			service := mustExecuteService(t, runner, nil, diagnostics)
+			request := validExecuteRequest("dispatch-optional", "attempt-optional")
+			request.Input.ExecutionLogger = selectedSink
+			result, err := service.Execute(context.Background(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertAcceptedResult(t, result, request.Correlation.DispatchID, request.Correlation.AttemptID, "accepted")
+			assertExecuteLogs(t, diagnostics, request.Correlation, result.Outcome)
+			if len(requestSink.records) != 0 {
+				t.Fatalf("service diagnostics reached request sink: %#v", requestSink.records)
+			}
+		})
+	}
+}
+
+func cleanupDiagnosticRunner(runnerFails bool) *stubRunner {
+	return &stubRunner{execute: func(_ context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+		file, err := request.TemporaryFiles.CreateTemp("", "")
+		if err != nil {
+			return workers.RunnerExecutionResult{}, err
+		}
+		if err := file.Close(); err != nil {
+			return workers.RunnerExecutionResult{}, err
+		}
+		if runnerFails {
+			return workers.RunnerExecutionResult{}, workers.NewProviderError(workers.WorkFailureTypeUnknown, "prior failure", nil)
+		}
+		return workers.RunnerExecutionResult{Content: "secret provider output"}, nil
+	}}
 }
