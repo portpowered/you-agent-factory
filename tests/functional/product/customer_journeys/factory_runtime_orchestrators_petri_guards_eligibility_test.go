@@ -19,6 +19,7 @@ import (
 // visited the shared Work enough times, then releases the expected public
 // terminal Work outcome through the guarded second-pass-review dispatch.
 func TestWorkflowEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, visitGuardedCompletionFactoryConfig())
 	support.WriteWorkstationConfig(t, dir, "advance-to-gate", "---\ntype: LOGICAL_MOVE\n---\n")
 	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
@@ -104,9 +105,10 @@ func TestWorkflowEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T) {
 // without the guarded workstation's success outcome.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestWorkflowParentOrSameNameGuardReleasesExpectedWork(t *testing.T) {
-	t.Run("matching peer names release correlated work", TestWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0)
+	t.Parallel()
+	t.Run("matching peer names release correlated work", runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0)
 
-	t.Run("mismatched peer names keep guarded workstation idle", TestWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1)
+	t.Run("mismatched peer names keep guarded workstation idle", runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1)
 }
 
 // TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkState proves
@@ -115,9 +117,10 @@ func TestWorkflowParentOrSameNameGuardReleasesExpectedWork(t *testing.T) {
 // Petri markings.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkState(t *testing.T) {
-	t.Run("visit count loop breaker routes over-limit work to failed", TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0)
+	t.Parallel()
+	t.Run("visit count loop breaker routes over-limit work to failed", runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0)
 
-	t.Run("matches fields guard blocks mismatched inputs", TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1)
+	t.Run("matches fields guard blocks mismatched inputs", runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1)
 }
 
 func visitCountLoopBreakerFactoryConfig() map[string]any {
@@ -436,7 +439,7 @@ func FactoryRuntimeOrchestratorsPetriGuardsAssertQuiescentSession(t *testing.T, 
 	}
 }
 
-func TestWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T) {
+func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T) {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, sameNameGuardFactoryConfig())
@@ -493,7 +496,7 @@ func TestWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T) {
 
 }
 
-func TestWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
+func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, sameNameGuardFactoryConfig())
@@ -565,7 +568,7 @@ func TestWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
 
 }
 
-func TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testing.T) {
+func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testing.T) {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, visitCountLoopBreakerFactoryConfig())
@@ -615,7 +618,7 @@ func TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *test
 
 }
 
-func TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testing.T) {
+func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testing.T) {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, matchesFieldsGuardFactoryConfig())

@@ -5,13 +5,13 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest hosted functional job, at `8a87eb39d3`, passed in **5m17.401s for
-the full functional supervisor**, including **4m14.065s for tests**. It reported
-944 passes, two skips and no test failures, and passed the unchanged coverage
-floors. The complete workflow failed lint and packaged checks because of stale
-baseline entries after source removals. The latest workflow with every required
-check passing remains `f5b5dfcfc9`: **7m37s overall / 6m16.528s tests**. The
-five-, three- and two-minute merge checkpoints remain unmet.
+The latest hosted functional job, at `0958ddb01f`, passed in **5m07.456s for
+the full functional supervisor**, including **4m08.406s for the coverage
+invocation**. It reported 827 final passes, two skips and no final failures;
+its unchanged coverage gates passed. MCP stdio and mock-worker cases failed
+initially and passed on retry; those recovered failures remain in diagnostics.
+Every required verification job passed. The five-, three- and two-minute merge
+checkpoints remain unmet: the full supervisor is still over five minutes.
 [PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867)
 contains the ongoing changes. Local measurements do not establish hosted latency.
 
@@ -1513,3 +1513,109 @@ The existing fixture variables must reset between repetitions, and assets and
 subprocess cases require separate handling. The private one-binary experiment's
 99% link-CPU reduction remains strong evidence for this direction, but passing
 customer execution and complete hosted gates remain the release criteria.
+
+
+## Immutable startup work and duplicate scenario execution
+
+Two successive hosted samples used the customer-lifecycle consolidation:
+
+| Revision | Full functional supervisor | Coverage invocation | Compile commands | Link commands | Final outcome |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `e120ac9028` | 398.946s | 326.594s | 694 | 62 | 825 passes, two skips |
+| `0958ddb01f` | 307.456s | 248.406s | 696 | 63 | 827 passes, two skips |
+
+These are different hosted samples, not a controlled before/after benchmark.
+The second revision restores MCP protocol's separate binary after combined
+fixtures exposed initialization failures. Both diagnostics report compilation
+work. The first run's Verification Policy failed because Backend Lint was
+canceled by the subsequent push. The second run's required jobs all passed,
+although its raw diagnostics retain recovered MCP stdio and mock-worker failures.
+Neither full supervisor reaches the five-minute merge checkpoint.
+
+At `0958ddb01f`, the slowest packages were:
+
+| Functional package | Elapsed time |
+| --- | ---: |
+| Product customer journeys | 157.472s |
+| Product customer lifecycles | 127.960s |
+| Packaged Factory invocation | 85.694s |
+| Factory execution | 77.547s |
+| Models inference | 71.569s |
+| Chat Sessions ACP | 51.193s |
+| CLI customer commands | 45.360s |
+| Providers ACP | 44.816s |
+
+Package durations overlap and cannot be added to obtain CI elapsed time. The
+supervisor also includes coverage tooling and concurrent quarantine validation.
+
+Product customer journeys was profiled with complete production `-coverpkg`,
+count coverage, `-ldflags=-w`, four pinned CPUs, `GOMAXPROCS=4` and parallelism
+12. Each sample executed fresh tests once and passed. Profile CPU measures the
+test process; command wall also includes the package build. These are individual
+observations, not repeated statistical estimates.
+
+| Sample | Command wall | Profile duration | Sampled test CPU |
+| --- | ---: | ---: | ---: |
+| Original startup behavior | 42.967s | 39.930s | 67.880s |
+| Cache validated embedded publication | 38.192s | 30.690s | 48.790s |
+| Also cache verified managed publication identity | 33.219s | 26.570s | 38.520s |
+| Also deduplicate helpers and parallelize parents | 28.588s | 21.630s | 38.430s |
+
+The initial profile attributed 36.46 CPU-seconds to system initialization,
+22.44 to process construction and 30.12 to generated Factory JSON decoding.
+These are overlapping call-tree totals. Repeated validation and installation
+compete with test execution, in addition to the previously measured linker cost.
+
+The embedded publication cannot change during a process. Its validated catalog
+now initializes once; accessors still return detached payloads and formats.
+Injected filesystems still validate every call. The existing test also verifies
+that caller mutations cannot poison a second load and compares publication names
+with the exact generated manifest, replacing a stale nineteen-factory list.
+Three repetitions of focused catalog checks passed in 0.475s.
+
+Each installer retains only a successfully verified publication fingerprint,
+keyed by installation root, Factory name, root filename and payload SHA-256.
+Customer files and management stamps remain freshly read on every reconciliation.
+Changed input misses the cache; changed customer files retain the repair/backup
+path. Prepared layouts stay operation-owned because persistence may mutate them.
+A new installer computes its own fingerprints. Three repetitions of existing
+reconciliation tests passed in 0.545s, including adoption, malformed evidence,
+source refresh, customer modifications, contention and failures.
+
+Eleven helpers had `Test...CaseN` names and ran directly as well as through their
+parents' `t.Run`. Renaming them to private `run...CaseN` helpers preserves every
+scenario assertion under the six customer-behavior parents. The parents have
+separate process/home fixtures and now run in parallel without shared environment
+mutation. Three repeated native workflow runs passed in 20.849s. The final
+profile has a shorter critical path, with nearly unchanged sampled CPU compared
+with the preceding sample; no further CPU reduction is claimed from that sample.
+
+Hosted evidence: [e120 run](https://github.com/portpowered/you-agent-factory/actions/runs/37325476800),
+[0958 run](https://github.com/portpowered/you-agent-factory/actions/runs/37327031568).
+The cache and duplicate-run changes require complete-lane and hosted validation
+before establishing a new checkpoint.
+
+
+### Complete four-core validation of the cache and duplicate-run changes
+
+The full supervisor passed in **192.74s overall / 143.595s for the coverage
+invocation**, with 816 passes, two skips and no failures. All existing coverage
+floors and quarantine inventory checks passed. The source snapshot uses the
+final fifteen-suite layout with MCP protocol separate. Its 818 top-level cases
+are exactly eleven fewer than the hosted 829: only the duplicate standalone
+`CaseN` executions disappear; their original parent scenarios remain.
+
+The complete command consumed 581.06 user CPU-seconds and 129.61 system
+CPU-seconds. Compiler instrumentation recorded 1,559 compilations consuming
+224.163 CPU-seconds and 113.921s of active wall time; 69 links consumed
+90.324 CPU-seconds and 109.670s of active wall time. These tool intervals overlap
+one another and test execution. There were also 563 vet invocations in the
+supervisor/tooling paths (17.720 CPU-seconds), even though the functional
+coverage invocation itself uses `-vet=off`. Product customer journeys passed
+in 80.669s, customer lifecycles in 71.758s, packaged invocation in 33.986s and
+Factory execution in 28.609s under this lane's contention.
+
+This measurement rebuilt dependencies in a fresh source directory. It is not
+a controlled warm comparison with previous samples, and it does not establish
+a hosted checkpoint. It does provide complete passing verification with the
+unchanged gates, rather than extrapolating the isolated profile to CI.

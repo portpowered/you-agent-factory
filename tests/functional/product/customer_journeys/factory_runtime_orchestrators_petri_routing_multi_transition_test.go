@@ -20,13 +20,14 @@ import (
 // ideation pipelines without inspecting internal Petri markings.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestWorkflowMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
-	t.Run("two_stage_service_simple_completes_at_terminal", TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0)
+	t.Parallel()
+	t.Run("two_stage_service_simple_completes_at_terminal", runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0)
 
-	t.Run("code_review_multi_stage_completes", TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1)
+	t.Run("code_review_multi_stage_completes", runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1)
 
-	t.Run("three_stage_ideation_reaches_story_complete", TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2)
+	t.Run("three_stage_ideation_reaches_story_complete", runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2)
 
-	t.Run("cross_work_type_dispatcher_reaches_prd_complete", TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3)
+	t.Run("cross_work_type_dispatcher_reaches_prd_complete", runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3)
 }
 
 // TestWorkflowFailureRoutesToDocumentedFailedState proves worker or provider
@@ -37,11 +38,12 @@ func TestWorkflowMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 // inspecting internal Petri markings.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestWorkflowFailureRoutesToDocumentedFailedState(t *testing.T) {
-	t.Run("two_stage_service_simple_second_stage_exit_routes_to_failed", TestWorkflowFailureRoutesToDocumentedFailedStateCase0)
+	t.Parallel()
+	t.Run("two_stage_service_simple_second_stage_exit_routes_to_failed", runWorkflowFailureRoutesToDocumentedFailedStateCase0)
 
-	t.Run("cross_work_type_dispatcher_executor_exit_routes_prd_to_failed", TestWorkflowFailureRoutesToDocumentedFailedStateCase1)
+	t.Run("cross_work_type_dispatcher_executor_exit_routes_prd_to_failed", runWorkflowFailureRoutesToDocumentedFailedStateCase1)
 
-	t.Run("code_review_reviewer_error_routes_to_failed", TestWorkflowFailureRoutesToDocumentedFailedStateCase2)
+	t.Run("code_review_reviewer_error_routes_to_failed", runWorkflowFailureRoutesToDocumentedFailedStateCase2)
 }
 
 // TestWorkflowMultipleStagesPreserveWorkCorrelation proves a known public Work
@@ -50,6 +52,7 @@ func TestWorkflowFailureRoutesToDocumentedFailedState(t *testing.T) {
 // routing completes or lands at the documented failed place, without
 // inspecting internal Petri markings.
 func TestWorkflowMultipleStagesPreserveWorkCorrelation(t *testing.T) {
+	t.Parallel()
 	t.Run("cross_work_type_dispatcher_preserves_origin_trace_through_stages", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		originTraceID := "trace-correlation-dispatcher"
@@ -147,7 +150,7 @@ func TestWorkflowMultipleStagesPreserveWorkCorrelation(t *testing.T) {
 	})
 }
 
-func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0(t *testing.T) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0(t *testing.T) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
@@ -178,7 +181,7 @@ func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0(t *testing.T)
 
 }
 
-func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1(t *testing.T) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1(t *testing.T) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
@@ -216,7 +219,7 @@ func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1(t *testing.T)
 
 }
 
-func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2(t *testing.T) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2(t *testing.T) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
@@ -253,7 +256,7 @@ func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2(t *testing.T)
 
 }
 
-func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3(t *testing.T) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3(t *testing.T) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
@@ -283,7 +286,7 @@ func TestWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3(t *testing.T)
 
 }
 
-func TestWorkflowFailureRoutesToDocumentedFailedStateCase0(t *testing.T) {
+func runWorkflowFailureRoutesToDocumentedFailedStateCase0(t *testing.T) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
@@ -331,7 +334,7 @@ func TestWorkflowFailureRoutesToDocumentedFailedStateCase0(t *testing.T) {
 
 }
 
-func TestWorkflowFailureRoutesToDocumentedFailedStateCase1(t *testing.T) {
+func runWorkflowFailureRoutesToDocumentedFailedStateCase1(t *testing.T) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
@@ -380,7 +383,7 @@ func TestWorkflowFailureRoutesToDocumentedFailedStateCase1(t *testing.T) {
 
 }
 
-func TestWorkflowFailureRoutesToDocumentedFailedStateCase2(t *testing.T) {
+func runWorkflowFailureRoutesToDocumentedFailedStateCase2(t *testing.T) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
