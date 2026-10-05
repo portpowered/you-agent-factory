@@ -363,7 +363,8 @@ jobs:
         run: |
           set -euo pipefail
           module_path="$(go list -m)"
-          go build -p=4 $(go list -deps -test -f '{{if not .ForTest}}{{.ImportPath}}{{end}}' ./pkg/... ./tests/functional/... | grep -v "^${module_path}" | grep -v '\.test$' | grep -v '\[' | sort -u) runtime/coverage
+          mapfile -t dep_packages < <(go list -deps -test -f '{{if not .ForTest}}{{.ImportPath}}{{end}}' ./pkg/... ./tests/functional/... | grep -v "^${module_path}" | grep -v '\.test$' | grep -v '\[' | sort -u)
+          go build -p=4 "${dep_packages[@]}" runtime/coverage
           du -sh ~/.cache/go-build
       - name: Save functional dependency build cache
         if: matrix.suite == 'functional' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.functional-deps-cache.outputs.cache-hit != 'true'

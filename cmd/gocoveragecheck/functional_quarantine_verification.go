@@ -25,8 +25,8 @@ type functionalQuarantineSelectorVerification struct {
 	// failure returned) when the coverage run returns, so it stays fail-closed;
 	// selection never depends on its result.
 	overlapCoverage bool
-	once          sync.Once
-	err           error
+	once            sync.Once
+	err             error
 }
 
 type functionalQuarantineRatchetVerification struct {
