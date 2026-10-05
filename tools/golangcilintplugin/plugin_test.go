@@ -1,12 +1,46 @@
 package golangcilintplugin
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"golang.org/x/tools/go/analysis"
 	"strings"
 	"testing"
 
 	"github.com/golangci/plugin-module-register/register"
+	"golang.org/x/tools/go/analysis"
 )
+
+func TestPluginPackagedFactorySourceDiagnostic(t *testing.T) {
+	instance, err := New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, err := instance.BuildAnalyzers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "source.go", "package sample\nvar definition = `name: '@you/plugin'`\n", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var diagnostics []analysis.Diagnostic
+	for _, rule := range rules {
+		if rule.Name != "packagedfactorysource" {
+			continue
+		}
+		_, err = rule.Run(&analysis.Pass{Analyzer: rule, Fset: fset, Files: []*ast.File{file}, Pkg: types.NewPackage("github.com/portpowered/infinite-you/internal/sample", "sample"), Report: func(d analysis.Diagnostic) { diagnostics = append(diagnostics, d) }})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, "@you/plugin") || fset.Position(diagnostics[0].Pos).Line != 2 {
+		t.Fatalf("plugin lost source diagnostic: %v", diagnostics)
+	}
+}
 
 func TestPluginConfiguration(t *testing.T) {
 	t.Parallel()

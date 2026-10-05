@@ -72,6 +72,10 @@ class SizeFixtures:
         root.mkdir()
         write(root, "go.mod", "module lintfixture\n\ngo 1.25.0\n")
         shutil.copytree(ROOT / "scripts/testdata/packagedfactorycatalog/packages", root / "packages")
+        # Both validators require compiler-declared source and publication inputs.
+        write(root, "packages/packaged-factories/embed.go",
+              'package packagedfactories\nimport "embed"\n'
+              '//go:embed factories\nvar Source embed.FS\n')
         config = self.config if ratchet else self.config.replace(
             "  new-from-merge-base: origin/main\n", "")
         write(root, ".golangci.yml", config)
@@ -91,9 +95,9 @@ class SizeFixtures:
         if "  new-from-merge-base: origin/main\n" in (root / ".golangci.yml").read_text():
             result = execute(["git", "merge-base", "HEAD", "origin/main"], root)
             if result.returncode == 0:
-                result = execute(command, root, compiler_env)
+                result = execute(command, root, dict(compiler_env or {}, GOLANGCI_LINT_CACHE=str(root / ".golangci-cache")))
         else:
-            result = execute(command, root, compiler_env)
+            result = execute(command, root, dict(compiler_env or {}, GOLANGCI_LINT_CACHE=str(root / ".golangci-cache")))
         write(root, f"{label}.log", result.stdout + result.stderr)
         if error:
             assert result.returncode != 0, f"{label}: missing failure"
@@ -103,11 +107,14 @@ class SizeFixtures:
             assert output.exists(), f"{label}: missing diagnostics: {result.stderr}"
             issues = json.loads(output.read_text(encoding="utf-8")).get("Issues") or []
             assert len(issues) == len(expected), f"{label}: unexpected diagnostics {issues}"
-            for issue, (linter, message) in zip(
-                    sorted(issues, key=lambda i: (i["FromLinter"], i["Text"])),
-                    sorted(expected)):
-                assert issue["FromLinter"] == linter and message in issue["Text"], issue
+            remaining = list(issues)
+            for linter, message in expected:
+                matches = [issue for issue in remaining
+                           if issue["FromLinter"] == linter and message in issue["Text"]]
+                assert matches, f"{label}: missing {(linter, message)} in {remaining}"
+                issue = matches[0]
                 assert issue["Pos"]["Line"] > 0 and issue["Pos"]["Filename"], issue
+                remaining.remove(issue)
             assert result.returncode == (1 if expected else 0), (
                 f"{label}: wrong exit {result.returncode}: {result.stderr}")
         self.results.append({"case": label, "exit": result.returncode, "issues": issues})
@@ -412,6 +419,53 @@ class PkgFixtures(SizeFixtures):
         self.errors()
 
 
+def packaged_source(fixtures: SizeFixtures) -> None:
+    # Consume the delivered plugin with both canonical configurations. Each
+    # cell owns its module; the warm-cache steps keep all Go inputs unchanged.
+    for mode, config in (("default", ".golangci-repository-default.yml"),
+                         ("complete", ".golangci-repository.yml")):
+        fixtures.config = (ROOT / config).read_text(encoding="utf-8")
+        root = fixtures.module(f"packaged-source-{mode}")
+        write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+        write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
+        write(root, "internal/lint/analyzers/baseline.txt", "")
+        write(root, "pkg/transports/fixture/source.go", "package fixture\n")
+        write(root, "packages/packaged-factories/embed.go",
+              'package packagedfactories\nimport "embed"\n'
+              '//go:embed factories\nvar Source embed.FS\n')
+        path = "packages/packaged-factories/factories/example/factory.js"
+        definition = (root / path).read_bytes()
+        checked(["git", "init", "-q"], root)
+        checked(["git", "config", "core.longpaths", "true"], root)
+        checked(["git", "add", "."], root)
+        fixtures.commit(root)
+        checked(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], root)
+        if mode == "complete":
+            write(root, ".golangci.yml", fixtures.config.replace(
+                "  timeout: 30m\n", "  timeout: 30m\n  build-tags: [integration, functionallong, backendconformance, factoryartifact, managed_process_integration]\n"))
+        fixtures.lint(root, f"{mode}-source-clean", [])
+        write(root, "pkg/transports/fixture/source.go",
+              'package fixture\nvar Definition = `{"name":" @you/off-boundary "}`\n')
+        issues = fixtures.lint(root, f"{mode}-source-literal", [("repolint", "@you/off-boundary")])
+        assert issues[0]["Pos"]["Line"] == 2, issues
+        write(root, "pkg/transports/fixture/source.go", "package fixture\n")
+        write(root, "packages/packaged-factories/factories/example/factory.yaml", "name: '@you/new'\n")
+        fixtures.lint(root, f"{mode}-source-duplicate-root", [("repolint", "packaged-factory-source:"), ("repolint", "projection failed:")])
+        (root / "packages/packaged-factories/factories/example/factory.yaml").unlink()
+        fixtures.lint(root, f"{mode}-source-warm-clean", [])
+        write(root, path, "return {};\n")
+        fixtures.lint(root, f"{mode}-source-warm-invalid", [("repolint", "packaged-factory-source:"), ("repolint", "projection failed:")])
+        (root / path).write_bytes(definition)
+        fixtures.lint(root, f"{mode}-source-recovered", [])
+        # Break the actual compiler embed boundary, leaving its owning unit.
+        write(root, "packages/packaged-factories/embed.go",
+              'package packagedfactories\nimport "embed"\n'
+              '//go:embed absent\nvar Source embed.FS\n')
+        fixtures.lint(root, f"{mode}-source-metadata-failure", [("typecheck", "pattern absent: no matching files found")])
+        (root / "packages/packaged-factories/embed.go").unlink()
+        fixtures.lint(root, f"{mode}-source-missing-owner", [("repolint", "incomplete compiler metadata")])
+
+
 def consumption(fixtures: SizeFixtures) -> None:
     prefix = "github.com/portpowered/infinite-you/"
     fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
@@ -461,7 +515,7 @@ def consumption(fixtures: SizeFixtures) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "catalog", "consumption", "package-boundary", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "catalog", "consumption", "package-boundary", "packaged-source", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
@@ -477,6 +531,8 @@ def main() -> None:
     print(f"Artifacts: {artifacts}\n{version.strip()}", flush=True)
     fixtures = SizeFixtures(tool, artifacts, (ROOT / ".golangci.yml").read_text(encoding="utf-8"))
     try:
+        if args.cohort in ("packaged-source", "all"):
+            packaged_source(fixtures)
         if args.cohort in ("catalog", "all"):
             fixtures.config = (ROOT / ".golangci-repository.yml").read_text(encoding="utf-8")
             root = fixtures.module("catalog-publication")
@@ -517,14 +573,14 @@ def main() -> None:
             extra.unlink()
             source = package / "factories/example/factory.js"
             source.write_text("return {};\n", encoding="utf-8")
-            fixtures.lint(root, "catalog-projection-cached", [("repolint", "projection failed:")])
+            fixtures.lint(root, "catalog-projection-cached", [("repolint", "projection failed:"), ("repolint", "packaged-factory-source:")])
             source.write_bytes(before[Path("factories/example/factory.js")])
             schema = package / "schemas/factory.schema.json"
             schema.unlink()
             fixtures.lint(root, "catalog-missing-schema-cached", [("repolint", "projection failed:")])
             schema.write_bytes(before[Path("schemas/factory.schema.json")])
             write(root, "packages/packaged-factories/factories/empty/note.md", "missing root\n")
-            fixtures.lint(root, "catalog-file-backed-missing-root", [("repolint", "no root Factory document")])
+            fixtures.lint(root, "catalog-file-backed-missing-root", [("repolint", "no root Factory document"), ("repolint", "packaged-factory-source:")])
             (package / "factories/empty/note.md").unlink()
             fixtures.lint(root, "catalog-restored-cached", [])
             git_directory = root / ".git"
