@@ -6,9 +6,9 @@ import (
 	"io"
 	"os"
 
+	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
-	factorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
 
 const (
@@ -34,16 +34,12 @@ func run(store generatedartifacts.Store, root string, stdout, stderr io.Writer) 
 		return 1
 	}
 
-	payload, err := factorysession.GenerateToolInventoryJSON()
+	artifacts, err := mcpcontractcheck.GenerateInventoryArtifacts()
 	if err != nil {
 		fmt.Fprintf(stderr, "%s generation failed: %v\n", commandPrefix, err)
 		return 1
 	}
-	artifact := generatedartifacts.Artifact{
-		Path:    factorysession.ToolInventoryBaselineRelativePath,
-		Payload: payload,
-	}
-	if err := store.Write(root, []generatedartifacts.Artifact{artifact}); err != nil {
+	if err := store.Write(root, artifacts); err != nil {
 		fmt.Fprintf(stderr, "%s generation failed: %v\n", commandPrefix, err)
 		return 1
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	factorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
@@ -50,7 +51,7 @@ func testArtifactStore(t *testing.T) generatedartifacts.LocalStore {
 	return store
 }
 
-func TestRunWritesOnlyTheProductionS11Artifact(t *testing.T) {
+func TestRunWritesCompletePublicInventories(t *testing.T) {
 	root := t.TempDir()
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 
@@ -64,7 +65,7 @@ func TestRunWritesOnlyTheProductionS11Artifact(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	expected, err := factorysession.GenerateToolInventoryJSON()
+	artifacts, err := mcpcontractcheck.GenerateInventoryArtifacts()
 	if err != nil {
 		t.Fatalf("GenerateToolInventoryJSON() error = %v", err)
 	}
@@ -73,12 +74,16 @@ func TestRunWritesOnlyTheProductionS11Artifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read generated S-11: %v", err)
 	}
-	if !bytes.Equal(got, expected) {
+	if !bytes.Equal(got, artifacts[0].Payload) {
 		t.Fatal("generated S-11 differs from the production inventory artifact")
 	}
+	policy, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(artifacts[1].Path)))
+	if err != nil || !bytes.Equal(policy, artifacts[1].Payload) {
+		t.Fatalf("result policy artifact differs: %v", err)
+	}
 	files := filesUnderRoot(t, root)
-	if len(files) != 1 || files[0] != factorysession.ToolInventoryBaselineRelativePath {
-		t.Fatalf("generated files = %#v, want only %q", files, factorysession.ToolInventoryBaselineRelativePath)
+	if len(files) != 2 || files[1] != factorysession.ToolInventoryBaselineRelativePath {
+		t.Fatalf("generated files = %#v, want tool and result-policy inventories including %q", files, factorysession.ToolInventoryBaselineRelativePath)
 	}
 }
 
@@ -108,8 +113,8 @@ func TestRunIsByteStableAcrossWrites(t *testing.T) {
 	if !bytes.Equal(first, second) {
 		t.Fatal("S-11 bytes changed across unchanged writes")
 	}
-	if files := filesUnderRoot(t, root); len(files) != 1 || files[0] != factorysession.ToolInventoryBaselineRelativePath {
-		t.Fatalf("generated files after repeat = %#v, want only %q", files, factorysession.ToolInventoryBaselineRelativePath)
+	if files := filesUnderRoot(t, root); len(files) != 2 || files[1] != factorysession.ToolInventoryBaselineRelativePath {
+		t.Fatalf("generated files after repeat = %#v, want tool and result-policy inventories including %q", files, factorysession.ToolInventoryBaselineRelativePath)
 	}
 }
 
@@ -140,8 +145,8 @@ func TestRunFailsClosedWhenStoreWriteFails(t *testing.T) {
 	if !bytes.Contains(stderr.Bytes(), []byte("generation failed: forced write failure")) {
 		t.Fatalf("stderr = %q, want write failure context", stderr.String())
 	}
-	if len(store.artifacts) != 1 || store.artifacts[0].Path != factorysession.ToolInventoryBaselineRelativePath {
-		t.Fatalf("store artifacts = %#v, want exactly S-11", store.artifacts)
+	if len(store.artifacts) != 2 || store.artifacts[0].Path != factorysession.ToolInventoryBaselineRelativePath {
+		t.Fatalf("store artifacts = %#v, want tool and result-policy inventories", store.artifacts)
 	}
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(factorysession.ToolInventoryBaselineRelativePath))); !os.IsNotExist(err) {
 		t.Fatalf("S-11 exists after failed store write: %v", err)

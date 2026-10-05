@@ -34,7 +34,12 @@ func Check(repositoryRoot string) ([]Diagnostic, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Validate(inputs), nil
+	diagnostics := Validate(inputs)
+	inventory, err := inventoryDiagnostics(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	return append(diagnostics, inventory...), nil
 }
 
 // LoadInputs projects authored, generated, registry, and alias values into

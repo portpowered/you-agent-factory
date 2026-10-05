@@ -768,6 +768,17 @@ func TestBaselineFixtureMatchesProjectedInventory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read baseline fixture: %v", err)
 	}
+	var owned mcpfactorysession.ToolInventory
+	if err := json.Unmarshal(baseline, &owned); err != nil {
+		t.Fatal(err)
+	}
+	owned.Tools = slices.DeleteFunc(owned.Tools, func(tool mcpfactorysession.ToolInventoryEntry) bool {
+		return strings.HasPrefix(tool.Name, "you.worker_session.")
+	})
+	baseline, err = mcpfactorysession.MarshalToolInventoryJSON(owned)
+	if err != nil {
+		t.Fatal(err)
+	}
 	projected, err := mcpfactorysession.MarshalToolInventoryJSON(mustProjectToolInventory(t))
 	if err != nil {
 		t.Fatalf("MarshalToolInventoryJSON() error = %v", err)
@@ -800,6 +811,9 @@ func TestBaselineFixtureMatchesDiscoverToolsRegistry(t *testing.T) {
 	if inventory.ProtocolVersion != mcpfactorysession.ToolInventoryProtocolVersion {
 		t.Fatalf("baseline protocolVersion = %q, want %q", inventory.ProtocolVersion, mcpfactorysession.ToolInventoryProtocolVersion)
 	}
+	inventory.Tools = slices.DeleteFunc(inventory.Tools, func(tool mcpfactorysession.ToolInventoryEntry) bool {
+		return strings.HasPrefix(tool.Name, "you.worker_session.")
+	})
 	if len(inventory.Tools) != len(mcpfactorysession.DiscoverTools()) {
 		t.Fatalf("baseline tool count = %d, want %d", len(inventory.Tools), len(mcpfactorysession.DiscoverTools()))
 	}

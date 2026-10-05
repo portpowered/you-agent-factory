@@ -37,6 +37,10 @@ func TestSelectedHostWorkerSessionTools(t *testing.T) {
 
 func runSelectedHostScenarios(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
+	t.Run("real host exact target controls", func(t *testing.T) {
+		t.Parallel()
+		runRealHostControls(t, process)
+	})
 	t.Run("discovery and reads", func(t *testing.T) {
 		t.Parallel()
 		host := httptest.NewServer(http.HandlerFunc(readHost))
