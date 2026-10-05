@@ -10,6 +10,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
@@ -20,33 +21,33 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-type sessionSyncPreflightTarget struct {
-	session    *livesession.LiveSession
-	remapped   bool
-	unresolved bool
+// sessionIdentityReader reads routing facts without retaining the runtime host.
+// Active selection remains the runtimebinding.State compatibility bridge (T15).
+type sessionIdentityReader struct {
+	state        *sessionruntime.Service
+	active       *runtimebinding.State
+	backendScope string
+	identity     identity.Service
 }
 
-func (fs *SessionRuntime) resolveSessionSyncPreflightTarget(
+func (r sessionIdentityReader) ResolveSyncPreflightTarget(
 	sessionID string,
 	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
-) (sessionSyncPreflightTarget, error) {
-	if fs == nil {
-		return sessionSyncPreflightTarget{}, fmt.Errorf("factory service is required")
-	}
-	if session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID); err == nil {
-		return sessionSyncPreflightTarget{session: session}, nil
+) (controlplane.SyncPreflightTarget, error) {
+	if session, err := runtimebinding.RequireLiveSession(r.state, sessionID); err == nil {
+		return controlplane.SyncPreflightTarget{Session: session}, nil
 	} else if !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		return sessionSyncPreflightTarget{}, err
+		return controlplane.SyncPreflightTarget{}, err
 	}
 	if strings.TrimSpace(sessionID) == DefaultFactorySessionID {
-		if session := runtimebinding.DefaultSessionSuccessor(fs.sessionState, &fs.runtimeState); session != nil {
-			return sessionSyncPreflightTarget{session: session, remapped: true}, nil
+		if session := runtimebinding.DefaultSessionSuccessor(r.state, r.active); session != nil {
+			return controlplane.SyncPreflightTarget{Session: session, Remapped: true}, nil
 		}
 	}
 	if hasLogicalResolveHint(logicalResolve) {
-		return fs.resolveSessionSyncPreflightByLogicalKey(sessionID, logicalResolve)
+		return r.resolveByLogicalKey(sessionID, logicalResolve)
 	}
-	return sessionSyncPreflightTarget{}, nil
+	return controlplane.SyncPreflightTarget{}, nil
 }
 
 func hasLogicalResolveHint(hint *interfaces.FactorySessionLogicalResolveHint) bool {
@@ -55,22 +56,39 @@ func hasLogicalResolveHint(hint *interfaces.FactorySessionLogicalResolveHint) bo
 		strings.TrimSpace(hint.LogicalSessionKeyID) != ""
 }
 
-func (fs *SessionRuntime) resolveSessionSyncPreflightByLogicalKey(
+func (r sessionIdentityReader) resolveByLogicalKey(
 	requestedSessionID string,
 	hint *interfaces.FactorySessionLogicalResolveHint,
-) (sessionSyncPreflightTarget, error) {
-	configuredScope := fs.backendScopeID
-	serviceScope := runtimebinding.BackendScopeID(configuredScope, nil)
+) (controlplane.SyncPreflightTarget, error) {
+	serviceScope := r.BackendScopeID()
 	if serviceScope == "" || strings.TrimSpace(hint.BackendScopeID) != serviceScope {
-		return sessionSyncPreflightTarget{unresolved: true}, nil
+		return controlplane.SyncPreflightTarget{Unresolved: true}, nil
 	}
-	session := fs.identity.ResolveLogical(fs.sessionState.Registry(), serviceScope, hint.LogicalSessionKeyID)
+	session := r.identity.ResolveLogical(r.state.Registry(), serviceScope, hint.LogicalSessionKeyID)
 	if session == nil {
-		return sessionSyncPreflightTarget{unresolved: true}, nil
+		return controlplane.SyncPreflightTarget{Unresolved: true}, nil
 	}
 	remapped := strings.TrimSpace(requestedSessionID) != "" &&
 		session.ID != strings.TrimSpace(requestedSessionID)
-	return sessionSyncPreflightTarget{session: session, remapped: remapped}, nil
+	return controlplane.SyncPreflightTarget{Session: session, Remapped: remapped}, nil
+}
+
+func (r sessionIdentityReader) BackendScopeID() string {
+	return runtimebinding.BackendScopeID(r.backendScope, nil)
+}
+
+func (r sessionIdentityReader) LogicalSessionKeyID(session *livesession.LiveSession) string {
+	if session == nil {
+		return ""
+	}
+	placement := session.Placement()
+	resolved, err := r.identity.Normalize(context.Background(), identity.NormalizeRequest{
+		BackendScopeID: r.BackendScopeID(), FolderPath: placement.FolderPath, Target: placement.Target,
+	})
+	if err != nil {
+		return ""
+	}
+	return resolved.LogicalSessionKeyID
 }
 
 func (fs *SessionRuntime) buildSessionProjectionContext(

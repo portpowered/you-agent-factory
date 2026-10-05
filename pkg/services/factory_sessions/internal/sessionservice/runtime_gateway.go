@@ -10,11 +10,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
@@ -293,42 +291,18 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	if runtime == nil {
 		return dependencyHost{}
 	}
-	resolveSyncPreflightTarget := func(
-		sessionID string,
-		logicalResolve *interfaces.FactorySessionLogicalResolveHint,
-	) (controlplane.SyncPreflightTarget, error) {
-		target, err := runtime.resolveSessionSyncPreflightTarget(sessionID, logicalResolve)
-		return controlplane.SyncPreflightTarget{
-			Session: target.session, Remapped: target.remapped, Unresolved: target.unresolved,
-		}, err
-	}
-	backendScopeID := func() string {
-		return runtimebinding.BackendScopeID(runtime.backendScopeID, nil)
-	}
-	logicalSessionKeyID := func(session *livesession.LiveSession) string {
-		if session == nil {
-			return ""
-		}
-		placement := session.Placement()
-		resolved, err := runtime.identity.Normalize(context.Background(), identity.NormalizeRequest{
-			BackendScopeID: backendScopeID(), FolderPath: placement.FolderPath, Target: placement.Target,
-		})
-		if err != nil {
-			return ""
-		}
-		return resolved.LogicalSessionKeyID
-	}
-	streamGenerationID := func(session *livesession.LiveSession) string {
-		return runtimebinding.StreamGenerationID(session)
+	routing := sessionIdentityReader{
+		state: runtime.sessionState, active: &runtime.runtimeState,
+		backendScope: runtime.backendScopeID, identity: runtime.identity,
 	}
 	projection := runtime.projectionReader()
 	return newSessionHost(
 		runtime.sessionState,
 		projection.BuildSessionProjectionContext,
-		resolveSyncPreflightTarget,
-		backendScopeID,
-		logicalSessionKeyID,
-		streamGenerationID,
+		routing.ResolveSyncPreflightTarget,
+		routing.BackendScopeID,
+		routing.LogicalSessionKeyID,
+		runtimebinding.StreamGenerationID,
 		runtime.WorkerSessionsObservationForSession,
 		runtime.stopFactorySession,
 		runtime.observeLiveLifecycleControl,

@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -630,6 +631,101 @@ func TestProcessDurableScopeRetainsSelectedCapabilitiesAndDetachedSettings(t *te
 			}
 			if selected.attempts != 1 || selected.progress != 1 || peer.attempts != 0 || peer.progress != 0 {
 				t.Fatalf("worker effects crossed session selection: selected=%+v peer=%+v", selected, peer)
+			}
+		})
+	}
+}
+
+// Logical resolution is an identity-owner edge; this fixture only selects
+// records when the reader forwards the expected scope and logical key.
+type routingIdentityStub struct{ projectionIdentityStub }
+
+func (s routingIdentityStub) ResolveLogical(registry sessionregistry.Service, scope, key string) *livesession.LiveSession {
+	if scope != "selected-backend" {
+		return nil
+	}
+	return registry.Get(key)
+}
+
+func TestSessionIdentityReaderPreservesDefaultSuccessorAndPeer(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	active := &runtimebinding.State{}
+	reader := sessionIdentityReader{state: state, active: active, backendScope: " selected-backend ", identity: routingIdentityStub{}}
+	for _, id := range []string{"first", "peer"} {
+		state.Registry().Upsert(&livesession.LiveSession{
+			ID: id, SessionState: livesession.SessionState{FolderPath: id},
+			Handle: &runtimebinding.SessionState{Handle: invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}}},
+		}, id == "peer")
+	}
+	active.SetActive(context.Background(), "first", nil)
+	got, err := reader.ResolveSyncPreflightTarget(factorysessions.DefaultSessionID, nil)
+	if err != nil || got.Session == nil || got.Session.ID != "first" || !got.Remapped || got.Unresolved {
+		t.Fatalf("active default successor = %#v, %v", got, err)
+	}
+	active.ClearActive()
+	got, err = reader.ResolveSyncPreflightTarget(factorysessions.DefaultSessionID, nil)
+	if err != nil || got.Session == nil || got.Session.ID != "peer" || !got.Remapped {
+		t.Fatalf("current default successor = %#v, %v", got, err)
+	}
+	// A real default wins over both active and current non-default records.
+	first := state.Resolve("first")
+	first.IsDefault = true
+	state.Registry().Upsert(first, false)
+	got, err = reader.ResolveSyncPreflightTarget(factorysessions.DefaultSessionID, nil)
+	if err != nil || got.Session == nil || got.Session.ID != "first" || got.Remapped {
+		t.Fatalf("real default = %#v, %v", got, err)
+	}
+	state.Registry().Remove("first")
+	for _, selector := range []string{"peer", "missing", "first"} {
+		got, err = reader.ResolveSyncPreflightTarget(selector, nil)
+		if err != nil || got.Remapped || got.Unresolved || (selector == "peer") != (got.Session != nil) {
+			t.Fatalf("after retirement %q = %#v, %v", selector, got, err)
+		}
+	}
+	if reader.BackendScopeID() != "selected-backend" || reader.LogicalSessionKeyID(state.Resolve("peer")) != "logical-peer" || reader.LogicalSessionKeyID(nil) != "" {
+		t.Fatal("addressed logical/backend facts changed")
+	}
+	host := SessionServiceHost(&SessionRuntime{sessionState: state, backendScopeID: reader.backendScope, identity: reader.identity})
+	got, err = host.ResolveSyncPreflightTarget("old", &factorydefinitions.FactorySessionLogicalResolveHint{
+		BackendScopeID: "selected-backend", LogicalSessionKeyID: "peer",
+	})
+	if err != nil || got.Session == nil || got.Session.ID != "peer" || !got.Remapped || host.LogicalSessionKeyID(got.Session) != "logical-peer" {
+		t.Fatalf("production host routing without gateway = %#v, %v", got, err)
+	}
+	reader.identity = projectionIdentityStub{err: errors.New("identity unavailable")}
+	if reader.LogicalSessionKeyID(state.Resolve("peer")) != "" {
+		t.Fatal("failed optional logical identity must stay empty")
+	}
+}
+
+func TestSessionIdentityReaderLogicalPreflight(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, requested, scope, key, wantID string
+		remapped, unresolved                bool
+	}{
+		{"remapped", "old", "selected-backend", "peer", "peer", true, false},
+		{"empty selector", "", "selected-backend", "peer", "peer", false, false},
+		{"scope mismatch", "old", "foreign", "peer", "", false, true},
+		{"missing logical", "old", "selected-backend", "absent", "", false, true},
+		{"incomplete hint", "old", "", "peer", "", false, false},
+		{"direct beats hint", "peer", "foreign", "absent", "peer", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			state := newWorkResolverSessionState()
+			state.Registry().Upsert(&livesession.LiveSession{ID: "peer", Handle: &runtimebinding.SessionState{
+				Handle: invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}},
+			}}, true)
+			reader := sessionIdentityReader{state: state, backendScope: "selected-backend", identity: routingIdentityStub{}}
+			got, err := reader.ResolveSyncPreflightTarget(tc.requested, &factorydefinitions.FactorySessionLogicalResolveHint{BackendScopeID: tc.scope, LogicalSessionKeyID: tc.key})
+			id := ""
+			if got.Session != nil {
+				id = got.Session.ID
+			}
+			if err != nil || id != tc.wantID || got.Remapped != tc.remapped || got.Unresolved != tc.unresolved {
+				t.Fatalf("logical preflight = %#v, %v", got, err)
 			}
 		})
 	}
