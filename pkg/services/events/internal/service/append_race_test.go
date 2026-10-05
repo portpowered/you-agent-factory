@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 
 	"go.uber.org/goleak"
@@ -22,7 +23,7 @@ func TestAppend_ConcurrentAppendsAssignUniqueContiguousPositions(t *testing.T) {
 	const perGoroutine = 20
 	const total = goroutines * perGoroutine
 
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/concurrent/events")
 
@@ -83,7 +84,7 @@ func TestAppend_ConcurrentAppendsAssignUniqueContiguousPositions(t *testing.T) {
 func TestAppend_ConcurrentDuplicateAppendsConvergeOnOneAcceptedRecord(t *testing.T) {
 	const goroutines = 50
 
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	req := events.AppendRequest{
 		Topic:          "chat-session/race/events",
