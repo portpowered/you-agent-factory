@@ -96,26 +96,15 @@ func (writer *FileWriter) rebuildCatalog(ctx context.Context) error {
 	if writer.catalogLoaded {
 		return nil
 	}
-	directory, err := os.Open(writer.root)
+	err := writer.directory.ScanDirectory(writer.root, 64, func(files []os.DirEntry) error {
+		return writer.indexCatalogFiles(ctx, files)
+	})
 	if errors.Is(err, os.ErrNotExist) {
 		writer.catalogLoaded = true
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read Worker capture index: %w", err)
-	}
-	defer func() { _ = directory.Close() }()
-	for {
-		files, err := directory.ReadDir(64)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return fmt.Errorf("read Worker capture index: %w", err)
-		}
-		if err := writer.indexCatalogFiles(ctx, files); err != nil {
-			return err
-		}
-		if errors.Is(err, io.EOF) {
-			break
-		}
 	}
 	writer.catalogLoaded = true
 	return nil

@@ -16,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -28,6 +26,7 @@ import (
 type FileWriter struct {
 	storage       platformreplay.Storage
 	appender      platformreplay.Appender
+	directory     platformreplay.DirectoryScanner
 	root          string
 	mu            sync.Mutex
 	entries       map[string]*recordingEntry
@@ -74,12 +73,15 @@ var _ recordings.WorkerRecordingReader = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*FileWriter)(nil)
 
 // NewFileWriter requires the existing append-and-sync storage capability.
-func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, clock recordings.WorkerCaptureClock, root, ownerEpoch string) (recordings.WorkerRecordingStore, error) {
+func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, directory platformreplay.DirectoryScanner, clock recordings.WorkerCaptureClock, root, ownerEpoch string) (recordings.WorkerRecordingStore, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("Worker recording file writer: storage is required")
 	}
 	if appender == nil {
 		return nil, fmt.Errorf("Worker recording file writer: append storage is required")
+	}
+	if directory == nil {
+		return nil, fmt.Errorf("worker recording file writer: directory scanner is required")
 	}
 	if root == "" {
 		return nil, fmt.Errorf("Worker recording file writer: root is required")
@@ -87,7 +89,7 @@ func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appen
 	if clock == nil || strings.TrimSpace(ownerEpoch) == "" {
 		return nil, fmt.Errorf("worker recording file writer: clock and owner epoch are required")
 	}
-	return &FileWriter{storage: storage, appender: appender, clock: clock, ownerEpoch: ownerEpoch, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry)}, nil
+	return &FileWriter{storage: storage, appender: appender, directory: directory, clock: clock, ownerEpoch: ownerEpoch, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry)}, nil
 }
 func (writer *FileWriter) entry(id string) *recordingEntry {
 	writer.mu.Lock()
@@ -147,7 +149,11 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	}
 	delta := workerJournalEntry{Version: 1, Kind: "record", RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Record: &record.Record}
 	if len(session.records) == 0 {
-		delta.RecordingGenerationID = uuid.NewString()
+		// The injected epoch fences host lifetimes. Opening identity fences
+		// distinct captures within that lifetime, without a hidden ID effect.
+		identity, _ := json.Marshal([]string{writer.ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
+		generation := sha256.Sum256(identity)
+		delta.RecordingGenerationID = hex.EncodeToString(generation[:])
 		delta.OwnerEpoch = writer.ownerEpoch
 	}
 	capturedAt := writer.clock.Now().UTC()

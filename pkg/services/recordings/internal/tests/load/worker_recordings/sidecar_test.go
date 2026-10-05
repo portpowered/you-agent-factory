@@ -39,7 +39,7 @@ func BenchmarkWorkerSidecarAppend(b *testing.B) {
 			if err := local.WriteFile(path, data); err != nil {
 				b.Fatal(err)
 			}
-			writer, err := recordingswire.NewWorkerRecordingFileWriter(local, local, platformclock.Real{}, root, uuid.NewString())
+			writer, err := recordingswire.NewWorkerRecordingFileWriter(local, local, local, platformclock.Real{}, root, uuid.NewString())
 			if err != nil {
 				b.Fatal(err)
 			}

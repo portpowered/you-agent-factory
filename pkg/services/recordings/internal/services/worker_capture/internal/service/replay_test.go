@@ -1002,5 +1002,5 @@ func TestFileWriterSameRecordingDuplicateIsExactlyOnce(t *testing.T) {
 
 func newTestFileWriter(storage platformreplay.Storage, root string) (recordings.WorkerRecordingStore, error) {
 	appender, _ := storage.(platformreplay.Appender)
-	return NewFileWriter(storage, appender, platformclock.Real{}, root, uuid.NewString())
+	return NewFileWriter(storage, appender, platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, root, uuid.NewString())
 }

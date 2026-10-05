@@ -204,7 +204,7 @@ func newWSRFT009DurableWriter(
 	if !ok {
 		t.Fatal("test recording storage must support append")
 	}
-	delegate, err := recordingswire.NewWorkerRecordingFileWriter(storage, appender, platformclock.Real{}, sidecarRoot, uuid.NewString())
+	delegate, err := recordingswire.NewWorkerRecordingFileWriter(storage, appender, platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, sidecarRoot, uuid.NewString())
 	if err != nil {
 		t.Fatalf("NewWorkerRecordingFileWriter(): %v", err)
 	}

@@ -99,7 +99,7 @@ func provideWorkerRecordingWriter(
 		}
 		storage := platformreplay.NewLocal(runtime.GOOS)
 		writer, err = recordingswire.NewWorkerRecordingFileWriter(
-			storage, storage, platformclock.Ensure(edges.Clock),
+			storage, storage, storage, platformclock.Ensure(edges.Clock),
 			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),
 			uuid.NewString(),
 		)

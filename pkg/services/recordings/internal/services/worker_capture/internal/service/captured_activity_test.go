@@ -20,6 +20,54 @@ type captureTimeProbe struct {
 	calls int
 }
 
+type catalogScanProbe struct {
+	local platformreplay.Local
+	fault error
+	calls int
+}
+
+func (scan *catalogScanProbe) ScanDirectory(path string, batchSize int, visit func([]os.DirEntry) error) error {
+	scan.calls++
+	if scan.fault != nil {
+		return scan.fault
+	}
+	return scan.local.ScanDirectory(path, batchSize, visit)
+}
+
+func TestFileWriterCatalogScanRetriesFailureAndCachesLookup(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	root := t.TempDir()
+	clock := &captureTimeProbe{now: time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)}
+	original, err := NewFileWriter(local, local, local, clock, root, "original")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := journalRecord(t, "scan-recording", "scan-worker")
+	if err := original.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	fault := errors.New("selected filesystem unavailable")
+	scan := &catalogScanProbe{local: local, fault: fault}
+	reopened, err := NewFileWriter(local, local, scan, clock, root, "reopened")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerCapturedActivityRequest{WorkerSessionID: record.WorkerSessionID}
+	if _, err := reopened.ReadWorkerCapturedActivity(t.Context(), request); !errors.Is(err, fault) {
+		t.Fatalf("selected scanner failure = %v, want %v", err, fault)
+	}
+	scan.fault = nil
+	page, err := reopened.ReadWorkerCapturedActivity(t.Context(), request)
+	if err != nil || len(page.Records) != 1 || scan.calls != 2 {
+		t.Fatalf("retry page=%+v scans=%d error=%v", page, scan.calls, err)
+	}
+	scan.fault = fault
+	if _, err := reopened.ReadWorkerCapturedActivity(t.Context(), request); err != nil || scan.calls != 2 {
+		t.Fatalf("cached lookup rescanned fleet: scans=%d error=%v", scan.calls, err)
+	}
+}
+
 func (clock *captureTimeProbe) Now() time.Time {
 	clock.calls++
 	return clock.now.Add(time.Duration(clock.calls) * time.Second)
@@ -31,7 +79,7 @@ func TestFileWriterCapturedAtAndCatalogSurviveReopening(t *testing.T) {
 	local := platformreplay.NewLocal(runtime.GOOS)
 	root := t.TempDir()
 	clock := &captureTimeProbe{now: time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)}
-	store, err := NewFileWriter(local, local, clock, root, "owner-one")
+	store, err := NewFileWriter(local, local, local, clock, root, "owner-one")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +105,7 @@ func TestFileWriterCapturedAtAndCatalogSurviveReopening(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(root, "catalog")); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := NewFileWriter(local, local, clock, root, "owner-two")
+	reopened, err := NewFileWriter(local, local, local, clock, root, "owner-two")
 	if err != nil {
 		t.Fatal(err)
 	}

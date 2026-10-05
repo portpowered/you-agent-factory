@@ -24,9 +24,10 @@ func NewWorkerSessionRecorder(
 func NewWorkerRecordingFileWriter(
 	storage platformreplay.Storage,
 	appender platformreplay.Appender,
+	directory platformreplay.DirectoryScanner,
 	clock recordings.WorkerCaptureClock,
 	root string,
 	ownerEpoch string,
 ) (recordings.WorkerRecordingStore, error) {
-	return workerrecordingwire.NewFileWriter(storage, appender, clock, root, ownerEpoch)
+	return workerrecordingwire.NewFileWriter(storage, appender, directory, clock, root, ownerEpoch)
 }

@@ -57,7 +57,7 @@ func TestWorkerRecordingDefaultDurableRoot(t *testing.T) {
 	if directory.calls != 1 {
 		t.Fatalf("Getwd calls = %d, want one", directory.calls)
 	}
-	reopened, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, filepath.Join(root, ".you-agent-factory", "worker-recordings"), uuid.NewString())
+	reopened, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, filepath.Join(root, ".you-agent-factory", "worker-recordings"), uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestWorkerRecordingRootFailureAndOverride(t *testing.T) {
 	if !errors.Is(err, fault) {
 		t.Fatalf("root resolution error = %v", err)
 	}
-	override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, t.TempDir(), uuid.NewString())
+	override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, t.TempDir(), uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestWorkerRecordingRejectsInvalidDefaultRoot(t *testing.T) {
 			if err == nil || writer != nil || !strings.Contains(err.Error(), "expected a non-empty absolute directory") {
 				t.Fatalf("invalid root %q: writer = %v, error = %v", root, writer, err)
 			}
-			override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, t.TempDir(), uuid.NewString())
+			override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, t.TempDir(), uuid.NewString())
 			if err != nil {
 				t.Fatal(err)
 			}
