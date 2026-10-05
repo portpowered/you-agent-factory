@@ -109,6 +109,7 @@ func (writer *FileWriter) capturedCatalogItem(ctx context.Context, catalog recor
 	}
 	item := session.capturedSummary()
 	item.Catalog = writer.catalogEntry(session)
+	item.OwnerLost = item.Terminal == nil && session.ownerEpoch != "" && session.ownerEpoch != "historical" && session.ownerEpoch != writer.ownerEpoch
 	return item, ctx.Err()
 }
 

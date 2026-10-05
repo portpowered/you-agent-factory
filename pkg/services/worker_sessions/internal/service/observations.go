@@ -26,7 +26,7 @@ func (r *registry) ListWorkerSessionObservations(
 	req workersessions.ListWorkerSessionObservationsRequest,
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
 	if req.History != "" {
-		return r.listActiveHistory(ctx, req)
+		return r.listHistory(ctx, req)
 	}
 	listStartedAt := r.clock.Now()
 	query, err := r.parseObservationListQuery(ctx, req)

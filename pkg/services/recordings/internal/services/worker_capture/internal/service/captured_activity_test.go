@@ -194,6 +194,9 @@ func TestFileWriterCatalogSummaryDistinguishesPrefixAndUncapturedTerminal(t *tes
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
 			got := restartedPrefixSummary(t, cell.legacy, cell.terminal)
+			if got.OwnerLost != (!cell.legacy && !cell.terminal) {
+				t.Fatalf("owner loss must require a known prior epoch and unfinished capture: %+v", got.Catalog)
+			}
 			wantStamps := 1
 			if cell.legacy {
 				wantStamps = 0

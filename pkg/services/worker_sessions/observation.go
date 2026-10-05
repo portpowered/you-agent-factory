@@ -91,14 +91,19 @@ const maxActiveHistoryNextTokenBytes = 4096
 // execution owner; a retained lifecycle state alone never establishes activity.
 type ObservationHistory string
 
-const ObservationHistoryActive ObservationHistory = "active"
+const (
+	ObservationHistoryActive   ObservationHistory = "active"
+	ObservationHistoryAll      ObservationHistory = "all"
+	ObservationHistoryArchived ObservationHistory = "archived"
+)
 
 // ListWorkerSessionObservationsRequest is the bounded top-level observation
 // query. NextToken is an opaque base64 cursor returned by the previous page.
-// Explicit active history freezes sampled observations for five idle minutes,
+// Explicit history freezes sampled observations for five idle minutes,
 // with at most 64 snapshots and 16MiB retained per constructed profile. Expired,
 // evicted, foreign, or mismatched-filter tokens return invalid pagination.
-// Durable all/archived selection is not yet exposed by this service contract.
+// All combines admitted live owners and durable captures; archived excludes
+// admitted live owners. A prefix without established owner loss is unavailable.
 type ListWorkerSessionObservationsRequest struct {
 	// RuntimeID optionally bounds a runtime-owned fleet source.
 	RuntimeID string
@@ -118,7 +123,7 @@ func (r ListWorkerSessionObservationsRequest) Validate() error {
 	if !r.Scope.Valid() {
 		return ErrInvalidObservationScope
 	}
-	if r.History != "" && r.History != ObservationHistoryActive {
+	if r.History != "" && r.History != ObservationHistoryActive && r.History != ObservationHistoryAll && r.History != ObservationHistoryArchived {
 		return ErrInvalidObservationHistory
 	}
 	if r.History != "" && len(r.NextToken) > maxActiveHistoryNextTokenBytes {

@@ -27,13 +27,13 @@ func historyFilter(req workersessions.ListWorkerSessionObservationsRequest) stri
 	return string(data)
 }
 
-func (r *registry) listActiveHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+func (r *registry) listHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session active history list rejected", "outcome", "invalid")
+		r.logger.Info("worker session history list rejected", "outcome", "invalid")
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	if err := observationContextError(ctx); err != nil {
-		r.logger.Info("worker session active history list rejected", "outcome", "canceled")
+		r.logger.Info("worker session history list rejected", "outcome", "canceled")
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	limit := req.MaxResults
@@ -46,9 +46,9 @@ func (r *registry) listActiveHistory(ctx context.Context, req workersessions.Lis
 	if strings.TrimSpace(req.NextToken) != "" {
 		result, err = r.historySnapshots.next(strings.TrimSpace(req.NextToken), filter, limit, r.clock.Now())
 	} else {
-		observations, projectionErr := r.activeHistoryObservations(ctx, req)
+		observations, projectionErr := r.historyObservations(ctx, req)
 		if projectionErr != nil {
-			r.logger.Info("worker session active history list", "outcome", "projection_unavailable")
+			r.logger.Info("worker session history list", "outcome", "projection_unavailable")
 			return workersessions.ListWorkerSessionObservationsResult{}, projectionErr
 		}
 		if err := observationContextError(ctx); err != nil {
@@ -59,7 +59,7 @@ func (r *registry) listActiveHistory(ctx context.Context, req workersessions.Lis
 	if canceled := observationContextError(ctx); canceled != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, canceled
 	}
-	r.logger.Info("worker session active history list", "scope", string(req.Scope.Normalized()), "result_count", len(result.Observations), "has_next", result.NextToken != "", "failed", err != nil)
+	r.logger.Info("worker session history list", "scope", string(req.Scope.Normalized()), "result_count", len(result.Observations), "has_next", result.NextToken != "", "failed", err != nil)
 	return result, err
 }
 

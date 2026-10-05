@@ -37,6 +37,9 @@ type WorkerCapturedCatalogPage struct {
 // output/progress history belongs to ReadWorkerCapturedActivity. CapturedAt contains
 // stamps for the opening and selected metadata only. Missing legacy stamps stay absent.
 type WorkerCapturedCatalogItem struct {
+	// OwnerLost establishes that an unfinished capture's recorded host epoch
+	// differs from this store's current epoch. Legacy captures cannot prove loss.
+	OwnerLost       bool
 	Catalog         WorkerSessionCatalogEntry
 	Opening         events.Record
 	MetadataRecords []events.Record
