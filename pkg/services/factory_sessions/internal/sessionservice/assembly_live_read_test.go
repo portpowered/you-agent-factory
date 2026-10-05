@@ -90,7 +90,10 @@ func TestSessionHostLifecyclePreservesFailedStopRetryAndPeers(t *testing.T) {
 	failure := errors.New("injected addressed stop failure")
 	lifecycle := &hostLifecycleStub{err: failure}
 	var released []string
-	host := SessionServiceHost(state, active, lifecycle,
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, _ factoryruntime.Clock) error {
+		return lifecycle.Stop(run)
+	}, zap.NewNop())
+	host := SessionServiceHost(state, active, control,
 		func(id string) { released = append(released, id) }, nil, "", nil, nil, nil, nil, nil)
 	for _, id := range []string{"first", "peer"} {
 		run := invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}}
@@ -200,7 +203,10 @@ func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
 	state.Registry().Upsert(previous, true)
 	active.SetActive(context.Background(), previous.ID, runtimebinding.HandleFromSession(previous))
 	lifecycle := &hostLifecycleStub{onStop: func() { state.Registry().Upsert(replacement, true) }}
-	reader := sessionLifecycleReader{state: state, active: active, lifecycle: lifecycle}
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, _ factoryruntime.Clock) error {
+		return lifecycle.Stop(run)
+	}, zap.NewNop())
+	reader := sessionLifecycleReader{state: state, active: active, control: control}
 	if err := reader.StopLiveSession("selected"); err != nil {
 		t.Fatal(err)
 	}
@@ -209,6 +215,52 @@ func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
 	}
 	if lifecycle.stopped != runtimebinding.HandleFromSession(previous) || active.ActiveHandle() != runtimebinding.HandleFromSession(replacement) {
 		t.Fatal("stop or active selection crossed replacement generations")
+	}
+}
+
+func TestSessionHostStopPreservesCleanupFailureAndSelectedClock(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	active := &runtimebinding.State{}
+	for _, id := range []string{"selected", "peer"} {
+		registerScopeControlRuntime(state, id, &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	}
+	selected := state.Resolve("selected")
+	bound := runtimebinding.SessionStateFrom(selected)
+	bound.Clock = projectionClockStub{now: time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)}
+	active.SetActive(context.Background(), selected.ID, bound.Handle)
+	failure := errors.New("injected binding cleanup failure")
+	cleanupErr := failure
+	binding := (factoryruntime.RuntimeBinding{}).New("selected-generation", selected.Runtime.Factory,
+		func(context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
+			return factoryruntime.RuntimeDeactivationResult{}, cleanupErr
+		})
+	if err := NewScopeActivation(state).Activate(context.Background(), SessionScope{Session: selected, Binding: binding}); err != nil {
+		t.Fatal(err)
+	}
+	var stoppedAt time.Time
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
+		if run != bound.Handle {
+			t.Fatal("stop targeted a peer run")
+		}
+		stoppedAt = clock.Now()
+		return nil
+	}, zap.NewNop())
+	var released []string
+	host := SessionServiceHost(state, active, control, func(id string) { released = append(released, id) },
+		nil, "", nil, nil, nil, nil, nil)
+	if err := host.StopLiveSession("selected"); !errors.Is(err, failure) {
+		t.Fatalf("cleanup failure = %v", err)
+	}
+	if !stoppedAt.Equal(bound.Clock.Now()) || state.Resolve("selected") == nil || state.Resolve("peer") == nil || len(released) != 0 {
+		t.Fatal("failed cleanup lost selected clock, registration, peer or admission")
+	}
+	cleanupErr = nil
+	if err := host.StopLiveSession("selected"); err != nil {
+		t.Fatalf("cleanup retry = %v", err)
+	}
+	if state.Resolve("selected") != nil || state.Resolve("peer") == nil || !reflect.DeepEqual(released, []string{"selected"}) || active.Active().SessionID != "peer" {
+		t.Fatal("successful cleanup failed to retire only the addressed generation")
 	}
 }
 

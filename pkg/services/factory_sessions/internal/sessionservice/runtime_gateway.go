@@ -271,7 +271,7 @@ func (fs *SessionRuntime) ReconnectCursorValidator() factorysessions.ReconnectCu
 func SessionServiceHost(
 	state *sessionruntime.Service,
 	active *runtimebinding.State,
-	lifecycle factoryruntime.RuntimeLifecycle,
+	control SessionScopeControl,
 	releaseAdmission func(string),
 	durable durableexecution.Service,
 	backendScope string,
@@ -283,7 +283,7 @@ func SessionServiceHost(
 ) Host {
 	routing := sessionIdentityReader{state: state, active: active, backendScope: backendScope, identity: identityService}
 	projection := sessionProjectionReader{state: state, backendScope: backendScope, identity: identityService, clock: clock, projector: projector, checkpoints: checkpoints}
-	lifecycleReader := sessionLifecycleReader{state: state, active: active, lifecycle: lifecycle, releaseAdmission: releaseAdmission, logger: logger}
+	lifecycleReader := sessionLifecycleReader{state: state, active: active, control: control, releaseAdmission: releaseAdmission, logger: logger}
 	return keyedSessionHost{
 		sessionIdentityReader:   routing,
 		sessionProjectionReader: projection,

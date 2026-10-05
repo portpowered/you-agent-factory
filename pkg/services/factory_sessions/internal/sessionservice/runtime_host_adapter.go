@@ -2,7 +2,9 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -19,20 +21,24 @@ import (
 type sessionLifecycleReader struct {
 	state            *sessionruntime.Service
 	active           *runtimebinding.State
-	lifecycle        factory.RuntimeLifecycle
+	control          SessionScopeControl
 	releaseAdmission func(string)
 	logger           *zap.Logger
 }
 
 func (r sessionLifecycleReader) StopLiveSession(sessionID string) error {
-	err := runtimebinding.StopSession(r.state, r.active, sessionID, func(handle factory.RuntimeRun) error {
-		if handle == nil {
-			return nil
+	if r.state == nil {
+		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
+	}
+	session := r.state.Resolve(sessionID)
+	if session == nil {
+		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
+	}
+	err := runtimebinding.StopSessionGeneration(r.state, r.active, session, func(factory.RuntimeRun) error {
+		if r.control == nil {
+			return fmt.Errorf("factory session control service is required")
 		}
-		if r.lifecycle == nil {
-			return fmt.Errorf("factory runtime lifecycle service is required")
-		}
-		return r.lifecycle.Stop(handle)
+		return r.control.StopLiveGeneration(context.Background(), session)
 	})
 	if err == nil && r.releaseAdmission != nil {
 		r.releaseAdmission(sessionID)
