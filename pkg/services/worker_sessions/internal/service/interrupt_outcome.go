@@ -78,7 +78,7 @@ func interruptFailureForCode(code string) error {
 }
 
 func validInterruptOutcome(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {
-	if !validInterruptResultIdentity(req, result) {
+	if !validInterruptResultIdentity(req, result) || !validInterruptSessionFacts(result.Source) || !validInterruptSessionFacts(result.Successor) {
 		return false
 	}
 	if result.Successor.ID == "" {
@@ -96,6 +96,13 @@ func validInterruptOutcome(req workersessions.InterruptRequest, result workerses
 	default:
 		return false
 	}
+}
+
+// The reader enforces the same privacy boundary as the writer. A malformed
+// journal must not turn provider content or private diagnostics into a reply.
+func validInterruptSessionFacts(session workersessions.Session) bool {
+	return session.Model == nil && session.ReasoningEffort == nil &&
+		session.Result == nil && session.ProviderSessionAssociation == nil
 }
 
 func validInterruptResultIdentity(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {

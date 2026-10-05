@@ -560,3 +560,75 @@ func TestInterruptJournalReplayPreservesAcceptedLineageWithoutPrivateMetadata(t 
 	}
 	assertNoSuccessor(t, r, "successor")
 }
+
+func TestInterruptJournalReplayRejectsPrivateSessionContentWithoutEffects(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"COMPLETED", "FAILED"} {
+		for _, owner := range []string{"source", "successor"} {
+			for _, field := range []string{"model", "reasoning", "terminal", "association"} {
+				t.Run(phase+"/"+owner+"/"+field, func(t *testing.T) {
+					t.Parallel()
+					r, plan, store := newDurableInterruptFixture(t)
+					operation, err := r.beginInterruptIntent(t.Context(), plan)
+					if err != nil {
+						t.Fatal(err)
+					}
+					outcome := durableInterruptOutcome{InterruptResult: interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, true)}
+					outcome.Source = workersessions.Session{ID: "worker", State: workersessions.StateCanceled}
+					outcome.Successor = workersessions.Session{ID: "successor", State: workersessions.StateRunning}
+					operation.Operation.Phase = phase
+					if phase == "FAILED" {
+						outcome.Accepted = false
+						operation.FailureCode = string(outcome.Phase)
+						outcome.FailureCauses = []string{"SUCCESSOR_ADMISSION_FAILED"}
+					}
+					session := &outcome.Source
+					if owner == "successor" {
+						session = &outcome.Successor
+					}
+					injectPrivateInterruptSessionContent(field, session)
+					operation.Result, _ = json.Marshal(outcome)
+					store.records = []recordings.WorkerControlOperationRecord{operation.Detached()}
+					calls := 0
+					plan.supervision.installCancel(func() { calls++ })
+					result, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+					want := interruptResult(plan.request, workersessions.InterruptPhaseValidation, false)
+					var typed *workersessions.InterruptError
+					if !found || !errors.Is(replayErr, recordings.ErrWorkerRecordingPersistence) || !errors.As(replayErr, &typed) || !reflect.DeepEqual(result, want) || !reflect.DeepEqual(typed.Result, want) {
+						t.Fatalf("private content replay=%#v found=%v err=%v", result, found, replayErr)
+					}
+					assertPrivateInterruptContentAbsent(t, typed, replayErr)
+					if calls != 0 || len(store.records) != 1 {
+						t.Fatalf("refusal had effects: cancellations=%d journal rows=%d", calls, len(store.records))
+					}
+					assertNoSuccessor(t, r, "successor")
+				})
+			}
+		}
+	}
+}
+
+func assertPrivateInterruptContentAbsent(t *testing.T, typed *workersessions.InterruptError, err error) {
+	t.Helper()
+	encoded, marshalErr := json.Marshal(typed.Result)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if strings.Contains(string(encoded), "private-provider-secret") || strings.Contains(err.Error(), "private-provider-secret") {
+		t.Fatal("private journal content reached the response")
+	}
+}
+
+func injectPrivateInterruptSessionContent(field string, session *workersessions.Session) {
+	private := "private-provider-secret"
+	switch field {
+	case "model":
+		session.Model = &private
+	case "reasoning":
+		session.ReasoningEffort = &private
+	case "terminal":
+		session.Result = &workersessions.TerminalResult{Cause: &workersessions.FailureCause{Detail: private}}
+	case "association":
+		session.ProviderSessionAssociation = &workersessions.ProviderSessionAssociation{WorkerSessionID: private}
+	}
+}

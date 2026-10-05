@@ -466,8 +466,10 @@ state, and accepted predecessor/successor links without stopping or admitting
 another execution. Later continuations do not change these saved links. A recovered
 admission failure leaves the source stopped. Use session inspection for richer
 session metadata. Durable replay validates the captured replacement input against
-the original request. Missing or corrupt captured input reports persistence
-unavailable without stopping a Worker Session or admitting a successor.
+the original request. Missing or corrupt captured input, or a stored control
+result containing provider metadata or private diagnostics, reports persistence
+unavailable without returning that content, stopping a Worker Session, or
+admitting a successor.
 An incomplete durable operation reports execution unavailable
 until its prior ownership and admission can be reconciled safely; submitting
 the same request does not blindly repeat its effects.
