@@ -1799,8 +1799,6 @@ petri-public|pkg/transports/mapping/factorysession|SummaryWithRuntimeToAPI|pkg/s
 testsleep-deadline-test|cmd/gocoveragecheck|cmd/gocoveragecheck/functional_stream_test.go::waitForFunctionalStreamMarker::deadline::1
 testsleep-deadline-test|cmd/gocoveragecheck|cmd/gocoveragecheck/stream_test.go::waitForStreamCapture::deadline::1
 testsleep-deadline-test|cmd/gocoveragecheck|cmd/gocoveragecheck/stream_test.go::waitForStreamChild::deadline::1
-testsleep-deadline-test|cmd/lintlane|cmd/lintlane/main_test.go::TestRunTargetsOverlapsWorkAndHonorsJobLimit::deadline::1
-testsleep-deadline-test|cmd/lintlane|cmd/lintlane/main_test.go::TestRunTargetsOverlapsWorkAndHonorsJobLimit::deadline::2
 testsleep-deadline-test|internal/builtcliacceptance|internal/builtcliacceptance/harness_test.go::TestConcurrentReusableHarnessOverlapsCommandsAndWaitsForIdleBeforeClose::deadline::1
 testsleep-deadline-test|internal/builtcliacceptance|internal/builtcliacceptance/harness_test.go::TestReusableHarnessRejectsOverlappingStartedCommandAndRecovers::deadline::1
 testsleep-deadline-test|pkg/initializer/application|pkg/initializer/application/entrypoints_test.go::TestInitializerProcessContextPreservesParentCancellation::deadline::1

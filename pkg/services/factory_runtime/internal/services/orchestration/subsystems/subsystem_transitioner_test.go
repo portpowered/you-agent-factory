@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -101,7 +102,7 @@ func TestTransitionerRejectsMalformedInternalWorkResults(t *testing.T) {
 			snapshot := workerBatchSnapshot("")
 			snapshot.Results = []workerexecution.WorkResult{test.result}
 			transitioner := NewTransitioner(
-				workerBatchTestNet(), nil, testSubsystemNow,
+				workerBatchTestNet(), logging.NoopLogger{}, testSubsystemNow,
 				testTokenTransformer(
 					workerBatchTestNet()),
 				nil, nil, nil,
@@ -435,7 +436,7 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 func TestTransitioner_WorkerGeneratedBatchPreservesAuthoredWorkData(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"child-payload","workId":"child-payload","workTypeName":"child","payload":"child-payload","tags":{"objective":"goal-1"}},{"name":"child-content","workId":"child-content","workTypeName":"child","content":[{"type":"text","text":"child-content"}]}]}}`)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -476,7 +477,7 @@ func TestTransitioner_WorkerGeneratedBatchCreatesFanoutCountFromPublicWork(t *te
 	net := workerBatchTestNet()
 	net.Places["t1:fanout-count"] = &petri.Place{ID: "t1:fanout-count", TypeID: "fanout-count"}
 	net.FanoutGroups = map[string]string{"t1": "t1:fanout-count"}
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"child-1","workTypeName":"child"},{"name":"child-2","workTypeName":"child"}]}}`)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -547,7 +548,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 			},
 		},
 	}
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"d-1": {

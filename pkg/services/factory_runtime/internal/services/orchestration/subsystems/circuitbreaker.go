@@ -41,7 +41,7 @@ func NewCircuitBreakerWithClock(
 	}
 	return &CircuitBreakerSubsystem{
 		state:         n,
-		logger:        logging.EnsureLogger(logger),
+		logger:        logger,
 		now:           now,
 		runtimeConfig: runtimeConfig,
 	}
