@@ -353,7 +353,7 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 	observations := make([]workersessions.Observation, 0, len(ids))
 	for _, item := range ids {
 		projected, err := r.projectObservation(ctx, item.id)
-		if err != nil {
+		if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 			return workersessions.ListObservationsResult{}, err
 		}
 		observations = append(observations, projected)
@@ -398,7 +398,9 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	// still makes the result stable without exposing both as one observation.
 	sortStrings(ids)
 	projected, err := r.projectObservation(ctx, ids[0])
-	if err != nil {
+	// Native transcript detail is optional; the retained association and
+	// lifecycle remain available when provider storage cannot be projected.
+	if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		return workersessions.Observation{}, err
 	}
 	r.logger.Info("worker session observation get", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
@@ -414,11 +416,10 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
-	// Worker-ID lookup is the provider-neutral history boundary. It must not
-	// require transcript enrichment from Provider Sessions: a worker can emit
-	// canonical lifecycle/output records without a readable provider transcript.
-	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID, req.FactorySessionID)
-	if err != nil {
+	// Provider detail is optional enrichment of the scoped Worker identity.
+	// Retain lifecycle facts when its native transcript cannot be projected.
+	projected, err := r.projectObservation(ctx, req.WorkerSessionID, req.FactorySessionID)
+	if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", publicWorkerID(req.WorkerSessionID), "outcome", "not_found")
 		return workersessions.Observation{}, err
 	}
@@ -426,11 +427,11 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	return projected, nil
 }
 
-func (r *registry) projectObservation(ctx context.Context, id string) (workersessions.Observation, error) {
+func (r *registry) projectObservation(ctx context.Context, id string, factorySessionIDs ...string) (workersessions.Observation, error) {
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
-	projected, err := r.projectWorkerSessionIdentity(ctx, id)
+	projected, err := r.projectWorkerSessionIdentity(ctx, id, factorySessionIDs...)
 	if err != nil {
 		return workersessions.Observation{}, err
 	}

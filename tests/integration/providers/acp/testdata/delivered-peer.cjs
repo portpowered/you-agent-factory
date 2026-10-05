@@ -3,6 +3,11 @@ const readline = require("node:readline");
 const mode = process.argv[2];
 const fs = require("node:fs");
 const attempts = process.argv[3];
+const earlyFailure = mode === "initialize-failure-once" && !fs.existsSync(attempts);
+if (mode === "initialize-failure-once") {
+  fs.appendFileSync(attempts, earlyFailure ? "initialize-failure\n" : "success\n");
+  process.on("exit", () => fs.appendFileSync(attempts + ".exits", earlyFailure ? "initialize-failure\n" : "success\n"));
+}
 let disconnect = mode === "prompt-disconnect" || mode === "prompt-secret-disconnect";
 if (mode === "disconnect-once") {
   // Observe real launches, including an accidental retry of the failed request.
@@ -31,7 +36,7 @@ const finish = () => {
     jsonrpc: "2.0", method: "session/update", params: {
       sessionId: "eof-fixture-session", update: {
         sessionUpdate: "agent_message_chunk",
-        content: { type: "text", text: "delivered EOF primary result" },
+        content: { type: "text", text: "delivered EOF primary result " + process.argv[4] },
       },
     },
   }) + "\n";
@@ -40,6 +45,10 @@ const finish = () => {
 input.on("line", (line) => {
   const request = JSON.parse(line);
   if (request.method === "initialize") {
+    if (earlyFailure) {
+      flushAndExit(JSON.stringify({jsonrpc: "2.0", id: request.id, error: {code: -32602, message: "fixture initialize refused"}}) + "\n");
+      return;
+    }
     const reply = result(request.id, {
       protocolVersion: mode === "initialize-version" ? 999 : 1,
       agentCapabilities: {}, authMethods: [],

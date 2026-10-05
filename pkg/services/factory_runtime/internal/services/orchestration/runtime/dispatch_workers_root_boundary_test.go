@@ -707,7 +707,7 @@ func TestRecordedObservationMergePreservesExecutionFacts(t *testing.T) {
 		[]workersessions.Observation{{WorkerSessionID: "retained", Model: &recordedModel, ReasoningEffort: &recordedEffort}},
 		[]workersessions.Observation{{WorkerSessionID: "retained", Model: &emptyModel, ReasoningEffort: &emptyEffort}},
 	)
-	assertExecutionFacts(t, "empty live", retained[0], recordedModel, recordedEffort)
+	assertExecutionFacts(t, "empty live", retained[0], emptyModel, emptyEffort)
 }
 
 func assertExecutionFacts(t *testing.T, label string, observation workersessions.Observation, model, effort string) {

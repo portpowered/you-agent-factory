@@ -397,21 +397,23 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return result, err
 	}
 
+	live, liveErr := s.listLive(ctx, req)
+	if liveErr != nil && !errors.Is(liveErr, workersessions.ErrObservationWorkNotFound) && s.Service != nil {
+		return workersessions.ListObservationsResult{}, liveErr
+	}
 	events := s.canonicalEvents()
 	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID)
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-
-	live, liveErr := s.listLive(ctx, req)
-	if liveErr == nil {
-		recorded = mergeRecordedObservations(recorded, live.Observations)
-	}
-	if !acceptableLiveObservationError(liveErr) {
-		return workersessions.ListObservationsResult{}, liveErr
-	}
 	if err := s.applyRecordingHealth(ctx, recorded); err != nil {
 		return workersessions.ListObservationsResult{}, err
+	}
+	if liveErr == nil {
+		if err := s.applyLiveRecordingHealth(ctx, live.Observations); err != nil {
+			return workersessions.ListObservationsResult{}, err
+		}
+		recorded = mergeRecordedObservations(recorded, live.Observations)
 	}
 	sample := completedFlushWatermarkSample{}
 	if len(recorded) > 0 || len(live.Observations) > 0 {
@@ -420,10 +422,6 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	s.applyConfirmation(recorded, sample)
 	s.applyConfirmation(live.Observations, sample)
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
-}
-
-func acceptableLiveObservationError(err error) bool {
-	return err == nil || isObservationNotFound(err) || isObservationProjectionUnavailable(err)
 }
 
 func recordedObservationListResult(
@@ -470,7 +468,10 @@ func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
 	}
 	req.RuntimeID = s.runtimeID
 	result, err := s.Service.ListWorkerSessionObservations(ctx, req)
-	if err == nil {
+	if err == nil || errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		if healthErr := s.applyLiveRecordingHealth(ctx, result.Observations); healthErr != nil {
+			return workersessions.ListWorkerSessionObservationsResult{}, healthErr
+		}
 		s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
 	}
 	return result, err
@@ -638,6 +639,19 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	if s != nil && s.Service != nil {
+		observation, err := s.Service.GetObservation(ctx, req)
+		if err == nil {
+			observation, err = s.withLiveRecordingHealth(ctx, observation)
+			if err != nil {
+				return workersessions.Observation{}, err
+			}
+			return s.confirmedObservation(observation), nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.Observation{}, err
+		}
+	}
 	if s != nil && s.ledger != nil && s.projector != nil {
 		fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
 		if err != nil {
@@ -661,19 +675,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	observation, err := s.Service.GetObservation(ctx, req)
-	if err != nil {
-		return workersessions.Observation{}, err
-	}
-	observation, err = s.withRecordingHealth(ctx, observation)
-	if err != nil {
-		return workersessions.Observation{}, err
-	}
-	return s.confirmedObservation(observation), nil
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
-// GetObservationByWorkerSessionID resolves the Worker Session against this
-// Factory Session's durable history before consulting the process-local registry.
+// GetObservationByWorkerSessionID resolves the Worker Session against the
+// live registry before falling back to this Factory Session's durable history.
 func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	ctx context.Context,
 	req workersessions.GetObservationByWorkerSessionIDRequest,
@@ -690,6 +696,12 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	if s != nil && s.Service != nil {
+		observation, err := s.readLiveWorkerSessionByID(ctx, req)
+		if err == nil || !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return observation, err
+		}
+	}
 	if s != nil && s.ledger != nil && s.projector != nil {
 		observation, found, err := s.readRecordedWorkerSessionByID(ctx, req.WorkerSessionID)
 		if err != nil {
@@ -705,7 +717,7 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.readLiveWorkerSessionByID(ctx, req)
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
 func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
@@ -749,22 +761,56 @@ func (s *recordedWorkerSessionObservation) withLiveRecordingHealth(
 	ctx context.Context,
 	observation workersessions.Observation,
 ) (workersessions.Observation, error) {
-	// A resumed runtime owns live attempts restored from its historical prefix,
-	// but the process-local registry can also return attempts admitted by another
-	// Factory Session. Rebind only restored lineage and preserve that foreign
-	// attempt's authoritative live identity for the fleet reader.
-	if s.liveObservationBelongsToRestoredPrefix(observation) {
-		return s.withRecordingHealth(ctx, observation)
+	observations := []workersessions.Observation{observation}
+	if err := s.applyLiveRecordingHealth(ctx, observations); err != nil {
+		return workersessions.Observation{}, err
+	}
+	return observations[0], nil
+}
+
+func (s *recordedWorkerSessionObservation) applyLiveRecordingHealth(
+	ctx context.Context,
+	observations []workersessions.Observation,
+) error {
+	if len(observations) == 0 {
+		return nil
 	}
 	health, err := s.recordingHealth(ctx)
 	if err != nil {
-		return workersessions.Observation{}, err
+		return err
 	}
-	if current, ok := health[observation.WorkerSessionID]; ok {
-		observation.RecordingHealth = current.status
-		observation.RecordingHealthReason = current.reason
+	for index := range observations {
+		observation := &observations[index]
+		// Only restored lineage can be rebound; shared registries can contain
+		// another Factory Session's attempts whose attribution must survive.
+		restored := s.liveObservationBelongsToRestoredPrefix(*observation)
+		if restored {
+			observation.FactorySessionID = s.factorySessionID
+		}
+		if current, ok := health[observation.WorkerSessionID]; ok {
+			observation.RecordingHealth = current.status
+			observation.RecordingHealthReason = current.reason
+			if restored && current.startedAt != nil {
+				startedAt := *current.startedAt
+				observation.StartedAt = &startedAt
+			}
+		}
+		*observation = liveRecordingHealth(*observation)
 	}
-	return observation, nil
+	return nil
+}
+
+func liveRecordingHealth(observation workersessions.Observation) workersessions.Observation {
+	// Loading a still-open file through replay can classify its missing terminal
+	// record as process interruption. Registry presence proves the attempt is
+	// still supervised; incomplete capture is truthful, inferred interruption is
+	// not. Preserve explicit live process-loss failures and real capture faults.
+	if observation.RecordingHealth == recordings.WorkerRecordingStatusIncomplete &&
+		observation.RecordingHealthReason == recordings.WorkerRecordingInterruptionProcessStopped &&
+		(observation.Failure == nil || observation.Failure.Kind != workersessions.FailureCauseProcessGone) {
+		observation.RecordingHealthReason = ""
+	}
+	return observation
 }
 
 func (s *recordedWorkerSessionObservation) ReadTranscript(

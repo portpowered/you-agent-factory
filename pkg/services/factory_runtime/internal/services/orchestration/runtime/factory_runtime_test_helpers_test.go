@@ -563,11 +563,11 @@ func (s *fakeWorkerSessionsService) ListObservations(context.Context, workersess
 }
 
 func (s *fakeWorkerSessionsService) GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error) {
-	return workersessions.Observation{}, nil
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
 func (s *fakeWorkerSessionsService) GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
-	return workersessions.Observation{}, nil
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
 func (s *fakeWorkerSessionsService) ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {

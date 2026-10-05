@@ -132,6 +132,9 @@ func workerSessionDetailEndpoint(server, sessionID, workerSessionID, provider, k
 	path := sessionpath.WorkerSessionsDetailPath(sessionID)
 	if strings.TrimSpace(workerSessionID) != "" {
 		path = sessionpath.TopLevelWorkerSessionDetailPath(workerSessionID)
+		if strings.TrimSpace(sessionID) != "" {
+			path = sessionpath.FactorySessionWorkerSessionDetailPath(sessionID, workerSessionID)
+		}
 	}
 	endpointURL, err := cliserver.RequestURL(server, path)
 	if err != nil {

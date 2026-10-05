@@ -29,19 +29,11 @@ func New(
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {
-	switch {
-	case pricing == nil:
-		return nil, errors.New("construct Costs query: price-table reader is required")
-	case settings == nil:
-		return nil, errors.New("construct Costs query: Operator Settings reader is required")
-	case metrics == nil:
-		return nil, errors.New("construct Costs query: runtime metrics query is required")
-	}
 	service := &Service{
 		pricing:  pricing,
 		settings: settings,
 		metrics:  metrics,
-		logger:   logging.EnsureLogger(logger),
+		logger:   logger,
 	}
 	return service.QueryCosts, nil
 }
@@ -52,12 +44,6 @@ func (service *Service) QueryCosts(
 	ctx context.Context,
 	request costs.QueryRequest,
 ) (costs.Report, error) {
-	if service == nil || service.pricing == nil || service.settings == nil || service.metrics == nil {
-		return costs.Report{}, &costs.QueryError{
-			Kind:    costs.QueryErrorInvalidInput,
-			Message: "query runtime costs: dependencies are required",
-		}
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}

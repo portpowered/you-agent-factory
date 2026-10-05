@@ -777,12 +777,68 @@ func (s *recordedWorkerSessionObservation) applyConfirmation(
 	if !sample.available {
 		return
 	}
+	s.confirmLiveTerminalStates(observations, sample)
 	for index := range observations {
 		observation := &observations[index]
 		if observation.StateSequenceKnown &&
 			observation.StreamGenerationID == sample.generationID &&
 			observation.StateSequence <= int64(sample.watermark.Sequence) {
 			observation.ConfirmationState = workersessions.ConfirmationStateConfirmed
+		}
+	}
+}
+
+// A live terminal outcome can be confirmed by the matching canonical response
+// without replacing any registry-owned lifecycle, timing or optional facts.
+// Active attempts remain unconfirmed because association alone does not prove
+// their current process-local state.
+func (s *recordedWorkerSessionObservation) confirmLiveTerminalStates(
+	observations []workersessions.Observation,
+	sample completedFlushWatermarkSample,
+) {
+	needsConfirmation := false
+	for _, observation := range observations {
+		if observation.State.Terminal() && !observation.StateSequenceKnown {
+			needsConfirmation = true
+			break
+		}
+	}
+	if !needsConfirmation {
+		return
+	}
+	events := s.canonicalEvents()
+	associations, _ := recordedDispatchFacts(events)
+	byWorker := make(map[string]workersessions.Observation)
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		dispatchID := stringPointerValue(event.Context.DispatchID)
+		association, ok := associations[dispatchID]
+		if !ok {
+			continue
+		}
+		var response workers.DispatchResponseEventPayload
+		if json.Unmarshal(event.Payload, &response) != nil {
+			continue
+		}
+		byWorker[association.workerSessionID] = workersessions.Observation{
+			State: recordedDispatchObservationState(interfaces.WorkstationResult{
+				Outcome: string(response.Outcome), Cancellation: response.Cancellation,
+			}),
+			StateSequence: int64(event.Context.Sequence),
+			AttemptID:     dispatchID,
+		}
+	}
+	for index := range observations {
+		observation := &observations[index]
+		if observation.StateSequenceKnown || !observation.State.Terminal() {
+			continue
+		}
+		if recorded, ok := byWorker[observation.WorkerSessionID]; ok && recorded.State == observation.State && recorded.AttemptID == observation.AttemptID {
+			observation.StateSequence = recorded.StateSequence
+			observation.StateSequenceKnown = true
+			observation.StreamGenerationID = sample.generationID
 		}
 	}
 }

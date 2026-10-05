@@ -138,12 +138,13 @@ func (group *inferenceProcessGroup) setup() {
 		})
 	}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      group.startAPIServer,
-		ProviderCommandRunner: group.commands,
-		ScriptCommandRunner:   group.scripts,
-		ProviderOverride:      group.override,
-		WorkerRecordingWriter: group.workerRecordings,
-		ProviderRegistrations: registrations,
+		APIServerStarter:                    group.startAPIServer,
+		ProviderSessionResolveHomeDirectory: func() (string, error) { return group.homeDir, nil },
+		ProviderCommandRunner:               group.commands,
+		ScriptCommandRunner:                 group.scripts,
+		ProviderOverride:                    group.override,
+		WorkerRecordingWriter:               group.workerRecordings,
+		ProviderRegistrations:               registrations,
 	})
 	if err != nil {
 		group.setupErr = err

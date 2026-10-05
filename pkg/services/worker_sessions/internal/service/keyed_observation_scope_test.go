@@ -102,12 +102,13 @@ func TestKeyedRuntimeObservationReadsRejectForeignFactoryScopeBeforeEffects(t *t
 			if err != nil {
 				t.Fatal(err)
 			}
+			ownProjectionCalls := projector.calls
 			wantErr := workersessions.ErrObservationSessionNotFound
 			if scope == "   " {
 				wantErr = workersessions.ErrInvalidObservationFactorySessionID
 			}
 			assertForeignObservationReads(t, registry, scope, wantErr)
-			if projector.calls != 0 || reader.readCalls != 0 || reader.subscribeCalls != 0 {
+			if projector.calls != ownProjectionCalls || reader.readCalls != 0 || reader.subscribeCalls != 0 {
 				t.Fatalf("foreign reads reached provider/events: %d/%d/%d", projector.calls, reader.readCalls, reader.subscribeCalls)
 			}
 			after, err := registry.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{

@@ -175,6 +175,24 @@ func assertCopiedLedgerSessionListsEqual(
 	}
 }
 
+func assertCopiedLedgerLiveHistoryIdentities(t *testing.T, live, history copiedLedgerPublicSnapshot) {
+	t.Helper()
+	for workID, list := range live.lists {
+		other := history.lists[workID]
+		if len(list.Sessions) != len(other.Sessions) {
+			t.Fatalf("live/history attempt count differs for %s", workID)
+		}
+		for index, left := range list.Sessions {
+			right := other.Sessions[index]
+			if left.WorkerSessionId != right.WorkerSessionId || left.AttemptId != right.AttemptId || left.State != right.State ||
+				!reflect.DeepEqual(left.FactorySessionId, right.FactorySessionId) || !reflect.DeepEqual(left.WorkIds, right.WorkIds) ||
+				!reflect.DeepEqual(left.ProviderSession, right.ProviderSession) || left.Transcript != right.Transcript {
+				t.Fatalf("live/history identity changed: live=%#v history=%#v", left, right)
+			}
+		}
+	}
+}
+
 func assertCopiedLedgerWorkInventoryEqual(t *testing.T, before, after factoryapi.ListWorkResponse) {
 	t.Helper()
 	if len(before.Results) != len(after.Results) {
