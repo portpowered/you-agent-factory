@@ -15,7 +15,7 @@ import (
 
 // baselineText is the checked-in exact violation list. One violation per line
 // as `rule|importer|importee`; `#` starts a comment. CI refuses growth by
-// comparing this one file with its merge-base version (make lint-baseline-growth).
+// comparing this one file with its merge-base version (baselinegrowth analyzer).
 //
 //go:embed baseline.txt
 var baselineText string

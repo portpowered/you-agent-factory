@@ -6,6 +6,7 @@ package golangcilintplugin
 import (
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
@@ -40,6 +41,9 @@ func New(raw any) (register.LinterPlugin, error) {
 	}
 	result := &plugin{}
 	for _, original := range analyzers.All() {
+		if original == analyzers.BaselineGrowth {
+			original = analyzers.BaselineGrowthForDirectory(".", strings.Join(config.DeferStale, ","))
+		}
 		copy := *original
 		copy.Flags = *flag.NewFlagSet(original.Name, flag.ContinueOnError)
 		copy.Flags.Bool("check-stale", !deferred[original.Name], "reject stale exact debt entries")

@@ -285,7 +285,7 @@ define run_timed_step
 endef
 
 
-.PHONY: golangci golangci-lint-run repolint lint-baseline-growth lint-migration-smoke
+.PHONY: golangci golangci-lint-run repolint lint-migration-smoke
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
@@ -1057,13 +1057,13 @@ REPOLINT_BIN := $(REPOLINT_DIR)/repolint
 endif
 
 # golangci runs built-in and strict custom diagnostics. The temporary repolint
-# dependency retains baseline growth/compiler-owner checks during migration.
+# dependency retains compiler-owner checks during migration.
 golangci: golangci-lint-run repository-lint-run repolint
 
 LINT_MIGRATION_COHORT ?= all
 
-lint-migration-smoke:
-	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(GOLANGCI_LINT)"
+lint-migration-smoke: golangci-build
+	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(abspath $(GOLANGCI_REPOSITORY))"
 
 golangci-lint-run:
 	@git merge-base HEAD origin/main
@@ -1075,18 +1075,10 @@ repolint-build:
 	$(GO) test ./internal/lint/analyzers
 	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
 
-repolint: lint-baseline-growth
+repolint: repolint-build
 	$(GO) vet -vettool=$(abspath $(REPOLINT_BIN)) -layering.check-stale=false -behavior.check-stale=false -construction.check-stale=false -petripublic.check-stale=false -serviceshape.check-stale=false -functionalshape.check-stale=false ./...
 	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
 	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt" --collect-tags "$(REPOLINT_TAGS)" --go "$(GO)"
-
-# New rule IDs seed once; established rule IDs never admit new keys.
-lint-baseline-growth: repolint-build
-	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; \
-	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
-		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; \
-	git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base" || exit 1; \
-	"$(REPOLINT_BIN)" -baseline-growth="$(REPOLINT_DIR)/baseline.base"
 
 
 deadcode:

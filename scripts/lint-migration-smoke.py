@@ -301,7 +301,7 @@ class PkgFixtures(SizeFixtures):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
@@ -317,7 +317,28 @@ def main() -> None:
     print(f"Artifacts: {artifacts}\n{version.strip()}", flush=True)
     fixtures = SizeFixtures(tool, artifacts, (ROOT / ".golangci.yml").read_text(encoding="utf-8"))
     try:
-        if args.cohort == "manifest":
+        if args.cohort in ("baseline", "all"):
+            fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
+            root = fixtures.module("baseline-growth")
+            write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
+            write(root, "internal/lint/analyzers/baseline.txt", "old|a|b\n")
+            write(root, "pkg/transports/fixture/source.go", "package fixture\n")
+            checked(["git", "init", "-q"], root)
+            checked(["git", "config", "core.longpaths", "true"], root)
+            checked(["git", "add", "internal"], root)
+            fixtures.commit(root)
+            checked(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], root)
+            fixtures.lint(root, "baseline-unchanged", [])
+            write(root, "internal/lint/analyzers/baseline.txt", "old|a|b\nnew|a|b\n")
+            fixtures.lint(root, "baseline-new-rule", [])
+            write(root, "internal/lint/analyzers/baseline.txt", "old|a|c\n")
+            fixtures.lint(root, "baseline-established-growth", [("repolint", "established baseline rules gained keys")])
+            write(root, "internal/lint/analyzers/baseline.txt", "")
+            fixtures.lint(root, "baseline-deletion", [])
+            checked(["git", "update-ref", "-d", "refs/remotes/origin/main"], root)
+            fixtures.lint(root, "baseline-missing-origin", [("repolint", "origin/main")])
+        if args.cohort in ("manifest", "all"):
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("manifest-authority")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
@@ -351,6 +372,7 @@ func execute(command *shape.Command) { command.Flags().String("name", "", "help"
             fixtures.lint(root, "manifest-invalid-settings", [], error="unknown deferred analyzer")
             write(root, ".golangci.yml", fixtures.config.replace("repolint", "missing"))
             fixtures.lint(root, "manifest-unregistered-plugin", [], error="not found")
+        fixtures.config = (ROOT / ".golangci.yml").read_text(encoding="utf-8")
         if args.cohort in ("size", "all"):
             fixtures.thresholds()
             fixtures.test_and_suppression()
