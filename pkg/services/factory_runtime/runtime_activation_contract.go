@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/sessionobservations"
 )
 
 // WorkRestoreReason identifies a structural failure while restoring a Work
@@ -109,10 +109,7 @@ type RuntimeActivationRequest struct {
 // activation request and from fixed process collaborators. Runtime opening
 // owners must not retain it on their reusable implementation; only the opened
 // session's mutation and progress callbacks retain this capability.
-type SessionObservations interface {
-	RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
-	PublishWorkerProgress(workers.ProgressFragment)
-}
+type SessionObservations = sessionobservations.Observations
 
 // RuntimeInitialOpening carries one scoped opening and its publication value.
 // Activation.Close owns cleanup, including resources returned with a failure.
