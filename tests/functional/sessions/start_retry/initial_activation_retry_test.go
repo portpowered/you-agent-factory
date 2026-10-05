@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -25,6 +26,14 @@ import (
 )
 
 const initialOpeningReadCeiling = 5 * time.Second
+
+// Keep timestamps visibly separate from host time while using the explicitly
+// selected real timer effect for asynchronous Work and lifecycle deadlines.
+type initialOpeningClock struct{ platformclock.Real }
+
+func (initialOpeningClock) Now() time.Time {
+	return time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+}
 
 func initialOpeningFactoryConfig() map[string]any {
 	return map[string]any{
@@ -67,6 +76,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	}
 	api := support.NewProcessAPIServer()
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
 		ScriptCommandRunner:       initialOpeningScriptRunner{effects: effects},
 		APIServerStarter:          api.Start,
@@ -308,6 +318,12 @@ func initialOpeningHistory(t *testing.T, sessions factorysessions.Service, sessi
 	stream, err := sessions.SubscribeFactoryEventsForSession(ctx, sessionID, nil)
 	if err != nil || stream == nil || len(stream.History) == 0 {
 		t.Fatalf("session %s retained events = %#v, %v, want public history", sessionID, stream, err)
+	}
+	for _, event := range stream.History {
+		if !event.Context.EventTime.Equal((initialOpeningClock{}).Now()) {
+			t.Fatalf("session %s event %s (%s) time = %s, want selected process time %s",
+				sessionID, event.Id, event.Type, event.Context.EventTime, (initialOpeningClock{}).Now())
+		}
 	}
 	return stream
 }

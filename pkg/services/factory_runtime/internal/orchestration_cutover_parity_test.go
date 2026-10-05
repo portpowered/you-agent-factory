@@ -168,7 +168,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, workflows, workflows)),
 		nil,
-		platformclock.Real{},
+		platformclock.Real{}, testDefinitionMapper(),
 	).Build(
 		context.Background(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,

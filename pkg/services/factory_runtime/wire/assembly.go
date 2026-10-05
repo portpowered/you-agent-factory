@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -18,6 +19,14 @@ import (
 
 // RuntimeFactory constructs hosted runtime bundles.
 type RuntimeFactory = factoryruntimeinternal.RuntimeFactory
+
+// DefinitionMapper holds reusable definition mapping behavior. Map allocates
+// a new net for each opening while retaining only the selected ID generator.
+type DefinitionMapper = definitionmapping.Mapper
+
+func NewDefinitionMapper(newID factoryruntime.IDGenerator) (*DefinitionMapper, error) {
+	return definitionmapping.New(newID)
+}
 
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
@@ -51,6 +60,7 @@ func NewRuntimeFactory(
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	providerSessions providersessions.Service,
 	workerAttemptScheduler platformclock.TimerSource,
+	definitionMapper *DefinitionMapper,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
 		quorumPolicy,
@@ -71,6 +81,7 @@ func NewRuntimeFactory(
 		orchestrationCompilation,
 		providerSessions,
 		workerAttemptScheduler,
+		definitionMapper,
 	)
 }
 

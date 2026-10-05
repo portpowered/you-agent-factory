@@ -5,8 +5,49 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
+
+func TestSharedMapperKeepsConcurrentOpeningStateDetached(t *testing.T) {
+	t.Parallel()
+	mapper, err := New(uuid.NewString)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := &interfaces.FactoryConfig{
+		Resources: []interfaces.ResourceConfig{{ID: "gpu", Name: "GPU pool", Capacity: 2}},
+	}
+	type result struct {
+		net *state.Net
+		err error
+	}
+	results := make(chan result, 2)
+	for range 2 {
+		go func() {
+			net, err := mapper.Map(t.Context(), config)
+			results <- result{net: net, err: err}
+		}()
+	}
+	first, second := <-results, <-results
+	for _, mapped := range []result{first, second} {
+		if mapped.err != nil {
+			t.Fatalf("Map: %v", mapped.err)
+		}
+		if mapped.net.Resources["gpu"] == nil || mapped.net.Resources["gpu"].Capacity != 2 {
+			t.Fatalf("mapped resources = %#v, want selected GPU capacity", mapped.net.Resources)
+		}
+	}
+	first.net.Resources["gpu"].Capacity = 1
+	delete(first.net.Places, "gpu:available")
+	if second.net.Resources["gpu"].Capacity != 2 || second.net.Places["gpu:available"] == nil {
+		t.Fatal("changing one opening's resource topology changed its peer")
+	}
+	if config.Resources[0].Capacity != 2 {
+		t.Fatal("mapping changed the caller's resource definition")
+	}
+}
 
 func TestResourceMappingUsesStableIDForMutableDisplayName(t *testing.T) {
 	var nextID int

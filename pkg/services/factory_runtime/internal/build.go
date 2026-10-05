@@ -58,6 +58,7 @@ type RuntimeFactory struct {
 	inputFiles               inputFileSystem
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
+	definitionMapper         *definitionmapping.Mapper
 	providerSessions         providersessions.Service
 	workerAttemptScheduler   platformclock.TimerSource
 }
@@ -81,6 +82,7 @@ func NewRuntimeFactory(
 	orchestrationCompilation factory.OrchestrationCompilation,
 	providerSessions providersessions.Service,
 	workerAttemptScheduler platformclock.TimerSource,
+	definitionMapper *definitionmapping.Mapper,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		quorumPolicy:             quorumPolicy,
@@ -101,6 +103,7 @@ func NewRuntimeFactory(
 		orchestrationCompilation: orchestrationCompilation,
 		providerSessions:         providerSessions,
 		workerAttemptScheduler:   workerAttemptScheduler,
+		definitionMapper:         definitionMapper,
 	}
 }
 
@@ -610,11 +613,7 @@ func (f *RuntimeFactory) compileOrchestrationNet(
 		}
 		return net, nil
 	case factory.OrchestrationKindJavaScript:
-		mapper, err := definitionmapping.New(f.newID)
-		if err != nil {
-			return nil, err
-		}
-		net, err := mapper.Map(ctx, cfg)
+		net, err := f.definitionMapper.Map(ctx, cfg)
 		if err != nil {
 			logger.Error("failed to map JavaScript factory runtime net", zap.Error(err))
 			return nil, fmt.Errorf("compile factory orchestration: %w", err)

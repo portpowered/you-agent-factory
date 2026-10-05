@@ -22,6 +22,7 @@ import (
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -683,13 +684,21 @@ func testOrchestrationCompilation() factory.OrchestrationCompilation {
 	return factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, nil, nil))
 }
 
+func testDefinitionMapper() *definitionmapping.Mapper {
+	mapper, err := definitionmapping.New(testRuntimeID)
+	if err != nil {
+		panic(err) // The fixed test ID generator is required by this fixture.
+	}
+	return mapper
+}
+
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
 		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil,
-		platformclock.Real{},
+		platformclock.Real{}, testDefinitionMapper(),
 	)
 }
 
@@ -716,7 +725,7 @@ func testRuntimeFactoryWithOwners(logOwner factory.RuntimeLogOwner, metricsOwner
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil,
-		platformclock.Real{},
+		platformclock.Real{}, testDefinitionMapper(),
 	)
 }
 
