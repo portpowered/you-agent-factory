@@ -70,10 +70,12 @@ func TestWorkerSessionHTTPListTerminateCharacterization(t *testing.T) {
 
 	joinedFleetCharacterizationTerminate(t, server, "fleet-a", runner.slots[0], false)
 	assertFleetCharacterizationTerminal(t, server, sessionID, "fleet-a", "fleet-a-dispatch", "TERMINATED")
+	assertCapturedStopCause(t, server.URL(), "fleet-a", "OPERATOR_TERMINATE")
 	assertFleetCharacterizationControl(t, fleetCharacterizationControl(t, server, "fleet-a", false), "fleet-a", "fleet-a-dispatch", "NOOP", "TERMINATED")
 	t.Log("REST-05: HTTP terminate joins exact no-reference A; repeated control is NOOP")
 	joinedFleetCharacterizationTerminate(t, server, "fleet-b", runner.slots[1], true)
 	assertFleetCharacterizationTerminal(t, server, sessionID, "fleet-b", "fleet-b-dispatch", "TERMINATED")
+	assertCapturedStopCause(t, server.URL(), "fleet-b", "OPERATOR_TERMINATE")
 	assertFleetCharacterizationControl(t, fleetCharacterizationControl(t, server, "fleet-a", true), "fleet-a", "fleet-a-dispatch", "NOOP", "TERMINATED")
 	t.Log("REST-06: remote CLI terminate joins B and matches A's terminal NOOP")
 	assertFleetCharacterizationMissing(t, server)
@@ -84,6 +86,7 @@ func TestWorkerSessionHTTPListTerminateCharacterization(t *testing.T) {
 	default:
 	}
 	completeFleetCharacterizationSibling(t, server, runner.slots[2], stream, sibling)
+	assertCapturedStopCause(t, server.URL(), sibling.workerSessionID, "COMPLETED")
 	for _, cli := range []bool{false, true} {
 		assertFleetCharacterizationControl(t, fleetCharacterizationControl(t, server, sibling.workerSessionID, cli), sibling.workerSessionID, sibling.dispatchID, "NOOP", "COMPLETED")
 	}
