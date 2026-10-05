@@ -74,6 +74,14 @@ type RecordedSessionInventoryRequest struct {
 // summaries. Complete replay histories never cross this boundary.
 type RecordedSessionInventoryResult struct {
 	Sessions []RecordedSessionSummary
+	Warnings []RecordedSessionDiagnostic
+}
+
+// RecordedSessionDiagnostic identifies an omitted artifact without exposing its contents.
+type RecordedSessionDiagnostic struct {
+	ArtifactReference string
+	Code              string
+	Reason            string
 }
 
 // RecordedSessionSummary is the listing metadata for one recording artifact.

@@ -50,33 +50,12 @@ func listSessionsCanonical(ctx context.Context, sessions factorysessions.Service
 		envelope := executionErrorEnvelope(err)
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
 	}
-	mode := factorysessions.SessionOperationModeLive
-	switch request.Scope {
-	case factorysessions.SessionListScopeLive:
-	case factorysessions.SessionListScopePersisted:
-		mode = factorysessions.SessionOperationModeDurable
-	case factorysessions.SessionListScopeAll:
-		mode = factorysessions.SessionOperationModeAll
-	default:
-		envelope := requestValidationErrorEnvelope(errors.New("unsupported Factory Session list scope"))
-		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
-	}
-	result, err := sessions.List(ctx, factorysessions.SessionListRequest{Mode: mode, Filters: request.Filters})
+	result, err := sessions.ListSessions(ctx, request)
 	if err != nil {
 		envelope := executionErrorEnvelope(err)
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
 	}
-	legacy := factorysessions.ListSessionsResult{Scope: request.Scope, DurableSessions: result.DurableSessions}
-	for _, session := range result.Sessions {
-		if session.Mode != factorysessions.SessionOperationModeLive {
-			continue
-		}
-		legacy.LiveSessions = append(legacy.LiveSessions, factorysessions.LiveSessionSummary{
-			ID: session.SessionID, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
-			Project: session.Project, IsDefault: session.IsDefault,
-		})
-	}
-	mapped := apifactorysession.ListSessionsResponseToAPI(legacy)
+	mapped := apifactorysession.ListSessionsResponseToAPI(result)
 	return ToolResponse[factoryapi.ListFactorySessionsResponse]{Result: &mapped}
 }
 

@@ -138,3 +138,30 @@ func TestListRequiresReadersForSelectedScopes(t *testing.T) {
 		t.Fatalf("persisted error = %v, want required durable reader", err)
 	}
 }
+
+func TestListWarningsAppearOnlyInHistoryAndAll(t *testing.T) {
+	t.Parallel()
+	warnings := []factorysessions.RecordedSessionDiagnostic{{ArtifactReference: "2026/10/03/bad.json", Code: "UNREADABLE_RECORDING", Reason: "Recording could not be decoded."}}
+	for _, scope := range []factorysessions.SessionListScope{"", factorysessions.SessionListScopeLive, factorysessions.SessionListScopePersisted, factorysessions.SessionListScopeHistory, factorysessions.SessionListScopeAll} {
+		t.Run(string(scope), func(t *testing.T) {
+			t.Parallel()
+			live := &scopedLiveReader{}
+			durable := &scopedDurableReader{result: factorysessions.ListSessionsResult{Warnings: warnings}}
+			result, err := scopedlisting.List(t.Context(), factorysessions.ListSessionsRequest{Scope: scope}, live, durable)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scope == factorysessions.SessionListScopeHistory || scope == factorysessions.SessionListScopeAll {
+				if !reflect.DeepEqual(result.Warnings, warnings) {
+					t.Fatalf("warnings = %#v", result.Warnings)
+				}
+				result.Warnings[0].Reason = "changed"
+				if durable.result.Warnings[0].Reason == "changed" {
+					t.Fatal("projection aliases owner diagnostics")
+				}
+			} else if len(result.Warnings) != 0 {
+				t.Fatalf("unexpected warnings = %#v", result.Warnings)
+			}
+		})
+	}
+}
