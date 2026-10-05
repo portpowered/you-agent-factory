@@ -554,7 +554,14 @@ class MarkdownFixtures:
             variables: tuple[str, ...] = (), env: dict | None = None) -> None:
         # The explicit fixture inputs are the observer; no source inventory check.
         paths = ['docs/README.md', 'docs/reference/valid.md', 'docs/reference/nested/.hidden/notes.MD']
-        before = {p: (root / p).read_bytes() for p in paths if (root / p).is_file() and os.access(root / p, os.R_OK)}
+        before = {}
+        for path in paths:
+            try:
+                before[path] = (root / path).read_bytes()
+            except (FileNotFoundError, PermissionError):
+                # Missing/inaccessible inputs are recipe faults, not observer faults.
+                # Keep permission handling confined to snapshot collection.
+                continue
         result = execute(['make', '-o', self.cache.as_posix() + '/ready',
                           'docs-reference-check', 'DOCS_MARKDOWN_CACHE=' + self.cache.as_posix(),
                           *variables], root, env)
@@ -620,11 +627,14 @@ class MarkdownFixtures:
                 path = root / operand
                 if operand.endswith('nested'):
                     write(root, operand + '/guide.md', '# Valid\n')
+                source = path / 'guide.md' if path.is_dir() else path
+                content = source.read_bytes()
                 path.chmod(0)
                 try:
                     self.run(root, 'M07-unreadable', (operand, 'Permission denied'))
                 finally:
                     path.chmod(0o700)
+                assert source.read_bytes() == content, f'M07-unreadable: modified {source}'
 
     def configuration(self) -> None:
         for label, content in (
