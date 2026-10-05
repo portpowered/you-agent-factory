@@ -776,7 +776,7 @@ func injectPrivateInterruptSessionContent(field string, session *workersessions.
 func TestInterruptJournalReplayRejectsUnknownOutcomeFieldsWithoutEffects(t *testing.T) {
 	t.Parallel()
 	for _, phase := range []string{"SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED", "FAILED"} {
-		for _, field := range []string{"top-level", "source", "successor", "trailing", "duplicate-accepted", "duplicate-state", "duplicate-model", "duplicate-escaped-model"} {
+		for _, field := range []string{"top-level", "source", "successor", "trailing", "duplicate-accepted", "duplicate-state", "duplicate-model", "duplicate-escaped-model", "alias-accepted", "alias-state", "alias-source-model", "alias-successor-model", "alias-model-only", "alias-failure-causes"} {
 			t.Run(phase+"/"+field, func(t *testing.T) {
 				t.Parallel()
 				r, plan, store := newDurableInterruptFixture(t)
@@ -827,6 +827,9 @@ func injectUnknownInterruptOutcomeField(t *testing.T, outcome durableInterruptOu
 	if err != nil {
 		t.Fatal(err)
 	}
+	if strings.HasPrefix(field, "alias-") {
+		return injectInterruptOutcomeAlias(payload, field)
+	}
 	switch field {
 	case "duplicate-accepted":
 		return bytes.Replace(payload, []byte(`"Accepted":`), []byte(`"Accepted":false,"Accepted":`), 1)
@@ -855,6 +858,25 @@ func injectUnknownInterruptOutcomeField(t *testing.T, outcome durableInterruptOu
 	payload, err = json.Marshal(document)
 	if err != nil {
 		t.Fatal(err)
+	}
+	return payload
+}
+
+func injectInterruptOutcomeAlias(payload json.RawMessage, field string) json.RawMessage {
+	switch field {
+	case "alias-accepted":
+		return bytes.Replace(payload, []byte(`"Accepted":`), []byte(`"accepted":false,"Accepted":`), 1)
+	case "alias-state":
+		return bytes.Replace(payload, []byte(`"State":"CANCELED"`), []byte(`"state":"RUNNING","State":"CANCELED"`), 1)
+	case "alias-source-model":
+		return bytes.Replace(payload, []byte(`"Model":null`), []byte(`"model":"private-provider-secret","Model":null`), 1)
+	case "alias-successor-model":
+		index := bytes.Index(payload, []byte(`"Successor":`))
+		return append(append(json.RawMessage(nil), payload[:index]...), bytes.Replace(payload[index:], []byte(`"Model":null`), []byte(`"model":"private-provider-secret","Model":null`), 1)...)
+	case "alias-model-only":
+		return bytes.Replace(payload, []byte(`"Model":null`), []byte(`"model":null`), 1)
+	case "alias-failure-causes":
+		return bytes.Replace(payload, []byte(`"Source":`), []byte(`"FailureCauses":[],"Source":`), 1)
 	}
 	return payload
 }

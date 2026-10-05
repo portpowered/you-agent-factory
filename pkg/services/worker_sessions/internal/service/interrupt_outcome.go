@@ -22,7 +22,7 @@ type durableInterruptOutcome struct {
 // Treat the saved response as a versioned contract, just like captured input.
 // Silently discarding unknown fields could hide an incompatible/private row.
 func readInterruptOutcome(payload json.RawMessage, outcome *durableInterruptOutcome) error {
-	if !uniqueInterruptJSONFields(payload) {
+	if !uniqueInterruptJSONFields(payload) || !exactInterruptOutcomeFields(payload) {
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
@@ -31,6 +31,43 @@ func readInterruptOutcome(payload json.RawMessage, outcome *durableInterruptOutc
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	return nil
+}
+
+// encoding/json accepts case-insensitive struct field aliases. Persisted
+// results use exact names so an alias cannot shadow a private or causal fact.
+// Token maps in execution recipes retain their case-sensitive customer keys.
+func exactInterruptOutcomeFields(payload json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payload, &fields) != nil || fields == nil {
+		return false
+	}
+	for name, value := range fields {
+		switch name {
+		case "RequestID", "SourceWorkerSessionID", "SuccessorWorkerSessionID", "Phase", "Accepted", "failureCauses":
+		case "Source", "Successor":
+			if !exactInterruptSessionFields(value) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func exactInterruptSessionFields(payload json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payload, &fields) != nil || fields == nil {
+		return false
+	}
+	for name := range fields {
+		switch name {
+		case "ID", "State", "Model", "ReasoningEffort", "Result", "ProviderSessionAssociation", "PredecessorWorkerSessionID", "SuccessorWorkerSessionID":
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // Duplicate members can conceal credentials or contradictory facts behind a

@@ -480,7 +480,8 @@ use cancel or terminate to stop the still-running source.
 Durable replay validates the captured replacement input against the original
 request. Older request-only artifacts remain readable for result replay.
 Missing or corrupt captured input, or a stored control
-result containing unknown fields, duplicate JSON members, provider metadata, or private diagnostics, reports persistence
+result containing unknown fields, duplicate JSON members, field-name case aliases,
+provider metadata, or private diagnostics, reports persistence
 unavailable without returning that content, stopping a Worker Session, or
 admitting a successor.
 If an intent or phase write loses its acknowledgement, the host reloads the
