@@ -331,6 +331,11 @@ func (router *reviewFailureCommandRouter) Run(
 	if provider {
 		return reviewFailureAccepted("fixture accepted"), nil
 	}
+	for _, arg := range request.Args {
+		if arg == "--classification" {
+			return platformprocess.CommandResult{Stdout: []byte("review\n"), ExitCode: 0}, nil
+		}
+	}
 	return platformprocess.CommandResult{Stdout: []byte("review-failure-script-ok"), ExitCode: 0}, nil
 }
 

@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +17,75 @@ import (
 )
 
 const testDebounceWindow = 50 * time.Millisecond
+
+// Each registration acknowledges the event that replaced the debounce timer;
+// a waiter count alone can still describe the previous event's timer.
+type registeringDebounceClock struct {
+	clockwork.Clock
+	registered chan struct{}
+	completed  chan struct{}
+}
+
+func (c *registeringDebounceClock) AfterFunc(d time.Duration, fn func()) clockwork.Timer {
+	timer := c.Clock.AfterFunc(d, func() {
+		fn()
+		if c.completed != nil {
+			c.completed <- struct{}{}
+		}
+	})
+	c.registered <- struct{}{}
+	return timer
+}
+
+func publishDebounceEvent(t *testing.T, events *scriptedEventWatcher, clock *registeringDebounceClock, event fsnotify.Event) {
+	t.Helper()
+	events.events <- event
+	select {
+	case <-clock.registered:
+	case <-time.After(time.Second): //nolint:testsleep // Failure ceiling only; timer registration is the readiness signal.
+		t.Fatal("event did not register its debounce timer")
+	}
+}
+
+func TestDebounceCancelJoinsRunningCallbackAndRetiresReplacement(t *testing.T) {
+	t.Parallel()
+	clock := clockwork.NewFakeClock()
+	scheduler := newDebounceScheduler(clock, testDebounceWindow)
+	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var replacementCalls atomic.Int32
+	scheduler.schedule("same", func() { close(started); <-release; close(finished) })
+	clock.Advance(testDebounceWindow)
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		t.Fatal("callback did not start")
+	}
+	scheduler.schedule("same", func() { replacementCalls.Add(1) })
+	done := make(chan struct{})
+	go func() { scheduler.cancelAll(); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("cancel returned before running callback joined")
+	default:
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("cancel did not join")
+	}
+	select {
+	case <-finished:
+	default:
+		t.Fatal("running callback not finished")
+	}
+	clock.Advance(testDebounceWindow)
+	scheduler.schedule("later", func() { replacementCalls.Add(1) })
+	clock.Advance(testDebounceWindow)
+	if replacementCalls.Load() != 0 {
+		t.Fatal("retired scheduler admitted another callback")
+	}
+}
 
 func newDebouncedTestWatcher(
 	dir string,
@@ -37,10 +109,24 @@ func newDebouncedTestWatcher(
 
 func startDebouncedWatch(t *testing.T, fw *watcher, eventWatcher *scriptedEventWatcher) (context.CancelFunc, <-chan error) {
 	t.Helper()
+	discovered := make(chan struct{})
+	var discoveryOnce sync.Once
+	walkDirectory := fw.walkDirectory
+	fw.walkDirectory = func(root string, fn fs.WalkDirFunc) error {
+		err := walkDirectory(root, fn)
+		discoveryOnce.Do(func() { close(discovered) })
+		return err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- fw.Watch(ctx) }()
 	waitForRegisteredDirectory(t, eventWatcher.added, fw.dir)
+	select {
+	case <-discovered:
+	case <-time.After(10 * time.Second):
+		cancel()
+		t.Fatal("initial directory discovery did not complete")
+	}
 	return cancel, done
 }
 
@@ -63,9 +149,6 @@ func TestFileWatcher_DebounceSingleEventSettlesOnce(t *testing.T) {
 	dir := setupWatchDir(t)
 	path := filepath.Join(dir, "request", "default", "single.md")
 	content := []byte("single event")
-	if err := writeLocalFile(path, content); err != nil {
-		t.Fatal(err)
-	}
 
 	clock := clockwork.NewFakeClock()
 	submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
@@ -74,6 +157,10 @@ func TestFileWatcher_DebounceSingleEventSettlesOnce(t *testing.T) {
 	cancel, done := startDebouncedWatch(t, fw, eventWatcher)
 	defer cancel()
 
+	// Complete empty-directory discovery before publishing the single event.
+	if err := writeLocalFile(path, content); err != nil {
+		t.Fatal(err)
+	}
 	eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
 	advanceDebounce(t, clock)
 
@@ -94,24 +181,23 @@ func TestFileWatcher_DebounceCoalescesBurstToOneSubmit(t *testing.T) {
 	dir := setupWatchDir(t)
 	path := filepath.Join(dir, "request", "default", "burst.md")
 	finalContent := []byte("settled content")
-	if err := writeLocalFile(path, []byte("draft")); err != nil {
-		t.Fatal(err)
-	}
-
 	clock := clockwork.NewFakeClock()
+	registeredClock := &registeringDebounceClock{Clock: clock, registered: make(chan struct{}, 1)}
 	submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	eventWatcher := newScriptedEventWatcher()
-	fw := newDebouncedTestWatcher(dir, submitter, clock, eventWatcher)
+	fw := newDebouncedTestWatcher(dir, submitter, registeredClock, eventWatcher)
 	cancel, done := startDebouncedWatch(t, fw, eventWatcher)
 	defer cancel()
 
-	eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
-	waitForFakeClockWaiters(t, clock, 1)
+	if err := writeLocalFile(path, []byte("draft")); err != nil {
+		t.Fatal(err)
+	}
+	publishDebounceEvent(t, eventWatcher, registeredClock, fsnotify.Event{Name: path, Op: fsnotify.Create})
 
 	if err := writeLocalFile(path, finalContent); err != nil {
 		t.Fatal(err)
 	}
-	eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Write}
+	publishDebounceEvent(t, eventWatcher, registeredClock, fsnotify.Event{Name: path, Op: fsnotify.Write})
 	advanceDebounce(t, clock)
 
 	select {
@@ -149,9 +235,8 @@ func TestFileWatcher_DebounceIndependentPathsSubmitSeparately(t *testing.T) {
 	cancel, done := startDebouncedWatch(t, fw, eventWatcher)
 	defer cancel()
 
-	eventWatcher.events <- fsnotify.Event{Name: pathA, Op: fsnotify.Create}
-	waitForFakeClockWaiters(t, clock, 1)
-	eventWatcher.events <- fsnotify.Event{Name: pathB, Op: fsnotify.Create}
+	// Discovery schedules both existing paths. Sending duplicate events here
+	// can replace a timer after advancement, so observe their actual registration.
 	waitForFakeClockWaiters(t, clock, 2)
 
 	clock.Advance(testDebounceWindow)
@@ -188,35 +273,53 @@ func TestFileWatcher_DebounceCancelDuringWindowSkipsSubmit(t *testing.T) {
 
 func TestFileWatcher_StoppingOneWatcherPreservesPeerPendingAdmission(t *testing.T) {
 	clock := clockwork.NewFakeClock()
+	clockA := &registeringDebounceClock{Clock: clock, registered: make(chan struct{}, 1)}
+	clockB := &registeringDebounceClock{Clock: clock, registered: make(chan struct{}, 1), completed: make(chan struct{}, 1)}
 	dirA, dirB := setupWatchDir(t), setupWatchDir(t)
 	pathA := filepath.Join(dirA, "request", "default", "a.md")
 	pathB := filepath.Join(dirB, "request", "default", "b.md")
-	for path, content := range map[string]string{pathA: "stopped", pathB: "peer"} {
-		if err := writeLocalFile(path, []byte(content)); err != nil {
-			t.Fatal(err)
-		}
-	}
 	submitA := &recordingSubmitter{}
 	submitB := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	eventsA, eventsB := newScriptedEventWatcher(), newScriptedEventWatcher()
-	watchA := newDebouncedTestWatcher(dirA, submitA, clock, eventsA)
-	watchB := newDebouncedTestWatcher(dirB, submitB, clock, eventsB)
+	watchA := newDebouncedTestWatcher(dirA, submitA, clockA, eventsA)
+	watchB := newDebouncedTestWatcher(dirB, submitB, clockB, eventsB)
 	cancelA, doneA := startDebouncedWatch(t, watchA, eventsA)
-	t.Cleanup(cancelA)
+	joinedA := false
+	t.Cleanup(func() {
+		cancelA()
+		if !joinedA {
+			waitForWatchDone(t, doneA)
+		}
+	})
 	cancelB, doneB := startDebouncedWatch(t, watchB, eventsB)
 	t.Cleanup(func() {
 		cancelB()
 		waitForWatchDone(t, doneB)
 	})
-	eventsA.events <- fsnotify.Event{Name: pathA, Op: fsnotify.Create}
-	waitForFakeClockWaiters(t, clock, 1)
-	eventsB.events <- fsnotify.Event{Name: pathB, Op: fsnotify.Create}
-	waitForFakeClockWaiters(t, clock, 2)
+	// Both initial walks are empty. Acknowledge each injected event's own
+	// timer before stopping A or making B eligible on the shared clock.
+	for path, content := range map[string]string{pathA: "stopped", pathB: "peer"} {
+		if err := writeLocalFile(path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	publishDebounceEvent(t, eventsA, clockA, fsnotify.Event{Name: pathA, Op: fsnotify.Create})
+	publishDebounceEvent(t, eventsB, clockB, fsnotify.Event{Name: pathB, Op: fsnotify.Create})
 
 	cancelA()
 	waitForWatchDone(t, doneA)
+	joinedA = true
 	clock.Advance(testDebounceWindow)
-	waitForSubmitCount(t, submitB, 1)
+	select {
+	case <-submitB.submitted:
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; the peer submission is the progress signal.
+		t.Fatal("peer watcher did not submit its pending Work Request")
+	}
+	select {
+	case <-clockB.completed:
+	case <-time.After(30 * time.Second): //nolint:testsleep // Failure ceiling only; completion acknowledges the entire peer callback.
+		t.Fatal("peer debounce callback did not complete")
+	}
 	if got := submitA.submitCallCount(); got != 0 {
 		t.Fatalf("stopped watcher admitted %d Work Requests, want 0", got)
 	}
@@ -227,22 +330,22 @@ func TestFileWatcher_StoppingOneWatcherPreservesPeerPendingAdmission(t *testing.
 }
 
 func TestFileWatcher_DebounceEquivalentSequencesProduceSameSubmitCount(t *testing.T) {
-	dir := setupWatchDir(t)
-	path := filepath.Join(dir, "request", "default", "repeat.md")
-	if err := writeLocalFile(path, []byte("repeat")); err != nil {
-		t.Fatal(err)
-	}
-
 	runSequence := func() int {
+		dir := setupWatchDir(t)
+		path := filepath.Join(dir, "request", "default", "repeat.md")
 		clock := clockwork.NewFakeClock()
+		registeredClock := &registeringDebounceClock{Clock: clock, registered: make(chan struct{}, 1)}
 		submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 		eventWatcher := newScriptedEventWatcher()
-		fw := newDebouncedTestWatcher(dir, submitter, clock, eventWatcher)
+		fw := newDebouncedTestWatcher(dir, submitter, registeredClock, eventWatcher)
 		cancel, done := startDebouncedWatch(t, fw, eventWatcher)
+		defer cancel()
 
-		eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
-		waitForFakeClockWaiters(t, clock, 1)
-		eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Write}
+		if err := writeLocalFile(path, []byte("repeat")); err != nil {
+			t.Fatal(err)
+		}
+		publishDebounceEvent(t, eventWatcher, registeredClock, fsnotify.Event{Name: path, Op: fsnotify.Create})
+		publishDebounceEvent(t, eventWatcher, registeredClock, fsnotify.Event{Name: path, Op: fsnotify.Write})
 		advanceDebounce(t, clock)
 
 		select {

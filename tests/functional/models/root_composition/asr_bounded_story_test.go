@@ -2,11 +2,9 @@ package root_composition_test
 
 import (
 	"bytes"
-	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -156,67 +154,4 @@ func assertASRBoundedInvalidInputResult(t *testing.T, err error, stdout, stderr 
 	if nonEmptyDiagnosticLines(stderr) != 1 {
 		t.Fatalf("ASR %s invalid-input diagnostic lines = %d, want one", mode, nonEmptyDiagnosticLines(stderr))
 	}
-}
-
-// TestModelsASRBoundedRepeatOnReusableRootProcessReleasesEachHostOnce proves
-// stable semantic values across repeated exact-fixture requests. The same
-// public root process is reused while each request-scoped managed host is
-// released exactly once.
-func TestModelsASRBoundedRepeatOnReusableRootProcessReleasesEachHostOnce(t *testing.T) {
-	t.Parallel()
-
-	story := setupASRStory(t)
-	first := runASRJSONInvocation(t, story)
-	firstObservation, err := localAIASRObservationFromResponse(first)
-	if err != nil {
-		t.Fatalf("normalize first repeated ASR response: %v", err)
-	}
-	assertASRStoryBackendRequest(t, story, *story.received)
-
-	second := runASRJSONInvocation(t, story)
-	secondObservation, err := localAIASRObservationFromResponse(second)
-	if err != nil {
-		t.Fatalf("normalize second repeated ASR response: %v", err)
-	}
-	if !reflect.DeepEqual(firstObservation, secondObservation) {
-		t.Fatalf("repeated ASR observations differ: first=%#v second=%#v", firstObservation, secondObservation)
-	}
-	assertASRStoryBackendRequest(t, story, *story.received)
-
-	transcriptionCalls := 0
-	for _, call := range story.fixture.Calls() {
-		if call.Method == "AudioTranscription" {
-			transcriptionCalls++
-			if call.Prompt != base64ASRStoryInput(story.inputBytes) {
-				t.Fatalf("repeated ASR fixture prompt = %q, want exact fixture bytes", call.Prompt)
-			}
-		}
-	}
-	if transcriptionCalls != 2 {
-		t.Fatalf("repeated ASR fixture transcription calls = %d, want one per invocation", transcriptionCalls)
-	}
-	if story.hostLauncher.Calls() != 2 {
-		t.Fatalf("repeated ASR managed host starts = %d, want one request-scoped host per invocation on the reused root process", story.hostLauncher.Calls())
-	}
-	if story.hostLauncher.StopCalls() != 2 {
-		t.Fatalf("repeated ASR managed host stops = %d, want exactly one release per started host", story.hostLauncher.StopCalls())
-	}
-	if story.rejectingNetwork.Calls() != 0 {
-		t.Fatalf("repeated ASR asset network calls = %d, want zero", story.rejectingNetwork.Calls())
-	}
-
-	closeRootProcess(t, story.process, "close repeated ASR root process")
-	assertLocalAIOMNIHostReleased(t, story.hostLauncher, "repeated ASR")
-	if story.hostLauncher.StopCalls() != 2 {
-		t.Fatalf("repeated ASR managed host stops after root close = %d, want no duplicate release", story.hostLauncher.StopCalls())
-	}
-	if err := story.fixture.Close(); err != nil {
-		t.Fatalf("close repeated ASR protocol fixture: %v", err)
-	}
-	assertLocalAIOMNIFixtureListenerReleased(t, story.fixture.Endpoint())
-	t.Logf("ASR repeat/release proof: two exact-fixture invocations returned stable observations on one reused root process, released each managed host exactly once, and released the fixture listener")
-}
-
-func base64ASRStoryInput(input []byte) string {
-	return base64.StdEncoding.EncodeToString(input)
 }

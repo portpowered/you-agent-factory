@@ -45,21 +45,23 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 	dir := setupWatchDir(t)
 	path := filepath.Join(dir, "request", "default", "injected.md")
 	content := []byte("deterministic input")
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	submitter := &recordingSubmitter{submitted: make(chan struct{}, 1)}
 	watcher := newScriptedEventWatcher()
 	clock := clockwork.NewFakeClock()
-	fw := newDebouncedTestWatcher(dir, submitter, clock, watcher)
+	registeredClock := &registeringDebounceClock{Clock: clock, registered: make(chan struct{}, 1)}
+	fw := newDebouncedTestWatcher(dir, submitter, registeredClock, watcher)
+	cancel, done := startDebouncedWatch(t, fw, watcher)
+	t.Cleanup(func() {
+		cancel()
+		waitForWatchDone(t, done)
+	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- fw.Watch(ctx) }()
-
-	waitForRegisteredDirectory(t, watcher.added, dir)
-	watcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
+	// Empty discovery is complete, so only this injected event can register
+	// the timer acknowledged before advancing the debounce window.
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	publishDebounceEvent(t, watcher, registeredClock, fsnotify.Event{Name: path, Op: fsnotify.Create})
 	advanceDebounce(t, clock)
 	select {
 	case <-submitter.submitted:
@@ -70,9 +72,6 @@ func TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration(t *testing
 	if got := string(requests[0].Works[0].Payload.([]byte)); got != string(content) {
 		t.Fatalf("payload = %q, want %q", got, content)
 	}
-
-	cancel()
-	waitForWatchDone(t, done)
 }
 
 func waitForRegisteredDirectory(t *testing.T, added <-chan string, want string) {
