@@ -131,6 +131,22 @@ func historyIdentityLess(left, right historyIdentity) bool {
 }
 
 func readFleetHistoryOwners(ctx context.Context, source workersessions.Service, req workersessions.ListWorkerSessionObservationsRequest) ([]workersessions.Observation, error) {
+	// Registries already return detached, sorted admitted owners. Sampling them
+	// directly avoids retaining an extra cursor snapshot in every source cache
+	// for a fleet query that freezes the same facts again in its own cache.
+	if owner, ok := source.(interface {
+		activeHistoryObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) ([]workersessions.Observation, error)
+	}); ok {
+		rows, err := owner.activeHistoryObservations(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return rows, ctx.Err()
+	}
+	return readFleetHistoryOwnerPages(ctx, source, req)
+}
+
+func readFleetHistoryOwnerPages(ctx context.Context, source workersessions.Service, req workersessions.ListWorkerSessionObservationsRequest) ([]workersessions.Observation, error) {
 	rows := make([]workersessions.Observation, 0)
 	seenTokens := make(map[string]struct{})
 	var previous historyIdentity

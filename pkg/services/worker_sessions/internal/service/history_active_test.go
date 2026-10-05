@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"time"
 
@@ -279,6 +278,45 @@ type fleetHistoryPageFake struct {
 	read func(workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error)
 }
 
+func TestFleetHistoryOwnerSamplingPreservesRegistryCursor(t *testing.T) {
+	t.Parallel()
+	r := newObservationRegistry(nil, nil)
+	addActiveHistoryFixture(r, "a", true)
+	addActiveHistoryFixture(r, "b", true)
+	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
+	first, err := r.ListWorkerSessionObservations(t.Context(), req)
+	if err != nil || first.NextToken == "" {
+		t.Fatalf("first registry page=%+v, %v", first, err)
+	}
+	cursor, err := decodeHistoryCursor(first.NextToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Charge near-capacity retained storage without a load-sized unit fixture.
+	// Another intermediate snapshot would evict this customer cursor.
+	r.historySnapshots.entries[cursor.ID].bytes = historySnapshotBytes
+	r.historySnapshots.bytes = historySnapshotBytes
+	owners, err := readFleetHistoryOwners(t.Context(), r, req)
+	if err != nil || len(owners) != 2 {
+		t.Fatalf("sampled owners=%+v, %v", owners, err)
+	}
+	owners[1].WorkIDs[0] = "caller mutation"
+	fresh, err := readFleetHistoryOwners(t.Context(), r, req)
+	if err != nil || len(fresh) != 2 || fresh[1].WorkIDs[0] != "work-1" {
+		t.Fatalf("detached sampling=%+v, %v", fresh, err)
+	}
+	req.NextToken = first.NextToken
+	replay, err := r.ListWorkerSessionObservations(t.Context(), req)
+	if err != nil || len(replay.Observations) != 1 || replay.Observations[0].WorkerSessionID != "b" || replay.Observations[0].WorkIDs[0] != "work-1" {
+		t.Fatalf("registry cursor after sampling=%+v, %v", replay, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := readFleetHistoryOwners(ctx, r, req); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled sampling=%v", err)
+	}
+}
+
 func (s fleetHistoryPageFake) ListWorkerSessionObservations(_ context.Context, req workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
 	return s.read(req)
 }
@@ -286,12 +324,27 @@ func (s fleetHistoryPageFake) ListWorkerSessionObservations(_ context.Context, r
 func TestFleetHistoryReadsBoundedOwnerPagesAndRejectsMalformedSources(t *testing.T) {
 	t.Parallel()
 	r := newObservationRegistry(nil, nil)
-	for i := 0; i < fleetHistorySourcePageSize+1; i++ {
-		addActiveHistoryFixture(r, fmt.Sprintf("id-%04d", i), true)
+	addActiveHistoryFixture(r, "a", true)
+	addActiveHistoryFixture(r, "b", true)
+	addActiveHistoryFixture(r, "c", true)
+	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 2}
+	rows, err := r.activeHistoryObservations(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
 	}
-	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: fleetHistorySourcePageSize}
-	rows, err := readFleetHistoryOwners(t.Context(), r, req)
-	if err != nil || len(rows) != fleetHistorySourcePageSize+1 {
+	calls := 0
+	paged := fleetHistoryPageFake{read: func(request workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+		calls++
+		if request.NextToken == "" {
+			return workersessions.ListWorkerSessionObservationsResult{Observations: rows[:2], NextToken: "next"}, nil
+		}
+		if request.NextToken != "next" || request.MaxResults != 2 {
+			t.Fatalf("unexpected source request: %+v", request)
+		}
+		return workersessions.ListWorkerSessionObservationsResult{Observations: rows[2:]}, nil
+	}}
+	got, err := readFleetHistoryOwners(t.Context(), paged, req)
+	if err != nil || !reflect.DeepEqual(got, rows) || calls != 2 {
 		t.Fatalf("bounded pages: count=%d err=%v", len(rows), err)
 	}
 	for _, tc := range []struct {
