@@ -201,7 +201,7 @@ func NewCatalogPathsService(
 		listEffective:       listEffective,
 		resolveNamedFactory: resolveNamedFactory,
 		resolveCurrentDir:   resolveCurrentDir,
-		logger:              logging.EnsureLogger(logger),
+		logger:              logger,
 	}, nil
 }
 

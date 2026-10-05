@@ -3,8 +3,10 @@ package wire_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -450,4 +452,144 @@ func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 	factorydefinitions.WorkflowSourceReader,
 ) []factorydefinitions.ValidationTarget {
 	return nil
+}
+
+type catalogProviderCapture struct{ records []catalogProviderRecord }
+type catalogProviderRecord struct {
+	level, message string
+	fields         []any
+}
+
+func (l *catalogProviderCapture) Info(message string, fields ...any) {
+	l.records = append(l.records, catalogProviderRecord{"info", message, fields})
+}
+func (l *catalogProviderCapture) Warn(message string, fields ...any) {
+	l.records = append(l.records, catalogProviderRecord{"warn", message, fields})
+}
+func (l *catalogProviderCapture) Debug(message string, fields ...any) {
+	l.records = append(l.records, catalogProviderRecord{"debug", message, fields})
+}
+func (l *catalogProviderCapture) Error(message string, fields ...any) {
+	l.records = append(l.records, catalogProviderRecord{"error", message, fields})
+}
+func (l *catalogProviderCapture) Verbose(message string, fields ...any) {
+	l.records = append(l.records, catalogProviderRecord{"verbose", message, fields})
+}
+
+type selectedNamedCatalog struct {
+	factorydefinitions.NamedFactoryCatalog
+	resolve func(string, string, string) (*factorydefinitions.NamedFactoryResolution, error)
+}
+
+func (s selectedNamedCatalog) ResolveNamedFactoryAcrossRoots(project, global, name string) (*factorydefinitions.NamedFactoryResolution, error) {
+	return s.resolve(project, global, name)
+}
+
+// The task explicitly retains this narrow owner-provider regression. It exercises
+// the existing adapter with controlled collaborators, without assembling a graph.
+func TestCatalogPathsProviderPreservesSelectedDiagnostics(t *testing.T) {
+	t.Parallel()
+	for _, quiet := range []bool{false, true} {
+		for _, outcome := range []string{"success", "missing", "canceled"} {
+			t.Run(fmt.Sprintf("quiet=%v/%s", quiet, outcome), func(t *testing.T) {
+				t.Parallel()
+				checkCatalogProviderDiagnostics(t, quiet, outcome)
+			})
+		}
+	}
+}
+
+func checkCatalogProviderDiagnostics(t *testing.T, quiet bool, outcome string) {
+	t.Helper()
+	capture := &catalogProviderCapture{}
+	var logger logging.Logger = capture
+	if quiet {
+		logger = logging.NoopLogger{}
+	}
+	ctx := t.Context()
+	if outcome == "canceled" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		cancel()
+	}
+	want := factorydefinitions.NamedFactoryResolution{Name: "private-name", FactoryDir: "/private/path", Source: factorydefinitions.NamedFactoryResolutionSourceGlobal}
+	var namedErr error
+	if outcome == "missing" {
+		namedErr = fmt.Errorf("private-path: %w", factorydefinitions.ErrNamedFactoryNotFound)
+	}
+	named := selectedNamedCatalog{resolve: func(project, global, name string) (*factorydefinitions.NamedFactoryResolution, error) {
+		if outcome == "canceled" {
+			t.Fatal("named collaborator called after cancellation")
+		}
+		if project != "/project" || global != "/global" || name != "private-name" {
+			t.Fatal("named request changed")
+		}
+		return &want, namedErr
+	}}
+	service, err := factorydefinitionswire.NewCatalogPathsService(noopListEffective, named, func(string) (string, error) {
+		if outcome == "canceled" {
+			t.Fatal("current collaborator called after cancellation")
+		}
+		return "/current", nil
+	}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(capture.records) != 0 {
+		t.Fatal("construction logged")
+	}
+	gotList, err := service.ListEffectiveFactories(ctx, factorydefinitions.ListEffectiveFactoriesRequest{})
+	if err != nil || !reflect.DeepEqual(gotList, factorydefinitions.ListEffectiveFactoriesResult{}) {
+		t.Fatalf("list=%+v, error=%v", gotList, err)
+	}
+	gotNamed, err := service.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{ProjectRoot: "/project", GlobalRoot: "/global", Name: "private-name"})
+	expectedNamed := factorydefinitions.ResolveNamedFactoryResult{Resolution: want}
+	if outcome == "canceled" {
+		namedErr = context.Canceled
+	}
+	if namedErr != nil {
+		expectedNamed = factorydefinitions.ResolveNamedFactoryResult{}
+	}
+	if err != namedErr || gotNamed != expectedNamed {
+		t.Fatalf("named=%+v, error=%v, want %+v/%v", gotNamed, err, expectedNamed, namedErr)
+	}
+	gotCurrent, err := service.ResolveCurrentFactoryLocation(ctx, factorydefinitions.ResolveCurrentFactoryLocationRequest{})
+	expectedCurrent := factorydefinitions.ResolveCurrentFactoryLocationResult{FactoryDir: "/current"}
+	var currentErr error
+	if outcome == "canceled" {
+		expectedCurrent = factorydefinitions.ResolveCurrentFactoryLocationResult{}
+		currentErr = context.Canceled
+	}
+	if err != currentErr || gotCurrent != expectedCurrent {
+		t.Fatalf("current=%+v, error=%v", gotCurrent, err)
+	}
+	expected := expectedProviderRecords(quiet, outcome)
+	if !reflect.DeepEqual(capture.records, expected) {
+		t.Fatalf("records=%#v, want %#v", capture.records, expected)
+	}
+}
+
+func expectedProviderRecords(quiet bool, outcome string) []catalogProviderRecord {
+	if quiet {
+		return nil
+	}
+	expected := providerOperationRecords("list_effective_factories", "", []any{"entry_count", 0})
+	namedReason, currentReason := "", ""
+	if outcome == "missing" {
+		namedReason = "named_factory_not_found"
+	}
+	if outcome == "canceled" {
+		namedReason, currentReason = "context_canceled", "context_canceled"
+	}
+	expected = append(expected, providerOperationRecords("resolve_named_factory", namedReason, []any{"source", "global"})...)
+	return append(expected, providerOperationRecords("resolve_current_factory_location", currentReason, nil)...)
+}
+
+func providerOperationRecords(operation, reason string, fields []any) []catalogProviderRecord {
+	prefix := "factory_definitions.catalog_paths." + operation
+	terminal := catalogProviderRecord{"info", prefix + ".finished", fields}
+	if reason != "" {
+		terminal = catalogProviderRecord{"warn", prefix + ".failed", []any{"reason", reason}}
+	}
+	return []catalogProviderRecord{{"info", prefix + ".started", nil}, terminal}
 }
