@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
@@ -21,7 +22,7 @@ func mustSubscribe(t *testing.T, st *Store, ctx context.Context, req events.Subs
 }
 
 func TestSubscribe_LiveOnlyFromCurrentHeadDoesNotReplayRetainedRecords(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 3)
 
@@ -46,7 +47,7 @@ func TestSubscribe_LiveOnlyFromCurrentHeadDoesNotReplayRetainedRecords(t *testin
 }
 
 func TestSubscribe_RetainedThenLiveDeliversContiguousPositionsAcrossHandoff(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 3)
 
@@ -81,7 +82,7 @@ func TestSubscribe_RetainedThenLiveDeliversContiguousPositionsAcrossHandoff(t *t
 }
 
 func TestSubscribe_MultipleSubscribersAreIndependent(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 2)
 
@@ -105,7 +106,7 @@ func TestSubscribe_MultipleSubscribersAreIndependent(t *testing.T) {
 }
 
 func TestSubscribe_GapReportsEvictedStartingPositionThenResumes(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 5) // retains only positions 4,5; evicts 1-3
 
@@ -140,7 +141,7 @@ func TestSubscribe_GapReportsEvictedStartingPositionThenResumes(t *testing.T) {
 // that record directly, not fabricate a DeliveryGap for a position Events
 // still retains (PR #1753 review finding 1, 2026-08-03T18:37:32Z).
 func TestSubscribe_FromExactlyBeforeEarliestRetainedIsNotAGap(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 5) // retains only positions 4,5; evicts 1-3
 
@@ -161,7 +162,7 @@ func TestSubscribe_FromExactlyBeforeEarliestRetainedIsNotAGap(t *testing.T) {
 }
 
 func TestSubscribe_UnresolvableCursorAheadOfHeadReturnsError(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 2)
 
@@ -176,7 +177,7 @@ func TestSubscribe_UnresolvableCursorAheadOfHeadReturnsError(t *testing.T) {
 }
 
 func TestSubscribe_ContextCancellationReturnsCanceled(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -193,7 +194,7 @@ func TestSubscribe_ContextCancellationReturnsCanceled(t *testing.T) {
 }
 
 func TestSubscribe_ContextCancellationWhileBlockedReleasesNext(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -216,7 +217,7 @@ func TestSubscribe_ContextCancellationWhileBlockedReleasesNext(t *testing.T) {
 }
 
 func TestSubscribe_CancellationIsPersistentAcrossLaterLiveContextCalls(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -245,7 +246,7 @@ func TestSubscribe_CancellationIsPersistentAcrossLaterLiveContextCalls(t *testin
 }
 
 func TestSubscribe_CancellationUnregistersSubscriberSoAppendAfterCancelIsNotDelivered(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	ts := st.topic(subscribeTestTopic)
@@ -287,7 +288,7 @@ func TestSubscribe_CancellationUnregistersSubscriberSoAppendAfterCancelIsNotDeli
 }
 
 func TestSubscribe_BackpressureTerminatesConsumerWithoutSilentLoss(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 2})
@@ -324,7 +325,7 @@ func TestSubscribe_BackpressureTerminatesConsumerWithoutSilentLoss(t *testing.T)
 }
 
 func TestSubscribe_StoreCloseTerminatesBlockedSubscriberWithClosed(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -356,7 +357,7 @@ func TestSubscribe_StoreCloseTerminatesBlockedSubscriberWithClosed(t *testing.T)
 }
 
 func TestSubscribe_AfterStoreCloseObservesClosedWithoutRegistering(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	if err := st.Close(ctx); err != nil {
 		t.Fatalf("Close() error = %v", err)
@@ -370,7 +371,7 @@ func TestSubscribe_AfterStoreCloseObservesClosedWithoutRegistering(t *testing.T)
 }
 
 func TestSubscribe_CloseIsIdempotent(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	if err := st.Close(ctx); err != nil {
 		t.Fatalf("Close() error = %v", err)
@@ -381,7 +382,7 @@ func TestSubscribe_CloseIsIdempotent(t *testing.T) {
 }
 
 func TestSubscribe_DeliveredRecordsAreDetached(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -403,7 +404,7 @@ func TestSubscribe_DeliveredRecordsAreDetached(t *testing.T) {
 }
 
 func TestSubscribe_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	_, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 0})
@@ -421,7 +422,7 @@ func TestSubscribe_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestSubscribe_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

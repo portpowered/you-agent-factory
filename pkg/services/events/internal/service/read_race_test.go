@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
@@ -20,7 +21,7 @@ func TestRead_ConcurrentIndependentReadersObserveContiguousHistory(t *testing.T)
 	const totalAppends = 200
 	const readers = 20
 
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/concurrent-read/events")
 

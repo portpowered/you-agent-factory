@@ -3,7 +3,7 @@
 ```mermaid
 flowchart TB
   subgraph input["Inputs"]
-    s_services_automations["automations<br/>8985 LOC · 7 subservices"]
+    s_services_automations["automations<br/>9180 LOC · 7 subservices"]
     s_services_chat_sessions["chat sessions<br/>4958 LOC · 0 subservices"]
     s_services_webhooks["webhooks<br/>718 LOC · 0 subservices"]
     s_services_work["work<br/>19737 LOC · 5 subservices"]
@@ -121,7 +121,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 
 | Service | Subservices |
 | --- | --- |
-| [`automations`](services/automations.md) | (subservice) cron (568 LOC)<br/>(subservice) cursorscopes (361 LOC)<br/>(subservice) filesystem watchers (1129 LOC)<br/>(subservice) hosted sources (1309 LOC)<br/>(subservice) reconciliation (985 LOC)<br/>(subservice) script pollers (740 LOC)<br/>(subservice) sourcelifecycle (863 LOC) |
+| [`automations`](services/automations.md) | (subservice) cron (568 LOC)<br/>(subservice) cursorscopes (361 LOC)<br/>(subservice) filesystem watchers (1161 LOC)<br/>(subservice) hosted sources (1309 LOC)<br/>(subservice) reconciliation (985 LOC)<br/>(subservice) script pollers (743 LOC)<br/>(subservice) sourcelifecycle (863 LOC) |
 | [`chat_sessions`](services/chat_sessions.md) | — |
 | [`costs`](services/costs.md) | — |
 | [`edges`](services/edges.md) | — |

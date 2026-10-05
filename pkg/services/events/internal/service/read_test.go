@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
@@ -38,7 +39,7 @@ func itoa(n int) string {
 }
 
 func TestRead_ReturnsAtHeadOnEmptyTopic(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	result, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 10})
@@ -54,7 +55,7 @@ func TestRead_ReturnsAtHeadOnEmptyTopic(t *testing.T) {
 }
 
 func TestRead_ProgressReturnsContiguousRecordsAndNextCursor(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 5)
 
@@ -85,7 +86,7 @@ func TestRead_ProgressReturnsContiguousRecordsAndNextCursor(t *testing.T) {
 }
 
 func TestRead_AtHeadAfterConsumingEverything(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 3)
 
@@ -102,7 +103,7 @@ func TestRead_AtHeadAfterConsumingEverything(t *testing.T) {
 }
 
 func TestRead_InvalidCursorAheadOfHead(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 2)
 
@@ -119,7 +120,7 @@ func TestRead_InvalidCursorAheadOfHead(t *testing.T) {
 }
 
 func TestRead_GapReportsEvictedPosition(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 5) // retains only positions 4,5; evicts 1-3
 
@@ -139,7 +140,7 @@ func TestRead_GapReportsEvictedPosition(t *testing.T) {
 }
 
 func TestRead_GapFromStartOfStreamWhenEarliestRecordEvicted(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 5)
 
@@ -164,7 +165,7 @@ func TestRead_GapFromStartOfStreamWhenEarliestRecordEvicted(t *testing.T) {
 // ReadOutcomeProgress, not fabricate a gap for a position Events still
 // retains (PR #1753 review finding 1, 2026-08-03T18:37:32Z).
 func TestRead_FromExactlyBeforeEarliestRetainedIsNotAGap(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 5) // retains only positions 4,5; evicts 1-3
 
@@ -184,7 +185,7 @@ func TestRead_FromExactlyBeforeEarliestRetainedIsNotAGap(t *testing.T) {
 }
 
 func TestRead_StartOfStreamIsNotAGapWhenNothingEvicted(t *testing.T) {
-	st := NewWithRetention(10)
+	st := NewWithRetention(10, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 3)
 
@@ -201,7 +202,7 @@ func TestRead_StartOfStreamIsNotAGapWhenNothingEvicted(t *testing.T) {
 }
 
 func TestRead_RetentionEvictsOldestWithoutRenumberingHead(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 4) // retains only positions 3,4; evicts 1,2
 
@@ -230,7 +231,7 @@ func TestRead_RetentionEvictsOldestWithoutRenumberingHead(t *testing.T) {
 // after that position has been evicted from the bounded ts.records
 // retention window (PR #1753 review finding 1, 2026-08-03T23:16:17Z).
 func TestRead_DuplicateIdentityStillResolvesAfterEviction(t *testing.T) {
-	st := NewWithRetention(1)
+	st := NewWithRetention(1, logging.NoopLogger{})
 	ctx := context.Background()
 
 	first := validAppendRequest()
@@ -262,7 +263,7 @@ func TestRead_DuplicateIdentityStillResolvesAfterEviction(t *testing.T) {
 }
 
 func TestRead_IndependentCursorsDoNotAffectEachOther(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 5)
 
@@ -295,7 +296,7 @@ func TestRead_IndependentCursorsDoNotAffectEachOther(t *testing.T) {
 }
 
 func TestRead_RejectsMalformedRequestBeforeAnyLogOrStateChange(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	_, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 0})
@@ -315,7 +316,7 @@ func TestRead_RejectsMalformedRequestBeforeAnyLogOrStateChange(t *testing.T) {
 }
 
 func TestRead_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -326,7 +327,7 @@ func TestRead_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestRead_RejectedAfterClose(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -340,7 +341,7 @@ func TestRead_RejectedAfterClose(t *testing.T) {
 }
 
 func TestRead_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -354,7 +355,7 @@ func TestRead_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
 }
 
 func TestRead_ReturnedRecordsAreDetached(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 	req.Topic = readTestTopic
