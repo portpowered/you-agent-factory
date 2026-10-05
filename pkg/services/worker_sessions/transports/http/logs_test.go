@@ -70,3 +70,29 @@ func TestCapturedLogsHTTPErrorMeanings(t *testing.T) {
 		})
 	}
 }
+
+func TestCapturedAtSSEFrameRetainsStoredTime(t *testing.T) {
+	t.Parallel()
+	stamp := time.Date(2026, 10, 5, 12, 0, 0, 123, time.UTC)
+	for _, capturedAt := range []*time.Time{&stamp, nil} {
+		frame := workerSessionEventFrame(factoryapi.WorkerSessionObservation{WorkerSessionId: "worker"}, workersessions.ObservationDelivery{
+			Kind:  workersessions.ObservationDeliveryRecord,
+			Event: workersessions.ObservationEvent{CapturedAt: capturedAt, Payload: []byte(`{"kind":"SESSION"}`)},
+		})
+		data, err := json.Marshal(frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if capturedAt == nil {
+			if strings.Contains(string(data), `"capturedAt"`) {
+				t.Fatal("unknown capture time must be omitted")
+			}
+		} else if decoded.Event.CapturedAt == nil || !decoded.Event.CapturedAt.Equal(stamp) {
+			t.Fatal("SSE serialization changed stored capture time")
+		}
+	}
+}

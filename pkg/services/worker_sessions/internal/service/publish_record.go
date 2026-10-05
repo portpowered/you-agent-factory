@@ -908,6 +908,7 @@ func (r *registry) replayObservationStream(
 		return workersessions.ObservationSubscription{}, err
 	}
 	wrapped := &observationSubscription{replay: replay, workerSessionID: observationWorkerSessionIDFromTopic(topic)}
+	replay.capturedAt = r.replayCaptureTimes(ctx, wrapped.workerSessionID)
 	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil
 }
 
