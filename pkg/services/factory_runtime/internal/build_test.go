@@ -3,8 +3,6 @@ package internal_test
 import (
 	"context"
 	"errors"
-	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
-	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,11 +19,14 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
+	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
+	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -33,6 +34,75 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
 )
+
+func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T) {
+	t.Parallel()
+	sessions := &stubWorkerSessionsService{}
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peerClock := clockwork.NewFakeClockAt(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+	peerSpec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, SessionID: "peer", MetricsSessionID: "peer-canonical",
+		RuntimeInstanceID: "peer-runtime", LoadedFactoryCfg: loaded, Clock: peerClock, BaseLogger: zap.NewNop()}
+	peerScopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "peer-runtime"}}
+	peer, err := openTestBundle(t.Context(), opening, peerSpec, peerScopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = peer.CloseArtifacts() })
+	clock := clockwork.NewFakeClockAt(peerClock.Now().Add(time.Hour))
+	spec := peerSpec
+	spec.SessionID, spec.MetricsSessionID, spec.RuntimeInstanceID, spec.Clock = "candidate", "candidate-canonical", "candidate-runtime", clock
+	openingErr := errors.New("candidate recording open failed")
+	finalized := 0
+	recorder := &runtimeRecordingsRecorderStub{onFinalize: func() { finalized++ }}
+	var captured recordings.RuntimeScopeRequest
+	scopes := &testRuntimeScopeServiceStub{openErr: openingErr, recorder: recorder, capturedRequest: &captured,
+		ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "candidate-runtime"}}
+	failed, err := openTestBundle(t.Context(), opening, spec, scopes)
+	if !errors.Is(err, openingErr) || failed != nil || finalized != 1 {
+		t.Fatalf("failed opening = %#v, %v, finalizations %d; want owned unwind without a runnable record", failed, err, finalized)
+	}
+	scopes.openErr = nil
+	candidate, err := openTestBundle(t.Context(), opening, spec, scopes)
+	if err != nil {
+		t.Fatalf("same-owner, same-identity retry: %v", err)
+	}
+	t.Cleanup(func() { _ = candidate.CloseArtifacts() })
+	assertBundleOpeningSelections(t, candidate, peer, captured, spec, peerClock)
+	if err := candidate.CloseArtifacts(); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot, err := peer.Factory.GetEngineStateSnapshot(t.Context()); err != nil || snapshot == nil {
+		t.Fatalf("candidate close changed peer observation: %#v, %v", snapshot, err)
+	}
+}
+
+func assertBundleOpeningSelections(t *testing.T, candidate, peer *factoryhost.Bundle, captured recordings.RuntimeScopeRequest, spec factory.SessionBuildSpec, peerClock factory.Clock) {
+	t.Helper()
+	if !candidate.StartTime().Equal(spec.Clock.Now()) || !peer.StartTime().Equal(peerClock.Now()) {
+		t.Fatal("opening substituted the selected clock or changed its peer start time")
+	}
+	if captured.FactorySessionID != spec.SessionID || captured.CanonicalSessionID != spec.MetricsSessionID || captured.RecordingID != spec.RuntimeInstanceID {
+		t.Fatalf("retry lost selected recording identities: %#v", captured)
+	}
+	if candidate.Factory == peer.Factory || candidate.Net == peer.Net || candidate.EventHistory == peer.EventHistory {
+		t.Fatal("openings shared scoped engine, net or event state")
+	}
+}
+
+func openTestBundle(ctx context.Context, opening *factoryinternal.BundleOpening, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService) (*factoryhost.Bundle, error) {
+	return opening.Open(ctx, spec, "", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
+		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0, spec.SessionID,
+		interfaces.RuntimeModeBatch, nil, false, nil, nil, "", "", false, false, nil, nil, nil, nil, nil, scopes, nil)
+}
 
 func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T) {
 	sessions := &stubWorkerSessionsService{}
@@ -403,8 +473,12 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	loader := func(string, interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loaded, nil
 	}
-	assembly, err := factoryinternal.NewAssembly(testRuntimeFactory(), sessions, sessions, testRuntimeWorkers{},
-		platformclock.Real{}, testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembly, err := factoryinternal.NewAssembly(opening,
+		platformclock.Real{}, testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
 	if err != nil {
 		t.Fatal(err)
 	}

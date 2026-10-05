@@ -78,16 +78,25 @@ func NewRuntimeFactory(
 // NewAssembly constructs the inert Factory Runtime assembly service selected by
 // Wire. It does not start a runtime or sidecar.
 func NewAssembly(
-	runtimeFactory *RuntimeFactory,
-	workerSessions workersessions.Service,
-	workerAttempts factoryruntime.WorkerAttemptOpener,
-	workerService workers.Service,
+	bundleOpening *BundleOpening,
 	metricsClock platformclock.TimerSource,
 	instanceHost InstanceHost,
 	preparation *RuntimePreparation,
-	requestResolver *WorkstationRequestExecutor,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessions, workerAttempts, workerService, metricsClock, instanceHost, preparation, requestResolver)
+	return factoryruntimeinternal.NewAssembly(bundleOpening, metricsClock, instanceHost, preparation)
+}
+
+type BundleOpening = factoryruntimeinternal.BundleOpening
+
+// NewBundleOpening constructs the fixed bundle-opening behavior once in Wire.
+func NewBundleOpening(
+	runtimeFactory *RuntimeFactory,
+	workerService workers.Service,
+	workerSessions workersessions.Service,
+	workerAttempts factoryruntime.WorkerAttemptOpener,
+	requestResolver *WorkstationRequestExecutor,
+) (*BundleOpening, error) {
+	return factoryruntimeinternal.NewBundleOpening(runtimeFactory, workerService, workerSessions, workerAttempts, requestResolver)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator

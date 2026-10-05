@@ -265,10 +265,6 @@ func NewRuntimeBuild(
 	invocationSkipPermissionsOverride *bool,
 	clock factory.Clock,
 	baseLogger *zap.Logger,
-	runtimeFactory *RuntimeFactory,
-	workerService workers.Service,
-	workerSessions workersessions.Service,
-	workerAttempts factory.WorkerAttemptOpener,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
 	progressFactory ProgressPublisherFactory,
 	completionFactory DispatchCompletionFactory,
@@ -278,10 +274,10 @@ func NewRuntimeBuild(
 	loadFactory factory.LoadedFactoryLoader,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 	preparation *runtimebuild.Service,
-	requestResolver *runtime.WorkstationRequestExecutor,
+	opening *BundleOpening,
 ) (*runtimebuild.CompatibilityBuild, error) {
-	if runtimeFactory == nil {
-		return nil, fmt.Errorf("Factory Runtime factory is required")
+	if opening == nil {
+		return nil, fmt.Errorf("Factory Runtime bundle opening is required")
 	}
 	return runtimebuild.BindCompatibility(preparation, runtimebuild.BuildDefaults{
 		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
@@ -308,16 +304,11 @@ func NewRuntimeBuild(
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
-			// Progress callbacks outlive build admission; preserve its values without its cancellation.
-			providerSessionProgress := workersessions.RuntimeProgressPublisher(workerAttempts.PublishRuntimeProgress).ForRuntime(context.WithoutCancel(ctx), spec.RuntimeInstanceID, progressPublisher)
-			if workerService == nil {
-				return nil, fmt.Errorf("Workers service is required")
-			}
 			var dispatchCompleted func(string)
 			if completionFactory != nil {
 				dispatchCompleted = completionFactory(spec.SessionID)
 			}
-			return buildBundle(
+			return opening.Open(
 				ctx,
 				spec,
 				runtimeLogDir,
@@ -338,115 +329,16 @@ func NewRuntimeBuild(
 				verbose,
 				skipBuiltInPrerequisiteValidation,
 				invocationSkipPermissionsOverride,
-				workerService,
 				mockWorkersConfig,
-				workerSessions,
-				workerAttempts,
-				providerSessionProgress,
-				runtimeFactory,
+				progressPublisher,
 				dispatchCompleted,
 				worldStateProjector,
 				recordingsRuntime,
 				initialFactorySnapshot,
-				requestResolver,
 			)
 		},
 		petriMutationRecorder,
 	)
-}
-
-func buildBundle(
-	ctx context.Context,
-	spec runtimebuild.SessionBuildSpec,
-	runtimeLogDir string,
-	runtimeLogConfig factory.RuntimeLogStorageConfig,
-	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
-	runtimeMetricsPolicy RuntimeMetricsPolicy,
-	runtimeMetricsDir string,
-	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
-	recordFlushInterval time.Duration,
-	defaultSessionID string,
-	runtimeMode factorydefinitions.RuntimeMode,
-	runtimeScheduler scheduler.Scheduler,
-	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	backendScopeID string,
-	factoryRunnerID string,
-	verbose bool,
-	skipBuiltInPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	workerExecution workers.Service,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	workerSessions workersessions.Service,
-	workerAttempts factory.WorkerAttemptOpener,
-	providerSessionProgress workers.ProgressPublisher,
-	runtimeFactory *RuntimeFactory,
-	dispatchCompleted func(string),
-	worldStateProjector factory.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot InitialFactorySnapshotFactory,
-	requestResolver *runtime.WorkstationRequestExecutor,
-) (*factoryhost.Bundle, error) {
-	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
-		spec, defaultSessionID, recordingsRuntime, initialFactorySnapshot,
-	)
-	if err != nil {
-		return nil, err
-	}
-	metricsSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
-	workerServiceWithProgress := newRuntimeWorkersService(
-		workerExecution, providerSessionProgress, spec, sessionID,
-		skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride,
-		requestResolver, mockWorkersConfig,
-	)
-	bundle, err := runtimeFactory.Build(
-		ctx,
-		spec.Dir,
-		spec.FolderPath,
-		sessionID,
-		metricsSessionID,
-		factoryRunnerID,
-		runtimeMode,
-		verbose,
-		runtimeScheduler,
-		inlineDispatch,
-		submissionRecorder,
-		dispatchRecorder,
-		runtimeLogDir,
-		runtimeLogConfig, runtimeFileLoggingPolicy,
-		runtimeMetricsPolicy,
-		runtimeMetricsDir,
-		runtimeMetricsConfig,
-		loadedFactoryCfg,
-		spec.RuntimeInstanceID,
-		strings.TrimSpace(backendScopeID),
-		spec.Clock,
-		spec.RecordPath,
-		initialFactory,
-		spec.RestoredWorldState,
-		spec.SkipRestoredDispatchReconciliation,
-		spec.SubmissionHooks,
-		spec.CompletionPlanner,
-		spec.PetriMutationRecorder,
-		worldStateProjector,
-		runtimeScopeWithFlush{
-			RuntimeScopeService:   recordingsRuntime,
-			flushInterval:         recordFlushInterval,
-			resumeCanonicalEvents: cloneFactoryEvents(spec.ResumeCanonicalEvents),
-		},
-		workerServiceWithProgress,
-		runtimeWorkerSessionBoundary{Service: workerSessions, opener: workerAttempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: runtimeFactory.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
-		workerAttempts,
-		dispatchCompleted,
-		mockWorkersConfig,
-	)
-	if err != nil {
-		return bundle, err
-	}
-	setReplayEvents(bundle.Factory, spec.ReplayEvents)
-	setBundleProgressPublisher(bundle, providerSessionProgress)
-	return bundle, nil
 }
 
 func newRuntimeWorkersService(

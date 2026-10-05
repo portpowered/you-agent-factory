@@ -14,11 +14,9 @@ import (
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -26,42 +24,27 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	runtimeFactory  *RuntimeFactory
-	workerSessions  workersessions.Service
-	workerAttempts  factoryruntime.WorkerAttemptOpener
-	workerService   workers.Service
-	metricsClock    platformclock.TimerSource
-	instanceHost    instancehost.Service
-	preparation     *runtimebuild.Service
-	requestResolver *runtime.WorkstationRequestExecutor
+	bundleOpening *BundleOpening
+	metricsClock  platformclock.TimerSource
+	instanceHost  instancehost.Service
+	preparation   *runtimebuild.Service
 }
 
-// NewAssembly constructs the inert Factory Runtime assembly service selected
-// by Wire. It retains the canonical supervisor and its keyed operations without
-// constructing another service during runtime opening.
+// NewAssembly constructs the inert compatibility assembly selected by Wire.
+// Bundle opening uses fixed process behavior; the per-opening compatibility
+// builder remains until initial activation and replacement callers migrate.
 func NewAssembly(
-	runtimeFactory *RuntimeFactory,
-	workerSessions workersessions.Service,
-	workerAttempts factoryruntime.WorkerAttemptOpener,
-	workerService workers.Service,
+	bundleOpening *BundleOpening,
 	metricsClock platformclock.TimerSource,
 	instanceHost instancehost.Service,
 	preparation *runtimebuild.Service,
-	requestResolver *runtime.WorkstationRequestExecutor,
 ) (*Assembly, error) {
-	if runtimeFactory == nil {
-		return nil, fmt.Errorf("Factory Runtime factory is required")
-	}
-	if workerSessions == nil {
-		return nil, fmt.Errorf("worker sessions service is required")
-	}
-	if workerService == nil {
-		return nil, fmt.Errorf("Workers service is required")
+	if bundleOpening == nil {
+		return nil, fmt.Errorf("Factory Runtime bundle opening is required")
 	}
 	return &Assembly{
-		runtimeFactory: runtimeFactory, workerSessions: workerSessions, workerAttempts: workerAttempts,
-		workerService: workerService, metricsClock: metricsClock, instanceHost: instanceHost,
-		preparation: preparation, requestResolver: requestResolver,
+		bundleOpening: bundleOpening, metricsClock: metricsClock, instanceHost: instanceHost,
+		preparation: preparation,
 	}, nil
 }
 
@@ -129,13 +112,9 @@ func (a *Assembly) Assemble(
 	factoryruntime.RuntimeSidecars,
 	error,
 ) {
-	if a == nil || a.runtimeFactory == nil {
+	if a == nil || a.bundleOpening == nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
 			fmt.Errorf("Factory Runtime assembly service is required")
-	}
-	if a.workerService == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
-			fmt.Errorf("Workers service is required")
 	}
 	builder, err := NewRuntimeBuild(
 		defaultWorkerModelProvider,
@@ -168,10 +147,6 @@ func (a *Assembly) Assemble(
 		invocationSkipPermissionsOverride,
 		clock,
 		baseLogger,
-		a.runtimeFactory,
-		a.workerService,
-		a.workerSessions,
-		a.workerAttempts,
 		mockCommandRunnerFactory,
 		progressFactory,
 		completionFactory,
@@ -181,7 +156,7 @@ func (a *Assembly) Assemble(
 		loadFactory,
 		initialFactorySnapshot,
 		a.preparation,
-		a.requestResolver,
+		a.bundleOpening,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err

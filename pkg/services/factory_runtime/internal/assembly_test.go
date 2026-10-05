@@ -300,50 +300,50 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 	}
 }
 
-func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil, nil, nil, nil, nil)
+func TestNewBundleOpeningRequiresWireConstructedRuntimeFactory(t *testing.T) {
+	opening, err := NewBundleOpening(nil, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
-		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
+		t.Fatalf("NewBundleOpening(nil) error = %v, want required dependency", err)
 	}
-	if assembly != nil {
-		t.Fatalf("NewAssembly(nil) = %#v, want nil assembly", assembly)
+	if opening != nil {
+		t.Fatalf("NewBundleOpening(nil) = %#v, want nil opening", opening)
 	}
 }
 
-func TestNewAssemblyRequiresWorkerSessionsService(t *testing.T) {
+func TestNewBundleOpeningRequiresWorkerSessionsService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, nil, nil, stubWorkersService{}, nil, nil, nil, nil)
+	opening, err := NewBundleOpening(runtimeFactory, stubWorkersService{}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "worker sessions service is required") {
-		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
+		t.Fatalf("NewBundleOpening(nil worker sessions) error = %v, want required dependency", err)
 	}
-	if assembly != nil {
-		t.Fatalf("NewAssembly(nil factory) = %#v, want nil assembly", assembly)
+	if opening != nil {
+		t.Fatalf("NewBundleOpening(nil worker sessions) = %#v, want nil opening", opening)
 	}
 }
 
-func TestNewAssemblyRequiresWorkersService(t *testing.T) {
+func TestNewBundleOpeningRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil, nil, nil, nil, nil)
+	opening, err := NewBundleOpening(runtimeFactory, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
-		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
+		t.Fatalf("NewBundleOpening(nil Workers service) error = %v, want required dependency", err)
 	}
-	if assembly != nil {
-		t.Fatalf("NewAssembly(nil Workers service) = %#v, want nil assembly", assembly)
+	if opening != nil {
+		t.Fatalf("NewBundleOpening(nil Workers service) = %#v, want nil opening", opening)
 	}
 }
 
-func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
+func TestNewBundleOpeningBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	workerService := stubWorkersService{}
-	assembly, err := NewAssembly(runtimeFactory, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, workerService, platformclock.Real{}, nil, nil, nil)
+	opening, err := NewBundleOpening(runtimeFactory, workerService, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
 	if err != nil {
-		t.Fatalf("NewAssembly() error = %v", err)
+		t.Fatalf("NewBundleOpening() error = %v", err)
 	}
-	if assembly == nil || assembly.runtimeFactory != runtimeFactory {
-		t.Fatalf("NewAssembly() = %#v, want supplied Runtime Factory", assembly)
+	if opening == nil || opening.runtimeFactory != runtimeFactory {
+		t.Fatalf("NewBundleOpening() = %#v, want supplied Runtime Factory", opening)
 	}
-	if assembly.workerService != workerService {
-		t.Fatalf("NewAssembly() worker service = %#v, want supplied service", assembly.workerService)
+	if opening.workerService != workerService {
+		t.Fatalf("NewBundleOpening() worker service = %#v, want supplied service", opening.workerService)
 	}
 }
 
@@ -841,4 +841,15 @@ func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime
 		return nil, err
 	}
 	return NewRoot(orchestrationwire.New(mapper, workflows, runtime), host, dispatchplanningwire.New(publisher, canceler))
+}
+
+func TestNewAssemblyRetainsSelectedBundleOpening(t *testing.T) {
+	opening := &BundleOpening{}
+	assembly, err := NewAssembly(opening, platformclock.Real{}, nil, nil)
+	if err != nil || assembly.bundleOpening != opening {
+		t.Fatalf("NewAssembly = %#v, %v; want selected opening", assembly, err)
+	}
+	if assembly, err := NewAssembly(nil, nil, nil, nil); err == nil || assembly != nil {
+		t.Fatalf("NewAssembly without opening = %#v, %v; want required dependency failure", assembly, err)
+	}
 }
