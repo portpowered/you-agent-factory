@@ -107,14 +107,9 @@ func runWebhookClose(t *testing.T, c *timeCohort, peer string, specialized bool)
 	call := route.await(t)
 	assertWebhookRequest(t, c, id, call, webhookNow(c, specialized))
 	call.reply <- journeyReply{status: http.StatusServiceUnavailable}
-	wait := c.webhook.await(t, time.Second)
+	c.webhook.await(t, time.Second)
 	support.CloseFactorySessionAt(t, c.url, id)
 	advanceWebhookScheduler(c.webhook, 1)
-	select {
-	case <-wait.channel:
-	default:
-		t.Fatal("old scoped wait did not release")
-	}
 	assertHealthyWebhook(t, c, peer, specialized)
 	route.assertHeld(t)
 	assertClosedTimeSession(t, c, id)

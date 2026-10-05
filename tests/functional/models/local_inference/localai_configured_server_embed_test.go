@@ -343,7 +343,6 @@ func TestModelsConfiguredServerEMBEDParity(t *testing.T) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close configured EMBED LocalAI fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 }
 
 // TestLocalAIConfiguredServerEMBEDValidationParity proves the two CLI forms
@@ -374,7 +373,6 @@ func TestLocalAIConfiguredServerEMBEDValidationParity(t *testing.T) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close validation EMBED LocalAI fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 }
 
 func assertLocalAIConfiguredEmbedValidationFailureParity(
@@ -544,7 +542,6 @@ func runLocalAIConfiguredEmbedFailureParity(t *testing.T, mode localai.Mode) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close configured EMBED failure LocalAI fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 }
 
 func assertLocalAIConfiguredEmbedFailure(
@@ -667,7 +664,6 @@ func TestLocalAIConfiguredServerEMBEDUnavailableAddressIsRedacted(t *testing.T) 
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close closed-server EMBED LocalAI fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 }
 
 // TestLocalAIConfiguredServerEMBEDNonFiniteFailureParity proves the typed
@@ -767,7 +763,6 @@ func TestLocalAIConfiguredServerEMBEDNonFiniteFailureParity(t *testing.T) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close non-finite EMBED LocalAI fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 }
 
 func assertLocalAIConfiguredEmbedFailureDiagnostics(

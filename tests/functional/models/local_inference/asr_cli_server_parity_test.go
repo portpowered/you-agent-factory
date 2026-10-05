@@ -249,7 +249,6 @@ func runLocalAIASRParityCase(
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close LocalAI ASR fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 	if calls := localNetwork.Calls() + hostedNetwork.Calls(); calls != 0 {
 		t.Fatalf("LocalAI ASR model-asset network calls = %d, want zero", calls)
 	}
@@ -656,7 +655,6 @@ func TestModelsASRControlledStartupCrashDoesNotPublish(t *testing.T) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close ASR startup-crash fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 	if network.Calls() != 0 {
 		t.Fatalf("ASR startup-crash model-asset network calls = %d, want zero", network.Calls())
 	}
@@ -692,7 +690,6 @@ func TestModelsASRControlledHealthTimeoutStopsReadiness(t *testing.T) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close ASR health-timeout fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 	if network.Calls() != 0 {
 		t.Fatalf("ASR health-timeout model-asset network calls = %d, want zero", network.Calls())
 	}
@@ -728,7 +725,6 @@ func TestModelsASRControlledCancellationStopsBackend(t *testing.T) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close ASR cancellation fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 	if network.Calls() != 0 {
 		t.Fatalf("ASR cancellation model-asset network calls = %d, want zero", network.Calls())
 	}
@@ -785,7 +781,6 @@ func TestModelsASRControlledMappedPublicationRollsBack(t *testing.T) {
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close ASR mapped-rollback fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 	if network.Calls() != 0 {
 		t.Fatalf("ASR mapped-rollback model-asset network calls = %d, want zero", network.Calls())
 	}

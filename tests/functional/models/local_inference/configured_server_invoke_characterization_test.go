@@ -176,7 +176,6 @@ func closeLocalAIConfiguredServerCharacterization(
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close configured-server characterization fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 }
 
 type localAIConfiguredEmbedOutputMapResult struct {

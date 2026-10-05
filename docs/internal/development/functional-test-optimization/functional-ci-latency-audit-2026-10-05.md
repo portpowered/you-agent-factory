@@ -769,6 +769,12 @@ difference to any single optimization.
   must publish a completed live Factory state before closing. It retains the
   completed terminal run result, completed Work, canonical ordering, and
   identical live/recorded event payloads.
+- Removed a fake-timer channel-release assertion after session close and
+  post-close TCP probes against LocalAI fixture ports. A stopped timer need
+  not fire, and another test may own a reused port. The public no-late-delivery,
+  peer-isolation, model-result, and joined-close checks remain. Fresh Windows
+  runs of process-time and local-inference packages pass in 35.151s and
+  20.392s respectively; these are focused checks, not a full-lane result.
 
 Required Backend Lint continues to own repository-wide vet. Bounded event and
 cleanup waits have inline reasons; they are not replaced with shorter sleeps.

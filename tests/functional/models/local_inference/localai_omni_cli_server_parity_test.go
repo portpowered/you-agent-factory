@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"path/filepath"
 	"runtime"
@@ -237,7 +236,6 @@ func runLocalAIOMNIParityCase(
 	if err := fixture.Close(); err != nil {
 		t.Fatalf("close LocalAI fixture: %v", err)
 	}
-	assertLocalAIOMNIFixtureListenerReleased(t, fixture.Endpoint())
 	if calls := localNetwork.Calls() + hostedNetwork.Calls(); calls != 0 {
 		t.Fatalf("LocalAI model-asset network calls = %d, want zero", calls)
 	}
@@ -747,14 +745,5 @@ func assertLocalAIOMNIServerReleased(
 	if err == nil {
 		_ = response.Body.Close()
 		t.Fatal("configured server listener remained reachable after close")
-	}
-}
-
-func assertLocalAIOMNIFixtureListenerReleased(t *testing.T, endpoint string) {
-	t.Helper()
-	connection, err := net.DialTimeout("tcp", endpoint, 250*time.Millisecond)
-	if err == nil {
-		_ = connection.Close()
-		t.Fatal("LocalAI fixture listener remained reachable after close")
 	}
 }
