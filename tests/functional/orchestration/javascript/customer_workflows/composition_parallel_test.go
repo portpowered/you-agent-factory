@@ -1,4 +1,4 @@
-package composition_test
+package customer_workflows_test
 
 import (
 	"bytes"

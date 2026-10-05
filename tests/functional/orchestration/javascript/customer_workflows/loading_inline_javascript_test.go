@@ -1,6 +1,6 @@
 // Package loading holds customer functional scenarios for inline JavaScript
 // Factory loading through the public CLI and customer process boundary.
-package loading_test
+package customer_workflows_test
 
 import (
 	"encoding/json"
@@ -65,7 +65,7 @@ const (
 	workflowSourceSyntaxErrorCode     = "workflow.source.syntaxError"
 )
 
-var privateJavaScriptVMDiagnosticMarkers = []string{
+var loadingPrivateJavaScriptVMDiagnosticMarkers = []string{
 	"goja",
 	"goja.",
 	"stack frame",
@@ -87,7 +87,7 @@ func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture
 		"hello",
 	}, dir, fixture.homeDir)
 	assertInlineJavaScriptSuccessOutcome(t, result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 func inlineJavaScriptFactoryDocument() map[string]any {
@@ -170,7 +170,7 @@ func runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T, fixture
 		"hello",
 	}, dir, fixture.homeDir)
 	assertOrderedInlineJavaScriptPipelineOutcome(t, result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 // TestInlineJavaScriptSyntaxErrorReturnsSourceLocation proves an inline
@@ -216,7 +216,7 @@ func runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T, fixture *
 		inputs.Stderr(),
 		inlineJavaScriptSyntaxErrorLine,
 	)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 	fixture.recoverAfterLoadFailure(t, "inline-syntax")
 }
 
@@ -342,11 +342,11 @@ func assertInlineJavaScriptSuccessOutcome(t *testing.T, result factoryapi.Invoca
 	}
 }
 
-func assertNoPrivateJavaScriptVMDiagnostics(t *testing.T, outputs ...string) {
+func loadingAssertNoPrivateJavaScriptVMDiagnostics(t *testing.T, outputs ...string) {
 	t.Helper()
 
 	combined := strings.ToLower(strings.Join(outputs, "\n"))
-	for _, marker := range privateJavaScriptVMDiagnosticMarkers {
+	for _, marker := range loadingPrivateJavaScriptVMDiagnosticMarkers {
 		if strings.Contains(combined, strings.ToLower(marker)) {
 			t.Fatalf("diagnostics exposed private VM detail %q in %q", marker, strings.Join(outputs, "\n---\n"))
 		}

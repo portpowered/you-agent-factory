@@ -20,7 +20,7 @@ type selectedTimeFacts struct{ platformclock.Source }
 type selectedTimeScheduler struct {
 	*platformclock.Deterministic
 	registered chan selectedTimeWait
-	readiness  chan struct{}
+	readiness  chan *selectedReadinessTimer
 	tick       int
 }
 
@@ -41,17 +41,33 @@ func (t *selectedTimeTimer) Stop() bool {
 }
 
 func (s *selectedTimeScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	if d == 10*time.Millisecond {
+		timer := &selectedReadinessTimer{channel: make(chan time.Time, 1)}
+		s.readiness <- timer
+		return timer
+	}
 	timer := &selectedTimeTimer{Timer: s.Deterministic.NewTimer(d)}
 	s.registered <- selectedTimeWait{duration: d, deadline: s.Now().Add(d), timer: timer}
-	if d == 10*time.Millisecond {
-		s.readiness <- struct{}{}
-	}
 	return timer
 }
 
+type selectedReadinessTimer struct {
+	channel chan time.Time
+	state   atomic.Uint32
+}
+
+func (timer *selectedReadinessTimer) C() <-chan time.Time { return timer.channel }
+func (timer *selectedReadinessTimer) Stop() bool          { return timer.state.CompareAndSwap(0, 2) }
+func (timer *selectedReadinessTimer) acknowledge(now time.Time) {
+	if timer.state.CompareAndSwap(0, 1) {
+		timer.channel <- now
+	}
+}
+
 // Public runtime activation itself polls readiness on the selected scheduler.
-// Advance those acknowledged 10ms waits only while an activation is in flight;
-// source eligibility and all close/join steps otherwise keep time frozen.
+// Acknowledge each readiness wait without moving source eligibility or request
+// deadlines. Advancing the whole clock here can expire a session-open request
+// while its filesystem initialization is still running under CPU contention.
 func selectedTimeActivate[T any](t *testing.T, scheduler *selectedTimeScheduler, fn func() T) T {
 	t.Helper()
 	done := make(chan struct{})
@@ -70,8 +86,8 @@ func selectedTimeActivate[T any](t *testing.T, scheduler *selectedTimeScheduler,
 				t.Fatal("public activation aborted; see the preceding operation failure")
 			}
 			return result
-		case <-scheduler.readiness:
-			scheduler.advance(10 * time.Millisecond)
+		case timer := <-scheduler.readiness:
+			timer.acknowledge(scheduler.Now())
 		case <-ceiling:
 			t.Fatal("public activation did not complete with controlled readiness polls")
 			var zero T

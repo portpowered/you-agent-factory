@@ -1,4 +1,4 @@
-package composition_test
+package customer_workflows_test
 
 import (
 	"context"
@@ -58,208 +58,72 @@ func (lifecycle *compositionStreamLifecycle) wrap(next http.Handler) http.Handle
 	})
 }
 
-// TestMain owns the one process and one HTTP listener for this package. The
-// fixture intentionally outlives individual tests so every behavior receives
-// a fresh explicit Factory Session without rebuilding the application graph.
-func TestMain(m *testing.M) {
-	code := m.Run()
-
-	compositionFixtureMu.Lock()
-	fixture := sharedCompositionFixture
-	compositionFixtureMu.Unlock()
-	if fixture != nil {
-		if err := fixture.shutdown(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			code = 1
-		}
-	}
-	os.Exit(code)
-}
-
-// TestJavaScriptCompositionFixturePartialStartUnwinds proves a real process
-// startup failure preserves the original error and closes the listener that
-// was acquired by the injected HTTP transport edge.
-func TestJavaScriptCompositionFixturePartialStartUnwinds(t *testing.T) {
-	hostDir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
-	homeDir := t.TempDir()
-	support.WriteAgentConfig(t, hostDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
-	writeParallelCompositionGlobalConfig(t, homeDir)
-
-	original := errors.New("injected composition fixture start failure")
-	partialAPI := support.NewProcessAPIServer()
-	partialStopped := make(chan struct{})
-	partialStreams := &compositionStreamLifecycle{}
-	var listenerURL string
-	var starterCalls atomic.Int32
-	failingStarter := newCompositionPartialStartStarter(original, partialAPI, partialStopped, partialStreams, &listenerURL, &starterCalls)
-
-	runner := newCompositionCommandRunner()
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      failingStarter,
-		ProviderCommandRunner: runner,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess(composition partial start): %v", err)
-	}
-	closed := false
-	defer func() {
-		if !closed {
-			if closeErr := process.Close(context.Background()); closeErr != nil {
-				t.Errorf("close partial-start process: %v", closeErr)
+// initializeCompositionFixture keeps its process alive until all customer journeys finish.
+func initializeCompositionFixture(t *testing.T) {
+	sharedCompositionFixture = nil
+	t.Cleanup(func() {
+		fixture := sharedCompositionFixture
+		if fixture != nil {
+			if err := fixture.shutdown(); err != nil {
+				t.Errorf("close workflow fixture: %v", err)
 			}
 		}
-	}()
-
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
 	})
-	inputs.Input.Env = compositionCustomerEnvironment(homeDir)
-	inputs.Input.WorkingDirectory = hostDir
-	got := process.Execute(inputs.Input)
-	closeErr := process.Close(context.Background())
-	if closeErr != nil {
-		t.Errorf("close partial-start process: %v", closeErr)
-	}
-	closed = closeErr == nil
-	if !errors.Is(got, original) && (got == nil || !strings.Contains(got.Error(), original.Error())) {
-		t.Fatalf("partial-start error = %v, want original error %q", got, original)
-	}
-	if got := starterCalls.Load(); got != 1 {
-		t.Fatalf("partial-start API starter calls = %d, want one", got)
-	}
-	if got := runner.callCount(); got != 0 {
-		t.Fatalf("partial-start provider command calls = %d, want zero", got)
-	}
-
-	listenerClosed := false
-	<-partialStopped
-	if partialStreams.active.Load() != 0 || partialStreams.opened.Load() != partialStreams.closed.Load() {
-		t.Fatalf("partial composition stream edge did not close: active=%d opened=%d closed=%d", partialStreams.active.Load(), partialStreams.opened.Load(), partialStreams.closed.Load())
-	}
-	listenerClosed = true
-	if strings.TrimSpace(listenerURL) != "" {
-		client := http.Client{Timeout: time.Second}
-		response, probeErr := client.Get(listenerURL + "/status")
-		if probeErr == nil {
-			listenerClosed = false
-			body, _ := io.ReadAll(response.Body)
-			response.Body.Close()
-			t.Fatalf("partial-start listener remained available: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
-		}
-	} else {
-		t.Fatal("partial-start application listener URL was not recorded")
-	}
-	// The listener was intentionally never published, so the edge request
-	// observation must show that no Factory Session route was admitted.
-	sessionActive := int(partialStreams.sessionRequests.Load())
-	if sessionActive != 0 {
-		t.Fatalf("partial-start Factory Session requests = %d, want zero", sessionActive)
-	}
-	processActive := boolToInt(!closed)
-	portActive := boolToInt(!listenerClosed)
-	streamActive := int(partialStreams.active.Load())
-	routeActive := runner.activeCount()
-	rootActive := boolToInt(!closed)
-	worktreeActive, err := removeAndObservePath(hostDir)
-	if err != nil {
-		t.Fatalf("remove composition partial-start factory: %v", err)
-	}
-	mutableStateActive := sessionActive + streamActive + routeActive + rootActive + worktreeActive
-	if processActive != 0 || portActive != 0 || streamActive != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
-		t.Fatalf("composition partial-start active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive)
-	}
-	t.Logf("composition partial-start lifecycle report: process_closed=%t api_starter_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d} streams_opened=%d streams_closed=%d provider_calls=%d original_error=%q", closed, starterCalls.Load(), processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive, partialStreams.opened.Load(), partialStreams.closed.Load(), runner.callCount(), original)
 }
 
-func newCompositionPartialStartStarter(
-	original error,
-	api *support.ProcessAPIServer,
-	stopped chan struct{},
-	streams *compositionStreamLifecycle,
-	listenerURL *string,
-	starterCalls *atomic.Int32,
-) func(context.Context, platformhttpserver.StartRequest) error {
-	return func(ctx context.Context, request platformhttpserver.StartRequest) error {
-		starterCalls.Add(1)
-		partialContext, cancelPartial := context.WithCancel(ctx)
-		startDone := make(chan error, 1)
-		request.OnBound = nil
-		request.Handler = streams.wrap(request.Handler)
-		go func() {
-			startDone <- api.Start(partialContext, request)
-			close(stopped)
-		}()
-		baseURL, err := api.WaitForBaseURL(compositionFixtureTimeout)
-		if err != nil {
-			cancelPartial()
-			<-startDone
-			return err
-		}
-		*listenerURL = baseURL
-		cancelPartial()
-		if err := <-startDone; err != nil {
-			return err
-		}
-		if streams.active.Load() != 0 || streams.opened.Load() != streams.closed.Load() {
-			return fmt.Errorf("partial composition stream edge did not close: active=%d opened=%d closed=%d", streams.active.Load(), streams.opened.Load(), streams.closed.Load())
-		}
-		return original
-	}
-}
-
-func TestJavaScriptAgentReturnsUnaryResult(t *testing.T) {
+func testCompositionJavaScriptAgentReturnsUnaryResult(t *testing.T) {
 	runJavaScriptAgentReturnsUnaryResult(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptAgentFailureReturnsStableFailureRecord(t *testing.T) {
+func testCompositionJavaScriptAgentFailureReturnsStableFailureRecord(t *testing.T) {
 	runJavaScriptAgentFailureReturnsStableFailureRecord(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptForEachDispatchesEveryInputOnce(t *testing.T) {
+func testCompositionJavaScriptForEachDispatchesEveryInputOnce(t *testing.T) {
 	runJavaScriptForEachDispatchesEveryInputOnce(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptForEachPreservesInputResultCorrelation(t *testing.T) {
+func testCompositionJavaScriptForEachPreservesInputResultCorrelation(t *testing.T) {
 	runJavaScriptForEachPreservesInputResultCorrelation(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptForEachEmptyInputDoesNotDispatch(t *testing.T) {
+func testCompositionJavaScriptForEachEmptyInputDoesNotDispatch(t *testing.T) {
 	runJavaScriptForEachEmptyInputDoesNotDispatch(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptNestedPipelineParallelCompositionCompletes(t *testing.T) {
+func testCompositionJavaScriptNestedPipelineParallelCompositionCompletes(t *testing.T) {
 	runJavaScriptNestedPipelineParallelCompositionCompletes(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptNestedFailureNamesChildAndStage(t *testing.T) {
+func testCompositionJavaScriptNestedFailureNamesChildAndStage(t *testing.T) {
 	runJavaScriptNestedFailureNamesChildAndStage(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
+func testCompositionJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 	runJavaScriptParallelDispatchesChildrenConcurrently(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
+func testCompositionJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
 	runJavaScriptParallelPreservesDeclaredResultOrdering(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T) {
+func testCompositionJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T) {
 	runJavaScriptParallelPartialFailureUsesDocumentedPolicy(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptPipelinePassesStageOutputToNextStage(t *testing.T) {
+func testCompositionJavaScriptPipelinePassesStageOutputToNextStage(t *testing.T) {
 	runJavaScriptPipelinePassesStageOutputToNextStage(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptPipelineStopsAfterStageFailure(t *testing.T) {
+func testCompositionJavaScriptPipelineStopsAfterStageFailure(t *testing.T) {
 	runJavaScriptPipelineStopsAfterStageFailure(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptNamedStagesExposeOrderedProgress(t *testing.T) {
+func testCompositionJavaScriptNamedStagesExposeOrderedProgress(t *testing.T) {
 	runJavaScriptNamedStagesExposeOrderedProgress(t, compositionFixtureForTest(t))
 }
 
-func TestJavaScriptEmptyStageProducesDocumentedResult(t *testing.T) {
+func testCompositionJavaScriptEmptyStageProducesDocumentedResult(t *testing.T) {
 	runJavaScriptEmptyStageProducesDocumentedResult(t, compositionFixtureForTest(t))
 }
 
@@ -581,12 +445,12 @@ func (fixture *compositionFixture) shutdown() error {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("composition SSE streams active=%d opened=%d closed=%d", streamActive, fixture.stream.opened.Load(), fixture.stream.closed.Load()))
 	}
 	processClosed := fixture.processStops.Load() == fixture.processStarts.Load() && closeErr == nil
-	processActive := boolToInt(!processClosed)
-	portActive := boolToInt(!listenerClosed)
+	processActive := compositionBoolToInt(!processClosed)
+	portActive := compositionBoolToInt(!listenerClosed)
 	sessionActive := maxInt(tracked-closed, 0)
 	streamActiveCount := int(streamActive)
 	routeActive := fixture.runner.activeCount()
-	rootActive := maxInt(int(fixture.rootBuilds.Load())-boolToInt(processClosed), 0)
+	rootActive := maxInt(int(fixture.rootBuilds.Load())-compositionBoolToInt(processClosed), 0)
 	if err := os.RemoveAll(fixture.hostDir); err != nil {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove composition factory: %w", err))
 	}
@@ -627,7 +491,7 @@ func (fixture *compositionFixture) activeCompositionRoots() int {
 	return active
 }
 
-func boolToInt(value bool) int {
+func compositionBoolToInt(value bool) int {
 	if value {
 		return 1
 	}
@@ -641,7 +505,7 @@ func maxInt(left, right int) int {
 	return right
 }
 
-func removeAndObservePath(path string) (int, error) {
+func compositionRemoveAndObservePath(path string) (int, error) {
 	if err := os.RemoveAll(path); err != nil {
 		return 1, err
 	}

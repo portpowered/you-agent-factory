@@ -1,6 +1,6 @@
 // typescript_test.go holds customer functional scenarios for TypeScript
 // Factory loading through the public CLI and customer process boundary.
-package loading_test
+package customer_workflows_test
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture
 		"hello",
 	}, dir, fixture.homeDir)
 	assertTypeScriptSuccessOutcome(t, result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 // TestTypeScriptSourceMapReportsAuthoredLocation proves a file-backed
@@ -59,7 +59,7 @@ func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadin
 		typeScriptSourceMapAuthoredLine,
 		typeScriptSourceMapEmittedLine,
 	)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 func scaffoldFileBackedTypeScriptFactory(t *testing.T) string {

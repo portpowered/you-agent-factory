@@ -1,6 +1,6 @@
 // file_javascript_test.go holds customer functional scenarios for file-backed
 // JavaScript Factory loading through the public CLI and customer process boundary.
-package loading_test
+package customer_workflows_test
 
 import (
 	"fmt"
@@ -33,7 +33,7 @@ func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fi
 		"hello",
 	}, dir, fixture.homeDir)
 	assertFileJavaScriptImportedSuccessOutcome(t, result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 // TestJavaScriptFactoryMissingImportFailsActionably proves a file-backed
@@ -57,7 +57,7 @@ func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loa
 		inputs.Stderr(),
 		fileJavaScriptMissingImportPath,
 	)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 func scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t *testing.T) string {

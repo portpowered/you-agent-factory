@@ -1,4 +1,4 @@
-package contracts
+package customer_workflows_test
 
 import (
 	"encoding/json"
@@ -45,7 +45,7 @@ const (
 	stableMissingRequiredInputDiagnostic = `required invocation parameter "label" is missing`
 )
 
-var privateJavaScriptVMDiagnosticMarkers = []string{
+var contractsPrivateJavaScriptVMDiagnosticMarkers = []string{
 	"goja",
 	"goja.",
 	"stack frame",
@@ -71,7 +71,7 @@ func runJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(
 	}
 
 	assertTypedInputMappingPrimaryResult(t, started.Result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, marshalPrimaryResultForDiagnostics(t, started.Result))
+	contractsAssertNoPrivateJavaScriptVMDiagnostics(t, marshalPrimaryResultForDiagnostics(t, started.Result))
 }
 
 // TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch proves omitting a
@@ -93,7 +93,7 @@ func runJavaScriptMissingRequiredInputFailsBeforeChildDispatch(
 			got, providerCalls,
 		)
 	}
-	assertNoPrivateJavaScriptVMDiagnostics(t, run.outcome.diagnostic)
+	contractsAssertNoPrivateJavaScriptVMDiagnostics(t, run.outcome.diagnostic)
 
 	// The rejected CLI request must not poison the next explicit Factory
 	// Session. Use a fresh authored root so this is also a direct witness for
@@ -387,11 +387,11 @@ func marshalPrimaryResultForDiagnostics(t *testing.T, result *factoryapi.Factory
 	return string(encoded)
 }
 
-func assertNoPrivateJavaScriptVMDiagnostics(t *testing.T, outputs ...string) {
+func contractsAssertNoPrivateJavaScriptVMDiagnostics(t *testing.T, outputs ...string) {
 	t.Helper()
 
 	combined := strings.ToLower(strings.Join(outputs, "\n"))
-	for _, marker := range privateJavaScriptVMDiagnosticMarkers {
+	for _, marker := range contractsPrivateJavaScriptVMDiagnosticMarkers {
 		if strings.Contains(combined, strings.ToLower(marker)) {
 			t.Fatalf("diagnostics exposed private VM detail %q in %q", marker, strings.Join(outputs, "\n---\n"))
 		}

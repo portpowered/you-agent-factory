@@ -1,4 +1,4 @@
-package loading_test
+package customer_workflows_test
 
 import (
 	"context"
@@ -42,72 +42,65 @@ var (
 	loadingSessionGate sync.RWMutex
 )
 
-// TestMain owns the one reusable process for this package. Individual tests
-// retain their original top-level selectors, while the shared fixture keeps
-// process construction and hosted-server startup out of every scenario.
-func TestMain(m *testing.M) {
-	code := m.Run()
-
-	loadingFixtureMu.Lock()
-	fixture := sharedLoadingFixture
-	loadingFixtureMu.Unlock()
-	if fixture != nil {
-		if err := fixture.shutdown(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			code = 1
+// initializeLoadingFixture keeps its process alive until all customer journeys finish.
+func initializeLoadingFixture(t *testing.T) {
+	sharedLoadingFixture = nil
+	t.Cleanup(func() {
+		fixture := sharedLoadingFixture
+		if fixture != nil {
+			if err := fixture.shutdown(); err != nil {
+				t.Errorf("close workflow fixture: %v", err)
+			}
 		}
-	}
-	os.Exit(code)
+	})
 }
 
-// Keep the original top-level test identities so focused -run selectors and
-// review tooling continue to address the same behavior rows as the baseline.
-func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
+func testLoadingInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
 	t.Parallel()
 	runInlineJavaScriptFactoryRunsFromCLI(t, loadingFixtureForTest(t))
 }
 
-func TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
+func testLoadingInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
 	t.Parallel()
 	runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t, loadingFixtureForTest(t))
 }
 
-func TestInlineJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
+func testLoadingInlineJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
 	t.Parallel()
 	runInlineJavaScriptFactoryRunsThroughAPIInvocation(t, loadingExclusiveFixtureForTest(t))
 }
 
-func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
+func testLoadingInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
 	t.Parallel()
 	runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t, loadingFixtureForTest(t))
 }
 
-func TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T) {
+func testLoadingJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T) {
 	t.Parallel()
 	runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t, loadingFixtureForTest(t))
 }
 
-func TestJavaScriptFactoryMissingImportFailsActionably(t *testing.T) {
+func testLoadingJavaScriptFactoryMissingImportFailsActionably(t *testing.T) {
 	t.Parallel()
 	runJavaScriptFactoryMissingImportFailsActionably(t, loadingFixtureForTest(t))
 }
 
-func TestTypeScriptFactoryTranspilesAndRuns(t *testing.T) {
+func testLoadingTypeScriptFactoryTranspilesAndRuns(t *testing.T) {
 	t.Parallel()
 	runTypeScriptFactoryTranspilesAndRuns(t, loadingFixtureForTest(t))
 }
 
-func TestTypeScriptSourceMapReportsAuthoredLocation(t *testing.T) {
+func testLoadingTypeScriptSourceMapReportsAuthoredLocation(t *testing.T) {
 	t.Parallel()
 	runTypeScriptSourceMapReportsAuthoredLocation(t, loadingFixtureForTest(t))
 }
 
-func TestNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T) {
+func testLoadingNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T) {
 	t.Parallel()
 	runNamedJavaScriptFactoryRunsThroughStandardCLI(t, loadingFixtureForTest(t))
 }
 
-func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
+func testLoadingNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
 	t.Parallel()
 	runNamedJavaScriptFactoryRunsThroughAPIInvocation(t, loadingExclusiveFixtureForTest(t))
 }
@@ -553,7 +546,7 @@ func (fixture *loadingFixture) recoverAfterLoadFailure(t *testing.T, label strin
 		fixture.homeDir,
 	)
 	assertLoadingRecoveryOutcome(t, result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 func scaffoldLoadingRecoveryFactory(t *testing.T, label string) string {

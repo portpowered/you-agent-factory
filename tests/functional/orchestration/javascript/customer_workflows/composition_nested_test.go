@@ -1,6 +1,6 @@
 // Package composition holds customer functional scenarios for nested JavaScript
 // composition primitives through the public process and invocation boundary.
-package composition_test
+package customer_workflows_test
 
 import (
 	"os"

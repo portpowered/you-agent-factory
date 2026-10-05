@@ -1,6 +1,6 @@
 // named_factory_test.go holds customer functional scenarios for named JavaScript
 // Factory loading through the public CLI, HTTP API, and Factory Session controls.
-package loading_test
+package customer_workflows_test
 
 import (
 	"bytes"
@@ -24,7 +24,7 @@ const (
 )
 
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
+func testLoadingNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
 	t.Parallel()
 	fixture := loadingExclusiveFixtureForTest(t)
 	runNamedJavaScriptFactoryUsesSameFactorySessionControls(t, fixture)
@@ -45,7 +45,7 @@ func runNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T, fixture *load
 		"hello",
 	}, t.TempDir(), fixture.homeDir, namedFactoryDir)
 	assertNamedJavaScriptSuccessOutcome(t, result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
 // TestNamedJavaScriptFactoryRunsThroughAPIInvocation proves the same named
@@ -65,7 +65,7 @@ func runNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T, fixture *lo
 	if err != nil {
 		t.Fatalf("marshal sync execution response: %v", err)
 	}
-	assertNoPrivateJavaScriptVMDiagnostics(t, string(responseJSON))
+	loadingAssertNoPrivateJavaScriptVMDiagnostics(t, string(responseJSON))
 }
 
 // TestNamedJavaScriptFactoryUsesSameFactorySessionControls proves pause and resume

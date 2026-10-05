@@ -1,4 +1,4 @@
-package contracts
+package customer_workflows_test
 
 import (
 	"encoding/json"
@@ -66,7 +66,7 @@ func runJavaScriptReturnValueMapsToPrimaryInvocationResult(
 
 	events := fixture.factoryEvents(t, started.SessionId)
 	assertReturnValueMappingFactoryEvents(t, events, returnValuePrimaryResult)
-	assertNoPrivateJavaScriptVMDiagnostics(
+	contractsAssertNoPrivateJavaScriptVMDiagnostics(
 		t,
 		marshalPrimaryResultForDiagnostics(t, started.Result),
 		marshalFactoryEventsForDiagnostics(t, events),
@@ -104,7 +104,7 @@ func runJavaScriptStructuredArtifactsMapToPublicResult(
 
 	events := fixture.factoryEvents(t, started.SessionId)
 	assertStructuredArtifactFactoryEvents(t, events)
-	assertNoPrivateJavaScriptVMDiagnostics(
+	contractsAssertNoPrivateJavaScriptVMDiagnostics(
 		t,
 		marshalPrimaryResultForDiagnostics(t, started.Result),
 		marshalArtifactListForDiagnostics(t, artifactList),
@@ -137,7 +137,7 @@ func runJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails(
 
 	events := fixture.factoryEvents(t, started.SessionId)
 	assertUnsupportedReturnFactoryEvents(t, events)
-	assertNoPrivateJavaScriptVMDiagnostics(
+	contractsAssertNoPrivateJavaScriptVMDiagnostics(
 		t,
 		marshalFailureDetailForDiagnostics(t, started.Result.FailureDetail),
 		marshalFailureDetailForDiagnostics(t, session.FailureDetail),

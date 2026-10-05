@@ -22,7 +22,7 @@ func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
 	facts := platformclock.NewDeterministic(base.Add(time.Hour), time.Millisecond)
-	scheduler := &selectedTimeScheduler{Deterministic: platformclock.NewDeterministic(base, time.Millisecond), registered: make(chan selectedTimeWait, 256), readiness: make(chan struct{}, 256)}
+	scheduler := &selectedTimeScheduler{Deterministic: platformclock.NewDeterministic(base, time.Millisecond), registered: make(chan selectedTimeWait, 256), readiness: make(chan *selectedReadinessTimer, 256)}
 	files := &selectedTimeFiles{empty: make(map[string]int), reads: make(chan string, 16), walked: make(chan string, 64), admissions: make(map[string]int)}
 	dirA, routeA := newScriptCycleFactory(t)
 	dirB, routeB := newScriptCycleFactory(t)

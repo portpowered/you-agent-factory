@@ -1,4 +1,4 @@
-package policy
+package customer_workflows_test
 
 import (
 	"encoding/json"
@@ -24,7 +24,7 @@ return { ok: true };`
 
 // TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic preserves
 // the original behavior selector while sharing the package-owned process.
-func TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.T) {
+func testPolicyJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.T) {
 	fixture := policyFixtureForTest(t)
 	before := fixture.trackedSessionCount()
 	runJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t, fixture)
@@ -35,7 +35,7 @@ func TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.
 
 // TestJavaScriptPolicyFailureDoesNotDispatchExternalWork preserves the
 // original behavior selector while sharing the package-owned process.
-func TestJavaScriptPolicyFailureDoesNotDispatchExternalWork(t *testing.T) {
+func testPolicyJavaScriptPolicyFailureDoesNotDispatchExternalWork(t *testing.T) {
 	fixture := policyFixtureForTest(t)
 	before := fixture.trackedSessionCount()
 	runJavaScriptPolicyFailureDoesNotDispatchExternalWork(t, fixture)

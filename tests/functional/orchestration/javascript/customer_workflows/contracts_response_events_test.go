@@ -1,4 +1,4 @@
-package contracts
+package customer_workflows_test
 
 import (
 	"bufio"
