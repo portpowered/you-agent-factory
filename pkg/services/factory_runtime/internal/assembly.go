@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -16,7 +15,6 @@ import (
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -25,20 +23,16 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	bundleOpening            BundleOpeningOperation
-	sidecars                 *SidecarOpening
-	instanceHost             instancehost.Service
-	preparation              *runtimebuild.Service
-	recordingsRuntime        recordings.RuntimeScopeService
-	initialFactorySnapshot   factorydefinitions.InitialFactorySnapshotFactory
-	providerOverride         providers.Service
-	providerCommandRunner    platformprocess.CommandRunner
-	scriptCommandRunner      platformprocess.CommandRunner
-	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
-	submissionRecorder       recordings.SubmissionRecorder
-	dispatchRecorder         recordings.DispatchRecorder
-	automationService        automations.Service
-	worldStateProjector      factoryruntime.WorldStateProjector
+	bundleOpening          BundleOpeningOperation
+	sidecars               *SidecarOpening
+	instanceHost           instancehost.Service
+	preparation            *runtimebuild.Service
+	recordingsRuntime      recordings.RuntimeScopeService
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory
+	submissionRecorder     recordings.SubmissionRecorder
+	dispatchRecorder       recordings.DispatchRecorder
+	automationService      automations.Service
+	worldStateProjector    factoryruntime.WorldStateProjector
 }
 
 // NewAssembly constructs the inert compatibility assembly selected by Wire.
@@ -51,10 +45,6 @@ func NewAssembly(
 	preparation *runtimebuild.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
@@ -70,8 +60,6 @@ func NewAssembly(
 		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
 		preparation:       preparation,
 		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot,
-		providerOverride: providerOverride, providerCommandRunner: providerCommandRunner,
-		scriptCommandRunner: scriptCommandRunner, mockCommandRunnerFactory: mockCommandRunnerFactory,
 		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder,
 		automationService: automationService, worldStateProjector: worldStateProjector,
 	}, nil
@@ -146,19 +134,22 @@ func (a *Assembly) Assemble(
 	// that low-level effect at the composition boundary and Workers adapts it
 	// privately when Execute receives the runtime-scoped override.
 	replayCommandRunner := replayProcessRunner
-	spec, err := a.preparation.PrepareExecutionSpec(ctx, runtimebuild.BuildDefaults{
-		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
-		ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
-	}, runtimebuild.SessionBuildValues{
-		Dir: dir, FolderPath: factoryRootDir, SessionID: defaultSessionID,
-		ExecutionBaseDir: executionBaseDir, LoadedFactoryCfg: loadedFactory,
-		RuntimeInstanceID: runtimeInstanceID, PreserveCompatibilityDefaultRecordPath: true,
-	}, factoryruntime.SessionBuildSpec{
-		BaseLogger: baseLogger, Clock: clock, ProviderOverride: replayProvider,
-		ReplayCommandRunner: replayCommandRunner, SubmissionHooks: replayhooks.Adapt(replayHooks),
-		CompletionPlanner: completionPlanner, PetriMutationRecorder: petriMutationRecorder,
-	}, a.providerOverride, a.providerCommandRunner, a.scriptCommandRunner, mockWorkersConfig,
-		runtimebuild.MockCommandRunnerFactory(a.mockCommandRunnerFactory))
+	spec, err := a.preparation.PrepareExecutionSpec(ctx,
+		runtimebuild.BuildDefaults{
+			WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+			ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+		},
+		runtimebuild.SessionBuildValues{
+			Dir: dir, FolderPath: factoryRootDir, SessionID: defaultSessionID,
+			ExecutionBaseDir: executionBaseDir, LoadedFactoryCfg: loadedFactory,
+			RuntimeInstanceID: runtimeInstanceID, PreserveCompatibilityDefaultRecordPath: true,
+		},
+		factoryruntime.SessionBuildSpec{
+			BaseLogger: baseLogger, Clock: clock, ProviderOverride: replayProvider,
+			ReplayCommandRunner: replayCommandRunner, SubmissionHooks: replayhooks.Adapt(replayHooks),
+			CompletionPlanner: completionPlanner, PetriMutationRecorder: petriMutationRecorder,
+		},
+		mockWorkersConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -200,15 +191,18 @@ func (a *Assembly) Assemble(
 		)
 	}
 	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
-		replacementSpec, err := a.preparation.PrepareExecutionSpec(ctx, runtimebuild.BuildDefaults{
-			WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
-			ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
-		}, runtimebuild.SessionBuildValues{
-			Dir: factoryDir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
-		}, factoryruntime.SessionBuildSpec{
-			Clock: clock, BaseLogger: baseLogger, PetriMutationRecorder: petriMutationRecorder,
-		}, a.providerOverride, a.providerCommandRunner, a.scriptCommandRunner, mockWorkersConfig,
-			runtimebuild.MockCommandRunnerFactory(a.mockCommandRunnerFactory))
+		replacementSpec, err := a.preparation.PrepareExecutionSpec(ctx,
+			runtimebuild.BuildDefaults{
+				WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+				ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+			},
+			runtimebuild.SessionBuildValues{
+				Dir: factoryDir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
+			},
+			factoryruntime.SessionBuildSpec{
+				Clock: clock, BaseLogger: baseLogger, PetriMutationRecorder: petriMutationRecorder,
+			},
+			mockWorkersConfig)
 		if err != nil {
 			return nil, err
 		}

@@ -59,7 +59,7 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 	}
 	preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return loaded, nil
-	}, testRuntimeID, zap.NewNop())
+	}, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	spec, err := preparation.PrepareSpec(t.Context(), runtimebuild.BuildDefaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5", ApplyOperatorDefaults: true},
 		runtimebuild.SessionBuildValues{Dir: "/fusion", FolderPath: "/fusion", SessionID: "~default", ExecutionBaseDir: "/fusion"},
 		runtimebuild.SessionBuildSpec{Clock: platformclock.Real{}, BaseLogger: zap.NewNop()})

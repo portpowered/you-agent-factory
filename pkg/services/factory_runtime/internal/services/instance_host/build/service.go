@@ -49,10 +49,14 @@ type PreparedSessionValues struct {
 
 // Service prepares session-owned candidates using fixed process collaborators.
 type Service struct {
-	workstationLoader factorydefinitions.WorkstationLoader
-	loadFactory       factory.LoadedFactoryLoader
-	newID             factory.IDGenerator
-	baseLogger        *zap.Logger
+	workstationLoader     factorydefinitions.WorkstationLoader
+	loadFactory           factory.LoadedFactoryLoader
+	newID                 factory.IDGenerator
+	baseLogger            *zap.Logger
+	providerOverride      providers.Service
+	providerCommandRunner platformprocess.CommandRunner
+	scriptCommandRunner   platformprocess.CommandRunner
+	newMockCommandRunner  MockCommandRunnerFactory
 }
 
 // New constructs inert preparation with explicitly selected collaborators.
@@ -61,8 +65,14 @@ func New(
 	loadFactory factory.LoadedFactoryLoader,
 	newID factory.IDGenerator,
 	baseLogger *zap.Logger,
+	providerOverride providers.Service,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
+	newMockCommandRunner MockCommandRunnerFactory,
 ) *Service {
-	return &Service{workstationLoader: workstationLoader, loadFactory: loadFactory, newID: newID, baseLogger: baseLogger}
+	return &Service{workstationLoader: workstationLoader, loadFactory: loadFactory, newID: newID, baseLogger: baseLogger,
+		providerOverride: providerOverride, providerCommandRunner: providerCommandRunner,
+		scriptCommandRunner: scriptCommandRunner, newMockCommandRunner: newMockCommandRunner}
 }
 
 // Prepare preserves candidate identity; callers discard a failed candidate.
@@ -136,19 +146,15 @@ func (s *Service) PrepareExecutionSpec(
 	defaults BuildDefaults,
 	values SessionBuildValues,
 	selections SessionBuildSpec,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
-	newMockCommandRunner MockCommandRunnerFactory,
 ) (SessionBuildSpec, error) {
-	selections.ProviderOverride = providerOverrideForMode(providerOverride, selections.ProviderOverride)
+	selections.ProviderOverride = providerOverrideForMode(s.providerOverride, selections.ProviderOverride)
 	spec, err := s.PrepareSpec(ctx, defaults, values, selections)
 	if err != nil {
 		return SessionBuildSpec{}, err
 	}
-	spec.ProviderCommandRunner = providerCommandRunnerForMode(mockWorkersConfig, providerCommandRunner, spec.LoadedFactoryCfg, newMockCommandRunner)
-	spec.CommandRunnerOverride = commandRunnerOverrideForMode(mockWorkersConfig, scriptCommandRunner, spec.LoadedFactoryCfg, spec.ReplayCommandRunner, newMockCommandRunner)
+	spec.ProviderCommandRunner = providerCommandRunnerForMode(mockWorkersConfig, s.providerCommandRunner, spec.LoadedFactoryCfg, s.newMockCommandRunner)
+	spec.CommandRunnerOverride = commandRunnerOverrideForMode(mockWorkersConfig, s.scriptCommandRunner, spec.LoadedFactoryCfg, spec.ReplayCommandRunner, s.newMockCommandRunner)
 	return spec, nil
 }
 

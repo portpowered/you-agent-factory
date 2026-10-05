@@ -91,18 +91,21 @@ func NewAssembly(
 	preparation *RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
 	worldStateProjector factoryruntime.WorldStateProjector,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(bundleOpening, sidecars, instanceHost, preparation,
-		recordingsRuntime, initialFactorySnapshot, providerOverride, providerCommandRunner,
-		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService, worldStateProjector)
+	return factoryruntimeinternal.NewAssembly(bundleOpening,
+		sidecars,
+		instanceHost,
+		preparation,
+		recordingsRuntime,
+		initialFactorySnapshot,
+		submissionRecorder,
+		dispatchRecorder,
+		automationService,
+		worldStateProjector)
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening
@@ -146,8 +149,17 @@ type RuntimePreparation = runtimebuild.Service
 // NewRuntimePreparation constructs fixed preparation once in canonical Wire.
 func NewRuntimePreparation(workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factoryruntime.LoadedFactoryLoader, newID factoryruntime.IDGenerator,
-	baseLogger *zap.Logger) *RuntimePreparation {
-	return runtimebuild.New(workstationLoader, loadFactory, newID, baseLogger)
+	baseLogger *zap.Logger, providerOverride providers.Service,
+	providerCommandRunner platformprocess.CommandRunner, scriptCommandRunner platformprocess.CommandRunner,
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory) *RuntimePreparation {
+	return runtimebuild.New(workstationLoader,
+		loadFactory,
+		newID,
+		baseLogger,
+		providerOverride,
+		providerCommandRunner,
+		scriptCommandRunner,
+		runtimebuild.MockCommandRunnerFactory(mockCommandRunnerFactory))
 }
 
 // Fixed typed roles consumed by canonical composition.

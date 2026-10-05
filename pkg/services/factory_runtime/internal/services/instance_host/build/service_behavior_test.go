@@ -31,7 +31,7 @@ func TestPrepareExecutionSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *t
 		runtimebuild.SessionBuildSpec{Clock: platformclock.Real{}, BaseLogger: zap.NewNop(), ProviderOverride: fixture.replayProvider,
 			ReplayCommandRunner: fixture.replayRunner, SubmissionHooks: []factory.SubmissionHook{fixture.hook}, CompletionPlanner: fixture.planner,
 			PetriMutationRecorder: func(string, []factorydefinitions.TokenMutationRecord) error { return nil }},
-		fixture.configuredProvider, nil, fixture.scriptRunner, nil, nil)
+		nil)
 	if err != nil {
 		t.Fatalf("PrepareExecutionSpec: %v", err)
 	}
@@ -41,7 +41,6 @@ func TestPrepareExecutionSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *t
 
 func TestPrepareExecutionSpecKeepsOpeningEffectsIndependent(t *testing.T) {
 	t.Parallel()
-	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop())
 	for _, name := range []string{"replay", "selected", "mock"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -67,12 +66,13 @@ func TestPrepareExecutionSpecKeepsOpeningEffectsIndependent(t *testing.T) {
 				wrapped = append(wrapped, next)
 				return next
 			}
+			preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), selectedProvider, providerRunner, scriptRunner, decorate)
 			clock := &platformclock.Real{}
 			logger := zap.NewNop().With(zap.String("opening", name))
 			spec, err := preparation.PrepareExecutionSpec(context.Background(), runtimebuild.BuildDefaults{},
 				runtimebuild.SessionBuildValues{SessionID: name, RuntimeInstanceID: "runtime-" + name, LoadedFactoryCfg: candidate},
 				runtimebuild.SessionBuildSpec{Clock: clock, BaseLogger: logger, ProviderOverride: replayProvider, ReplayCommandRunner: replayRunner},
-				selectedProvider, providerRunner, scriptRunner, mockConfig, decorate)
+				mockConfig)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +144,7 @@ func newSelectedBuildFixture(t *testing.T) selectedBuildFixture {
 	fixture.service = runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		t.Fatal("supplied candidate unexpectedly loaded")
 		return nil, nil
-	}, testRuntimeID, zap.NewNop())
+	}, testRuntimeID, zap.NewNop(), fixture.configuredProvider, nil, fixture.scriptRunner, nil)
 	return fixture
 }
 
@@ -234,7 +234,10 @@ func TestPrepareExecutionSpecReportsFailuresWithoutOpeningEffects(t *testing.T) 
 			t.Parallel()
 			preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 				return nil, loadErr
-			}, testRuntimeID, zap.NewNop())
+			}, testRuntimeID, zap.NewNop(), nil, nil, nil, func(*workers.MockWorkersConfig, factorydefinitions.RuntimeDefinitionLookup, platformprocess.CommandRunner) platformprocess.CommandRunner {
+				t.Fatal("execution effect opened after preparation failure")
+				return nil
+			})
 			var candidate factorydefinitions.MutableLoadedFactorySource
 			if test.candidate != nil {
 				candidate = test.candidate
@@ -242,10 +245,7 @@ func TestPrepareExecutionSpecReportsFailuresWithoutOpeningEffects(t *testing.T) 
 			selections := runtimebuild.SessionBuildSpec{Clock: platformclock.Real{}, BaseLogger: zap.NewNop()}
 			spec, err := preparation.PrepareExecutionSpec(t.Context(), runtimebuild.BuildDefaults{WorkerModelProvider: test.provider, WorkerModel: "model", ApplyOperatorDefaults: true},
 				runtimebuild.SessionBuildValues{Dir: "/factory", SessionID: "session", LoadedFactoryCfg: candidate}, selections,
-				nil, nil, nil, &workers.MockWorkersConfig{}, func(*workers.MockWorkersConfig, factorydefinitions.RuntimeDefinitionLookup, platformprocess.CommandRunner) platformprocess.CommandRunner {
-					t.Fatal("execution effect opened after preparation failure")
-					return nil
-				})
+				&workers.MockWorkersConfig{})
 			if err == nil || !strings.Contains(err.Error(), test.wantText) || (test.wantErr != nil && !errors.Is(err, test.wantErr)) {
 				t.Fatalf("preparation error = %v", err)
 			}
@@ -367,7 +367,7 @@ func TestPrepareSuppliedCandidateKeepsPriorGenerationAndDetachedValues(t *testin
 	preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		t.Fatal("supplied candidate must skip loading")
 		return nil, nil
-	}, testRuntimeID, zap.NewNop())
+	}, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	defaults := runtimebuild.BuildDefaults{WorkerModelProvider: " CODEX ", WorkerModel: " gpt-5 ", ApplyOperatorDefaults: true,
 		RecordPath: "/recordings/factory-__factory_session_id__.json", WorkflowID: "workflow-selected"}
 	values := runtimebuild.SessionBuildValues{Dir: "/factories/selected", FolderPath: "/workspace/project", SessionID: "session-selected",
@@ -415,7 +415,7 @@ func TestPrepareLoadsSelectedCandidateAndSelectsIdentityAndRecordingPath(t *test
 					t.Fatalf("load selection = %q, %T", dir, loader)
 				}
 				return candidate, nil
-			}, func() string { ids++; return "generated" }, zap.NewNop())
+			}, func() string { ids++; return "generated" }, zap.NewNop(), nil, nil, nil, nil)
 			prepared, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{RecordPath: "/recording.json"},
 				runtimebuild.SessionBuildValues{Dir: "/selected", SessionID: test.sessionID, RuntimeInstanceID: test.runtimeID,
 					ExecutionBaseDir: "/runtime", PreserveCompatibilityDefaultRecordPath: test.compatibility})
@@ -464,7 +464,7 @@ func TestPreparePreservesFailureIdentityAndContext(t *testing.T) {
 					return nil, sentinel
 				}
 				return candidate, nil
-			}, testRuntimeID, zap.NewNop())
+			}, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 			result, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{ApplyOperatorDefaults: true, WorkerModelProvider: test.provider, WorkerModel: "model"}, runtimebuild.SessionBuildValues{})
 			if err == nil || !strings.Contains(err.Error(), test.context) {
 				t.Fatalf("Prepare error = %v", err)
@@ -482,7 +482,7 @@ func TestPreparePreservesFailureIdentityAndContext(t *testing.T) {
 func TestPrepareWarningsPreserveSessionFieldsAndTargetOrder(t *testing.T) {
 	t.Parallel()
 	core, observed := observer.New(zap.WarnLevel)
-	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(core))
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(core), nil, nil, nil, nil)
 	for _, id := range []string{"session-a", "session-b"} {
 		candidate := newSelectedBuildFixture(t).loaded
 		candidate.replacements = []factorydefinitions.PortableBundledFileReplacement{{TargetPath: "first"}, {TargetPath: "second"}}
@@ -512,7 +512,7 @@ func TestPrepareWarningsPreserveSessionFieldsAndTargetOrder(t *testing.T) {
 func TestPrepareSpecWarningsUseSelectedOpeningLogger(t *testing.T) {
 	t.Parallel()
 	processCore, processLogs := observer.New(zap.WarnLevel)
-	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(processCore))
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(processCore), nil, nil, nil, nil)
 	for _, id := range []string{"session-a", "session-b"} {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()

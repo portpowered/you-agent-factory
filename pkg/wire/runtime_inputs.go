@@ -52,18 +52,21 @@ func provideFactoryRuntimeAssembly(
 	preparation *factoryruntimewire.RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
-	providerOverride factorysessionwire.ProviderOverrideService,
-	providerCommandRunner factorysessionwire.ProviderCommandRunner,
-	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
-	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
 	worldStateProjector factoryruntime.WorldStateProjector,
 ) (*factoryruntimewire.Assembly, error) {
-	return factoryruntimewire.NewAssembly(bundleOpening, sidecars, instanceHost, preparation,
-		recordingsRuntime, initialFactorySnapshot, providerOverride, providerCommandRunner,
-		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService, worldStateProjector)
+	return factoryruntimewire.NewAssembly(bundleOpening,
+		sidecars,
+		instanceHost,
+		preparation,
+		recordingsRuntime,
+		initialFactorySnapshot,
+		submissionRecorder,
+		dispatchRecorder,
+		automationService,
+		worldStateProjector)
 }
 
 func provideWorkersMockWorkersConfigFileSystem(
@@ -699,3 +702,15 @@ func provideRuntimeRequestLogger(baseLogger *zap.Logger, loggerFactory factoryru
 
 // Current Work reads use live sessions; historical reads keep their existing separate snapshot root.
 func provideWorkSnapshotReader() workwire.SnapshotReader { return nil }
+
+// provideRuntimePreparation selects fixed execution effects in canonical Wire.
+func provideRuntimePreparation(workstationLoader factorydefinitions.WorkstationLoader,
+	loadFactory factoryruntime.LoadedFactoryLoader, newID factoryruntime.IDGenerator, baseLogger *zap.Logger,
+	providerOverride factorysessionwire.ProviderOverrideService,
+	providerCommandRunner factorysessionwire.ProviderCommandRunner,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+) *factoryruntimewire.RuntimePreparation {
+	return factoryruntimewire.NewRuntimePreparation(workstationLoader, loadFactory, newID, baseLogger,
+		providerOverride, providerCommandRunner, scriptCommandRunner, mockCommandRunnerFactory)
+}

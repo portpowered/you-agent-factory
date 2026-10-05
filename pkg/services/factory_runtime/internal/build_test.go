@@ -130,7 +130,8 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil),
+		&testRuntimeScopeServiceStub{}, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,9 +196,8 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	loader := func(path string, _ interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loadedFactoryFixture(path)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil,
-		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil,
-		nil, provider, script, decorate, submit, dispatch, nil, projector)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, provider, script, decorate),
+		&testRuntimeScopeServiceStub{}, nil, submit, dispatch, nil, projector)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -872,7 +872,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1031,7 +1031,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		snapshots = append(snapshots, source)
 		return nil, nil
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, snapshot, nil, nil, nil, nil, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, snapshot, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

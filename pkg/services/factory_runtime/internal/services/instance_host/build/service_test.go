@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +29,7 @@ func TestSessionScopedRecordPath_PreservesDefaultAndSuffixesNonDefaultSessions(t
 
 func TestPrepareSharedServiceKeepsParallelSessionValuesIndependent(t *testing.T) {
 	t.Parallel()
-	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop())
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	for _, id := range []string{"session-a", "session-b"} {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
@@ -48,9 +49,48 @@ func TestPrepareSharedServiceKeepsParallelSessionValuesIndependent(t *testing.T)
 	}
 }
 
+func TestPrepareExecutionSpecSharedOwnerKeepsReplayAndMockSelectionsIndependent(t *testing.T) {
+	t.Parallel()
+	providerRunner := &behaviorCommandRunner{selection: "fixed-provider"}
+	decorate := func(config *workers.MockWorkersConfig, definitions factorydefinitions.RuntimeDefinitionLookup, next platformprocess.CommandRunner) platformprocess.CommandRunner {
+		if config == nil || definitions == nil {
+			t.Error("mock decoration lost the opening's configuration or definitions")
+		}
+		return next
+	}
+	owner := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, providerRunner, nil, decorate)
+	for _, id := range []string{"replay", "mock"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			candidate := &runtimeBuildLoadedSource{factoryDir: "/factory/" + id, config: &factorydefinitions.FactoryConfig{}}
+			replay := &behaviorCommandRunner{selection: id}
+			var mock *workers.MockWorkersConfig
+			if id == "mock" {
+				mock = &workers.MockWorkersConfig{}
+			}
+			spec, err := owner.PrepareExecutionSpec(t.Context(), runtimebuild.BuildDefaults{},
+				runtimebuild.SessionBuildValues{SessionID: id, RuntimeInstanceID: id, LoadedFactoryCfg: candidate},
+				runtimebuild.SessionBuildSpec{ReplayCommandRunner: replay}, mock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.CommandRunnerOverride != replay || spec.ReplayCommandRunner != replay || spec.LoadedFactoryCfg != candidate || spec.SessionID != id {
+				t.Fatalf("opening selections changed: %#v", spec)
+			}
+			var expected platformprocess.CommandRunner
+			if mock != nil {
+				expected = providerRunner
+			}
+			if spec.ProviderCommandRunner != expected {
+				t.Fatalf("provider runner = %v, want %v", spec.ProviderCommandRunner, expected)
+			}
+		})
+	}
+}
+
 func TestPrepareSpecKeepsSelectedEffectsAndParallelCandidatesIndependent(t *testing.T) {
 	t.Parallel()
-	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop())
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	for _, id := range []string{"session-a", "session-b"} {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
@@ -95,7 +135,7 @@ func TestPrepareSpecFailedCandidateLeavesOwnerReusable(t *testing.T) {
 	failure := errors.New("candidate load failed")
 	preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return nil, failure
-	}, testRuntimeID, zap.NewNop())
+	}, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	clock := &platformclock.Real{}
 	selections := runtimebuild.SessionBuildSpec{Clock: clock}
 	values := runtimebuild.SessionBuildValues{SessionID: "same-session", RuntimeInstanceID: "same-runtime", ExecutionBaseDir: "/runtime"}
@@ -111,7 +151,7 @@ func TestPrepareSpecFailedCandidateLeavesOwnerReusable(t *testing.T) {
 
 func TestPrepareSpecRetainsMutationRecorderAcrossRepeatedCandidates(t *testing.T) {
 	t.Parallel()
-	owner := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop())
+	owner := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	wantErr := errors.New("persist mutation")
 	calls := 0
 	selected := runtimebuild.SessionBuildSpec{PetriMutationRecorder: func(id string, mutations []factorydefinitions.TokenMutationRecord) error {

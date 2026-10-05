@@ -514,19 +514,19 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v140 := provideFactoryDefinitionLoader(v135, v136, v137, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v138, portableBundledFileInspection, v139)
 	v141 := provideLoadedFactoryLoader(v140)
-	v142 := wire4.NewRuntimePreparation(v134, v141, factoryIDGenerator, logger)
-	v143, err := provideRecordingsRuntimeScopeService(recordingsService)
+	v142, err := provideFactoryRuntimeProviderCommandRunner(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v143 := provideRuntimePreparation(v134, v141, factoryIDGenerator, logger, v75, v142, v73, workersMockCommandRunnerFactory)
+	v144, err := provideRecordingsRuntimeScopeService(recordingsService)
 	if err != nil {
 		return nil, err
 	}
 	initialFactorySnapshotFactory := provideInitialFactorySnapshotFactory(v135, v136)
-	v144, err := provideFactoryRuntimeProviderCommandRunner(edges2)
-	if err != nil {
-		return nil, err
-	}
 	v145 := provideFactoryRuntimeSubmissionRecorder(edges2)
 	v146 := provideFactoryRuntimeDispatchRecorder(edges2)
-	v147, err := provideFactoryRuntimeAssembly(v118, v133, v16, v142, v143, initialFactorySnapshotFactory, v75, v144, v73, workersMockCommandRunnerFactory, v145, v146, root, worldStateProjector)
+	v147, err := provideFactoryRuntimeAssembly(v118, v133, v16, v143, v144, initialFactorySnapshotFactory, v145, v146, root, worldStateProjector)
 	if err != nil {
 		return nil, err
 	}
@@ -640,7 +640,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v170 := &wire3.RecordingsPorts{
 		Service: recordingsService,
-		Runtime: v143,
+		Runtime: v144,
 	}
 	httpClient := provideFactoryWebhookHTTPClient(edges2)
 	secretResolver := provideFactoryWebhookSecretResolver(edges2)
@@ -654,7 +654,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v172 := &wire3.WorkersPorts{
 		Service:                          workersService,
 		ProviderFromCommandRunnerFactory: providerFromCommandRunnerFactory,
-		ProviderCommandRunner:            v144,
+		ProviderCommandRunner:            v142,
 		ScriptCommandRunner:              v73,
 	}
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(operatorsettingsService)
@@ -1196,7 +1196,9 @@ var servicesSet = wire11.NewSet(
 	provideFactoryDefinitionsRoot,
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
-	provideInitialFactorySnapshotFactory, wire4.NewRuntimeFactory, wire4.NewBundleOpening, wire4.NewEngineOpening, wire4.NewOutboxOpening, wire4.NewDefinitionMapper, provideRuntimePreparationWorkstationLoader, wire4.NewRuntimePreparation, provideRuntimeRequestInvocationFiles,
+	provideInitialFactorySnapshotFactory, wire4.NewRuntimeFactory, wire4.NewBundleOpening, wire4.NewEngineOpening, wire4.NewOutboxOpening, wire4.NewDefinitionMapper, provideRuntimePreparationWorkstationLoader,
+	provideRuntimePreparation,
+	provideRuntimeRequestInvocationFiles,
 	provideRuntimeRequestPrompts,
 	provideRuntimeRequestTemplateFields,
 	provideRuntimeRequestArtifactFiles,

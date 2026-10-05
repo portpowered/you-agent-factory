@@ -15,7 +15,7 @@ func TestPrepareSpecExplicitSelectionsSkipUnusedCollaborators(t *testing.T) {
 	logger := zap.NewNop()
 	clock := &platformclock.Real{}
 	candidate := &runtimeBuildLoadedSource{config: &factorydefinitions.FactoryConfig{}}
-	owner := runtimebuild.New(nil, nil, nil, logger)
+	owner := runtimebuild.New(nil, nil, nil, logger, nil, nil, nil, nil)
 	selections := runtimebuild.SessionBuildSpec{Clock: clock, BaseLogger: logger}
 	spec, err := owner.PrepareSpec(t.Context(), runtimebuild.BuildDefaults{},
 		runtimebuild.SessionBuildValues{SessionID: "session", RuntimeInstanceID: "runtime", LoadedFactoryCfg: candidate}, selections)

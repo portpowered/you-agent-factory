@@ -353,7 +353,7 @@ var servicesSet = wire.NewSet(
 	factoryruntimewire.NewOutboxOpening,
 	factoryruntimewire.NewDefinitionMapper,
 	provideRuntimePreparationWorkstationLoader,
-	factoryruntimewire.NewRuntimePreparation,
+	provideRuntimePreparation,
 	provideRuntimeRequestInvocationFiles,
 	provideRuntimeRequestPrompts,
 	provideRuntimeRequestTemplateFields,
