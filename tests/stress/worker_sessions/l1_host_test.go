@@ -69,14 +69,19 @@ func (runner *l1Script) RunStreaming(ctx context.Context, _ platformprocess.Comm
 	}
 }
 
-func startL1Host(t *testing.T, ctx context.Context, dir string, runner *l1Script) (string, recordings.WorkerRecordingStore) {
+func startL1Host(t *testing.T, ctx context.Context, dir string, runner platformprocess.CommandRunner, writers ...recordings.WorkerRecordingWriter) (string, recordings.WorkerRecordingStore) {
 	t.Helper()
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	ready := make(chan string, 1)
 	var store recordings.WorkerRecordingStore
+	var writer recordings.WorkerRecordingWriter
+	if len(writers) > 0 {
+		writer = writers[0]
+	}
 	process, err := root.BuildProcess(ctx, edges.Edges{
-		ScriptCommandRunner: runner, FactorySessionsWorkingDirectory: evictionWorkingDirectory(dir),
+		WorkerRecordingWriter: writer,
+		ScriptCommandRunner:   runner, FactorySessionsWorkingDirectory: evictionWorkingDirectory(dir),
 		WorkerRecordingStoreObserver:        func(value recordings.WorkerRecordingStore) { store = value },
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
 		APIServerStarter: func(hostCtx context.Context, request platformhttpserver.StartRequest) error {
