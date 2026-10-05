@@ -1,0 +1,23 @@
+package customer_commands_test
+
+import "testing"
+
+// TestCLIOutputJourneys owns its immutable fixture until all customer scenarios finish.
+func TestCLIOutputJourneys(t *testing.T) {
+	t.Parallel()
+	initializeOutputFixture(t)
+	t.Run("TestConcurrentQuietAndVerboseInvocationsKeepOwnFraming", testOutputConcurrentQuietAndVerboseInvocationsKeepOwnFraming)
+	t.Run("TestInjectedInvocationSelectedEffectsAndOutputPolicy", testOutputInjectedInvocationSelectedEffectsAndOutputPolicy)
+	t.Run("TestSelectedProcessClockDatesRecordingAndCLIRunFacts", testOutputSelectedProcessClockDatesRecordingAndCLIRunFacts)
+	t.Run("TestSelectedTimeArtifactFailurePreservesCLIError", testOutputSelectedTimeArtifactFailurePreservesCLIError)
+	t.Run("TestCLIJSONFailureRemainsValidJSON", testOutputCLIJSONFailureRemainsValidJSON)
+	t.Run("TestCLIInvalidInputsAreBadRequest", testOutputCLIInvalidInputsAreBadRequest)
+	t.Run("TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult", testOutputCLINDJSONEmitsDecodableResponseEventsThenInvocationResult)
+	t.Run("TestCLINDJSONFailureEndsWithOneTerminalResult", testOutputCLINDJSONFailureEndsWithOneTerminalResult)
+	t.Run("TestCLISlowWriterDoesNotReorderResponseEvents", testOutputCLISlowWriterDoesNotReorderResponseEvents)
+	t.Run("TestCLIWriterFailureCancelsInvocation", testOutputCLIWriterFailureCancelsInvocation)
+	t.Run("TestCLITextStreamSurfacesIncrementalMessages", testOutputCLITextStreamSurfacesIncrementalMessages)
+	t.Run("TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise", testOutputCLITextStreamDoesNotPrintStructuredEnvelopeNoise)
+	t.Run("TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet", testOutputCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet)
+	t.Run("TestCLITextStreamInterruptedRunDoesNotClaimCompletion", testOutputCLITextStreamInterruptedRunDoesNotClaimCompletion)
+}

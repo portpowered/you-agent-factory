@@ -15,64 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestRunnerInvokesModelsRootGenericOperationExactlyOnce(t *testing.T) {
-	modelsEdge := &captureModelsService{
-		result: models.InvokeModelResult{
-			Status: models.ModelInvocationStatusCompleted,
-			Outputs: []models.InferenceOutput{{
-				Name:        "audio",
-				Modality:    models.ModalityAudio,
-				ContentType: "audio/wav",
-				MediaType:   "audio/wav",
-				Content:     "fixture-audio-bytes",
-			}},
-		},
-	}
-	runner := newTestRunner(t, modelsEdge, nil)
-	request := validRequest()
-	request.ModelOperation = models.OperationTTS
-	request.ModelBindings = []workers.ResolvedModelOperationBinding{
-		{
-			Slot:   "text",
-			Source: workers.ModelOperationBindingSourceInput,
-			Content: []work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText,
-				Text: "Read this in order.",
-			}},
-		},
-		{
-			Slot:   "voice",
-			Source: workers.ModelOperationBindingSourceInput,
-			Content: []work.WorkContentPart{{
-				Type:        work.WorkContentPartTypeAudio,
-				Text:        "voice",
-				ContentType: "audio/wav",
-			}},
-		},
-		{
-			Slot:   "parameters",
-			Source: workers.ModelOperationBindingSourceConfig,
-			Content: []work.WorkContentPart{{
-				Type: work.WorkContentPartTypeJSON,
-				JSON: []byte(`{"speed":1,"pitch":0.2}`),
-			}},
-		},
-	}
-
-	result, err := runner.Execute(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if got := modelsEdge.Calls(); got != 1 {
-		t.Fatalf("Models InvokeModel calls = %d, want exactly one", got)
-	}
-	if got := modelsEdge.LegacyCalls(); got != 0 {
-		t.Fatalf("Models InvokeLocal calls = %d, want zero", got)
-	}
-	assertGenericInvocationRequest(t, modelsEdge.Request())
-	assertGenericInvocationResult(t, result)
-}
-
 func assertGenericInvocationRequest(t *testing.T, captured models.InvokeModelRequest) {
 	t.Helper()
 	if captured.Model.NameOrURI != models.BuiltInModelNameTTS || captured.Operation != models.OperationTTS {
@@ -140,28 +82,6 @@ func TestRunnerPreservesModelsOwnedOutputURLsAndArtifacts(t *testing.T) {
 	if len(result.ProposedOutput.ArtifactRefs) != 1 ||
 		result.ProposedOutput.ArtifactRefs[0].ArtifactID != artifact.String() {
 		t.Fatalf("artifact refs = %#v", result.ProposedOutput.ArtifactRefs)
-	}
-}
-
-func TestRunnerKeepsLegacyModelWorkersOnModelsLocalInvocation(t *testing.T) {
-	modelsEdge := &captureModelsService{legacyHandled: true, legacyContent: "legacy output"}
-	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:legacy")
-	if err != nil {
-		t.Fatalf("parse scope: %v", err)
-	}
-	runner, err := New(Config{Worker: models.LocalWorker{
-		Name: "legacy-worker", Type: models.RuntimeWorkerTypeModel,
-		Model: "OMNIVOICE_Q4_K_M", ModelLocality: models.RuntimeModelLocalityLocal,
-	}, Scope: scope}, Dependencies{Models: modelsEdge})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	result, err := runner.Execute(context.Background(), validRequest())
-	if err != nil || result.Content != "legacy output" {
-		t.Fatalf("legacy runner result = %#v, %v", result, err)
-	}
-	if modelsEdge.Calls() != 0 || modelsEdge.LegacyCalls() != 1 {
-		t.Fatalf("Models calls = generic %d legacy %d, want 0/1", modelsEdge.Calls(), modelsEdge.LegacyCalls())
 	}
 }
 
@@ -345,19 +265,6 @@ func (service *captureModelsService) InvokeModel(
 	err := service.err
 	service.mu.Unlock()
 	return result, err
-}
-
-// InvokeLocal is intentionally present only as a tripwire: the V4 runner must
-// never use the retired specialized Models edge.
-func (service *captureModelsService) InvokeLocal(
-	context.Context,
-	models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	service.legacyCall.Add(1)
-	if service.legacyHandled {
-		return models.LocalInvocationResult{Handled: true, Content: service.legacyContent}, nil
-	}
-	return models.LocalInvocationResult{}, errors.New("retired InvokeLocal edge was called")
 }
 
 func (service *captureModelsService) Request() models.InvokeModelRequest {

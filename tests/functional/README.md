@@ -2,6 +2,19 @@
 
 `tests/functional/` is the behavior-first home for functional coverage.
 
+Tests here exercise customer use cases through CLI, MCP, REST, event streams,
+or files produced by those operations. Constructor effect counts, service-contract
+value tests, fixture self-tests, source-file inspections, and CI/Make wiring checks
+belong outside this lane. CI tooling checks live under `tests/tooling/verification`.
+
+Packages name the customer behavior: `models/inference`, `models/cli`,
+`sessions/isolation_and_recovery`, `sessions/chat_sessions/acp`,
+`operator_settings/configuration`, `recordings/lifecycle`, `work/admission`, and
+`factory/execution`. Independent packaged invocation journeys share
+`factory/packaged/invocation` and run in parallel to avoid serializing them.
+This includes Plan Parallel, Fusion, Deep Research, Quorum, Subagent, Ralph,
+Plan Execute and Factory Builder; each cohort owns its process and sessions.
+
 ## Commands
 
 - Default non-long lane: `make test-functional` (cache-aware developer feedback)
@@ -11,7 +24,7 @@
 - Release-package lane: `make test-release`
 - Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first, discovers the complete package/test population with `go test -list`, subtracts only `functional-quarantine.json`, and performs an explicit `-count=1` instrumented run; coverage-only local rerun)
 - Independent backend unit coverage report: `make test-unit-coverage`
-- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `functional-timing-summary.json`, `coverage.out`, and `command.log` on success and failure when present. The timing artifact is produced by that same full `./tests/functional/...` run and reports discovered/observed package counts, every observed top-level test outcome, elapsed time, and concise failure-reason diagnostics; it does not use a one-test allow-list. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
+- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `functional-timing-summary.json`, `coverage.out`, and `command.log` on success and failure when present. The timing artifact is produced by that same full `./tests/functional/...` run and reports discovered/observed package counts, every observed top-level test outcome, elapsed time, and concise failure-reason diagnostics; it does not use a one-test allow-list. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/tooling/verification/functional_runner_contract_test.go` (does not run the full functional suite).
 - Root-process S24 acceptance lane (also run by `make verify-pr`): `make test-root-process-acceptance`
 - Opt-in long lane: `make test-functional-long`
 - Managed-runtime specialty lane: `make long-tests-managed-runtime`
@@ -133,6 +146,9 @@ reject new root-level `providers/*_test.go` aggregate files.
   API smoke coverage for `/status`, `/models`, session routes, and factory
   activation should prefer that seam over hand-built HTTP doubles when the
   goal is startup-path parity.
+- Default API fixtures own a temporary home and model cache. Tests that supply
+  `Env` explicitly must select their scenario-owned cache; cache-override tests
+  remain responsible for their deliberate selection.
 - Provider functional packages must obtain executable processes through
   `tests/functional/internal/support.BuildProcess`; they must not import
   `pkg/root`, `pkg/wire`, initializer or runtime composition internals, service

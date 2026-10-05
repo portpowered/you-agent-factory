@@ -22,12 +22,11 @@ import (
 func TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(t *testing.T) {
 	t.Parallel()
 	dir := writeMockJavaScriptACPFactory(t)
-	support.SetWorkingDirectory(t, dir)
 
 	var acpStarts atomic.Int32
 	providerRunner := support.NewRecordingCommandRunner("live provider route was unexpectedly invoked")
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--factory", "./acp.js", "--with-mock-workers", "--no-record",
+		"you", "run", "--factory", filepath.Join(dir, "acp.js"), "--with-mock-workers", "--no-record",
 	})
 	inputs.Input.WorkingDirectory = dir
 	inputs.Input.Env = builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir())

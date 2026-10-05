@@ -444,8 +444,11 @@ func assertUnifiedSmokeTerminalStatePayloads(
 	if err != nil {
 		t.Fatalf("decode FACTORY_STATE_RESPONSE payload: %v", err)
 	}
-	if stateResponse.State != factoryapi.FactoryStateCompleted {
-		t.Fatalf("FACTORY_STATE_RESPONSE state = %s, want COMPLETED", stateResponse.State)
+	// This server runs continuously: its last live state may remain RUNNING
+	// after all submitted Work completes. Closing the run produces the terminal
+	// RUN_RESPONSE, whose completed outcome is checked independently below.
+	if stateResponse.State != factoryapi.FactoryStateRunning && stateResponse.State != factoryapi.FactoryStateCompleted {
+		t.Fatalf("FACTORY_STATE_RESPONSE state = %s, want RUNNING or COMPLETED", stateResponse.State)
 	}
 	runResponse, err := events[indices.runResponse].Payload.AsRunResponseEventPayload()
 	if err != nil {

@@ -132,8 +132,8 @@ func runControlledWatchCancellationCases(t *testing.T) {
 			fixture.request,
 		}}, nil)
 		process := workWatchProcess
-		ctx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
-		defer cancel()
+		ctx, expire := support.ControlledDeadlineContext(t.Context())
+		defer expire()
 		stdout := newLedgerOutput()
 		stderr := newLedgerOutput()
 		inputs := controlledWatchInput(t, ctx, stream.URL(), false, stdout, stderr)
@@ -141,6 +141,7 @@ func runControlledWatchCancellationCases(t *testing.T) {
 		connection := waitForControlledConnection(t, stream)
 		waitForControlledSignal(t, connection.attached, "deadline watch stream attachment")
 
+		expire()
 		err := waitControlledWatchCommand(t, command)
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("established watch deadline error = %v, want context.DeadlineExceeded", err)

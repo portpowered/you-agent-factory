@@ -1,0 +1,17 @@
+package customer_lifecycles_test
+
+import "testing"
+
+// TestFactoryAudioArtifactJourneys owns its immutable fixture until all customer scenarios finish.
+func TestFactoryAudioArtifactJourneys(t *testing.T) {
+	t.Parallel()
+	resetfactoryomniartifact3State()
+	initializeFactoryomniartifactFixture(t)
+	t.Run("TestFactorySessionOmniArtifactRedactsUnsafeFailureAcrossBoundaries", testFactoryomniartifactFactorySessionOmniArtifactRedactsUnsafeFailureAcrossBoundaries)
+	t.Run("TestFactorySessionOmniArtifactJourney", testFactoryomniartifactFactorySessionOmniArtifactJourney)
+	t.Run("TestFactorySessionOmniArtifactReplayPreservesOrderAndLineage", testFactoryomniartifactFactorySessionOmniArtifactReplayPreservesOrderAndLineage)
+	t.Run("TestFactorySessionOmniArtifactMetadataIsSemantic", testFactoryomniartifactFactorySessionOmniArtifactMetadataIsSemantic)
+	t.Run("TestFactorySessionOmniArtifactLineageIsPreserved", testFactoryomniartifactFactorySessionOmniArtifactLineageIsPreserved)
+	t.Run("TestFactorySessionOmniArtifactBackendFailureIsAtomic", testFactoryomniartifactFactorySessionOmniArtifactBackendFailureIsAtomic)
+	t.Run("TestFactorySessionOmniArtifactReleaseIsExactlyOnce", testFactoryomniartifactFactorySessionOmniArtifactReleaseIsExactlyOnce)
+}

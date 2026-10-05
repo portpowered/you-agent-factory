@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -469,7 +470,7 @@ func (store *wsrFT004RecordingStore) LoadWorkerRecording(
 	defer store.mu.Unlock()
 	snapshot, ok := store.snapshots[recordingID]
 	if !ok {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("recording %q not found", recordingID)
+		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("recording %q: %w", recordingID, os.ErrNotExist)
 	}
 	return cloneWSRFT004Snapshot(snapshot), nil
 }

@@ -1,0 +1,19 @@
+package customer_lifecycles_test
+
+import "testing"
+
+// TestPackagedFactoryCatalogJourneys owns its immutable fixture until all customer scenarios finish.
+func TestPackagedFactoryCatalogJourneys(t *testing.T) {
+	t.Parallel()
+	resetfactorypackagedcatalog0State()
+	resetfactorypackagedcatalog3State()
+	initializeFactorypackagedcatalogFixture(t)
+	t.Run("TestPackagedFactoriesAPIExposesDiscoverableEntries", testFactorypackagedcatalogPackagedFactoriesAPIExposesDiscoverableEntries)
+	t.Run("TestFactoryListProjectsEffectiveCatalogWithoutInitialization", testFactorypackagedcatalogFactoryListProjectsEffectiveCatalogWithoutInitialization)
+	t.Run("TestFactoryListReportsCatalogDiscoveryFailuresAtomically", testFactorypackagedcatalogFactoryListReportsCatalogDiscoveryFailuresAtomically)
+	t.Run("TestFactoryListHonorsPreCanceledContextAtomically", testFactorypackagedcatalogFactoryListHonorsPreCanceledContextAtomically)
+	t.Run("TestLocalFactoryOverridesPackagedFactoryWithSameName", testFactorypackagedcatalogLocalFactoryOverridesPackagedFactoryWithSameName)
+	t.Run("TestInvalidLocalOverrideDoesNotFallBackSilently", testFactorypackagedcatalogInvalidLocalOverrideDoesNotFallBackSilently)
+	t.Run("TestUnrelatedLocalFactoryDoesNotHidePackagedFactories", testFactorypackagedcatalogUnrelatedLocalFactoryDoesNotHidePackagedFactories)
+	t.Run("TestPackagedFactoryRejectsMissingRequiredInput", testFactorypackagedcatalogPackagedFactoryRejectsMissingRequiredInput)
+}

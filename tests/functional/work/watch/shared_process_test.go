@@ -24,7 +24,7 @@ var selectedWatchSource watchObservationSource
 var selectedWatchScheduler = &watchSelectedScheduler{
 	clock:   platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond),
 	created: make(chan time.Duration, 128),
-	startup: make(chan struct{}, 128),
+	startup: make(chan *watchReadinessTimer, 128),
 }
 var watchHostListeners sync.Map
 
@@ -39,7 +39,7 @@ func (s *watchObservationSource) Now() time.Time {
 type watchSelectedScheduler struct {
 	clock   *platformclock.Deterministic
 	created chan time.Duration
-	startup chan struct{}
+	startup chan *watchReadinessTimer
 	mu      sync.Mutex
 	tick    int
 }
@@ -49,14 +49,31 @@ func (s *watchSelectedScheduler) After(delay time.Duration) <-chan time.Time {
 	return s.NewTimer(delay).C()
 }
 func (s *watchSelectedScheduler) NewTimer(delay time.Duration) platformclock.Timer {
+	// Runtime readiness polls receive an explicit wakeup without moving the
+	// watch clock or consuming its unrelated startup/request deadlines.
+	if delay == 10*time.Millisecond {
+		timer := &watchReadinessTimer{channel: make(chan time.Time, 1)}
+		s.startup <- timer
+		return timer
+	}
 	timer := s.clock.NewTimer(delay)
 	if delay == 100*time.Millisecond {
 		s.created <- delay
 	}
-	if delay == 10*time.Millisecond {
-		s.startup <- struct{}{}
-	}
 	return timer
+}
+
+type watchReadinessTimer struct {
+	channel chan time.Time
+	stopped atomic.Bool
+}
+
+func (timer *watchReadinessTimer) C() <-chan time.Time { return timer.channel }
+func (timer *watchReadinessTimer) Stop() bool          { return !timer.stopped.Swap(true) }
+func (timer *watchReadinessTimer) wake(now time.Time) {
+	if !timer.stopped.Swap(true) {
+		timer.channel <- now
+	}
 }
 
 func (s *watchSelectedScheduler) advance(delta int) {

@@ -131,7 +131,7 @@ func NewService(
 		return nil, fmt.Errorf("construct Models: scoped local execution is required")
 	}
 	return modelsservice.NewRoot(
-		resources, localExecution.PullModelForScope, localExecution.InvokeLocal,
+		resources, localExecution.PullModelForScope,
 		localExecution.CloseScope, localExecution.Close,
 		runtimeScopes, catalog, assets, runtimeHost, inference,
 		logger, now, pullMetrics, runtimeEvidence,
@@ -139,40 +139,17 @@ func NewService(
 	)
 }
 
-// LocalRuntime is the completed, inert local execution adapter shared by scopes.
-type LocalRuntime = localmodels.Runtime
-
 // ResourceLimiter retains only scoped reservation state, independently of execution behavior.
 type ResourceLimiter = localmodels.ResourceLimiter
 
 type ScopedLocalExecution = modelsservice.ScopedLocalExecution
 
-func NewScopedLocalExecution(scopes RuntimeScopes, assets Assets, host RuntimeHost,
-	runtime LocalRuntime, resources *ResourceLimiter, hooks LocalRuntimeHooks,
-	now func() time.Time) (ScopedLocalExecution, error) {
-	return modelsservice.NewScopedLocalExecution(scopes, assets, host, runtime, resources, hooks, now)
+func NewScopedLocalExecution(scopes RuntimeScopes, assets Assets) (ScopedLocalExecution, error) {
+	return modelsservice.NewScopedLocalExecution(scopes, assets)
 }
 
 func NewResourceLimiter(hooks LocalRuntimeHooks, now func() time.Time) (*ResourceLimiter, error) {
 	return localmodels.NewResourceLimiter(hooks, now)
-}
-
-func NewLocalRuntime(runner platformprocess.CommandRunner, client RuntimeHTTPDoer,
-	inspect RuntimeInspectFile, temp RuntimeTempDirectory, create RuntimeCreateTempFile) (LocalRuntime, error) {
-	for _, required := range []struct {
-		value any
-		name  string
-	}{
-		{runner, "model runtime command runner"}, {client, "model runtime HTTP client"},
-		{inspect, "model runtime file inspector"}, {temp, "model runtime temporary directory resolver"},
-		{create, "model runtime temporary file creator"},
-	} {
-		if isNilDependency(required.value) {
-			return nil, fmt.Errorf("construct Models: %s is required", required.name)
-		}
-	}
-	return localmodels.NewOmniVoiceRuntime(runner, client, localmodels.InspectFile(inspect),
-		localmodels.TempDirectory(temp), runtimeTempFileAdapter{next: create}.create)
 }
 
 func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.RuntimeAssetEndpoints {
@@ -249,14 +226,6 @@ func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
 // NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.
 func NewInvocationArtifactExporter(fileSystem InvocationArtifactFileSystem) (InvocationArtifactExporter, error) {
 	return inferencewire.NewInvocationArtifactExporter(fileSystem)
-}
-
-type runtimeTempFileAdapter struct {
-	next modelseffects.RuntimeCreateTempFile
-}
-
-func (a runtimeTempFileAdapter) create(dir, pattern string) (localmodels.TempFile, error) {
-	return a.next(dir, pattern)
 }
 
 type SlotState = runtimehostwire.SlotState

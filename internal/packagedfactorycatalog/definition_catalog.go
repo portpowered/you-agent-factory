@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"sync"
 
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -18,10 +19,16 @@ type DefinitionCatalog struct {
 	definitions []factorydefinitions.PackagedDefinition
 }
 
+// The embedded publication cannot change during this process. Validate it
+// once; catalog accessors keep every caller's definitions detached.
+var publishedDefinitionCatalog = sync.OnceValues(func() (DefinitionCatalog, error) {
+	return LoadDefinitionCatalog(packagedfactories.Published())
+})
+
 // LoadPublishedDefinitionCatalog validates the exact generated publication
 // embedded in the packaged-factories module.
 func LoadPublishedDefinitionCatalog() (DefinitionCatalog, error) {
-	return LoadDefinitionCatalog(packagedfactories.Published())
+	return publishedDefinitionCatalog()
 }
 
 // LoadDefinitionCatalog validates a generated package publication before

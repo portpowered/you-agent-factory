@@ -26,7 +26,6 @@ import (
 type Root struct {
 	resources                  *localmodels.ResourceLimiter
 	pullModel                  func(context.Context, models.PullModelRequest) (models.PullResult, error)
-	invokeLocal                func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
 	closeScopedExecution       func(models.RuntimeScopeRef)
 	closeExecution             func()
 	runtimeScopes              runtimescopes.Service
@@ -51,7 +50,6 @@ var _ models.Service = (*Root)(nil)
 func NewRoot(
 	resources *localmodels.ResourceLimiter,
 	pullModel func(context.Context, models.PullModelRequest) (models.PullResult, error),
-	invokeLocal func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error),
 	closeScopedExecution func(models.RuntimeScopeRef),
 	closeExecution func(),
 	runtimeScopes runtimescopes.Service,
@@ -94,9 +92,6 @@ func NewRoot(
 	if pullModel == nil {
 		return nil, missingDependencyError("scoped model pull")
 	}
-	if invokeLocal == nil {
-		return nil, missingDependencyError("scoped local invocation")
-	}
 	if closeScopedExecution == nil {
 		return nil, missingDependencyError("scoped execution close")
 	}
@@ -107,7 +102,7 @@ func NewRoot(
 		return nil, missingDependencyError("Models revision resolver")
 	}
 	return &Root{
-		resources: resources, pullModel: pullModel, invokeLocal: invokeLocal,
+		resources: resources, pullModel: pullModel,
 		closeScopedExecution: closeScopedExecution, closeExecution: closeExecution,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
 		runtimeHost: runtimeHostService, inference: inferenceService,
@@ -893,11 +888,4 @@ func (o *Root) CancelInvocation(
 		return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
 	}
 	return o.inference.CancelInvocation(ctx, request)
-}
-
-func (o *Root) InvokeLocal(
-	ctx context.Context,
-	request models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	return o.invokeLocal(ctx, request)
 }
