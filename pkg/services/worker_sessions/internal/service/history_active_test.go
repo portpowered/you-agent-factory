@@ -321,6 +321,44 @@ func (s fleetHistoryPageFake) ListWorkerSessionObservations(_ context.Context, r
 	return s.read(req)
 }
 
+func TestFleetHistoryUsesScopedSnapshotInsteadOfCompatibilityCursor(t *testing.T) {
+	t.Parallel()
+	rows := []workersessions.Observation{
+		{WorkerSessionID: "same-id", FactorySessionID: "factory-a", AttemptID: "attempt-a", State: workersessions.StateRunning, DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable},
+		{WorkerSessionID: "same-id", FactorySessionID: "factory-b", AttemptID: "attempt-b", State: workersessions.StateRunning, DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable},
+	}
+	sources := make([]workersessions.Service, 0, len(rows))
+	for _, row := range rows {
+		sources = append(sources, fleetHistoryPageFake{read: func(workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+			return workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{row}}, nil
+		}})
+	}
+	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
+	query := NewFleetHistory(func(context.Context) ([]workersessions.Service, error) {
+		return sources, nil
+	}, nil, clock, logging.NoopLogger{}, newTestHistoryBudget())
+	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
+	one, err := query.ListWorkerSessionObservations(t.Context(), req)
+	if err != nil || len(one.Observations) != 1 || one.NextToken == "" {
+		t.Fatalf("first=%+v err=%v", one, err)
+	}
+	if !reflect.DeepEqual(one.Observations[0], rows[0]) {
+		t.Fatalf("first scoped observation=%+v; want %+v", one.Observations[0], rows[0])
+	}
+	req.NextToken = one.NextToken
+	two, err := query.ListWorkerSessionObservations(t.Context(), req)
+	if err != nil || len(two.Observations) != 1 || two.Observations[0].FactorySessionID == one.Observations[0].FactorySessionID || two.NextToken != "" {
+		t.Fatalf("second=%+v err=%v", two, err)
+	}
+	if !reflect.DeepEqual(two.Observations[0], rows[1]) {
+		t.Fatalf("second scoped observation=%+v; want %+v", two.Observations[0], rows[1])
+	}
+	req.History = ""
+	if _, err := query.ListWorkerSessionObservations(t.Context(), req); err == nil {
+		t.Fatal("history snapshot accepted as compatibility cursor")
+	}
+}
+
 func TestFleetHistoryReadsBoundedOwnerPagesAndRejectsMalformedSources(t *testing.T) {
 	t.Parallel()
 	r := newObservationRegistry(nil, nil)

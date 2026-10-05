@@ -1003,29 +1003,3 @@ func (source *fleetObservationSource) inventorySnapshot() []workersessions.Obser
 func newLegacyFleetFixture(catalog ObservationServiceCatalog) *FleetObservationService {
 	return NewFleetObservationService(catalog, nil, platformclock.Real{}, logging.NoopLogger{}, &HistorySnapshotBudget{Entropy: rand.Reader})
 }
-
-func TestFleetHistoryUsesScopedSnapshotInsteadOfCompatibilityCursor(t *testing.T) {
-	t.Parallel()
-	rows := []workersessions.Observation{
-		{WorkerSessionID: "same-id", FactorySessionID: "factory-a", AttemptID: "attempt-a", State: workersessions.StateRunning, DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable},
-		{WorkerSessionID: "same-id", FactorySessionID: "factory-b", AttemptID: "attempt-b", State: workersessions.StateRunning, DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable},
-	}
-	first, second := newFleetObservationSource("first", rows[0]), newFleetObservationSource("second", rows[1])
-	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
-		return []workersessions.Service{first, second}, nil
-	})
-	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
-	one, err := service.ListWorkerSessionObservations(t.Context(), req)
-	if err != nil || len(one.Observations) != 1 || one.NextToken == "" {
-		t.Fatalf("first=%+v err=%v", one, err)
-	}
-	req.NextToken = one.NextToken
-	two, err := service.ListWorkerSessionObservations(t.Context(), req)
-	if err != nil || len(two.Observations) != 1 || two.Observations[0].FactorySessionID == one.Observations[0].FactorySessionID || two.NextToken != "" {
-		t.Fatalf("second=%+v err=%v", two, err)
-	}
-	req.History = ""
-	if _, err := service.ListWorkerSessionObservations(t.Context(), req); err == nil {
-		t.Fatal("history snapshot accepted as compatibility cursor")
-	}
-}
