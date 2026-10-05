@@ -9,7 +9,57 @@ import (
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestRuntimeSessionLoggerPreservesSelectedBackendAndScope(t *testing.T) {
+	t.Parallel()
+	baseCore, baseLogs := observer.New(zap.InfoLevel)
+	sinkCore, sinkLogs := observer.New(zap.InfoLevel)
+	base := zap.New(baseCore).With(zap.String("backend", "selected-process"))
+	sink := &runtimeLoggerSinkStub{logger: zap.New(sinkCore).With(zap.String("backend", "selected-sink"))}
+	for _, scenario := range []struct {
+		name    string
+		sink    factory.RuntimeLogSink
+		logs    *observer.ObservedLogs
+		backend string
+	}{
+		{name: "process", logs: baseLogs, backend: "selected-process"},
+		{name: "sink", sink: sink, logs: sinkLogs, backend: "selected-sink"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			selected := runtimeSessionBaseLogger(base, scenario.sink)
+			first := newSessionLogger(selected, "session-one", "/folder-one", "/factory-one")
+			peer := newSessionLogger(selected, "session-two", "/folder-two", "/factory-two")
+			first.Info("opening first")
+			peer.Info("opening peer")
+			selected.Info("unscoped backend")
+			entries := scenario.logs.All()
+			if len(entries) != 3 {
+				t.Fatalf("selected backend received %d entries, want 3", len(entries))
+			}
+			for i, session := range []string{"one", "two"} {
+				fields := entries[i].ContextMap()
+				if fields["backend"] != scenario.backend || fields["session_id"] != "session-"+session ||
+					fields["folder_path"] != "/folder-"+session || fields["factory_dir"] != "/factory-"+session {
+					t.Fatalf("session log fields = %#v", fields)
+				}
+			}
+			fields := entries[2].ContextMap()
+			if fields["backend"] != scenario.backend || len(fields) != 1 {
+				t.Fatalf("session fields leaked to selected backend: %#v", fields)
+			}
+		})
+	}
+}
+
+type runtimeLoggerSinkStub struct {
+	runtimeSinkStub
+	logger *zap.Logger
+}
+
+func (sink *runtimeLoggerSinkStub) Logger() *zap.Logger { return sink.logger }
 
 func TestRuntimeSinkOpeningFailsClosedWithoutInjectedOwners(t *testing.T) {
 	t.Parallel()

@@ -23,6 +23,8 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const initialOpeningReadCeiling = 5 * time.Second
@@ -67,6 +69,13 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
+	// An authored input directory makes initial activation emit its scoped
+	// diagnostic, so selected backend propagation has an observable witness.
+	for _, dir := range []string{reused.candidateDir, reused.peerDir} {
+		if err := os.MkdirAll(filepath.Join(dir, factorydefinitions.InputsDir), 0o755); err != nil {
+			t.Fatalf("prepare authored inputs: %v", err)
+		}
+	}
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	gate := &initialOpeningGate{entered: make(chan struct{}), release: make(chan struct{})}
 	files := &initialOpeningDirectories{
@@ -75,7 +84,9 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		failure:    failure, gate: gate, effects: effects,
 	}
 	api := support.NewProcessAPIServer()
+	logCore, logs := observer.New(zap.InfoLevel)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProcessLogger:             zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
 		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
 		ScriptCommandRunner:       initialOpeningScriptRunner{effects: effects},
@@ -137,6 +148,8 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		recordPath := filepath.Join(t.TempDir(), "opening.replay.jsonl")
 		request.RuntimeSelection.Recording.RecordPath = recordPath
 		startInitialOpeningSession(t, sessions, request)
+		assertInitialOpeningDiagnostics(t, logs, reused.candidateID, reused.candidateDir)
+		assertInitialOpeningDiagnostics(t, logs, reused.peerID, reused.peerDir)
 		assertInitialOpeningInvocation(t, sessions, reused.candidateID)
 		firstHistory := initialOpeningHistory(t, sessions, reused.candidateID)
 		closeInitialOpeningSession(t, sessions, reused.candidateID)
@@ -144,6 +157,19 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		assertInitialOpeningHistoryPreserved(t, sessions, reused.peerID, peerHistory)
 		assertInitialOpeningInvocation(t, sessions, reused.peerID)
 	})
+}
+
+func assertInitialOpeningDiagnostics(t *testing.T, logs *observer.ObservedLogs, sessionID, dir string) {
+	t.Helper()
+	entries := logs.FilterMessage("using inputs/ directory").FilterField(zap.String("session_id", sessionID)).All()
+	if len(entries) != 1 {
+		t.Fatalf("session %s opening diagnostics = %d, want one selected-backend entry", sessionID, len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["selected_backend"] != "initial-opening" || fields["factory_dir"] != dir ||
+		fields["folder_path"] != dir || fields["dir"] != filepath.Join(dir, factorydefinitions.InputsDir) {
+		t.Fatalf("session %s opening diagnostic scope = %#v", sessionID, fields)
+	}
 }
 
 func testCanceledInitialOpening(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *initialOpeningGate) {

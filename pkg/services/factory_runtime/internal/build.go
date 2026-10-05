@@ -546,9 +546,6 @@ func ensureRuntimeInputsDir(
 }
 
 func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
-	if base == nil {
-		base = zap.NewNop()
-	}
 	return base.With(
 		zap.String("session_id", sessionID),
 		zap.String("folder_path", folderPath),
@@ -711,10 +708,7 @@ func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink factory.RuntimeLog
 	if logSink != nil {
 		return logSink.Logger()
 	}
-	if baseLogger != nil {
-		return baseLogger
-	}
-	return zap.NewNop()
+	return baseLogger
 }
 
 func openRuntimeMetricsScope(
