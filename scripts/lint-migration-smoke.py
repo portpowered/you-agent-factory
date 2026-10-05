@@ -471,7 +471,7 @@ def consumption(fixtures: SizeFixtures) -> None:
     fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
     root = fixtures.module("consumption")
     write(root, "go.mod", "module " + prefix.rstrip("/") + "\n\ngo 1.25.0\n")
-    write(root, "packages/packaged-factories/publication.go", "package publication\nconst Bytes = 1\n")
+    write(root, "packages/packaged-factories/publication.go", "package packagedfactories\nconst Bytes = 1\n")
     write(root, "internal/packagedfactorycatalog/catalog.go",
           'package packagedfactorycatalog\nimport _ "' + prefix + 'packages/packaged-factories"\n'
           'func LoadPublishedDefinitionCatalog() {}\n')
