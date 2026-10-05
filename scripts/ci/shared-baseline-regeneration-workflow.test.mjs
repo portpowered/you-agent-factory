@@ -1129,6 +1129,17 @@ function callsMatching(calls, predicate) {
 	return calls.filter(predicate).map(commandText);
 }
 
+function assertQueueCompatibleMerge(calls, headSha) {
+	const mergeCalls = calls.filter((call) => call.command === "gh" && call.args[1] === "merge");
+	assert.equal(mergeCalls.length, 1);
+	assert.deepEqual(mergeCalls[0].args, [
+		"pr", "merge", "42", "--repo", REPOSITORY,
+		"--auto", "--match-head-commit", headSha,
+	]);
+	assert.equal(mergeCalls[0].args.includes("--delete-branch"), false);
+	assert.equal(mergeCalls[0].args.includes("--squash"), false);
+}
+
 test("enumerates exactly the classified snapshots and wires every merged writer", () => {
 	assert.deepEqual(SHARED_BASELINE_PATHS, [
 		"docs/internal/baselines/deadcode-baseline.txt",
@@ -1795,7 +1806,7 @@ test("F-01 controlled edge closes an obsolete PR and deletes its branch without 
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && call.args[1] === "merge").length, 0);
 });
 
-test("F-02 controlled edge publishes one leased bot commit and exact-head auto-merge request", () => {
+test("F-02 controlled edge publishes one leased bot commit and exact-head auto-merge request", { concurrency: true }, () => {
 	const changedPaths = [SHARED_BASELINE_PATHS[0], SHARED_BASELINE_PATHS[8]];
 	const edge = createControlledCommandEdge({
 		stagedPaths: changedPaths,
@@ -1816,8 +1827,7 @@ test("F-02 controlled edge publishes one leased bot commit and exact-head auto-m
 	assert.deepEqual(addCall.args.slice(2), SHARED_BASELINE_PATHS);
 	const pushCall = edge.calls.find((call) => call.command === "git" && call.args[0] === "push");
 	assert.deepEqual(pushCall.args, ["push", "--force-with-lease", "origin", `${SHARED_BASELINE_BOT_BRANCH}:${SHARED_BASELINE_BOT_BRANCH}`]);
-	const mergeCall = edge.calls.find((call) => call.command === "gh" && call.args[1] === "merge");
-	assert.deepEqual(mergeCall.args.slice(-2), ["--match-head-commit", GENERATED_SHA]);
+	assertQueueCompatibleMerge(edge.calls, GENERATED_SHA);
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && call.args[1] === "create").length, 1);
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && call.args[1] === "edit").length, 0);
 });
@@ -1838,7 +1848,7 @@ test("F-03 controlled edge supersedes stale main before any publication mutation
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && ["add", "commit", "push"].includes(call.args[0])).length, 0);
 });
 
-test("F-04 compares every allowlisted path and reuses an exact existing candidate", () => {
+test("F-04 compares every allowlisted path and reuses an exact existing candidate", { concurrency: true }, () => {
 	const changedPaths = [SHARED_BASELINE_PATHS[2]];
 	const edge = createControlledCommandEdge({
 		remotePaths: changedPaths,
@@ -1862,8 +1872,7 @@ test("F-04 compares every allowlisted path and reuses an exact existing candidat
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && call.args[0] === "commit").length, 0);
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && call.args[0] === "push").length, 0);
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && call.args[0] === "reset").length, 1);
-	const mergeCall = edge.calls.find((call) => call.command === "gh" && call.args[1] === "merge");
-	assert.deepEqual(mergeCall.args.slice(-2), ["--match-head-commit", BOT_BRANCH_SHA]);
+	assertQueueCompatibleMerge(edge.calls, BOT_BRANCH_SHA);
 });
 
 test("F-05 rejects invalid candidate and remote paths before any later publication action", () => {
@@ -1930,7 +1939,7 @@ test("F-12 rejects duplicate bot PRs before branch publication", () => {
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && ["create", "edit", "merge"].includes(call.args[1])).length, 0);
 });
 
-test("F-14 makes an exact draft PR ready before requesting exact-head auto-merge", () => {
+test("F-14 makes an exact draft PR ready before requesting exact-head auto-merge", { concurrency: true }, () => {
 	const changedPath = SHARED_BASELINE_PATHS[0];
 	const edge = createControlledCommandEdge({
 		pullRequestLists: [[], []],
@@ -1950,7 +1959,65 @@ test("F-14 makes an exact draft PR ready before requesting exact-head auto-merge
 	const mergeIndex = edge.calls.findIndex((call) => call.command === "gh" && call.args[1] === "merge");
 	assert.ok(readyIndex >= 0);
 	assert.ok(mergeIndex > readyIndex);
+	assertQueueCompatibleMerge(edge.calls, GENERATED_SHA);
 });
+
+for (const { name, metadata, expectedError } of [
+	{
+		name: "mismatched PR head",
+		metadata: { headRefOid: SHA("d") },
+		expectedError: /pull request head does not match generated commit/,
+	},
+	{
+		name: "unsafe PR path",
+		metadata: { files: ["unexpected.txt"] },
+		expectedError: /unexpected path\(s\).*unexpected\.txt/,
+	},
+]) {
+	test(`queue-compatible reconciliation rejects ${name} before ready or merge`, { concurrency: true }, () => {
+		const changedPaths = [SHARED_BASELINE_PATHS[0]];
+		const edge = createControlledCommandEdge({
+			stagedPaths: changedPaths,
+			metadata: { files: changedPaths, isDraft: true, ...metadata },
+		});
+		assert.throws(() => reconcileBotCandidate({
+			repository: REPOSITORY,
+			mainSha: MAIN_SHA,
+			changedPaths,
+			sourceRunUrl: SOURCE_RUN_URL,
+			commandRunner: edge.run,
+		}), expectedError);
+		assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && ["ready", "merge"].includes(call.args[1])).length, 0);
+	});
+}
+
+for (const { operation, failure, expectedError } of [
+	{ operation: "ready", failure: 1, expectedError: /gh command failed with exit code 1: simulated command failure/ },
+	{ operation: "merge", failure: 1, expectedError: /gh command failed with exit code 1: simulated command failure/ },
+	{ operation: "merge", failure: new Error("remote merge timeout"), expectedError: /remote merge timeout/ },
+]) {
+	test(`queue-compatible reconciliation propagates ${operation} ${failure instanceof Error ? "timeout" : "rejection"} without retry`, { concurrency: true }, () => {
+		const changedPaths = [SHARED_BASELINE_PATHS[0]];
+		const edge = createControlledCommandEdge({
+			stagedPaths: changedPaths,
+			metadata: { files: changedPaths, isDraft: true },
+			failWhen: (call) => call.command === "gh" && call.args[1] === operation ? failure : undefined,
+		});
+		assert.throws(() => reconcileBotCandidate({
+			repository: REPOSITORY,
+			mainSha: MAIN_SHA,
+			changedPaths,
+			sourceRunUrl: SOURCE_RUN_URL,
+			commandRunner: edge.run,
+		}), expectedError);
+		assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && call.args[1] === "ready").length, 1);
+		if (operation === "ready") {
+			assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && call.args[1] === "merge").length, 0);
+		} else {
+			assertQueueCompatibleMerge(edge.calls, GENERATED_SHA);
+		}
+	});
+}
 
 test("F-16 and F-17 stop before auto-merge for invalid metadata or a failed mutation command", () => {
 	const invalidMetadataEdge = createControlledCommandEdge({
