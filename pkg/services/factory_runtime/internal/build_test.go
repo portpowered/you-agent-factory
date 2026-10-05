@@ -365,16 +365,21 @@ func TestBuild_FailedOpeningRetainsRetryableCleanupWithoutRepeatingReleasedResou
 			if err := errors.Join(bundle.FinalizeRecording(time.Time{}), bundle.CloseArtifacts(), bundle.CloseArtifacts()); err != nil {
 				t.Fatalf("successful cleanup retry: %v", err)
 			}
-			for _, resource := range []string{"recording", "log", "metrics"} {
-				want := 1
-				if resource == failed {
-					want = 3
-				}
-				if calls[resource] != want {
-					t.Errorf("%s releases = %d, want %d", resource, calls[resource], want)
-				}
-			}
+			assertOpeningResourceReleaseCounts(t, calls, failed)
 		})
+	}
+}
+
+func assertOpeningResourceReleaseCounts(t *testing.T, calls map[string]int, failed string) {
+	t.Helper()
+	for _, resource := range []string{"recording", "log", "metrics"} {
+		want := 1
+		if resource == failed {
+			want = 3
+		}
+		if calls[resource] != want {
+			t.Errorf("%s releases = %d, want %d", resource, calls[resource], want)
+		}
 	}
 }
 
@@ -413,9 +418,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 		return assembleCleanupTestRuntime(ctx, assembly, dir, loaded, scopes, clock, request)
 	}
 	result, err := root.Activate(t.Context(), request, start)
-	if !errors.Is(err, openingErr) || !errors.Is(err, cleanupErr) || !result.Binding.IsZero() {
-		t.Fatalf("failed activation = %#v, %v, want both causes and no publication", result, err)
-	}
+	assertOpeningFailureWithoutPublication(t, result, err, openingErr, cleanupErr)
 	if _, err := root.Activate(t.Context(), request, start); !errors.Is(err, factory.ErrRuntimeActivationConflict) || attempts != 1 {
 		t.Fatalf("pending cleanup activation = %v, attempts %d, want conflict without another opening", err, attempts)
 	}
@@ -435,6 +438,13 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	}
 	if _, err := root.Deactivate(t.Context(), factory.RuntimeDeactivationRequest{Binding: result.Binding}); err != nil {
 		t.Fatalf("close retried generation: %v", err)
+	}
+}
+
+func assertOpeningFailureWithoutPublication(t *testing.T, result factory.RuntimeActivationResult, err, openingErr, cleanupErr error) {
+	t.Helper()
+	if !errors.Is(err, openingErr) || !errors.Is(err, cleanupErr) || !result.Binding.IsZero() {
+		t.Fatalf("failed activation = %#v, %v, want both causes and no publication", result, err)
 	}
 }
 

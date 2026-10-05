@@ -21,6 +21,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
@@ -69,6 +70,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
+	selected := newInitialOpeningProviderScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
 	for _, dir := range []string{reused.candidateDir, reused.peerDir} {
@@ -90,6 +92,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
 		ScriptCommandRunner:       initialOpeningScriptRunner{effects: effects},
+		ProviderCommandRunner:     initialOpeningProviderRunner{effects: effects},
 		APIServerStarter:          api.Start,
 	})
 	if err != nil {
@@ -156,6 +159,17 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		assertInitialOpeningReplay(t, process, recordPath, reused.candidateID, firstHistory)
 		assertInitialOpeningHistoryPreserved(t, sessions, reused.peerID, peerHistory)
 		assertInitialOpeningInvocation(t, sessions, reused.peerID)
+	})
+	t.Run("selected Codex provider executes independently attributed sessions", func(t *testing.T) {
+		t.Parallel()
+		peerHistory := selected.startPeer(t, sessions)
+		startInitialOpeningSession(t, sessions, selected.request())
+		assertInitialOpeningInvocation(t, sessions, selected.candidateID)
+		initialOpeningHistory(t, sessions, selected.candidateID)
+		assertInitialOpeningProviderSelection(t, effects, selected.candidateDir)
+		assertInitialOpeningProviderSelection(t, effects, selected.peerDir)
+		assertInitialOpeningHistoryPreserved(t, sessions, selected.peerID, peerHistory)
+		assertInitialOpeningInvocation(t, sessions, selected.peerID)
 	})
 }
 
@@ -256,10 +270,45 @@ func newInitialOpeningScenario(t *testing.T) initialOpeningScenario {
 	config := initialOpeningFactoryConfig()
 	config["workTypes"].([]map[string]any)[0]["handlingBehavior"] = []string{"DEFAULT"}
 	config["workers"] = []map[string]string{{"name": "worker-a", "type": string(factorydefinitions.WorkerTypeScript), "command": "initial-opening-script"}}
+	return initialOpeningScenarioWithConfig(t, config)
+}
+
+func newInitialOpeningProviderScenario(t *testing.T) initialOpeningScenario {
+	t.Helper()
+	config := initialOpeningFactoryConfig()
+	config["workTypes"].([]map[string]any)[0]["handlingBehavior"] = []string{"DEFAULT"}
+	scenario := initialOpeningScenarioWithConfig(t, config)
+	for _, dir := range []string{scenario.candidateDir, scenario.peerDir} {
+		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	}
+	return scenario
+}
+
+func initialOpeningScenarioWithConfig(t *testing.T, config map[string]any) initialOpeningScenario {
+	t.Helper()
 	return initialOpeningScenario{
 		candidateDir: support.ScaffoldFactory(t, config), peerDir: support.ScaffoldFactory(t, config),
 		home: t.TempDir(), logs: t.TempDir(), metrics: t.TempDir(),
 		candidateID: uuid.NewString(), runtimeID: uuid.NewString(), peerID: uuid.NewString(),
+	}
+}
+
+type initialOpeningProviderRunner struct{ effects *initialOpeningEffects }
+
+func (runner initialOpeningProviderRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if request.Command != string(modelprovider.ProviderCodex) || !strings.Contains(strings.Join(request.Args, " "), "gpt-5-codex") {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command %q with arguments %v", request.Command, request.Args)
+	}
+	runner.effects.record("worker.codex", request.WorkDir)
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("initial opening COMPLETE")}, nil
+}
+
+func assertInitialOpeningProviderSelection(t *testing.T, effects *initialOpeningEffects, dir string) {
+	t.Helper()
+	scenario := initialOpeningScenario{candidateDir: dir}
+	calls := effects.forScenario(scenario)
+	if calls[filepath.Clean(dir)+"|worker.codex"] != 1 || calls[filepath.Clean(dir)+"|worker.run"] != 0 {
+		t.Fatalf("selected provider effects for %s = %v, want one Codex execution", dir, calls)
 	}
 }
 
