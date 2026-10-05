@@ -43,9 +43,6 @@ func (r *registry) ListWorkerSessionObservations(
 		NextToken:    nextToken,
 	}
 	if err != nil {
-		if errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-			r.logger.Info("worker session top-level observation list degraded", "scope", string(query.scope), "state_count", len(req.States), "result_count", len(observations), "optional_projection", "unavailable")
-		}
 		return result, err
 	}
 	r.logger.Debug(
@@ -138,20 +135,19 @@ func observationListPage(ids []string, limit int) []string {
 
 func (r *registry) projectObservationList(ctx context.Context, ids []string) ([]workersessions.Observation, error) {
 	observations := make([]workersessions.Observation, 0, len(ids))
-	var optionalProjectionErr error
 	for _, id := range ids {
-		projected, err := r.projectObservation(ctx, id)
-		if errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-			observations = append(observations, projected)
-			optionalProjectionErr = workersessions.ErrObservationProjectionUnavailable
-			continue
-		}
+		// Fleet pages use captured facts. Native transcript parsing belongs to
+		// selected detail reads, including the separate Work-scoped list.
+		projected, err := r.projectWorkerSessionIdentity(ctx, id)
 		if err != nil {
+			return nil, err
+		}
+		if err := projected.Validate(); err != nil {
 			return nil, err
 		}
 		observations = append(observations, projected)
 	}
-	return observations, optionalProjectionErr
+	return observations, nil
 }
 
 func observationListNextToken(allIDs, pageIDs []string) string {
