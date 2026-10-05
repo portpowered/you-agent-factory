@@ -173,12 +173,13 @@ func TestCapturedSelectedAndCatalogSummaryPreserveRecordedFacts(t *testing.T) {
 	item := historyCapture(t, "worker", "", "attempt", true)
 	item.Catalog.RecordingID = "recording"
 	item.Catalog.CommittedPosition = 2
+	item.SuccessorWorkerSessionID = "next"
 	item.MetadataRecords = []events.Record{{
 		ID:      events.RecordID{Position: 2},
 		Payload: []byte(`{"kind":"SESSION","phase":"UPDATED","provenance":{"provider":"codex"},"payload":{"workerSessionId":"worker","attemptId":"attempt","model":"recorded-model","reasoningEffort":"high","lineage":{"predecessorWorkerSessionId":"prior"}}}`),
 	}}
 	reader := &capturedMetadataReader{
-		capturedActivityFake: &capturedActivityFake{page: recordings.WorkerCapturedActivityPage{Catalog: item.Catalog, Opening: item.Opening, Terminal: item.Terminal, Health: item.Health}},
+		capturedActivityFake: &capturedActivityFake{page: recordings.WorkerCapturedActivityPage{Catalog: item.Catalog, Opening: item.Opening, Terminal: item.Terminal, Health: item.Health, SuccessorWorkerSessionID: item.SuccessorWorkerSessionID}},
 		replayCaptureReader: replayCaptureReader{snapshot: recordings.WorkerRecordingSnapshot{RecordingID: "recording", Sessions: []recordings.WorkerSessionRecordingSnapshot{
 			{WorkerSessionID: "worker", Records: item.MetadataRecords},
 			{WorkerSessionID: "sibling", Records: []events.Record{{Payload: []byte(`{"kind":"SESSION","phase":"UPDATED","provenance":{"provider":"foreign"},"payload":{"workerSessionId":"worker"}}`)}}},
@@ -189,7 +190,7 @@ func TestCapturedSelectedAndCatalogSummaryPreserveRecordedFacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCapturedSessionFacts(t, got)
-	if got.PredecessorWorkerSessionID != "prior" || got.SuccessorWorkerSessionID != "" {
+	if got.PredecessorWorkerSessionID != "prior" || got.SuccessorWorkerSessionID != "next" {
 		t.Fatalf("recorded lineage: %+v", got)
 	}
 	listed, err := capturedHistoryIdentity(item, nil)
@@ -197,7 +198,7 @@ func TestCapturedSelectedAndCatalogSummaryPreserveRecordedFacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCapturedSessionFacts(t, *listed)
-	if listed.PredecessorWorkerSessionID != got.PredecessorWorkerSessionID {
+	if listed.PredecessorWorkerSessionID != got.PredecessorWorkerSessionID || listed.SuccessorWorkerSessionID != got.SuccessorWorkerSessionID {
 		t.Fatalf("selected/catalog lineage differs: %+v %+v", listed, got)
 	}
 }

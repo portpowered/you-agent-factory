@@ -550,7 +550,13 @@ func assertArchivedHostTiming(t *testing.T, host *support.FunctionalAPIServer, i
 	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id)
 	observation := support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
 	logs := support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint+"/logs")
-	stamp := logs.Events[len(logs.Events)-1].Event.CapturedAt
+	var stamp *time.Time
+	for _, frame := range logs.Events {
+		phase := frame.Event.Payload["phase"]
+		if frame.Event.Payload["kind"] == "SESSION" && (phase == "COMPLETED" || phase == "FAILED" || phase == "CANCELED") {
+			stamp = frame.Event.CapturedAt
+		}
+	}
 	if stamp == nil || observation.StartedAt == nil || observation.EndedAt == nil || !observation.EndedAt.Equal(*stamp) || observation.DurationMillis == nil || *observation.DurationMillis != stamp.Sub(*observation.StartedAt).Milliseconds() || observation.DurationBasis != "RECORDED_TIMESTAMPS" {
 		t.Fatalf("recovered Factory summary lost host capture timing: %+v terminal=%v", observation, stamp)
 	}

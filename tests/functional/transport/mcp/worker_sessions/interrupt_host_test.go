@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -114,6 +116,58 @@ func runRealHostInterrupt(t *testing.T, process support.Process) {
 	assertRuntimeObservationParity(t, source, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": "source"})["result"].(map[string]any)["session"])
 	assertFactoryCLIParity(t, host, "successor", successor)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "successor", "operation": "TERMINATE"})
+	assertInterruptMetadataRecovery(t, process, host, runner, dir)
+}
+
+func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host *support.FunctionalAPIServer, runner *interruptHostRunner, dir string) {
+	t.Helper()
+	// Join the original writer before constructing a new host over the same
+	// isolated profile. Recovery must use captures with native reads denied.
+	host.Close(t)
+	home := t.TempDir()
+	native := &deniedMetadataProviderFiles{}
+	reopened := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir),
+			ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }, ProviderSessionFileSystem: native,
+		},
+	})
+	session, ctx := startMCP(t, process, reopened.URL())
+	page := historyParityPage(t, ctx, session, reopened, "archived", "direct", "")
+	if len(page["sessions"].([]any)) != 2 {
+		t.Fatalf("recovery lost source/successor membership: %v", page)
+	}
+	for _, value := range page["sessions"].([]any) {
+		observation := value.(map[string]any)
+		id := observation["workerSessionId"].(string)
+		if observation["provider"] != "codex" || observation["model"] != "test-model" {
+			t.Fatalf("recovery lost captured selection: %v", observation)
+		}
+		if (id == "source" && observation["successorWorkerSessionId"] != "successor") ||
+			(id == "successor" && observation["predecessorWorkerSessionId"] != "source") {
+			t.Fatalf("recovery lost committed lineage: %v", observation)
+		}
+		selected := getHost(t, reopened.URL()+"/worker-sessions/"+id)
+		assertJSONEqual(t, observation, selected)
+		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
+		assertFactoryCLIParity(t, reopened, id, selected)
+		assertArchivedHostTiming(t, reopened, id)
+	}
+	assertProviderCallCount(t, runner, 2)
+	if native.calls.Load() != 0 {
+		t.Fatal("archived metadata recovery attempted a provider-native file read")
+	}
+}
+
+type deniedMetadataProviderFiles struct{ calls atomic.Int64 }
+
+func (f *deniedMetadataProviderFiles) Open(string) (io.ReadCloser, error) {
+	f.calls.Add(1)
+	return nil, os.ErrPermission
+}
+
+func (f *deniedMetadataProviderFiles) Stat(string) (fs.FileInfo, error) {
+	return nil, os.ErrPermission
 }
 
 func assertTerminalReplayParity(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string) {

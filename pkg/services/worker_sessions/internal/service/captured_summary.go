@@ -51,6 +51,12 @@ func (s *LogReader) GetObservationByWorkerSessionID(ctx context.Context, req wor
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
+	if page.SuccessorWorkerSessionID != "" {
+		if result.SuccessorWorkerSessionID != "" && result.SuccessorWorkerSessionID != page.SuccessorWorkerSessionID {
+			return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+		}
+		result.SuccessorWorkerSessionID = page.SuccessorWorkerSessionID
+	}
 	return result.Clone(), nil
 }
 

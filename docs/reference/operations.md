@@ -358,6 +358,9 @@ Session summaries include the recorded `provider` even before a Provider Session
 reference is available. Recorded continuation links appear as
 `predecessorWorkerSessionId` and `successorWorkerSessionId`; missing legacy facts
 remain omitted.
+Archived source summaries derive the successor from its committed opening in
+the same profile and Factory scope. Successor admission does not rewrite the
+source history. Ambiguous captured links report an unavailable projection.
 
 Logs pages include the recording generation, committed position, capture
 health, and ordered events. New committed events include `capturedAt`, the

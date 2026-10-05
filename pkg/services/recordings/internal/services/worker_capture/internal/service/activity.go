@@ -50,6 +50,9 @@ func (writer *FileWriter) indexSession(session *recordingSession) {
 	writer.catalogMu.Lock()
 	_, indexed := writer.catalog[entry.WorkerSessionID]
 	writer.acceptCatalogEntry(entry)
+	if !indexed {
+		writer.indexSuccessorOpening(session, entry)
+	}
 	writer.catalogMu.Unlock()
 	if indexed || entry.CommittedPosition != 1 {
 		return
@@ -169,6 +172,7 @@ func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) 
 		indexed := writer.catalogEntry(session)
 		writer.catalogMu.Lock()
 		writer.acceptCatalogEntry(indexed)
+		writer.indexSuccessorOpening(session, indexed)
 		writer.catalogMu.Unlock()
 	}
 	return nil
@@ -229,6 +233,11 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 	if limit < 1 || limit > 1000 {
 		return recordings.WorkerCapturedActivityPage{}, recordings.ErrInvalidWorkerRecordingRequest
 	}
+	// A cached source identity alone cannot establish the absence of a
+	// successor in retained recordings. Complete the cancellable index once.
+	if err := writer.rebuildCatalog(ctx); err != nil {
+		return recordings.WorkerCapturedActivityPage{}, err
+	}
 	catalog, err := writer.LookupWorkerSessionCapture(ctx, request.WorkerSessionID)
 	if err != nil {
 		return recordings.WorkerCapturedActivityPage{}, err
@@ -273,6 +282,10 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 		page.Records = append(page.Records, captured)
 	}
 	page.TokenUsage = capturedUsage(session, cursor.Head)
+	page.SuccessorWorkerSessionID, err = writer.capturedSuccessor(session, catalog)
+	if err != nil {
+		return recordings.WorkerCapturedActivityPage{}, err
+	}
 	page.NextToken, err = cursor.continuation(end, page.Terminal != nil)
 	return page, err
 }

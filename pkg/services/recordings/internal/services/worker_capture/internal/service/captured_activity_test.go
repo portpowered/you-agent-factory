@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,6 +62,146 @@ func TestFileWriterCapturedActiveLossPreservesIncompletePrefix(t *testing.T) {
 type captureTimeProbe struct {
 	now   time.Time
 	calls int
+}
+
+func TestFileWriterCapturedSuccessorSurvivesRestartWithoutSourceRewrite(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	source := lineageOpeningRecord(t, "source", "", "", "")
+	if err := writer.PersistWorkerRecord(t.Context(), source); err != nil {
+		t.Fatal(err)
+	}
+	source.Record = mustRecord(t, terminalAppend(source.Record.ID.Topic, "source"), 2)
+	if err := writer.PersistWorkerRecord(t.Context(), source); err != nil {
+		t.Fatal(err)
+	}
+	before, err := local.ReadFile(writer.path(source.RecordingID) + "l")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCapturedSuccessor(t, writer, "")
+	// A foreign Factory scope and an unrelated attempt cannot enrich source.
+	for _, record := range []recordings.WorkerRecordingRecord{
+		lineageOpeningRecord(t, "foreign", "factory-other", "source", ""),
+		lineageOpeningRecord(t, "other-attempt", "", "source", "unrelated-attempt"),
+	} {
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertCapturedSuccessor(t, writer, "")
+	successor := lineageOpeningRecord(t, "successor", "", "source", "source-attempt")
+	if err := writer.PersistWorkerRecord(t.Context(), successor); err != nil {
+		t.Fatal(err)
+	}
+	assertCapturedSuccessor(t, writer, "successor")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCapturedSuccessor(t, reopened, "successor")
+	after, err := local.ReadFile(writer.path(source.RecordingID) + "l")
+	if err != nil || string(before) != string(after) {
+		t.Fatal("successor admission or recovery rewrote the terminal source journal")
+	}
+}
+
+func TestFileWriterCapturedSuccessorRejectsAmbiguousAdmission(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	for _, record := range []recordings.WorkerRecordingRecord{
+		lineageOpeningRecord(t, "source", "", "", ""),
+		lineageOpeningRecord(t, "one", "", "source", "source-attempt"),
+		lineageOpeningRecord(t, "two", "", "source", "source-attempt"),
+	} {
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := writer.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: "source"})
+	if !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("ambiguous successor selected an arbitrary link: %v", err)
+	}
+	if _, err := writer.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: "one"}); err != nil {
+		t.Fatalf("ambiguous source hid healthy selected sibling: %v", err)
+	}
+}
+
+func TestFileWriterCapturedSuccessorWaitsForCommittedOpening(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS), entered: make(chan struct{}), release: make(chan struct{})}
+	writer := journalWriter(t, probe)
+	source := lineageOpeningRecord(t, "source", "", "", "")
+	if err := writer.PersistWorkerRecord(t.Context(), source); err != nil {
+		t.Fatal(err)
+	}
+	// Complete reconstruction before admission so source reads use the index
+	// while the successor's independent append barrier is held.
+	assertCapturedSuccessor(t, writer, "")
+	successor := lineageOpeningRecord(t, "successor", "", "source", "source-attempt")
+	probe.gatePath = writer.path(successor.RecordingID) + "l"
+	var release sync.Once
+	unblock := func() { release.Do(func() { close(probe.release) }) }
+	t.Cleanup(unblock)
+	done := make(chan error, 1)
+	go func() { done <- writer.PersistWorkerRecord(t.Context(), successor) }()
+	select {
+	case <-probe.entered:
+	case <-t.Context().Done():
+		t.Fatal("successor did not reach the append boundary")
+	}
+	assertCapturedSuccessor(t, writer, "")
+	unblock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	assertCapturedSuccessor(t, writer, "successor")
+}
+
+func lineageOpeningRecord(t *testing.T, id, factory, predecessor, previousAttempt string) recordings.WorkerRecordingRecord {
+	t.Helper()
+	record := journalRecord(t, "recording-"+id, id)
+	var draft workers.Draft
+	if err := json.Unmarshal(record.Record.Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	opening := workers.SessionPayload{WorkerSessionID: id, FactorySessionID: factory, DispatchID: id + "-attempt", AttemptID: id + "-attempt", Status: "STARTING"}
+	if predecessor != "" {
+		if previousAttempt == "" {
+			previousAttempt = predecessor + "-attempt"
+		}
+		opening.AttemptReason = workers.AttemptReasonResume
+		opening.Continuation = &workers.SessionContinuation{Provider: "codex", Kind: "session_id", ID: "controlled"}
+		opening.Lineage = &workers.SessionLineage{PredecessorWorkerSessionID: predecessor, PreviousDispatchID: previousAttempt, PreviousAttemptID: previousAttempt}
+	}
+	var err error
+	draft.Payload, err = json.Marshal(opening)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Record.Payload, err = json.Marshal(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return record
+}
+
+func assertCapturedSuccessor(t *testing.T, reader recordings.WorkerCapturedActivityReader, want string) {
+	t.Helper()
+	page, err := reader.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: "source"})
+	if err != nil || page.SuccessorWorkerSessionID != want {
+		t.Fatalf("selected captured successor=%q want=%q error=%v", page.SuccessorWorkerSessionID, want, err)
+	}
+	items, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items.Items {
+		if item.Catalog.WorkerSessionID == "source" && item.SuccessorWorkerSessionID != want {
+			t.Fatalf("catalog successor=%q want=%q", item.SuccessorWorkerSessionID, want)
+		}
+	}
 }
 
 func TestFileWriterCatalogSummaryKeepsLatestFactsAcrossRestart(t *testing.T) {

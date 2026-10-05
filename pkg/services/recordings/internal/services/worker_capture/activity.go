@@ -37,6 +37,9 @@ type WorkerCapturedCatalogPage struct {
 // output/progress history belongs to ReadWorkerCapturedActivity. CapturedAt contains
 // stamps for the opening and selected metadata only. Missing legacy stamps stay absent.
 type WorkerCapturedCatalogItem struct {
+	// SuccessorWorkerSessionID is derived from a committed successor opening in
+	// the same profile and Factory scope; it never changes the source journal.
+	SuccessorWorkerSessionID string
 	// OwnerLost establishes that an unfinished capture's recorded host epoch
 	// differs from this store's current epoch. Legacy captures cannot prove loss.
 	OwnerLost       bool
@@ -68,6 +71,7 @@ type WorkerCapturedActivityRequest struct {
 
 // WorkerCapturedActivityPage contains only an accepted prefix of the journal.
 type WorkerCapturedActivityPage struct {
+	SuccessorWorkerSessionID string
 	// OwnerLost proves an unfinished capture belongs to an earlier known host epoch.
 	OwnerLost    bool
 	Catalog      WorkerSessionCatalogEntry
