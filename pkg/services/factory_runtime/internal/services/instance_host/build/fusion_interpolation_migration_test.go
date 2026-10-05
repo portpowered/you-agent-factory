@@ -1,12 +1,10 @@
 package runtimebuild_test
 
 import (
-	"context"
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"go.uber.org/zap"
 )
@@ -59,37 +57,12 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 			}},
 		},
 	}
-	builder, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return loaded, nil
-	}, testRuntimeID, zap.NewNop()), runtimebuild.BuildDefaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5", ApplyOperatorDefaults: true, RecordPath: "", WorkflowID: ""},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		platformclock.Real{},
-		zap.NewNop(),
-		func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			return &factoryhost.Bundle{}, nil
-		},
-		nil)
-	if err != nil {
-		t.Fatalf("runtimebuild.New: %v", err)
-	}
-	spec, err := builder.BuildSpec(
-		context.Background(),
-		"/fusion",
-		"/fusion",
-		"~default",
-		"/fusion",
-		nil,
-		"",
-		nil,
-		nil,
-		nil,
-		nil,
-		false,
-	)
+	}, testRuntimeID, zap.NewNop())
+	spec, err := preparation.PrepareSpec(t.Context(), runtimebuild.BuildDefaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5", ApplyOperatorDefaults: true},
+		runtimebuild.SessionBuildValues{Dir: "/fusion", FolderPath: "/fusion", SessionID: "~default", ExecutionBaseDir: "/fusion"},
+		runtimebuild.SessionBuildSpec{Clock: platformclock.Real{}, BaseLogger: zap.NewNop()})
 	if err != nil {
 		t.Fatalf("BuildSpec: %v", err)
 	}

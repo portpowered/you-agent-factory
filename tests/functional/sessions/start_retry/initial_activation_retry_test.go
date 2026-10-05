@@ -128,19 +128,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	t.Run("closed recording preserves attributed history and live peer", func(t *testing.T) {
 		t.Parallel()
-		peerHistory := reused.startPeer(t, sessions)
-		request := reused.request()
-		recordPath := filepath.Join(t.TempDir(), "opening.replay.jsonl")
-		request.RuntimeSelection.Recording.RecordPath = recordPath
-		startInitialOpeningSession(t, sessions, request)
-		assertInitialOpeningDiagnostics(t, logs, reused.candidateID, reused.candidateDir)
-		assertInitialOpeningDiagnostics(t, logs, reused.peerID, reused.peerDir)
-		assertInitialOpeningInvocation(t, sessions, reused.candidateID)
-		firstHistory := initialOpeningHistory(t, sessions, reused.candidateID)
-		closeInitialOpeningSession(t, sessions, reused.candidateID)
-		assertInitialOpeningReplay(t, process, recordPath, reused.candidateID, firstHistory)
-		assertInitialOpeningHistoryPreserved(t, sessions, reused.peerID, peerHistory)
-		assertInitialOpeningInvocation(t, sessions, reused.peerID)
+		testInitialOpeningRecordedHistory(t, sessions, process, reused, logs)
 	})
 	t.Run("selected Codex provider executes independently attributed sessions", func(t *testing.T) {
 		t.Parallel()
@@ -157,6 +145,23 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testInitialOpeningWorktreeReuse(t, sessions, checkout, effects)
 	})
+}
+
+func testInitialOpeningRecordedHistory(t *testing.T, sessions factorysessions.Service, process support.Process, reused initialOpeningScenario, logs *observer.ObservedLogs) {
+	t.Helper()
+	peerHistory := reused.startPeer(t, sessions)
+	request := reused.request()
+	recordPath := filepath.Join(t.TempDir(), "opening.replay.jsonl")
+	request.RuntimeSelection.Recording.RecordPath = recordPath
+	startInitialOpeningSession(t, sessions, request)
+	assertInitialOpeningDiagnostics(t, logs, reused.candidateID, reused.candidateDir)
+	assertInitialOpeningDiagnostics(t, logs, reused.peerID, reused.peerDir)
+	assertInitialOpeningInvocation(t, sessions, reused.candidateID)
+	firstHistory := initialOpeningHistory(t, sessions, reused.candidateID)
+	closeInitialOpeningSession(t, sessions, reused.candidateID)
+	assertInitialOpeningReplay(t, process, recordPath, reused.candidateID, firstHistory)
+	assertInitialOpeningHistoryPreserved(t, sessions, reused.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, reused.peerID)
 }
 
 func testFailedInitialOpeningRetry(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, effects *initialOpeningEffects, failure error) {

@@ -127,6 +127,52 @@ func openTestBundle(ctx context.Context, opening *factoryinternal.BundleOpening,
 		interfaces.RuntimeModeBatch, nil, false, nil, nil, "", "", false, false, nil, nil, nil, nil, nil, scopes, nil)
 }
 
+// Ports the retired compatibility builder's error/cancellation and caller-value
+// assertions onto the fixed owner that actually opens runtime resources.
+func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := &stubWorkerSessionsService{}
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	openingErr := errors.New("recording unavailable")
+	for _, canceled := range []bool{false, true} {
+		ctx, cancel := context.WithCancel(t.Context())
+		if canceled {
+			cancel()
+		}
+		finalized := 0
+		spec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, SessionID: "caller-owned", RuntimeInstanceID: "runtime",
+			LoadedFactoryCfg: loaded, Clock: clockwork.NewFakeClock(), BaseLogger: zap.NewNop()}
+		before := spec
+		scopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "runtime"},
+			recorder: &runtimeRecordingsRecorderStub{onFinalize: func() { finalized++ }}}
+		wantErr := error(context.Canceled)
+		if !canceled {
+			scopes.openErr = openingErr
+			wantErr = openingErr
+		}
+		record, err := openTestBundle(ctx, opening, spec, scopes)
+		cancel()
+		if !errors.Is(err, wantErr) || record != nil {
+			t.Fatalf("canceled=%t opening = (%v, %v), want %v", canceled, record, err, wantErr)
+		}
+		if !reflect.DeepEqual(spec, before) || spec.PetriMutationRecorder != nil {
+			t.Fatal("opening mutated caller-owned spec")
+		}
+		if !canceled && finalized != 1 {
+			t.Fatalf("failure finalizations = %d, want 1", finalized)
+		}
+	}
+}
+
 func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T) {
 	sessions := &stubWorkerSessionsService{}
 	dir := t.TempDir()
@@ -634,6 +680,20 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = replacement.CloseArtifacts() })
 	assertReplacementSelections(t, initial, replacement, recorded, clock)
+	assertReplacementBuildValues(t, replacement, recorded, spec, dir)
+}
+
+func assertReplacementBuildValues(t *testing.T, replacement factory.RuntimeRecord, recorded recordings.RuntimeScopeRequest, spec factory.SessionBuildSpec, dir string) {
+	t.Helper()
+	if recorded.FactorySessionID != "candidate" || recorded.RecordPath != "recording.candidate.json" {
+		t.Fatalf("replacement recording selections = %#v", recorded)
+	}
+	if replacement.LoadedRuntimeConfig().FactoryDir() != dir || replacement.LoadedRuntimeConfig().RuntimeBaseDir() != dir {
+		t.Fatal("replacement changed the selected factory or execution directory")
+	}
+	if spec.RuntimeInstanceID != "initial-runtime" || spec.PetriMutationRecorder != nil {
+		t.Fatal("replacement mutated the initial caller's spec")
+	}
 }
 
 func assertReplacementSelections(t *testing.T, initial, replacement factory.RuntimeRecord, recorded recordings.RuntimeScopeRequest, clock factory.Clock) {

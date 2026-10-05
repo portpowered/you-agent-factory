@@ -84,21 +84,13 @@ func TestCommandRunnerOverrideForMode_UnmatchedPassthroughDelegatesToNextRunner(
 	}
 }
 
-func TestRuntimeBuildDefensiveConstructionBoundaries(t *testing.T) {
+func TestOperatorDefaultsAbsentCandidateRemainsNoOp(t *testing.T) {
 	t.Parallel()
 
 	if err := applyOperatorDefaultsToLoadedConfig("", "", nil); err != nil {
 		t.Fatalf("applyOperatorDefaultsToLoadedConfig(nil) error = %v", err)
 	}
-	var svc *CompatibilityBuild
-	if _, err := svc.Build(context.Background(), SessionBuildSpec{}); err == nil {
-		t.Fatal("nil service Build() succeeded")
-	}
-	if _, err := svc.BuildSpec(
-		context.Background(), "", "", "", "", nil, "", nil, nil, nil, nil, false,
-	); err == nil {
-		t.Fatal("nil service BuildSpec() succeeded")
-	}
+
 }
 
 func TestCommandRunnerOverrideForMode_UnmatchedDefaultAcceptSkipsNextRunner(t *testing.T) {
