@@ -5,7 +5,6 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"golang.org/x/tools/go/analysis"
 	"strings"
 	"testing"
 
