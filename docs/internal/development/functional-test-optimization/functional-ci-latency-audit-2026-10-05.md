@@ -869,3 +869,28 @@ inside the embedding suite. The complete model package passes in 12.548s
 locally; its scenario evidence references were updated and all 156 reviewed
 records validate. Fixture source identities use `customer-inference` rather
 than the retired `root-composition` label.
+
+After the five-package merge, the complete Linux supervisor at `d087be567f`
+took **237.00s (3m57s)**, including a **222.064s** test invocation across
+141 packages. Quarantine passed in 21.766s. Of 1,021 top-level tests, 1,018
+passed, two skipped and one failed. The webhook journey passed. The remaining
+failure was admitted-Work cancellation/recovery: the fixture received the exact
+dispatch-response event, then immediately read the Work projection while it
+still held its initial state. The event is not a public read barrier. It now
+awaits the exact Work's terminal state and output through REST before checking
+correlation/isolation. Three fresh local repetitions pass in 11.214s total.
+The package declaration is also corrected from `root_composition_test` to
+`concurrency_test`. Full coverage gates were not evaluated on this failed run;
+evidence is under `.artifacts/latency-audit/linux-d087/`.
+
+A sequential four-CPU linker experiment compiled the fully covered HTTP status
+test binary with ordinary debug data and with `-ldflags=-w`. The first ordinary
+build warmed additional compiler entries and is excluded from comparison.
+The subsequent ordinary build took 1.815s wall / 2.425s child CPU and produced
+84,485,923 bytes. Two builds without DWARF took 1.435s/1.388s wall and
+1.623s/1.553s child CPU, producing 68,593,982 bytes. These are complete warm
+compile/link command measurements for one package, not a suite-wide forecast.
+Functional coverage now omits debugger-only DWARF while retaining Go runtime
+stack symbols/source coordinates and coverage counters. Other coverage lanes
+retain their existing flags. A fresh full-lane measurement is required to
+establish its actual elapsed saving.

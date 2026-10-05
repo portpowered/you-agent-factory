@@ -84,7 +84,9 @@ func prepareCoverageRunWithFunctionalMetadata(
 		// Required Backend Lint runs vet across the repository. Repeating it
 		// on the instrumented functional graph adds static-analysis work to
 		// the customer-behavior lane without exercising another behavior.
-		coverageTestArgs = append(coverageTestArgs, "-vet=off")
+		// Functional evidence retains Go's stack symbols and source coordinates;
+		// debugger-only DWARF data is unnecessary for customer scenarios.
+		coverageTestArgs = append(coverageTestArgs, "-vet=off", "-ldflags=-w")
 	}
 	if cfg.short {
 		coverageTestArgs = append(coverageTestArgs, "-short")

@@ -1,4 +1,4 @@
-package root_composition_test
+package concurrency_test
 
 import (
 	"context"
