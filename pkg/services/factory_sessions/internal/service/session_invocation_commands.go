@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/invocation"
@@ -48,6 +49,10 @@ func (r *Root) invokeJavaScriptSession(ctx context.Context, sessionID string, re
 	if err != nil {
 		return factorysessions.InvocationResult{}, err
 	}
+	resourceAdmission, ok := bound.Instance.RuntimeService().(factoryruntime.ResourceCapacityLeaseAdmission)
+	if !ok {
+		return factorysessions.InvocationResult{}, fmt.Errorf("%w: resource admission for session %q", factorysessions.ErrRuntimeNotAvailable, sessionID)
+	}
 	factoryDir := ""
 	if projection.Context.Session != nil {
 		factoryDir = projection.Context.Session.FactoryDir
@@ -61,6 +66,7 @@ func (r *Root) invokeJavaScriptSession(ctx context.Context, sessionID string, re
 			start.WorkerSettings = bound.WorkerSettingsSnapshot()
 			start.WorkerAttemptStarter = factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(bound.Instance))
 			start.WorkerProgressPublisher = runtimeProgressPublisher(bound.Instance)
+			start.WorkerResourceAdmission = resourceAdmission
 		},
 	)
 	if err != nil {

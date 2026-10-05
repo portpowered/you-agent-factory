@@ -15,6 +15,9 @@ import (
 func newInitialOpeningChildScenario(t *testing.T) initialOpeningScenario {
 	t.Helper()
 	config := map[string]any{"name": "initial-opening-child"}
+	// Only this explicitly opened Factory has this resource. Looking up the
+	// process's default runtime or the active peer cannot admit this child.
+	config["resources"] = []map[string]any{{"id": "opening-child-slot", "name": "child-slot", "capacity": 1}}
 	config["invocationSignature"] = map[string]any{
 		"parameters": []any{map[string]any{"name": "prompt", "required": false,
 			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}}}},
@@ -27,7 +30,7 @@ func newInitialOpeningChildScenario(t *testing.T) initialOpeningScenario {
 				"encoding": "utf-8",
 				"inline": `return (async function () {
   return await agent.run({prompt: "prove opened session child", label: "opening-child",
-    modelProvider: "codex", model: "gpt-5-codex"});
+    modelProvider: "codex", model: "gpt-5-codex", resourceId: "opening-child-slot"});
 })();`,
 			},
 		},
