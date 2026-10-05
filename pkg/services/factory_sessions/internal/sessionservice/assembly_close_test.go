@@ -42,7 +42,7 @@ func (owner *closingDurableOwner) Close() error {
 func TestAssemblyCloseDrainsProcessDurableOwner(t *testing.T) {
 	failure := errors.New("durable shutdown failed")
 	owner := &closingDurableOwner{err: failure}
-	assembly := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, owner).(*Assembly)
+	assembly := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, owner, nil).(*Assembly)
 	if err := assembly.Close(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("Close error = %v, want %v", err, failure)
 	}
@@ -336,7 +336,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, NewNamedFactoryActivator(state)).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}
@@ -616,5 +616,71 @@ func assertGatewayInjectedInvocation(t *testing.T, ctx context.Context, gateway 
 	invoker.err = nil
 	if _, err := gateway.InvokeFactorySession(ctx, "peer", factorysessions.InvocationRequest{}); err != nil || invoker.sessionID != "peer" {
 		t.Fatalf("peer invocation = %v", err)
+	}
+}
+
+type namedActivationOwner struct {
+	runtimebinding.SessionProjectionOwner
+	activate func(context.Context, string) error
+}
+
+func (o namedActivationOwner) ActivateNamedFactory(ctx context.Context, name string) error {
+	return o.activate(ctx, name)
+}
+
+func TestNamedFactoryActivatorFollowsSelectedGenerationAndPreservesPeers(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	failure := errors.New("selected activation failed")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	register := func(id string, selected bool, want string, result error) {
+		state.Register(sessionruntime.Registration{
+			SessionID: id, Select: selected,
+			Handle: &runtimebinding.SessionState{Owner: namedActivationOwner{
+				activate: func(got context.Context, name string) error {
+					if got != ctx || name != want {
+						t.Fatalf("activation input = %v/%q, want supplied context/%q", got, name, want)
+					}
+					return result
+				},
+			}},
+		})
+	}
+	register("selected", true, "first", failure)
+	register("peer", false, "peer", nil)
+	activate := NewNamedFactoryActivator(state)
+	assembly := NewAssembly(nil, state, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, activate).(*Assembly)
+	if err := assembly.ActivateNamedFactory(ctx, "first"); !errors.Is(err, failure) {
+		t.Fatalf("selected activation error = %v, want %v", err, failure)
+	}
+	register("selected", true, "replacement", nil)
+	if err := assembly.ActivateNamedFactory(ctx, "replacement"); err != nil {
+		t.Fatalf("replacement activation = %v", err)
+	}
+	state.Registry().Upsert(state.Resolve("peer"), true)
+	if err := assembly.ActivateNamedFactory(ctx, "peer"); err != nil {
+		t.Fatalf("peer activation after selected failure/replacement = %v", err)
+	}
+}
+
+func TestNamedFactoryActivatorPreservesMissingCapabilityErrors(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	ctx := context.Background()
+	if err := NewNamedFactoryActivator(nil)(ctx, "factory"); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("nil authority error = %v", err)
+	}
+	activate := NewNamedFactoryActivator(state)
+	if err := activate(ctx, "factory"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("empty authority error = %v", err)
+	}
+	state.Register(sessionruntime.Registration{SessionID: "selected", Handle: struct{}{}, Select: true})
+	if err := activate(ctx, "factory"); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("missing record capability error = %v", err)
+	}
+	state.Register(sessionruntime.Registration{SessionID: "selected", Handle: &runtimebinding.SessionState{}, Select: true})
+	if err := activate(ctx, "factory"); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) || err.Error() != factorysessions.ErrRuntimeNotAvailable.Error()+": session activation owner is unavailable" {
+		t.Fatalf("missing owner error = %v", err)
 	}
 }

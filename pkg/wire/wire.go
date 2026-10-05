@@ -249,6 +249,7 @@ var servicesSet = wire.NewSet(
 	wire.Bind(new(automations.Service), new(automations.Root)),
 	factorysessionwire.NewRuntimeAssembly,
 	factorysessionwire.NewSessionHost,
+	factorysessionwire.NewNamedFactoryActivator,
 	provideSessionCheckpointStoreFactory,
 	provideFactorySessionsCapability,
 	provideFactoryVisualizationMetricsQuery,

@@ -355,6 +355,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		streams,
 		NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, in.clock, nil, in.newJavaScriptCheckpointStore, zap.NewNop()),
 		nil,
+		NewNamedFactoryActivator(state),
 	)
 }
 

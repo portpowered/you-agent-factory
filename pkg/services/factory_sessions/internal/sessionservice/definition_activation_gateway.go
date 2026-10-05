@@ -2,12 +2,40 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
+
+// NewNamedFactoryActivator routes activation to the currently selected record.
+// The per-record opening owner remains the T17 compatibility boundary.
+func NewNamedFactoryActivator(state *sessionruntime.Service) func(context.Context, string) error {
+	return func(ctx context.Context, name string) error {
+		if state == nil {
+			return factorysessions.ErrRuntimeNotAvailable
+		}
+		session := state.Current()
+		if session == nil {
+			return factorysessions.ErrSessionNotFound
+		}
+		bound := runtimebinding.SessionStateFrom(session)
+		if bound == nil {
+			return factorysessions.ErrRuntimeNotAvailable
+		}
+		owner, ok := bound.Owner.(interface {
+			ActivateNamedFactory(context.Context, string) error
+		})
+		if !ok || owner == nil {
+			return fmt.Errorf("%w: session activation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
+		}
+		return owner.ActivateNamedFactory(ctx, name)
+	}
+}
 
 type definitionActivationGateway struct {
 	runtime *SessionRuntime

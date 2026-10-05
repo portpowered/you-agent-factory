@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -50,6 +51,7 @@ func NewAssembly(
 	gatewayStreams *stream.Manager,
 	projectionReader runtimebinding.SessionProjectionOwner,
 	processDurable durableexecution.Service,
+	namedFactoryActivator func(context.Context, string) error,
 ) (roles.RuntimeAssembly, error) {
 	if activation == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
@@ -94,6 +96,7 @@ func NewAssembly(
 		gatewayStreams,
 		projectionReader,
 		processDurable,
+		namedFactoryActivator,
 	)
 	assembly, ok := assemblyRole.(*legacyservice.Assembly)
 	if !ok || assembly == nil {

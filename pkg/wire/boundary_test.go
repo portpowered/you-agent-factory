@@ -152,6 +152,7 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 		streams,
 		factorysessionwire.NewSessionHost(state, factorysessionwire.NewScopeControl(state, nil, zap.NewNop()), identity, &wireTestClock{}, nil, provideSessionCheckpointStoreFactory(), zap.NewNop()),
 		nil,
+		factorysessionwire.NewNamedFactoryActivator(state),
 	)
 	if err != nil {
 		t.Fatalf("provide Factory Sessions assembly: %v", err)

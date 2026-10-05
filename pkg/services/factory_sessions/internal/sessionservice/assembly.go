@@ -39,6 +39,7 @@ type Assembly struct {
 	streams                      StreamManager
 	gatewayStreams               *stream.Manager
 	projectionReader             runtimebinding.SessionProjectionOwner
+	namedFactoryActivator        func(context.Context, string) error
 	invoker                      roles.InvocationService
 	scopeControl                 SessionScopeControl
 	scopeActivation              SessionScopeActivation
@@ -93,6 +94,7 @@ func NewAssembly(
 	gatewayStreams *stream.Manager,
 	projectionReader runtimebinding.SessionProjectionOwner,
 	processDurable durableexecution.Service,
+	namedFactoryActivator func(context.Context, string) error,
 ) roles.RuntimeAssembly {
 	return &Assembly{
 		SessionGateway:               &Service{durable: processDurable},
@@ -101,6 +103,7 @@ func NewAssembly(
 		streams:                      streams,
 		gatewayStreams:               gatewayStreams,
 		projectionReader:             projectionReader,
+		namedFactoryActivator:        namedFactoryActivator,
 		invoker:                      invoker,
 		scopeControl:                 control,
 		scopeActivation:              activation,
@@ -485,7 +488,7 @@ func (a *Assembly) Complete(
 		a.recordedHistory,
 		runtime.durableExecution,
 		a.invoker,
-		runtime.ActivateNamedFactory,
+		a.namedFactoryActivator,
 		runtime.DefinitionActivationGateway(),
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
@@ -651,24 +654,10 @@ func (a *Assembly) InvokeFactorySession(ctx context.Context, sessionID string, r
 }
 
 func (a *Assembly) ActivateNamedFactory(ctx context.Context, name string) error {
-	if a == nil || a.state == nil {
+	if a == nil || a.namedFactoryActivator == nil {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
-	session := a.state.Current()
-	if session == nil {
-		return factorysessions.ErrSessionNotFound
-	}
-	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil {
-		return factorysessions.ErrRuntimeNotAvailable
-	}
-	owner, ok := bound.Owner.(interface {
-		ActivateNamedFactory(context.Context, string) error
-	})
-	if !ok || owner == nil {
-		return fmt.Errorf("%w: session activation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
-	}
-	return owner.ActivateNamedFactory(ctx, name)
+	return a.namedFactoryActivator(ctx, name)
 }
 
 func (a *Assembly) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.SessionProjection, error) {

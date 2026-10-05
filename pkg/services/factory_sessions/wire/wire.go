@@ -7,6 +7,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
@@ -215,6 +216,13 @@ func NewSessionHost(state *SessionState, control SessionScopeControl, identitySe
 	return sessionservice.SessionServiceHost(state, nil, control, nil, "", identityService, clock, projector, checkpoints, logger)
 }
 
+// NamedFactoryActivator addresses the selected session at each activation.
+type NamedFactoryActivator func(context.Context, string) error
+
+func NewNamedFactoryActivator(state *SessionState) NamedFactoryActivator {
+	return sessionservice.NewNamedFactoryActivator(state)
+}
+
 // NewRuntimeAssembly builds the one owner-private Factory Sessions assembly
 // used by peer roots while canonical Wire completes the rest of the process
 // graph. It is an assembly capability, not a second published Service root.
@@ -241,6 +249,7 @@ func NewRuntimeAssembly(
 	gatewayStreams *GatewayStreams,
 	host sessionservice.Host,
 	processDurable durableexecution.Service,
+	namedFactoryActivator NamedFactoryActivator,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
 		registry, state, streams, invoker, control, activation,
@@ -260,6 +269,7 @@ func NewRuntimeAssembly(
 		gatewayStreams,
 		host,
 		processDurable,
+		namedFactoryActivator,
 	)
 	if err != nil {
 		return nil, err
