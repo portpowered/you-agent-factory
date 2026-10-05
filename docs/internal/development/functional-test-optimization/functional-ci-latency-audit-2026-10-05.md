@@ -5,12 +5,15 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest successful hosted verification, at `f5b5dfcfc9`, took **7m37s for
-the full functional supervisor**, including **6m16.528s for tests**. All required
-checks passed, but the five-, three- and two-minute merge checkpoints remain
-unmet. [PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867)
-contains the ongoing changes. Passing local warm-cache supervisors have ranged
-from **3m11.29s to 4m18.10s**; they do not establish hosted latency.
+The latest hosted functional job, at `8a87eb39d3`, passed in **5m17.401s for
+the full functional supervisor**, including **4m14.065s for tests**. It reported
+944 passes, two skips and no test failures, and passed the unchanged coverage
+floors. The complete workflow failed lint and packaged checks because of stale
+baseline entries after source removals. The latest workflow with every required
+check passing remains `f5b5dfcfc9`: **7m37s overall / 6m16.528s tests**. The
+five-, three- and two-minute merge checkpoints remain unmet.
+[PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867)
+contains the ongoing changes. Local measurements do not establish hosted latency.
 
 Consolidation has a measured benefit. A controlled build-only comparison reduced
 **136 linker invocations to one**, **160.292s linker CPU to 1.807s**, and warm
@@ -29,6 +32,10 @@ scenario decisions, including three added on main. Six further CLI packages
 share one customer-command package. Four workflow fixture suites share one
 package, and 28 compatible suites now share Product customer journeys, removing
 27 more binaries while retaining their explicit sessions and public observers.
+Sixteen further fixture-owning suites now share Product customer lifecycles,
+removing another 15 binaries. Their former package setup and shutdown belong to
+parallel parent tests; cleanup runs after their parallel children. Repetition
+resets fixture state, and resume fixtures resolve repository paths explicitly.
 
 Detailed measurements below include failed runs and their causes. Remaining
 work is to consolidate fixture-heavy packages with their own lifecycles, reduce
@@ -36,6 +43,48 @@ scenario startup and execution costs, and verify the complete hosted lane at
 each requested checkpoint.
 
 ## Initial finding
+
+### Latest fixture consolidation measurement
+
+The additional customer-lifecycle package combines 16 fixture-owning suites:
+audio artifacts, packaged catalog/classification/CLI–REST parity, review failure
+recovery, operator settings, Factory dispatch/eligibility/session lifecycle,
+CLI discovery/resume/worker lifecycle/modes, MCP protocol, and Work routing.
+Only their test packaging changes. Each fixture remains owned by one parallel
+parent and its customer scenarios; independent parents have independent routes,
+sessions, homes and cleanup. Package state resets between repeated runs.
+
+The first full four-CPU Linux coverage run of this layout took **244.70s overall
+/ 194.208s tests**, and failed. It observed **68 links**, consuming **95.742
+CPU-seconds** with **142.827s of active wall time**, and **1,543 compilations**
+consuming **234.302 CPU-seconds**. The previous synchronized-layout sample had
+80 links / 110.065 linker CPU-seconds, but only 121 compilations. The new sample
+used a fresh source directory and rebuilt substantially more dependencies;
+these are different cache states and are not a controlled elapsed-time comparison.
+Active compiler and linker intervals overlap each other and running tests.
+
+The run reported 822 top-level passes, two skips and three failures across
+two packages. Failures were an incorrect fixed-UUID expectation added during
+identity-test cleanup, MCP protocol startup exceeding its existing five-second
+guard, and the unchanged injected invocation cancellation case returning an
+empty request/session identity. The UUID generator deliberately returns fresh
+UUIDs: the corrected customer assertion checks the persisted local UUID and
+retains the separate existing-identity reuse proof. MCP now uses the shared
+isolated-home helper to exclude operator model caches. The cancellation failure
+remains recorded; this failed sample establishes no latency checkpoint.
+
+Pure fixture-ledger checks for packaged cross-surface characterization and the
+guard fake's own marker-selection self-test are removed. Operator-settings
+construction counters are also removed; CLI output, settings-file persistence,
+UUID validity/reuse, session/Work/Event correlation and customer failure
+contracts remain. Large migrated scenarios now have named assertion stages
+and case helpers, split into focused files. The migrated package's built-in
+and repository lint, including the integration/long/conformance tag union,
+report zero issues on the migrated package. Three complete native repetitions
+of the final customer-lifecycle scenarios pass in 123.771s. Manifest projection
+still validates all 159 reviewed decisions. Catalog fixtures now author their
+known customer paths directly instead of calling the production path-policy
+function to arrange the assertion.
 
 The initial measurements below are followed by an [implementation and validation
 update](#implementation-and-validation-update) for the authorized cleanup.

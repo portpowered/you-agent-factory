@@ -2254,12 +2254,12 @@ testsleep-deadline-test|tests/functional/factory_definitions/transports/cli/name
 testsleep-deadline-test|tests/functional/factory_definitions/transports/cli/validate_persist|tests/functional/factory_definitions/transports/cli/validate_persist/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/factory_definitions/transports/cli/yaml_parity|tests/functional/factory_definitions/transports/cli/yaml_parity/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/factory/execution_test|tests/functional/factory/execution/invocation_characterization_test.go::runLocalAIFactoryInference::deadline::1
-testsleep-deadline-test|tests/functional/factory/omni_artifact_test|tests/functional/factory/omni_artifact/omni_artifact_fixture_test.go::omniProtocolFixture.WaitForCancellation::deadline::1
-testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/characterization_assertions_test.go::assertCrossListenerClosed::deadline::1
-testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/characterization_assertions_test.go::assertPackagedGoalFactorySessionAbsent::deadline::1
-testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/package_cli_api_test.go::pollPackagedGoalAPIInspectionUntilCLICompletes::deadline::1
-testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/package_cli_api_test.go::tryGetRetainedFactoryEvents::deadline::1
-testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/package_cli_api_test.go::waitForSessionWorkEndpoint::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_omni_artifact_omni_artifact_fixture_test.go::omniProtocolFixture.WaitForCancellation::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_characterization_assertions_test.go::assertCrossListenerClosed::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_characterization_assertions_test.go::assertPackagedGoalFactorySessionAbsent::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_package_cli_api_test.go::pollPackagedGoalAPIInspectionUntilCLICompletes::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_package_cli_api_test.go::tryGetRetainedFactoryEvents::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_package_cli_api_test.go::waitForSessionWorkEndpoint::deadline::1
 testsleep-deadline-test|tests/functional/factory/packaged/invocation_test|tests/functional/factory/packaged/invocation/tts_shared_fixture_test.go::packagedTTSSharedFixture.close::deadline::1
 testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/failure_isolation_test.go::TestMetricsSessionCancellationDoesNotCorruptConcurrentReport::deadline::1
 testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/failure_isolation_test.go::TestMetricsSessionTimeoutReturnsNoPartialReport::deadline::1
@@ -2277,7 +2277,7 @@ testsleep-deadline-test|tests/functional/internal/support|tests/functional/inter
 testsleep-deadline-test|tests/functional/internal/support|tests/functional/internal/support/worker_session_replay_internal_test.go::TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention::deadline::1
 testsleep-deadline-test|tests/functional/internal/support|tests/functional/internal/support/worker_session_replay_internal_test.go::TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention::deadline::2
 testsleep-deadline-test|tests/functional/internal/support|tests/functional/internal/support/worker_session_replay_internal_test.go::TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention::deadline::3
-testsleep-deadline-test|tests/functional/orchestration/petri/guards|tests/functional/orchestration/petri/guards/guard_cases_test.go::sharedGuardProviderTimeout::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/orchestration_petri_guards_guard_cases_test.go::sharedGuardProviderTimeout::deadline::1
 testsleep-deadline-test|tests/functional/providers/acp_test|tests/functional/providers/acp/daemon_concurrency_test.go::TestProvidersACPRunsConcurrentPromptsOnIndependentRequestOwnedPeers::deadline::1
 testsleep-deadline-test|tests/functional/providers/agy|tests/functional/providers/agy/shared_process_runner_test.go::TestAgySharedCommandRunnerCancellationUnblocksEnteredPeerAndPreservesReuse::deadline::1
 testsleep-deadline-test|tests/functional/providers/agy|tests/functional/providers/agy/shared_process_runner_test.go::TestAgySharedCommandRunnerCancellationUnblocksEnteredPeerAndPreservesReuse::deadline::2
@@ -2294,10 +2294,10 @@ testsleep-deadline-test|tests/functional/sessions/cli_test|tests/functional/sess
 testsleep-deadline-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_execution_helpers_test.go::waitForBlockingInvocationStart::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData::deadline::1
 testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|tests/functional/transport/cli/customer_commands/output_text_stream_test.go::waitForInterruptibleStdoutLifecycle::deadline::1
-testsleep-deadline-test|tests/functional/transport/cli/root_discovery_test|tests/functional/transport/cli/root_discovery/root_discovery_test.go::runServerLifecycleCase::deadline::1
-testsleep-deadline-test|tests/functional/transport/cli/root_discovery_test|tests/functional/transport/cli/root_discovery/root_discovery_test.go::TestContinuousRunScopedServerKeepsListenerUntilCancellation::deadline::1
-testsleep-deadline-test|tests/functional/transport/cli/root_discovery_test|tests/functional/transport/cli/root_discovery/root_discovery_test.go::TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness::deadline::1
-testsleep-deadline-test|tests/functional/transport/cli/root_discovery_test|tests/functional/transport/cli/root_discovery/root_discovery_test.go::TestServerDisclosesHomeBeforeSystemInitializationAccess::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_root_discovery_root_discovery_test.go::runServerLifecycleCase::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_root_discovery_root_discovery_test.go::testTransportclirootdiscoveryContinuousRunScopedServerKeepsListenerUntilCancellation::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_root_discovery_root_discovery_test.go::testTransportclirootdiscoveryCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_root_discovery_root_discovery_test.go::testTransportclirootdiscoveryServerDisclosesHomeBeforeSystemInitializationAccess::deadline::1
 testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPICancelledRequestDoesNotCancelUnrelatedSession::deadline::1
 testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPICancelledRequestDoesNotCancelUnrelatedSession::deadline::2
 testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPIConcurrentSessionRequestsRemainIsolated::deadline::1
@@ -2312,7 +2312,7 @@ testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/w
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerSignal::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/workers/inference_test|tests/functional/workers/inference/recording_recovery_test.go::testWSRFT009InterruptedPrefix::deadline::1
-testsleep-deadline-test|tests/functional/workers/transports/cli/run/modes_test|tests/functional/workers/transports/cli/run/modes/adverse_modes_test.go::TestCLIRunTimeoutRecoversOnSameProcess::deadline::1
+testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/workers_transports_cli_run_modes_adverse_modes_test.go::testWorkerstransportsclirunmodesCLIRunTimeoutRecoversOnSameProcess::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/workstations_cron_helpers_test.go::assertCronServerStops::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/workstations_cron_helpers_test.go::waitForFakeClockWaiters::deadline::1
 testsleep-deadline-test|tests/functional/workstations/execution|tests/functional/workstations/execution/prompt_hot_reload_test.go::readPromptReloadSession::deadline::1
@@ -2465,11 +2465,11 @@ testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/funct
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::assertNoAdditionalProviderCommandWork::sleep::1
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::waitForActivatedFactoryRuntime::sleep::1
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::waitForSubmittedWorkAtPlace::sleep::1
-testsleep-sleep-test|tests/functional/factory/omni_artifact_test|tests/functional/factory/omni_artifact/omni_artifact_test.go::factoryFixture.waitForConfirmedWork::sleep::1
-testsleep-sleep-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/characterization_assertions_test.go::assertCrossListenerClosed::sleep::1
+testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_omni_artifact_omni_artifact_test.go::factoryFixture.waitForConfirmedWork::sleep::1
+testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_characterization_assertions_test.go::assertCrossListenerClosed::sleep::1
 testsleep-sleep-test|tests/functional/factory/packaged/invocation_test|tests/functional/factory/packaged/invocation/full_flow_invocation_test.go::fullFlowRunner.awaitConcurrentImplementation::sleep::1
-testsleep-sleep-test|tests/functional/factory/review_failure_routing|tests/functional/factory/review_failure_routing/helpers_test.go::awaitReviewFailureWorkStates::sleep::1
-testsleep-sleep-test|tests/functional/factory/review_failure_routing|tests/functional/factory/review_failure_routing/work_payload_survival_test.go::promptCapture.awaitContaining::sleep::1
+testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_review_failure_routing_helpers_test.go::awaitReviewFailureWorkStates::sleep::1
+testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_review_failure_routing_work_payload_survival_test.go::promptCapture.awaitContaining::sleep::1
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/basic_factory_run_test.go::holdACPHelperUntilReleased::sleep::1
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/basic_factory_run_test.go::holdACPHelperUntilReleased::sleep::2
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/daemon_concurrency_test.go::waitForACPTestFile::sleep::1
@@ -2494,8 +2494,8 @@ testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/funct
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::logicalIdentityResumeBlockingProvider.waitForCanceledExecute::sleep::1
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::waitForDurableFactorySessionStatus::sleep::1
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::waitForFactorySessionDispatchStatus::sleep::1
-testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/functional/transport/cli/session_resume/resume_smoke_test.go::waitForCLIResumeSmokeDispatchStatus::sleep::1
-testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/functional/transport/cli/session_resume/resume_smoke_test.go::waitForDurableSessionStatusViaCLI::sleep::1
+testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_session_resume_resume_smoke_test.go::waitForCLIResumeSmokeDispatchStatus::sleep::1
+testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_session_resume_resume_smoke_test.go::waitForDurableSessionStatusViaCLI::sleep::1
 testsleep-sleep-test|tests/functional/work/admission_test|tests/functional/work/admission/recovery_helpers_test.go::waitForSessionInFlightDispatches::sleep::1
 testsleep-sleep-test|tests/functional/work/admission_test|tests/functional/work/admission/recovery_helpers_test.go::waitForWorkIDsAtState::sleep::1
 testsleep-sleep-test|tests/functional/work/admission_test|tests/functional/work/admission/recovery_helpers_test.go::waitForWorkIDsComplete::sleep::1
@@ -2676,8 +2676,6 @@ functional-test-missing-subsection|tests/functional/sessionparity|tests/function
 functional-test-missing-subsection|tests/functional/sessionparity|tests/functional/sessionparity/fixtures_test.go
 functional-test-missing-subsection|tests/functional/sessionparity|tests/functional/sessionparity/normalize.go
 functional-test-missing-subsection|tests/functional/sessionparity|tests/functional/sessionparity/normalize_test.go
-functional-test-missing-subsection|tests/functional/sessions_test|tests/functional/sessions/live_change_contract_test.go
-functional-test-missing-subsection|tests/functional/sessions_test|tests/functional/sessions/live_runtime_build_process_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/cli_docs_smoke_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/doc.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/guarded_loop_breaker_long_test.go
@@ -2689,15 +2687,8 @@ functional-test-missing-subsection|tests/functional/workflow|tests/functional/wo
 functional-test-missing-subsection|tests/functional/workflow|tests/functional/workflow/doc.go
 functional-test-missing-subsection|tests/functional/workflow|tests/functional/workflow/review_retry_exhaustion_long_test.go
 functional-test-missing-subsection|tests/functional/work|tests/functional/work/doc.go
-functional-test-unclassified-domain|tests/functional/bootstrap_portability/metadata_contract|tests/functional/bootstrap_portability/metadata_contract/factory_metadata_contract_test.go
-functional-test-unclassified-domain|tests/functional/cli/factory_run/output|tests/functional/cli/factory_run/output/failure_test.go
-functional-test-unclassified-domain|tests/functional/cli/factory_run/output|tests/functional/cli/factory_run/output/output_test.go
-functional-test-unclassified-domain|tests/functional/cli/factory_run/yaml_io_parity|tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/guards|tests/functional/factory_runtime/orchestrators/petri/guards/doc.go
-functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/guards|tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/routing|tests/functional/factory_runtime/orchestrators/petri/routing/doc.go
-functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/routing|tests/functional/factory_runtime/orchestrators/petri/routing/helpers_test.go
-functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/routing|tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go
 functional-test-unclassified-domain|tests/functional/internal/restclient_test|tests/functional/internal/restclient/adapter_test.go
 functional-test-unclassified-domain|tests/functional/internal/restclient|tests/functional/internal/restclient/adapter.go
 service-root-exported-function|pkg/services/automations/internal/services/hosted_sources|pkg/services/automations/internal/services/hosted_sources/service.go#NewCheckpointStore
@@ -3038,7 +3029,6 @@ test-cross-owner-policy|pkg/services/system_initialization/internal/workflow|pkg
 test-cross-owner-policy|pkg/services/system_initialization/internal/workflow|pkg/services/system_initialization/internal/workflow/workflow_test.go#pkg/services/factory_definitions.NamedFactoriesRoot::count=1
 test-cross-owner-policy|pkg/services/system_initialization/internal/workflow|pkg/services/system_initialization/internal/workflow/workflow_test.go#pkg/services/operator_settings.DefaultConfigPath::count=2
 test-cross-owner-policy|pkg/services/system_initialization_test|pkg/services/system_initialization/initializer_routing_test.go#pkg/services/operator_settings.DefaultConfigPath::count=2
-test-cross-owner-policy|tests/functional/factory/packaged/catalog|tests/functional/factory/packaged/catalog/override_test.go#pkg/services/factory_definitions.MapDir::count=2
 test-cross-owner-policy|tests/functional/internal/support|tests/functional/internal/support/acp_agent_profile.go#pkg/services/operator_settings.DefaultConfigPath::count=1
 
 # Exact observed transport debt sites; original rule IDs remain unchanged.
@@ -3161,8 +3151,6 @@ construction-recorded-site-test|pkg/services/worker_sessions/internal/service_te
 construction-recorded-site-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go#service-construction-test#pkg/services/events/wire.NewService::count=1
 construction-recorded-site-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go#service-construction-test#pkg/services/worker_sessions/wire.NewService::count=1
 construction-recorded-site-test|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/session_test_helpers_test.go#service-construction-test#pkg/services/chat_sessions/wire.NewService::count=1
-construction-recorded-site-test|tests/functional/recordings/root_composition_test|tests/functional/recordings/root_composition/portable_transport_activation_test.go#service-construction-test#pkg/services/recordings/transports/cli.New::count=1
-construction-recorded-site-test|tests/functional/sessions_test|tests/functional/sessions/live_change_contract_test.go#service-construction-test#pkg/services/factory_sessions/wire.NewLiveChangeCoordinator::count=1
 construction-recorded-site-test|tests/functional/workers/inference_test|tests/functional/workers/inference/recording_recovery_test.go#service-construction-test#pkg/services/recordings/wire.NewWorkerRecordingFileWriter::count=1
 construction-recorded-site|pkg/services/factory_sessions/internal/execution|pkg/services/factory_sessions/internal/execution/prepare_start_bundle.go#service-construction#pkg/services/factory_runtime.NewWorkflowSourceReader::count=1
 
