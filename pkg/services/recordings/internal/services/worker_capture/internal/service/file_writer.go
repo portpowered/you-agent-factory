@@ -48,12 +48,13 @@ type recordingEntry struct {
 	order    []string
 }
 type recordingSession struct {
-	generation string
-	ownerEpoch string
-	capturedAt map[string]time.Time
-	projection recordings.WorkerRecordingProjection
-	records    []events.Record
-	identities map[events.AppendIdentity]events.Record
+	generation       string
+	ownerEpoch       string
+	capturedAt       map[string]time.Time
+	projection       recordings.WorkerRecordingProjection
+	records          []events.Record
+	identities       map[events.AppendIdentity]events.Record
+	summaryPositions [summaryFactCount]uint64
 }
 type workerJournalEntry struct {
 	RecordingGenerationID string                              `json:"recordingGenerationId,omitempty"`
@@ -185,6 +186,7 @@ func (session *recordingSession) acceptRecord(projection recordings.WorkerRecord
 	session.identities[record.Identity()] = record
 	projection.Records = nil
 	session.projection = projection
+	session.rememberSummary(record)
 }
 
 // PersistWorkerRecordingFailure appends a safe capture-loss fact.
@@ -367,6 +369,7 @@ func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry) error {
 		session.ensureLegacyIdentity()
 		for _, record := range session.records {
 			session.identities[record.Identity()] = record
+			session.rememberSummary(record)
 		}
 		entry.commit(session)
 	}

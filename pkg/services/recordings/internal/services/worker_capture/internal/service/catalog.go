@@ -77,8 +77,12 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 		start++
 	}
 	end := min(start+limit, len(entries))
+	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation)
+	if err != nil {
+		return recordings.WorkerCapturedCatalogPage{}, err
+	}
 	page := recordings.WorkerCapturedCatalogPage{
-		Entries:      append([]recordings.WorkerSessionCatalogEntry{}, entries[start:end]...),
+		Items:        items,
 		GenerationID: generation,
 	}
 	if end < len(entries) {

@@ -27,9 +27,23 @@ type WorkerCapturedCatalogRequest struct {
 }
 
 type WorkerCapturedCatalogPage struct {
-	Entries      []WorkerSessionCatalogEntry
+	Items        []WorkerCapturedCatalogItem
 	GenerationID string
 	NextToken    string
+}
+
+// WorkerCapturedCatalogItem contains only committed summary facts. MetadataRecords
+// retain the latest usage and supported session fields, plus the terminal record;
+// output/progress history belongs to ReadWorkerCapturedActivity. CapturedAt contains
+// stamps for the opening and selected metadata only. Missing legacy stamps stay absent.
+type WorkerCapturedCatalogItem struct {
+	Catalog         WorkerSessionCatalogEntry
+	Opening         events.Record
+	MetadataRecords []events.Record
+	CapturedAt      map[string]time.Time
+	Terminal        *WorkerRecordingTerminal
+	Health          WorkerRecordingStatus
+	HealthReason    string
 }
 
 // WorkerCapturedRecord separates host commit metadata from source-native payloads.

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestFileWriterCapturedActiveLossPreservesIncompletePrefix(t *testing.T) {
@@ -58,6 +60,305 @@ type captureTimeProbe struct {
 	calls int
 }
 
+func TestFileWriterCatalogSummaryKeepsLatestFactsAcrossRestart(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	record := journalRecord(t, "summary-recording", "summary-worker")
+	persistCatalogSummaryFixture(t, writer, record)
+	want := mustCatalogSummary(t, writer)
+	assertCatalogSummaryFacts(t, want)
+	probe.mu.Lock()
+	reads := probe.reads
+	probe.mu.Unlock()
+	// Returned payloads, stamps and terminal facts are caller-owned snapshots.
+	want.Opening.Payload[0] = '!'
+	want.MetadataRecords[0].Payload[0] = '!'
+	want.CapturedAt["1"] = time.Time{}
+	want.Terminal.Status = "FAILED"
+	again := mustCatalogSummary(t, writer)
+	assertCatalogSummaryFacts(t, again)
+	probe.mu.Lock()
+	if probe.reads != reads {
+		t.Errorf("cached summary reloaded logs: reads %d -> %d", reads, probe.reads)
+	}
+	probe.mu.Unlock()
+	reopened, err := NewFileWriter(probe, probe, probe, &captureTimeProbe{}, writer.root, "restarted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := mustCatalogSummary(t, reopened); !reflect.DeepEqual(got, again) {
+		t.Fatalf("restarted summary changed committed facts: got=%+v want=%+v", got, again)
+	}
+}
+
+func persistCatalogSummaryFixture(t *testing.T, writer recordings.WorkerRecordingStore, record recordings.WorkerRecordingRecord) {
+	t.Helper()
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	for i, cell := range []struct {
+		kind    workers.Kind
+		payload string
+	}{
+		{workers.KindSession, `{"providerSelection":{"runnerId":"codex"},"model":"initial","reasoningEffort":"high"}`},
+		{workers.KindSession, `{"workerSessionId":"summary-worker","dispatchId":"attempt","attemptId":"attempt","attemptReason":"RESUME","continuation":{"provider":"codex","kind":"session_id","id":"opaque"},"lineage":{"predecessorWorkerSessionId":"prior","previousDispatchId":"prior-attempt","previousAttemptId":"prior-attempt"}}`},
+		{workers.KindSession, `{"continuation":{"provider":"codex","kind":"session_id","id":"opaque"}}`},
+		{workers.KindUsage, `{"model":"observed","totalTokens":12}`},
+		{workers.KindUsage, `{"inputTokens":0,"totalTokens":0}`},
+		{workers.KindSession, `{"title":"latest display title"}`},
+		{workers.KindProgress, `{"label":"working"}`},
+		{workers.KindSession, `{"status":"RUNNING"}`},
+	} {
+		record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, cell.kind, cell.payload, uint64(i+2))
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record.Record = mustRecord(t, workerOutputAppend(record.Record.ID.Topic, record.WorkerSessionID, 1, "output"), 10)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, record.WorkerSessionID), 11)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func catalogMetadataRecord(t *testing.T, topic events.Topic, kind workers.Kind, payload string, position uint64) events.Record {
+	t.Helper()
+	request := openingAppend(topic, "summary-worker")
+	var draft workers.Draft
+	if err := json.Unmarshal(request.Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	draft.Kind, draft.Phase, draft.Payload = kind, workers.PhaseUpdated, json.RawMessage(payload)
+	var err error
+	request.Payload, err = json.Marshal(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.SourceID = "summary-facts"
+	request.SourceSequence = events.SourceSequence(position)
+	request.SourceEventID = events.SourceEventID(strconv.FormatUint(position, 10))
+	return mustRecord(t, request, events.AggregateSequence(position))
+}
+
+func mustCatalogSummary(t *testing.T, reader recordings.WorkerCapturedActivityReader) recordings.WorkerCapturedCatalogItem {
+	t.Helper()
+	page, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("summary page = %+v, %v", page, err)
+	}
+	return page.Items[0]
+}
+
+func assertCatalogSummaryFacts(t *testing.T, item recordings.WorkerCapturedCatalogItem) {
+	t.Helper()
+	var positions []uint64
+	for _, record := range item.MetadataRecords {
+		positions = append(positions, uint64(record.ID.Position))
+		if item.CapturedAt[strconv.FormatUint(uint64(record.ID.Position), 10)].IsZero() {
+			t.Fatalf("selected fact lacks its recorded stamp: %+v", record)
+		}
+	}
+	if !reflect.DeepEqual(positions, []uint64{2, 3, 4, 5, 6, 9, 11}) || len(item.CapturedAt) != 8 || item.CapturedAt["1"].IsZero() {
+		t.Fatalf("summary lost partial facts or included output/history stamps: positions=%v stamps=%v", positions, item.CapturedAt)
+	}
+	if item.Catalog.CommittedPosition != 11 || item.Terminal == nil || item.Terminal.Status != "COMPLETED" || item.Health != recordings.WorkerRecordingStatusComplete {
+		t.Fatalf("summary lost terminal truth: %+v", item)
+	}
+	var draft workers.Draft
+	if err := json.Unmarshal(item.MetadataRecords[4].Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	var usage map[string]int
+	if err := json.Unmarshal(draft.Payload, &usage); err != nil {
+		t.Fatal(err)
+	}
+	if value, present := usage["inputTokens"]; !present || value != 0 || len(usage) != 2 {
+		t.Fatalf("latest usage erased explicit zero or invented absent fields: %s", draft.Payload)
+	}
+}
+
+func TestFileWriterCatalogSummaryDistinguishesPrefixAndUncapturedTerminal(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name             string
+		legacy, terminal bool
+	}{
+		{name: "incomplete"},
+		{name: "legacy", legacy: true},
+		{name: "uncaptured-terminal", terminal: true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			got := restartedPrefixSummary(t, cell.legacy, cell.terminal)
+			wantStamps := 1
+			if cell.legacy {
+				wantStamps = 0
+			}
+			if len(got.MetadataRecords) != 0 || got.Catalog.CommittedPosition != 1 || len(got.CapturedAt) != wantStamps {
+				t.Fatalf("prefix invented metadata, stamps or watermark: %+v", got)
+			}
+			if cell.terminal {
+				if got.Terminal == nil || got.Terminal.Position != 2 || got.Health != recordings.WorkerRecordingStatusDegraded || got.HealthReason != "PERSISTENCE_FAILED" {
+					t.Fatalf("uncaptured authoritative terminal lost its degraded health: %+v", got)
+				}
+			} else if got.Terminal != nil || got.Health != recordings.WorkerRecordingStatusIncomplete {
+				t.Fatalf("prefix masquerades as complete or ended: %+v", got)
+			}
+		})
+	}
+}
+
+func restartedPrefixSummary(t *testing.T, legacy, terminal bool) recordings.WorkerCapturedCatalogItem {
+	t.Helper()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	opening := journalRecord(t, "legacy", "legacy-session")
+	if legacy {
+		if err := local.WriteFile(writer.path("legacy"), []byte(legacyWorkerOpeningFixture)); err != nil {
+			t.Fatal(err)
+		}
+	} else if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+		t.Fatal(err)
+	}
+	if terminal {
+		if err := writer.PersistWorkerRecordingFailure(t.Context(), recordings.WorkerRecordingFailure{
+			RecordingID: "legacy", WorkerSessionID: "legacy-session", Topic: opening.Record.ID.Topic, Code: "PERSISTENCE_FAILED",
+			ExecutionTerminal: &recordings.WorkerRecordingTerminal{Position: 2, Phase: workers.PhaseCompleted, Status: "COMPLETED"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mustCatalogSummary(t, reopened)
+}
+
+type catalogAppendProbe struct {
+	platformreplay.Local
+	fault error
+}
+
+func (probe *catalogAppendProbe) AppendFile(path string, data []byte) error {
+	if probe.fault != nil {
+		return probe.fault
+	}
+	return probe.Local.AppendFile(path, data)
+}
+
+func TestFileWriterCatalogSummaryExcludesRejectedAppend(t *testing.T) {
+	t.Parallel()
+	probe := &catalogAppendProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	record := journalRecord(t, "rejected", "summary-worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	want := mustCatalogSummary(t, writer)
+	record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindUsage, `{"totalTokens":10}`, 2)
+	probe.fault = errors.New("selected append unavailable")
+	if err := writer.PersistWorkerRecord(t.Context(), record); !errors.Is(err, probe.fault) {
+		t.Fatalf("rejected append = %v", err)
+	}
+	if got := mustCatalogSummary(t, writer); !reflect.DeepEqual(got, want) {
+		t.Fatalf("summary advertised uncommitted metadata: got=%+v want=%+v", got, want)
+	}
+	probe.fault = nil
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	got := mustCatalogSummary(t, writer)
+	if got.Catalog.CommittedPosition != 2 || len(got.MetadataRecords) != 1 || len(got.CapturedAt) != 2 {
+		t.Fatalf("accepted retry failed to publish metadata: %+v", got)
+	}
+}
+
+func TestFileWriterCatalogSummaryRehydratesUncertainCommit(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	record := journalRecord(t, "uncertain", "summary-worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	_ = mustCatalogSummary(t, writer)
+	probe.failAfterSync = true
+	record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindUsage, `{"totalTokens":10}`, 2)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err == nil {
+		t.Fatal("uncertain close did not return its error")
+	}
+	got := mustCatalogSummary(t, writer)
+	if got.Catalog.CommittedPosition != 2 || len(got.MetadataRecords) != 1 || len(got.CapturedAt) != 2 {
+		t.Fatalf("summary failed to recover synchronized bytes after uncertain close: %+v", got)
+	}
+}
+
+func TestFileWriterCatalogSummaryKeepsPartialSelectionAndRetryFacts(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	record := journalRecord(t, "partial-selection", "summary-worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	for i, payload := range []string{
+		`{"providerSelection":{"runnerId":"codex","modelProvider":"openai"}}`,
+		`{"providerSelection":{"executorProvider":"codex"}}`,
+		`{"providerSelection":{"runnerId":"codex"}}`,
+		`{"workerSessionId":"summary-worker","dispatchId":"attempt","attemptId":"attempt","attemptReason":"RETRY","lineage":{"previousDispatchId":"prior-attempt","previousAttemptId":"prior-attempt"}}`,
+		`{"status":"RUNNING"}`,
+	} {
+		record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindSession, payload, uint64(i+2))
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := mustCatalogSummary(t, writer)
+	var positions []uint64
+	for _, metadata := range got.MetadataRecords {
+		positions = append(positions, uint64(metadata.ID.Position))
+	}
+	if !reflect.DeepEqual(positions, []uint64{2, 3, 4, 5, 6}) || got.Catalog.CommittedPosition != 6 || got.Terminal != nil {
+		t.Fatalf("partial updates erased known selection or retry facts: %+v", got)
+	}
+}
+
+func TestFileWriterCatalogSummaryRebuildsLegacyFactsWithoutStamps(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	source := journalWriter(t, local)
+	record := journalRecord(t, "summary-recording", "summary-worker")
+	persistCatalogSummaryFixture(t, source, record)
+	want := mustCatalogSummary(t, source)
+	snapshot, err := source.LoadWorkerRecording(t.Context(), record.RecordingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Sessions[0].CapturedAt = nil
+	snapshot.Sessions[0].RecordingGenerationID = ""
+	snapshot.Sessions[0].OwnerEpoch = ""
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := journalWriter(t, local)
+	if err := local.WriteFile(legacy.path(record.RecordingID), data); err != nil {
+		t.Fatal(err)
+	}
+	got := mustCatalogSummary(t, legacy)
+	if len(got.CapturedAt) != 0 || got.Catalog.OwnerEpoch != "historical" || got.Catalog.RecordingGenerationID == "" {
+		t.Fatalf("legacy summary fabricated commit metadata: %+v", got)
+	}
+	if !reflect.DeepEqual(got.Opening, want.Opening) || !reflect.DeepEqual(got.MetadataRecords, want.MetadataRecords) ||
+		!reflect.DeepEqual(got.Terminal, want.Terminal) || got.Health != want.Health {
+		t.Fatalf("legacy summary lost source facts: got=%+v want=%+v", got, want)
+	}
+}
+
 func TestFileWriterCatalogEnumerationSurvivesRestart(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)
@@ -78,7 +379,8 @@ func TestFileWriterCatalogEnumerationSurvivesRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, entry := range page.Entries {
+		for _, item := range page.Items {
+			entry := item.Catalog
 			ids = append(ids, entry.WorkerSessionID)
 			if entry.OwnerEpoch == "reopened" || entry.CommittedPosition != 1 {
 				t.Fatalf("invented restarted ownership or watermark: %+v", entry)
@@ -152,7 +454,7 @@ func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
 	}
 	for _, store := range []recordings.WorkerCapturedActivityReader{writer, reopened} {
 		page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
-		if err != nil || len(page.Entries) != 1 || page.Entries[0].WorkerSessionID != "healthy" {
+		if err != nil || len(page.Items) != 1 || page.Items[0].Catalog.WorkerSessionID != "healthy" {
 			t.Fatalf("ambiguous enumeration = %+v, %v", page, err)
 		}
 		if _, err := store.LookupWorkerSessionCapture(t.Context(), "collision"); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
@@ -188,6 +490,18 @@ func TestFileWriterCatalogKeepsDamagedCaptureUnavailable(t *testing.T) {
 
 func assertDamagedCapturedCatalog(t *testing.T, reopened recordings.WorkerRecordingStore) {
 	t.Helper()
+	catalog, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+	if err != nil || len(catalog.Items) != 2 {
+		t.Fatalf("catalog hid a healthy sibling or invented unreadable metadata: %+v %v", catalog, err)
+	}
+	for _, item := range catalog.Items {
+		if item.Health != recordings.WorkerRecordingStatusIncomplete || item.Terminal != nil || item.Catalog.CommittedPosition != 1 {
+			t.Fatalf("damaged-prefix summary claimed terminal or uncommitted bytes: %+v", item)
+		}
+		if item.Catalog.WorkerSessionID == "torn-worker" && item.HealthReason != "PERSISTENCE_FAILED" {
+			t.Fatalf("torn prefix hid capture failure: %+v", item)
+		}
+	}
 	for range 2 {
 		page, err := reopened.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: "malformed-worker"})
 		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(page.Records) != 0 || page.Catalog.CommittedPosition != 0 {
