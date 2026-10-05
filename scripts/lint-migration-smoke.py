@@ -516,7 +516,7 @@ def consumption(fixtures: SizeFixtures) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "catalog", "consumption", "package-boundary", "packaged-source", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "provider-catalog", "catalog", "consumption", "package-boundary", "packaged-source", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
@@ -532,6 +532,64 @@ def main() -> None:
     print(f"Artifacts: {artifacts}\n{version.strip()}", flush=True)
     fixtures = SizeFixtures(tool, artifacts, (ROOT / ".golangci.yml").read_text(encoding="utf-8"))
     try:
+        if args.cohort in ("provider-catalog", "all"):
+            fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
+            root = fixtures.module("provider-catalog")
+            write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "internal/providercatalog/source.go", "package providercatalog\n")
+            write(root, "pkg/wire/wire.go", "package wire\n")
+            write(root, "pkg/transports/fixture/source.go", "package fixture\n")
+            names = checked(["git", "ls-files", "-z", "--", "packages/model-providers/providers"], ROOT).split("\0")
+            names += ["api/openapi.yaml"] + ["packages/model-providers/generated/" + name for name in
+                       ("catalog.json", "provider-manifest.schema.json", "provider-catalog.schema.json", "runtime-acp.json")]
+            for name in filter(None, names):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / name).read_bytes())
+            checked(["git", "init", "-q"], root)
+            checked(["git", "add", "."], root)
+            fixtures.commit(root)
+            checked(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], root)
+            tracked = {name: (root / name).read_bytes() for name in names if name}
+            fixtures.lint(root, "provider-clean-default", [])
+            write(root, ".golangci.yml", (ROOT / ".golangci-repository.yml").read_text(encoding="utf-8"))
+            fixtures.lint(root, "provider-clean-complete", [])
+            manifest = "packages/model-providers/providers/claude/provider.yaml"
+            original = (root / manifest).read_bytes()
+            changed = original.replace(b"Anthropic Claude Code CLI integration.", b"Claude CLI description changed for cache witness.")
+            assert changed != original
+            (root / manifest).write_bytes(changed)
+            fixtures.lint(root, "provider-yaml-only-warm-cache", [("repolint", "provider-catalog: stale:")])
+            assert (root / manifest).read_bytes() == changed
+            assert (root / "packages/model-providers/generated/catalog.json").read_bytes() == tracked["packages/model-providers/generated/catalog.json"]
+            (root / manifest).write_bytes(original)
+            fixtures.lint(root, "provider-yaml-recovery", [])
+            projection = root / "packages/model-providers/generated/runtime-acp.json"
+            projection.unlink()
+            fixtures.lint(root, "provider-missing-warm-cache", [("repolint", "provider-catalog: missing:")])
+            assert not projection.exists()
+            projection.write_bytes(tracked["packages/model-providers/generated/runtime-acp.json"])
+            write(root, "packages/model-providers/generated/unused.txt", "unused")
+            fixtures.lint(root, "provider-output-recovery-extra-ignored", [])
+            for name, payload in tracked.items():
+                assert (root / name).read_bytes() == payload, f"lint modified {name}"
+            # Real Git ignored/deleted acquisition belongs in this static lane.
+            scaffold = "packages/model-providers/providers/new/scaffold.txt"
+            write(root, ".gitignore", "scaffold.txt\n")
+            write(root, scaffold, "ignored populated input")
+            fixtures.lint(root, "provider-ignored-populated-input", [("repolint", "new/provider.yaml")])
+            assert (root / scaffold).read_text() == "ignored populated input"
+            checked(["git", "add", "-f", scaffold], root)
+            fixtures.lint(root, "provider-tracked-populated-input", [("repolint", "new/provider.yaml")])
+            (root / scaffold).unlink()
+            fixtures.lint(root, "provider-deleted-tracked-input-recovery", [])
+            for name, payload in tracked.items():
+                assert (root / name).read_bytes() == payload, f"lint modified {name}"
+            outside = fixtures.module("provider-unrelated")
+            write(outside, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(outside, "internal/unrelated/source.go", "package unrelated\n")
+            checked(["git", "init", "-q"], outside)
+            fixtures.lint(outside, "provider-unrelated-owner", [])
         if args.cohort in ("packaged-source", "all"):
             packaged_source(fixtures)
         if args.cohort in ("catalog", "all"):

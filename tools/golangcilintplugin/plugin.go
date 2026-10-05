@@ -50,6 +50,9 @@ func New(raw any) (register.LinterPlugin, error) {
 		if original == analyzers.CompilerOwners {
 			original = analyzers.CompilerOwnersForDirectory(".")
 		}
+		if original == analyzers.ProviderCatalog {
+			original = analyzers.ProviderCatalogForDirectory(".")
+		}
 		if original == analyzers.PackagedFactoryCatalog {
 			original = analyzers.PackagedFactoryCatalogForDirectory(".")
 		}
