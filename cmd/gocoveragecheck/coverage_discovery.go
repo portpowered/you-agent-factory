@@ -98,7 +98,7 @@ func resolveCoverageLaneWithDiscoveryForOS(cfg config, targetOS string) (coverag
 	if testConfigured {
 		testPackages = splitList(cfg.packages, " ", true)
 	} else {
-		include := isBackendCoveragePackage
+		include := isBackendUnitTestPackage
 		if cfg.suite == functionalCoverageSuite {
 			include = isFunctionalTestPackage
 		}

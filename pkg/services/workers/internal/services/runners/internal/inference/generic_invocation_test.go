@@ -13,6 +13,24 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestModelRuntimeProjectionKeepsRequestScopeWithFallbackValues(t *testing.T) {
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:request")
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker := models.LocalWorker{Name: "fallback"}
+	resources := []models.LocalResource{{Name: "resource"}}
+	request := workers.RunnerExecutionRequest{ModelRuntime: &workers.ModelRuntimeInput{Scope: scope}}
+	gotScope, gotWorker, gotResources := modelRuntimeProjection(request, models.RuntimeScopeRef{}, worker, resources)
+	if gotScope != scope || gotWorker.Name != worker.Name || !reflect.DeepEqual(gotResources, resources) {
+		t.Fatalf("projection = %#v %#v %#v", gotScope, gotWorker, gotResources)
+	}
+	gotResources[0].Name = "mutated"
+	if resources[0].Name != "resource" {
+		t.Fatal("projection aliases fallback resources")
+	}
+}
+
 func TestGenericInvocationInputsMapsSupportedWorkPartsInOrder(t *testing.T) {
 	artifactID := "models-inference:artifact:input"
 	inputs, parameters, err := genericInvocationInputs([]workers.ResolvedModelOperationBinding{

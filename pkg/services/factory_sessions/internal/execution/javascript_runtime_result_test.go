@@ -54,13 +54,12 @@ func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
 }
 
 func TestPersistSessionSnapshotWarnsBeforeConfiguredHardLimit(t *testing.T) {
-	const mib = 1024 * 1024
 	for _, limit := range []struct {
 		name                    string
 		maxBytes, wantThreshold int
 	}{
-		{"default 64 MiB", 64 * mib, 48 * mib},
-		{"larger 128 MiB", 128 * mib, 100 * mib},
+		{"4 KiB", 4096, 3072},
+		{"8 KiB", 8192, 6144},
 	} {
 		t.Run(limit.name, func(t *testing.T) {
 			threshold := durableSessionSnapshotWarningThresholdForMax(limit.maxBytes)
@@ -960,4 +959,22 @@ func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionSt
 		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
 	}
 	return state
+}
+
+func TestSnapshotWarningThresholdConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		maxBytes  int
+		threshold int64
+	}{
+		{"default", 0, 48 << 20}, {"negative uses default", -1, 48 << 20},
+		{"64 MiB", 64 << 20, 48 << 20}, {"100 MiB", 100 << 20, 100 << 20}, {"128 MiB", 128 << 20, 100 << 20},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := durableSessionSnapshotWarningThresholdForMax(test.maxBytes); got != test.threshold {
+				t.Fatalf("threshold=%d, want %d", got, test.threshold)
+			}
+		})
+	}
 }

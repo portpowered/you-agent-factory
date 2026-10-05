@@ -59,6 +59,9 @@ func New(raw any) (register.LinterPlugin, error) {
 		if original == analyzers.WireSelection {
 			original = analyzers.WireSelectionForDirectory(".")
 		}
+		if original == analyzers.PackagedFactorySourceInputs {
+			original = analyzers.PackagedFactorySourceInputsForDirectory(".")
+		}
 		copy := *original
 		copy.Flags = *flag.NewFlagSet(original.Name, flag.ContinueOnError)
 		copy.Flags.Bool("check-stale", !deferred[original.Name], "reject stale exact debt entries")

@@ -1,0 +1,137 @@
+package factorysessionexecution
+
+import (
+	"encoding/json"
+	"fmt"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestDurablePetriFailureHistorySnapshotGrowthStress(t *testing.T) {
+	retryCounts := []int{10, 100, 1000}
+	baselineBytes := make(map[int]int, len(retryCounts))
+	boundedBytes := make(map[int]int, len(retryCounts))
+
+	for _, retryCount := range retryCounts {
+		t.Run(fmt.Sprintf("N=%d", retryCount), func(t *testing.T) {
+			store := &runtimeRecordingStore{}
+			mutations := make([]interfaces.TokenMutationRecord, retryCount)
+			for retry := 1; retry <= retryCount; retry++ {
+				mutations[retry-1] = failureMutation(failureHistoryForRetryCount(retry), retry)
+			}
+			state := runtimeSessionState{
+				session: SessionReadResult{
+					SessionID: "~default",
+					Status:    LifecycleStatusRunning,
+				},
+				petriMutations: mutations,
+			}
+			service := &JavaScriptRuntimeService{
+				clock:       runtimeTestClock{now: time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)},
+				persistence: store,
+			}
+			if err := service.persistSessionSnapshot(state); err != nil {
+				t.Fatalf("persist retry sequence: %v", err)
+			}
+
+			live := cloneRuntimeSessionState(&state)
+			last := live.petriMutations[len(live.petriMutations)-1].Token.History
+			if len(last.FailureLog) != retryCount {
+				t.Fatalf("live final failure log length = %d, want %d", len(last.FailureLog), retryCount)
+			}
+			if last.FailureLogDroppedCount != 0 {
+				t.Fatalf("live final dropped failure count = %d, want 0", last.FailureLogDroppedCount)
+			}
+
+			unbounded := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(live, 0)
+			before, err := json.MarshalIndent(unbounded, "", "  ")
+			if err != nil {
+				t.Fatalf("marshal unbounded baseline: %v", err)
+			}
+			baselineBytes[retryCount] = len(before)
+			boundedBytes[retryCount] = len(store.payload)
+			t.Logf("N=%d before_bytes=%d after_bytes=%d", retryCount, len(before), len(store.payload))
+		})
+	}
+
+	if boundedBytes[10] != baselineBytes[10] {
+		t.Fatalf("N=10 changed despite fitting capacity: before=%d after=%d", baselineBytes[10], boundedBytes[10])
+	}
+	for _, retryCount := range []int{100, 1000} {
+		if boundedBytes[retryCount] >= baselineBytes[retryCount] {
+			t.Fatalf("N=%d bounded snapshot = %d, want less than unbounded baseline %d", retryCount, boundedBytes[retryCount], baselineBytes[retryCount])
+		}
+	}
+	if boundedBytes[1000] > boundedBytes[100]*12 {
+		t.Fatalf("bounded snapshots grew superlinearly: N=100=%d, N=1000=%d", boundedBytes[100], boundedBytes[1000])
+	}
+}
+
+func TestPersistSessionSnapshotWarningScale(t *testing.T) {
+	const mib = 1024 * 1024
+	for _, limit := range []struct {
+		name                    string
+		maxBytes, wantThreshold int
+	}{
+		{"default 64 MiB", 64 * mib, 48 * mib},
+		{"larger 128 MiB", 128 * mib, 100 * mib},
+	} {
+		t.Run(limit.name, func(t *testing.T) {
+			threshold := durableSessionSnapshotWarningThresholdForMax(limit.maxBytes)
+			if int(threshold) != limit.wantThreshold {
+				t.Fatalf("warning threshold = %d, want %d", threshold, limit.wantThreshold)
+			}
+			for _, boundary := range []struct {
+				name  string
+				delta int
+				warn  bool
+			}{{"one byte below", -1, false}, {"at threshold", 0, true}} {
+				t.Run(boundary.name, func(t *testing.T) {
+					core, observed := observer.New(zap.WarnLevel)
+					store := &runtimeRecordingStore{}
+					service := &JavaScriptRuntimeService{
+						persistence:              store,
+						persistenceWarningLogger: zap.New(core),
+					}
+					service.persistedSnapshotMaxBytes = limit.maxBytes
+					state := exactEncodedSizeWarningState(t, int(threshold)+boundary.delta)
+					if err := service.persistSessionSnapshot(state); err != nil {
+						t.Fatalf("persistSessionSnapshot: %v", err)
+					}
+					if got := len(store.payload); got != int(threshold)+boundary.delta {
+						t.Fatalf("persisted snapshot bytes = %d, want %d", got, int(threshold)+boundary.delta)
+					}
+					entries := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").All()
+					assertSnapshotWarning(t, entries, boundary.warn, threshold)
+				})
+			}
+		})
+	}
+}
+
+func TestCompactPetriTokenHistoryScale(t *testing.T) {
+	const snapshotLimit = 5 * 1024 * 1024
+	body := strings.Repeat("large-worker-output-", 1_200)
+	for _, count := range []int{500, 1_000} {
+		t.Run(strconv.Itoa(count)+"-tokens", func(t *testing.T) {
+			mutations := make([]interfaces.TokenMutationRecord, 0, count*3)
+			for index := 0; index < count; index++ {
+				mutations = append(mutations, largeTerminalTokenMutations(index, body)...)
+			}
+			before := encodePetriMutationSnapshot(t, mutations, nil)
+			if count == 500 && len(before) <= snapshotLimit {
+				t.Fatalf("uncompacted 500-token snapshot = %d, want > %d", len(before), snapshotLimit)
+			}
+			retained, summaries := compactPetriTokenHistory(mutations, nil)
+			after := encodePetriMutationSnapshot(t, retained, summaries)
+			if len(after) > snapshotLimit || len(retained) != 0 || len(summaries) != count || strings.Contains(string(after), body) || strings.Contains(string(after), "structured_result") {
+				t.Fatalf("compacted %d tokens = %d bytes, %d mutations, %d summaries; output retained=%t", count, len(after), len(retained), len(summaries), strings.Contains(string(after), body))
+			}
+		})
+	}
+}

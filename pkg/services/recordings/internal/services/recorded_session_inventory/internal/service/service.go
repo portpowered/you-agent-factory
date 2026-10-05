@@ -36,7 +36,7 @@ func New(
 	return &Service{
 		readDir:      directoryReader(readDir),
 		replayInputs: replayInputs,
-		logger:       logging.EnsureLogger(logger),
+		logger:       logger,
 	}
 }
 

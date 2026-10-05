@@ -6,8 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -717,4 +720,110 @@ func (owner *historicalQueryReplay) ObserveReplay(request recordings.ObserveRepl
 	return recordings.ObserveReplayResult{Observation: recordings.ReplayObservation{
 		Kind: kind, Plan: request.Plan, WorldState: recordings.WorldStateView{Scope: owner.scope},
 	}}, nil
+}
+
+func TestReplayInputMetadataFailurePreservesSelectedDiagnosticsAndOwnership(t *testing.T) {
+	t.Parallel()
+	privateCause := errors.New("credential=metadata-private-cause")
+	cases := []struct {
+		name       string
+		failOpen   int
+		payload    string
+		closeErr   error
+		legacyErr  error
+		wantCause  error
+		wantCode   recordings.ReplayArtifactDiagnosticCode
+		wantCloses int
+	}{
+		{name: "classification open", failOpen: 1, wantCause: privateCause, wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure},
+		{name: "portable open", failOpen: 2, payload: `{"recordingKind":"you.factory-session.javascript.recording"}`, wantCause: privateCause, wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure, wantCloses: 1},
+		{name: "portable decode", payload: `{"recordingKind":"you.factory-session.javascript.recording","session":`, wantCode: recordings.ReplayArtifactDiagnosticMalformed, wantCloses: 2},
+		{name: "portable close", payload: `{"recordingKind":"you.factory-session.javascript.recording","schemaVersion":"2","replayCompatibilityVersion":"1","session":{"id":"session-1"}}`, closeErr: privateCause, wantCause: privateCause, wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure, wantCloses: 2},
+		{name: "legacy metadata", payload: `{"events":[]}`, legacyErr: privateCause, wantCause: privateCause, wantCode: recordings.ReplayArtifactDiagnosticDependencyFailure, wantCloses: 1},
+		{name: "deadline", failOpen: 1, wantCause: context.DeadlineExceeded, wantCode: recordings.ReplayArtifactDiagnosticCancelled},
+	}
+	for _, scenario := range cases {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			var capturedError *recordings.ReplayInputError
+			for _, variant := range []string{"capture", "noop"} {
+				t.Run(variant, func(t *testing.T) {
+					capture := &recordingOperationLogger{}
+					var selected logging.Logger = capture
+					if variant == "noop" {
+						selected = logging.NoopLogger{}
+					}
+					opens, closes := 0, 0
+					opener := func(string) (io.ReadCloser, error) {
+						opens++
+						if opens == scenario.failOpen {
+							return nil, scenario.wantCause
+						}
+						return &metadataFailureReader{Reader: strings.NewReader(scenario.payload), closes: &closes, closeErr: scenario.closeErr}, nil
+					}
+					loader := NewReplayInputLoader(
+						func(string) ([]byte, error) { t.Fatal("metadata failure used full reader"); return nil, nil },
+						opener, nil,
+						func(string) (recordings.ReplayInputMetadata, error) {
+							return recordings.ReplayInputMetadata{}, scenario.legacyErr
+						}, selected,
+					)
+					result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "private-recording-path", MetadataOnly: true})
+					inputErr := assertMetadataFailureResult(t, result, err, scenario.wantCode, scenario.wantCause, closes, scenario.wantCloses)
+					if variant == "capture" {
+						capturedError = inputErr
+						assertMetadataFailureLogs(t, capture.infos, errors.Is(err, context.DeadlineExceeded))
+					} else if !reflect.DeepEqual(inputErr.Diagnostic, capturedError.Diagnostic) || inputErr.Family != capturedError.Family {
+						t.Fatalf("Noop changed classification: %#v vs %#v", inputErr, capturedError)
+					}
+				})
+			}
+		})
+	}
+}
+
+func assertMetadataFailureResult(t *testing.T, result recordings.LoadReplayInputResult, err error, wantCode recordings.ReplayArtifactDiagnosticCode, wantCause error, closes, wantCloses int) *recordings.ReplayInputError {
+	t.Helper()
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != wantCode {
+		t.Fatalf("error = %v, want %s", err, wantCode)
+	}
+	if wantCause != nil && !errors.Is(err, wantCause) {
+		t.Fatalf("lost cause: %v", err)
+	}
+	if result.Metadata != nil || result.Portable != nil || result.Legacy != nil || result.ArtifactDigest != "" || closes != wantCloses {
+		t.Fatalf("result = %#v, closes = %d, want %d", result, closes, wantCloses)
+	}
+	return inputErr
+}
+
+type metadataFailureReader struct {
+	io.Reader
+	closes   *int
+	closeErr error
+}
+
+func (reader *metadataFailureReader) Close() error { *reader.closes++; return reader.closeErr }
+
+func assertMetadataFailureLogs(t *testing.T, entries []recordingOperationLogEntry, canceled bool) {
+	t.Helper()
+	if len(entries) != 2 || entries[0].message != "recordings replay input accepted" || entries[1].message != "recordings replay input outcome" {
+		t.Fatalf("records = %#v", entries)
+	}
+	wantOutcome := "dependency_failure"
+	if canceled {
+		wantOutcome = "canceled"
+	}
+	// Decode failure is the existing validation outcome.
+	if entries[1].fields["error_class"] == string(recordings.ReplayArtifactDiagnosticMalformed) {
+		wantOutcome = "validation_failure"
+	}
+	if entries[0].fields["metadata_only"] != true || entries[1].fields["outcome"] != wantOutcome {
+		t.Fatalf("metadata intent/outcome = %#v", entries)
+	}
+	for _, entry := range entries {
+		if entry.fields["operation"] != "load_replay_input" || strings.Contains(fmt.Sprint(entry), "metadata-private-cause") || strings.Contains(fmt.Sprint(entry), "private-recording-path") {
+			t.Fatalf("unsafe or unattributed record: %#v", entry)
+		}
+	}
 }

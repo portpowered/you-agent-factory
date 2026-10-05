@@ -153,4 +153,29 @@ type mediaReadOpener struct {
 	open func(string) (io.ReadCloser, error)
 }
 
+func TestMediaMaterializationFailureStillCleansUp(t *testing.T) {
+	for _, canceled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "effect error", true: "canceled during materialization"}[canceled], func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			cleaned := 0
+			failure := errors.New("materialization failed")
+			r := &runner{contentMaterializer: work.ContentMaterializeFunc(func(context.Context, string) (string, work.ContentCleanup, error) {
+				if canceled {
+					cancel()
+					return "fixture", func() { cleaned++ }, nil
+				}
+				return "", func() { cleaned++ }, failure
+			})}
+			_, err := r.readMediaURL(ctx, "file:///input")
+			if canceled {
+				failure = context.Canceled
+			}
+			if !errors.Is(err, failure) || cleaned != 1 {
+				t.Fatalf("error=%v cleanups=%d", err, cleaned)
+			}
+		})
+	}
+}
+
 func (o mediaReadOpener) Open(path string) (io.ReadCloser, error) { return o.open(path) }

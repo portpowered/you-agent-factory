@@ -1,0 +1,672 @@
+{
+  "hostedRun": 37293075863,
+  "unitAndFunctionalSourceHead": "c735b0e7483a22bb75ba244ee40d710d0810a685",
+  "description": "Same-head hosted unit and functional production-block union. New focused component tests restore seven remaining floors; their five fresh-process samples are evaluated separately. Existing floor holds are unchanged. Wire-only requirements are removed from the unit manifest.",
+  "packages": [
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/process",
+      "unit": {
+        "covered": 23,
+        "total": 27,
+        "percent": 85.18518518518519
+      },
+      "functional": {
+        "covered": 15,
+        "total": 27,
+        "percent": 55.55555555555556
+      },
+      "combined": {
+        "covered": 25,
+        "total": 27,
+        "percent": 92.5925925925926
+      },
+      "priorUnitFloor": 90.47,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 85.18
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/browser",
+      "unit": {
+        "covered": 4,
+        "total": 10,
+        "percent": 40.0
+      },
+      "functional": {
+        "covered": 1,
+        "total": 10,
+        "percent": 10.0
+      },
+      "combined": {
+        "covered": 5,
+        "total": 10,
+        "percent": 50.0
+      },
+      "priorUnitFloor": 50.0,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 40.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
+      "unit": {
+        "covered": 83,
+        "total": 116,
+        "percent": 71.55172413793103
+      },
+      "functional": {
+        "covered": 83,
+        "total": 116,
+        "percent": 71.55172413793103
+      },
+      "combined": {
+        "covered": 97,
+        "total": 116,
+        "percent": 83.62068965517241
+      },
+      "priorUnitFloor": 75.4,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 71.55
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources",
+      "unit": {
+        "covered": 0,
+        "total": 2,
+        "percent": 0.0
+      },
+      "functional": {
+        "covered": 2,
+        "total": 2,
+        "percent": 100.0
+      },
+      "combined": {
+        "covered": 2,
+        "total": 2,
+        "percent": 100.0
+      },
+      "priorUnitFloor": 100.0,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
+      "unit": {
+        "covered": 378,
+        "total": 535,
+        "percent": 70.65420560747664
+      },
+      "functional": {
+        "covered": 309,
+        "total": 535,
+        "percent": 57.757009345794394
+      },
+      "combined": {
+        "covered": 417,
+        "total": 535,
+        "percent": 77.94392523364486
+      },
+      "priorUnitFloor": 74.17,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 70.65
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "unit": {
+        "covered": 26,
+        "total": 58,
+        "percent": 44.827586206896555
+      },
+      "functional": {
+        "covered": 49,
+        "total": 58,
+        "percent": 84.48275862068965
+      },
+      "combined": {
+        "covered": 50,
+        "total": 58,
+        "percent": 86.20689655172414
+      },
+      "priorUnitFloor": 68.18,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 44.82
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
+      "unit": {
+        "covered": 0,
+        "total": 9,
+        "percent": 0.0
+      },
+      "functional": {
+        "covered": 9,
+        "total": 9,
+        "percent": 100.0
+      },
+      "combined": {
+        "covered": 9,
+        "total": 9,
+        "percent": 100.0
+      },
+      "priorUnitFloor": 65.0,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "unit": {
+        "covered": 29,
+        "total": 226,
+        "percent": 12.831858407079647
+      },
+      "functional": {
+        "covered": 174,
+        "total": 226,
+        "percent": 76.99115044247787
+      },
+      "combined": {
+        "covered": 174,
+        "total": 226,
+        "percent": 76.99115044247787
+      },
+      "priorUnitFloor": 25.13,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 12.83
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+      "unit": {
+        "covered": 48,
+        "total": 80,
+        "percent": 60.0
+      },
+      "functional": {
+        "covered": 64,
+        "total": 80,
+        "percent": 80.0
+      },
+      "combined": {
+        "covered": 69,
+        "total": 80,
+        "percent": 86.25
+      },
+      "priorUnitFloor": 63.75,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 60.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+      "unit": {
+        "covered": 0,
+        "total": 14,
+        "percent": 0.0
+      },
+      "functional": {
+        "covered": 11,
+        "total": 14,
+        "percent": 78.57142857142857
+      },
+      "combined": {
+        "covered": 11,
+        "total": 14,
+        "percent": 78.57142857142857
+      },
+      "priorUnitFloor": 71.42,
+      "action": "Restore focused policy coverage; retain prior floor",
+      "focusedUnitSamples": [
+        {
+          "covered": 13,
+          "total": 14,
+          "percent": 92.85714285714286
+        },
+        {
+          "covered": 13,
+          "total": 14,
+          "percent": 92.85714285714286
+        },
+        {
+          "covered": 13,
+          "total": 14,
+          "percent": 92.85714285714286
+        },
+        {
+          "covered": 13,
+          "total": 14,
+          "percent": 92.85714285714286
+        },
+        {
+          "covered": 13,
+          "total": 14,
+          "percent": 92.85714285714286
+        }
+      ]
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+      "unit": {
+        "covered": 0,
+        "total": 21,
+        "percent": 0.0
+      },
+      "functional": {
+        "covered": 18,
+        "total": 21,
+        "percent": 85.71428571428571
+      },
+      "combined": {
+        "covered": 18,
+        "total": 21,
+        "percent": 85.71428571428571
+      },
+      "priorUnitFloor": 76.19,
+      "action": "Restore focused policy coverage; retain prior floor",
+      "focusedUnitSamples": [
+        {
+          "covered": 20,
+          "total": 21,
+          "percent": 95.23809523809523
+        },
+        {
+          "covered": 20,
+          "total": 21,
+          "percent": 95.23809523809523
+        },
+        {
+          "covered": 20,
+          "total": 21,
+          "percent": 95.23809523809523
+        },
+        {
+          "covered": 20,
+          "total": 21,
+          "percent": 95.23809523809523
+        },
+        {
+          "covered": 20,
+          "total": 21,
+          "percent": 95.23809523809523
+        }
+      ]
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+      "unit": {
+        "covered": 30,
+        "total": 45,
+        "percent": 66.66666666666667
+      },
+      "functional": {
+        "covered": 35,
+        "total": 45,
+        "percent": 77.77777777777777
+      },
+      "combined": {
+        "covered": 38,
+        "total": 45,
+        "percent": 84.44444444444444
+      },
+      "priorUnitFloor": 73.33,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 66.66
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+      "unit": {
+        "covered": 0,
+        "total": 7,
+        "percent": 0.0
+      },
+      "functional": {
+        "covered": 6,
+        "total": 7,
+        "percent": 85.71428571428571
+      },
+      "combined": {
+        "covered": 6,
+        "total": 7,
+        "percent": 85.71428571428571
+      },
+      "priorUnitFloor": 85.71,
+      "action": "Restore focused policy coverage; retain prior floor",
+      "focusedUnitSamples": [
+        {
+          "covered": 6,
+          "total": 7,
+          "percent": 85.71428571428571
+        },
+        {
+          "covered": 6,
+          "total": 7,
+          "percent": 85.71428571428571
+        },
+        {
+          "covered": 6,
+          "total": 7,
+          "percent": 85.71428571428571
+        },
+        {
+          "covered": 6,
+          "total": 7,
+          "percent": 85.71428571428571
+        },
+        {
+          "covered": 6,
+          "total": 7,
+          "percent": 85.71428571428571
+        }
+      ]
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+      "unit": {
+        "covered": 51,
+        "total": 62,
+        "percent": 82.25806451612904
+      },
+      "functional": {
+        "covered": 54,
+        "total": 62,
+        "percent": 87.09677419354838
+      },
+      "combined": {
+        "covered": 61,
+        "total": 62,
+        "percent": 98.38709677419355
+      },
+      "priorUnitFloor": 98.38,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 82.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
+      "unit": {
+        "covered": 1418,
+        "total": 1982,
+        "percent": 71.54389505549949
+      },
+      "functional": {
+        "covered": 1148,
+        "total": 1982,
+        "percent": 57.921291624621595
+      },
+      "combined": {
+        "covered": 1711,
+        "total": 1982,
+        "percent": 86.32694248234107
+      },
+      "priorUnitFloor": 79.41,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 71.54
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay",
+      "unit": {
+        "covered": 1750,
+        "total": 2370,
+        "percent": 73.83966244725738
+      },
+      "functional": {
+        "covered": 1264,
+        "total": 2370,
+        "percent": 53.333333333333336
+      },
+      "combined": {
+        "covered": 1929,
+        "total": 2370,
+        "percent": 81.39240506329114
+      },
+      "priorUnitFloor": 78.72,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 73.83
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service",
+      "unit": {
+        "covered": 152,
+        "total": 211,
+        "percent": 72.03791469194313
+      },
+      "functional": {
+        "covered": 127,
+        "total": 211,
+        "percent": 60.18957345971564
+      },
+      "combined": {
+        "covered": 152,
+        "total": 211,
+        "percent": 72.03791469194313
+      },
+      "priorUnitFloor": 73.89,
+      "action": "Restore focused component coverage; retain prior floor",
+      "focusedUnitSamples": [
+        {
+          "covered": 157,
+          "total": 211,
+          "percent": 74.40758293838863
+        },
+        {
+          "covered": 157,
+          "total": 211,
+          "percent": 74.40758293838863
+        },
+        {
+          "covered": 157,
+          "total": 211,
+          "percent": 74.40758293838863
+        },
+        {
+          "covered": 157,
+          "total": 211,
+          "percent": 74.40758293838863
+        },
+        {
+          "covered": 157,
+          "total": 211,
+          "percent": 74.40758293838863
+        }
+      ]
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/internal/service",
+      "unit": {
+        "covered": 107,
+        "total": 139,
+        "percent": 76.97841726618705
+      },
+      "functional": {
+        "covered": 94,
+        "total": 139,
+        "percent": 67.62589928057554
+      },
+      "combined": {
+        "covered": 113,
+        "total": 139,
+        "percent": 81.29496402877697
+      },
+      "priorUnitFloor": 77.53,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 76.97
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
+      "unit": {
+        "covered": 44,
+        "total": 84,
+        "percent": 52.38095238095238
+      },
+      "functional": {
+        "covered": 16,
+        "total": 84,
+        "percent": 19.047619047619047
+      },
+      "combined": {
+        "covered": 47,
+        "total": 84,
+        "percent": 55.95238095238095
+      },
+      "priorUnitFloor": 53.22,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 52.38
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
+      "unit": {
+        "covered": 372,
+        "total": 404,
+        "percent": 92.07920792079207
+      },
+      "functional": {
+        "covered": 196,
+        "total": 404,
+        "percent": 48.51485148514851
+      },
+      "combined": {
+        "covered": 375,
+        "total": 404,
+        "percent": 92.82178217821782
+      },
+      "priorUnitFloor": 93.18,
+      "action": "Restore focused component coverage; retain prior floor",
+      "focusedUnitSamples": [
+        {
+          "covered": 376,
+          "total": 404,
+          "percent": 93.06930693069307
+        },
+        {
+          "covered": 376,
+          "total": 404,
+          "percent": 93.06930693069307
+        },
+        {
+          "covered": 376,
+          "total": 404,
+          "percent": 93.06930693069307
+        },
+        {
+          "covered": 376,
+          "total": 404,
+          "percent": 93.06930693069307
+        },
+        {
+          "covered": 376,
+          "total": 404,
+          "percent": 93.06930693069307
+        }
+      ]
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/mock",
+      "unit": {
+        "covered": 0,
+        "total": 93,
+        "percent": 0.0
+      },
+      "functional": {
+        "covered": 0,
+        "total": 93,
+        "percent": 0.0
+      },
+      "combined": {
+        "covered": 0,
+        "total": 93,
+        "percent": 0.0
+      },
+      "priorUnitFloor": 54.05,
+      "action": "Restore focused component coverage; retain prior floor",
+      "focusedUnitSamples": [
+        {
+          "covered": 75,
+          "total": 93,
+          "percent": 80.64516129032258
+        },
+        {
+          "covered": 75,
+          "total": 93,
+          "percent": 80.64516129032258
+        },
+        {
+          "covered": 75,
+          "total": 93,
+          "percent": 80.64516129032258
+        },
+        {
+          "covered": 75,
+          "total": 93,
+          "percent": 80.64516129032258
+        },
+        {
+          "covered": 75,
+          "total": 93,
+          "percent": 80.64516129032258
+        }
+      ]
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree",
+      "unit": {
+        "covered": 78,
+        "total": 145,
+        "percent": 53.793103448275865
+      },
+      "functional": {
+        "covered": 77,
+        "total": 145,
+        "percent": 53.10344827586207
+      },
+      "combined": {
+        "covered": 98,
+        "total": 145,
+        "percent": 67.58620689655173
+      },
+      "priorUnitFloor": 59.05,
+      "action": "Reconcile incidental composition coverage with unit scope",
+      "reconciledUnitFloor": 53.79
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/observation",
+      "unit": {
+        "covered": 57,
+        "total": 88,
+        "percent": 64.77272727272727
+      },
+      "functional": {
+        "covered": 0,
+        "total": 88,
+        "percent": 0.0
+      },
+      "combined": {
+        "covered": 57,
+        "total": 88,
+        "percent": 64.77272727272727
+      },
+      "priorUnitFloor": 82.95,
+      "action": "Restore focused component coverage; retain prior floor",
+      "focusedUnitSamples": [
+        {
+          "covered": 79,
+          "total": 88,
+          "percent": 89.77272727272727
+        },
+        {
+          "covered": 79,
+          "total": 88,
+          "percent": 89.77272727272727
+        },
+        {
+          "covered": 79,
+          "total": 88,
+          "percent": 89.77272727272727
+        },
+        {
+          "covered": 79,
+          "total": 88,
+          "percent": 89.77272727272727
+        },
+        {
+          "covered": 79,
+          "total": 88,
+          "percent": 89.77272727272727
+        }
+      ]
+    }
+  ]
+}

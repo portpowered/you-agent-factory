@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -125,7 +126,7 @@ func TestClaudeRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T
 		{
 			name: "deadline",
 			newContext: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 50*time.Millisecond)
+				return newClaudeSignaledDeadlineContext()
 			},
 			want:     providers.ErrExecuteTimeout,
 			wantKind: providers.ExecuteFailureKindTimeout,
@@ -162,10 +163,15 @@ func TestClaudeRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T
 					err    error
 				}{result: result, err: err}
 			}()
-			<-started
-			if test.wantKind == providers.ExecuteFailureKindCanceled {
-				cancel()
+			budget := time.After(time.Second)
+			select {
+			case <-started:
+			case <-outcome:
+				t.Fatal("Execute completed before the effect started")
+			case <-budget:
+				t.Fatal("effect did not start")
 			}
+			cancel()
 
 			select {
 			case got := <-outcome:
@@ -173,7 +179,7 @@ func TestClaudeRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T
 					t.Fatalf("Execute() error = %v, want %v", got.err, test.want)
 				}
 				assertClaudeFailure(t, got.result, got.err, test.wantKind, "")
-			case <-time.After(time.Second):
+			case <-budget:
 				t.Fatal("Execute() did not stop after context termination")
 			}
 			if got := cleanups.Load(); got != 1 {
@@ -278,4 +284,26 @@ func sentinelForKind(kind providers.ExecuteFailureKind) error {
 	default:
 		return providers.ErrExecuteFailed
 	}
+}
+
+// Trigger deadline expiry only after the effect is running. A real 50 ms timer
+// races setup and can leave the startup waiter blocked on a loaded machine.
+type claudeSignaledDeadlineContext struct {
+	context.Context
+	done chan struct{}
+}
+
+func (ctx claudeSignaledDeadlineContext) Done() <-chan struct{} { return ctx.done }
+func (ctx claudeSignaledDeadlineContext) Err() error {
+	select {
+	case <-ctx.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func newClaudeSignaledDeadlineContext() (context.Context, context.CancelFunc) {
+	ctx := claudeSignaledDeadlineContext{Context: context.Background(), done: make(chan struct{})}
+	return ctx, sync.OnceFunc(func() { close(ctx.done) })
 }

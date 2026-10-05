@@ -79,3 +79,45 @@ func TestResolvedInputObservationRejectsInvalidEdgeValues(t *testing.T) {
 		t.Fatalf("Encode() error = %v, want resolved-input diagnostic", err)
 	}
 }
+
+func TestParseObservationDetachesArgumentsAndFindsFlags(t *testing.T) {
+	command := &cobra.Command{Use: "run"}
+	command.Flags().String("target", "default", "target")
+	if err := command.Flags().Set("target", "selected"); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"input"}
+	result := CaptureParseResult(command, args)
+	args[0] = "mutated"
+	flag, found := Flag(result, "target")
+	if result.CommandPath != "run" || result.Positionals[0] != "input" || !found || flag.Value != "selected" || !flag.Changed {
+		t.Fatalf("parse result = %#v, flag=%#v", result, flag)
+	}
+	if _, found := Flag(result, "missing"); found {
+		t.Fatal("missing flag found")
+	}
+	if result := CaptureParseResult(nil, []string{"input"}); result.CommandPath != "" || result.Positionals[0] != "input" {
+		t.Fatalf("nil command result = %#v", result)
+	}
+}
+
+func TestCaptureAppendRetainsOnlyValidObservations(t *testing.T) {
+	var results []Result
+	observer := CaptureAppend(&results)
+	valid, err := Encode(Result{Parse: platformprocess.CLIParseResult{CommandPath: "you run"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := observer(valid); err != nil {
+		t.Fatal(err)
+	}
+	if err := observer(platformprocess.CLIObservation{}); err == nil {
+		t.Fatal("invalid observation accepted")
+	}
+	if len(results) != 1 || results[0].Parse.CommandPath != "you run" {
+		t.Fatalf("observations = %#v", results)
+	}
+	if err := CaptureAppend(nil)(valid); err != nil {
+		t.Fatalf("nil capture = %v", err)
+	}
+}
