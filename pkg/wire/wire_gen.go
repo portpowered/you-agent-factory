@@ -437,16 +437,18 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	workService := provideWorkService(v90, submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer, v107, requestPreparationService, invocationInputPreparation)
 	v110 := wire4.NewOutboxOpening()
 	v111 := wire4.NewEngineOpening(invocationInterpolationService, providersessionsService, quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, workService, requestIDGenerator, factoryIDGenerator, runtimeDirectoryFileSystem, decisionEnvelopeService, v110)
-	v112 := wire4.NewRuntimeFactory(runtimeLoggerFactory, factoryRuntimeLogOwner, factoryRuntimeMetricsOwner, factoryIDGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation, timerSource, v25, v111)
-	v113, err := provideWorkerRecordingWriter(edges2)
+	v112 := provideFactoryRuntimeSubmissionRecorder(edges2)
+	v113 := provideFactoryRuntimeDispatchRecorder(edges2)
+	v114 := wire4.NewRuntimeFactory(runtimeLoggerFactory, factoryRuntimeLogOwner, factoryRuntimeMetricsOwner, factoryIDGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation, timerSource, v25, v111, v112, v113, worldStateProjector)
+	v115, err := provideWorkerRecordingWriter(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v114, err := provideWorkerSessionRecorder(eventsService, v113, loggingLogger)
+	v116, err := provideWorkerSessionRecorder(eventsService, v115, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
-	workersessionsService, err := provideWorkerSessionsService(workersService, eventsService, providersessionsService, loggingLogger, source, timerSource, v114, v113)
+	workersessionsService, err := provideWorkerSessionsService(workersService, eventsService, providersessionsService, loggingLogger, source, timerSource, v116, v115)
 	if err != nil {
 		return nil, err
 	}
@@ -455,14 +457,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	fileReader := provideRuntimeRequestInvocationFiles(inputFileSystem)
-	v115 := provideRuntimeRequestPrompts(workersService)
-	v116 := provideRuntimeRequestTemplateFields(workersService)
+	v117 := provideRuntimeRequestPrompts(workersService)
+	v118 := provideRuntimeRequestTemplateFields(workersService)
 	progressPublisher := provideRuntimeRequestProgress()
 	expectedArtifactFileSystem := provideRuntimeRequestArtifactFiles(inputFileSystem)
 	factoryLogger := provideRuntimeRequestLogger(logger, runtimeLoggerFactory)
-	v117 := wire4.NewWorkstationRequestExecutor(workersService, invocationInterpolationService, fileReader, factoryIDGenerator, v115, v116, progressPublisher, expectedArtifactFileSystem, factoryLogger)
-	v118 := provideFactoryRuntimeSubmissionRecorder(edges2)
-	v119 := provideFactoryRuntimeDispatchRecorder(edges2)
+	v119 := wire4.NewWorkstationRequestExecutor(workersService, invocationInterpolationService, fileReader, factoryIDGenerator, v117, v118, progressPublisher, expectedArtifactFileSystem, factoryLogger)
 	v120, err := provideRecordingsRuntimeScopeService(recordingsService)
 	if err != nil {
 		return nil, err
@@ -477,7 +477,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	initialFactorySnapshotFactory := provideInitialFactorySnapshotFactory(v121, v122)
-	v123, err := wire4.NewBundleOpening(v112, timerSource, workersService, workersessionsService, workerAttemptOpener, v117, v118, v119, worldStateProjector, v120, initialFactorySnapshotFactory)
+	v123, err := wire4.NewBundleOpening(v114, timerSource, workersService, workersessionsService, workerAttemptOpener, v119, v120, initialFactorySnapshotFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -548,8 +548,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		NewSessionLogger:                sessionLoggerFactory,
 		Clock:                           source,
 		ProviderOverride:                v75,
-		SubmissionRecorder:              v118,
-		DispatchRecorder:                v119,
+		SubmissionRecorder:              v112,
+		DispatchRecorder:                v113,
 	}
 	v150 := provideFactoryDefinitionCompilation(v143)
 	v151 := provideOrchestratorDefinitionValidator(javaScriptWorkflows)
@@ -946,7 +946,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	workerRecordingReader, err := provideWorkerRecordingReader(v113)
+	workerRecordingReader, err := provideWorkerRecordingReader(v115)
 	if err != nil {
 		return nil, err
 	}

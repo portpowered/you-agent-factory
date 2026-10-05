@@ -65,6 +65,9 @@ func NewRuntimeFactory(
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper DefinitionMapper,
 	engineOpening *EngineOpening,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
 		loggerFactory,
@@ -79,6 +82,7 @@ func NewRuntimeFactory(
 		workerAttemptScheduler,
 		definitionMapper,
 		engineOpening,
+		submissionRecorder, dispatchRecorder, worldStateProjector,
 	)
 }
 
@@ -119,16 +123,13 @@ func NewBundleOpening(
 	workerSessions workersessions.Service,
 	workerAttempts factoryruntime.WorkerAttemptOpener,
 	requestResolver *WorkstationRequestExecutor,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	worldStateProjector factoryruntime.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 ) (BundleOpening, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("factory runtime factory is required")
 	}
-	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver, submissionRecorder, dispatchRecorder, worldStateProjector, recordingsRuntime, initialFactorySnapshot)
+	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver, recordingsRuntime, initialFactorySnapshot)
 	if err != nil {
 		return nil, err
 	}

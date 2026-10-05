@@ -63,8 +63,6 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 		_ bool,
 		_ factory.Scheduler,
 		_ bool,
-		_ recordings.SubmissionRecorder,
-		_ recordings.DispatchRecorder,
 		_ string,
 		_ factory.RuntimeLogStorageConfig,
 		_ factory.RuntimeFileLoggingPolicy,
@@ -82,7 +80,6 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 		_ []factory.SubmissionHook,
 		_ factory.CompletionDeliveryPlanner,
 		_ factory.PetriMutationRecorder,
-		_ factory.WorldStateProjector,
 		_ recordings.RuntimeScopeService,
 		_ workers.Service,
 		_ workersessions.Service,
@@ -97,7 +94,7 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 		return partial, openingErr
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(selected, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{}, nil)
+	opening, err := factoryinternal.NewBundleOpening(selected, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, &testRuntimeScopeServiceStub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +123,7 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 	}
 	resources := &observationResourceOpening{failure: errors.New("stop at controlled resource boundary")}
 	sessions := &observationWorkerSessions{}
-	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{}, nil)
+	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, &testRuntimeScopeServiceStub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,14 +177,6 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 		return next
 	}
 	var effects []string
-	projector := func(events []interfaces.FactoryEvent, tick int) (interfaces.FactoryWorldState, error) {
-		if len(events) != 1 || events[0].Id != "selected-event" {
-			t.Fatalf("projection events = %#v, want selected event", events)
-		}
-		return interfaces.FactoryWorldState{Tick: tick}, nil
-	}
-	submit := func(work.FactorySubmissionRecord) { effects = append(effects, "submission") }
-	dispatch := func(recordings.FactoryDispatchRecord) { effects = append(effects, "dispatch") }
 	loader := func(path string, _ interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loadedFactoryFixture(path)
 	}
@@ -195,7 +184,7 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	var snapshotSources []interfaces.LoadedFactorySource
 	snapshot := &interfaces.FactorySnapshot{}
 	capture := captureSelectedOpeningSnapshot(&snapshotSources, snapshot)
-	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, submit, dispatch, projector, scopes, capture)
+	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, capture)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,16 +207,109 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 		t.Fatalf("replacement error = %v, want controlled resource failure", err)
 	}
 	assertSelectedOpeningRecordingAndSnapshots(t, resources, scopes, snapshot, snapshotSources)
-	for index := range resources.submissions {
-		resources.submissions[index](work.FactorySubmissionRecord{})
-		resources.dispatches[index](recordings.FactoryDispatchRecord{})
-		assertSelectedOpeningProjection(t, resources.projectors[index], index+1)
+	for index := range resources.progress {
 		resources.progress[index](workers.ProgressFragment{Payload: "output"})
 		resources.completions[index]("dispatch-id")
 	}
-	if decorations != 4 || !reflect.DeepEqual(effects, []string{"submission", "dispatch", "candidate:output", "candidate:dispatch-id", "submission", "dispatch", "successor:output", "successor:dispatch-id"}) {
+	if decorations != 4 || !reflect.DeepEqual(effects, []string{"candidate:output", "candidate:dispatch-id", "successor:output", "successor:dispatch-id"}) {
 		t.Fatalf("fixed effects = %v, decorations = %d; want both openings", effects, decorations)
 	}
+}
+
+// Exercise fixed effects at the real opening component's engine boundary,
+// rather than asserting that compatibility assembly forwards callbacks.
+func TestBuildUsesFixedRecordingAndProjectionForIndependentOpenings(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	var submissions []work.FactorySubmissionRecord
+	var dispatches []recordings.FactoryDispatchRecord
+	var projected []string
+	owner := testRuntimeFactoryWithEffects(nil, nil,
+		func(record work.FactorySubmissionRecord) { submissions = append(submissions, record) },
+		func(record recordings.FactoryDispatchRecord) { dispatches = append(dispatches, record) },
+		func(events []interfaces.FactoryEvent, tick int) (interfaces.FactoryWorldState, error) {
+			if len(events) != 1 {
+				t.Fatalf("projection events = %#v", events)
+			}
+			projected = append(projected, events[0].Id)
+			return interfaces.FactoryWorldState{Tick: tick}, nil
+		},
+	)
+	var bundles []*factoryhost.Bundle
+	for _, sessionID := range []string{"candidate", "peer"} {
+		bundle := openFixedEffectsBundle(t, owner, dir, sessionID)
+		bundles = append(bundles, bundle)
+	}
+	for index, bundle := range bundles {
+		name := []string{"candidate", "peer"}[index]
+		if _, err := bundle.Factory.SubmitWorkRequest(t.Context(), work.WorkRequest{
+			RequestID: "request-" + name, Type: work.WorkRequestTypeFactoryRequestBatch,
+			Works: []work.Work{{Name: name, WorkID: "work-" + name, WorkTypeID: "task", State: "init"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := bundle.Factory.(runtimeopening.TickableFactory).Tick(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := bundle.Factory.GetEngineStateSnapshot(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(submissions) != 2 || len(dispatches) != 2 {
+		t.Fatalf("fixed recording calls = %d submissions/%d dispatches; want two each", len(submissions), len(dispatches))
+	}
+	if submissions[0].Request.WorkID != "work-candidate" || submissions[1].Request.WorkID != "work-peer" {
+		t.Fatalf("submission attribution = %#v", submissions)
+	}
+	if dispatches[0].Dispatch.Execution.RequestID != "request-candidate" || dispatches[1].Dispatch.Execution.RequestID != "request-peer" {
+		t.Fatalf("dispatch attribution = %#v", dispatches)
+	}
+	if !reflect.DeepEqual(projected, []string{"candidate", "peer"}) {
+		t.Fatalf("projection history = %v; want independently addressed histories", projected)
+	}
+}
+
+func openFixedEffectsBundle(t *testing.T, owner *factoryinternal.RuntimeFactory, dir, sessionID string) *factoryhost.Bundle {
+	t.Helper()
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := &fixedEffectsSessions{stubWorkerSessionsService: &stubWorkerSessionsService{}}
+	scopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{
+		GenerationID: sessionID, Events: []interfaces.FactoryEvent{{Id: sessionID}},
+	}}
+	bundle, err := owner.Build(t.Context(), zap.NewNop(), dir, dir, sessionID, sessionID,
+		"", interfaces.RuntimeModeBatch, false, nil, true,
+		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
+		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		loaded, "runtime-"+sessionID, "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
+		scopes, fixedEffectsWorker{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := bundle.CloseArtifacts(); err != nil {
+			t.Error(err)
+		}
+	})
+	return bundle
+}
+
+type fixedEffectsWorker struct{ workers.Service }
+
+func (fixedEffectsWorker) Execute(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+}
+
+type fixedEffectsSessions struct{ *stubWorkerSessionsService }
+
+func (*fixedEffectsSessions) BeginRuntimeAttempt(_ context.Context, _ workersessions.RuntimeAttemptRequest,
+	_ workers.Service, _ platformclock.Source, _ platformclock.TimerSource,
+	_ func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+) (workersessions.RuntimeAttempt, error) {
+	return workersessions.RuntimeAttempt(func(context.Context, workers.WorkstationDispatchResult, error) error { return nil }), nil
 }
 
 func captureSelectedOpeningSnapshot(sources *[]interfaces.LoadedFactorySource, snapshot *interfaces.FactorySnapshot) interfaces.InitialFactorySnapshotFactory {
@@ -270,17 +352,6 @@ func fixedTestProgress(t *testing.T, effects *[]string) func(*zap.Logger) func(s
 func fixedTestCompletion(effects *[]string) func(string) func(string) {
 	return func(sessionID string) func(string) {
 		return func(dispatchID string) { *effects = append(*effects, sessionID+":"+dispatchID) }
-	}
-}
-
-func assertSelectedOpeningProjection(t *testing.T, projector factory.WorldStateProjector, tick int) {
-	t.Helper()
-	if projector == nil {
-		t.Fatal("opening lost the fixed world-state projector")
-	}
-	state, err := projector([]interfaces.FactoryEvent{{Id: "selected-event"}}, tick)
-	if err != nil || state.Tick != tick {
-		t.Fatalf("opening projection = %#v, %v; want tick %d", state, err, tick)
 	}
 }
 
@@ -332,9 +403,6 @@ type observationResourceOpening struct {
 	failure     error
 	mutations   []factory.PetriMutationRecorder
 	progress    []workers.ProgressPublisher
-	submissions []recordings.SubmissionRecorder
-	dispatches  []recordings.DispatchRecorder
-	projectors  []factory.WorldStateProjector
 	completions []func(string)
 	snapshots   []*interfaces.FactorySnapshot
 	scopes      []recordings.RuntimeScopeService
@@ -348,8 +416,6 @@ func (opening *observationResourceOpening) Open(
 	_ bool,
 	_ factory.Scheduler,
 	_ bool,
-	submission recordings.SubmissionRecorder,
-	dispatch recordings.DispatchRecorder,
 	_ string,
 	_ factory.RuntimeLogStorageConfig,
 	_ factory.RuntimeFileLoggingPolicy,
@@ -366,7 +432,6 @@ func (opening *observationResourceOpening) Open(
 	_ []factory.SubmissionHook,
 	_ factory.CompletionDeliveryPlanner,
 	mutations factory.PetriMutationRecorder,
-	projector factory.WorldStateProjector,
 	scopes recordings.RuntimeScopeService,
 	worker workers.Service,
 	_ workersessions.Service,
@@ -377,9 +442,6 @@ func (opening *observationResourceOpening) Open(
 	opening.snapshots = append(opening.snapshots, snapshot)
 	opening.scopes = append(opening.scopes, scopes)
 	opening.mutations = append(opening.mutations, mutations)
-	opening.submissions = append(opening.submissions, submission)
-	opening.dispatches = append(opening.dispatches, dispatch)
-	opening.projectors = append(opening.projectors, projector)
 	opening.completions = append(opening.completions, completion)
 	opening.progress = append(opening.progress, worker.(interface {
 		RuntimeProgressPublisher() workers.ProgressPublisher
@@ -412,7 +474,7 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	var captured recordings.RuntimeScopeRequest
 	scopes := &testRuntimeScopeServiceStub{openErr: openingErr, recorder: recorder, capturedRequest: &captured,
 		ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "candidate-runtime"}}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{bySession: map[string]*testRuntimeScopeServiceStub{"peer": peerScopes, "candidate": scopes}}, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, &testRuntimeScopeServiceStub{bySession: map[string]*testRuntimeScopeServiceStub{"peer": peerScopes, "candidate": scopes}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,7 +597,7 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 			scopes.openErr = openingErr
 			wantErr = openingErr
 		}
-		opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, scopes, nil)
+		opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -574,12 +636,12 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
-		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-recordings-root", "", clockwork.NewFakeClock(),
-		"/recordings/session.json", nil, nil, false, nil, nil, nil, nil,
+		"/recordings/session.json", nil, nil, false, nil, nil, nil,
 		runtimeScopes,
 		testRuntimeWorkers{},
 		sessions, sessions,
@@ -613,11 +675,11 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 	}
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
-		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
+		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		sessions, sessions,
@@ -662,11 +724,11 @@ func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *tes
 
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), zap.NewNop(), dir, dir, compatibilitySessionID, canonicalSessionID,
-		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-identity-handoff", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
+		loaded, "runtime-identity-handoff", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		runtimeScopes,
 		testRuntimeWorkers{},
 		sessions, sessions,
@@ -709,11 +771,11 @@ func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.
 	}
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
-		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-identity-fallback", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
+		loaded, "runtime-identity-fallback", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		sessions, sessions,
@@ -755,10 +817,10 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		func() { events = append(events, "metrics.close") },
 	).Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
-		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, false, nil, nil, nil, nil,
+		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, false, nil, nil, nil,
 		runtimeScopes,
 		testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
 	)
@@ -811,9 +873,9 @@ func TestBuild_PreservesOpeningAndCleanupFailures(t *testing.T) {
 			}
 			bundle, err := testRuntimeFactoryWithOwners(logOwner, metricsOwner).Build(
 				context.Background(), zap.NewNop(), dir, dir, "~default", "", "", interfaces.RuntimeModeBatch,
-				false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
+				false, nil, false, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
 				factory.RuntimeMetricsStorageConfig{}, loaded, stage, "", clockwork.NewFakeClock(),
-				"recording.json", nil, nil, false, nil, nil, nil, nil, scopes,
+				"recording.json", nil, nil, false, nil, nil, nil, scopes,
 				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
 			)
 			if bundle == nil || bundle.RuntimeService() != nil || err == nil {
@@ -861,9 +923,9 @@ func TestBuild_FailedOpeningRetainsRetryableCleanupWithoutRepeatingReleasedResou
 			)
 			bundle, err := owner.Build(
 				context.Background(), zap.NewNop(), dir, dir, "candidate", "", "", interfaces.RuntimeModeBatch,
-				false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
+				false, nil, false, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
 				factory.RuntimeMetricsStorageConfig{}, loaded, "candidate-runtime", "", clockwork.NewFakeClock(),
-				"recording.json", nil, nil, false, nil, nil, nil, nil,
+				"recording.json", nil, nil, false, nil, nil, nil,
 				&testRuntimeScopeServiceStub{recorder: recorder, openErr: openingErr},
 				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
 			)
@@ -922,7 +984,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	loader := func(string, interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loaded, nil
 	}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, scopes, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1080,7 +1142,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		snapshots = append(snapshots, source)
 		return nil, nil
 	}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, scopes, snapshot)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1162,10 +1224,10 @@ func TestBuild_FileLoggingRetainsSelectedLogger(t *testing.T) {
 	sessions := &stubWorkerSessionsService{}
 	bundle, err := testRuntimeFactoryWithOwners(owner, nil).Build(
 		t.Context(), selected, dir, dir, "selected-session", "", "", interfaces.RuntimeModeBatch,
-		false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{},
+		false, nil, false, dir, factory.RuntimeLogStorageConfig{},
 		factory.RuntimeFileLoggingPolicyEnabled, factory.RuntimeMetricsPolicyDisabled,
 		"", factory.RuntimeMetricsStorageConfig{}, loaded, "selected-runtime", "", clockwork.NewFakeClock(),
-		"", nil, nil, false, nil, nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
+		"", nil, nil, false, nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{}, sessions, sessions, nil,
 	)
 	if err != nil {
@@ -1199,10 +1261,10 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 	bundle, err := testRuntimeFactoryWithSinks(logDir, metricsDir).Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
-		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
+		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		sessions, sessions,
@@ -1235,12 +1297,12 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 
 	disabledBundle, err := testRuntimeFactory().Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
-		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", interfaces.RuntimeModeBatch, false, nil, false,
 		logDir, factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled,
 		metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
+		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		sessions, sessions,
@@ -1412,13 +1474,7 @@ func testDefinitionMapper() *definitionmapping.Mapper {
 }
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
-	return factoryinternal.NewRuntimeFactory(
-		testRuntimeLoggerFactory, nil, nil,
-		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
-		testOrchestrationCompilation(),
-		platformclock.Real{}, testDefinitionMapper(),
-		runtimeopening.NewEngineOpening(nil, nil, nil, nil, outputAsPayloadPolicy(), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
-	)
+	return testRuntimeFactoryWithEffects(nil, nil, nil, nil, nil)
 }
 
 func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.RuntimeFactory {
@@ -1438,13 +1494,18 @@ func testRuntimeFactoryWithSinkCallbacks(
 }
 
 func testRuntimeFactoryWithOwners(logOwner factory.RuntimeLogOwner, metricsOwner factory.RuntimeMetricsOwner) *factoryinternal.RuntimeFactory {
+	return testRuntimeFactoryWithEffects(logOwner, metricsOwner, nil, nil, nil)
+}
+
+func testRuntimeFactoryWithEffects(logOwner factory.RuntimeLogOwner, metricsOwner factory.RuntimeMetricsOwner,
+	submit recordings.SubmissionRecorder, dispatch recordings.DispatchRecorder, project factory.WorldStateProjector,
+) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		testRuntimeLoggerFactory,
-		logOwner, metricsOwner,
+		testRuntimeLoggerFactory, logOwner, metricsOwner,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
-		testOrchestrationCompilation(),
-		platformclock.Real{}, testDefinitionMapper(),
+		testOrchestrationCompilation(), platformclock.Real{}, testDefinitionMapper(),
 		runtimeopening.NewEngineOpening(nil, nil, nil, nil, outputAsPayloadPolicy(), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
+		submit, dispatch, project,
 	)
 }
 

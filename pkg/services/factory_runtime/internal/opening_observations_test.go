@@ -32,7 +32,7 @@ func TestBundleOpeningKeepsMutationAndProgressObserversWithTheirOpening(t *testi
 	}
 	effect := &observationOpeningEffect{}
 	sessions := &observationOpeningSessions{stubWorkerSessionsService: &stubWorkerSessionsService{}}
-	opening, err := factoryinternal.NewBundleOpening(effect.Open, platformclock.Real{}, observationOpeningWorker{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{}, nil)
+	opening, err := factoryinternal.NewBundleOpening(effect.Open, platformclock.Real{}, observationOpeningWorker{}, sessions, sessions, nil, &testRuntimeScopeServiceStub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,13 +97,12 @@ type observationOpeningEffect struct {
 func (effect *observationOpeningEffect) Open(
 	_ context.Context, _ *zap.Logger,
 	_, _, _, _, _ string, _ definitions.RuntimeMode, _ bool, _ factory.Scheduler, _ bool,
-	_ recordings.SubmissionRecorder, _ recordings.DispatchRecorder,
 	_ string, _ factory.RuntimeLogStorageConfig, _ factory.RuntimeFileLoggingPolicy,
 	_ factory.RuntimeMetricsPolicy, _ string, _ factory.RuntimeMetricsStorageConfig,
 	_ factory.LoadedConfig, _, _ string, _ factory.Clock, _ string,
 	_ *definitions.FactorySnapshot, _ *definitions.FactoryWorldState, _ bool,
 	_ []factory.SubmissionHook, _ factory.CompletionDeliveryPlanner,
-	mutation factory.PetriMutationRecorder, _ factory.WorldStateProjector,
+	mutation factory.PetriMutationRecorder,
 	_ recordings.RuntimeScopeService, worker workers.Service, _ workersessions.Service,
 	_ factory.WorkerAttemptOpener, _ func(string), _ ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {

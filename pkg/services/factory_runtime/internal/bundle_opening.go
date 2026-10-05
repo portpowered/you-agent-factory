@@ -59,8 +59,6 @@ type runtimeResourceOpening func(
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
 	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	runtimeLogDir string,
 	runtimeLogConfig factory.RuntimeLogStorageConfig,
 	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
@@ -78,7 +76,6 @@ type runtimeResourceOpening func(
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
-	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
 	workerSessions workersessions.Service,
@@ -97,9 +94,6 @@ type BundleOpening struct {
 	workerSessions         workersessions.Service
 	workerAttempts         factory.WorkerAttemptOpener
 	requestResolver        *runtime.WorkstationRequestExecutor
-	submissionRecorder     recordings.SubmissionRecorder
-	dispatchRecorder       recordings.DispatchRecorder
-	worldStateProjector    factory.WorldStateProjector
 	recordingsRuntime      recordings.RuntimeScopeService
 	initialFactorySnapshot InitialFactorySnapshotFactory
 }
@@ -111,9 +105,6 @@ func NewBundleOpening(
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
 	requestResolver *runtime.WorkstationRequestExecutor,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*BundleOpening, error) {
@@ -128,7 +119,6 @@ func NewBundleOpening(
 	}
 	return &BundleOpening{runtimeBuild: runtimeBuild, workerAttemptScheduler: workerAttemptScheduler, workerService: workerService,
 		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver,
-		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder, worldStateProjector: worldStateProjector,
 		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot}, nil
 }
 
@@ -183,8 +173,6 @@ func (opening *BundleOpening) Open(
 		verbose,
 		runtimeScheduler,
 		inlineDispatch,
-		opening.submissionRecorder,
-		opening.dispatchRecorder,
 		runtimeLogDir,
 		runtimeLogConfig, runtimeFileLoggingPolicy,
 		runtimeMetricsPolicy,
@@ -201,7 +189,6 @@ func (opening *BundleOpening) Open(
 		spec.SubmissionHooks,
 		spec.CompletionPlanner,
 		spec.PetriMutationRecorder,
-		opening.worldStateProjector,
 		runtimeScopeWithFlush{
 			RuntimeScopeService:   opening.recordingsRuntime,
 			flushInterval:         recordFlushInterval,

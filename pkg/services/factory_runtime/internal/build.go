@@ -54,6 +54,9 @@ type RuntimeFactory struct {
 	engineOpening            *runtime.EngineOpening
 	definitionMapper         definitionmapping.Mapping
 	workerAttemptScheduler   platformclock.TimerSource
+	submissionRecorder       recordings.SubmissionRecorder
+	dispatchRecorder         recordings.DispatchRecorder
+	worldStateProjector      factory.WorldStateProjector
 }
 
 func NewRuntimeFactory(
@@ -69,6 +72,9 @@ func NewRuntimeFactory(
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper definitionmapping.Mapping,
 	engineOpening *runtime.EngineOpening,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	worldStateProjector factory.WorldStateProjector,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		loggerFactory:            loggerFactory,
@@ -83,12 +89,14 @@ func NewRuntimeFactory(
 		workerAttemptScheduler:   workerAttemptScheduler,
 		definitionMapper:         definitionMapper,
 		engineOpening:            engineOpening,
+		submissionRecorder:       submissionRecorder,
+		dispatchRecorder:         dispatchRecorder,
+		worldStateProjector:      worldStateProjector,
 	}
 }
 
-// Build constructs one hosted runtime bundle from explicit runtime values and
-// collaborators. Dependencies are deliberately flat so Wire and callers expose
-// the real construction graph.
+// Build opens session-owned resources using fixed process behavior.
+// Worker boundaries and observations belong to the admitted session.
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -104,8 +112,6 @@ func (f *RuntimeFactory) Build(
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
 	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	runtimeLogDir string,
 	runtimeLogConfig factory.RuntimeLogStorageConfig,
 	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
@@ -123,7 +129,6 @@ func (f *RuntimeFactory) Build(
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
-	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
 	workerSessions workersessions.Service,
@@ -288,25 +293,19 @@ func (f *RuntimeFactory) Build(
 	if len(mockWorkersConfigs) > 0 {
 		mockWorkersConfig = mockWorkersConfigs[0]
 	}
-	bundle, err := assembleRuntimeBundle(
+	bundle, err := f.assembleRuntimeBundle(
 		ctx,
 		dir, folderPath, sessionID, metricsSessionID, runtimeMode, verbose, runtimeScheduler,
-		inlineDispatch, submissionRecorder,
-		dispatchRecorder,
+		inlineDispatch,
 		loadedFactoryCfg, runtimeInstanceID,
 		backendScopeID, clock, recordPath, recording, submissionHooks,
-		completionPlanner, petriMutationRecorder, worldStateProjector, restoredWorldState,
+		completionPlanner, petriMutationRecorder, restoredWorldState,
 		skipRestoredDispatchReconciliation,
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerService,
 		mockWorkersConfig,
 		workerSessions,
 		workerAttempts,
-		f.workerAttemptScheduler,
-		f.workRequestIDs,
-		f.inputFiles,
-		f.inputDirectoryWalker,
-		f.engineOpening,
 	)
 	if err != nil {
 		return nil, err
@@ -336,7 +335,7 @@ func validateConfiguredRuntimeWorkers(loaded factory.LoadedConfig) error {
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func assembleRuntimeBundle(
+func (f *RuntimeFactory) assembleRuntimeBundle(
 	ctx context.Context,
 	dir string,
 	folderPath string,
@@ -346,8 +345,6 @@ func assembleRuntimeBundle(
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
 	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	loadedFactoryCfg factory.LoadedConfig,
 	runtimeInstanceID string,
 	backendScopeID string,
@@ -357,7 +354,6 @@ func assembleRuntimeBundle(
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
-	worldStateProjector factory.WorldStateProjector,
 	restoredWorldState *interfaces.FactoryWorldState,
 	skipRestoredDispatchReconciliation bool,
 	dispatchCompleted func(string),
@@ -371,17 +367,79 @@ func assembleRuntimeBundle(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
-	workerAttemptScheduler platformclock.TimerSource,
-	workRequestIDs work.RequestIDGenerator,
-	inputFiles inputFileSystem,
-	inputDirectoryWalker factory.InputDirectoryWalker,
-	engineOpening *runtime.EngineOpening,
 ) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, sessionID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
 		logger, logSink, metricsSink, recording, recordPath, dispatchCompleted,
 	)
+	factoryEventRecorder := f.factoryEventRecorder(recordPath, recording, eventHistory)
+	if workerAttempts == nil {
+		return nil, fmt.Errorf("worker sessions runtime attempt capability is required")
+	}
+	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
+	if f.submissionRecorder != nil {
+		effectiveSubmissionRecorder = f.submissionRecorder
+	}
+	activeFactory, err := f.engineOpening.Open(
+		net,
+		runtimeScheduler,
+		workerService,
+		workerSessions,
+		workerAttempts,
+		loadedFactoryCfg,
+		invocationFileReader(f.inputFiles),
+		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), canonicalSessionID),
+		sessionID,
+		runtimeMode,
+		structuredLogger,
+		clock,
+		f.workerAttemptScheduler,
+		inlineDispatch,
+		eventHistory,
+		workerRecordingIdentity(runtimeInstanceID),
+		runtimeInstanceID,
+		f.worldStateProjector,
+		restoredWorldState,
+		skipRestoredDispatchReconciliation,
+		effectiveSubmissionRecorder,
+		factoryEventRecorder,
+		submissionHooks,
+		effectiveDispatchRecorder(f.dispatchRecorder, bundle.RecordDispatchMetric),
+		bundle.RecordCompletionMetrics,
+		petriMutationRecorder,
+		completionPlanner,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create factory: %w", err)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetMockWorkersConfig(*workers.MockWorkersConfig)
+	}); ok {
+		configurable.SetMockWorkersConfig(mockWorkersConfig)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetPromptSourceReader(func(string) ([]byte, error))
+	}); ok && f.inputFiles != nil {
+		configurable.SetPromptSourceReader(f.inputFiles.ReadFile)
+	}
+	// Filesystem effects may finish after admission was canceled. Keep the
+	// unpublished engine inside this opening owner so unwind releases only its
+	// resources, without sealing worker admission for a same-identity retry.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	bundle.Factory = activeFactory
+	bundle.InputFiles = f.inputFiles
+	bundle.InputDirectoryWalker = f.inputDirectoryWalker
+	bundle.WorkRequestIDs = f.workRequestIDs
+	return bundle, nil
+}
+
+func (*RuntimeFactory) factoryEventRecorder(recordPath string, recording recordings.RuntimeRecorder,
+	eventHistory recordings.RuntimeLedger,
+) factory.FactoryEventRecorder {
 	factoryEventRecorder := factory.FactoryEventRecorder(nil)
 	if recordPath != "" {
 		factoryEventRecorder = func(event interfaces.FactoryEvent) {
@@ -401,67 +459,7 @@ func assembleRuntimeBundle(
 			recording.RecordEvent(event)
 		}
 	}
-	if workerAttempts == nil {
-		return nil, fmt.Errorf("worker sessions runtime attempt capability is required")
-	}
-	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
-	if submissionRecorder != nil {
-		effectiveSubmissionRecorder = submissionRecorder
-	}
-	activeFactory, err := engineOpening.Open(
-		net,
-		runtimeScheduler,
-		workerService,
-		workerSessions,
-		workerAttempts,
-		loadedFactoryCfg,
-		invocationFileReader(inputFiles),
-		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), canonicalSessionID),
-		sessionID,
-		runtimeMode,
-		structuredLogger,
-		clock,
-		workerAttemptScheduler,
-		inlineDispatch,
-		eventHistory,
-		workerRecordingIdentity(runtimeInstanceID),
-		runtimeInstanceID,
-		worldStateProjector,
-		restoredWorldState,
-		skipRestoredDispatchReconciliation,
-		effectiveSubmissionRecorder,
-		factoryEventRecorder,
-		submissionHooks,
-		effectiveDispatchRecorder(dispatchRecorder, bundle.RecordDispatchMetric),
-		bundle.RecordCompletionMetrics,
-		petriMutationRecorder,
-		completionPlanner,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create factory: %w", err)
-	}
-	if configurable, ok := activeFactory.(interface {
-		SetMockWorkersConfig(*workers.MockWorkersConfig)
-	}); ok {
-		configurable.SetMockWorkersConfig(mockWorkersConfig)
-	}
-	if configurable, ok := activeFactory.(interface {
-		SetPromptSourceReader(func(string) ([]byte, error))
-	}); ok && inputFiles != nil {
-		configurable.SetPromptSourceReader(inputFiles.ReadFile)
-	}
-	// Filesystem effects may finish after admission was canceled. Keep the
-	// unpublished engine inside this opening owner so unwind releases only its
-	// resources, without sealing worker admission for a same-identity retry.
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	bundle.Factory = activeFactory
-	bundle.InputFiles = inputFiles
-	bundle.InputDirectoryWalker = inputDirectoryWalker
-	bundle.WorkRequestIDs = workRequestIDs
-	return bundle, nil
+	return factoryEventRecorder
 }
 
 func invocationFileReader(inputFiles inputFileSystem) interfaces.FileReader {
