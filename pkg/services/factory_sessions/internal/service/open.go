@@ -427,12 +427,9 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			opening.clock,
 			opening.logger,
 			r.workersMockCommandRunnerFactory,
-			fanOutWorkerProgress(
-				r.factorySessionsRuntimeAssembly.InferenceProgressPublisherFactory(opening.logger),
-				opening.observations.PublishWorkerProgress,
-			),
+			r.factorySessionsRuntimeAssembly.InferenceProgressPublisherFactory(opening.logger),
 			r.factorySessionsRuntimeAssembly.DispatchCompletionObserverFactory(),
-			opening.observations.RecordPetriTokenMutations,
+			opening.observations,
 			opening.recordingProjections.ReconstructFactoryWorldState,
 			opening.configured.Definition.Directory,
 			opening.root.FactoryRootDir,
@@ -740,38 +737,6 @@ func lastCanonicalCursor(
 		}
 	}
 	return nil
-}
-
-// fanOutWorkerProgress adds the durable execution service to one runtime's
-// Worker progress publication.
-//
-// A Worker's output reaches its runtime, which routes it to the live session's
-// response stream. A JavaScript workflow child is a Worker of that runtime but
-// belongs to a durable session, whose response-event store is its own; without
-// this the child's output would reach the runtime and stop there, and the
-// dashboard, the SSE feed, and the CLI's NDJSON contract would all show a
-// session that produced nothing. The durable service ignores any dispatch it
-// does not own, so a Petri Worker's progress still goes only where it went
-// before.
-func fanOutWorkerProgress(
-	publishers func(string) workers.ProgressPublisher,
-	observe workers.ProgressPublisher,
-) func(string) workers.ProgressPublisher {
-	if observe == nil {
-		return publishers
-	}
-	return func(sessionID string) workers.ProgressPublisher {
-		var next workers.ProgressPublisher
-		if publishers != nil {
-			next = publishers(sessionID)
-		}
-		return func(fragment workers.ProgressFragment) {
-			if next != nil {
-				next(fragment)
-			}
-			observe(fragment)
-		}
-	}
 }
 
 // workerInvokerBinder is the narrow capability a durable execution service

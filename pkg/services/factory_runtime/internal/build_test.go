@@ -114,7 +114,7 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 // The resource boundary retains callbacks just as an opened engine does. Emit
 // after both admissions, so a reusable owner's latest-session substitution
 // would route the first session's observations into its peer.
-func TestBundleOpeningKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testing.T) {
+func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
@@ -128,16 +128,16 @@ func TestBundleOpeningKeepsMutationAndProgressObservationsScopedAcrossCalls(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil,
+		runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	observations := [2]*openingSessionObservations{{}, {}}
 	for index, sessionID := range []string{"candidate", "peer"} {
-		spec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, LoadedFactoryCfg: loaded,
-			SessionID: sessionID, RuntimeInstanceID: "runtime-" + sessionID,
-			Clock: clockwork.NewFakeClock(), BaseLogger: zap.NewNop(),
-			PetriMutationRecorder: observations[index].RecordPetriTokenMutations}
-		result, openErr := openTestBundle(t.Context(), opening.Open, spec, &testRuntimeScopeServiceStub{}, observations[index].PublishWorkerProgress)
-		if result != nil || !errors.Is(openErr, resources.failure) {
-			t.Fatalf("opening %s = %#v, %v; want unpublished controlled failure", sessionID, result, openErr)
-		}
+		result, openErr := assembleTestInitialOpening(t.Context(), assembly, dir, loaded, clockwork.NewFakeClock(),
+			factory.RuntimeActivationRequest{FactorySessionID: sessionID, RuntimeID: "runtime-" + sessionID}, observations[index])
+		assertUnpublishedOpeningFailure(t, result, openErr, resources.failure)
 	}
 	for index, sessionID := range []string{"candidate", "peer"} {
 		mutation := interfaces.TokenMutationRecord{}
@@ -154,6 +154,13 @@ func TestBundleOpeningKeepsMutationAndProgressObservationsScopedAcrossCalls(t *t
 	}
 	if !reflect.DeepEqual(sessions.runtimeIDs, []string{"runtime-candidate", "runtime-peer"}) {
 		t.Fatalf("progress supervision identities = %v; want each admitted runtime", sessions.runtimeIDs)
+	}
+}
+
+func assertUnpublishedOpeningFailure(t *testing.T, opening *factory.RuntimeInitialOpening, err, cause error) {
+	t.Helper()
+	if !errors.Is(err, cause) || opening == nil || opening.Record != nil || opening.Activation == nil || opening.Activation.Service != nil {
+		t.Fatalf("opening = %#v, %v; want unpublished controlled failure", opening, err)
 	}
 }
 
@@ -858,13 +865,18 @@ func assembleTestInitialOpening(
 	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
+	observations ...factory.SessionObservations,
 ) (*factory.RuntimeInitialOpening, error) {
+	var observe factory.SessionObservations
+	if len(observations) > 0 {
+		observe = observations[0]
+	}
 	return assembly.Assemble(
 		ctx, "", "", false, "recording.json", "", request.FactorySessionID, request.FactorySessionID,
 		nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
 		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0,
-		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, nil, nil,
+		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, observe, nil,
 		dir, dir, dir, loaded, request.RuntimeID, nil, nil, nil, nil, nil, false,
 	)
 }

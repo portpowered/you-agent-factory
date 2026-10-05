@@ -388,7 +388,7 @@ func assemblePortableReplayRuntime(
 	}); ok {
 		observe = owner.PublishWorkerProgress
 	}
-	progressFactory := fanOutWorkerProgress(nil, observe)
+	observations := replaySessionObservations{mutations: mutationOwner.RecordPetriTokenMutations, progress: observe}
 	opening, err := factoryRuntimeAssembler.Assemble(
 		ctx,
 		configured.OperatorDefaults.WorkerModelProvider,
@@ -422,9 +422,9 @@ func assemblePortableReplayRuntime(
 		clock,
 		logger,
 		workersMockCommandRunnerFactory,
-		progressFactory,
 		nil,
-		mutationOwner.RecordPetriTokenMutations,
+		nil,
+		observations,
 		projection.ReconstructFactoryWorldState,
 		configured.Definition.Directory,
 		root.FactoryRootDir,
@@ -445,6 +445,23 @@ func assemblePortableReplayRuntime(
 		return opening, fmt.Errorf("construct portable replay runtime: runtime instance is required")
 	}
 	return opening, nil
+}
+
+// replaySessionObservations preserves the legacy replay boundary's optional
+// progress capability while keeping its required mutation owner scoped.
+type replaySessionObservations struct {
+	mutations factoryruntime.PetriMutationRecorder
+	progress  workers.ProgressPublisher
+}
+
+func (observations replaySessionObservations) RecordPetriTokenMutations(sessionID string, records []factorydefinitions.TokenMutationRecord) error {
+	return observations.mutations(sessionID, records)
+}
+
+func (observations replaySessionObservations) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	if observations.progress != nil {
+		observations.progress(fragment)
+	}
 }
 
 func bindDurableExecutionCapabilities(

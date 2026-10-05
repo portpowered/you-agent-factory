@@ -96,7 +96,7 @@ func (a *Assembly) Assemble(
 	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	progressFactory func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
-	petriMutationRecorder factoryruntime.PetriMutationRecorder,
+	observations factoryruntime.SessionObservations,
 	worldStateProjector factoryruntime.WorldStateProjector,
 	dir string,
 	factoryRootDir string,
@@ -113,6 +113,10 @@ func (a *Assembly) Assemble(
 	if a == nil || a.bundleOpening == nil {
 		return nil,
 			fmt.Errorf("Factory Runtime assembly service is required")
+	}
+	var petriMutationRecorder factoryruntime.PetriMutationRecorder
+	if observations != nil {
+		petriMutationRecorder = observations.RecordPetriTokenMutations
 	}
 	// Replay hooks consume the same detached event history as world-state
 	// reconstruction. A successor recording can legitimately reset its local
@@ -169,10 +173,7 @@ func (a *Assembly) Assemble(
 	// The callback retains this session's selections, not a secondary service
 	// graph. Both initial and replacement resources use the fixed opening owner.
 	open := func(ctx context.Context, spec factoryruntime.SessionBuildSpec) (factoryruntime.RuntimeRecord, error) {
-		var progressPublisher workers.ProgressPublisher
-		if progressFactory != nil {
-			progressPublisher = progressFactory(spec.SessionID)
-		}
+		progressPublisher := a.sessionProgressPublisher(spec.SessionID, progressFactory, observations)
 		var dispatchCompleted func(string)
 		if completionFactory != nil {
 			dispatchCompleted = completionFactory(spec.SessionID)
@@ -210,6 +211,28 @@ func (a *Assembly) Assemble(
 	result.Lifecycle = a.instanceHost.Scope(clock)
 	result.Sidecars = a.sidecars.Scope(serviceMode)
 	return result, nil
+}
+
+// sessionProgressPublisher retains only the addressed opening's observations.
+// Runtime publication precedes durable observation, preserving event ordering.
+func (a *Assembly) sessionProgressPublisher(
+	sessionID string,
+	publishers func(string) workers.ProgressPublisher,
+	observations factoryruntime.SessionObservations,
+) workers.ProgressPublisher {
+	var next workers.ProgressPublisher
+	if publishers != nil {
+		next = publishers(sessionID)
+	}
+	if observations == nil {
+		return next
+	}
+	return func(fragment workers.ProgressFragment) {
+		if next != nil {
+			next(fragment)
+		}
+		observations.PublishWorkerProgress(fragment)
+	}
 }
 
 // runtimeReplacementOperation is one session's addressed replacement capability.

@@ -102,7 +102,7 @@ type FactoryRuntimeAssembler interface {
 		factoryruntime.WorkersMockCommandRunnerFactory,
 		func(string) workers.ProgressPublisher,
 		func(string) func(string),
-		factoryruntime.PetriMutationRecorder,
+		factoryruntime.SessionObservations,
 		factoryruntime.WorldStateProjector,
 		string,
 		string,

@@ -712,7 +712,7 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	factoryruntime.WorkersMockCommandRunnerFactory,
 	func(string) workers.ProgressPublisher,
 	func(string) func(string),
-	factoryruntime.PetriMutationRecorder,
+	factoryruntime.SessionObservations,
 	factoryruntime.WorldStateProjector,
 	string,
 	string,

@@ -1013,3 +1013,52 @@ func (record *initialPublicationRecord) CloseArtifacts() error {
 	record.closes++
 	return nil
 }
+
+func TestAssemblyObservationProgressPreservesScopedOwnerAndPublicationOrder(t *testing.T) {
+	t.Parallel()
+	for _, withoutRuntimePublisher := range []bool{false, true} {
+		t.Run(map[bool]string{false: "runtime and durable", true: "durable only"}[withoutRuntimePublisher], func(t *testing.T) {
+			t.Parallel()
+			var order []string
+			first := &openingObservationStub{progress: func(fragment workers.ProgressFragment) {
+				order = append(order, "first:"+fragment.Payload)
+			}}
+			second := &openingObservationStub{progress: func(fragment workers.ProgressFragment) {
+				order = append(order, "second:"+fragment.Payload)
+			}}
+			var factory func(string) workers.ProgressPublisher
+			if !withoutRuntimePublisher {
+				factory = func(sessionID string) workers.ProgressPublisher {
+					return func(fragment workers.ProgressFragment) {
+						order = append(order, sessionID+":"+fragment.Payload)
+					}
+				}
+			}
+			firstPublisher := (&Assembly{}).sessionProgressPublisher("first-runtime", factory, first)
+			secondPublisher := (&Assembly{}).sessionProgressPublisher("second-runtime", factory, second)
+			fragment := workers.ProgressFragment{DispatchID: "dispatch", Payload: "output"}
+			// Creating a peer publisher must not retarget an already-opened session.
+			firstPublisher(fragment)
+			secondPublisher(fragment)
+			want := []string{"first:output", "second:output"}
+			if !withoutRuntimePublisher {
+				want = []string{"first-runtime:output", "first:output", "second-runtime:output", "second:output"}
+			}
+			if !reflect.DeepEqual(order, want) {
+				t.Fatalf("progress publication = %v, want %v", order, want)
+			}
+		})
+	}
+}
+
+type openingObservationStub struct {
+	progress func(workers.ProgressFragment)
+}
+
+func (*openingObservationStub) RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error {
+	return nil
+}
+
+func (observations *openingObservationStub) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	observations.progress(fragment)
+}
