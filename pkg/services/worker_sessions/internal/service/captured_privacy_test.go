@@ -65,3 +65,43 @@ func TestAppendDraftInvalidDeclaredSecretDoesNotAppend(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendDraftDeclaredToolSecretsKeepTypedEvent(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	draft := workers.Draft{
+		Kind: workers.KindTool, Phase: workers.PhaseCompleted,
+		Payload:                    json.RawMessage(`{"toolCallId":"call","toolName":"visible","argumentsSummary":{"environment":{"credential":"environment-secret"}},"resultSummary":{"output":"tool-secret","neighbor":"visible"}}`),
+		DeclaredSecretJSONPointers: []string{"/argumentsSummary/environment", "/resultSummary/output"},
+	}
+	result, err := r.appendDraft(t.Context(), workersessions.Topic("privacy-worker"), events.AppendIdentity{
+		SourceType: "worker_provider", SourceID: "privacy-worker", SourceSequence: 1, SourceEventID: "tool",
+	}, workerDraftSchemaID, draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(result.Record.Payload), "environment-secret") || strings.Contains(string(result.Record.Payload), "tool-secret") {
+		t.Fatal("Events publication exposed classified tool content")
+	}
+	var published workers.Draft
+	if err := json.Unmarshal(result.Record.Payload, &published); err != nil {
+		t.Fatal(err)
+	}
+	if err := workers.ValidateDraft(published); err != nil {
+		t.Fatalf("classified tool publication lost its Worker type: %v", err)
+	}
+	var tool workers.ToolPayload
+	if err := json.Unmarshal(published.Payload, &tool); err != nil {
+		t.Fatal(err)
+	}
+	var resultSummary map[string]string
+	if err := json.Unmarshal(tool.ResultSummary, &resultSummary); err != nil {
+		t.Fatal(err)
+	}
+	if tool.ToolCallID != "call" || tool.ToolName != "visible" || resultSummary["output"] != "<redacted>" || resultSummary["neighbor"] != "visible" {
+		t.Fatal("tool redaction lost public identity or adjacent output")
+	}
+	if !strings.Contains(string(tool.ArgumentsSummary), `"redacted":true`) || !strings.Contains(string(draft.Payload), "environment-secret") {
+		t.Fatal("structured classification lost its marker or changed producer data")
+	}
+}
