@@ -1,4 +1,4 @@
-package process_test
+package customer_commands_test
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 // TestCLIWorkerFailureExitCode proves a terminal worker failure crosses the
 // reusable customer Process.Execute boundary through the injected command
 // runner edge.
-func TestCLIWorkerFailureExitCode(t *testing.T) {
+func testProcessCLIWorkerFailureExitCode(t *testing.T) {
 	t.Parallel()
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
 	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerFailurePrompt)
@@ -48,7 +48,7 @@ func TestCLIWorkerFailureExitCode(t *testing.T) {
 // TestCLISuccessExitCode proves a successful one-shot worker run reaches the
 // reusable customer Process.Execute boundary through an injected provider
 // command runner.
-func TestCLISuccessExitCode(t *testing.T) {
+func testProcessCLISuccessExitCode(t *testing.T) {
 	t.Parallel()
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
 	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerSuccessPrompt)

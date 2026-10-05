@@ -1,4 +1,4 @@
-package output_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -36,7 +36,7 @@ const (
 // response-stream CLI run surfaces lifecycle progress on stdout while the
 // invocation is in flight, then completes with canonical presentation and no
 // structured or operator noise.
-func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
+func testOutputCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	t.Parallel()
 	writer := newFirstChunkGatedStdoutWriter()
 	runGoalHumanResponseStreamWithStdout(t, writer)
@@ -85,7 +85,7 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 // TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise proves quiet human
 // output stays free of structured envelopes, retired automation record shapes,
 // and operator lifecycle chatter.
-func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
+func testOutputCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 	t.Run("quiet clean primary result", func(t *testing.T) {
 		stdout, stderr := runGoalHumanInvocation(t, []string{"--quiet"})
 		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
@@ -101,7 +101,7 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 // TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet proves
 // a non-quiet operator continuous CLI run with --with-server reports Factory
 // initiated and Dashboard URL startup output on stdout.
-func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *testing.T) {
+func testOutputCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI operator continuous text-stream startup")
@@ -163,7 +163,7 @@ func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *t
 // TestCLITextStreamInterruptedRunDoesNotClaimCompletion proves interrupting a
 // human response-stream CLI run ends with the documented cancellation outcome
 // and does not print successful-completion or primary-result claims on stdout.
-func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
+func testOutputCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
 	t.Parallel()
 	// This case intentionally owns an independent root: cancellation and the
 	// external-work join are the behavior under test.
@@ -202,26 +202,7 @@ func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
 		t.Fatalf("external work cancellation error = %v, want context.Canceled", externalWork.runErr())
 	}
 
-	output := stdout.String()
-	if !strings.Contains(output, "--- invocation outcome ---") {
-		t.Fatalf("stdout missing invocation outcome after interrupt:\n%s", output)
-	}
-	if !strings.Contains(output, "status: CANCELED") {
-		t.Fatalf("stdout missing canceled status after interrupt:\n%s", output)
-	}
-	if strings.Contains(output, "--- primary result ---") {
-		t.Fatalf("stdout contains primary-result separator after interrupt:\n%s", output)
-	}
-	for _, line := range nonEmptyStdoutLines(output) {
-		if line == textStreamPrimaryResult {
-			t.Fatalf("stdout line claims successful primary result after interrupt:\n%s", output)
-		}
-	}
-	for _, forbidden := range []string{"final output updated: FINAL", "factory completed: SUCCEEDED"} {
-		if strings.Contains(output, forbidden) {
-			t.Fatalf("stdout contains successful-completion claim %q after interrupt:\n%s", forbidden, output)
-		}
-	}
+	assertInterruptedHumanCLIOutput(t, stdout.String())
 }
 
 var humanTextStreamForbiddenEnvelopeLiterals = []string{
@@ -700,4 +681,29 @@ func waitForTextStreamServerReady(ctx context.Context, baseURL string) error {
 		return errors.New("server not ready")
 	}
 	return nil
+}
+
+func assertInterruptedHumanCLIOutput(t *testing.T, output string) {
+	t.Helper()
+
+	if !strings.Contains(output, "--- invocation outcome ---") {
+		t.Fatalf("stdout missing invocation outcome after interrupt:\n%s", output)
+	}
+	if !strings.Contains(output, "status: CANCELED") {
+		t.Fatalf("stdout missing canceled status after interrupt:\n%s", output)
+	}
+	if strings.Contains(output, "--- primary result ---") {
+		t.Fatalf("stdout contains primary-result separator after interrupt:\n%s", output)
+	}
+	for _, line := range nonEmptyStdoutLines(output) {
+		if line == textStreamPrimaryResult {
+			t.Fatalf("stdout line claims successful primary result after interrupt:\n%s", output)
+		}
+	}
+	for _, forbidden := range []string{"final output updated: FINAL", "factory completed: SUCCEEDED"} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("stdout contains successful-completion claim %q after interrupt:\n%s", forbidden, output)
+		}
+	}
+
 }

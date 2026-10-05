@@ -25,7 +25,8 @@ and Work admission. This preserves ordinary and `functionallong` cases and
 their session-owned fixtures. Independent parent tests overlap through Go's
 test scheduler. Sixteen composition-oriented test names now describe customer
 CLI, REST, Work, session control, recording and replay behavior. Coverage floors
-and all 156 reviewed scenario decisions are preserved.
+and all 156 reviewed scenario decisions are preserved. Six further CLI packages
+now share one customer-command package, removing five additional test binaries.
 
 Detailed measurements below include failed runs and their causes. Remaining
 work is to consolidate fixture-heavy packages with their own lifecycles, reduce
@@ -1179,3 +1180,41 @@ boundary/shape/sleep/debt analyzers and all 156 reviewed scenarios also pass.
 Hosted CI is required on the current pushed source before a merge checkpoint
 can be claimed. The audit keeps all complete failed measurements alongside the
 passing coverage-only and earlier complete passing measurements.
+
+
+### CLI fixture packages consolidated into customer command journeys
+
+The six packages for documentation, shell completion, submit, CLI output,
+process behavior and invocation help now live under
+`tests/functional/transport/cli/customer_commands`. Six named customer journey
+parents run independently in parallel. Each former TestMain setup belongs to
+its journey parent; parent cleanup runs after all parallel child scenarios
+finish. The layout uses ordinary Go test scheduling, without a global lifecycle
+shim. Existing scenario names remain visible as named subtests.
+
+| Covered build-only measurement, four CPUs | Six original packages | One customer-command package |
+| --- | ---: | ---: |
+| Link commands | 6 | 1 |
+| Link user + system CPU | 7.803s | 2.403s |
+| Summed linker wall | 12.988s | 3.551s |
+| Active linker wall interval union | 2.507s | 3.551s |
+| Whole build command wall | 4.82s | 7.64s |
+
+These warm dependency-cache runs use `-exec=/bin/true`, full backend coverage
+instrumentation and the same four-CPU affinity. They measure binary construction,
+not scenario execution. Link CPU falls 69%, but this small batch's elapsed build
+sample increases; filesystem and scheduling costs remain material. Summed CPU
+savings must not be presented as CI elapsed savings. Raw tool records are in
+`linux-cli-fixtures-baseline` and `linux-cli-fixtures-warm` under the audit artifacts.
+
+The initial covered Linux execution of the merged package passed in 5.764s;
+its whole command took 20.37s including compilation and linking. The full merged
+Windows package passes three consecutive repetitions in 76.185s. Earlier
+repetition attempts exposed package-lazy Sync.Once and process references
+surviving cleanup: the owned output, help and process fixtures now reset those
+references before each journey setup. Those failed attempts are retained as
+validation findings rather than counted as passing measurements. The ordinary
+and functionallong source variants compile, focused lint and repository custom
+analyzers pass, and all 156 reviewed scenario records validate. A new complete
+four-CPU coverage supervisor measurement is running; no hosted checkpoint is
+claimed from these focused results.

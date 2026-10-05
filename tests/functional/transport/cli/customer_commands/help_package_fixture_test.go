@@ -1,4 +1,4 @@
-package help_test
+package customer_commands_test
 
 import (
 	"context"
@@ -70,18 +70,25 @@ var helpPackageFixtureState struct {
 	err     error
 }
 
-// TestMain closes the package-owned process after every parallel test has
+// initializeHelpFixture closes the package-owned process after every parallel test has
 // released its invocation resources. The close timeout is a cleanup ceiling,
 // not synchronization for any help behavior; help never starts external work.
-func TestMain(m *testing.M) {
-	exitCode := m.Run()
-	if err := closeHelpPackageFixture(); err != nil {
-		fmt.Fprintf(os.Stderr, "help package fixture cleanup failed: %v\n", err)
-		if exitCode == 0 {
-			exitCode = 1
+func initializeHelpFixture(t *testing.T) {
+	helpPackageFixtureState.Once = sync.Once{}
+	helpPackageFixtureState.fixture = nil
+	helpPackageFixtureState.err = nil
+	t.Cleanup(func() {
+		exitCode := 0
+		if err := closeHelpPackageFixture(); err != nil {
+			fmt.Fprintf(os.Stderr, "help package fixture cleanup failed: %v\n", err)
+			if exitCode == 0 {
+				exitCode = 1
+			}
 		}
-	}
-	os.Exit(exitCode)
+		if exitCode != 0 {
+			t.Error("customer fixture cleanup failed; see preceding diagnostic")
+		}
+	})
 }
 
 func helpPackageFixtureForTest(t *testing.T) *helpPackageFixture {

@@ -1,4 +1,4 @@
-package shell_completion_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCompletionFailureBoundariesAndReuse(t *testing.T) {
+func testShellcompletionCompletionFailureBoundariesAndReuse(t *testing.T) {
 	t.Run("missing and unsupported shells fall back to identical clean completion help", testCompletionHelpFallback)
 	t.Run("duplicate shell input is rejected without partial output", testCompletionDuplicateInput)
 	t.Run("scripts and dynamic candidates repeat in both directions", testCompletionReuse)

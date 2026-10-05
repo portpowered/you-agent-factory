@@ -1,4 +1,4 @@
-package shell_completion_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -21,38 +21,42 @@ const completionProcessCloseTimeout = 5 * time.Second
 
 var completionProcesses *completionProcessFixture
 
-// TestMain owns the one immutable root-built process used by every completion
+// initializeShellcompletionFixture owns the one immutable root-built process used by every completion
 // scenario. Each invocation still owns fresh streams, environments, homes,
 // and working roots.
-func TestMain(m *testing.M) {
+func initializeShellcompletionFixture(t *testing.T) {
 	ledger := newCompletionLifecycleLedger()
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build shell-completion functional process: %v\n", err)
-		os.Exit(1)
+		t.Fatal("customer fixture setup failed; see preceding diagnostic")
 	}
 	ledger.processStarted()
 	completionProcesses = &completionProcessFixture{process: process, ledger: ledger}
+	t.Cleanup(func() {
 
-	exitCode := m.Run()
-	closeContext, cancel := context.WithTimeout(context.Background(), completionProcessCloseTimeout)
-	closeErr := process.Close(closeContext)
-	cancel()
-	ledger.processClosed()
-	if closeErr != nil {
-		fmt.Fprintf(os.Stderr, "close shell-completion functional process: %v\n", closeErr)
-		if exitCode == 0 {
-			exitCode = 1
+		exitCode := 0
+		closeContext, cancel := context.WithTimeout(context.Background(), completionProcessCloseTimeout)
+		closeErr := process.Close(closeContext)
+		cancel()
+		ledger.processClosed()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "close shell-completion functional process: %v\n", closeErr)
+			if exitCode == 0 {
+				exitCode = 1
+			}
 		}
-	}
-	if ledgerErr := ledger.assertClean(); ledgerErr != nil {
-		fmt.Fprintf(os.Stderr, "shell-completion lifecycle ledger: %v\n", ledgerErr)
-		if exitCode == 0 {
-			exitCode = 1
+		if ledgerErr := ledger.assertClean(); ledgerErr != nil {
+			fmt.Fprintf(os.Stderr, "shell-completion lifecycle ledger: %v\n", ledgerErr)
+			if exitCode == 0 {
+				exitCode = 1
+			}
 		}
-	}
-	fmt.Fprintf(os.Stderr, "shell-completion lifecycle ledger: %s\n", ledger.summary())
-	os.Exit(exitCode)
+		fmt.Fprintf(os.Stderr, "shell-completion lifecycle ledger: %s\n", ledger.summary())
+		if exitCode != 0 {
+			t.Error("customer fixture cleanup failed; see preceding diagnostic")
+		}
+	})
 }
 
 type completionProcessFixture struct {

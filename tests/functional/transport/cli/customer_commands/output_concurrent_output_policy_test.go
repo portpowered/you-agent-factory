@@ -1,4 +1,4 @@
-package output_test
+package customer_commands_test
 
 import (
 	"context"
@@ -33,7 +33,7 @@ import (
 // The cohort starts on the parent goroutine rather than parallel child bodies:
 // all five effects must enter even with go test -parallel 1. No gate holds a
 // shared invocation lock; each invocation owns its session, profile and streams.
-func TestConcurrentQuietAndVerboseInvocationsKeepOwnFraming(t *testing.T) {
+func testOutputConcurrentQuietAndVerboseInvocationsKeepOwnFraming(t *testing.T) {
 	t.Parallel()
 	selections := [][]string{
 		{"--quiet"}, {"--json", "--output", "primary"},
@@ -376,7 +376,7 @@ func assertConcurrentOutputConflict(t *testing.T, number int, flags []string) {
 // The same public CLI output policy applies to selected terminal classifications.
 // Both invocations enter before either is released, sharing the package host
 // while retaining explicit sessions and scenario-owned provider routes.
-func TestInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
+func testOutputInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
 	t.Parallel()
 	for round, policy := range []struct{ tty, override bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
 		t.Run(fmt.Sprintf("tty=%t/providerOverride=%t", policy.tty, policy.override), func(t *testing.T) {
@@ -474,7 +474,7 @@ func (runner selectedRunTimeRunner) Run(ctx context.Context, request platformpro
 	return support.NewStaticSuccessCommandRunner("selected time COMPLETE").Run(ctx, request)
 }
 
-func TestSelectedProcessClockDatesRecordingAndCLIRunFacts(t *testing.T) {
+func testOutputSelectedProcessClockDatesRecordingAndCLIRunFacts(t *testing.T) {
 	t.Parallel()
 	for _, explicit := range []bool{false, true} {
 		t.Run(fmt.Sprintf("explicit=%t", explicit), func(t *testing.T) {
@@ -565,7 +565,7 @@ func assertSelectedRunRecordingFacts(t *testing.T, service recordings.Service, i
 	}
 }
 
-func TestSelectedTimeArtifactFailurePreservesCLIError(t *testing.T) {
+func testOutputSelectedTimeArtifactFailurePreservesCLIError(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
 	blocked := filepath.Join(home, "blocked-logs")

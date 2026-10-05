@@ -1,4 +1,4 @@
-package docs_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 // TestDocsFailureBoundariesAndReuse characterizes invalid input, duplicate
 // input, repeated canonical/alias reads, and output recovery through the same
 // package process used by the happy-path docs tests.
-func TestDocsFailureBoundariesAndReuse(t *testing.T) {
+func testDocsDocsFailureBoundariesAndReuse(t *testing.T) {
 	t.Run("unsupported topic leaves a later topic clean", testDocsUnsupportedTopicRecovery)
 	t.Run("duplicate topic is rejected and next invocation is clean", testDocsDuplicateTopicRecovery)
 	t.Run("canonical and alias reads are detached and repeatable", testDocsCanonicalAliasReuse)

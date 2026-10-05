@@ -1,4 +1,4 @@
-package process_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ const acpShutdownReadTimeout = 30 * time.Second
 // the ACP scanner is already blocked on stdin before the context is canceled,
 // so the command's cancellation cleanup must both unblock the read and return
 // the cancellation sentinel unchanged.
-func TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess(t *testing.T) {
+func testProcessACPServeCancellationPreservesContextCanceledIdentityThroughProcess(t *testing.T) {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)

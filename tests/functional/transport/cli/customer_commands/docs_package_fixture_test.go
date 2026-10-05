@@ -1,4 +1,4 @@
-package docs_test
+package customer_commands_test
 
 import (
 	"context"
@@ -21,10 +21,10 @@ const docsProviderResultCount = 64
 
 var documentationProcesses *documentationProcessFixture
 
-// TestMain owns the one immutable root-built process used by every docs
+// initializeDocsFixture owns the one immutable root-built process used by every docs
 // scenario. Inputs, output streams, homes, and working roots remain
 // invocation-local so repeated commands cannot borrow state from one another.
-func TestMain(m *testing.M) {
+func initializeDocsFixture(t *testing.T) {
 	providerRunner := support.NewShapedProviderCommandRunner(documentationProviderResults()...)
 	ledger := newDocumentationLifecycleLedger()
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build docs functional process: %v\n", err)
-		os.Exit(1)
+		t.Fatal("customer fixture setup failed; see preceding diagnostic")
 	}
 	ledger.processStarted()
 	documentationProcesses = &documentationProcessFixture{
@@ -40,26 +40,30 @@ func TestMain(m *testing.M) {
 		providerRunner: providerRunner,
 		ledger:         ledger,
 	}
+	t.Cleanup(func() {
 
-	exitCode := m.Run()
-	closeContext, cancel := context.WithTimeout(context.Background(), docsProcessCloseTimeout)
-	closeErr := process.Close(closeContext)
-	cancel()
-	ledger.processClosed()
-	if closeErr != nil {
-		fmt.Fprintf(os.Stderr, "close docs functional process: %v\n", closeErr)
-		if exitCode == 0 {
-			exitCode = 1
+		exitCode := 0
+		closeContext, cancel := context.WithTimeout(context.Background(), docsProcessCloseTimeout)
+		closeErr := process.Close(closeContext)
+		cancel()
+		ledger.processClosed()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "close docs functional process: %v\n", closeErr)
+			if exitCode == 0 {
+				exitCode = 1
+			}
 		}
-	}
-	if ledgerErr := ledger.assertClean(); ledgerErr != nil {
-		fmt.Fprintf(os.Stderr, "docs lifecycle ledger: %v\n", ledgerErr)
-		if exitCode == 0 {
-			exitCode = 1
+		if ledgerErr := ledger.assertClean(); ledgerErr != nil {
+			fmt.Fprintf(os.Stderr, "docs lifecycle ledger: %v\n", ledgerErr)
+			if exitCode == 0 {
+				exitCode = 1
+			}
 		}
-	}
-	fmt.Fprintf(os.Stderr, "docs lifecycle ledger: %s\n", ledger.summary())
-	os.Exit(exitCode)
+		fmt.Fprintf(os.Stderr, "docs lifecycle ledger: %s\n", ledger.summary())
+		if exitCode != 0 {
+			t.Error("customer fixture cleanup failed; see preceding diagnostic")
+		}
+	})
 }
 
 func documentationProviderResults() []platformprocess.CommandResult {

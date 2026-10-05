@@ -1,4 +1,4 @@
-package process_test
+package customer_commands_test
 
 import (
 	"bufio"
@@ -19,36 +19,14 @@ import (
 // stream failure crosses the in-process customer process boundary: complete
 // transition lines remain on stdout, the abort is actionable on stderr, and
 // the command is unsuccessful instead of being converted to a success.
-func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
+func testProcessCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	session := newCLIHome(t)
 	successSession := newCLIHome(t)
 	fixturePayloads := processWatchAbortPayloads(t)
 	finitePayloads := processWatchFinitePayloads(t)
-	streamServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "text/event-stream")
-		writer.Header().Set("Cache-Control", "no-cache")
-		flusher, ok := writer.(http.Flusher)
-		if !ok {
-			http.Error(writer, "watch fixture response writer does not support flushing", http.StatusInternalServerError)
-			return
-		}
-
-		payloads := fixturePayloads
-		if strings.Contains(request.URL.Path, "session-success") {
-			payloads = finitePayloads
-		}
-		writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, strconv.Itoa(len(payloads)))
-		for _, payload := range payloads {
-			_, _ = fmt.Fprintf(writer, "data: %s\n\n", payload)
-			flusher.Flush()
-		}
-		if strings.Contains(request.URL.Path, "session-abort") {
-			_, _ = fmt.Fprint(writer, "data: {\"id\":\"stream-abort")
-			flusher.Flush()
-		}
-	}))
+	streamServer := newProcessWatchAbortServer(t, fixturePayloads, finitePayloads)
 	defer streamServer.Close()
 
 	result := session.run(t, process, nil, "--server", streamServer.URL, "work", "watch", "--session", "session-abort")
@@ -191,3 +169,30 @@ func processWatchFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventTyp
 }
 
 func processWatchStringPtr(value string) *string { return &value }
+
+func newProcessWatchAbortServer(t *testing.T, fixturePayloads, finitePayloads [][]byte) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		writer.Header().Set("Cache-Control", "no-cache")
+		flusher, ok := writer.(http.Flusher)
+		if !ok {
+			http.Error(writer, "watch fixture response writer does not support flushing", http.StatusInternalServerError)
+			return
+		}
+
+		payloads := fixturePayloads
+		if strings.Contains(request.URL.Path, "session-success") {
+			payloads = finitePayloads
+		}
+		writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, strconv.Itoa(len(payloads)))
+		for _, payload := range payloads {
+			_, _ = fmt.Fprintf(writer, "data: %s\n\n", payload)
+			flusher.Flush()
+		}
+		if strings.Contains(request.URL.Path, "session-abort") {
+			_, _ = fmt.Fprint(writer, "data: {\"id\":\"stream-abort")
+			flusher.Flush()
+		}
+	}))
+}

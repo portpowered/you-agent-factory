@@ -1,4 +1,4 @@
-package output_test
+package customer_commands_test
 
 import (
 	"context"
@@ -28,20 +28,27 @@ var machineOutputShared struct {
 	err     error
 }
 
-// TestMain owns the machine-readable output process for the package. The
+// initializeOutputFixture owns the machine-readable output process for the package. The
 // process is built lazily so isolated lifecycle tests retain their own roots.
-func TestMain(m *testing.M) {
-	exitCode := m.Run()
-	if fixture := machineOutputShared.fixture; fixture != nil {
-		closeContext, cancel := context.WithTimeout(context.Background(), machineOutputProcessCloseTimeout)
-		closeErr := fixture.close(closeContext)
-		cancel()
-		if closeErr != nil && exitCode == 0 {
-			fmt.Fprintf(os.Stderr, "close shared CLI output process: %v\n", closeErr)
-			exitCode = 1
+func initializeOutputFixture(t *testing.T) {
+	machineOutputShared.once = sync.Once{}
+	machineOutputShared.fixture = nil
+	machineOutputShared.err = nil
+	t.Cleanup(func() {
+		exitCode := 0
+		if fixture := machineOutputShared.fixture; fixture != nil {
+			closeContext, cancel := context.WithTimeout(context.Background(), machineOutputProcessCloseTimeout)
+			closeErr := fixture.close(closeContext)
+			cancel()
+			if closeErr != nil && exitCode == 0 {
+				fmt.Fprintf(os.Stderr, "close shared CLI output process: %v\n", closeErr)
+				exitCode = 1
+			}
 		}
-	}
-	os.Exit(exitCode)
+		if exitCode != 0 {
+			t.Error("customer fixture cleanup failed; see preceding diagnostic")
+		}
+	})
 }
 
 type machineOutputFixture struct {

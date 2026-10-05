@@ -1,4 +1,4 @@
-package help_test
+package customer_commands_test
 
 import (
 	"os"
@@ -22,7 +22,7 @@ const (
 // <factory> --help prints Factory invocation help for the selected named Factory,
 // including signature usage and the factory-defined argument surface customers
 // use to compose a run command without starting Work.
-func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
+func testHelpCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 	t.Parallel()
 
 	fixture := helpPackageFixtureForTest(t)
@@ -84,7 +84,7 @@ func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 // TestCLIRunHelpDistinguishesRequiredAndOptionalParameters proves you run --named
 // <factory> --help visibly marks required and optional invocationSignature
 // parameters so operators know which arguments they must supply before a run.
-func TestCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
+func testHelpCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
 	t.Parallel()
 
 	fixture := helpPackageFixtureForTest(t)
@@ -128,7 +128,7 @@ func TestCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
 // TestCLIRunHelpDoesNotDispatchExternalWork proves you run --named <factory>
 // --help completes as read-only Factory invocation discovery without invoking
 // external provider command execution or worker dispatch.
-func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
+func testHelpCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
 	t.Parallel()
 
 	fixture := helpPackageFixtureForTest(t)
@@ -186,7 +186,7 @@ func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
 // session guidance is executable CLI behavior: placement examples use the
 // accepted run grammar and do not advertise flags that belong to another
 // command family.
-func TestCLISessionHelpPublishesRunnablePlacementExamples(t *testing.T) {
+func testHelpCLISessionHelpPublishesRunnablePlacementExamples(t *testing.T) {
 	t.Parallel()
 
 	fixture := helpPackageFixtureForTest(t)
@@ -217,7 +217,7 @@ func TestCLISessionHelpPublishesRunnablePlacementExamples(t *testing.T) {
 // TestCLIRunHelpCoversGenericAndExplicitFactorySelections proves the generic
 // run help remains byte-for-byte stable and an explicit Factory path exposes
 // the same authored invocation signature as the named selection.
-func TestCLIRunHelpCoversGenericAndExplicitFactorySelections(t *testing.T) {
+func testHelpCLIRunHelpCoversGenericAndExplicitFactorySelections(t *testing.T) {
 	t.Parallel()
 
 	fixture := helpPackageFixtureForTest(t)
@@ -263,7 +263,7 @@ func TestCLIRunHelpCoversGenericAndExplicitFactorySelections(t *testing.T) {
 // TestCLIRunHelpResetsEmptyAndInvalidSelections proves an empty signature can
 // be followed by a full signature on the same process, while missing and
 // malformed selections fail before help text or external work are produced.
-func TestCLIRunHelpResetsEmptyAndInvalidSelections(t *testing.T) {
+func testHelpCLIRunHelpResetsEmptyAndInvalidSelections(t *testing.T) {
 	t.Parallel()
 
 	fixture := helpPackageFixtureForTest(t)

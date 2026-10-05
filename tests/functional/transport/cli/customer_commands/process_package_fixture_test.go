@@ -1,4 +1,4 @@
-package process_test
+package customer_commands_test
 
 import (
 	"context"
@@ -24,29 +24,39 @@ var sharedWorkerOutcome struct {
 	mu      sync.Mutex
 }
 
-// TestMain owns the package-scoped root shared by the two eligible worker
+// initializeProcessFixture owns the package-scoped root shared by the two eligible worker
 // outcomes. It is released only after every test has finished.
-func TestMain(m *testing.M) {
-	exitCode := m.Run()
+func initializeProcessFixture(t *testing.T) {
+	plainCLIProcess.once = sync.Once{}
+	plainCLIProcess.process = nil
+	plainCLIProcess.err = nil
+	sharedWorkerOutcome.process = nil
+	sharedWorkerOutcome.router = nil
+	sharedWorkerOutcome.err = nil
+	t.Cleanup(func() {
+		exitCode := 0
 
-	sharedWorkerOutcome.mu.Lock()
-	sharedProcess := sharedWorkerOutcome.process
-	sharedWorkerOutcome.mu.Unlock()
-	plainCloseContext, plainCancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
-	if err := closePlainProcess(plainCloseContext); err != nil && exitCode == 0 {
-		fmt.Fprintf(os.Stderr, "close shared plain CLI process: %v\n", err)
-		exitCode = 1
-	}
-	plainCancel()
-	if sharedProcess != nil {
-		closeContext, cancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
-		if err := sharedProcess.Close(closeContext); err != nil && exitCode == 0 {
-			fmt.Fprintf(os.Stderr, "close shared worker-outcome process: %v\n", err)
+		sharedWorkerOutcome.mu.Lock()
+		sharedProcess := sharedWorkerOutcome.process
+		sharedWorkerOutcome.mu.Unlock()
+		plainCloseContext, plainCancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
+		if err := closePlainProcess(plainCloseContext); err != nil && exitCode == 0 {
+			fmt.Fprintf(os.Stderr, "close shared plain CLI process: %v\n", err)
 			exitCode = 1
 		}
-		cancel()
-	}
-	os.Exit(exitCode)
+		plainCancel()
+		if sharedProcess != nil {
+			closeContext, cancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
+			if err := sharedProcess.Close(closeContext); err != nil && exitCode == 0 {
+				fmt.Fprintf(os.Stderr, "close shared worker-outcome process: %v\n", err)
+				exitCode = 1
+			}
+			cancel()
+		}
+		if exitCode != 0 {
+			t.Error("customer fixture cleanup failed; see preceding diagnostic")
+		}
+	})
 }
 
 const packageResourceCloseTimeout = 5 * time.Second

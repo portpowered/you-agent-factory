@@ -1,4 +1,4 @@
-package output_test
+package customer_commands_test
 
 import (
 	"encoding/json"
@@ -22,64 +22,13 @@ const (
 // with empty stdout, terminal invocation failures end their stdout stream with
 // a failed InvocationResponse plus one stderr ErrorResponse, and a later
 // successful invocation recovers on the same shared root.
-func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
+func testOutputCLIJSONFailureRemainsValidJSON(t *testing.T) {
 	t.Parallel()
-	t.Run("pre-terminal failure leaves stdout empty with one stderr ErrorResponse", func(t *testing.T) {
-		stdout, stderr, err := runSingleJSONInvocation(t, []string{
-			"you", "--json", "run", "--named", "@you/missing", "--no-record",
-			"deterministic pre-session failure",
-		}, "", nil)
-		if err == nil {
-			t.Fatal("Process.Execute error = nil, want pre-terminal invocation failure")
-		}
-		if stdout != "" {
-			t.Fatalf("stdout = %q, want empty on pre-terminal failure", stdout)
-		}
-		response := decodeSingleJSONErrorResponse(t, stderr)
-		if response.Code != factoryapi.ErrorResponseCode(runcli.InvocationErrorCodeFailed) ||
-			response.Family != factoryapi.ErrorFamilyInternalServerError {
-			t.Fatalf("ErrorResponse = %#v", response)
-		}
-	})
+	t.Run("pre-terminal failure leaves stdout empty with one stderr ErrorResponse", testOutputCLIJSONFailureRemainsValidJSONCase1)
 
-	t.Run("terminal failure emits failed InvocationResponse and one stderr ErrorResponse", func(t *testing.T) {
-		stdout, stderr, err := runSingleJSONInvocation(t, []string{
-			"you", "--json", "run", "--factory", jsonTerminalFailureFactoryPath(t), "--no-record",
-			"deterministic terminal failure",
-		}, "", nil)
-		if err == nil {
-			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
-		}
-		response := decodeSingleJSONInvocationResponse(t, stdout)
-		if response.Status != factoryapi.InvocationTerminalStatusFailed {
-			t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusFailed)
-		}
-		if response.ErrorCode == nil || response.Message == nil {
-			t.Fatalf("failed InvocationResponse lacks error detail: %#v", response)
-		}
-		if string(*response.ErrorCode) != "INVOCATION_RUNTIME_FAILURE" ||
-			!strings.HasPrefix(*response.Message, `invocation failed: work "work-1" reached failed state "goal:failed"`) {
-			t.Fatalf("InvocationResponse = %#v, want the pinned terminal failure", response)
-		}
-		errorResponse := decodeSingleJSONErrorResponse(t, stderr)
-		if errorResponse.Code != factoryapi.ErrorResponseCode(*response.ErrorCode) ||
-			errorResponse.Family != factoryapi.ErrorFamilyInternalServerError ||
-			!strings.HasPrefix(errorResponse.Message, *response.Message) {
-			t.Fatalf("ErrorResponse = %#v, want code %s and message prefix %q", errorResponse, *response.ErrorCode, *response.Message)
-		}
-	})
+	t.Run("terminal failure emits failed InvocationResponse and one stderr ErrorResponse", testOutputCLIJSONFailureRemainsValidJSONCase2)
 
-	t.Run("success recovers after terminal failure on the shared root", func(t *testing.T) {
-		stdout := runGoalSingleJSON(t)
-		response := decodeSingleJSONInvocationResponse(t, stdout)
-		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-			t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
-		}
-		if got := invocationPrimaryResultText(t, response); got != jsonWantInvocationResultText {
-			t.Fatalf("primaryResult = %q, want %q", got, jsonWantInvocationResultText)
-		}
-		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
-	})
+	t.Run("success recovers after terminal failure on the shared root", testOutputCLIJSONFailureRemainsValidJSONCase3)
 }
 
 func jsonTerminalFailureFactoryPath(t *testing.T) string {
@@ -109,7 +58,7 @@ func jsonTerminalFailureFactoryPath(t *testing.T) string {
 
 // TestCLIInvalidInputsAreBadRequest proves malformed arguments and output
 // selections remain customer-facing bad requests.
-func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
+func testOutputCLIInvalidInputsAreBadRequest(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name                string
@@ -288,4 +237,70 @@ func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationRes
 		t.Fatalf("primaryResult[0] as text content: %v", err)
 	}
 	return part.Text
+}
+
+func testOutputCLIJSONFailureRemainsValidJSONCase1(t *testing.T) {
+	t.Helper()
+
+	stdout, stderr, err := runSingleJSONInvocation(t, []string{
+		"you", "--json", "run", "--named", "@you/missing", "--no-record",
+		"deterministic pre-session failure",
+	}, "", nil)
+	if err == nil {
+		t.Fatal("Process.Execute error = nil, want pre-terminal invocation failure")
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty on pre-terminal failure", stdout)
+	}
+	response := decodeSingleJSONErrorResponse(t, stderr)
+	if response.Code != factoryapi.ErrorResponseCode(runcli.InvocationErrorCodeFailed) ||
+		response.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("ErrorResponse = %#v", response)
+	}
+
+}
+
+func testOutputCLIJSONFailureRemainsValidJSONCase2(t *testing.T) {
+	t.Helper()
+
+	stdout, stderr, err := runSingleJSONInvocation(t, []string{
+		"you", "--json", "run", "--factory", jsonTerminalFailureFactoryPath(t), "--no-record",
+		"deterministic terminal failure",
+	}, "", nil)
+	if err == nil {
+		t.Fatal("Process.Execute error = nil, want terminal invocation failure")
+	}
+	response := decodeSingleJSONInvocationResponse(t, stdout)
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusFailed)
+	}
+	if response.ErrorCode == nil || response.Message == nil {
+		t.Fatalf("failed InvocationResponse lacks error detail: %#v", response)
+	}
+	if string(*response.ErrorCode) != "INVOCATION_RUNTIME_FAILURE" ||
+		!strings.HasPrefix(*response.Message, `invocation failed: work "work-1" reached failed state "goal:failed"`) {
+		t.Fatalf("InvocationResponse = %#v, want the pinned terminal failure", response)
+	}
+	errorResponse := decodeSingleJSONErrorResponse(t, stderr)
+	if errorResponse.Code != factoryapi.ErrorResponseCode(*response.ErrorCode) ||
+		errorResponse.Family != factoryapi.ErrorFamilyInternalServerError ||
+		!strings.HasPrefix(errorResponse.Message, *response.Message) {
+		t.Fatalf("ErrorResponse = %#v, want code %s and message prefix %q", errorResponse, *response.ErrorCode, *response.Message)
+	}
+
+}
+
+func testOutputCLIJSONFailureRemainsValidJSONCase3(t *testing.T) {
+	t.Helper()
+
+	stdout := runGoalSingleJSON(t)
+	response := decodeSingleJSONInvocationResponse(t, stdout)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
+	}
+	if got := invocationPrimaryResultText(t, response); got != jsonWantInvocationResultText {
+		t.Fatalf("primaryResult = %q, want %q", got, jsonWantInvocationResultText)
+	}
+	assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
+
 }

@@ -1,4 +1,4 @@
-package docs_test
+package customer_commands_test
 
 import (
 	"strings"
@@ -8,7 +8,7 @@ import (
 // TestDocsAliasReturnsCanonicalCustomerDocumentation proves one representative
 // public alias resolves to the same usable documentation as its canonical topic.
 // Exact topic and alias membership is a static contract/lint concern.
-func TestDocsAliasReturnsCanonicalCustomerDocumentation(t *testing.T) {
+func testDocsDocsAliasReturnsCanonicalCustomerDocumentation(t *testing.T) {
 	canonical := executeDocsCommand(t, "docs", "workstations")
 	alias := executeDocsCommand(t, "docs", "workstation")
 	if !strings.Contains(alias, "# ") {

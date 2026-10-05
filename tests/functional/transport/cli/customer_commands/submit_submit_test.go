@@ -1,4 +1,4 @@
-package submit_test
+package customer_commands_test
 
 import (
 	"bufio"
@@ -27,98 +27,14 @@ const functionalBatch = `{
 
 // TestSubmitFamilyExecutesThroughRootBuiltProcess proves the public submit
 // commands can run repeatedly through the one package-owned root process.
-func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
+func testSubmitSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 	fixture := packageSubmitFixture
 
-	t.Run("batch dry-run", func(t *testing.T) {
-		result := fixture.execute(t, []string{
-			"you", "--server", "http://127.0.0.1:1",
-			"submit", "batch", "--dry-run", functionalBatch,
-		}, context.Background(), "", true)
-		if result.err != nil {
-			t.Fatalf("batch dry-run error = %v", result.err)
-		}
-		for _, marker := range []string{
-			"requestId: functional-submit-batch",
-			"batchSource: inline",
-			"dry-run: no request sent",
-		} {
-			if !strings.Contains(result.stdout, marker) {
-				t.Fatalf("batch dry-run output omitted %q: %q", marker, result.stdout)
-			}
-		}
-	})
+	t.Run("batch dry-run", func(t *testing.T) { testSubmitSubmitFamilyExecutesThroughRootBuiltProcessCase1(t, fixture) })
 
-	t.Run("unary named session", func(t *testing.T) {
-		payloadRoot := fixture.tempDir(t)
-		payloadPath := filepath.Join(payloadRoot, "request.md")
-		if err := writeSubmitFile(payloadPath, "# Review\n\nCheck the release."); err != nil {
-			t.Fatalf("write unary payload: %v", err)
-		}
-		server := newSubmitHTTPServer(t, fixture.ledger, func(w http.ResponseWriter, r *http.Request) {
-			_, _ = io.Copy(io.Discard, r.Body)
-			submitJSONResponse(w, http.StatusCreated, submitAcceptedResponse(
-				"functional-unary-request", "functional-unary-trace", "functional-unary-work", "release-review", "task",
-			))
-		})
+	t.Run("unary named session", func(t *testing.T) { testSubmitSubmitFamilyExecutesThroughRootBuiltProcessCase2(t, fixture) })
 
-		result := fixture.execute(t, []string{
-			"you", "--server", server.URL(), "--json",
-			"submit", "--name", "release-review", "--work-type-name", "task",
-			"--payload", payloadPath, "--session", "functional-session",
-		}, context.Background(), "", true)
-		if result.err != nil {
-			t.Fatalf("unary submit error = %v", result.err)
-		}
-		requests := server.requestsSnapshot()
-		if len(requests) != 1 || requests[0].Method != http.MethodPost || requests[0].Path != "/factory-sessions/functional-session/work" {
-			t.Fatalf("unary requests = %#v", requests)
-		}
-		for _, marker := range []string{
-			`"sessionId":"functional-session"`,
-			`"name":"release-review"`,
-			`"workTypeName":"task"`,
-		} {
-			if !strings.Contains(result.stdout, marker) {
-				t.Fatalf("unary output omitted %q: %q", marker, result.stdout)
-			}
-		}
-	})
-
-	t.Run("unary JSON payload", func(t *testing.T) {
-		payloadRoot := fixture.tempDir(t)
-		payloadPath := filepath.Join(payloadRoot, "request.json")
-		if err := writeSubmitFile(payloadPath, `{"title":"Review JSON"}`); err != nil {
-			t.Fatalf("write JSON payload: %v", err)
-		}
-		server := newSubmitHTTPServer(t, fixture.ledger, func(w http.ResponseWriter, r *http.Request) {
-			_, _ = io.Copy(io.Discard, r.Body)
-			submitJSONResponse(w, http.StatusCreated, submitAcceptedResponse(
-				"functional-json-request", "functional-json-trace", "functional-json-work", "json-review", "task",
-			))
-		})
-
-		result := fixture.execute(t, []string{
-			"you", "--server", server.URL(), "--json",
-			"submit", "--name", "json-review", "--work-type-name", "task",
-			"--payload", payloadPath,
-		}, context.Background(), "", true)
-		if result.err != nil {
-			t.Fatalf("unary JSON submit error = %v", result.err)
-		}
-		requests := server.requestsSnapshot()
-		if len(requests) != 1 || requests[0].Method != http.MethodPost || requests[0].Path != "/factory-sessions/~default/work" {
-			t.Fatalf("unary JSON requests = %#v", requests)
-		}
-		for _, marker := range []string{
-			`"name":"json-review"`,
-			`"workTypeName":"task"`,
-		} {
-			if !strings.Contains(result.stdout, marker) {
-				t.Fatalf("unary JSON output omitted %q: %q", marker, result.stdout)
-			}
-		}
-	})
+	t.Run("unary JSON payload", func(t *testing.T) { testSubmitSubmitFamilyExecutesThroughRootBuiltProcessCase3(t, fixture) })
 }
 
 // submitLiveTerminalLimit bounds the convergence wait for the canonical Factory
@@ -129,7 +45,7 @@ const submitLiveTerminalLimit = 15 * time.Second
 // TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure proves
 // live submit admission remains visible when the real provider boundary later
 // rejects the worker's structured output.
-func TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *testing.T) {
+func testSubmitSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *testing.T) {
 	fixture := packageSubmitFixture
 	factoryDir := fixture.tempDir(t)
 	writeSubmitFactory(t, factoryDir)
@@ -263,4 +179,103 @@ func readSubmitWorkerSessionTerminal(t testing.TB, baseURL, sessionID, workerSes
 		t.Fatalf("read Worker Session event stream: %v", err)
 	}
 	t.Fatal("Worker Session event stream ended without a terminal delivery")
+}
+
+func testSubmitSubmitFamilyExecutesThroughRootBuiltProcessCase1(t *testing.T, fixture *submitFixture) {
+	t.Helper()
+
+	result := fixture.execute(t, []string{
+		"you", "--server", "http://127.0.0.1:1",
+		"submit", "batch", "--dry-run", functionalBatch,
+	}, context.Background(), "", true)
+	if result.err != nil {
+		t.Fatalf("batch dry-run error = %v", result.err)
+	}
+	for _, marker := range []string{
+		"requestId: functional-submit-batch",
+		"batchSource: inline",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(result.stdout, marker) {
+			t.Fatalf("batch dry-run output omitted %q: %q", marker, result.stdout)
+		}
+	}
+
+}
+
+func testSubmitSubmitFamilyExecutesThroughRootBuiltProcessCase2(t *testing.T, fixture *submitFixture) {
+	t.Helper()
+
+	payloadRoot := fixture.tempDir(t)
+	payloadPath := filepath.Join(payloadRoot, "request.md")
+	if err := writeSubmitFile(payloadPath, "# Review\n\nCheck the release."); err != nil {
+		t.Fatalf("write unary payload: %v", err)
+	}
+	server := newSubmitHTTPServer(t, fixture.ledger, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		submitJSONResponse(w, http.StatusCreated, submitAcceptedResponse(
+			"functional-unary-request", "functional-unary-trace", "functional-unary-work", "release-review", "task",
+		))
+	})
+
+	result := fixture.execute(t, []string{
+		"you", "--server", server.URL(), "--json",
+		"submit", "--name", "release-review", "--work-type-name", "task",
+		"--payload", payloadPath, "--session", "functional-session",
+	}, context.Background(), "", true)
+	if result.err != nil {
+		t.Fatalf("unary submit error = %v", result.err)
+	}
+	requests := server.requestsSnapshot()
+	if len(requests) != 1 || requests[0].Method != http.MethodPost || requests[0].Path != "/factory-sessions/functional-session/work" {
+		t.Fatalf("unary requests = %#v", requests)
+	}
+	for _, marker := range []string{
+		`"sessionId":"functional-session"`,
+		`"name":"release-review"`,
+		`"workTypeName":"task"`,
+	} {
+		if !strings.Contains(result.stdout, marker) {
+			t.Fatalf("unary output omitted %q: %q", marker, result.stdout)
+		}
+	}
+
+}
+
+func testSubmitSubmitFamilyExecutesThroughRootBuiltProcessCase3(t *testing.T, fixture *submitFixture) {
+	t.Helper()
+
+	payloadRoot := fixture.tempDir(t)
+	payloadPath := filepath.Join(payloadRoot, "request.json")
+	if err := writeSubmitFile(payloadPath, `{"title":"Review JSON"}`); err != nil {
+		t.Fatalf("write JSON payload: %v", err)
+	}
+	server := newSubmitHTTPServer(t, fixture.ledger, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		submitJSONResponse(w, http.StatusCreated, submitAcceptedResponse(
+			"functional-json-request", "functional-json-trace", "functional-json-work", "json-review", "task",
+		))
+	})
+
+	result := fixture.execute(t, []string{
+		"you", "--server", server.URL(), "--json",
+		"submit", "--name", "json-review", "--work-type-name", "task",
+		"--payload", payloadPath,
+	}, context.Background(), "", true)
+	if result.err != nil {
+		t.Fatalf("unary JSON submit error = %v", result.err)
+	}
+	requests := server.requestsSnapshot()
+	if len(requests) != 1 || requests[0].Method != http.MethodPost || requests[0].Path != "/factory-sessions/~default/work" {
+		t.Fatalf("unary JSON requests = %#v", requests)
+	}
+	for _, marker := range []string{
+		`"name":"json-review"`,
+		`"workTypeName":"task"`,
+	} {
+		if !strings.Contains(result.stdout, marker) {
+			t.Fatalf("unary JSON output omitted %q: %q", marker, result.stdout)
+		}
+	}
+
 }

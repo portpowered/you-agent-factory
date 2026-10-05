@@ -1,4 +1,4 @@
-package process_test
+package customer_commands_test
 
 import (
 	"context"
@@ -137,7 +137,7 @@ func assertNoActivationMarkers(t testing.TB, label, stream string) {
 	}
 }
 
-func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
+func testProcessCLIHelpListsPublicCommandFamilies(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	listings := map[string][]string{}
@@ -195,7 +195,7 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 	})
 }
 
-func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
+func testProcessCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	for _, tc := range []struct {
@@ -227,7 +227,7 @@ func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
 	}
 }
 
-func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
+func testProcessCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 	t.Parallel()
 	home := newCLIHome(t)
 	result := home.requireSuccess(t, plainProcess(t), "--version")
@@ -247,7 +247,7 @@ func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 	home.assertNoProductFilesystemEffects(t)
 }
 
-func TestCLIGroupHelpRendersExactlyOnce(t *testing.T) {
+func testProcessCLIGroupHelpRendersExactlyOnce(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	for _, family := range []string{"factory", "config", "worker-sessions"} {
@@ -289,7 +289,7 @@ func runGroupHelp(t *testing.T, process support.Process, family, flag string) cl
 	return result
 }
 
-func TestCLIUnknownCommandWritesSafeCodedStderr(t *testing.T) {
+func testProcessCLIUnknownCommandWritesSafeCodedStderr(t *testing.T) {
 	t.Parallel()
 	home := newCLIHome(t)
 	result := home.run(t, plainProcess(t), nil, "not-a-command")
@@ -331,7 +331,7 @@ func TestCLIUnknownCommandWritesSafeCodedStderr(t *testing.T) {
 // TestCLIValidationFailureReturnsErrorWithoutSuccessOutput is the in-process
 // form of the validation-failure exit check; the numeric OS status remains
 // covered by the built-binary exit-status integration test.
-func TestCLIValidationFailureReturnsErrorWithoutSuccessOutput(t *testing.T) {
+func testProcessCLIValidationFailureReturnsErrorWithoutSuccessOutput(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	for _, tc := range []struct {
@@ -491,7 +491,7 @@ func goalMockWorkers(t testing.TB, runType workers.MockWorkerRunType, passthroug
 	return path
 }
 
-func TestCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
+func testProcessCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	home := configuredGoalHome(t, process)
@@ -506,7 +506,7 @@ func TestCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
 	assertNoActivationMarkers(t, "success stdout", result.Stdout)
 }
 
-func TestCLIFailureWritesDiagnosticToStderr(t *testing.T) {
+func testProcessCLIFailureWritesDiagnosticToStderr(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	home := configuredGoalHome(t, process)
@@ -529,7 +529,7 @@ func TestCLIFailureWritesDiagnosticToStderr(t *testing.T) {
 	}
 }
 
-func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
+func testProcessCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	accept := goalMockWorkers(t, workers.MockWorkerRunTypeAccept, true)
@@ -660,7 +660,7 @@ func stdinRunArgs(t testing.TB, home cliHome) []string {
 	}
 }
 
-func TestRunReadsPromptFromStdin(t *testing.T) {
+func testProcessRunReadsPromptFromStdin(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	home := newCLIHome(t)
@@ -674,7 +674,7 @@ func TestRunReadsPromptFromStdin(t *testing.T) {
 	}
 }
 
-func TestCLIEmptyRequiredStdinFailsWithoutDispatch(t *testing.T) {
+func testProcessCLIEmptyRequiredStdinFailsWithoutDispatch(t *testing.T) {
 	t.Parallel()
 	process := plainProcess(t)
 	home := newCLIHome(t)
@@ -699,7 +699,7 @@ const (
 // TestSubmitBatchReadsJSONFromStdin proves `you submit batch -` consumes one
 // canonical FACTORY_REQUEST_BATCH document from stdin and acknowledges the
 // accepted Work against a live in-process server.
-func TestSubmitBatchReadsJSONFromStdin(t *testing.T) {
+func testProcessSubmitBatchReadsJSONFromStdin(t *testing.T) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, map[string]any{
 		"name": "stdin-submit-batch",

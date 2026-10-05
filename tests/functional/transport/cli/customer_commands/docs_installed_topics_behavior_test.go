@@ -1,4 +1,4 @@
-package docs_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 // The provider command edge keeps this documentation proof local and avoids
 // model or paid-provider effects while still crossing validation, runtime
 // loading, and provider-backed worker execution.
-func TestInstalledDocumentationBehaviorThroughPublicProcess(t *testing.T) {
+func testDocsInstalledDocumentationBehaviorThroughPublicProcess(t *testing.T) {
 	t.Run("Factory examples validate and run", func(t *testing.T) {
 		testFactoryDocumentationExamples(t, documentationProcess(t).process, documentationProcess(t).providerRunner)
 	})

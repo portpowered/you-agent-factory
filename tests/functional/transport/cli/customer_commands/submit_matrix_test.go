@@ -1,4 +1,4 @@
-package submit_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ const submitBatchStdinLimit = 16 << 20
 
 // TestSubmitInputDependencyAndCleanupMatrix characterizes the public submit
 // input, HTTP, output, cancellation, ordering, and same-process cleanup edges.
-func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
+func testSubmitSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 	testSubmitFileAndStdinDryRuns(t)
 	testSubmitMalformedAndInvalidInput(t)
 	testSubmitRequiredAndEmptyInputs(t)

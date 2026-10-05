@@ -2294,7 +2294,7 @@ testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_ap
 testsleep-deadline-test|tests/functional/sessions/cli_test|tests/functional/sessions/cli/resolved_session_family_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/sessions/execution_test|tests/functional/sessions/execution/helpers_test.go::waitForBlockingInvocationStart::deadline::1
 testsleep-deadline-test|tests/functional/sessions/execution_test|tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData::deadline::1
-testsleep-deadline-test|tests/functional/transport/cli/output_test|tests/functional/transport/cli/output/text_stream_test.go::waitForInterruptibleStdoutLifecycle::deadline::1
+testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|tests/functional/transport/cli/customer_commands/output_text_stream_test.go::waitForInterruptibleStdoutLifecycle::deadline::1
 testsleep-deadline-test|tests/functional/transport/cli/root_discovery_test|tests/functional/transport/cli/root_discovery/root_discovery_test.go::runServerLifecycleCase::deadline::1
 testsleep-deadline-test|tests/functional/transport/cli/root_discovery_test|tests/functional/transport/cli/root_discovery/root_discovery_test.go::TestContinuousRunScopedServerKeepsListenerUntilCancellation::deadline::1
 testsleep-deadline-test|tests/functional/transport/cli/root_discovery_test|tests/functional/transport/cli/root_discovery/root_discovery_test.go::TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness::deadline::1
@@ -2305,8 +2305,8 @@ testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functi
 testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPIConcurrentSessionRequestsRemainIsolated::deadline::2
 testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/startup_shutdown_test.go::assertActiveRequestTerminatedAfterShutdown::deadline::1
 testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/startup_shutdown_test.go::startActiveBlockingInvocation::deadline::1
-testsleep-deadline-test|tests/functional/transport/submit_test|tests/functional/transport/submit/matrix_test.go::testSubmitCancellation::deadline::1
-testsleep-deadline-test|tests/functional/transport/submit_test|tests/functional/transport/submit/matrix_test.go::testSubmitRecoveryAndOutput::deadline::1
+testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|tests/functional/transport/cli/customer_commands/submit_matrix_test.go::testSubmitCancellation::deadline::1
+testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|tests/functional/transport/cli/customer_commands/submit_matrix_test.go::testSubmitRecoveryAndOutput::deadline::1
 testsleep-deadline-test|tests/functional/work/transports/cli_test|tests/functional/work/transports/cli/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerCommand::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerLines::deadline::1

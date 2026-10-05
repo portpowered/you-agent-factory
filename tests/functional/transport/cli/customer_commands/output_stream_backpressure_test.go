@@ -1,4 +1,4 @@
-package output_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ const (
 // response-stream output preserves Factory Event and terminal InvocationResult
 // emission order when stdout is blocked by a slow consumer, so parsers never
 // observe reordered lifecycle or result records under backpressure.
-func TestCLISlowWriterDoesNotReorderResponseEvents(t *testing.T) {
+func testOutputCLISlowWriterDoesNotReorderResponseEvents(t *testing.T) {
 	t.Parallel()
 	writer := newGatedStdoutWriter()
 	stdout := runGoalResponseStreamWithStdout(t, writer)
@@ -192,7 +192,7 @@ func runGoalResponseStreamWithStdout(t *testing.T, stdout *gatedStdoutWriter) *g
 // TestCLIWriterFailureCancelsInvocation proves a broken stdout writer ends the
 // CLI response-stream invocation unsuccessfully and cancels in-flight provider
 // external work so no orphaned subprocess remains after the CLI returns.
-func TestCLIWriterFailureCancelsInvocation(t *testing.T) {
+func testOutputCLIWriterFailureCancelsInvocation(t *testing.T) {
 	t.Parallel()
 	externalWork := newCancellableExternalWorkRunner()
 	writer := newInFlightFailureStdoutWriter(errors.New(writerFailureStdoutError), externalWork)

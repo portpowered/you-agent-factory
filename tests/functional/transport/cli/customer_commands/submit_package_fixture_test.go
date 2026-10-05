@@ -1,4 +1,4 @@
-package submit_test
+package customer_commands_test
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ import (
 
 var packageSubmitFixture *submitFixture
 
-func TestMain(m *testing.M) {
+func initializeSubmitFixture(t *testing.T) {
 	ledger := newSubmitLifecycleLedger()
 	providerRunner := &submitProviderCommandRunner{}
 	apiStarter := &submitAPIServerStarter{ready: make(chan *support.ProcessAPIServer, 16), ledger: ledger}
@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "build submit functional process: %v\n", err)
-		os.Exit(1)
+		t.Fatal("customer fixture setup failed; see preceding diagnostic")
 	}
 	packageSubmitFixture = &submitFixture{
 		process: process,
@@ -46,20 +46,24 @@ func TestMain(m *testing.M) {
 		ledger:  ledger,
 	}
 	ledger.processStarted()
+	t.Cleanup(func() {
 
-	code := m.Run()
-	closeErr := process.Close(context.Background())
-	ledger.processClosed()
-	if closeErr != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "close submit functional process: %v\n", closeErr)
-		code = 1
-	}
-	if cleanErr := ledger.assertClean(); cleanErr != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "submit functional fixture leak: %v\n", cleanErr)
-		code = 1
-	}
-	_, _ = fmt.Fprintf(os.Stderr, "submit functional lifecycle ledger: %s\n", ledger.summary())
-	os.Exit(code)
+		code := 0
+		closeErr := process.Close(context.Background())
+		ledger.processClosed()
+		if closeErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "close submit functional process: %v\n", closeErr)
+			code = 1
+		}
+		if cleanErr := ledger.assertClean(); cleanErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "submit functional fixture leak: %v\n", cleanErr)
+			code = 1
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "submit functional lifecycle ledger: %s\n", ledger.summary())
+		if code != 0 {
+			t.Error("customer fixture cleanup failed; see preceding diagnostic")
+		}
+	})
 }
 
 type submitFixture struct {

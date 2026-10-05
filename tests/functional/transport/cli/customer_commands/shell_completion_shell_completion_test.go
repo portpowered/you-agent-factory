@@ -1,4 +1,4 @@
-package shell_completion_test
+package customer_commands_test
 
 import (
 	"encoding/json"
@@ -18,7 +18,7 @@ const (
 // and dynamic candidates through the production root process. Shell syntax is
 // covered by transport-level unit and integration tests; this functional test
 // does not build or invoke a CLI executable.
-func TestGeneratedCompletionScriptsReachRootProcess(t *testing.T) {
+func testShellcompletionGeneratedCompletionScriptsReachRootProcess(t *testing.T) {
 	for _, shell := range []string{"bash", "zsh", "powershell"} {
 		shell := shell
 		t.Run(shell, func(t *testing.T) {

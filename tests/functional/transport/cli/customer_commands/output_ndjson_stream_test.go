@@ -1,4 +1,4 @@
-package output_test
+package customer_commands_test
 
 import (
 	"encoding/json"
@@ -20,7 +20,7 @@ const (
 // successful CLI NDJSON response-stream run emits public Factory Event records
 // with monotonic sequences, followed by exactly one terminal InvocationResult
 // that decodes through the public contract without private stream vocabulary.
-func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T) {
+func testOutputCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T) {
 	t.Parallel()
 	stdout := runGoalResponseStream(t)
 	records := decodeNDJSONRecords(t, stdout)
@@ -82,7 +82,7 @@ func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T)
 // TestCLINDJSONFailureEndsWithOneTerminalResult proves a deterministic terminal
 // invocation failure under CLI NDJSON response-stream mode ends with exactly one
 // failed InvocationResult and emits no stream records after that terminal record.
-func TestCLINDJSONFailureEndsWithOneTerminalResult(t *testing.T) {
+func testOutputCLINDJSONFailureEndsWithOneTerminalResult(t *testing.T) {
 	t.Parallel()
 	stdout := runGoalResponseStreamFailure(t)
 	records := decodeNDJSONRecords(t, stdout)
