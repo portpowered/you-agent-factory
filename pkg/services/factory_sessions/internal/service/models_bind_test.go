@@ -847,6 +847,79 @@ func TestRuntimeOpeningCleanupReportsModelsOwnershipAddedDuringRelease(t *testin
 	assertOnlyOwnedModelsScopeClosed(t, modelService.closeRequests, bind.Scope)
 }
 
+func TestRuntimeOpeningCleanupRetainsDependenciesWhenModelsReleaseAddsConsumer(t *testing.T) {
+	t.Parallel()
+	for _, releaseFails := range []bool{false, true} {
+		t.Run(fmt.Sprintf("releaseFails=%t", releaseFails), func(t *testing.T) {
+			t.Parallel()
+			cleanup := &runtimeOpeningCleanup{}
+			var events []string
+			dependency := &recordingModelsService{events: &events}
+			scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cleanup.OwnModelsScope(t.Context(), modelsRuntimeBind{Root: dependency, Scope: scope})
+			releaseErr := errors.New("Models release failed")
+			registering := &consumerRegisteringModelsService{
+				recordingModelsService: &recordingModelsService{}, cleanup: cleanup, events: &events,
+			}
+			if releaseFails {
+				registering.failure = releaseErr
+			}
+			cleanup.OwnModelsScope(t.Context(), modelsRuntimeBind{Root: registering, Scope: scope})
+			activation, _ := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+			closeErr := activation.Close(t.Context())
+			if releaseFails && !errors.Is(closeErr, releaseErr) {
+				t.Fatalf("cleanup = %v, want original release failure", closeErr)
+			}
+			if !releaseFails && !errors.Is(closeErr, errRuntimeOpeningCleanupPending) {
+				t.Fatalf("cleanup = %v, want pending ownership", closeErr)
+			}
+			if len(dependency.closeRequests) != 0 {
+				t.Fatal("Models dependency released before its newly registered consumer")
+			}
+			for range 2 {
+				if err := activation.Close(t.Context()); err != nil {
+					t.Fatalf("explicit cleanup retry: %v", err)
+				}
+			}
+			want := []string{"registering-models-close", "new-consumer-close"}
+			if releaseFails {
+				want = append(want, "registering-models-close")
+			}
+			want = append(want, "models-close")
+			if !slices.Equal(events, want) {
+				t.Fatalf("release order = %v, want %v", events, want)
+			}
+			assertOnlyOwnedModelsScopeClosed(t, dependency.closeRequests, scope)
+		})
+	}
+}
+
+type consumerRegisteringModelsService struct {
+	*recordingModelsService
+	cleanup *runtimeOpeningCleanup
+	events  *[]string
+	failure error
+	added   bool
+}
+
+func (service *consumerRegisteringModelsService) CloseRuntimeScope(_ context.Context, request models.CloseRuntimeScopeRequest) (models.CloseRuntimeScopeResult, error) {
+	*service.events = append(*service.events, "registering-models-close")
+	if !service.added {
+		service.added = true
+		service.cleanup.Add(func() error {
+			*service.events = append(*service.events, "new-consumer-close")
+			return nil
+		})
+		if service.failure != nil {
+			return models.CloseRuntimeScopeResult{}, service.failure
+		}
+	}
+	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+}
+
 func TestRuntimeOpeningCleanupRetainsModelsAcrossConsumerAndDependencyFailures(t *testing.T) {
 	t.Parallel()
 	consumerErr, modelsErr := errors.New("consumer close failed"), errors.New("Models close failed")

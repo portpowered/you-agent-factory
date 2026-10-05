@@ -107,7 +107,7 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	// A failed consumer still owns its dependency. Release independent resources
 	// now, but keep Models available until every consumer has closed successfully.
 	if closeErr == nil && !consumersAdded {
-		models, closeErr = cleanup.releaseActions(models)
+		models, closeErr = cleanup.releaseModels(models)
 	}
 	cleanup.mu.Lock()
 	cleanup.actions = append(pending, cleanup.actions...)
@@ -120,6 +120,27 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	}
 	cleanup.mu.Unlock()
 	return closeErr
+}
+
+// A dependency release can itself register a consumer. Recheck between Models
+// releases so the remaining dependencies stay available until that consumer
+// closes on an explicit retry.
+func (cleanup *runtimeOpeningCleanup) releaseModels(actions []func() error) ([]func() error, error) {
+	var pending []func() error
+	var closeErr error
+	for index := len(actions) - 1; index >= 0; index-- {
+		cleanup.mu.Lock()
+		consumersAdded := len(cleanup.actions) != 0
+		cleanup.mu.Unlock()
+		if consumersAdded {
+			return append(actions[:index+1], pending...), closeErr
+		}
+		if err := actions[index](); err != nil {
+			closeErr = errors.Join(closeErr, err)
+			pending = append([]func() error{actions[index]}, pending...)
+		}
+	}
+	return pending, closeErr
 }
 
 func (*runtimeOpeningCleanup) releaseActions(actions []func() error) ([]func() error, error) {
