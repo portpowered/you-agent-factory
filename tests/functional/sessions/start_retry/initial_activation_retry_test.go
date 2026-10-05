@@ -95,16 +95,25 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("failed resource opening retries with the same identity", func(t *testing.T) {
 		t.Parallel()
 		peerHistory := failed.startPeer(t, sessions)
-		_, err := sessions.Start(t.Context(), failed.request())
+		request := failed.request()
+		recordPath := filepath.Join(t.TempDir(), "retry.replay.jsonl")
+		request.RuntimeSelection.Recording.RecordPath = recordPath
+		_, err := sessions.Start(t.Context(), request)
 		if !errors.Is(err, failure) {
 			t.Fatalf("failed Start error = %v, want controlled opening cause", err)
 		}
 		assertInitialOpeningNotPublished(t, sessions, failed.candidateID)
 		assertInitialOpeningHistoryPreserved(t, sessions, failed.peerID, peerHistory)
 		assertInitialOpeningInvocation(t, sessions, failed.peerID)
-		failed.startCandidate(t, sessions)
+		// Reuse the failed opening's identity and destinations. A new filename
+		// would conceal a partial recording left behind by failed activation.
+		startInitialOpeningSession(t, sessions, request)
 		assertInitialOpeningInvocation(t, sessions, failed.candidateID)
 		assertInitialOpeningDuplicate(t, sessions, failed, effects)
+		history := initialOpeningHistory(t, sessions, failed.candidateID)
+		closeInitialOpeningSession(t, sessions, failed.candidateID)
+		assertInitialOpeningReplay(t, process, recordPath, failed.candidateID, history)
+		assertInitialOpeningHistoryPreserved(t, sessions, failed.peerID, peerHistory)
 		assertInitialOpeningInvocation(t, sessions, failed.peerID)
 	})
 	t.Run("cancellation while opening unwinds before same identity retry", func(t *testing.T) {
@@ -131,11 +140,13 @@ func testCanceledInitialOpening(t *testing.T, sessions factorysessions.Service, 
 	t.Helper()
 	t.Cleanup(gate.unblock)
 	peerHistory := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	request.RuntimeSelection.Recording.RecordPath = filepath.Join(t.TempDir(), "canceled.replay.jsonl")
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		_, err := sessions.Start(ctx, scenario.request())
+		_, err := sessions.Start(ctx, request)
 		result <- err
 	}()
 	select {
@@ -156,7 +167,7 @@ func testCanceledInitialOpening(t *testing.T, sessions factorysessions.Service, 
 	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
-	scenario.startCandidate(t, sessions)
+	startInitialOpeningSession(t, sessions, request)
 	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
 }
 
@@ -241,11 +252,6 @@ func (scenario initialOpeningScenario) startPeer(t *testing.T, sessions factorys
 	startInitialOpeningSession(t, sessions, request)
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
 	return initialOpeningHistory(t, sessions, scenario.peerID)
-}
-
-func (scenario initialOpeningScenario) startCandidate(t *testing.T, sessions factorysessions.Service) {
-	t.Helper()
-	startInitialOpeningSession(t, sessions, scenario.request())
 }
 
 func startInitialOpeningSession(t *testing.T, sessions factorysessions.Service, request factorysessions.SessionStartRequest) {

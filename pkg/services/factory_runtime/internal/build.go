@@ -254,6 +254,17 @@ func (f *RuntimeFactory) Build(
 	if err := validateConfiguredRuntimeWorkers(loadedFactoryCfg); err != nil {
 		return nil, err
 	}
+	// Prepare the input destination before binding a recording identity.
+	// A failed directory open must leave that identity available for retry;
+	// finalizing a bound recording would permanently reject its later writes.
+	if err := ensureRuntimeInputsDir(dir, logger, f.runtimeDirs); err != nil {
+		return nil, err
+	}
+	// Filesystem effects may complete after cancellation. Do not bind an
+	// unpublished recording or engine when opening admission has been canceled.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
 		Topology:           net,
 		Definitions:        loadedFactoryCfg,
@@ -480,9 +491,6 @@ func assembleRuntimeBundle(
 		SetPromptSourceReader(func(string) ([]byte, error))
 	}); ok && inputFiles != nil {
 		configurable.SetPromptSourceReader(inputFiles.ReadFile)
-	}
-	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
-		return nil, err
 	}
 	// Filesystem effects may finish after admission was canceled. Keep the
 	// unpublished engine inside this opening owner so unwind releases only its
