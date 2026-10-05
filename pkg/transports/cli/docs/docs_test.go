@@ -76,6 +76,28 @@ func TestIndexMarkdown_UsesRequestedExecutableAndCanonicalSummaries(t *testing.T
 	}
 }
 
+func TestIndexMarkdown_OrdersEqualDisplayOrderTopicsAlphabetically(t *testing.T) {
+	// Registry replacement is package-global, so this test must remain serial.
+	original := topicRegistry
+	t.Cleanup(func() { topicRegistry = original })
+	topicRegistry = newTopicRegistry([]topicDocument{
+		{topic: TopicWorkers, description: "Worker setup.", displayOrder: 20},
+		{topic: TopicTemplates, description: "Prompt templates.", displayOrder: 20},
+		{topic: TopicConfig, description: "Factory configuration.", displayOrder: 20},
+		{topic: TopicRun, description: "Run modes.", displayOrder: 10},
+	})
+
+	index := IndexMarkdown("factory-cli")
+	_, got, ok := strings.Cut(index, "Packaged reference topics:\n\n")
+	want := "- `run` - Run modes. Run `factory-cli docs run`.\n" +
+		"- `config` - Factory configuration. Run `factory-cli docs config`.\n" +
+		"- `templates` - Prompt templates. Run `factory-cli docs templates`.\n" +
+		"- `workers` - Worker setup. Run `factory-cli docs workers`.\n"
+	if !ok || got != want {
+		t.Fatalf("rendered topic list = %q, want %q", got, want)
+	}
+}
+
 func TestMarkdown_ResolvesAliasesAndReportsUnsupportedTopics(t *testing.T) {
 	canonical, err := Markdown(string(TopicBatchInputs))
 	if err != nil {
