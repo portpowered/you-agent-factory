@@ -1,8 +1,12 @@
 package root_composition_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -275,4 +279,54 @@ func processExecuteRuntimeOpeningFactoryConfig() map[string]any {
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		}},
 	}
+}
+
+func sessionSummaryContains(summaries []factoryapi.FactorySessionSummary, sessionID string) bool {
+	for _, summary := range summaries {
+		if summary.Id == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+func postSessionsLifecycleControl(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+	pathSegment := "pause"
+	if operation == factoryapi.FactorySessionLifecycleControlKindResume {
+		pathSegment = "resume"
+	}
+	return postSessionsJSON[factoryapi.FactorySessionLifecycleControlResponse](
+		t,
+		baseURL+"/factory-sessions/"+sessionID+"/"+pathSegment,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+		"apply Factory Session lifecycle control through public HTTP surface",
+	)
+}
+
+func postSessionsJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
+	t.Helper()
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("%s: marshal request: %v", failurePrefix, err)
+	}
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("%s: POST %s status = %d, want success: %s", failurePrefix, endpoint, response.StatusCode, payload)
+	}
+	var decoded T
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
+	}
+	return decoded
 }
