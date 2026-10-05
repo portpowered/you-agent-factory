@@ -733,6 +733,10 @@ func finalizeRuntimeWorkspaceSelection(
 		// Detached execution must carry the same default workspace that the
 		// legacy workstation executor derived from RuntimeConfig.
 		selection.workingDirectory = baseDirectory
+		// This is an already-selected runtime root, not an authored portable
+		// path. Resolving it again can prefix the root twice on Unix when the
+		// optional artifact filesystem is absent.
+		return
 	}
 	selection.workingDirectory = resolveRuntimePath(baseDirectory, selection.workingDirectory, fileSystem)
 }

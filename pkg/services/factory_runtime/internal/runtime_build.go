@@ -13,7 +13,6 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -21,8 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type ProgressPublisherFactory func(string) workers.ProgressPublisher
-type DispatchCompletionFactory func(string) func(string)
 type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFactory
 
 // TODO: these command runner overrides adn what else, should not exist within the factory runtime
@@ -228,117 +225,6 @@ func (opening runtimeScopeWithFlush) OpenRuntime(
 	request.FlushInterval = opening.flushInterval
 	request.ReplayEvents = cloneFactoryEvents(opening.resumeCanonicalEvents)
 	return opening.RuntimeScopeService.OpenRuntime(ctx, request)
-}
-
-// newRuntimeBuild constructs the canonical runtime-build service from decomposed process
-// configuration and domain collaborators.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func NewRuntimeBuild(
-	defaultWorkerModelProvider string,
-	defaultWorkerModel string,
-	applyOperatorDefaults bool,
-	recordPath string,
-	workflowID string,
-	defaultSessionID string,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	runtimeMode factorydefinitions.RuntimeMode,
-	runtimeScheduler scheduler.Scheduler,
-	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	runtimeLogDir string,
-	runtimeLogConfig factory.RuntimeLogStorageConfig,
-	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
-	runtimeMetricsPolicy RuntimeMetricsPolicy,
-	runtimeMetricsDir string,
-	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
-	recordFlushInterval time.Duration,
-	backendScopeID string,
-	factoryRunnerID string,
-	verbose bool,
-	skipBuiltInPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
-	progressFactory ProgressPublisherFactory,
-	completionFactory DispatchCompletionFactory,
-	petriMutationRecorder factory.PetriMutationRecorder,
-	worldStateProjector factory.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeScopeService,
-	loadFactory factory.LoadedFactoryLoader,
-	initialFactorySnapshot InitialFactorySnapshotFactory,
-	preparation *runtimebuild.Service,
-	opening *BundleOpening,
-) (*runtimebuild.CompatibilityBuild, error) {
-	if opening == nil {
-		return nil, fmt.Errorf("Factory Runtime bundle opening is required")
-	}
-	return runtimebuild.BindCompatibility(preparation, runtimebuild.BuildDefaults{
-		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
-		ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
-	},
-		providerOverride,
-		providerCommandRunner,
-		scriptCommandRunner,
-		mockWorkersConfig,
-		func(
-			config *workers.MockWorkersConfig,
-			runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
-			next platformprocess.CommandRunner,
-		) platformprocess.CommandRunner {
-			if mockCommandRunnerFactory == nil {
-				return next
-			}
-			return mockCommandRunnerFactory(config, runtimeConfig, next)
-		},
-		clock,
-		baseLogger,
-		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			var progressPublisher workers.ProgressPublisher
-			if progressFactory != nil {
-				progressPublisher = progressFactory(spec.SessionID)
-			}
-			var dispatchCompleted func(string)
-			if completionFactory != nil {
-				dispatchCompleted = completionFactory(spec.SessionID)
-			}
-			return opening.Open(
-				ctx,
-				spec,
-				runtimeLogDir,
-				runtimeLogConfig,
-				runtimeFileLoggingPolicy,
-				runtimeMetricsPolicy,
-				runtimeMetricsDir,
-				runtimeMetricsConfig,
-				recordFlushInterval,
-				defaultSessionID,
-				runtimeMode,
-				runtimeScheduler,
-				inlineDispatch,
-				submissionRecorder,
-				dispatchRecorder,
-				backendScopeID,
-				factoryRunnerID,
-				verbose,
-				skipBuiltInPrerequisiteValidation,
-				invocationSkipPermissionsOverride,
-				mockWorkersConfig,
-				progressPublisher,
-				dispatchCompleted,
-				worldStateProjector,
-				recordingsRuntime,
-				initialFactorySnapshot,
-			)
-		},
-		petriMutationRecorder,
-	)
 }
 
 func newRuntimeWorkersService(

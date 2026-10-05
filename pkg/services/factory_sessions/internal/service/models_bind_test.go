@@ -432,8 +432,8 @@ func TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure(t *te
 		return nil
 	})
 	openingErr := errors.New("later opening step failed")
-	if err := cleanup.Unwind(openingErr); !errors.Is(err, openingErr) {
-		t.Fatalf("Unwind() error = %v, want opening failure", err)
+	if err := errors.Join(openingErr, cleanup.Close()); !errors.Is(err, openingErr) {
+		t.Fatalf("opening failure cleanup error = %v, want opening failure", err)
 	}
 	if !slices.Equal(events, []string{"models-open", "later-close", "models-close"}) {
 		t.Fatalf("cleanup events = %v, want reverse acquisition order", events)
@@ -467,10 +467,10 @@ func TestRuntimeOpeningCleanupPreservesPrimaryErrorAndAggregatesCleanupFailures(
 		return secondCleanupErr
 	})
 
-	err := cleanup.Unwind(openingErr)
+	err := errors.Join(openingErr, cleanup.Close())
 	for _, expected := range []error{openingErr, firstCleanupErr, secondCleanupErr} {
 		if !errors.Is(err, expected) {
-			t.Fatalf("Unwind() error = %v, want to retain %v", err, expected)
+			t.Fatalf("opening failure cleanup error = %v, want to retain %v", err, expected)
 		}
 	}
 	if !slices.Equal(events, []string{"second-close", "first-close"}) {
@@ -558,10 +558,10 @@ func TestRuntimeOpeningCleanupOwnsPartialRecordAndRetriesRelease(t *testing.T) {
 	record := &openingRecordCleanupFake{finalizeErr: finalizeErr, closeErr: closeErr}
 	cleanup.OwnRuntimeRecord(nil, openingCoordinatorClock{})
 	cleanup.OwnRuntimeRecord(record, openingCoordinatorClock{})
-	err := cleanup.Unwind(openingErr)
+	err := errors.Join(openingErr, cleanup.Close())
 	for _, expected := range []error{openingErr, finalizeErr, closeErr} {
 		if !errors.Is(err, expected) {
-			t.Fatalf("Unwind() = %v, missing cause %v", err, expected)
+			t.Fatalf("opening failure cleanup = %v, missing cause %v", err, expected)
 		}
 	}
 	if !record.finalizedAt.Equal((openingCoordinatorClock{}).Now().UTC()) {

@@ -106,10 +106,6 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	return closeErr
 }
 
-func (cleanup *runtimeOpeningCleanup) Unwind(cause error) error {
-	return errors.Join(cause, cleanup.Close())
-}
-
 func bindModelsRuntimeScope(
 	ctx context.Context,
 	modelService models.Service,

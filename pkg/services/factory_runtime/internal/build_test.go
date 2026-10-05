@@ -532,14 +532,7 @@ func assembleCleanupTestRuntime(
 	loaded interfaces.MutableLoadedFactorySource, scopes recordings.RuntimeScopeService,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (*factory.RuntimeActivation, error) {
-	_, record, _, _, _, err := assembly.Assemble(
-		ctx, "", "", false, "recording.json", "", request.FactorySessionID, request.FactorySessionID,
-		nil, nil, nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
-		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
-		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0,
-		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, nil, nil, scopes, nil,
-		dir, dir, dir, loaded, request.RuntimeID, nil, nil, nil, nil, nil, false,
-	)
+	_, record, _, err := assembleTestRuntimeRecord(ctx, assembly, dir, loaded, scopes, clock, request)
 	if record == nil {
 		return nil, err
 	}
@@ -547,6 +540,90 @@ func assembleCleanupTestRuntime(
 		finalizer := record.(interface{ FinalizeRecording(time.Time) error })
 		return errors.Join(finalizer.FinalizeRecording(clock.Now()), record.CloseArtifacts())
 	}}, err
+}
+
+func assembleTestRuntimeRecord(
+	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
+	loaded interfaces.MutableLoadedFactorySource, scopes recordings.RuntimeScopeService,
+	clock factory.Clock, request factory.RuntimeActivationRequest,
+) (factory.RuntimeReplacementBuilder, factory.RuntimeRecord, factory.SessionBuildSpec, error) {
+	builder, record, spec, _, _, err := assembly.Assemble(
+		ctx, "", "", false, "recording.json", "", request.FactorySessionID, request.FactorySessionID,
+		nil, nil, nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
+		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
+		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0,
+		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, nil, nil, scopes, nil,
+		dir, dir, dir, loaded, request.RuntimeID, nil, nil, nil, nil, nil, false,
+	)
+	return builder, record, spec, err
+}
+
+func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := clockwork.NewFakeClock()
+	loadErr := errors.New("replacement load failed")
+	failLoad := true
+	loader := func(path string, _ interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
+		if failLoad {
+			return nil, loadErr
+		}
+		return loadedFactoryFixture(path)
+	}
+	sessions := &stubWorkerSessionsService{}
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembly, err := factoryinternal.NewAssembly(opening,
+		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{},
+		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recorded recordings.RuntimeScopeRequest
+	scopes := &testRuntimeScopeServiceStub{capturedRequest: &recorded,
+		ledgerFactory: func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
+			return &recordingfixtures.ScriptedRuntimeLedger{GenerationID: recorded.RecordingID}
+		}}
+	builder, initial, spec, err := assembleTestRuntimeRecord(t.Context(), assembly, dir, loaded, scopes, clock,
+		factory.RuntimeActivationRequest{FactorySessionID: "candidate", RuntimeID: "initial-runtime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = initial.CloseArtifacts() })
+	if spec.RuntimeInstanceID != "initial-runtime" || recorded.RecordingID != "initial-runtime" {
+		t.Fatalf("initial identity = %q/%q", spec.RuntimeInstanceID, recorded.RecordingID)
+	}
+	if replacement, err := builder.BuildReplacement(t.Context(), dir, dir, "candidate", dir); !errors.Is(err, loadErr) || replacement != nil {
+		t.Fatalf("failed replacement = %#v, %v, want load failure without resource", replacement, err)
+	}
+	failLoad = false
+	clock.Advance(time.Minute)
+	replacement, err := builder.BuildReplacement(t.Context(), dir, dir, "candidate", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = replacement.CloseArtifacts() })
+	assertReplacementSelections(t, initial, replacement, recorded, clock)
+}
+
+func assertReplacementSelections(t *testing.T, initial, replacement factory.RuntimeRecord, recorded recordings.RuntimeScopeRequest, clock factory.Clock) {
+	t.Helper()
+	if !replacement.StartTime().Equal(clock.Now()) || recorded.RecordingID != testRuntimeID() {
+		t.Fatalf("replacement time/identity = %v/%q", replacement.StartTime(), recorded.RecordingID)
+	}
+	if replacement.LoadedRuntimeConfig() == initial.LoadedRuntimeConfig() || replacement.RecordingLedger() == initial.RecordingLedger() {
+		t.Fatal("replacement shares candidate or history with the initial generation")
+	}
+	if initial.StartTime() == replacement.StartTime() || initial.StreamGeneration() != "initial-runtime" {
+		t.Fatal("replacement changed the initial generation's clock or identity")
+	}
 }
 
 type testCleanupAssemblyHost struct{ instancehost.Service }

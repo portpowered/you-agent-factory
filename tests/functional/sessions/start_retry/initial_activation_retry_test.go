@@ -120,27 +120,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 
 	t.Run("failed resource opening retries with the same identity", func(t *testing.T) {
 		t.Parallel()
-		peerHistory := failed.startPeer(t, sessions)
-		request := failed.request()
-		recordPath := filepath.Join(t.TempDir(), "retry.replay.jsonl")
-		request.RuntimeSelection.Recording.RecordPath = recordPath
-		_, err := sessions.Start(t.Context(), request)
-		if !errors.Is(err, failure) {
-			t.Fatalf("failed Start error = %v, want controlled opening cause", err)
-		}
-		assertInitialOpeningNotPublished(t, sessions, failed.candidateID)
-		assertInitialOpeningHistoryPreserved(t, sessions, failed.peerID, peerHistory)
-		assertInitialOpeningInvocation(t, sessions, failed.peerID)
-		// Reuse the failed opening's identity and destinations. A new filename
-		// would conceal a partial recording left behind by failed activation.
-		startInitialOpeningSession(t, sessions, request)
-		assertInitialOpeningInvocation(t, sessions, failed.candidateID)
-		assertInitialOpeningDuplicate(t, sessions, failed, effects)
-		history := initialOpeningHistory(t, sessions, failed.candidateID)
-		closeInitialOpeningSession(t, sessions, failed.candidateID)
-		assertInitialOpeningReplay(t, process, recordPath, failed.candidateID, history)
-		assertInitialOpeningHistoryPreserved(t, sessions, failed.peerID, peerHistory)
-		assertInitialOpeningInvocation(t, sessions, failed.peerID)
+		testFailedInitialOpeningRetry(t, sessions, process, failed, effects, failure)
 	})
 	t.Run("cancellation while opening unwinds before same identity retry", func(t *testing.T) {
 		t.Parallel()
@@ -177,6 +157,31 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testInitialOpeningWorktreeReuse(t, sessions, checkout, effects)
 	})
+}
+
+func testFailedInitialOpeningRetry(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, effects *initialOpeningEffects, failure error) {
+	t.Helper()
+	peerHistory := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	recordPath := filepath.Join(t.TempDir(), "retry.replay.jsonl")
+	request.RuntimeSelection.Recording.RecordPath = recordPath
+	_, err := sessions.Start(t.Context(), request)
+	if !errors.Is(err, failure) {
+		t.Fatalf("failed Start error = %v, want controlled opening cause", err)
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	// Reuse the failed opening's identity and destinations. A new filename
+	// would conceal a partial recording left behind by failed activation.
+	startInitialOpeningSession(t, sessions, request)
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	assertInitialOpeningDuplicate(t, sessions, scenario, effects)
+	history := initialOpeningHistory(t, sessions, scenario.candidateID)
+	closeInitialOpeningSession(t, sessions, scenario.candidateID)
+	assertInitialOpeningReplay(t, process, recordPath, scenario.candidateID, history)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
 }
 
 func assertInitialOpeningDiagnostics(t *testing.T, logs *observer.ObservedLogs, sessionID, dir string) {

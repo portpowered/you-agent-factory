@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
@@ -30,8 +31,8 @@ type Assembly struct {
 }
 
 // NewAssembly constructs the inert compatibility assembly selected by Wire.
-// Bundle opening uses fixed process behavior; the per-opening compatibility
-// builder remains until initial activation and replacement callers migrate.
+// Opening and replacement consume fixed process behavior. Only invocation
+// selections and scoped resources are allocated when a session opens.
 func NewAssembly(
 	bundleOpening *BundleOpening,
 	sidecars *SidecarOpening,
@@ -115,51 +116,6 @@ func (a *Assembly) Assemble(
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
 			fmt.Errorf("Factory Runtime assembly service is required")
 	}
-	builder, err := NewRuntimeBuild(
-		defaultWorkerModelProvider,
-		defaultWorkerModel,
-		applyOperatorDefaults,
-		recordPath,
-		workflowID,
-		defaultSessionID,
-		workstationLoader,
-		providerOverride,
-		providerCommandRunner,
-		scriptCommandRunner,
-		mockWorkersConfig,
-		runtimeMode,
-		runtimeScheduler,
-		inlineDispatch,
-		submissionRecorder,
-		dispatchRecorder,
-		runtimeLogDir,
-		runtimeLogConfig,
-		runtimeFileLoggingPolicy,
-		runtimeMetricsPolicy,
-		runtimeMetricsDir,
-		runtimeMetricsConfig,
-		recordFlushInterval,
-		backendScopeID,
-		factoryRunnerID,
-		verbose,
-		skipBuiltInPrerequisiteValidation,
-		invocationSkipPermissionsOverride,
-		clock,
-		baseLogger,
-		mockCommandRunnerFactory,
-		progressFactory,
-		completionFactory,
-		petriMutationRecorder,
-		worldStateProjector,
-		recordingsRuntime,
-		loadFactory,
-		initialFactorySnapshot,
-		a.preparation,
-		a.bundleOpening,
-	)
-	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
-	}
 	if recordingsRuntime == nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, fmt.Errorf(
 			"Recordings runtime opening is required",
@@ -217,24 +173,42 @@ func (a *Assembly) Assemble(
 	); err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
-	var progressPublisher workers.ProgressPublisher
-	if progressFactory != nil {
-		progressPublisher = progressFactory(spec.SessionID)
+	// The callback retains this session's selections, not a secondary service
+	// graph. Both initial and replacement resources use the fixed opening owner.
+	open := func(ctx context.Context, spec factoryruntime.SessionBuildSpec) (*factoryhost.Bundle, error) {
+		var progressPublisher workers.ProgressPublisher
+		if progressFactory != nil {
+			progressPublisher = progressFactory(spec.SessionID)
+		}
+		var dispatchCompleted func(string)
+		if completionFactory != nil {
+			dispatchCompleted = completionFactory(spec.SessionID)
+		}
+		return a.bundleOpening.Open(
+			ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
+			runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
+			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
+			submissionRecorder, dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
+			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
+			progressPublisher, dispatchCompleted, worldStateProjector, recordingsRuntime, initialFactorySnapshot,
+		)
 	}
-	var dispatchCompleted func(string)
-	if completionFactory != nil {
-		dispatchCompleted = completionFactory(spec.SessionID)
-	}
-	// Opening consumes the fixed owners directly. The returned compatibility
-	// builder is retained only for later replacement operations.
-	instance, err := a.bundleOpening.Open(
-		ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
-		runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
-		defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
-		submissionRecorder, dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
-		skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
-		progressPublisher, dispatchCompleted, worldStateProjector, recordingsRuntime, initialFactorySnapshot,
-	)
+	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
+		replacementSpec, err := a.preparation.PrepareExecutionSpec(ctx, runtimebuild.BuildDefaults{
+			WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+			ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+		}, runtimebuild.SessionBuildValues{
+			Dir: factoryDir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
+		}, factoryruntime.SessionBuildSpec{
+			Clock: clock, BaseLogger: baseLogger, PetriMutationRecorder: petriMutationRecorder,
+		}, providerOverride, providerCommandRunner, scriptCommandRunner, mockWorkersConfig,
+			runtimebuild.MockCommandRunnerFactory(mockCommandRunnerFactory))
+		if err != nil {
+			return nil, err
+		}
+		return open(ctx, replacementSpec)
+	})
+	instance, err := open(ctx, spec)
 	if err != nil {
 		// Preserve partial resource ownership for Sessions even though no
 		// lifecycle or runnable generation can be published.
@@ -253,6 +227,14 @@ func (a *Assembly) Assemble(
 		lifecycle,
 		a.sidecars.Scope(serviceMode),
 		nil
+}
+
+// runtimeReplacementOperation is one session's addressed replacement capability.
+// The captured invocation selections have the same lifetime as that session.
+type runtimeReplacementOperation func(context.Context, string, string, string, string) (factoryruntime.RuntimeRecord, error)
+
+func (operation runtimeReplacementOperation) BuildReplacement(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
+	return operation(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
 }
 
 func (a *Assembly) configureRestoredWorldState(
