@@ -56,6 +56,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	httpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
@@ -578,7 +579,11 @@ func provideMCPServerBuilder(
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
 		sessions factorysessions.Service,
 	) (*mcpserver.Server, error) {
-		workerTools, err := workersessionwire.NewMCPAdapter(serverURL, &http.Client{Timeout: 30 * time.Second})
+		hostClient, err := httpclient.NewClient(serverURL, httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}))
+		if err != nil {
+			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
+		}
+		workerTools, err := workersessionwire.NewMCPAdapter(hostClient)
 		if err != nil {
 			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
 		}

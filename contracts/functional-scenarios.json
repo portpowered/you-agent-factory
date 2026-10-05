@@ -955,7 +955,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestSelectedHostWorkerSessionTools",
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
           "boundary": "mcp"
         }
       ]
@@ -970,7 +970,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestSelectedHostWorkerSessionTools",
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
           "boundary": "mcp"
         }
       ]
@@ -985,7 +985,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestSelectedHostWorkerSessionTools",
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
           "boundary": "mcp"
         }
       ]

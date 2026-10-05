@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -30,16 +31,32 @@ const transcriptJSON = `{"workerSessionId":"host-worker","providerSession":{"id"
 const summaryFrameJSON = `{"workerSessionId":"host-worker","providerSession":{"id":"fixture-provider-session","kind":"session","provider":"controlled"},"workIds":[],"delivery":"REPLAY_SUMMARY","errorCode":null,"errorMessage":null,"event":{"cursor":{"position":0},"position":0,"payload":{},"schemaId":"worker-session-replay-summary","sourceEventId":"summary","sourceId":"host-worker","sourceSequence":0,"sourceType":"worker"},"replaySummary":{"complete":true,"eventsEmitted":0,"kind":"replay-summary","reason":"COMPLETED"}}`
 const interruptJSON = `{"accepted":true,"phase":"SUCCESSOR_ADMISSION","requestId":"request","sourceWorkerSessionId":"host-worker","successorWorkerSessionId":"successor","source":{"workerSessionId":"host-worker","state":"CANCELED","eventTopic":"worker/host-worker"},"successor":{"workerSessionId":"successor","state":"STARTING","eventTopic":"worker/successor"}}`
 
-func TestSelectedHostWorkerSessionTools(t *testing.T) {
+func TestWorkerSessionMCPParity(t *testing.T) {
 	t.Run("parity", runSelectedHostScenarios)
 	functionalevidence.Covers(t, "mcp/mcp.tool.you.worker_session.list", "mcp/mcp.tool.you.worker_session.read", "mcp/mcp.tool.you.worker_session.control")
 }
 
 func runSelectedHostScenarios(t *testing.T) {
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
 	t.Run("real host exact target controls", func(t *testing.T) {
 		t.Parallel()
 		runRealHostControls(t, process)
+	})
+	t.Run("real host interrupt and transcript", func(t *testing.T) {
+		t.Parallel()
+		runRealHostInterrupt(t, process)
+	})
+	t.Run("real host partial interrupt", func(t *testing.T) {
+		t.Parallel()
+		runRealHostPartialInterrupt(t, process)
+	})
+	t.Run("real host Factory discovery and reads", func(t *testing.T) {
+		t.Parallel()
+		runRealHostFactory(t, process)
+	})
+	t.Run("selected host request cancels with MCP session", func(t *testing.T) {
+		t.Parallel()
+		runHostCancellation(t, process)
 	})
 	t.Run("discovery and reads", func(t *testing.T) {
 		t.Parallel()
@@ -90,6 +107,8 @@ func runSelectedHostScenarios(t *testing.T) {
 			status := http.StatusNotFound
 			if strings.HasSuffix(r.URL.Path, "/denied") {
 				status = http.StatusForbidden
+			} else if strings.HasSuffix(r.URL.Path, "/unavailable") {
+				status = http.StatusServiceUnavailable
 			}
 			w.WriteHeader(status)
 			_, _ = io.WriteString(w, `{"message":"secret-from-host"}`)
@@ -100,6 +119,7 @@ func runSelectedHostScenarios(t *testing.T) {
 			result := callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": id})
 			assertToolError(t, result, code, false)
 		}
+		assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "unavailable"}), "worker_session.unavailable", true)
 		host.Close()
 		for _, tool := range []string{"list", "read", "control"} {
 			args := map[string]any{}
@@ -114,7 +134,20 @@ func runSelectedHostScenarios(t *testing.T) {
 	})
 }
 
+type rejectLocalProvider struct{ t *testing.T }
+
+func (r rejectLocalProvider) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.t.Error("selected-host MCP executed a local provider")
+	return platformprocess.CommandResult{}, errors.New("local provider execution forbidden")
+}
+
 func startMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSession, context.Context) {
+	t.Helper()
+	session, ctx, _ := startCancellableMCP(t, process, host)
+	return session, ctx
+}
+
+func startCancellableMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	stdinRead, stdinWrite := io.Pipe()
@@ -153,7 +186,7 @@ func startMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSe
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = session.Close() })
-	return session, ctx
+	return session, ctx, cancel
 }
 
 func readHost(w http.ResponseWriter, r *http.Request) {
@@ -287,5 +320,33 @@ func assertWorkerDiscovery(t *testing.T, ctx context.Context, session *mcp.Clien
 	}
 	if !reflect.DeepEqual(names, []string{"you.worker_session.control", "you.worker_session.list", "you.worker_session.read"}) {
 		t.Fatalf("Worker Session discovery: %v", names)
+	}
+}
+
+func runHostCancellation(t *testing.T, process support.Process) {
+	t.Helper()
+	started, canceled := make(chan struct{}), make(chan struct{})
+	host := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(started)
+		<-request.Context().Done()
+		close(canceled)
+	}))
+	t.Cleanup(host.Close)
+	session, ctx, cancel := startCancellableMCP(t, process, host.URL)
+	done := make(chan error, 1)
+	go func() {
+		_, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.worker_session.list", Arguments: map[string]any{}})
+		done <- err
+	}()
+	waitControlSignal(t, started)
+	cancel()
+	waitControlSignal(t, canceled)
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled MCP call: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("canceled MCP call did not join")
 	}
 }
