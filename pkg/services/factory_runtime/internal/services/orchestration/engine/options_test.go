@@ -5,8 +5,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -38,9 +40,17 @@ func newTestFactoryEngine(
 	runtimeSubsystems []subsystems.Subsystem,
 	opts ...Option,
 ) *FactoryEngine {
+	return newTestFactoryEngineWithClock(net, marking, runtimeSubsystems, logging.NoopLogger{}, platformclock.Real{}, opts...)
+}
+
+func newTestFactoryEngineWithLogger(net *state.Net, marking *petri.Marking, runtimeSubsystems []subsystems.Subsystem, logger logging.Logger, opts ...Option) *FactoryEngine {
+	return newTestFactoryEngineWithClock(net, marking, runtimeSubsystems, logger, platformclock.NewDeterministic(time.Unix(100, 0), time.Second), opts...)
+}
+
+func newTestFactoryEngineWithClock(net *state.Net, marking *petri.Marking, runtimeSubsystems []subsystems.Subsystem, logger logging.Logger, clock factory.Clock, opts ...Option) *FactoryEngine {
 	engine, err := NewFactoryEngine(
 		net, marking, runtimeSubsystems,
-		nil, platformclock.Real{}, func() string { return fmt.Sprintf("test-id-%d", testWorkRequestIdentity.Add(1)) }, nil, nil,
+		logger, clock, func() string { return fmt.Sprintf("test-id-%d", testWorkRequestIdentity.Add(1)) }, nil, nil,
 		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil,
