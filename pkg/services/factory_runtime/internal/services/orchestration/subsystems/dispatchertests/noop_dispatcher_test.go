@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
@@ -24,7 +25,7 @@ func newTestPipeline(n *state.Net) *testPipeline {
 	return &testPipeline{
 		transitioner: subsystems.NewTransitioner(
 			n,
-			nil, testTransitionerNow,
+			logging.NoopLogger{}, testTransitionerNow,
 
 			testTransitioner(
 				n),

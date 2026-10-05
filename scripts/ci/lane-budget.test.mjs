@@ -45,10 +45,10 @@ function runMake(variables, targets = ["print-go-parallelism"], envOverrides = {
 }
 
 // The dry-run lint recipe is the command CI actually executes, so assert the
-// expanded -jobs argument instead of the variable alone.
+// expanded jobs handoff instead of the variable alone.
 function expandedLintJobs(stdout) {
-	const match = stdout.match(/lintlane\b[^\r\n]*?\s-jobs\s+"(\d+)"/);
-	assert.ok(match, `lintlane -jobs argument was not expanded to a positive integer:\n${stdout}`);
+	const match = stdout.match(platform === "win32" ? /LINT_JOBS="(\d+)"/ : /--begin-run\b[^\r\n]*?\s--jobs\s+"(\d+)"/);
+	assert.ok(match, `lint jobs handoff was not expanded to a positive integer:\n${stdout}`);
 	return Number(match[1]);
 }
 
@@ -117,7 +117,7 @@ test("corrupted production result warns, falls back, and reaches numeric job fla
 		);
 		assert.match(result.stdout, /unitlane -jobs 2/);
 		assert.match(result.stdout, /functionallane -jobs 2/);
-		assert.match(result.stdout, /lintlane -make .* -jobs "2"/);
+		assert.equal(expandedLintJobs(result.stdout), 2);
 	}
 });
 
@@ -170,14 +170,14 @@ test("explicit LINT_JOBS overrides are forwarded and non-positive values stay re
 		assert.equal(expandedLintJobs(dryRun.stdout), override.jobs, `${override.label}: ${dryRun.stdout}`);
 	}
 
-	// An explicit non-positive request must keep reaching lintlane verbatim so
+	// An explicit non-positive request must keep reaching report setup verbatim so
 	// its positive-integer parser stays the single rejecting authority.
 	for (const invalid of ["LINT_JOBS=0", "LINT_JOBS=many"]) {
 		const dryRun = runMake([...capacity, invalid], ["-n", "lint"]);
 		assert.equal(dryRun.status, 0, `${invalid}: ${dryRun.stdout}\n${dryRun.stderr}`);
-		assert.match(dryRun.stdout, /lintlane\b[^\r\n]*?\s-jobs\s+"[^"]*"/, `${invalid}: ${dryRun.stdout}`);
+		assert.match(dryRun.stdout, /(?:--jobs\s+|LINT_JOBS=)"[^"]*"/, `${invalid}: ${dryRun.stdout}`);
 		assert.ok(
-			!/lintlane\b[^\r\n]*?\s-jobs\s+"[1-9]/.test(dryRun.stdout),
+			!/(?:--jobs\s+|LINT_JOBS=)"[1-9]/.test(dryRun.stdout),
 			`${invalid} must not be replaced by a budget:\n${dryRun.stdout}`,
 		);
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -22,7 +23,7 @@ func TestTransitionerPreservesNoArcDiagnosticWhileContextIsActive(t *testing.T) 
 	snapshot.Results[0].Outcome = workerexecution.OutcomeFailed
 	snapshot.Results[0].Error = "ordinary failure"
 	transitioner := NewTransitioner(
-		net, nil, testSubsystemNow, testTokenTransformer(net), nil, nil, nil,
+		net, logging.NoopLogger{}, testSubsystemNow, testTokenTransformer(net), nil, nil, nil,
 		testWorkPropagationPolicy(),
 	)
 
@@ -38,7 +39,7 @@ func TestTransitionerPreservesNoArcDiagnosticWhileContextIsActive(t *testing.T) 
 func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T) {
 	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	snapshot := workerBatchSnapshot("worker output")
 	snapshot.Dispatches["dispatch-1"].ExpectedArtifactContext = &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"}
 	snapshot.Results[0] = workerexecution.WorkResult{
@@ -87,7 +88,7 @@ func TestTransitioner_TerminalFailureBypassesAuthoredRetryRoute(t *testing.T) {
 	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
 	net.Transitions["t1"].FailureArcs = []petri.Arc{{ID: "retry", PlaceID: "task:init"}}
-	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	snapshot := workerBatchSnapshot("")
 	snapshot.Results[0] = workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
@@ -146,7 +147,7 @@ func TestReleaseResourceTokensOnFailure_PreservesConsumedTokenIdentityRegardless
 		Places: map[string]*petri.Place{
 			"executor:available": {ID: "executor:available", TypeID: "executor", State: "available"},
 		},
-	}, nil, func() time.Time { return now }, testTokenTransformer(&state.Net{
+	}, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(&state.Net{
 		Places: map[string]*petri.Place{
 			"executor:available": {ID: "executor:available", TypeID: "executor", State: "available"},
 		},

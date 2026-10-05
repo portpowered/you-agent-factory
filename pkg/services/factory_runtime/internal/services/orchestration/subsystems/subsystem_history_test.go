@@ -16,7 +16,7 @@ import (
 
 func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *testing.T) {
 	timestamp := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
-	subsystem := NewHistory(nil)
+	subsystem := NewHistory(logging.NoopLogger{})
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Results: []workerexecution.WorkResult{{
 			DispatchID:   "dispatch-1",
@@ -113,7 +113,7 @@ func TestHistorySubsystem_RepeatedSnapshotExecutionDoesNotDoubleCountVisitHistor
 		},
 	}
 
-	subsystem := NewHistory(nil)
+	subsystem := NewHistory(logging.NoopLogger{})
 	first, err := subsystem.Execute(context.Background(), snapshot)
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
@@ -399,7 +399,7 @@ func TestTransitioner_CanceledDispatchRestoresConsumedWorkWithoutFailureRoute(t 
 	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(
-		net, nil, func() time.Time { return now }, testTokenTransformer(net),
+		net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net),
 		nil, nil, nil, testWorkPropagationPolicy(),
 	)
 	snapshot := workerBatchSnapshot("")
