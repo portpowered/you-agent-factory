@@ -620,7 +620,12 @@ func TestExecuteConcurrentCallsDoNotShareDispatchState(t *testing.T) {
 		},
 	}
 	capture := &executeCaptureLogger{}
+	var observationsMu sync.Mutex
+	observations := make(map[string][]workers.ExecutionObservation)
 	service := mustExecuteServiceWithEdges(t, runner, func(_ context.Context, observation workers.ExecutionObservation) error {
+		observationsMu.Lock()
+		observations[observation.Correlation.DispatchID] = append(observations[observation.Correlation.DispatchID], observation)
+		observationsMu.Unlock()
 		if observation.Correlation.DispatchID == "dispatch-a" {
 			return errors.New("secret isolated observer")
 		}
@@ -660,6 +665,7 @@ func TestExecuteConcurrentCallsDoNotShareDispatchState(t *testing.T) {
 			if seen[result.Correlation.DispatchID] {
 				t.Fatalf("duplicate dispatch result %q", result.Correlation.DispatchID)
 			}
+			assertAcceptedResult(t, result, result.Correlation.DispatchID, "attempt-"+strings.TrimPrefix(result.Correlation.DispatchID, "dispatch-"), result.Correlation.DispatchID)
 			seen[result.Correlation.DispatchID] = true
 		}
 	}
@@ -670,6 +676,12 @@ func TestExecuteConcurrentCallsDoNotShareDispatchState(t *testing.T) {
 		for _, record := range capture.records {
 			if record.fields["dispatch_id"] == dispatch {
 				perAttempt.records = append(perAttempt.records, record)
+			}
+		}
+		assertCompletedObservationShape(t, observations[dispatch])
+		for _, observation := range observations[dispatch] {
+			if observation.Correlation != validExecuteRequest(dispatch, attempt).Correlation {
+				t.Fatalf("crossed observation = %#v", observation)
 			}
 		}
 		var categories []string

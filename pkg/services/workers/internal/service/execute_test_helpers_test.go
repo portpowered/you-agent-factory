@@ -599,9 +599,7 @@ func assertSafeCleanupAttempt(t *testing.T, panics, runnerFails bool) {
 	if runnerFails {
 		wantType, wantMessage = workers.WorkFailureTypeUnknown, "prior failure"
 	}
-	if result.Failure.Type != wantType || result.Failure.Message != wantMessage {
-		t.Fatalf("failure = %#v", result.Failure)
-	}
+	assertCleanupFailure(t, result, wantType, wantMessage)
 	if !reflect.DeepEqual(effects, []string{"STARTED", "release", "remove", "FAILED"}) {
 		t.Fatalf("effects = %v", effects)
 	}
@@ -662,4 +660,11 @@ func cleanupDiagnosticRunner(runnerFails bool) *stubRunner {
 		}
 		return workers.RunnerExecutionResult{Content: "secret provider output"}, nil
 	}}
+}
+
+func assertCleanupFailure(t *testing.T, result workers.ExecuteResult, wantType workers.WorkFailureType, wantMessage string) {
+	t.Helper()
+	if result.Failure.Type != wantType || result.Failure.Message != wantMessage || result.Failure.Family != workers.WorkFailureFamilyTerminal || result.Failure.RetryHint {
+		t.Fatalf("failure = %#v", result.Failure)
+	}
 }
