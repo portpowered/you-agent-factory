@@ -161,16 +161,13 @@ func (r *registry) interruptReplayCapture(ctx context.Context, id string) (recor
 	if err != nil {
 		return recordings.WorkerControlTarget{}, err
 	}
-	// Factory replacement has never admitted a direct interrupt operation.
-	// Leave its existing active-source validation in charge of the refusal;
-	// a Factory capture alone is not a failed direct replay or store outage.
-	if entry.FactorySessionID != "" {
-		return recordings.WorkerControlTarget{}, os.ErrNotExist
-	}
+	// Direct invocations may carry a Factory Session correlation. Only a
+	// committed exact operation grants replay authority; a capture without
+	// one leaves the existing active-source validation in charge.
 	if entry.WorkerSessionID != id || entry.RecordingGenerationID == "" || entry.OwnerEpoch == "" {
 		return recordings.WorkerControlTarget{}, recordings.ErrWorkerControlConflict
 	}
-	return recordings.WorkerControlTarget{RecordingID: entry.RecordingID, WorkerSessionID: entry.WorkerSessionID, RecordingGenerationID: entry.RecordingGenerationID, OwnerEpoch: entry.OwnerEpoch}, nil
+	return recordings.WorkerControlTarget{RecordingID: entry.RecordingID, WorkerSessionID: entry.WorkerSessionID, FactorySessionID: entry.FactorySessionID, RecordingGenerationID: entry.RecordingGenerationID, OwnerEpoch: entry.OwnerEpoch}, nil
 }
 
 func decodeInterruptOutcome(req workersessions.InterruptRequest, record recordings.WorkerControlOperationRecord) (workersessions.InterruptResult, error) {

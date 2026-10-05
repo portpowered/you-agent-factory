@@ -223,7 +223,8 @@ func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
 	r.operations = store
 	capture := exactCaptureIdentity()
 	capture.WorkerSessionID = fixture.sourceID
-	capture.FactorySessionID = ""
+	// A direct invocation can retain Factory Session correlation. It still
+	// replays only its exact committed operation after losing live handles.
 	pub := r.publicationFor(fixture.sourceID)
 	pub.mu.Lock()
 	pub.capture = capture
@@ -273,6 +274,7 @@ func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
 	r.mu.Unlock()
 	r.logs = &LogReader{reader: &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
 		RecordingID: capture.RecordingID, WorkerSessionID: capture.WorkerSessionID,
+		FactorySessionID:      capture.FactorySessionID,
 		RecordingGenerationID: capture.RecordingGenerationID, OwnerEpoch: capture.OwnerEpoch,
 	}}}
 	replayed, err = fixture.registry.Interrupt(t.Context(), req)

@@ -470,7 +470,10 @@ message. A committed result preserves its phase and source/successor identity,
 state, and accepted predecessor/successor links without stopping or admitting
 another execution. Later continuations do not change these saved links. A recovered
 admission failure leaves the source stopped. Use session inspection for richer
-session metadata. New interruptions capture the execution recipe and exact
+session metadata. After a host restart, use `--async` to read the saved admission
+result without waiting on a live successor stream. A committed source stop
+retains `OPERATOR_CANCEL` even if successor admission fails.
+New interruptions capture the execution recipe and exact
 Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
 require secret redaction prevent safe recipe recovery, so interruption refuses

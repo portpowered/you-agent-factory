@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -142,6 +143,46 @@ func TestPrebuiltWorkerInterruptStopsExactChildAndAdmitsOneSuccessor(t *testing.
 
 	stopInterruptDaemon(t, binaryPath, factoryDir, serverURL, env, daemon)
 	assertInterruptPortAvailable(t, port)
+	daemon = startInterruptDaemon(t, ctx, binaryPath, factoryDir, serverURL, env)
+	waitForInterruptStatus(t, ctx, daemon, serverURL)
+	assertRecoveredInterrupt(t, ctx, binaryPath, factoryDir, serverURL, env, stateDir, interruptResponse)
+	stopInterruptDaemon(t, binaryPath, factoryDir, serverURL, env, daemon)
+	assertInterruptPortAvailable(t, port)
+}
+
+// Compare the saved admission snapshot, rather than a later successor state.
+// Both public retry transports must replay it without another provider call.
+func assertRecoveredInterrupt(t *testing.T, ctx context.Context, binary, directory, serverURL string, env []string, state string, accepted factoryapi.WorkerSessionInterruptResponse) {
+	t.Helper()
+	replayed := postInterrupt(t, ctx, serverURL)
+	if !reflect.DeepEqual(replayed, accepted) {
+		t.Fatalf("recovered HTTP interrupt = %#v, want saved %#v", replayed, accepted)
+	}
+	result := runInterruptBinary(t, ctx, binary, directory, env,
+		"--remote", "--server", serverURL, "--json", "worker-sessions", "interrupt", interruptSourceWorkerSessionID,
+		"--request-id", interruptRequestID, "--successor-worker-session-id", interruptSuccessorWorkerSessionID,
+		"--replacement-message", interruptReplacementMessage, "--async")
+	var cli factoryapi.WorkerSessionInterruptResponse
+	if result.err != nil || json.Unmarshal([]byte(result.stdout), &cli) != nil || !reflect.DeepEqual(cli, accepted) {
+		t.Fatalf("recovered CLI interrupt: error=%v stdout=%s stderr=%s want=%#v", result.err, result.stdout, result.stderr, accepted)
+	}
+	for _, id := range []string{interruptSourceWorkerSessionID, interruptSuccessorWorkerSessionID} {
+		observation, status, err := getInterruptWorker(ctx, http.DefaultClient, serverURL, id)
+		cause := "OPERATOR_CANCEL"
+		if id == interruptSuccessorWorkerSessionID {
+			cause = "COMPLETED"
+		}
+		if err != nil || status != http.StatusOK || observation.TerminalCause == nil || *observation.TerminalCause != factoryapi.WorkerSessionObservationTerminalCause(cause) {
+			t.Fatalf("recovered %s: observation=%#v status=%d error=%v want cause=%s", id, observation, status, err, cause)
+		}
+	}
+	if count, err := os.ReadFile(filepath.Join(state, "count")); err != nil || strings.TrimSpace(string(count)) != "2" {
+		t.Fatalf("recovered provider invocation count = %q, %v; want exactly two", count, err)
+	}
+	if _, err := os.Stat(filepath.Join(state, "unexpected.marker")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("recovered unexpected provider invocation marker: %v", err)
+	}
+	t.Log("reconstructed host replays identical CLI/HTTP interrupt admission and terminal causes with exactly two provider invocations")
 }
 
 type interruptDaemon struct {

@@ -46,24 +46,51 @@ func (r *registry) observationTerminalCause(ctx context.Context, id string, stat
 // a stop that loses to natural completion must never claim an operator cause.
 func committedStopCause(records []recordings.WorkerControlOperationRecord, target recordings.WorkerControlTarget, state workersessions.State) *string {
 	for _, record := range records {
-		if record.Target != target || record.Operation.Phase != "COMPLETED" || record.FailureCode != "" {
+		if record.Target != target {
 			continue
 		}
-		var result workersessions.ControlResult
-		if json.Unmarshal(record.Result, &result) != nil || result.Outcome != workersessions.ControlOutcomeApplied ||
-			result.Session.ID != target.WorkerSessionID || result.Session.State != state {
-			continue
+		if committedInterruptStop(record, state) {
+			cause := "OPERATOR_CANCEL"
+			return &cause
 		}
-		var cause string
-		switch {
-		case record.Operation.Action == "cancel" && result.Action == workersessions.ControlActionCancel && state == workersessions.StateCanceled:
-			cause = "OPERATOR_CANCEL"
-		case record.Operation.Action == "terminate" && result.Action == workersessions.ControlActionTerminate && state == workersessions.StateTerminated:
-			cause = "OPERATOR_TERMINATE"
-		default:
-			continue
+		if cause := committedPlainStopCause(record, state); cause != nil {
+			return cause
 		}
-		return &cause
 	}
 	return nil
+}
+
+func committedPlainStopCause(record recordings.WorkerControlOperationRecord, state workersessions.State) *string {
+	if record.Operation.Phase != "COMPLETED" || record.FailureCode != "" {
+		return nil
+	}
+	var result workersessions.ControlResult
+	if json.Unmarshal(record.Result, &result) != nil || result.Outcome != workersessions.ControlOutcomeApplied ||
+		result.Session.ID != record.Target.WorkerSessionID || result.Session.State != state {
+		return nil
+	}
+	var cause string
+	switch {
+	case record.Operation.Action == "cancel" && result.Action == workersessions.ControlActionCancel && state == workersessions.StateCanceled:
+		cause = "OPERATOR_CANCEL"
+	case record.Operation.Action == "terminate" && result.Action == workersessions.ControlActionTerminate && state == workersessions.StateTerminated:
+		cause = "OPERATOR_TERMINATE"
+	default:
+		return nil
+	}
+	return &cause
+}
+
+// Source join is committed before successor admission. An admission failure
+// or missing final row does not erase that causal stop; INTENT alone cannot
+// establish it. Reuse the strict result decoder to reject malformed snapshots.
+func committedInterruptStop(record recordings.WorkerControlOperationRecord, state workersessions.State) bool {
+	operation := record.Operation
+	if state != workersessions.StateCanceled || operation.Action != "interrupt" || operation.Version != 1 ||
+		operation.WorkerSessionID != record.Target.WorkerSessionID || operation.ExpectedAttemptID != record.Target.ExpectedAttemptID {
+		return false
+	}
+	req := workersessions.InterruptRequest{RequestID: operation.RequestID, SourceWorkerSessionID: operation.WorkerSessionID, SuccessorWorkerSessionID: operation.SuccessorWorkerSessionID}
+	result, _ := decodeInterruptOutcome(req, record)
+	return result.Phase == workersessions.InterruptPhaseSuccessorAdmission && result.Source.State == state
 }

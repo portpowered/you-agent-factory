@@ -96,3 +96,42 @@ func TestTerminalCauseObservationCloneIsDetached(t *testing.T) {
 		t.Fatal("clone changed authoritative cause")
 	}
 }
+
+func TestTerminalCauseInterruptRequiresCommittedSourceJoin(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"INTENT", "SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED", "FAILED", "corrupt", "stale"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			r, plan, _ := newDurableInterruptFixture(t)
+			record, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := record.Target
+			result := interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+			result.Source = workersessions.Session{ID: plan.request.SourceWorkerSessionID, State: workersessions.StateCanceled}
+			if phase == "SUCCESSOR_ADMITTED" || phase == "COMPLETED" {
+				result.Accepted = true
+				result.Successor = workersessions.Session{ID: plan.request.SuccessorWorkerSessionID, State: workersessions.StateRunning}
+			}
+			outcome := durableInterruptOutcome{InterruptResult: result}
+			if phase == "FAILED" {
+				outcome.FailureCauses = []string{"SUCCESSOR_ADMISSION_FAILED"}
+				record.FailureCode = string(result.Phase)
+			}
+			record.Operation.Phase = phase
+			record.Result, _ = json.Marshal(outcome)
+			if phase == "corrupt" {
+				record.Result = []byte(`{"Source":{"State":"CANCELED"}}`)
+			}
+			if phase == "stale" {
+				record.Target.ExpectedAttemptID = "another-attempt"
+			}
+			cause := committedStopCause([]recordings.WorkerControlOperationRecord{*record}, target, workersessions.StateCanceled)
+			want := phase != "INTENT" && phase != "corrupt" && phase != "stale"
+			if want && (cause == nil || *cause != "OPERATOR_CANCEL") || !want && cause != nil {
+				t.Fatalf("phase=%s cause=%v want committed source join=%t", phase, cause, want)
+			}
+		})
+	}
+}
