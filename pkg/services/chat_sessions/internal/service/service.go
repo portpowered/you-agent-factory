@@ -5,8 +5,6 @@
 package service
 
 import (
-	"fmt"
-
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -25,29 +23,17 @@ type Service struct {
 
 var _ chatsessions.FactoryTargetCatalogService = (*Service)(nil)
 
-// New constructs a Service from its required collaborator roots. Both
-// operatorSettings and factoryDefinitions are required interfaces:
-// production Wire composition always supplies both, and a nil value is
-// rejected here rather than deferred to an operation-time panic. logger is
-// the direct, required operation-logging abstraction; callers with no
-// operation logging pass logging.NoopLogger{}.
+// New stores concrete collaborator roots and the selected operation logger.
+// The owning Wire provider validates required peers and selects nil compatibility
+// before calling this inert constructor.
 func New(
 	operatorSettings operatorsettings.Service,
 	factoryDefinitions factorydefinitions.CatalogPathsService,
 	logger logging.Logger,
-) (*Service, error) {
-	if operatorSettings == nil {
-		return nil, fmt.Errorf("construct chat sessions factory target catalog: operator settings root is required")
-	}
-	if factoryDefinitions == nil {
-		return nil, fmt.Errorf("construct chat sessions factory target catalog: factory definitions catalog/path capability is required")
-	}
-	if logger == nil {
-		logger = logging.NoopLogger{}
-	}
+) *Service {
 	return &Service{
 		operatorSettings:   operatorSettings,
 		factoryDefinitions: factoryDefinitions,
 		logger:             logger,
-	}, nil
+	}
 }

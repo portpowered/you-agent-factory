@@ -226,39 +226,112 @@ func (l *serviceCaptureLogger) Verbose(msg string, kv ...any) {
 	l.calls = append(l.calls, serviceLogCall{"verbose", msg, kv})
 }
 
-// stubOperatorSettingsService is a minimal Operator Settings root double.
-// NewFactoryTargetCatalogService is a pure delegating constructor that calls
-// no method on either injected root before returning, so a structurally
-// satisfying zero value is enough to prove the delegation.
+// Controlled peers for the retained catalog provider compatibility witness.
 type stubOperatorSettingsService struct {
 	operatorsettings.Service
+	calls *int
 }
 
-// stubFactoryDefinitionsService is a minimal Factory Definitions root
-// double, for the same reason as stubOperatorSettingsService.
+func (s stubOperatorSettingsService) ResolveACPAgentProfile(string) (operatorsettings.ACPAgentProfile, error) {
+	*s.calls++
+	return operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/review"}, nil
+}
+
 type stubFactoryDefinitionsService struct {
-	factorydefinitions.Service
+	factorydefinitions.CatalogPathsService
+	calls     *int
+	installed *bool
 }
 
-func (stubFactoryDefinitionsService) ResolveCurrentFactoryLocation(
-	context.Context,
-	factorydefinitions.ResolveCurrentFactoryLocationRequest,
-) (factorydefinitions.ResolveCurrentFactoryLocationResult, error) {
-	return factorydefinitions.ResolveCurrentFactoryLocationResult{}, nil
-}
-
-// TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots proves this
-// package's NewFactoryTargetCatalogService is the thin delegation its doc
-// comment claims: it forwards the injected Operator Settings and Factory
-// Definitions roots straight through to internalservice.New and returns a
-// working, non-nil catalog service.
-func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T) {
-	service, err := NewFactoryTargetCatalogService(stubOperatorSettingsService{}, stubFactoryDefinitionsService{}, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("NewFactoryTargetCatalogService: unexpected error: %v", err)
+func (s stubFactoryDefinitionsService) ListEffectiveFactories(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	*s.calls++
+	if !*s.installed {
+		return factorydefinitions.ListEffectiveFactoriesResult{}, nil
 	}
-	if service == nil {
-		t.Fatal("NewFactoryTargetCatalogService returned a nil service with a nil error")
+	location := "/private/factories/review"
+	return factorydefinitions.ListEffectiveFactoriesResult{Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{Name: "@you/review", Location: &location}}}, nil
+}
+
+// Existing provider witness: retained wiring integration, not a unit test.
+func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"nil", "noop", "capture"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			capture := &serviceCaptureLogger{}
+			var logger logging.Logger
+			if mode == "noop" {
+				logger = logging.NoopLogger{}
+			}
+			if mode == "capture" {
+				logger = capture
+			}
+			profileCalls, catalogCalls, installed := 0, 0, true
+			service, err := NewFactoryTargetCatalogService(stubOperatorSettingsService{calls: &profileCalls}, stubFactoryDefinitionsService{calls: &catalogCalls, installed: &installed}, logger)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if profileCalls != 0 || catalogCalls != 0 || len(capture.calls) != 0 {
+				t.Fatal("construction invoked effects")
+			}
+			req := chatsessions.ResolveFactoryTargetCatalogRequest{OperatorSettingsPath: "/private/operator.json"}
+			result, err := service.ResolveFactoryTargetCatalog(context.Background(), req)
+			want := chatsessions.ResolveFactoryTargetCatalogResult{CurrentTarget: "factory:@you/review", Choices: []chatsessions.FactoryTargetCatalogChoice{{Value: "factory:@you/review", Name: "@you/review"}}}
+			if err != nil || !reflect.DeepEqual(result, want) {
+				t.Fatalf("%s success: %+v, %v", mode, result, err)
+			}
+			installed = false
+			result, err = service.ResolveFactoryTargetCatalog(context.Background(), req)
+			var typed *chatsessions.FactoryTargetCatalogError
+			if !errors.Is(err, chatsessions.ErrFactoryTargetCatalogEmpty) || !errors.As(err, &typed) || typed.Target != "" || typed.Cause != nil || !reflect.DeepEqual(result, chatsessions.ResolveFactoryTargetCatalogResult{}) {
+				t.Fatalf("%s failure: %+v, %v", mode, result, err)
+			}
+			if profileCalls != 2 || catalogCalls != 2 {
+				t.Fatalf("operation observations: %d / %d", profileCalls, catalogCalls)
+			}
+			var wantLogs []serviceLogCall
+			if mode == "capture" {
+				wantLogs = []serviceLogCall{
+					{"info", "chat_sessions.resolve_factory_target_catalog.started", nil},
+					{"info", "chat_sessions.resolve_factory_target_catalog.finished", []any{"choice_count", 1}},
+					{"info", "chat_sessions.resolve_factory_target_catalog.started", nil},
+					{"warn", "chat_sessions.resolve_factory_target_catalog.failed", []any{"reason", "catalog_empty"}},
+				}
+			}
+			if !reflect.DeepEqual(capture.calls, wantLogs) {
+				t.Fatalf("%s diagnostics: %+v, want %+v", mode, capture.calls, wantLogs)
+			}
+		})
+	}
+}
+
+func TestNewFactoryTargetCatalogService_RejectsMissingPeers(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []string{"settings", "definitions", "both"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			calls, installed := 0, true
+			var settings operatorsettings.Service = stubOperatorSettingsService{calls: &calls}
+			var definitions factorydefinitions.CatalogPathsService = stubFactoryDefinitionsService{calls: &calls, installed: &installed}
+			want := "construct chat sessions factory target catalog: operator settings root is required"
+			if missing != "definitions" {
+				settings = nil
+			}
+			if missing != "settings" {
+				definitions = nil
+			}
+			if missing == "definitions" {
+				want = "construct chat sessions factory target catalog: factory definitions catalog/path capability is required"
+			}
+			capture := &serviceCaptureLogger{}
+			service, err := NewFactoryTargetCatalogService(settings, definitions, capture)
+			if service != nil || err == nil || err.Error() != want {
+				t.Fatalf("missing %s: %v, %v", missing, service, err)
+			}
+			if calls != 0 || len(capture.calls) != 0 {
+				t.Fatal("rejected construction invoked effects")
+			}
+		})
 	}
 }
 
