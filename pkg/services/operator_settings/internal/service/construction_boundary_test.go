@@ -124,14 +124,15 @@ func TestSelectedProfileLoggersPreserveOutcomesAndIsolateConcurrentEffects(t *te
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			entered := make(chan struct{}, 2)
+			entered := make(chan struct{}, 3)
 			release := make(chan struct{})
 			// Always release blocked peers if an assertion or failure ceiling fires.
 			defer close(release)
 			spy := &spyLogger{}
-			documents := make([]*profileDocument, 2)
-			results := make([]chan profileOperationResult, 2)
-			for index, logger := range []logging.Logger{spy, logging.NoopLogger{}} {
+			peerSpy := &spyLogger{}
+			documents := make([]*profileDocument, 3)
+			results := make([]chan profileOperationResult, 3)
+			for index, logger := range []logging.Logger{spy, peerSpy, logging.NoopLogger{}} {
 				document := &profileDocument{path: filepath.Join(t.TempDir(), "config.json"), loadError: tc.loadError, persistError: tc.persistError, entered: entered, release: release}
 				documents[index] = document
 				root, err := operatorservice.New(document, &constructionResolution{}, nil, nil, nil, nil, nil, logger, nil)
@@ -143,15 +144,18 @@ func TestSelectedProfileLoggersPreserveOutcomesAndIsolateConcurrentEffects(t *te
 			}
 			awaitProfileEntry(t, entered)
 			awaitProfileEntry(t, entered)
-			// Both independently selected effects have reached the document boundary.
+			awaitProfileEntry(t, entered)
+			// All three independently selected effects have reached the document boundary.
+			release <- struct{}{}
 			release <- struct{}{}
 			release <- struct{}{}
 			captureResult := awaitProfileResult(t, results[0])
-			quietResult := awaitProfileResult(t, results[1])
+			peerResult := awaitProfileResult(t, results[1])
+			quietResult := awaitProfileResult(t, results[2])
 			if !reflect.DeepEqual(captureResult.updated, quietResult.updated) || !reflect.DeepEqual(captureResult.resolved, quietResult.resolved) {
 				t.Fatalf("selected logger altered results: capture=%#v quiet=%#v", captureResult, quietResult)
 			}
-			assertSelectedProfileOutcome(t, tc.loadError, tc.persistError, tc.update, documents, captureResult, quietResult)
+			assertSelectedProfileOutcome(t, tc.loadError, tc.persistError, tc.update, documents, captureResult, peerResult, quietResult)
 			operation := "resolve_acp_agent_profile"
 			if tc.update {
 				operation = "update_acp_agent_profile"
@@ -165,10 +169,18 @@ func TestSelectedProfileLoggersPreserveOutcomesAndIsolateConcurrentEffects(t *te
 			} else if !containsKeyValue(spy, "reason", tc.reason) {
 				t.Fatalf("missing failure classification %q", tc.reason)
 			}
+			if !reflect.DeepEqual(peerResult.updated, quietResult.updated) || !reflect.DeepEqual(peerResult.resolved, quietResult.resolved) {
+				t.Fatalf("peer logger altered result: %#v", peerResult)
+			}
+			if !reflect.DeepEqual(peerSpy.messages(), want) {
+				t.Fatalf("peer records = %v, want %v", peerSpy.messages(), want)
+			}
 			if !reflect.DeepEqual(spy.messages(), want) {
 				t.Fatalf("capture records = %v, want %v; quiet peer must emit none", spy.messages(), want)
 			}
-			assertNoSensitiveValuesLogged(t, spy, secret.Error(), "factory:@you/reviewer", documents[0].path, documents[1].path)
+			for _, capture := range []*spyLogger{spy, peerSpy} {
+				assertNoSensitiveValuesLogged(t, capture, secret.Error(), "factory:@you/reviewer", documents[0].path, documents[1].path, documents[2].path)
+			}
 		})
 	}
 }
