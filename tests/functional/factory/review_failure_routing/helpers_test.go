@@ -449,3 +449,43 @@ func reviewFailureRejected(feedback string) platformprocess.CommandResult {
 		feedback,
 	))}
 }
+
+// awaitReviewFailureQuiescence waits until every dispatch has a terminal
+// response and the dispatch count and work states stop changing across several
+// consecutive polls. It replaces fixed sleeps that gave a wrongly routed token
+// time to be (not) dispatched, so negative assertions run as soon as the
+// session is genuinely idle.
+func awaitReviewFailureQuiescence(t *testing.T, scenario *reviewFailureScenario) {
+	t.Helper()
+	const stablePolls = 4
+	deadline := time.Now().Add(reviewFailureEventTimeout)
+	var lastSignature string
+	stable := 0
+	for time.Now().Before(deadline) {
+		dispatches := reviewFailureDispatches(t, scenario)
+		incomplete := 0
+		for _, dispatch := range dispatches {
+			if dispatch.Response == nil {
+				incomplete++
+			}
+		}
+		works := scenario.listWorks(t)
+		signature := fmt.Sprintf("%d/%d", len(dispatches), len(works))
+		for _, work := range works {
+			if work.WorkId != nil && work.State != nil {
+				signature += "|" + *work.WorkId + "=" + work.State.Name
+			}
+		}
+		if incomplete == 0 && signature == lastSignature {
+			stable++
+			if stable >= stablePolls {
+				return
+			}
+		} else {
+			stable = 0
+		}
+		lastSignature = signature
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("review failure scenario did not reach quiescence before the deadline")
+}
