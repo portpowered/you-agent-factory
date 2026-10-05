@@ -75,7 +75,7 @@ func TestHistoryListingResilienceAfterRestart(t *testing.T) {
 	}
 	for generation := range 2 {
 		daemon := startBoardPersistenceDaemon(t, binary, factory, home, filepath.Join(t.TempDir(), "host.json"), "")
-		output, err := runBoardPersistenceCLI(t.Context(), binary, factory, home, daemon.baseURL, "--json", "session", "list", "--history-only")
+		output, err := runHistoryListingCLI(t, binary, factory, home, daemon.baseURL)
 		if err != nil {
 			t.Fatalf("you --json session list --history-only exit failure: %v: %s", err, output)
 		}
@@ -111,4 +111,21 @@ func TestHistoryListingResilienceAfterRestart(t *testing.T) {
 			t.Fatalf("history mutated %s: %q %v", path, actual, err)
 		}
 	}
+}
+
+func runHistoryListingCLI(t *testing.T, binary, factory, home, endpoint string) ([]byte, error) {
+	t.Helper()
+	args := []string{"--server", endpoint, "--json", "session", "list", "--history-only"}
+	command := exec.CommandContext(t.Context(), binary, args...)
+	command.Dir = factory
+	command.Env = builtcliacceptance.ProcessEnvForIsolatedHome(home)
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	err := command.Run()
+	exitCode := -1
+	if command.ProcessState != nil {
+		exitCode = command.ProcessState.ExitCode()
+	}
+	t.Logf("CLI argv=%q OS exit=%d stdout=%s stderr=%s", args, exitCode, stdout.String(), stderr.String())
+	return stdout.Bytes(), err
 }
