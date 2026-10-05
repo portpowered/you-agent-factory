@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -544,6 +545,19 @@ func withWorkerSessions(service workersessions.Service) testFactoryOption {
 // package tests; Runtime's tests only need this seam's integration contract.
 type fakeWorkerSessionsService struct {
 	execution workers.Service
+}
+
+// This execution-only double has no durable captured activity.
+func (*fakeWorkerSessionsService) GetCapturedObservation(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+}
+
+func (*fakeWorkerSessionsService) ReadLogs(context.Context, workersessions.ReadLogsRequest) (workersessions.LogPage, error) {
+	return workersessions.LogPage{}, workersessions.ErrSessionNotFound
+}
+
+func (*fakeWorkerSessionsService) ReadLogsArtifact(context.Context, string, string) (io.ReadCloser, error) {
+	return nil, workersessions.ErrSessionNotFound
 }
 
 func (s *fakeWorkerSessionsService) Reserve(context.Context, workersessions.ReserveRequest) (workersessions.Session, error) {

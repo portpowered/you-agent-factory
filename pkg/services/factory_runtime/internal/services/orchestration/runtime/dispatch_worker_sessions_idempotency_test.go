@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -29,6 +30,18 @@ type countingWorkerSessionsService struct {
 
 func newCountingWorkerSessionsService(inner workersessions.Service) *countingWorkerSessionsService {
 	return &countingWorkerSessionsService{inner: inner, startCallsByID: map[string]int{}}
+}
+
+func (s *countingWorkerSessionsService) GetCapturedObservation(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return s.inner.GetCapturedObservation(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) ReadLogs(ctx context.Context, req workersessions.ReadLogsRequest) (workersessions.LogPage, error) {
+	return s.inner.ReadLogs(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) ReadLogsArtifact(ctx context.Context, id, ref string) (io.ReadCloser, error) {
+	return s.inner.ReadLogsArtifact(ctx, id, ref)
 }
 
 func (s *countingWorkerSessionsService) Reserve(
