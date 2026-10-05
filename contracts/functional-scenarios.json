@@ -709,11 +709,11 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_captured_logs_test.go::TestWorkerSessionCapturedLogsCLIHTTPParity",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_captured_logs_test.go::TestWorkerSessionCapturedLogsCLIHTTPParity",
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
           "boundary": "cli"
         }
       ]
@@ -1559,11 +1559,11 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_captured_logs_test.go::TestWorkerSessionCapturedLogsCLIHTTPParity",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_captured_logs_test.go::TestWorkerSessionCapturedLogsCLIHTTPParity",
           "boundary": "rest"
         },
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
           "boundary": "rest"
         }
       ]

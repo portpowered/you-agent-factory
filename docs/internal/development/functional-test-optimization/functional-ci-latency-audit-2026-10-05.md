@@ -28,8 +28,8 @@ customer-use-case packages: Factory execution, packaged Factory invocation,
 and Work admission. This preserves ordinary and `functionallong` cases and
 their session-owned fixtures. Independent parent tests overlap through Go's
 test scheduler. Sixteen composition-oriented test names now describe customer
-CLI, REST, Work, session control, recording and replay behavior. Coverage floors are unchanged. The rebased manifest preserves all 159 reviewed
-scenario decisions, including three added on main. Six further CLI packages
+CLI, REST, Work, session control, recording and replay behavior. Coverage floors are unchanged. The rebased manifest preserves all 160 reviewed
+scenario decisions, including the new captured-activity surface from main. Six further CLI packages
 share one customer-command package. Four workflow fixture suites share one
 package, and 28 compatible suites now share Product customer journeys, removing
 27 more binaries while retaining their explicit sessions and public observers.
@@ -1706,3 +1706,90 @@ wall time; two compiles consume 0.999 CPU-seconds. A shorter invocation with a
 failed gate establishes no checkpoint. Recording reuse and selected-session
 observation now pass in this complete run with owned homes and typed fake
 missing-history behavior.
+
+
+### Rebase onto current main
+
+The branch is rebased onto `c54a1263c6` after main added selected Worker captured
+activity reads and required the selected packaged-installation logger. The
+canonical Wire graph is regenerated from current providers to preserve those
+new roles alongside legacy model removal. Eight new Worker HTTP fixture files
+move with their existing suite into Product customer journeys, with unchanged
+customer assertions and helper ownership. Their package declaration and scenario
+references follow the new location. Main's captured-log evidence supersedes the
+older read-surface declaration where appropriate. No new binary is introduced
+for these additions. Verification and full-lane measurements from before this
+rebase remain labeled by their source revisions; they do not verify this new
+combined source snapshot.
+
+
+The first complete four-core rebased snapshot takes **198.81s overall /
+151.518s tests** and fails: 819 passes, two skips, one existing Work-watch
+startup failure (`SERVER_START_FAILED` before host readiness). The consolidated
+customer-journey package, including main's newly moved captured-log cases,
+passes, as does Workers inference with the recording corrections. The isolated
+captured-log selection also passes natively in 20.896s. The rebased manifest
+checks all 160 reviewed scenarios. This full run rebuilds 1,571 compiler actions
+(225.939 CPU-seconds, 117.583s active wall) and 68 links (93.624 CPU-seconds,
+110.612s active wall). The unrelated readiness failure is retained and prevents
+using this sample as a checkpoint. A fresh execution with warm build caches
+follows to verify the complete combined source and coverage gates.
+
+
+### Rebased warm lane and readiness correction
+
+The warm repeat on the current-main rebase took 137.03 seconds for the full
+supervisor and 126.450 seconds for the coverage invocation. It recorded 819
+passing tests, two skipped tests and one failure: the same Work-watch customer
+journey failed when public `session create` returned HTTP 504. There were no
+compiler actions; 65 linker actions consumed 88.443 summed CPU seconds over
+98.412 seconds of overlapping active intervals. This failed sample is not a
+latency checkpoint.
+
+The selected-clock fixture advanced its entire process clock by 10 milliseconds
+for each runtime-readiness poll. Under contention, repeated polls could consume
+the independent one-second startup deadline before the runtime goroutine made
+progress. Readiness now receives a fixture-owned timer wakeup without advancing
+that clock. Reconnect timers and the public 99/100 millisecond boundary assertions
+remain controlled by explicit clock advancement. Host initialization also uses
+the common isolated customer-home/model-cache environment. Five focused native
+runs passed in 31.634 seconds. A complete lane measures the correction separately.
+
+
+The corrected complete sample took 155.12 seconds overall and 144.144 seconds
+for the coverage invocation. Work-watch passed in 13.655 seconds under full-lane
+load. The sample still failed: 818 tests passed, two skipped and two failed.
+Runtime-metrics cancellation reported that closed-session history changed after
+clock advancement and peer completion. Mock-worker cleanup reported a nonempty
+temporary directory during removal. Both raw failures are retained. The 65 linker
+actions consumed 102.978 summed CPU seconds and 109.305 overlapping active
+seconds; two compiler actions consumed 0.549 CPU seconds. This sample does not
+establish a successful sub-three-minute lane.
+
+The refreshed private monolith experiment includes 63 package groups, 741 Go
+files and 823 Test-prefixed declarations. It retains package fixtures, embedded
+assets, source mappings and evidence declarations. Unlike the earlier build-only
+transform, executable variants retain package initialization functions.
+
+
+### Current-main one-binary execution experiment
+
+The refreshed four-core experiment built and executed one binary in 145.28
+seconds. Its single linker action took 2.186 wall seconds and 2.142 CPU seconds;
+two compiler actions consumed 33.707 CPU seconds. Package execution took 128.713
+seconds. This establishes the linker reduction, not a passing CI checkpoint:
+the mock JavaScript ACP test failed, as did an invocation-scoped cancellation
+case. Parent cohort failures are additional JSON events for those same failures,
+not independent failed customer scenarios. Peak RSS was 6,325,684 KiB, compared
+with 1,362,000 KiB in the preceding native-package lane. A single binary therefore
+also concentrates memory and fixture concurrency; its end-to-end benefit is much
+smaller than its isolated linker benefit in this sample.
+
+The mock JavaScript ACP fixture unnecessarily changed the process-wide working
+directory while running in parallel. Its command now supplies an absolute Factory
+path and an explicit command working directory. Removing the global mutation
+alone initially exposed the relative Factory-path dependency; making the path
+absolute preserved the customer invocation. Five focused native repetitions
+passed in 3.729 seconds, and changed watch/mock scopes passed built-in and tagged
+repository lint. The private monolith is repeated with this correction before
+considering any shipping layout.
