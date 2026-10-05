@@ -45,7 +45,6 @@ type HostHTTPDoer = effects.HostHTTPDoer
 type HostTimer = effects.HostTimer
 type HostClock = effects.HostClock
 
-type RuntimeHTTPDoer = effects.RuntimeHTTPDoer
 type RuntimeTempFile = effects.RuntimeTempFile
 type RuntimeInspectFile = effects.RuntimeInspectFile
 type RuntimeTempDirectory = effects.RuntimeTempDirectory

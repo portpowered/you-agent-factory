@@ -297,7 +297,7 @@ func startProjectRootBackedMCPServerWithProcess(
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--project-root", projectRoot},
-			Env:              append(os.Environ(), "HOME="+homeDirectory, "USERPROFILE="+homeDirectory),
+			Env:              support.IsolatedHomeEnvironment(homeDirectory),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,

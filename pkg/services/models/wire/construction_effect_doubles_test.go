@@ -42,7 +42,6 @@ type constructionEdges struct {
 	hostHTTP          modelseffects.HostHTTPDoer
 	hostClock         modelseffects.HostClock
 	runtimeRunner     platformprocess.CommandRunner
-	runtimeHTTP       modelseffects.RuntimeHTTPDoer
 	runtimeInspect    modelseffects.RuntimeInspectFile
 	runtimeTempDir    modelseffects.RuntimeTempDirectory
 	runtimeTempFile   modelseffects.RuntimeCreateTempFile
@@ -76,7 +75,6 @@ func validConstructionEdges() constructionEdges {
 		hostHTTP:          http.DefaultClient,
 		hostClock:         inertHostClock{},
 		runtimeRunner:     inertCommandRunner{},
-		runtimeHTTP:       http.DefaultClient,
 		runtimeInspect:    os.Stat,
 		runtimeTempDir:    os.TempDir,
 		runtimeTempFile: func(dir, pattern string) (modelseffects.RuntimeTempFile, error) {
@@ -108,7 +106,6 @@ func (edges constructionEdges) newServiceWithInvocationProtocol(
 		edges.hostHTTP,
 		edges.hostClock,
 		edges.runtimeRunner,
-		edges.runtimeHTTP,
 		edges.runtimeInspect,
 		edges.runtimeTempDir,
 		edges.runtimeTempFile,
@@ -628,7 +625,6 @@ func newModelsServiceWithFixtureEffects(
 	hostHTTP HostHTTPDoer,
 	hostClock HostClock,
 	runtimeRunner platformprocess.CommandRunner,
-	runtimeHTTP RuntimeHTTPDoer,
 	runtimeInspect RuntimeInspectFile,
 	runtimeTempDir RuntimeTempDirectory,
 	runtimeTempFile RuntimeCreateTempFile,
@@ -657,7 +653,7 @@ func newModelsServiceWithFixtureEffects(
 		assetPlatform, assetHTTP, assetEndpoints, assetMkdirAll, assetStat, assetHome,
 		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir,
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
-		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
+		runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
 		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination,
 		runtimeEvidence, resolveSymlinks, backendResolver,
@@ -682,7 +678,6 @@ func composeModelsService(
 	hostHTTP HostHTTPDoer,
 	hostClock HostClock,
 	runtimeRunner platformprocess.CommandRunner,
-	runtimeHTTP RuntimeHTTPDoer,
 	runtimeInspect RuntimeInspectFile,
 	runtimeTempDir RuntimeTempDirectory,
 	runtimeTempFile RuntimeCreateTempFile,
@@ -752,15 +747,11 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	localRuntime, err := NewLocalRuntime(runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile)
-	if err != nil {
-		return nil, err
-	}
 	resources, err := NewResourceLimiter(localHooks, now)
 	if err != nil {
 		return nil, err
 	}
-	execution, err := NewScopedLocalExecution(runtimeScopes, assetService, runtimeHost, localRuntime, resources, localHooks, now)
+	execution, err := NewScopedLocalExecution(runtimeScopes, assetService)
 	if err != nil {
 		return nil, err
 	}

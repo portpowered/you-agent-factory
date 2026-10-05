@@ -149,15 +149,16 @@ func TestWSRFT006ReusedRecordingPathStartsFreshWorkerHistory(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	recordPath := filepath.Join(t.TempDir(), "wsr-ft-006-reused.replay.json")
+	homeDir := t.TempDir()
 
 	firstDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
 	queueWSRFT006ProviderResult(t, loaded, runner)
-	executeWSRFT006RecordedFactory(t, process, firstDir, recordPath)
+	executeWSRFT006RecordedFactory(t, process, firstDir, recordPath, homeDir)
 	firstRecordingID, firstWorkerID := probe.RecordingIdentity(t)
 
 	secondDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
 	queueWSRFT006ProviderResult(t, loaded, runner)
-	executeWSRFT006RecordedFactory(t, process, secondDir, recordPath)
+	executeWSRFT006RecordedFactory(t, process, secondDir, recordPath, homeDir)
 	secondRecordingID, secondWorkerID := probe.RecordingIdentity(t)
 	if secondRecordingID == firstRecordingID {
 		t.Fatalf("same-path recording identity = %q after second execution, want a fresh identity", secondRecordingID)
@@ -179,13 +180,14 @@ func executeWSRFT006RecordedFactory(
 	t *testing.T,
 	process support.ApplicationProcess,
 	dir string,
-	recordPath string,
+	recordPath, homeDir string,
 ) {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
 	})
 	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = sharedInferenceProcessEnvironment(homeDir)
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}

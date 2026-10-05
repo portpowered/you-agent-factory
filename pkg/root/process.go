@@ -91,7 +91,6 @@ func invalidConstructionOverride(field string) error {
 		"ModelHostHTTPClient":           "construct Models: model host HTTP client is required",
 		"ModelHostClock":                "construct Models: model host clock is required",
 		"ModelRuntimeCommandRunner":     "construct Models: model runtime command runner is required",
-		"ModelRuntimeHTTPClient":        "construct Models: model runtime HTTP client is required",
 	}[field]
 	if message != "" {
 		return fmt.Errorf("Edges.%s: %s", field, message)

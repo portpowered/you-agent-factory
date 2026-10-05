@@ -239,10 +239,3 @@ func (fake *rootFake) AcquireLease(
 func (fake *rootFake) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
 	return models.ErrUnsupportedOperation
 }
-
-func (fake *rootFake) InvokeLocal(
-	context.Context,
-	models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	return models.LocalInvocationResult{}, models.ErrUnsupportedOperation
-}

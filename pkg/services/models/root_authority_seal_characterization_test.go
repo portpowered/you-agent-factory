@@ -40,10 +40,6 @@ func (peerModelsService) ReleaseLease(context.Context, models.ReleaseLeaseReques
 	return models.ErrHostLeaseNotFound
 }
 
-func (peerModelsService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
-	return models.LocalInvocationResult{Handled: false}, nil
-}
-
 func (peerModelsService) InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
 	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
@@ -58,53 +54,6 @@ func TestRootServiceAuthority_FakePeerGetModelNotFound(t *testing.T) {
 	}
 	if !errors.Is(err, models.ErrNotFound) {
 		t.Fatalf("GetModel error = %v, want ErrNotFound", err)
-	}
-}
-
-func TestRootServiceAuthority_AggregateSurfaceRemainsOnSingularService(t *testing.T) {
-	t.Parallel()
-
-	service := peerModelsService{}
-
-	var sealed models.Service = peerModelsService{}
-	if _, err := sealed.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{}); !errors.Is(
-		err, models.ErrUnsupportedOperation,
-	) {
-		t.Fatalf("OpenRuntimeScope = %v, want ErrUnsupportedOperation", err)
-	}
-	if _, err := service.AcquireLease(context.Background(), models.AcquireLeaseRequest{}); !errors.Is(
-		err, models.ErrHostRuntimeNotReady,
-	) {
-		t.Fatalf("AcquireLease = %v, want ErrHostRuntimeNotReady", err)
-	}
-	if err := service.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{}); !errors.Is(
-		err, models.ErrHostLeaseNotFound,
-	) {
-		t.Fatalf("ReleaseLease = %v, want ErrHostLeaseNotFound", err)
-	}
-
-	list, err := service.ListModels(context.Background())
-	if err != nil {
-		t.Fatalf("ListModels: %v", err)
-	}
-	if list.Results == nil {
-		// Empty catalog is valid; Results must remain a usable Models-owned List.
-		list.Results = []models.Summary{}
-	}
-
-	if _, err := service.PullModel(context.Background(), "model"); !errors.Is(err, models.ErrUnsupportedOperation) {
-		t.Fatalf("PullModel error = %v, want ErrUnsupportedOperation", err)
-	}
-	if _, err := service.InspectRuntime(context.Background(), "model"); !errors.Is(err, models.ErrUnsupported) {
-		t.Fatalf("InspectRuntime error = %v, want ErrUnsupported", err)
-	}
-
-	result, err := service.InvokeLocal(context.Background(), models.LocalInvocationRequest{})
-	if err != nil {
-		t.Fatalf("InvokeLocal: %v", err)
-	}
-	if result.Handled {
-		t.Fatal("InvokeLocal Handled = true, want false for unsupported peer path")
 	}
 }
 

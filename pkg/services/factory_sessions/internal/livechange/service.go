@@ -37,17 +37,6 @@ var _ factorysessioncontracts.LiveChangeCoordinator = (*Service)(nil)
 // operation boundary rather than captured by this shared instance.
 func NewCoordinator() *Service { return &Service{} }
 
-// New constructs an admission coordinator with explicit process effects.
-func New(now func() time.Time, logger *zap.Logger) *Service {
-	if now == nil {
-		return nil
-	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-	return &Service{now: now, logger: logger}
-}
-
 // ApplyLiveChange applies one live change through the shared coordinator and
 // explicit runtime operation ports.
 func (s *Service) ApplyLiveChange(
@@ -117,24 +106,6 @@ func (s *Service) forOperation(operation factorysessions.LiveChangeOperation) (*
 		logger = zap.NewNop()
 	}
 	return &Service{now: now, logger: logger}, nil
-}
-
-// Apply validates, admits, applies, and closes one live change. A request
-// event is appended before application only after all pre-admission checks
-// succeed.
-func (s *Service) Apply(
-	ctx context.Context,
-	sessionID string,
-	request factorysessions.LiveChangeRequest,
-	stateProvider StateProvider,
-	events factorysessions.LiveChangeEventLog,
-	application factorysessions.LiveChangeApplication,
-) (factorysessions.LiveChangeResult, error) {
-	return s.ApplyLiveChange(ctx, sessionID, request, factorysessions.LiveChangeOperation{
-		StateProvider: stateProvider,
-		Events:        events,
-		Application:   application,
-	})
 }
 
 func (s *Service) apply(
@@ -275,24 +246,6 @@ func (s *Service) applyApplication(
 	}
 
 	return s.closeSuccess(events, sessionID, request, result.Factory, result.ResourceCapacity, s.now())
-}
-
-// Recover closes a request event that has no terminal event. It is intentionally
-// request-ID based so recovery after process restart does not need the original
-// request body from the caller.
-func (s *Service) Recover(
-	ctx context.Context,
-	sessionID string,
-	requestID string,
-	stateProvider StateProvider,
-	events factorysessions.LiveChangeEventLog,
-	application factorysessions.LiveChangeApplication,
-) (factorysessions.LiveChangeResult, error) {
-	return s.RecoverLiveChange(ctx, sessionID, requestID, factorysessions.LiveChangeOperation{
-		StateProvider: stateProvider,
-		Events:        events,
-		Application:   application,
-	})
 }
 
 func (s *Service) recover(

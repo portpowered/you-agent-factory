@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -22,6 +23,9 @@ type Service struct {
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator
 	ownerProbe       ownerProbe
 	logger           logging.Logger
+	// Successful publication fingerprints are immutable for these content
+	// inputs and this installer's persistence implementation.
+	managedContentIDs sync.Map // managedPublicationIdentity -> string
 }
 
 const (

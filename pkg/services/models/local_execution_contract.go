@@ -895,20 +895,6 @@ func (e *TargetError) Unwrap() error {
 	return e.Cause
 }
 
-// LocalInvocationRequest is the plain infer request on the Models root.
-// Peers supply Worker/dispatch/bindings vocabulary without importing nested
-// inference or local-execution implementation types.
-type LocalInvocationRequest struct {
-	Scope            RuntimeScopeRef
-	Holder           string
-	Worker           LocalWorker
-	Resources        []LocalResource
-	Dispatch         work.WorkDispatch
-	ModelOperation   string
-	ModelBindings    []ResolvedModelOperationBinding
-	WorkingDirectory string
-}
-
 // LocalWorker is the Models-owned projection of the authored Worker fields
 // required to select and invoke a managed local runtime.
 type LocalWorker struct {
@@ -933,20 +919,4 @@ type LocalResource struct {
 	Backend    string
 	LoadPolicy string
 	Provider   string
-}
-
-// LocalInvocationResult is the plain infer result on the Models root. Handled
-// true means Models owned the invocation; false means Models declined.
-type LocalInvocationResult struct {
-	Handled bool
-	Content string
-}
-
-// ValidateLocalInvocationRequest checks the plain infer/local-invocation
-// request. Managed-runtime workers with an empty Model fail closed.
-func ValidateLocalInvocationRequest(request LocalInvocationRequest) error {
-	if request.Worker.UsesManagedRuntime() && strings.TrimSpace(request.Worker.Model) == "" {
-		return fmt.Errorf("%w: empty managed runtime model name", ErrNotFound)
-	}
-	return nil
 }
