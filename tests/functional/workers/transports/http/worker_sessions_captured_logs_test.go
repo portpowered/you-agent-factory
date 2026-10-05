@@ -68,6 +68,8 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	if archived.State != factoryapi.WorkerSessionObservationStateCompleted || archived.ProviderSession != nil || archived.StartedAt == nil {
 		t.Fatalf("archived captured identity lost facts: %+v", archived)
 	}
+	restarted.Close(t)
+	assertLegacyCapturedLogsRecovery(t, config, ended)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")
 }
 
