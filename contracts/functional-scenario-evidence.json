@@ -26,6 +26,24 @@
       ]
     },
     {
+      "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
+      "stableIds": [
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show",
+        "cli/you.worker-sessions.stream"
+      ]
+    },
+    {
+      "test": "tests/functional/product/cli_rest_journeys/transport_http_server_journeys_test.go::TestRESTServerJourneys",
+      "stableIds": [
+        "rest/getEventsBySessionId",
+        "rest/getStatusBySessionId",
+        "rest/listWorkBySessionId",
+        "rest/submitWorkBySessionId"
+      ]
+    },
+    {
       "test": "tests/functional/product/customer_journeys/providers_discovery_discovery_test.go::TestCLIProvidersListShowsConfiguredProviders",
       "stableIds": [
         "cli/you.providers.list"
@@ -103,15 +121,6 @@
       ]
     },
     {
-      "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
-      "stableIds": [
-        "cli/you.worker-sessions.list",
-        "cli/you.worker-sessions.read",
-        "cli/you.worker-sessions.show",
-        "cli/you.worker-sessions.stream"
-      ]
-    },
-    {
       "test": "tests/functional/providers/acp/catalog_cli_test.go::TestCustomersCanAddListAndDeleteACPWorkers",
       "stableIds": [
         "cli/you.workers.acp.add",
@@ -132,15 +141,6 @@
         "cli/you.work.approval.list",
         "cli/you.work.approval.show",
         "cli/you.work.move"
-      ]
-    },
-    {
-      "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
-      "stableIds": [
-        "rest/getEventsBySessionId",
-        "rest/getStatusBySessionId",
-        "rest/listWorkBySessionId",
-        "rest/submitWorkBySessionId"
       ]
     },
     {

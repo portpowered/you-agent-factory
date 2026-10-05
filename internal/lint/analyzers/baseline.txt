@@ -2249,10 +2249,6 @@ testsleep-deadline-test|pkg/wire|pkg/wire/cli_test.go::TestProvideLocalWorkerSes
 testsleep-deadline-test|pkg/wire|pkg/wire/http_host_test.go::receiveWireDeadLetter::deadline::1
 testsleep-deadline-test|pkg/wire|pkg/wire/http_host_test.go::TestWorkerSessionFleetActiveReadCausalRegression::deadline::1
 testsleep-deadline-test|pkg/wire|pkg/wire/run_session_selection_test.go::TestRelayRuntimeHostReadyPreservesBindingWhenRuntimeAlreadyFinished::deadline::1
-testsleep-deadline-test|tests/functional/events/factory_events|tests/functional/events/factory_events/shared_process_test.go::TestMain::deadline::1
-testsleep-deadline-test|tests/functional/factory_definitions/transports/cli/named_lifecycle|tests/functional/factory_definitions/transports/cli/named_lifecycle/shared_process_test.go::TestMain::deadline::1
-testsleep-deadline-test|tests/functional/factory_definitions/transports/cli/validate_persist|tests/functional/factory_definitions/transports/cli/validate_persist/shared_process_test.go::TestMain::deadline::1
-testsleep-deadline-test|tests/functional/factory_definitions/transports/cli/yaml_parity|tests/functional/factory_definitions/transports/cli/yaml_parity/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/factory/execution_test|tests/functional/factory/execution/invocation_characterization_test.go::runLocalAIFactoryInference::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_omni_artifact_omni_artifact_fixture_test.go::omniProtocolFixture.WaitForCancellation::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_characterization_assertions_test.go::assertCrossListenerClosed::deadline::1
@@ -2290,7 +2286,6 @@ testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_ap
 testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_api/api_service_mode_observability_smoke_test.go::assertServiceModeServerStops::deadline::1
 testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_api/dashboard_engine_state_test.go::functionalWorldViewProvider.nextDispatch::deadline::1
 testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_api/events_test.go::factoryEventHTTPStream.close::deadline::1
-testsleep-deadline-test|tests/functional/sessions/cli_test|tests/functional/sessions/cli/resolved_session_family_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_execution_helpers_test.go::waitForBlockingInvocationStart::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData::deadline::1
 testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|tests/functional/transport/cli/customer_commands/output_text_stream_test.go::waitForInterruptibleStdoutLifecycle::deadline::1
@@ -2298,15 +2293,8 @@ testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/
 testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_root_discovery_root_discovery_test.go::testTransportclirootdiscoveryContinuousRunScopedServerKeepsListenerUntilCancellation::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_root_discovery_root_discovery_test.go::testTransportclirootdiscoveryCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/transport_cli_root_discovery_root_discovery_test.go::testTransportclirootdiscoveryServerDisclosesHomeBeforeSystemInitializationAccess::deadline::1
-testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPICancelledRequestDoesNotCancelUnrelatedSession::deadline::1
-testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPICancelledRequestDoesNotCancelUnrelatedSession::deadline::2
-testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPIConcurrentSessionRequestsRemainIsolated::deadline::1
-testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/concurrent_requests_test.go::TestAPIConcurrentSessionRequestsRemainIsolated::deadline::2
-testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/startup_shutdown_test.go::assertActiveRequestTerminatedAfterShutdown::deadline::1
-testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/startup_shutdown_test.go::startActiveBlockingInvocation::deadline::1
 testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|tests/functional/transport/cli/customer_commands/submit_matrix_test.go::testSubmitCancellation::deadline::1
 testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|tests/functional/transport/cli/customer_commands/submit_matrix_test.go::testSubmitRecoveryAndOutput::deadline::1
-testsleep-deadline-test|tests/functional/work/transports/cli_test|tests/functional/work/transports/cli/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerCommand::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerLines::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerSignal::deadline::1
@@ -2460,7 +2448,6 @@ testsleep-sleep-test|pkg/transports/http/servertests/factorysessionsse|pkg/trans
 testsleep-sleep-test|pkg/wire|pkg/wire/cli_http_test.go::TestModelAssetHTTPClientAllowsBodyPastFormerWholeTransferBudget::sleep::1
 testsleep-sleep-test|pkg/wire|pkg/wire/models_gallery_backend_live_test.go::TestLocalAIGalleryCUDAInstalledBackendLive::sleep::1
 testsleep-sleep-test|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/helpers_functionallong_test.go::waitForGeneratedWorkAtPlace::sleep::1
-testsleep-sleep-test|tests/functional/events/factory_events|tests/functional/events/factory_events/order_and_cursor_test.go::waitForWorkRequestEvent::sleep::1
 testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/factory_runtime_orchestrators_petri_guards_eligibility_test.go::waitForMinimumWorkAtCustomerState::sleep::1
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::assertNoAdditionalProviderCommandWork::sleep::1
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::waitForActivatedFactoryRuntime::sleep::1

@@ -1,0 +1,19 @@
+package cli_rest_journeys_test
+
+import "testing"
+
+// TestModelCatalogCLIJourneys owns its immutable fixture until all customer scenarios finish.
+func TestModelCatalogCLIJourneys(t *testing.T) {
+	t.Parallel()
+	resetmodelscli1State()
+	initializeModelscliFixture(t)
+	t.Run("TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges", testModelscliProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges)
+	t.Run("TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity", testModelscliProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity)
+	t.Run("TestProcessModelsDiagnosticOutputFailureAndRecovery", testModelscliProcessModelsDiagnosticOutputFailureAndRecovery)
+	t.Run("TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON", testModelscliProcessModelsList_UsesServerFlagAndReturnsCatalogJSON)
+	t.Run("TestProcessModelsCatalogDiscoversCustomOperatorModel", testModelscliProcessModelsCatalogDiscoversCustomOperatorModel)
+	t.Run("TestProcessModelsInspect_UsesResolvedModelNameArgument", testModelscliProcessModelsInspect_UsesResolvedModelNameArgument)
+	t.Run("TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON", testModelscliProcessModelsPull_UsesServerFlagAndReturnsPullJSON)
+	t.Run("TestProcessModelsList_ReturnsHumanReadableCatalog", testModelscliProcessModelsList_ReturnsHumanReadableCatalog)
+	t.Run("TestProcessModelsInspect_ReturnsHumanReadableDetail", testModelscliProcessModelsInspect_ReturnsHumanReadableDetail)
+}

@@ -5,7 +5,7 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest hosted functional job, at `02a491c07b`, passed in **5m33.016s for
+The latest completed hosted functional measurement, at `02a491c07b`, passed in **5m33.016s for
 the full functional supervisor**, including **4m17.763s for the coverage
 invocation**. It reported 816 final passes, two skips and no final failures;
 unchanged coverage gates and all required verification jobs passed. Providers
@@ -1813,3 +1813,87 @@ existing 0.25-point epsilon and existing main holds. No baseline was edited.
 The private harness and monolith are not committed production tests. This
 measurement excludes the full functional supervisor and hosted CI environment;
 it proves feasibility, not completion of a latency checkpoint.
+
+
+### Shipping CLI and REST fixture consolidation
+
+Nine fixture-owning packages join `product/cli_rest_journeys`: Provider Session
+CLI diagnosis, Models catalog/invocation CLI, Factory YAML parity, Factory
+validation/persistence, named Factory lifecycle, Session CLI controls, Work CLI
+collections, Factory Events and REST server behavior. Forty-three existing source
+files retain their customer assertions beneath named parallel scenario parents.
+Each parent constructs and cleans up its own former package fixture; cleanup
+runs after parallel children. Repetition resets fixture-owned state. This removes
+eight native package links without shipping the private monolith fixture harness.
+Two complete native repetitions passed in 58.536 seconds before the additional
+cleanup and 62.728 seconds after it. Built-in and tagged repository lint pass.
+All 160 reviewed scenarios retain their decisions; evidence declarations move
+to executable scenario parents, and existing lint-debt identities follow their
+source moves without adding allowances.
+
+The concurrent REST identity proof now performs one overlapping observation
+per owned session rather than ten repeated rounds. Distinct identity and
+cancellation observations remain. Direct filesystem implementation checks and
+durable-appender component failure probes are removed from the functional
+webhook case. Their behavior is a component concern; customer webhook delivery,
+recorded history, signing, filtering, retries and dead-letter artifacts remain.
+Public Work Request observation uses a bounded ticker instead of a fixed 50 ms
+sleep. Existing cleanup and failure observation ceilings are unchanged.
+
+Two attempted full measurements in the reused private Linux checkout were
+invalid because functional discovery also found the completed experimental
+monolith sources. Removing those sources from Git's index did not exclude them
+from the repository's filesystem discovery. The experimental directory was moved
+outside the functional source tree, and a clean discovery now selects 69
+packages. Neither incomplete attempt counts as latency or coverage evidence.
+
+
+The first platform-complete native consolidation sample passed all 755 selected
+tests with two skips: 133.92 seconds full supervisor / 124.764 seconds coverage
+invocation. It recorded 57 linker actions, 79.944 CPU seconds and 102.292 seconds
+of overlapping link-active intervals; four compiler actions consumed 3.200 CPU
+seconds. Whole-command CPU was 380.20 user plus 104.81 system seconds, and peak
+RSS 1,359,684 KiB. It failed the unchanged filesystem floor: 31/47 statements
+(65.9574%) versus 75%. This is a failed gate sample, not a latency checkpoint.
+The largest executing packages were Product customer journeys (91.346s), Product
+customer lifecycles (81.527s), packaged invocation (47.874s), the new CLI/REST
+journeys (43.430s), Factory execution (39.372s), and Models inference (29.054s).
+These package elapsed intervals overlap and cannot be added to supervisor wall.
+
+A Linux compile check also caught a non-Windows memory observation helper that
+the Windows typed source load had omitted. Both platform variants now move with
+the Provider Session CLI fixture. The early compile-failed sample did not check
+coverage; no latency conclusion is drawn from its short termination.
+
+To retain the filesystem floor through customer behavior, the existing webhook
+append-failure scenario now uses an actual blocked destination directory through
+the exact appender edge. Two Linux cases add an exhausted file and unavailable
+durable flush. Each case submits Work through the CLI, observes signed delivery
+and retained canonical history through public interfaces, verifies one terminal
+append attempt at the external-effect boundary, and proves an independent peer
+continues delivering. The dead-letter record is still checked for canonical body,
+identity, retry classification and redaction. Device fixtures are confined to
+scenario-owned symlinks, and non-Linux execution skips those two device cases.
+Three Windows repetitions passed in 33.541s; three four-core Linux repetitions
+passed in 7.860s. Built-in and tagged repository lint report zero issues.
+
+
+The customer file-failure replacement passes the complete four-core canonical
+lane: **130.64s full supervisor / 120.533s coverage invocation**, 755 top-level
+passes, two skips and no failures. The original total and package coverage gates
+and all quarantine checks pass. Total coverage is 61.4%; filesystem coverage is
+36/47 statements (76.6%), above its unchanged 75% floor. The recorded tool trace
+has 57 linker actions consuming 76.129 summed CPU seconds over 97.962 seconds of
+overlapping active intervals. Two compiler actions consume 2.880 CPU seconds.
+Whole-command CPU is 366.93 user plus 103.21 system seconds; peak RSS is
+1,422,344 KiB (1.36 GiB). This avoids the experimental all-in-one candidate's
+6.28 GiB peak while retaining measured link reduction. The failed predecessor
+was 133.92s; these are individual samples, not a statistical speedup estimate.
+
+The largest package intervals in the passing sample are Product customer journeys
+83.254s, Product customer lifecycles 74.332s, CLI/REST journeys 50.061s, packaged
+invocation 45.905s, Factory execution 36.648s and Models inference 28.192s. They
+identify the next fixture/compute targets; they overlap and are not additive.
+Thirteen resolved sleep/deadline debt records are removed: the fixed sleep no
+longer exists, and existing signal-driven failure/cleanup ceilings now explain
+their purpose in code. No coverage floor or debt allowance is increased.

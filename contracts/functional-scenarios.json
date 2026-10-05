@@ -675,7 +675,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
           "boundary": "cli"
         }
       ]
@@ -705,7 +705,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
           "boundary": "cli"
         },
         {
@@ -743,7 +743,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
           "boundary": "cli"
         }
       ]
@@ -758,7 +758,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
           "boundary": "cli"
         }
       ]
@@ -1083,7 +1083,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
+          "test": "tests/functional/product/cli_rest_journeys/transport_http_server_journeys_test.go::TestRESTServerJourneys",
           "boundary": "rest"
         }
       ],
@@ -1254,7 +1254,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
+          "test": "tests/functional/product/cli_rest_journeys/transport_http_server_journeys_test.go::TestRESTServerJourneys",
           "boundary": "rest"
         }
       ]
@@ -1454,7 +1454,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
+          "test": "tests/functional/product/cli_rest_journeys/transport_http_server_journeys_test.go::TestRESTServerJourneys",
           "boundary": "rest"
         }
       ]
@@ -1787,7 +1787,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
+          "test": "tests/functional/product/cli_rest_journeys/transport_http_server_journeys_test.go::TestRESTServerJourneys",
           "boundary": "rest"
         }
       ]
