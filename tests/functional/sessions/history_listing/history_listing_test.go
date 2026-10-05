@@ -85,48 +85,10 @@ func historyEdges(home, recordingRoot, cell string) serviceedges.Edges {
 func assertHistorySurfaces(t *testing.T, process support.Process, endpoint, factory string, env []string, home string, rows, warnings []string, fatal bool) {
 	t.Helper()
 	for _, scope := range []string{"history", "all", "live", "persisted", ""} {
-		response, err := http.Get(endpoint + "/factory-sessions?scope=" + scope)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, err := io.ReadAll(response.Body)
-		response.Body.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
 		includesHistory := scope == "history" || scope == "all"
-		if fatal && includesHistory {
-			if response.StatusCode < 500 {
-				t.Fatalf("scan failure status = %d: %s", response.StatusCode, body)
-			}
-		} else {
-			if response.StatusCode != http.StatusOK {
-				t.Fatalf("HTTP %s = %d: %s", scope, response.StatusCode, body)
-			}
-			var result factoryapi.ListFactorySessionsResponse
-			if err := json.Unmarshal(body, &result); err != nil {
-				t.Fatal(err)
-			}
-			assertHistoryResult(t, result, includesHistory, rows, warnings)
-		}
-		inputs := support.FakeInputs(t.Context(), []string{"you", "--server", endpoint, "--json", "session", "list", "--scope", scope})
-		inputs.Env, inputs.WorkingDirectory = env, factory
-		err = process.Execute(inputs.Input)
-		if fatal && includesHistory {
-			if err == nil {
-				t.Fatal("CLI concealed scan failure")
-			}
-		} else {
-			if err != nil {
-				t.Fatalf("CLI %s: %v; %s", scope, err, inputs.Stderr())
-			}
-			var result factoryapi.ListFactorySessionsResponse
-			if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
-				t.Fatalf("CLI JSON: %v: %s", err, inputs.Stdout())
-			}
-			assertHistoryResult(t, result, includesHistory, rows, warnings)
-		}
-		if strings.Contains(string(body)+inputs.Stdout(), home) || strings.Contains(string(body)+inputs.Stdout(), "planted-secret") {
+		body := assertHistoryHTTP(t, endpoint, scope, includesHistory, rows, warnings, fatal)
+		stdout := assertHistoryCLI(t, process, endpoint, factory, env, scope, includesHistory, rows, warnings, fatal)
+		if strings.Contains(body+stdout, home) || strings.Contains(body+stdout, "planted-secret") {
 			t.Fatal("listing leaked host path or content")
 		}
 	}
@@ -146,6 +108,56 @@ func assertHistorySurfaces(t *testing.T, process support.Process, endpoint, fact
 			}
 		}
 	}
+}
+
+func assertHistoryHTTP(t *testing.T, endpoint, scope string, includesHistory bool, rows, warnings []string, fatal bool) string {
+	t.Helper()
+	response, err := http.Get(endpoint + "/factory-sessions?scope=" + scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fatal && includesHistory {
+		if response.StatusCode < 500 {
+			t.Fatalf("scan failure status = %d: %s", response.StatusCode, body)
+		}
+		return string(body)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("HTTP %s = %d: %s", scope, response.StatusCode, body)
+	}
+	var result factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatal(err)
+	}
+	assertHistoryResult(t, result, includesHistory, rows, warnings)
+	return string(body)
+}
+
+func assertHistoryCLI(t *testing.T, process support.Process, endpoint, factory string, env []string, scope string, includesHistory bool, rows, warnings []string, fatal bool) string {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", endpoint, "--json", "session", "list", "--scope", scope})
+	inputs.Env, inputs.WorkingDirectory = env, factory
+	err := process.Execute(inputs.Input)
+	if fatal && includesHistory {
+		if err == nil {
+			t.Fatal("CLI concealed scan failure")
+		}
+		return inputs.Stdout()
+	}
+	if err != nil {
+		t.Fatalf("CLI %s: %v; %s", scope, err, inputs.Stderr())
+	}
+	var result factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
+		t.Fatalf("CLI JSON: %v: %s", err, inputs.Stdout())
+	}
+	assertHistoryResult(t, result, includesHistory, rows, warnings)
+	return inputs.Stdout()
 }
 
 func assertHistoryResult(t *testing.T, result factoryapi.ListFactorySessionsResponse, includesHistory bool, rows, warnings []string) {
@@ -249,6 +261,11 @@ func assertPopulatedScope(t *testing.T, result factoryapi.ListFactorySessionsRes
 	if (len(result.Sessions) > 0) != (scope == "live" || scope == "all") {
 		t.Fatalf("scope %s live rows = %d", scope, len(result.Sessions))
 	}
+	assertPopulatedHistoryScope(t, result, scope, warnings)
+}
+
+func assertPopulatedHistoryScope(t *testing.T, result factoryapi.ListFactorySessionsResponse, scope string, warnings []string) {
+	t.Helper()
 	if scope == "history" || scope == "all" {
 		if result.RecordedSessions == nil || len(*result.RecordedSessions) < 2 {
 			t.Fatalf("scope %s lost healthy history", scope)
