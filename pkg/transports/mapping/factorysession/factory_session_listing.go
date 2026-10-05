@@ -513,6 +513,7 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 		}
 		response.RecordedSessions = &recorded
 	}
+	response.Warnings = recordingWarningsToAPI(result.Warnings)
 	response.Sessions = canonicalAPILiveSessionSummaries(response.Sessions)
 	return response
 }
@@ -547,6 +548,7 @@ func ScopedSessionListResponseToAPI(result factorysessions.ScopedSessionListResu
 		}
 		response.RecordedSessions = &recorded
 	}
+	response.Warnings = recordingWarningsToAPI(result.Warnings)
 	return response
 }
 
@@ -743,4 +745,17 @@ func SyncPreflightResultToAPI(result factorysessions.SyncPreflightResult) factor
 		RequestedSessionId: result.RequestedSessionID,
 		StreamGenerationId: result.StreamGenerationID,
 	}
+}
+
+func recordingWarningsToAPI(diagnostics []factorysessions.RecordedSessionDiagnostic) *[]factoryapi.FactorySessionRecordingWarning {
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	warnings := make([]factoryapi.FactorySessionRecordingWarning, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		warnings = append(warnings, factoryapi.FactorySessionRecordingWarning{
+			ArtifactReference: diagnostic.ArtifactReference, Code: factoryapi.FactorySessionRecordingWarningCode(diagnostic.Code), Reason: diagnostic.Reason,
+		})
+	}
+	return &warnings
 }

@@ -3,6 +3,7 @@ package wire_test
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"reflect"
@@ -18,19 +19,23 @@ import (
 type snapshotSourceStub struct{}
 
 type publicationFileStub struct {
-	name     string
-	calls    *[]string
-	payload  []byte
-	chmodErr error
-	syncErr  error
-	closeErr error
-	writeErr error
+	name       string
+	calls      *[]string
+	payload    []byte
+	chmodErr   error
+	syncErr    error
+	closeErr   error
+	writeErr   error
+	shortWrite bool
 }
 
 func (file *publicationFileStub) Write(payload []byte) (int, error) {
 	*file.calls = append(*file.calls, "write")
 	if file.writeErr != nil {
 		return 0, file.writeErr
+	}
+	if file.shortWrite {
+		return len(payload) - 1, nil
 	}
 	file.payload = append(file.payload[:0], payload...)
 	return len(payload), nil
@@ -329,6 +334,48 @@ func TestNewPublicationRejectsMissingEffect(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			if publication, err := testCase.make(); err == nil || publication != nil {
 				t.Fatalf("NewPublication() = (%#v, %v), want missing %s effect error", publication, err, testCase.name)
+			}
+		})
+	}
+}
+
+func TestPublicationRejectsIncompleteTemporaryFiles(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"short write", "sync", "close", "rename"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			var calls []string
+			failure := errors.New(stage)
+			file := &publicationFileStub{name: "artifact.tmp", calls: &calls, shortWrite: stage == "short write"}
+			if stage == "sync" {
+				file.syncErr = failure
+			}
+			if stage == "close" {
+				file.closeErr = failure
+			}
+			published, removed := false, false
+			publication, err := artifactsexportwire.NewPublication(
+				func(string, fs.FileMode) error { return nil },
+				func(string, string) (recordings.RecordingTemporaryFile, error) { return file, nil },
+				func(string) error { removed = true; return nil },
+				func(string, string) error {
+					if stage == "rename" {
+						return failure
+					}
+					published = true
+					return nil
+				},
+				func(string) ([]byte, error) { return nil, nil },
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = publication.Publish(t.Context(), "artifact.json", []byte("complete payload"))
+			if stage == "short write" {
+				failure = io.ErrShortWrite
+			}
+			if !errors.Is(err, failure) || published || !removed {
+				t.Fatalf("publication = %v, published=%v removed=%v", err, published, removed)
 			}
 		})
 	}

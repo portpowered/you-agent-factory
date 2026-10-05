@@ -233,6 +233,7 @@ func ApplySessionListScope(result ListSessionsResult, request ListSessionsReques
 		return ListSessionsResult{
 			Scope:            scope,
 			RecordedSessions: recorded,
+			Warnings:         append([]recordings.RecordedSessionDiagnostic(nil), result.Warnings...),
 		}
 	default:
 		return ListSessionsResult{
@@ -240,6 +241,7 @@ func ApplySessionListScope(result ListSessionsResult, request ListSessionsReques
 			LiveSessions:     SortLiveSessionSummaries(DeduplicateLiveSessionsForAllScope(live, durable)),
 			DurableSessions:  SortDurableSessionSummaries(durable),
 			RecordedSessions: recorded,
+			Warnings:         append([]recordings.RecordedSessionDiagnostic(nil), result.Warnings...),
 		}
 	}
 }

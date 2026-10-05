@@ -149,11 +149,12 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 		if scope == factorysessions.SessionListScopeHistory && (a == nil || a.recordedSessionInventory == nil) {
 			return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
 		}
-		recorded, err := a.listRecordedSessions()
+		recorded, warnings, err := a.listRecordedSessions()
 		if err != nil {
 			return factorysessions.ListSessionsResult{}, err
 		}
 		result.RecordedSessions = recorded
+		result.Warnings = warnings
 	}
 	if scope == factorysessions.SessionListScopeHistory {
 		return result, nil
@@ -209,19 +210,19 @@ func shouldIncludeRecordedHistory(scope factorysessions.SessionListScope, exclud
 		(scope == factorysessions.SessionListScopeAll && !excluded)
 }
 
-func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionListSummary, error) {
+func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionListSummary, []factorysessions.RecordedSessionDiagnostic, error) {
 	if a == nil || a.recordedSessionInventory == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	root, err := a.recordingRoot()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	listed, err := a.recordedSessionInventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{
 		RecordingRoot: root,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list recorded Factory Sessions: %w", err)
+		return nil, nil, fmt.Errorf("list recorded Factory Sessions: %w", err)
 	}
 	result := make([]factorysessions.RecordedSessionListSummary, 0, len(listed.Sessions))
 	for _, session := range listed.Sessions {
@@ -238,7 +239,7 @@ func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionList
 		}
 		return result[left].ArtifactReference < result[right].ArtifactReference
 	})
-	return result, nil
+	return result, append([]factorysessions.RecordedSessionDiagnostic(nil), listed.Warnings...), nil
 }
 
 // ReadDurableFactorySessionEventStream reads and materializes one finite

@@ -107,7 +107,7 @@ func List(cfg ListConfig) error {
 	}
 	recordedSessions := recordedSessionsFromAPI(httpResult)
 	if normalized.Scope == fse.SessionListScopeHistory {
-		scoped := fse.ScopedSessionListResult{Scope: normalized.Scope, RecordedSessions: recordedSessions}
+		scoped := fse.ScopedSessionListResult{Scope: normalized.Scope, RecordedSessions: recordedSessions, Warnings: recordingWarningsFromAPI(httpResult)}
 		return emitListResult(cfg, listResponseFromScopedResult(scoped), 0, 0, len(recordedSessions))
 	}
 	if !needsDurable {
@@ -122,6 +122,7 @@ func List(cfg ListConfig) error {
 	if err != nil {
 		return err
 	}
+	scoped.Warnings = recordingWarningsFromAPI(httpResult)
 	return emitListResult(cfg, listResponseFromScopedResult(scoped), len(scoped.LiveSessions), len(scoped.DurableSessions), len(scoped.RecordedSessions))
 }
 
@@ -280,4 +281,15 @@ func orchestratorKindLabel(session factoryapi.FactorySessionSummary) string {
 		return ""
 	}
 	return string(session.Runtime.OrchestratorKind)
+}
+
+func recordingWarningsFromAPI(response factoryapi.ListFactorySessionsResponse) []fse.RecordedSessionDiagnostic {
+	if response.Warnings == nil {
+		return nil
+	}
+	warnings := make([]fse.RecordedSessionDiagnostic, 0, len(*response.Warnings))
+	for _, warning := range *response.Warnings {
+		warnings = append(warnings, fse.RecordedSessionDiagnostic{ArtifactReference: warning.ArtifactReference, Code: string(warning.Code), Reason: warning.Reason})
+	}
+	return warnings
 }

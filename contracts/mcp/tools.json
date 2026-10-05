@@ -1406,7 +1406,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "List Factory Sessions for one scope (live workspace, persisted durable execution, or all). Uses GET /factory-sessions durable listing vocabulary.",
+            "canonicalEnglish": "List Factory Sessions for one scope (live workspace, persisted durable execution, recorded history, or all). Uses GET /factory-sessions durable listing vocabulary.",
             "id": "mcp.tool.you.factory_session.list.description"
           },
           "title": {
@@ -1438,6 +1438,7 @@
               "enum": [
                 "live",
                 "persisted",
+                "history",
                 "all"
               ]
             },
@@ -1478,6 +1479,7 @@
               "enum": [
                 "live",
                 "persisted",
+                "history",
                 "all"
               ],
               "type": "string"
@@ -1557,6 +1559,7 @@
                   "enum": [
                     "live",
                     "persisted",
+                    "history",
                     "all"
                   ],
                   "type": "string"
@@ -1572,6 +1575,66 @@
                     "type": "object"
                   },
                   "type": "array"
+                },
+                "recordedSessions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "sessionId",
+                      "source",
+                      "artifactReference",
+                      "format"
+                    ],
+                    "properties": {
+                      "sessionId": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "recorded-history"
+                        ]
+                      },
+                      "artifactReference": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "V1_JSON",
+                          "V2_JSONL"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "artifactReference",
+                      "code",
+                      "reason"
+                    ],
+                    "properties": {
+                      "artifactReference": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "UNREADABLE_RECORDING"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               },
               "type": "object"
