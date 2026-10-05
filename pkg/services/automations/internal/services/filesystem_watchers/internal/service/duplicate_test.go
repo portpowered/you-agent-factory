@@ -166,7 +166,7 @@ func TestFileWatcher_DuplicateLiveObservationSubmitsOnce(t *testing.T) {
 		if want := filesystemwatchers.ObservationIdentity("request/default/live-dup.md"); identity != want {
 			t.Fatalf("committed identity = %q, want %q", identity, want)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(time.Second): //nolint:testsleep // Failure ceiling only; Record acknowledges the committed identity.
 		t.Fatal("first observation did not commit its handled identity")
 	}
 	waitForDebounceCompletion(t, registeredClock.completed)
@@ -187,7 +187,7 @@ func waitForDebounceCompletion(t *testing.T, completed <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-completed:
-	case <-time.After(time.Second):
+	case <-time.After(time.Second): //nolint:testsleep // Failure ceiling only; callback completion is the readiness signal.
 		t.Fatal("debounce callback did not complete")
 	}
 }
