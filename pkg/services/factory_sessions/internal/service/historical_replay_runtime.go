@@ -236,11 +236,10 @@ func openPortableReplayDurableOwner(
 				loadFactory,
 				automationService,
 			)
-			if err != nil {
-				return err
-			}
+			// A failed opening can still own artifacts. Register them before
+			// forwarding the error; the durable owner must stop before release.
 			cleanup.Set(runtime)
-			return nil
+			return err
 		},
 	}
 	cleanup.SetOwner(owner)
@@ -288,7 +287,7 @@ func preparePortableReplayRuntime(
 		automationService,
 	)
 	if err != nil {
-		return nil, err
+		return runtime, err
 	}
 	runtimeService := runtime.RuntimeService()
 	var resourceLeaseAdmission factoryruntime.ResourceCapacityLeaseAdmission
@@ -310,8 +309,7 @@ func preparePortableReplayRuntime(
 		runtimeProgressPublisher(runtime),
 		runtimeWorkerAttemptStarter(runtime),
 	); err != nil {
-		runtime.CloseArtifacts()
-		return nil, err
+		return runtime, err
 	}
 	return runtime, nil
 }
@@ -455,7 +453,7 @@ func assemblePortableReplayRuntime(
 		false,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("construct portable replay runtime: %w", err)
+		return runtime, fmt.Errorf("construct portable replay runtime: %w", err)
 	}
 	if runtime == nil {
 		return nil, fmt.Errorf("construct portable replay runtime: runtime instance is required")

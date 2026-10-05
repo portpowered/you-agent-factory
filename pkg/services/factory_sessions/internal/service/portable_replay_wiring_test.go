@@ -68,6 +68,42 @@ func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t 
 	}
 }
 
+func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing.T) {
+	t.Parallel()
+	openingErr := errors.New("partial replay resource opening failed")
+	artifactErr := errors.New("partial replay artifact release failed")
+	var events []string
+	owner := &portableReplayRuntimeOwner{restorable: true, events: &events}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	factory.factoryRuntimeAssembler = portableReplayRuntimeAssemblerStub{
+		runtime: &portableReplayRuntimeRecord{closeArtifacts: func() error {
+			events = append(events, "partial-runtime-close")
+			return artifactErr
+		}},
+		err: openingErr,
+	}
+	products, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = products.execution.Resume(t.Context(), "session-js-checkpoint-001",
+		factorysessions.ControlRequest{RequestID: "resume-partial-opening"})
+	if !errors.Is(err, openingErr) {
+		t.Fatalf("resume error = %v, want original opening cause", err)
+	}
+	if owner.resumeCalls != 0 || len(events) != 0 {
+		t.Fatalf("failed opening resumed or closed outside its owner: resumes=%d events=%v", owner.resumeCalls, events)
+	}
+	for range 2 {
+		if err := products.closeArtifacts(); !errors.Is(err, artifactErr) {
+			t.Fatalf("application cleanup = %v, want retained partial artifact cause", err)
+		}
+	}
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "partial-runtime-close"}) {
+		t.Fatalf("partial cleanup = %v, want owner before artifacts without repeated effects", events)
+	}
+}
+
 func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	ownerErr := errors.New("durable owner close failed")
 	artifactErr := errors.New("replay artifacts close failed")
@@ -638,6 +674,7 @@ func (*portableReplayRuntimeRecord) BeginWorkerAttempt(
 
 type portableReplayRuntimeAssemblerStub struct {
 	runtime runtimeports.RuntimeInstance
+	err     error
 }
 
 func (assembler portableReplayRuntimeAssemblerStub) Assemble(
@@ -700,7 +737,7 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	runtimeports.RuntimeSidecarService,
 	error,
 ) {
-	return nil, assembler.runtime, factoryruntime.SessionBuildSpec{}, nil, nil, nil
+	return nil, assembler.runtime, factoryruntime.SessionBuildSpec{}, nil, nil, assembler.err
 }
 
 var _ durableexecution.Service = (*portableReplayRuntimeOwner)(nil)
