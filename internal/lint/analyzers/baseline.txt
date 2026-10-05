@@ -2503,7 +2503,7 @@ testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/fu
 testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/functional/transport/cli/session_resume/resume_smoke_test.go::waitForDurableSessionStatusViaCLI::sleep::1
 testsleep-sleep-test|tests/functional/work/admission_test|tests/functional/work/admission/recovery_helpers_test.go::waitForSessionInFlightDispatches::sleep::1
 testsleep-sleep-test|tests/functional/work/admission_test|tests/functional/work/admission/recovery_helpers_test.go::waitForWorkIDsAtState::sleep::1
-testsleep-sleep-test|tests/functional/work/admission_test|tests/functional/work/admission/recovery_helpers_test.go::recoveryWaitForWorkIDsComplete::sleep::1
+testsleep-sleep-test|tests/functional/work/admission_test|tests/functional/work/admission/recovery_helpers_test.go::waitForWorkIDsComplete::sleep::1
 testsleep-sleep-test|tests/functional/workstations/cron|tests/functional/workstations/cron/helpers_test.go::assertStatusHidesCronTimeWork::sleep::1
 testsleep-sleep-test|tests/functional/workstations/cron|tests/functional/workstations/cron/helpers_test.go::waitForCronDispatch::sleep::1
 testsleep-sleep-test|tests/functional/workstations/cron|tests/functional/workstations/cron/helpers_test.go::waitForCronToken::sleep::1

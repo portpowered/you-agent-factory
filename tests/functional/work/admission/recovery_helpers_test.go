@@ -117,7 +117,7 @@ func waitForWorkIDsAtState(
 	t.Fatalf("timed out waiting for work IDs %v at state %q; last listing: %#v", workIDs, stateName, listed.Results)
 }
 
-func recoveryWaitForWorkIDsComplete(
+func waitForWorkIDsComplete(
 	t *testing.T,
 	baseURL string,
 	workIDs []string,

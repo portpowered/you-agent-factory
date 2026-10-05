@@ -1239,3 +1239,26 @@ A fresh-checkout measurement before the passing local run stopped before coverag
 because the audit repository had no Git HEAD, which the diagnostic collector
 requires. Its 102.34s invocation is retained under linux-cli-cohorts-full and is
 excluded from test-runtime comparisons.
+
+
+### Warm CLI consolidation follow-up and relocation lint correction
+
+The warm full supervisor took **227.51s**, including **212.589s** for tests,
+with 111 packages, 963 top-level passes, two skips and one failure. Its 109 links
+consumed **183.089s CPU** and **199.934s active wall**; there were no compiler
+commands. Whole supervisor CPU was 683.76s user and 158.51s system. The failure
+was `TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown`: public watcher
+Factory Session activation returned HTTP 504 while the controlled scheduler
+advanced readiness polls. Coverage floors were consequently not evaluated.
+The earlier dependency-cache-populating complete run passed; this failed warm
+run cannot establish a checkpoint. Raw evidence is in linux-cli-cohorts-warm.
+
+The lint relocation correction now uses Git-detected test-file renames to map
+existing testsleep allowances to the destination file and its declared package.
+The function identity, finding kind and occurrence number stay exact. Other
+rules remain deletion-only. Unit tests verify that added timer occurrences,
+changed function identities, copies without rename evidence and unreadable
+renamed sources cannot pass through this mapping. One recovery helper retains
+its original name; no current symbol collision requires renaming it. Focused
+baseline-growth tests, custom analyzers, built-in lint and the affected Work
+recovery scenarios pass. Hosted required checks remain necessary.

@@ -93,7 +93,7 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 		t.Fatalf("child move status = %d, want 200: %s", childMoveStatus, childMoveBody)
 	}
 
-	completed := recoveryWaitForWorkIDsComplete(t, server.URL(), []string{parentWorkID, childWorkID}, 15*time.Second)
+	completed := waitForWorkIDsComplete(t, server.URL(), []string{parentWorkID, childWorkID}, 15*time.Second)
 	if len(completed) != 2 {
 		t.Fatalf("completed Works = %#v, want parent and child", completed)
 	}
@@ -248,7 +248,7 @@ func TestAPIMoveWorkResumesRecoverableFlow(t *testing.T) {
 		t.Fatalf("API move response state = %q, want requested %q; body=%s", recoveryWorkStateName(moved.State), recoverState, body)
 	}
 
-	completed := recoveryWaitForWorkIDsComplete(t, server.URL(), []string{workID}, 15*time.Second)
+	completed := waitForWorkIDsComplete(t, server.URL(), []string{workID}, 15*time.Second)
 	if len(completed) != 1 || recoveryWorkStateName(completed[0].State) != "complete" {
 		t.Fatalf("resumed flow completion = %#v, want complete", completed)
 	}
