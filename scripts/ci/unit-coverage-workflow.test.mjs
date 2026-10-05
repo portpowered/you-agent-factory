@@ -83,7 +83,7 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 	assert.match(moduleCache, /go-modules-/);
 	assert.match(modulePrefetch, /go list -deps -test -mod=readonly \.\/\.\.\./);
 
-	const buildCache = stepSection(job, "      - name: Restore unit coverage Go build and test cache", "      - name: Restore functional coverage Go build cache");
+	const buildCache = stepSection(job, "      - name: Restore unit coverage Go build and test cache", "      - name: Run LocalAI Runner V2 controlled component matrix");
 	assert.match(buildCache, /if: matrix\.suite == 'unit'/);
 	assert.match(buildCache, /id: unit-go-build-cache/);
 	assert.match(buildCache, /uses: actions\/cache\/restore@v4/);
@@ -91,10 +91,11 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 	assert.match(buildCache, /key: unit-coverage-build-/);
 	assert.match(buildCache, /hashFiles\('go\.mod', 'go\.sum'\) \}\}(\r?\n|$)/);
 	assert.doesNotMatch(buildCache, /jobs-4/);
-	assert.match(buildCache, /functional-coverage-build-/);
+	assert.doesNotMatch(buildCache, /functional-coverage-build-/);
 
 	const save = stepSection(job, "      - name: Save unit coverage Go build and test cache", "      # This existing coverage tier");
 	assert.match(save, /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' && matrix\.suite == 'unit' && steps\.unit-go-build-cache\.outputs\.cache-hit != 'true'/);
+	assert.match(job, /find ~\/\.cache\/go-build -type f ! -newermt "\$JOB_START" -delete/);
 	assert.match(save, /uses: actions\/cache\/save@v4/);
 	assert.match(save, /key: \$\{\{ steps\.unit-go-build-cache\.outputs\.cache-primary-key \}\}/);
 });

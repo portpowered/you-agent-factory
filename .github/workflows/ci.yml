@@ -291,6 +291,9 @@ jobs:
           - suite: functional
             label: Functional
     steps:
+      - name: Record job start time
+        shell: bash
+        run: echo "JOB_START=$(date -u '+%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         if: matrix.suite == 'unit'
         with:
@@ -340,16 +343,6 @@ jobs:
           key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
           restore-keys: |
             unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
-            functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-12-
-      - name: Restore functional coverage Go build cache
-        if: matrix.suite == 'functional'
-        id: functional-go-build-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-${{ steps.functional-parallelism.outputs.jobs }}-${{ hashFiles('go.mod', 'go.sum') }}
-          restore-keys: |
-            functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-${{ steps.functional-parallelism.outputs.jobs }}-
       - uses: actions/setup-node@v4
         if: matrix.suite == 'functional'
         with:
@@ -375,6 +368,10 @@ jobs:
           go test -race ./tests/functional/workers/inference -run 'TestWSRFT004|TestWSRFT009|TestWorkerRecordingSurvivesTempCleanup|TestWorkerSessionSelectedSessionObservationConsistency' -count=1 -p=2 -timeout=5m
           go test -race ./pkg/services/factory_runtime/internal/services/orchestration/runtime -run 'TestRecordedWorkerSessionObservation|TestMergeRecordedObservations' -count=1 -timeout=5m
           go test -race ./pkg/services/worker_sessions/internal/service -count=1 -timeout=5m
+      - name: Prune unit Go build cache to entries touched by this job
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: find ~/.cache/go-build -type f ! -newermt "$JOB_START" -delete
       - name: Save unit coverage Go build and test cache
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -508,15 +505,6 @@ jobs:
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
           FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/functional-test-viz/coverage-build-diagnostics.json
-          FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY: ${{ steps.functional-go-build-cache.outputs.cache-primary-key }}
-          FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY: ${{ steps.functional-go-build-cache.outputs.cache-matched-key }}
-          FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-go-build-cache.outputs.cache-hit || 'false' }}
-      - name: Save functional coverage Go build cache
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'functional' && steps.functional-go-build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/go-build
-          key: ${{ steps.functional-go-build-cache.outputs.cache-primary-key }}
       - name: Upload Linux quarantine package evidence
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
