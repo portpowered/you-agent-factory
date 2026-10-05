@@ -28,12 +28,13 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)
 	recordPath := filepath.Join(t.TempDir(), "worker-sessions-read-surface.json")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	config := support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		Args:                      []string{"--record", recordPath},
 		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+	}
+	server := support.StartFunctionalAPIServer(t, config)
 	t.Cleanup(func() { server.Stop(t) })
 
 	emptyFleet := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions")
@@ -105,6 +106,14 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	}
 	if activeLogs.Events[0].Event.CapturedAt == nil || endedLogs.Events[0].Event.CapturedAt == nil || !activeLogs.Events[0].Event.CapturedAt.Equal(*endedLogs.Events[0].Event.CapturedAt) {
 		t.Fatal("opening capture time changed between active and ended reads")
+	}
+	server.Close(t)
+	restarted := support.StartFunctionalAPIServer(t, config)
+	recovered := assertCapturedLogsCLIHTTPParity(t, restarted, completed.Sessions[0].WorkerSessionId)
+	assertCapturedSummaryUsage(t, restarted, completed.Sessions[0].WorkerSessionId)
+	archived := support.GetJSON[factoryapi.WorkerSessionObservation](t, restarted.URL()+"/worker-sessions/"+url.PathEscape(completed.Sessions[0].WorkerSessionId))
+	if archived.FactorySessionId == nil || *archived.FactorySessionId != sessionID || archived.State != factoryapi.WorkerSessionObservationStateCompleted || recovered.RecordingGenerationId != endedLogs.RecordingGenerationId || recovered.CommittedPosition != endedLogs.CommittedPosition {
+		t.Fatalf("restart lost captured Factory identity/head: %+v %+v", archived, recovered)
 	}
 	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")
 }

@@ -796,13 +796,7 @@ func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
 		return workersessions.Observation{}, found, err
 	}
 	observation := recordedObservationFromFact(fact, s.clock)
-	if fact.provider != nil {
-		observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
-		if err != nil {
-			return workersessions.Observation{}, false, err
-		}
-	}
-	observation, err = s.withRecordingHealth(ctx, observation)
+	observation, err = s.withCapturedWorkerIdentity(ctx, observation)
 	if err != nil {
 		return workersessions.Observation{}, false, err
 	}
