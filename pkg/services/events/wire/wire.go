@@ -16,9 +16,13 @@ import (
 
 // NewService constructs an inert, process-scoped Events root using the
 // default bounded-retention policy. logger is optional and defaults to a
-// no-op logger when omitted, matching the repository's optional-logger
+// no-op logger when omitted or nil, matching the repository's optional-logger
 // construction convention. Construction starts no background lifecycle work
 // and performs no durable write.
 func NewService(logger ...logging.Logger) (events.Service, error) {
-	return internalservice.New(logger...), nil
+	var selected logging.Logger = logging.NoopLogger{}
+	if len(logger) > 0 && logger[0] != nil {
+		selected = logger[0]
+	}
+	return internalservice.New(selected), nil
 }
