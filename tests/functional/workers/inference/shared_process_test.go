@@ -738,10 +738,7 @@ func readSharedInferenceWorkerReplay(
 }
 
 func sharedInferenceProcessEnvironment(homeDir string) []string {
-	environment := append([]string(nil), os.Environ()...)
-	environment = setSharedInferenceEnvironment(environment, "HOME", homeDir)
-	environment = setSharedInferenceEnvironment(environment, "USERPROFILE", homeDir)
-	return environment
+	return support.IsolatedHomeEnvironment(homeDir)
 }
 
 func setSharedInferenceEnvironment(environment []string, name, value string) []string {

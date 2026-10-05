@@ -1,0 +1,23 @@
+package customer_journeys_test
+
+import "testing"
+
+// TestWorkflowExecutionJourneys owns its immutable fixture until all customer scenarios finish.
+func TestWorkflowExecutionJourneys(t *testing.T) {
+	t.Parallel()
+	initializeCompositionFixture(t)
+	t.Run("TestJavaScriptAgentReturnsUnaryResult", testCompositionJavaScriptAgentReturnsUnaryResult)
+	t.Run("TestJavaScriptAgentFailureReturnsStableFailureRecord", testCompositionJavaScriptAgentFailureReturnsStableFailureRecord)
+	t.Run("TestJavaScriptForEachDispatchesEveryInputOnce", testCompositionJavaScriptForEachDispatchesEveryInputOnce)
+	t.Run("TestJavaScriptForEachPreservesInputResultCorrelation", testCompositionJavaScriptForEachPreservesInputResultCorrelation)
+	t.Run("TestJavaScriptForEachEmptyInputDoesNotDispatch", testCompositionJavaScriptForEachEmptyInputDoesNotDispatch)
+	t.Run("TestJavaScriptNestedPipelineParallelCompositionCompletes", testCompositionJavaScriptNestedPipelineParallelCompositionCompletes)
+	t.Run("TestJavaScriptNestedFailureNamesChildAndStage", testCompositionJavaScriptNestedFailureNamesChildAndStage)
+	t.Run("TestJavaScriptParallelDispatchesChildrenConcurrently", testCompositionJavaScriptParallelDispatchesChildrenConcurrently)
+	t.Run("TestJavaScriptParallelPreservesDeclaredResultOrdering", testCompositionJavaScriptParallelPreservesDeclaredResultOrdering)
+	t.Run("TestJavaScriptParallelPartialFailureUsesDocumentedPolicy", testCompositionJavaScriptParallelPartialFailureUsesDocumentedPolicy)
+	t.Run("TestJavaScriptPipelinePassesStageOutputToNextStage", testCompositionJavaScriptPipelinePassesStageOutputToNextStage)
+	t.Run("TestJavaScriptPipelineStopsAfterStageFailure", testCompositionJavaScriptPipelineStopsAfterStageFailure)
+	t.Run("TestJavaScriptNamedStagesExposeOrderedProgress", testCompositionJavaScriptNamedStagesExposeOrderedProgress)
+	t.Run("TestJavaScriptEmptyStageProducesDocumentedResult", testCompositionJavaScriptEmptyStageProducesDocumentedResult)
+}

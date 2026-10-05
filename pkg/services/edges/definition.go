@@ -129,14 +129,11 @@ type Edges struct {
 	ModelHostCompatibilityChecker interface {
 		Check(context.Context, ModelHostCompatibilityRequest) error
 	}
-	ModelResolveBackendArtifact ModelResolveBackendArtifact
-	ModelInvocationBackend      ModelInvocationBackend
-	ModelASRBackend             ModelASRBackend
-	ModelEmbeddingBackend       ModelEmbeddingBackend
-	ModelRuntimeCommandRunner   platformprocess.CommandRunner
-	ModelRuntimeHTTPClient      interface {
-		Do(*http.Request) (*http.Response, error)
-	}
+	ModelResolveBackendArtifact       ModelResolveBackendArtifact
+	ModelInvocationBackend            ModelInvocationBackend
+	ModelASRBackend                   ModelASRBackend
+	ModelEmbeddingBackend             ModelEmbeddingBackend
+	ModelRuntimeCommandRunner         platformprocess.CommandRunner
 	ModelRuntimeInspectFile           RuntimeInspectFile
 	ModelRuntimeTempDirectory         RuntimeTempDirectory
 	ModelRuntimeCreateTempFile        RuntimeCreateTempFile
@@ -468,9 +465,6 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner
-	}
-	if replacements.ModelRuntimeHTTPClient != nil {
-		defaults.ModelRuntimeHTTPClient = replacements.ModelRuntimeHTTPClient
 	}
 	if replacements.ModelRuntimeInspectFile != nil {
 		defaults.ModelRuntimeInspectFile = replacements.ModelRuntimeInspectFile

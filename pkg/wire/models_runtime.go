@@ -179,12 +179,7 @@ func provideModelHostHTTP(edges serviceedges.Edges) modelswire.HostHTTPDoer {
 	}
 	return &http.Client{Timeout: modelHostHTTPTimeout}
 }
-func provideModelRuntimeHTTP(edges serviceedges.Edges) modelswire.RuntimeHTTPDoer {
-	if selected := edges.ModelRuntimeHTTPClient; selected != nil {
-		return modelswire.RuntimeHTTPDoer(selected)
-	}
-	return &http.Client{Timeout: modelRuntimeHTTPTimeout}
-}
+
 func provideModelRuntimeInspectFile(edges serviceedges.Edges) modelswire.RuntimeInspectFile {
 	if selected := edges.ModelRuntimeInspectFile; selected != nil {
 		return modelswire.RuntimeInspectFile(selected)
@@ -327,18 +322,12 @@ func provideModelInference(scopes modelswire.RuntimeScopes, assets modelswire.As
 	now modelNow, executionDeadline func() time.Duration) (modelswire.Inference, error) {
 	return modelswire.NewInference(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
 }
-func provideModelLocalRuntime(runner modelRuntimeRunner, client modelswire.RuntimeHTTPDoer, inspect modelswire.RuntimeInspectFile,
-	temp modelswire.RuntimeTempDirectory, create modelswire.RuntimeCreateTempFile) (modelswire.LocalRuntime, error) {
-	return modelswire.NewLocalRuntime(runner, client, inspect, temp, create)
-}
+
 func provideModelResourceLimiter(now modelNow) (*modelswire.ResourceLimiter, error) {
 	return modelswire.NewResourceLimiter(modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), now)
 }
-func provideModelScopedLocalExecution(scopes modelswire.RuntimeScopes, assets modelswire.Assets,
-	host modelswire.RuntimeHost, runtime modelswire.LocalRuntime, resources *modelswire.ResourceLimiter,
-	now modelNow) (modelswire.ScopedLocalExecution, error) {
-	return modelswire.NewScopedLocalExecution(scopes, assets, host, runtime, resources,
-		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()), now)
+func provideModelScopedLocalExecution(scopes modelswire.RuntimeScopes, assets modelswire.Assets) (modelswire.ScopedLocalExecution, error) {
+	return modelswire.NewScopedLocalExecution(scopes, assets)
 }
 func provideModelsService(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	catalog modelswire.Catalog, host modelswire.RuntimeHost, inference modelswire.Inference,

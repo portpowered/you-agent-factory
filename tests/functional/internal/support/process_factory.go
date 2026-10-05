@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -359,7 +358,7 @@ func runFactoryToCompletionWithHome(
 	if configure != nil {
 		configure(homeDir)
 	}
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = IsolatedHomeEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = dir
 	t.Cleanup(func() {
 		if !t.Failed() {

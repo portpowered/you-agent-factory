@@ -1,0 +1,19 @@
+package customer_lifecycles_test
+
+import "testing"
+
+// TestFactoryDispatchJourneys owns its immutable fixture until all customer scenarios finish.
+func TestFactoryDispatchJourneys(t *testing.T) {
+	t.Parallel()
+	resetorchestrationpetridispatch5State()
+	initializeOrchestrationpetridispatchFixture(t)
+	t.Run("TestPetriIndependentWorkDispatchesConcurrently", testOrchestrationpetridispatchPetriIndependentWorkDispatchesConcurrently)
+	t.Run("TestPetriConcurrentResultsCorrelateToOriginalWork", testOrchestrationpetridispatchPetriConcurrentResultsCorrelateToOriginalWork)
+	t.Run("TestPetriConcurrentFailureDoesNotDuplicateDispatch", testOrchestrationpetridispatchPetriConcurrentFailureDoesNotDuplicateDispatch)
+	t.Run("TestPetriExecutorPanicRoutesToFailedTerminal", testOrchestrationpetridispatchPetriExecutorPanicRoutesToFailedTerminal)
+	t.Run("TestProjectCycleCurrentCycleSelectionPreservesHistoricalCycle", testOrchestrationpetridispatchProjectCycleCurrentCycleSelectionPreservesHistoricalCycle)
+	t.Run("TestPetriSharedDispatchSuccess", testOrchestrationpetridispatchPetriSharedDispatchSuccess)
+	t.Run("TestPetriWorkerErrorReturnsFailedTerminalOutcome", testOrchestrationpetridispatchPetriWorkerErrorReturnsFailedTerminalOutcome)
+	t.Run("TestPetriExecutorDispatchTerminalRouting", testOrchestrationpetridispatchPetriExecutorDispatchTerminalRouting)
+	t.Run("TestPetriInvocationInputAndOutputMapping", testOrchestrationpetridispatchPetriInvocationInputAndOutputMapping)
+}

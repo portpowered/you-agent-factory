@@ -570,9 +570,6 @@ func TestModelsConstructionRejectsMissingFunctionEffects(t *testing.T) {
 		{"asset read-directory effect", func(e *constructionEdges) { e.assetReadDir = nil }},
 		{"asset create-file effect", func(e *constructionEdges) { e.assetCreate = nil }},
 		{"asset open-file effect", func(e *constructionEdges) { e.assetOpen = nil }},
-		{"model runtime file inspector", func(e *constructionEdges) { e.runtimeInspect = nil }},
-		{"model runtime temporary directory resolver", func(e *constructionEdges) { e.runtimeTempDir = nil }},
-		{"model runtime temporary file creator", func(e *constructionEdges) { e.runtimeTempFile = nil }},
 		{"process clock", func(e *constructionEdges) { e.now = nil }},
 	}
 	for _, test := range cases {
@@ -608,12 +605,6 @@ func TestModelsConstructionRejectsNilAndTypedNilRequiredEffects(t *testing.T) {
 				e.hostHTTP = (*recordingHTTPDoer)(nil)
 			}
 		}},
-		{"model runtime HTTP client", func(e *constructionEdges, typed bool) {
-			e.runtimeHTTP = nil
-			if typed {
-				e.runtimeHTTP = (*recordingHTTPDoer)(nil)
-			}
-		}},
 		{"model host process launcher", func(e *constructionEdges, typed bool) {
 			e.processLauncher = nil
 			if typed {
@@ -624,12 +615,6 @@ func TestModelsConstructionRejectsNilAndTypedNilRequiredEffects(t *testing.T) {
 			e.hostClock = nil
 			if typed {
 				e.hostClock = (*recordingHostClock)(nil)
-			}
-		}},
-		{"model runtime command runner", func(e *constructionEdges, typed bool) {
-			e.runtimeRunner = nil
-			if typed {
-				e.runtimeRunner = (*recordingCommandRunner)(nil)
 			}
 		}},
 	}
@@ -709,43 +694,6 @@ func TestModelsConstructionPreservesIssuerEntropyFailure(t *testing.T) {
 	service, err := edges.newServiceWithInvocationProtocol(nil)
 	if service != nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "construct Models Runtime Scopes issuer identity") {
 		t.Fatalf("construction = (%T, %v), want nil service and preserved issuer failure", service, err)
-	}
-}
-
-func TestNewLocalRuntimeRequiresSelectedEffectsAndConstructsInertly(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name   string
-		remove func(*constructionEdges)
-	}{
-		{"runner", func(e *constructionEdges) { e.runtimeRunner = nil }},
-		{"typed-nil runner", func(e *constructionEdges) { e.runtimeRunner = (*recordingCommandRunner)(nil) }},
-		{"HTTP", func(e *constructionEdges) { e.runtimeHTTP = nil }},
-		{"typed-nil HTTP", func(e *constructionEdges) { e.runtimeHTTP = (*recordingHTTPDoer)(nil) }},
-		{"inspect", func(e *constructionEdges) { e.runtimeInspect = nil }},
-		{"temp", func(e *constructionEdges) { e.runtimeTempDir = nil }},
-		{"create", func(e *constructionEdges) { e.runtimeTempFile = nil }},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			effects := validConstructionEdges()
-			test.remove(&effects)
-			runtime, err := NewLocalRuntime(effects.runtimeRunner, effects.runtimeHTTP, effects.runtimeInspect, effects.runtimeTempDir, effects.runtimeTempFile)
-			if runtime != nil || err == nil {
-				t.Fatalf("missing effect: runtime=%T error=%v", runtime, err)
-			}
-		})
-	}
-	effects := validConstructionEdges()
-	effects.runtimeRunner = &recordingCommandRunner{}
-	effects.runtimeHTTP = &recordingHTTPDoer{}
-	effects.runtimeInspect = func(string) (os.FileInfo, error) { panic("inspection during construction") }
-	effects.runtimeTempDir = func() string { panic("temp directory during construction") }
-	effects.runtimeTempFile = func(string, string) (modelseffects.RuntimeTempFile, error) { panic("temp file during construction") }
-	runtime, err := NewLocalRuntime(effects.runtimeRunner, effects.runtimeHTTP, effects.runtimeInspect, effects.runtimeTempDir, effects.runtimeTempFile)
-	if runtime == nil || err != nil {
-		t.Fatalf("inert construction: runtime=%T error=%v", runtime, err)
 	}
 }
 

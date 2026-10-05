@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -16,28 +17,6 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-var publishedCatalogNames = []string{
-	"@you/agy-clip-qa",
-	"@you/agy-cold-watch",
-	"@you/classify",
-	"@you/deep-research",
-	"@you/factory-builder",
-	"@you/fix",
-	"@you/full-flow",
-	"@you/fusion",
-	"@you/goal",
-	"@you/loop",
-	"@you/plan-execute",
-	"@you/plan-parallel",
-	"@you/quorum",
-	"@you/ralph",
-	"@you/review",
-	"@you/spawn",
-	"@you/subagent",
-	"@you/tournament",
-	"@you/tts",
-}
-
 func TestLoadPublishedDefinitionCatalogReturnsExactDetachedGeneratedDefinitions(t *testing.T) {
 	t.Parallel()
 
@@ -45,14 +24,16 @@ func TestLoadPublishedDefinitionCatalogReturnsExactDetachedGeneratedDefinitions(
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
 	}
-	if got := catalog.Names(); !reflect.DeepEqual(got, publishedCatalogNames) {
-		t.Fatalf("Names() = %v, want %v", got, publishedCatalogNames)
-	}
-
 	manifest := readFixtureManifest(t, publishedFixture(t))
 	entries := make(map[string]packagedfactorycatalog.ManifestEntry, len(manifest.Factories))
+	var publishedCatalogNames []string
 	for _, entry := range manifest.Factories {
 		entries[entry.PublicName] = entry
+		publishedCatalogNames = append(publishedCatalogNames, entry.PublicName)
+	}
+	sort.Strings(publishedCatalogNames)
+	if got := catalog.Names(); !reflect.DeepEqual(got, publishedCatalogNames) {
+		t.Fatalf("Names() = %v, want published manifest names %v", got, publishedCatalogNames)
 	}
 	definitions := catalog.All()
 	if len(definitions) != len(publishedCatalogNames) {
@@ -99,6 +80,16 @@ func TestLoadPublishedDefinitionCatalogReturnsExactDetachedGeneratedDefinitions(
 	}
 	if _, ok := catalog.Lookup("@you/missing"); ok {
 		t.Fatal("Lookup(@you/missing) unexpectedly found a definition")
+	}
+	reloaded, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("reload published catalog: %v", err)
+	}
+	if got := reloaded.All()[0]; got.JSON[0] == 'x' || got.YAML[0] == 'x' || got.Formats[0] != "JSON" {
+		t.Fatal("caller mutations contaminated a subsequent published catalog load")
+	}
+	if got, ok := reloaded.Lookup("@you/goal"); !ok || got.JSON[0] == 'x' {
+		t.Fatal("lookup mutation contaminated a subsequent published catalog load")
 	}
 }
 

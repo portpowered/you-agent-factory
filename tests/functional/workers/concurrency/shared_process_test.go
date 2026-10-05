@@ -1,4 +1,4 @@
-package root_composition_test
+package concurrency_test
 
 import (
 	"context"
@@ -409,8 +409,17 @@ func completeAdmittedWork(t *testing.T, session *concurrencySession, stream *sup
 		return event.Type == factoryapi.FactoryEventTypeDispatchResponse && stringPointerValue(event.Context.DispatchId) == dispatchID
 	})
 	session.runner.joinCalls(t)
-	work := concurrencyWorkByID(t, session, response.WorkId)
 	want := marker + " output COMPLETE"
+	// Dispatch publication precedes updating the public Work projection. Await
+	// the exact admitted Work rather than treating the event as a read barrier.
+	work, err := support.WaitForObservation(concurrencySharedProcessTimeout, func() (factoryapi.Work, error) {
+		return concurrencyWorkByID(t, session, response.WorkId), nil
+	}, func(work factoryapi.Work) bool {
+		return work.State != nil && work.State.Type == factoryapi.WorkStateTypeTERMINAL && work.State.Name == "complete" && workContentText(t, work) == want
+	})
+	if err != nil {
+		t.Fatalf("AWC surviving Work did not publish completion: %v", err)
+	}
 	if work.State == nil || work.State.Type != factoryapi.WorkStateTypeTERMINAL || work.State.Name != "complete" || workContentText(t, work) != want || session.runner.canceledCount() != 0 {
 		t.Fatalf("AWC surviving Work = %#v content=%q canceled=%d, want complete with exact %q", work, workContentText(t, work), session.runner.canceledCount(), want)
 	}

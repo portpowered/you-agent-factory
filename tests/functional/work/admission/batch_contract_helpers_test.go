@@ -1,0 +1,489 @@
+package admission_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	harnessSubmitBatchRequestID = "work-cli-submit-batch-contract-harness"
+	harnessSubmitBatchWorkName  = "harness-review"
+	harnessSubmitBatchWorkType  = "task"
+
+	dryRunSubmitBatchRequestID = "work-cli-submit-batch-dry-run"
+	dryRunSubmitBatchWorkName  = "dry-run-review"
+	dryRunSubmitBatchWorkType  = "task"
+
+	successHumanSubmitBatchRequestID = "work-cli-submit-batch-success-human"
+	successJSONSubmitBatchRequestID  = "work-cli-submit-batch-success-json"
+	successSubmitBatchWorkName       = "success-review"
+	successSubmitBatchWorkType       = "task"
+)
+
+type batchContractSubmitJSON struct {
+	RequestID    string `json:"requestId"`
+	TraceID      string `json:"traceId"`
+	WorkCount    int    `json:"workCount"`
+	SessionID    string `json:"sessionId"`
+	EndpointPath string `json:"endpointPath"`
+	BatchSource  string `json:"batchSource"`
+	Works        []struct {
+		Name         string `json:"name"`
+		WorkTypeName string `json:"workTypeName"`
+		WorkID       string `json:"workId"`
+	} `json:"works"`
+}
+
+func buildBatchContractProcess(t *testing.T, edges serviceedges.Edges) support.Process {
+	t.Helper()
+	return support.BuildProcess(t, edges)
+}
+
+func executeSubmitBatchCLI(t *testing.T, process support.Process, args []string) string {
+	t.Helper()
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = batchContractHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = home
+	stdinIsTTY := true
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.Stdin = strings.NewReader("")
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstderr:\n%s", args, err, inputs.Stderr())
+	}
+	return inputs.Stdout()
+}
+
+func executeSubmitBatchCLIExpectError(t *testing.T, process support.Process, args []string) (stdout, stderr string, err error) {
+	return executeSubmitBatchCLIExpectErrorWithInput(t, process, args, "", true)
+}
+
+func executeSubmitBatchCLIExpectErrorWithInput(
+	t *testing.T,
+	process support.Process,
+	args []string,
+	stdin string,
+	stdinIsTTY bool,
+) (stdout, stderr string, err error) {
+	t.Helper()
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = batchContractHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = home
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.Stdin = strings.NewReader(stdin)
+	err = process.Execute(inputs.Input)
+	return inputs.Stdout(), inputs.Stderr(), err
+}
+
+func executeSubmitBatchCLIOnServer(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	args []string,
+) (stdout, stderr string, err error) {
+	t.Helper()
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = batchContractHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = home
+	stdinIsTTY := true
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.Stdin = strings.NewReader("")
+	err = server.Execute(t, inputs.Input)
+	return inputs.Stdout(), inputs.Stderr(), err
+}
+
+func harnessInlineBatchJSON(requestID string) string {
+	return inlineBatchJSON(requestID, harnessSubmitBatchWorkName, harnessSubmitBatchWorkType, "Harness")
+}
+
+func dryRunInlineBatchJSON() string {
+	return inlineBatchJSON(dryRunSubmitBatchRequestID, dryRunSubmitBatchWorkName, dryRunSubmitBatchWorkType, "Dry run")
+}
+
+func successHumanInlineBatchJSON() string {
+	return inlineBatchJSON(
+		successHumanSubmitBatchRequestID,
+		successSubmitBatchWorkName,
+		successSubmitBatchWorkType,
+		"Success human",
+	)
+}
+
+func successJSONInlineBatchJSON() string {
+	return inlineBatchJSON(
+		successJSONSubmitBatchRequestID,
+		successSubmitBatchWorkName,
+		successSubmitBatchWorkType,
+		"Success JSON",
+	)
+}
+
+func invalidInlineBatchJSON() string {
+	return `{not-json`
+}
+
+func successSubmitBatchFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "work-cli-submit-batch-contract-success",
+		"workTypes": []map[string]any{
+			{
+				"name": successSubmitBatchWorkType,
+				"states": []map[string]any{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "mock-worker"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "process-task",
+				"worker":    "mock-worker",
+				"inputs":    []map[string]string{{"workType": successSubmitBatchWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": successSubmitBatchWorkType, "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": successSubmitBatchWorkType, "state": "failed"}},
+			},
+		},
+	}
+}
+
+func batchAdmissionFactoryConfig() map[string]any {
+	config := successSubmitBatchFactoryConfig()
+	delete(config, "workers")
+	delete(config, "workstations")
+	return config
+}
+
+func providerSubmitBatchFactoryConfig() map[string]any {
+	config := successSubmitBatchFactoryConfig()
+	config["name"] = "work-cli-submit-batch-contract-provider"
+	config["workers"] = []map[string]string{{"name": "provider-worker"}}
+	workstations := config["workstations"].([]map[string]any)
+	workstations[0]["worker"] = "provider-worker"
+	config["workstations"] = workstations
+	return config
+}
+
+func duplicateSubmitBatchFactoryConfig() map[string]any {
+	config := batchAdmissionFactoryConfig()
+	config["workTypes"] = append(config["workTypes"].([]map[string]any), map[string]any{
+		"name": "story",
+		"states": []map[string]any{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	})
+	return config
+}
+
+func decodeSubmitBatchJSONResult(t *testing.T, output string) batchContractSubmitJSON {
+	t.Helper()
+
+	var submitted batchContractSubmitJSON
+	if err := json.Unmarshal(bytes.TrimSpace([]byte(output)), &submitted); err != nil {
+		t.Fatalf("decode submit batch JSON: %v\noutput:\n%s", err, output)
+	}
+	return submitted
+}
+
+func assertSubmitBatchHumanSuccess(t *testing.T, output, requestID, workName, workType string) {
+	t.Helper()
+
+	for _, marker := range []string{
+		"requestId: " + requestID,
+		"traceId:",
+		"work count: 1",
+		workName + " (" + workType + ")",
+		"workId=",
+	} {
+		if !strings.Contains(output, marker) {
+			t.Fatalf("submit batch human output missing %q:\n%s", marker, output)
+		}
+	}
+}
+
+func assertSubmitBatchJSONSuccess(t *testing.T, submitted batchContractSubmitJSON, requestID, workName, workType string) {
+	t.Helper()
+
+	if submitted.RequestID != requestID {
+		t.Fatalf("submit batch JSON requestId = %q, want %q", submitted.RequestID, requestID)
+	}
+	if strings.TrimSpace(submitted.TraceID) == "" {
+		t.Fatalf("submit batch JSON missing traceId: %#v", submitted)
+	}
+	if submitted.WorkCount != 1 {
+		t.Fatalf("submit batch JSON workCount = %d, want 1", submitted.WorkCount)
+	}
+	if strings.TrimSpace(submitted.SessionID) == "" {
+		t.Fatalf("submit batch JSON missing sessionId: %#v", submitted)
+	}
+	if strings.TrimSpace(submitted.EndpointPath) == "" {
+		t.Fatalf("submit batch JSON missing endpointPath: %#v", submitted)
+	}
+	if submitted.BatchSource != "inline" {
+		t.Fatalf("submit batch JSON batchSource = %q, want inline", submitted.BatchSource)
+	}
+	if len(submitted.Works) != 1 {
+		t.Fatalf("submit batch JSON works = %#v, want one accepted work", submitted.Works)
+	}
+	work := submitted.Works[0]
+	if work.Name != workName {
+		t.Fatalf("submit batch JSON work name = %q, want %q", work.Name, workName)
+	}
+	if work.WorkTypeName != workType {
+		t.Fatalf("submit batch JSON work type = %q, want %q", work.WorkTypeName, workType)
+	}
+	if strings.TrimSpace(work.WorkID) == "" {
+		t.Fatalf("submit batch JSON missing accepted workId: %#v", work)
+	}
+}
+
+func assertExplicitWorkIDHTTPConflict(
+	t *testing.T,
+	serverURL, sessionID, workID string,
+	beforeWork factoryapi.ListWorkResponse,
+	beforeEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	requestID := "request-explicit-session-http-conflict"
+	endpoint := support.SessionWorkURL(
+		serverURL, sessionID, "/work-requests/"+url.PathEscape(requestID),
+	)
+	request, err := http.NewRequest(
+		http.MethodPut,
+		endpoint,
+		bytes.NewBufferString(explicitBatchJSONWithTitle(requestID, workID, "untrusted-payload-secret")),
+	)
+	if err != nil {
+		t.Fatalf("build explicit Work ID conflict request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("send explicit Work ID conflict request: %v", err)
+	}
+	responseBody, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read explicit Work ID conflict response: %v", readErr)
+	}
+	var conflictResponse factoryapi.ErrorResponse
+	if err := json.Unmarshal(responseBody, &conflictResponse); err != nil {
+		t.Fatalf("decode explicit Work ID conflict response: %v\nbody=%s", err, responseBody)
+	}
+	if response.StatusCode != http.StatusConflict ||
+		conflictResponse.Code != factoryapi.ErrorResponseCodeCONFLICT ||
+		conflictResponse.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("HTTP conflict = status:%d response:%#v, want 409 CONFLICT/CONFLICT", response.StatusCode, conflictResponse)
+	}
+	if strings.Contains(string(responseBody), "untrusted-payload-secret") {
+		t.Fatalf("HTTP conflict response echoed untrusted payload: %s", responseBody)
+	}
+	assertExplicitWorkIDConflictStateUnchanged(t, serverURL, sessionID, beforeWork, beforeEvents, "HTTP")
+}
+
+func assertExplicitWorkIDCLIConflict(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	sessionID, workID string,
+	beforeWork factoryapi.ListWorkResponse,
+	beforeEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	requestID := "request-explicit-session-cli-conflict"
+	stdout, stderr, err := executeSubmitBatchCLIOnServer(t, server, []string{
+		"you", "--server", server.URL(), "submit", "batch",
+		"--session", sessionID,
+		explicitBatchJSONWithTitle(requestID, workID, "untrusted-payload-secret"),
+	})
+	if err == nil {
+		t.Fatal("CLI explicit Work ID conflict succeeded")
+	}
+	diagnostic := err.Error() + "\n" + stderr
+	for _, marker := range []string{
+		"batch submission failed (409)",
+		"code=CONFLICT",
+		"family=CONFLICT",
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("CLI conflict diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+	if strings.Contains(diagnostic, "untrusted-payload-secret") {
+		t.Fatalf("CLI conflict diagnostic echoed untrusted payload: %s", diagnostic)
+	}
+	if stdout != "" {
+		t.Fatalf("CLI conflict emitted success stdout: %q", stdout)
+	}
+	assertExplicitWorkIDConflictStateUnchanged(t, server.URL(), sessionID, beforeWork, beforeEvents, "CLI")
+}
+
+func assertExplicitWorkIDConflictStateUnchanged(
+	t *testing.T,
+	serverURL, sessionID string,
+	beforeWork factoryapi.ListWorkResponse,
+	beforeEvents []factoryapi.FactoryEvent,
+	boundary string,
+) {
+	t.Helper()
+
+	listEndpoint := support.SessionWorkURL(serverURL, sessionID, "/work")
+	afterWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	afterEvents := support.GetFactoryEventsForSessionAt(t, serverURL, sessionID)
+	if !reflect.DeepEqual(afterWork, beforeWork) || !reflect.DeepEqual(afterEvents, beforeEvents) {
+		t.Fatalf("%s conflict mutated public state: workChanged=%t eventsChanged=%t", boundary, !reflect.DeepEqual(afterWork, beforeWork), !reflect.DeepEqual(afterEvents, beforeEvents))
+	}
+}
+
+func assertRelationEndpointDiagnostic(t *testing.T, diagnostic, value, source string) {
+	t.Helper()
+	for _, marker := range []string{
+		"relations[0]",
+		`relation type "DEPENDS_ON"`,
+		`sourceWorkName "` + source + `"`,
+		"targetWorkName",
+		value,
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+}
+
+func inlineBatchJSON(requestID, workName, workType, title string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "` + workName + `", "workTypeName": "` + workType + `", "payload": {"title": "` + title + `"}}
+		]
+	}`
+}
+
+func oversizedBatchJSON(requestID, workName string) string {
+	return batchJSONWithPayloadSize(requestID, workName, work.MaxWorkPayloadBytes+1, "")
+}
+
+func boundaryBatchJSON(requestID, workName string, payloadBytes int, marker string) string {
+	return batchJSONWithPayloadSize(requestID, workName, payloadBytes, marker)
+}
+
+func batchJSONWithPayloadSize(requestID, workName string, payloadBytes int, textPrefix string) string {
+	const emptyPayload = `{"text":""}`
+	textBytes := payloadBytes - len(emptyPayload)
+	if textBytes < len(textPrefix) {
+		panic(fmt.Sprintf("payload size %d cannot fit prefix %q", payloadBytes, textPrefix))
+	}
+	payload := `{"text":"` + textPrefix + strings.Repeat("x", textBytes-len(textPrefix)) + `"}`
+	if len(payload) != payloadBytes {
+		panic(fmt.Sprintf("test payload length = %d, want %d", len(payload), payloadBytes))
+	}
+	return fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":"task","payload":%s}]}`,
+		requestID,
+		workName,
+		payload,
+	)
+}
+
+func duplicateBatchJSON(requestID string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "release", "workTypeName": "task", "payload": {"title": "Task release"}},
+			{"name": "release", "workTypeName": "story", "payload": {"title": "Story release"}}
+		]
+	}`
+}
+
+func explicitBatchJSON(requestID, workID string) string {
+	return explicitBatchJSONWithTitle(requestID, workID, "explicit Work ID conflict")
+}
+
+func explicitBatchJSONWithTitle(requestID, workID, title string) string {
+	return fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":"explicit-work","workId":%q,"workTypeName":"task","payload":{"title":%q}}]}`,
+		requestID, workID, title,
+	)
+}
+
+func validRelationsBatchJSON() string {
+	return `{
+		"requestId": "batch-valid-relations",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "parent", "workTypeName": "task"},
+			{"name": "prerequisite", "workTypeName": "task"},
+			{"name": "child", "workTypeName": "task"}
+		],
+		"relations": [
+			{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"},
+			{"type": "DEPENDS_ON", "sourceWorkName": "child", "targetWorkName": "prerequisite"}
+		]
+	}`
+}
+
+func relationEndpointBatchJSON(requestID, workName, sourceWorkName, targetWorkName string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "` + workName + `", "workTypeName": "task"}],
+		"relations": [{"type": "DEPENDS_ON", "sourceWorkName": "` + sourceWorkName + `", "targetWorkName": "` + targetWorkName + `"}]
+	}`
+}
+
+func writeBatchContractInputFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "batch.json")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write batch input file: %v", err)
+	}
+	return path
+}
+
+func newInstrumentedSubmitBatchServer(t *testing.T) (serverURL string, requests *atomic.Int32) {
+	t.Helper()
+	var count atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count.Add(1)
+		t.Errorf("submit batch dry-run must not send HTTP requests; got %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL, &count
+}
+
+func batchContractHomeEnvironment(home string) []string {
+	if runtime.GOOS == "windows" {
+		return []string{"USERPROFILE=" + home}
+	}
+	if runtime.GOOS == "plan9" {
+		return []string{"home=" + home}
+	}
+	return []string{"HOME=" + home}
+}

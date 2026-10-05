@@ -20,18 +20,104 @@
       ]
     },
     {
-      "test": "tests/functional/models/root_composition/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
+      "test": "tests/functional/models/inference/inference_invoke_test.go::TestModelRESTInvokesBuiltinTTSWithNamedAudioOutput",
       "stableIds": [
         "rest/invokeGenericModel"
       ]
     },
     {
-      "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+      "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
       "stableIds": [
         "cli/you.worker-sessions.list",
         "cli/you.worker-sessions.read",
         "cli/you.worker-sessions.show",
         "cli/you.worker-sessions.stream"
+      ]
+    },
+    {
+      "test": "tests/functional/product/cli_rest_journeys/transport_http_server_journeys_test.go::TestRESTServerJourneys",
+      "stableIds": [
+        "rest/getEventsBySessionId",
+        "rest/getStatusBySessionId",
+        "rest/listWorkBySessionId",
+        "rest/submitWorkBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/providers_discovery_discovery_test.go::TestCLIProvidersListShowsConfiguredProviders",
+      "stableIds": [
+        "cli/you.providers.list"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
+      "stableIds": [
+        "rest/getFactorySessionDispatch",
+        "rest/listFactorySessionDispatches"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
+      "stableIds": [
+        "rest/getFactorySessionResults",
+        "rest/invokeFactorySessionBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/sessions_resource_capacity_test.go::TestRESTResourceCapacityChangesPreserveRevisionAndIdempotency",
+      "stableIds": [
+        "rest/setFactorySessionResourceCapacity"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/transport_acp_stdio_cli_serve_acp_prompt_test.go::TestServeACPCompletesOneFactoryPrompt",
+      "stableIds": [
+        "cli/you.server.acp"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_captured_logs_test.go::TestWorkerSessionCapturedLogsCLIHTTPParity",
+      "stableIds": [
+        "cli/you.worker-sessions.read",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
+      "stableIds": [
+        "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot",
+      "stableIds": [
+        "rest/cancelWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
+      "stableIds": [
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+      "stableIds": [
+        "rest/interruptWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
+      "stableIds": [
+        "rest/listWorkerSessions",
+        "rest/terminateWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
+      "stableIds": [
+        "cli/you.worker-sessions.read",
+        "rest/readWorkerSessionLogs"
       ]
     },
     {
@@ -43,53 +129,18 @@
       ]
     },
     {
-      "test": "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess",
-      "stableIds": [
-        "cli/you.providers.list"
-      ]
-    },
-    {
-      "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
-      "stableIds": [
-        "rest/getFactorySessionDispatch",
-        "rest/listFactorySessionDispatches"
-      ]
-    },
-    {
-      "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
-      "stableIds": [
-        "rest/getFactorySessionResults",
-        "rest/invokeFactorySessionBySessionId"
-      ]
-    },
-    {
-      "test": "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
-      "stableIds": [
-        "cli/you.server.acp"
-      ]
-    },
-    {
-      "test": "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath",
+      "test": "tests/functional/transport/cli/invocation/run_wiring_test.go::TestCLIRunFactoryByPath",
       "stableIds": [
         "cli/you.run"
       ]
     },
     {
-      "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
+      "test": "tests/functional/transport/cli/invocation/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
       "stableIds": [
         "cli/you.submit.batch",
         "cli/you.work.approval.list",
         "cli/you.work.approval.show",
         "cli/you.work.move"
-      ]
-    },
-    {
-      "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
-      "stableIds": [
-        "rest/getEventsBySessionId",
-        "rest/getStatusBySessionId",
-        "rest/listWorkBySessionId",
-        "rest/submitWorkBySessionId"
       ]
     },
     {
@@ -101,21 +152,21 @@
       ]
     },
     {
-      "test": "tests/functional/work/recovery/manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
+      "test": "tests/functional/work/admission/batch_contract_batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
+      "stableIds": [
+        "cli/you.submit.batch"
+      ]
+    },
+    {
+      "test": "tests/functional/work/admission/recovery_manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
       "stableIds": [
         "rest/moveWorkBySessionId"
       ]
     },
     {
-      "test": "tests/functional/work/submission/http_test.go::TestAPIBatchUpsertAcceptsWorksContent",
+      "test": "tests/functional/work/admission/submission_http_test.go::TestAPIBatchUpsertAcceptsWorksContent",
       "stableIds": [
         "rest/upsertWorkRequestBySessionId"
-      ]
-    },
-    {
-      "test": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
-      "stableIds": [
-        "cli/you.submit.batch"
       ]
     },
     {
@@ -172,51 +223,6 @@
       "test": "tests/functional/workers/mock/shared_process_test.go::TestSharedProcessWorkersMock",
       "stableIds": [
         "cli/you.session.resource.set"
-      ]
-    },
-    {
-      "test": "tests/functional/workers/transports/http/worker_sessions_captured_logs_test.go::TestWorkerSessionCapturedLogsCLIHTTPParity",
-      "stableIds": [
-        "cli/you.worker-sessions.read",
-        "rest/readWorkerSessionLogs"
-      ]
-    },
-    {
-      "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
-      "stableIds": [
-        "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
-      ]
-    },
-    {
-      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot",
-      "stableIds": [
-        "rest/cancelWorkerSession"
-      ]
-    },
-    {
-      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
-      "stableIds": [
-        "rest/startWorkerSession"
-      ]
-    },
-    {
-      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
-      "stableIds": [
-        "rest/interruptWorkerSession"
-      ]
-    },
-    {
-      "test": "tests/functional/workers/transports/http/worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
-      "stableIds": [
-        "rest/listWorkerSessions",
-        "rest/terminateWorkerSession"
-      ]
-    },
-    {
-      "test": "tests/functional/workers/transports/http/worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
-      "stableIds": [
-        "cli/you.worker-sessions.read",
-        "rest/readWorkerSessionLogs"
       ]
     },
     {

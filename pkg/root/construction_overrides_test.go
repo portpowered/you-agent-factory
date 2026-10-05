@@ -85,7 +85,6 @@ func invalidOverrides0() []invalidOverrideCase {
 		{"ModelHostGRPCDialer", serviceedges.Edges{ModelHostGRPCDialer: (*nilModelHostGRPCDialer)(nil)}},
 		{"ModelHostCompatibilityChecker", serviceedges.Edges{ModelHostCompatibilityChecker: (*nilModelHostCompatibilityChecker)(nil)}},
 		{"ModelRuntimeCommandRunner", serviceedges.Edges{ModelRuntimeCommandRunner: (*nilModelRuntimeCommandRunner)(nil)}},
-		{"ModelRuntimeHTTPClient", serviceedges.Edges{ModelRuntimeHTTPClient: (*nilModelRuntimeHTTPClient)(nil)}},
 	}
 }
 
@@ -260,13 +259,6 @@ type nilModelHostCompatibilityChecker struct {
 type nilModelRuntimeCommandRunnerEffect platformprocess.CommandRunner
 type nilModelRuntimeCommandRunner struct {
 	nilModelRuntimeCommandRunnerEffect
-}
-
-type nilModelRuntimeHTTPClientEffect interface {
-	Do(*http.Request) (*http.Response, error)
-}
-type nilModelRuntimeHTTPClient struct {
-	nilModelRuntimeHTTPClientEffect
 }
 
 type nilModelInvocationArtifactFileSystemEffect interface {

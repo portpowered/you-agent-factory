@@ -43,15 +43,15 @@ func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *s
 	if err != nil {
 		t.Fatal(err)
 	}
-	inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+	inputs.Input.Env = support.IsolatedHomeEnvironment(profile)
 	inputs.Input.WorkingDirectory = profile
 	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, inputs.Input.WorkingDirectory)
 	inputs.Input.Context = context.Background()
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	for {
 		select {
-		case <-selectedWatchScheduler.startup:
-			selectedWatchScheduler.advance(10)
+		case timer := <-selectedWatchScheduler.startup:
+			timer.wake(selectedWatchScheduler.Now())
 		case <-entry.ready:
 			return host
 		case <-command.Done():
@@ -73,8 +73,8 @@ func (h *selectedWatchHost) execute(t *testing.T, args ...string) string {
 	var err error
 	for {
 		select {
-		case <-selectedWatchScheduler.startup:
-			selectedWatchScheduler.advance(10)
+		case timer := <-selectedWatchScheduler.startup:
+			timer.wake(selectedWatchScheduler.Now())
 		case err = <-done:
 			goto finished
 		case <-time.After(selectedWatchCeiling):

@@ -1,0 +1,20 @@
+package customer_journeys_test
+
+import "testing"
+
+// TestWorkflowLoadingJourneys owns its immutable fixture until all customer scenarios finish.
+func TestWorkflowLoadingJourneys(t *testing.T) {
+	t.Parallel()
+	initializeLoadingFixture(t)
+	t.Run("TestInlineJavaScriptFactoryRunsFromCLI", testLoadingInlineJavaScriptFactoryRunsFromCLI)
+	t.Run("TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline", testLoadingInlineJavaScriptFactoryRunsOrderedTwoStagePipeline)
+	t.Run("TestInlineJavaScriptFactoryRunsThroughAPIInvocation", testLoadingInlineJavaScriptFactoryRunsThroughAPIInvocation)
+	t.Run("TestInlineJavaScriptSyntaxErrorReturnsSourceLocation", testLoadingInlineJavaScriptSyntaxErrorReturnsSourceLocation)
+	t.Run("TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot", testLoadingJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot)
+	t.Run("TestJavaScriptFactoryMissingImportFailsActionably", testLoadingJavaScriptFactoryMissingImportFailsActionably)
+	t.Run("TestTypeScriptFactoryTranspilesAndRuns", testLoadingTypeScriptFactoryTranspilesAndRuns)
+	t.Run("TestTypeScriptSourceMapReportsAuthoredLocation", testLoadingTypeScriptSourceMapReportsAuthoredLocation)
+	t.Run("TestNamedJavaScriptFactoryRunsThroughStandardCLI", testLoadingNamedJavaScriptFactoryRunsThroughStandardCLI)
+	t.Run("TestNamedJavaScriptFactoryRunsThroughAPIInvocation", testLoadingNamedJavaScriptFactoryRunsThroughAPIInvocation)
+	t.Run("TestNamedJavaScriptFactoryUsesSameFactorySessionControls", testLoadingNamedJavaScriptFactoryUsesSameFactorySessionControls)
+}

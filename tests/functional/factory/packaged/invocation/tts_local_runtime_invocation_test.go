@@ -1,0 +1,478 @@
+package invocation_test
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
+)
+
+// TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText proves the
+// installed local TTS route carries the complete customer value through the
+// operation-binding boundary and into Models' joined built-in invocation.
+func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
+	t.Parallel()
+	text := "The release is ready, with every submitted word preserved exactly."
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(
+		t,
+		homeDir,
+		factorydefinitions.PackagedTTSFactoryName,
+	)
+	cacheDir := t.TempDir()
+	writePackagedTTSReadyModelCache(t, homeDir, cacheDir)
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
+	privateFixture := localai.Start(t)
+	launcher := &packagedTTSModelHostLauncher{endpoint: privateFixture.Endpoint()}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedTTSFactoryName,
+		"--no-record",
+		"--output", "primary",
+		"--to", text,
+	})
+	inputs.Input.Env = append(
+		os.Environ(),
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+		run.ModelCacheDirEnvironment+"="+cacheDir,
+	)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			return packagedTTSPinnedBackendSelection(), nil
+		},
+		ModelHostProcessLauncher:      launcher,
+		ModelHostProtocolNegotiator:   packagedTTSHostProtocolNegotiator{},
+		ModelHostCompatibilityChecker: packagedTTSHostCompatibilityChecker{},
+		ModelHostHTTPClient:           modelServer.Client(),
+
+		ModelInvocationBackend: backend.Invoke,
+	})
+	t.Cleanup(func() {
+		if launcher.StartCount() != 1 || launcher.StopCount() != 1 {
+			t.Errorf("local model host lifecycle = starts %d, stops %d; want one start and one cleanup stop", launcher.StartCount(), launcher.StopCount())
+		}
+	})
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(packaged local TTS) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+	if response.RequestId == "" || response.TraceId == "" {
+		t.Fatalf("local TTS invocation identity = request %q trace %q, want non-empty values", response.RequestId, response.TraceId)
+	}
+	if backend.CallCount() != 0 {
+		t.Fatalf("generic Models TTS invocation count = %d, want zero private-route fallback calls", backend.CallCount())
+	}
+	assertPackagedTTSManagedHostLaunch(t, launcher, cacheDir)
+
+	audio := packagedTTSPrimaryAudio(t, response.PrimaryResult)
+	if string(audio) != string(localai.AudioBytes()) {
+		t.Fatalf("joined audio Work = %d bytes; want semantic LocalAI fixture audio", len(audio))
+	}
+	ttsCalls := privateFixture.Calls()
+	if len(ttsCalls) != 1 || ttsCalls[0].Method != "TTS" || ttsCalls[0].Text != text {
+		t.Fatalf("private TTS calls = %#v, want one exact text request", ttsCalls)
+	}
+}
+
+type packagedTTSModelsBackend struct {
+	mu        sync.Mutex
+	audio     []byte
+	request   *models.InvokeModelRequest
+	artifacts []models.InferenceArtifact
+	calls     int
+	failure   error
+}
+
+func newPackagedTTSModelsBackend(audio []byte) *packagedTTSModelsBackend {
+	return &packagedTTSModelsBackend{audio: append([]byte(nil), audio...)}
+}
+
+func (backend *packagedTTSModelsBackend) Invoke(
+	_ context.Context,
+	request models.InvokeModelRequest,
+) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	backend.mu.Lock()
+	backend.calls++
+	failure := backend.failure
+	cloned := request
+	cloned.Inputs = append([]models.InferenceInput(nil), request.Inputs...)
+	backend.request = &cloned
+	audio := append([]byte(nil), backend.audio...)
+	artifacts := make([]models.InferenceArtifact, len(backend.artifacts))
+	for index, artifact := range backend.artifacts {
+		artifacts[index] = artifact.Clone()
+	}
+	backend.mu.Unlock()
+	if failure != nil {
+		return nil, nil, failure
+	}
+	return []models.InferenceContent{{
+		Name: "audio", Modality: models.ModalityAudio,
+		ContentType: "audio/wav", MediaType: "audio/wav", Content: string(audio),
+	}}, artifacts, nil
+}
+
+func (backend *packagedTTSModelsBackend) CallCount() int {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	return backend.calls
+}
+
+func (backend *packagedTTSModelsBackend) SetFailure(failure error) {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	backend.failure = failure
+}
+
+func (backend *packagedTTSModelsBackend) Reset(failure error) {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	backend.calls = 0
+	backend.request = nil
+	backend.failure = failure
+}
+
+func (backend *packagedTTSModelsBackend) SetArtifacts(artifacts []models.InferenceArtifact) {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	backend.artifacts = make([]models.InferenceArtifact, len(artifacts))
+	for index, artifact := range artifacts {
+		backend.artifacts[index] = artifact.Clone()
+	}
+}
+
+func (backend *packagedTTSModelsBackend) LastRequest(t testing.TB) models.InvokeModelRequest {
+	t.Helper()
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if backend.request == nil {
+		t.Fatal("Models TTS invocation backend was not called")
+	}
+	request := *backend.request
+	request.Inputs = append([]models.InferenceInput(nil), backend.request.Inputs...)
+	return request
+}
+
+type packagedTTSModelHostLauncher struct {
+	mu       sync.Mutex
+	endpoint string
+	starts   int
+	stops    int
+	specs    []serviceedges.HostProcessStartSpec
+}
+
+func (launcher *packagedTTSModelHostLauncher) Start(
+	_ context.Context,
+	spec serviceedges.HostProcessStartSpec,
+) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
+	launcher.mu.Lock()
+	launcher.starts++
+	launcher.specs = append(launcher.specs, clonePackagedTTSHostStartSpec(spec))
+	launcher.mu.Unlock()
+	return &packagedTTSModelHostProcess{
+		endpoint: launcher.endpoint,
+		stopped:  make(chan struct{}),
+		onStop:   launcher.recordStop,
+	}, nil
+}
+
+type packagedTTSModelHostProcess struct {
+	endpoint string
+	stopped  chan struct{}
+	once     sync.Once
+	onStop   func()
+}
+
+func (process *packagedTTSModelHostProcess) HealthEndpoint() string { return process.endpoint }
+func (process *packagedTTSModelHostProcess) Wait() error {
+	<-process.stopped
+	return nil
+}
+func (process *packagedTTSModelHostProcess) Stop(context.Context) error {
+	process.once.Do(func() {
+		close(process.stopped)
+		if process.onStop != nil {
+			process.onStop()
+		}
+	})
+	return nil
+}
+
+func (launcher *packagedTTSModelHostLauncher) recordStop() {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	launcher.stops++
+}
+
+func (launcher *packagedTTSModelHostLauncher) StartCount() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.starts
+}
+
+func (launcher *packagedTTSModelHostLauncher) StopCount() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.stops
+}
+
+func (launcher *packagedTTSModelHostLauncher) LastStartSpec(t testing.TB) serviceedges.HostProcessStartSpec {
+	t.Helper()
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	if len(launcher.specs) == 0 {
+		t.Fatal("local model host launch spec was not observed")
+	}
+	return clonePackagedTTSHostStartSpec(launcher.specs[len(launcher.specs)-1])
+}
+
+func assertPackagedTTSManagedHostLaunch(
+	t *testing.T,
+	launcher *packagedTTSModelHostLauncher,
+	cacheDir string,
+) {
+	t.Helper()
+	spec := launcher.LastStartSpec(t)
+	modelPathObserved := false
+	for _, modelFile := range spec.ModelFiles {
+		if modelFile == spec.ModelPath {
+			modelPathObserved = true
+			break
+		}
+	}
+	if spec.Backend != "localai-vibevoice" || spec.ModelPath == "" || len(spec.ModelFiles) != 3 ||
+		!modelPathObserved || len(spec.BackendFiles) != 1 || !pathWithinPackagedTTSCache(cacheDir, spec.ModelPath) {
+		t.Fatalf("Models host launch = %#v, want managed VibeVoice backend and resolved model/backend artifacts", spec)
+	}
+	if filepath.Base(spec.BackendFiles[0]) != packagedTTSPinnedBackendSelection().Name ||
+		!pathWithinPackagedTTSCache(cacheDir, spec.BackendFiles[0]) {
+		t.Fatalf("Models host backend artifact = %q, want the selected cached backend artifact under %q", spec.BackendFiles[0], cacheDir)
+	}
+	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
+		t.Fatalf("Models host launch override = command %q args %#v endpoint %q, want Models to pass only its resolved backend artifact", spec.Command, spec.Args, spec.HealthEndpoint)
+	}
+}
+
+func clonePackagedTTSHostStartSpec(spec serviceedges.HostProcessStartSpec) serviceedges.HostProcessStartSpec {
+	spec.Args = append([]string(nil), spec.Args...)
+	spec.Env = append([]string(nil), spec.Env...)
+	spec.ModelFiles = append([]string(nil), spec.ModelFiles...)
+	spec.BackendFiles = append([]string(nil), spec.BackendFiles...)
+	return spec
+}
+
+func pathWithinPackagedTTSCache(cacheDir, candidate string) bool {
+	relative, err := filepath.Rel(cacheDir, candidate)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+type packagedTTSHostProtocolNegotiator struct{}
+
+func (packagedTTSHostProtocolNegotiator) Negotiate(
+	context.Context,
+	string,
+	serviceedges.ModelHostProtocolNegotiationRequest,
+) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	return serviceedges.ModelHostProtocolNegotiationResult{
+		ProtocolVersion: "localai-backend-v1",
+		Backend:         "localai-vibevoice",
+		Ready:           true,
+	}, nil
+}
+
+type packagedTTSHostCompatibilityChecker struct{}
+
+func (packagedTTSHostCompatibilityChecker) Check(
+	context.Context,
+	serviceedges.ModelHostCompatibilityRequest,
+) error {
+	return nil
+}
+
+func writePackagedTTSReadyModelCache(t testing.TB, homeDir, cacheDir string) {
+	t.Helper()
+	artifacts := []struct {
+		name string
+		body []byte
+	}{
+		{name: "vibevoice-realtime-0.5B-q8_0.gguf", body: []byte("joined built-in tts model fixture")},
+		{name: "tokenizer.gguf", body: []byte("joined built-in tts tokenizer fixture")},
+		{name: "voice-en-Carter_man.gguf", body: []byte("joined built-in tts voice fixture")},
+	}
+	bundleDir := filepath.Join(homeDir, "tts-role-bundle")
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("create packaged TTS role bundle: %v", err)
+	}
+	metadataArtifacts := make([]map[string]any, 0, len(artifacts))
+	identitiesByName := make(map[string]string, len(artifacts))
+	for _, artifact := range artifacts {
+		if err := os.WriteFile(filepath.Join(bundleDir, artifact.name), artifact.body, 0o644); err != nil {
+			t.Fatalf("write packaged TTS role bundle asset %q: %v", artifact.name, err)
+		}
+		digest := fmt.Sprintf("%x", sha256.Sum256(artifact.body))
+		identitiesByName[artifact.name] = fmt.Sprintf("%s:%d:%s", artifact.name, len(artifact.body), digest)
+		metadataArtifacts = append(metadataArtifacts, map[string]any{
+			"Name": artifact.name, "Bytes": len(artifact.body), "SHA256": digest,
+		})
+	}
+	source := (&url.URL{Scheme: "file", Path: filepath.ToSlash(bundleDir)}).String()
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	var operatorConfig map[string]any
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read packaged TTS operator config: %v", err)
+	}
+	if err := json.Unmarshal(configData, &operatorConfig); err != nil {
+		t.Fatalf("decode packaged TTS operator config: %v", err)
+	}
+	modelsConfig, ok := operatorConfig["models"].(map[string]any)
+	if !ok {
+		modelsConfig = map[string]any{}
+		operatorConfig["models"] = modelsConfig
+	}
+	modelsConfig[models.BuiltInModelNameTTS] = map[string]any{"source": source}
+	configData, err = json.Marshal(operatorConfig)
+	if err != nil {
+		t.Fatalf("marshal packaged TTS operator config: %v", err)
+	}
+	if err := os.WriteFile(configPath, configData, 0o600); err != nil {
+		t.Fatalf("write packaged TTS operator config: %v", err)
+	}
+	modelIdentity := fmt.Sprintf(
+		"model|%s|%s,%s,%s",
+		source,
+		identitiesByName["tokenizer.gguf"],
+		identitiesByName["vibevoice-realtime-0.5B-q8_0.gguf"],
+		identitiesByName["voice-en-Carter_man.gguf"],
+	)
+	modelIdentityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(modelIdentity)))
+	modelSnapshot := filepath.Join(cacheDir, ".you-content-addressed", "model", modelIdentityHash)
+	if err := os.MkdirAll(modelSnapshot, 0o755); err != nil {
+		t.Fatalf("create packaged TTS generic model snapshot: %v", err)
+	}
+	for _, artifact := range artifacts {
+		if err := os.WriteFile(filepath.Join(modelSnapshot, artifact.name), artifact.body, 0o644); err != nil {
+			t.Fatalf("write packaged TTS generic model asset %q: %v", artifact.name, err)
+		}
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"kind": "model", "identity": modelIdentity, "source": source, "sourceKey": source,
+		"artifacts": metadataArtifacts,
+	})
+	if err != nil {
+		t.Fatalf("marshal packaged TTS generic model metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelSnapshot, ".you-assets.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write packaged TTS generic model metadata: %v", err)
+	}
+	const backend = "localai-vibevoice"
+	selection := packagedTTSPinnedBackendSelection()
+	backendURLHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
+	backendSource := "backend://" + backend + "/release://" + backendURLHash
+	backendIdentity := fmt.Sprintf("backend|%s|%s:%d:%s", backendSource, selection.Name, selection.Bytes, selection.SHA256)
+	backendIdentityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(backendIdentity)))
+	backendSnapshot := filepath.Join(cacheDir, "backend-artifacts", ".you-content-addressed", "backend", backendIdentityHash)
+	if err := os.MkdirAll(backendSnapshot, 0o755); err != nil {
+		t.Fatalf("create packaged TTS generic backend snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(backendSnapshot, selection.Name), []byte("pinned-backend-fixture"), 0o644); err != nil {
+		t.Fatalf("write packaged TTS generic backend asset: %v", err)
+	}
+	backendMetadata, err := json.Marshal(map[string]any{
+		"kind": "backend", "identity": backendIdentity, "source": backendSource, "sourceKey": backendSource,
+		"artifacts": []map[string]any{{"Name": selection.Name, "Bytes": selection.Bytes, "SHA256": selection.SHA256}},
+	})
+	if err != nil {
+		t.Fatalf("marshal packaged TTS generic backend metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(backendSnapshot, ".you-assets.json"), backendMetadata, 0o644); err != nil {
+		t.Fatalf("write packaged TTS generic backend metadata: %v", err)
+	}
+}
+
+func packagedTTSPinnedBackendSelection() serviceedges.ModelBackendArtifactSelection {
+	return serviceedges.ModelBackendArtifactSelection{
+		Name:     "localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+		Bytes:    22,
+		SHA256:   "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
+	}
+}
+
+func packagedTTSPrimaryAudio(
+	t testing.TB,
+	primaryResult *factoryapi.WorkContent,
+) []byte {
+	t.Helper()
+	if primaryResult == nil || len(*primaryResult) == 0 {
+		t.Fatal("primary result is empty, want one audio Work part")
+	}
+	for _, part := range *primaryResult {
+		if audioPart, err := part.AsWorkAudioContentPart(); err == nil {
+			const prefix = "data:audio/wav;base64,"
+			if !strings.HasPrefix(audioPart.Url, prefix) {
+				continue
+			}
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(audioPart.Url, prefix))
+			if err != nil {
+				t.Fatalf("decode joined audio Work URL: %v", err)
+			}
+			return decoded
+		}
+		textPart, err := part.AsWorkTextContentPart()
+		if err != nil {
+			continue
+		}
+		const prefix = "data:audio/wav;base64,"
+		if !strings.HasPrefix(textPart.Text, prefix) {
+			continue
+		}
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(textPart.Text, prefix))
+		if err != nil {
+			t.Fatalf("decode joined audio data URL: %v", err)
+		}
+		return decoded
+	}
+	t.Fatalf("primary result = %#v, want one audio/wav data URL Work part", primaryResult)
+	return nil
+}
