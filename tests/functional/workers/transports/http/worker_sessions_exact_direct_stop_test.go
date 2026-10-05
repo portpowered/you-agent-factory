@@ -3,6 +3,7 @@ package http_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -14,9 +15,67 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workercli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// F9-01 uses separate roots because the selected profile and command edge are
+// immutable process inputs. No real remote account or new authorization policy
+// is inferred from this existing selected-host not-found boundary.
+func TestExactStopWrongSelectedProfileHasNoEffects(t *testing.T) {
+	t.Parallel()
+	ownerRunner := newFleetCharacterizationRunner()
+	owner := startExactFactoryStopServer(t, ownerRunner, uuid.NewString())
+	foreignRunner := newFleetCharacterizationRunner()
+	foreign := startExactFactoryStopServer(t, foreignRunner, uuid.NewString())
+	for index, id := range []string{"profile-target", "profile-sibling"} {
+		response := postDirectWorkerSession(t, t.Context(), owner.URL(), id+"-request", id, id+"-dispatch")
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusAccepted {
+			t.Fatalf("admit %s status=%d", id, response.StatusCode)
+		}
+		waitFleetCharacterizationSignal(t, ownerRunner.slots[index].started, "profile owner admission")
+	}
+	for _, action := range []string{"cancel", "terminate"} {
+		assertExactForeignStopRefused(t, foreign, "profile-target", action)
+		for index, id := range []string{"profile-target", "profile-sibling"} {
+			select {
+			case <-ownerRunner.slots[index].canceled:
+				t.Fatalf("foreign %s canceled %s", action, id)
+			default:
+			}
+			assertFleetCharacterizationSnapshot(t, owner, id, id+"-dispatch", "RUNNING")
+		}
+	}
+	if ownerRunner.callCount() != 2 || foreignRunner.callCount() != 0 {
+		t.Fatalf("owner/foreign calls=%d/%d", ownerRunner.callCount(), foreignRunner.callCount())
+	}
+}
+
+func assertExactForeignStopRefused(t *testing.T, foreign *fleetCharacterizationServer, id, action string) {
+	t.Helper()
+	response := postWorkerSessionControl(t, foreign.URL(), id, action)
+	defer response.Body.Close()
+	var diagnostic struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&diagnostic); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusNotFound || diagnostic.Code != "NOT_FOUND" {
+		t.Fatalf("foreign HTTP %s status=%d diagnostic=%#v", action, response.StatusCode, diagnostic)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", foreign.URL(), "worker-sessions", action, id, "--output", "json"})
+	err := foreign.Execute(t, inputs.Input)
+	var typed *workercli.CLIError
+	if !errors.As(err, &typed) || typed.Code != "NOT_FOUND" || strings.TrimSpace(inputs.Stdout()) != "" {
+		t.Fatalf("foreign CLI %s error=%v stdout=%s stderr=%s", action, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "NOT_FOUND" {
+		t.Fatalf("foreign CLI diagnostic=%#v error=%v", diagnostic, err)
+	}
+}
 
 // Public CLI cancel and HTTP retries use the same production host, real journal
 // and two independent no-reference executions. The controlled runner delays its
