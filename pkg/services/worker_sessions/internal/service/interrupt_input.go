@@ -121,7 +121,7 @@ func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersess
 	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF {
 		return recordings.ErrWorkerRecordingPersistence
 	}
-	if !canonicalInterruptRecipeFields(stored, input) {
+	if !canonicalInterruptJSONFields(stored, input) {
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	accepted := req
@@ -138,8 +138,8 @@ func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersess
 // Compare field names with the decoded contract's own encoding. Struct aliases
 // disappear on encoding, while case-sensitive customer map keys survive. This
 // prevents a later canonical field from concealing an earlier private alias.
-func canonicalInterruptRecipeFields(payload []byte, input durableInterruptInput) bool {
-	canonical, err := json.Marshal(input)
+func canonicalInterruptJSONFields(payload []byte, decoded any) bool {
+	canonical, err := json.Marshal(decoded)
 	if err != nil {
 		return false
 	}

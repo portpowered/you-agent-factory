@@ -501,7 +501,9 @@ that admission snapshot without another stop or admission. Inspect the successor
 to read its current state.
 For a joined source without an admission snapshot, recovery inspects the reserved
 successor's captured opening. A conflicting owner, scope, attempt, or predecessor
-refuses recovery. A matching opening still reports execution unavailable because
+refuses recovery. Openings with unknown fields, duplicate JSON members, or
+field-name case aliases also refuse recovery. A matching opening still reports
+execution unavailable because
 the opening precedes provider admission. A missing opening also leaves admission
 uncertain. Neither result starts another execution.
 

@@ -36,7 +36,8 @@ func (f *interruptPendingCaptureReader) ReadWorkerCapturedActivity(_ context.Con
 
 func TestInterruptPendingAdmissionInspectsExactOpeningWithoutRestoringAuthority(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"missing", "matching", "growing", "lookup-failure", "read-failure", "foreign-worker", "foreign-scope", "foreign-owner", "missing-generation", "changed-generation", "malformed", "wrong-attempt", "wrong-predecessor", "wrong-source-attempt"} {
+	for _, scenario := range []string{"missing", "matching", "growing", "lookup-failure", "read-failure", "foreign-worker", "foreign-scope", "foreign-owner", "missing-generation", "changed-generation", "malformed", "wrong-attempt", "wrong-predecessor", "wrong-source-attempt",
+		"shadow-draft-alias", "shadow-draft-duplicate", "shadow-draft-unknown", "shadow-worker-alias", "shadow-attempt-duplicate", "shadow-lineage-alias", "shadow-lineage-duplicate", "shadow-opening-unknown"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			r, plan, store := newDurableInterruptFixture(t)
@@ -119,11 +120,46 @@ func pendingInterruptCaptureFixture(scenario string, plan interruptPlan, target 
 	}
 	payload, _ := json.Marshal(opening)
 	draft, _ := json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: payload})
-	if scenario == "malformed" {
-		draft = []byte(`{"private-capture":"corrupt"}`)
+	shadowed := shadowPendingInterruptOpening(scenario, payload, draft)
+	if !reflect.DeepEqual(shadowed, draft) {
+		draft = shadowed
+		cause = recordings.ErrWorkerRecordingPersistence
 	}
 	f.page.Opening = events.Record{Payload: draft}
 	return f, cause
+}
+
+// Earlier private or foreign values are concealed by a later canonical field
+// under permissive JSON decoding. Exercise the coordinator, not just decoding.
+func shadowPendingInterruptOpening(scenario string, payload, draft []byte) []byte {
+	var prefix string
+	switch scenario {
+	case "malformed":
+		return []byte(`{"private-capture":"corrupt"}`)
+	case "shadow-draft-alias":
+		return append([]byte(`{"Kind":"private-capture",`), draft[1:]...)
+	case "shadow-draft-duplicate":
+		return append([]byte(`{"kind":"private-capture",`), draft[1:]...)
+	case "shadow-draft-unknown":
+		return append([]byte(`{"private-capture":"secret",`), draft[1:]...)
+	case "shadow-worker-alias":
+		prefix = `{"WorkerSessionId":"private-capture",`
+	case "shadow-attempt-duplicate":
+		prefix = `{"attemptId":"private-capture",`
+	case "shadow-lineage-alias":
+		payload = []byte(strings.Replace(string(payload), `"lineage":{`, `"lineage":{"PredecessorWorkerSessionId":"private-capture",`, 1))
+	case "shadow-lineage-duplicate":
+		payload = []byte(strings.Replace(string(payload), `"lineage":{`, `"lineage":{"predecessorWorkerSessionId":"private-capture",`, 1))
+	case "shadow-opening-unknown":
+		prefix = `{"private-capture":"secret",`
+	default:
+		return draft
+	}
+	if prefix != "" {
+		payload = append([]byte(prefix), payload[1:]...)
+	}
+	encoded, _ := json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: payload})
+	return encoded
 }
 
 // The coordinator's store collaborator commits a detached row, then loses

@@ -1,11 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -92,8 +94,8 @@ func (r *registry) inspectPendingInterruptSuccessor(ctx context.Context, req wor
 func validatePendingInterruptOpening(page recordings.WorkerCapturedActivityPage, req workersessions.InterruptRequest, sourceAttempt string) error {
 	var draft workers.Draft
 	var opening workers.SessionPayload
-	if json.Unmarshal(page.Opening.Payload, &draft) != nil || draft.Kind != workers.KindSession || draft.Phase != workers.PhaseStarted ||
-		json.Unmarshal(draft.Payload, &opening) != nil {
+	if readPendingInterruptOpeningJSON(page.Opening.Payload, &draft) != nil || draft.Kind != workers.KindSession || draft.Phase != workers.PhaseStarted ||
+		readPendingInterruptOpeningJSON(draft.Payload, &opening) != nil {
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	if opening.WorkerSessionID != req.SuccessorWorkerSessionID || opening.FactorySessionID != "" || opening.RecordingID != page.Catalog.RecordingID {
@@ -106,6 +108,20 @@ func validatePendingInterruptOpening(page recordings.WorkerCapturedActivityPage,
 	lineage := opening.Lineage
 	if lineage.PredecessorWorkerSessionID != req.SourceWorkerSessionID || lineage.PreviousDispatchID != sourceAttempt || lineage.PreviousAttemptID != sourceAttempt {
 		return workersessions.ErrInterruptSourceConflict
+	}
+	return nil
+}
+
+// Opening identities must not be shadowed by duplicate members or Go's
+// case-insensitive aliases before recovery compares the frozen target.
+func readPendingInterruptOpeningJSON(payload []byte, decoded any) error {
+	if !uniqueInterruptJSONFields(payload) {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(decoded) != nil || decoder.Decode(new(any)) != io.EOF || !canonicalInterruptJSONFields(payload, decoded) {
+		return recordings.ErrWorkerRecordingPersistence
 	}
 	return nil
 }
