@@ -234,11 +234,15 @@ type Edges struct {
 	// ProcessScheduler controls default process deadlines. An explicit scheduler
 	// wins; otherwise BuildProcess uses Clock's TimerSource capability, or Real
 	// for a legacy Now-only Clock. Specialized owner clock overrides still win.
-	ProcessScheduler                 platformclock.TimerSource
-	ACPWireRecorder                  wiretranscript.WireRecorder
-	SubmissionRecorder               recordings.SubmissionRecorder
-	DispatchRecorder                 recordings.DispatchRecorder
-	WorkerRecordingWriter            recordings.WorkerRecordingWriter
+	ProcessScheduler      platformclock.TimerSource
+	ACPWireRecorder       wiretranscript.WireRecorder
+	SubmissionRecorder    recordings.SubmissionRecorder
+	DispatchRecorder      recordings.DispatchRecorder
+	WorkerRecordingWriter recordings.WorkerRecordingWriter
+	// WorkerRecordingStoreObserver receives the Wire-constructed durable role.
+	// An injected writer can delegate to it while controlling an exact capture
+	// effect; callers never construct a peer product service themselves.
+	WorkerRecordingStoreObserver     func(recordings.WorkerRecordingStore)
 	RecordingWriteFile               func(string, []byte) error
 	RecordingAppendFile              func(string, []byte) error
 	RecordingMakeDirectories         recordings.RecordingMakeDirectories
@@ -662,6 +666,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.WorkerRecordingWriter != nil {
 		defaults.WorkerRecordingWriter = replacements.WorkerRecordingWriter
+	}
+	if replacements.WorkerRecordingStoreObserver != nil {
+		defaults.WorkerRecordingStoreObserver = replacements.WorkerRecordingStoreObserver
 	}
 	if replacements.RecordingWriteFile != nil {
 		defaults.RecordingWriteFile = replacements.RecordingWriteFile

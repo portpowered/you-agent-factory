@@ -7,16 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -50,12 +48,7 @@ func (gate *capturedScriptGate) RunStreaming(ctx context.Context, _ platformproc
 // identities are local to this parallel scenario, with no executable build.
 func TestWorkerSessionCapturedLogsActiveScriptWriteFailure(t *testing.T) {
 	t.Parallel()
-	local := platformreplay.NewLocal(runtime.GOOS)
-	store, err := processwire.ComposeWorkerRecordingStore(local, local, local, capturedHostClock{}, t.TempDir(), "script-fault-owner")
-	if err != nil {
-		t.Fatal(err)
-	}
-	fault := &capturedFaultStore{WorkerRecordingStore: store, acceptedThrough: 2, failed: make(chan struct{})}
+	fault := &capturedFaultStore{acceptedThrough: 2, failed: make(chan struct{})}
 	gate := &capturedScriptGate{started: make(chan struct{}), failNext: make(chan struct{}), canceled: make(chan struct{})}
 	dir := support.ScaffoldSingleStepFactory(t, "captured-script-failure")
 	if err := os.MkdirAll(filepath.Join(dir, "workers", "processor"), 0o700); err != nil {
@@ -67,7 +60,7 @@ func TestWorkerSessionCapturedLogsActiveScriptWriteFailure(t *testing.T) {
 	home := t.TempDir()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Env: []string{"HOME=" + home, "USERPROFILE=" + home},
-		Edges: serviceedges.Edges{ScriptCommandRunner: gate, WorkerRecordingWriter: fault, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+		Edges: serviceedges.Edges{ScriptCommandRunner: gate, WorkerRecordingWriter: fault, WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { fault.WorkerRecordingStore = store }, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
 	})
 	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
 	if opened.Session == nil {

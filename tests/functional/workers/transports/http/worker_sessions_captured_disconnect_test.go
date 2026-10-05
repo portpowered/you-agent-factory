@@ -5,18 +5,15 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -79,12 +76,7 @@ func TestWorkerSessionCapturedLogsObserverCancellation(t *testing.T) {
 
 func capturedReadCancellationServer(t *testing.T) (*support.FunctionalAPIServer, *functionalWorkerGate, *capturedReadGate, chan struct{}) {
 	t.Helper()
-	local := platformreplay.NewLocal(runtime.GOOS)
-	writer, err := processwire.ComposeWorkerRecordingStore(local, local, local, capturedHostClock{}, t.TempDir(), "captured-observer-owner")
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := &capturedReadGate{WorkerRecordingStore: writer, started: make(chan struct{}, 1), detached: make(chan struct{}, 1)}
+	store := &capturedReadGate{started: make(chan struct{}, 1), detached: make(chan struct{}, 1)}
 	finish := make(chan struct{})
 	runner := newFunctionalWorkerGate(finish)
 	dir := support.ScaffoldSingleStepFactory(t, "captured-observer")
@@ -93,7 +85,7 @@ func capturedReadCancellationServer(t *testing.T) (*support.FunctionalAPIServer,
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Env:   []string{"HOME=" + home, "USERPROFILE=" + home},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: store, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: store, WorkerRecordingStoreObserver: func(backing recordings.WorkerRecordingStore) { store.WorkerRecordingStore = backing }, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
 	})
 	return server, runner, store, finish
 }

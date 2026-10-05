@@ -17,7 +17,6 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -36,15 +35,11 @@ func (storage *capturedReadFault) ReadFile(path string) ([]byte, error) {
 func assertUnreadableCapturedRecovery(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage) {
 	t.Helper()
 	root := t.TempDir()
-	path := writeLegacyCapturedFixture(t, root, current)
+	writeLegacyCapturedFixture(t, root, current)
 	local := platformreplay.NewLocal(runtime.GOOS)
 	storage := &capturedReadFault{Local: local}
 	storage.unavailable.Store(true)
-	store, err := processwire.ComposeWorkerRecordingStore(storage, local, local, capturedHostClock{}, filepath.Dir(path), "unreadable-owner")
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.Edges.WorkerRecordingWriter = store
+	config.Edges.RecordingReadFile = storage.ReadFile
 	config.Edges.FactorySessionsWorkingDirectory = capturedRecordingDirectory(root)
 	server := support.StartFunctionalAPIServer(t, config)
 	for range 2 {

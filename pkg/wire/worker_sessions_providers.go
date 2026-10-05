@@ -74,7 +74,7 @@ func provideWorkerRecordingWriter(
 	edges serviceedges.Edges,
 ) (recordings.WorkerRecordingWriter, error) {
 	writer := edges.WorkerRecordingWriter
-	if writer == nil {
+	if writer == nil || edges.WorkerRecordingStoreObserver != nil {
 		projectRoot, err := provideFactorySessionsWorkingDirectory(edges).Getwd()
 		if err != nil {
 			return nil, fmt.Errorf("resolve Worker recording project root: %w", err)
@@ -83,30 +83,34 @@ func provideWorkerRecordingWriter(
 			return nil, fmt.Errorf("resolve Worker recording project root: expected a non-empty absolute directory")
 		}
 		storage := platformreplay.NewLocal(runtime.GOOS)
-		writer, err = ComposeWorkerRecordingStore(
-			storage, storage, storage, platformclock.Ensure(edges.Clock),
+		store, err := recordingswire.NewWorkerRecordingFileWriter(
+			workerCaptureStorage{Local: storage, readFile: edges.RecordingReadFile}, storage, storage, platformclock.Ensure(edges.Clock),
 			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),
 			uuid.NewString(),
 		)
 		if err != nil {
 			return nil, err
 		}
+		if edges.WorkerRecordingStoreObserver != nil {
+			edges.WorkerRecordingStoreObserver(store)
+		}
+		if writer == nil {
+			writer = store
+		}
 	}
 	return writer, nil
 }
 
-// ComposeWorkerRecordingStore assembles the durable capture role from explicit
-// filesystem and clock effects. Callers inject the returned service-root role
-// through Edges; service construction remains at the canonical Wire boundary.
-func ComposeWorkerRecordingStore(
-	storage platformreplay.Storage,
-	appender platformreplay.Appender,
-	directory platformreplay.DirectoryScanner,
-	clock recordings.WorkerCaptureClock,
-	root string,
-	ownerEpoch string,
-) (recordings.WorkerRecordingStore, error) {
-	return recordingswire.NewWorkerRecordingFileWriter(storage, appender, directory, clock, root, ownerEpoch)
+type workerCaptureStorage struct {
+	platformreplay.Local
+	readFile recordings.RecordingReadFile
+}
+
+func (storage workerCaptureStorage) ReadFile(path string) ([]byte, error) {
+	if storage.readFile != nil {
+		return storage.readFile(path)
+	}
+	return storage.Local.ReadFile(path)
 }
 
 // provideWorkerSessionsService constructs the canonical process supervisor.

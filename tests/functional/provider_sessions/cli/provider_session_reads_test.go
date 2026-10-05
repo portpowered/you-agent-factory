@@ -64,6 +64,9 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 		decodeCLIJSON(t, shownInputs, &shown)
 		assertProviderSessionTerminalIdentity(t, shown, terminal, sessionID, workID)
 		assertProviderSessionReadSafe(t, shownInputs.Stdout(), fixture.homeDir)
+		if shown.Transcript != "UNAVAILABLE" || shown.Parse.EventCount != 0 || shown.Parse.MalformedLineCount != 0 || len(shown.Parse.Errors) != 0 {
+			t.Fatalf("canonical show copied optional native transcript diagnostics: %#v", shown)
+		}
 		if test.errorCode != "" {
 			inputs, err := executeCLIExpectError(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
 			if err == nil {
@@ -76,8 +79,10 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 			assertProviderSessionReadSafe(t, err.Error()+inputs.Stderr(), fixture.homeDir)
 			continue
 		}
-		if test.provider == "codex" && (shown.Parse.MalformedLineCount != 1 || len(shown.Parse.Errors) != 1 || shown.Parse.Errors[0].Message != "truncated JSON event record") {
-			t.Fatalf("mixed rollout parse = %#v, want one truncated diagnostic", shown.Parse)
+		// The Work-scoped compatibility list retains native diagnostics, while
+		// canonical show and captured usage remain independent of that file.
+		if test.provider == "codex" && (terminal.Parse.MalformedLineCount != 1 || len(terminal.Parse.Errors) != 1 || terminal.Parse.Errors[0].Message != "truncated JSON event record") {
+			t.Fatalf("mixed rollout parse = %#v, want one truncated diagnostic", terminal.Parse)
 		}
 		inputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
 		var transcript struct {

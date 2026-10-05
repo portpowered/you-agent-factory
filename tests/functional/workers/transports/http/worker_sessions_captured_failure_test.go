@@ -6,18 +6,15 @@ import (
 	"io"
 	"net/http"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -40,18 +37,9 @@ func (store *capturedFaultStore) PersistWorkerRecord(ctx context.Context, record
 	return store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
-type capturedHostClock struct{}
-
-func (capturedHostClock) Now() time.Time { return time.Now() }
-
 func capturedFailureServer(t *testing.T, acceptedThrough uint64) (*support.FunctionalAPIServer, *functionalWorkerGate, *capturedFaultStore) {
 	t.Helper()
-	local := platformreplay.NewLocal(runtime.GOOS)
-	store, err := processwire.ComposeWorkerRecordingStore(local, local, local, capturedHostClock{}, t.TempDir(), "captured-failure-owner")
-	if err != nil {
-		t.Fatal(err)
-	}
-	fault := &capturedFaultStore{WorkerRecordingStore: store, acceptedThrough: acceptedThrough, failed: make(chan struct{})}
+	fault := &capturedFaultStore{acceptedThrough: acceptedThrough, failed: make(chan struct{})}
 	runner := newFunctionalWorkerGate(make(chan struct{}))
 	dir := support.ScaffoldSingleStepFactory(t, "captured-failure")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
@@ -59,7 +47,7 @@ func capturedFailureServer(t *testing.T, acceptedThrough uint64) (*support.Funct
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Env:   []string{"HOME=" + home, "USERPROFILE=" + home},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: fault, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: fault, WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { fault.WorkerRecordingStore = store }, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
 	})
 	return server, runner, fault
 }
