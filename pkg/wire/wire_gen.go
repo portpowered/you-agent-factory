@@ -437,7 +437,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	workService := provideWorkService(v90, submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer, v107, requestPreparationService, invocationInputPreparation)
 	v110 := wire4.NewOutboxOpening()
 	v111 := wire4.NewEngineOpening(invocationInterpolationService, providersessionsService, quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, workService, requestIDGenerator, factoryIDGenerator, runtimeDirectoryFileSystem, decisionEnvelopeService, v110)
-	v112 := wire4.NewRuntimeFactory(logger, runtimeLoggerFactory, factoryRuntimeLogOwner, factoryRuntimeMetricsOwner, factoryIDGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation, timerSource, v25, v111)
+	v112 := wire4.NewRuntimeFactory(runtimeLoggerFactory, factoryRuntimeLogOwner, factoryRuntimeMetricsOwner, factoryIDGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation, timerSource, v25, v111)
 	v113, err := provideWorkerRecordingWriter(edges2)
 	if err != nil {
 		return nil, err

@@ -41,7 +41,6 @@ type inputFileSystem interface {
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 
 type RuntimeFactory struct {
-	baseLogger               *zap.Logger
 	loggerFactory            factory.RuntimeLoggerFactory
 	runtimeLogs              factory.RuntimeLogOwner
 	runtimeMetrics           factory.RuntimeMetricsOwner
@@ -57,7 +56,6 @@ type RuntimeFactory struct {
 }
 
 func NewRuntimeFactory(
-	baseLogger *zap.Logger,
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogOwner,
 	runtimeMetrics factory.RuntimeMetricsOwner,
@@ -72,7 +70,6 @@ func NewRuntimeFactory(
 	engineOpening *runtime.EngineOpening,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
-		baseLogger:               baseLogger,
 		loggerFactory:            loggerFactory,
 		runtimeLogs:              runtimeLogs,
 		runtimeMetrics:           runtimeMetrics,
@@ -96,6 +93,7 @@ func NewRuntimeFactory(
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func (f *RuntimeFactory) Build(
 	ctx context.Context,
+	baseLogger *zap.Logger,
 	dir string,
 	folderPath string,
 	sessionID string,
@@ -197,7 +195,7 @@ func (f *RuntimeFactory) Build(
 		return nil, err
 	}
 	logger := newSessionLogger(
-		runtimeSessionBaseLogger(f.baseLogger, logSink),
+		runtimeSessionBaseLogger(baseLogger, logSink),
 		sessionID,
 		folderPath,
 		dir,

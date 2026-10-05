@@ -45,7 +45,6 @@ type InputFileSystem interface {
 
 // NewRuntimeFactory constructs a hosted runtime bundle factory.
 func NewRuntimeFactory(
-	baseLogger *zap.Logger,
 	loggerFactory factoryruntime.RuntimeLoggerFactory,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	runtimeMetrics factoryruntime.RuntimeMetricsOwner,
@@ -60,7 +59,6 @@ func NewRuntimeFactory(
 	engineOpening *EngineOpening,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
-		baseLogger,
 		loggerFactory,
 		runtimeLogs,
 		runtimeMetrics,

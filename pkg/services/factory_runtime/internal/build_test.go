@@ -33,6 +33,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T) {
@@ -49,8 +50,10 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 		t.Fatal(err)
 	}
 	peerClock := clockwork.NewFakeClockAt(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+	core, logs := observer.New(zap.InfoLevel)
+	selectedLogger := zap.New(core)
 	peerSpec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, SessionID: "peer", MetricsSessionID: "peer-canonical",
-		RuntimeInstanceID: "peer-runtime", LoadedFactoryCfg: loaded, Clock: peerClock, BaseLogger: zap.NewNop()}
+		RuntimeInstanceID: "peer-runtime", LoadedFactoryCfg: loaded, Clock: peerClock, BaseLogger: selectedLogger.With(zap.String("opening_selection", "peer"))}
 	peerScopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "peer-runtime"}}
 	peer, err := openTestBundle(t.Context(), opening, peerSpec, peerScopes)
 	if err != nil {
@@ -59,6 +62,7 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	t.Cleanup(func() { _ = peer.CloseArtifacts() })
 	clock := clockwork.NewFakeClockAt(peerClock.Now().Add(time.Hour))
 	spec := peerSpec
+	spec.BaseLogger = selectedLogger.With(zap.String("opening_selection", "candidate"))
 	spec.SessionID, spec.MetricsSessionID, spec.RuntimeInstanceID, spec.Clock = "candidate", "candidate-canonical", "candidate-runtime", clock
 	openingErr := errors.New("candidate recording open failed")
 	finalized := 0
@@ -77,6 +81,7 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	}
 	t.Cleanup(func() { _ = candidate.CloseArtifacts() })
 	assertBundleOpeningSelections(t, candidate, peer, captured, spec, peerClock)
+	assertBundleOpeningLogAttribution(t, candidate, peer, logs)
 	if err := candidate.CloseArtifacts(); err != nil {
 		t.Fatal(err)
 	}
@@ -95,6 +100,24 @@ func assertBundleOpeningSelections(t *testing.T, candidate, peer *factoryhost.Bu
 	}
 	if candidate.Factory == peer.Factory || candidate.Net == peer.Net || candidate.EventHistory == peer.EventHistory {
 		t.Fatal("openings shared scoped engine, net or event state")
+	}
+}
+
+// Emitted records prove the opening retained the selected backend and scoped
+// fields after a failed candidate and retry, without replacing the live peer.
+func assertBundleOpeningLogAttribution(t *testing.T, candidate, peer *factoryhost.Bundle, logs *observer.ObservedLogs) {
+	t.Helper()
+	candidate.Logger.Info("selected-opening")
+	peer.Logger.Info("selected-opening")
+	entries := logs.FilterMessage("selected-opening").All()
+	if len(entries) != 2 {
+		t.Fatalf("selected backend entries = %d, want candidate and peer", len(entries))
+	}
+	for index, sessionID := range []string{"candidate", "peer"} {
+		fields := entries[index].ContextMap()
+		if fields["opening_selection"] != sessionID || fields["session_id"] != sessionID {
+			t.Fatalf("opening log %d attribution = %#v, want selected %s scope", index, fields, sessionID)
+		}
 	}
 }
 
@@ -124,7 +147,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 	}
 
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -163,7 +186,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -212,7 +235,7 @@ func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *tes
 	}
 
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, compatibilitySessionID, canonicalSessionID,
+		context.Background(), zap.NewNop(), dir, dir, compatibilitySessionID, canonicalSessionID,
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -259,7 +282,7 @@ func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -305,7 +328,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		func() { events = append(events, "log.close") },
 		func() { events = append(events, "metrics.close") },
 	).Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
@@ -361,7 +384,7 @@ func TestBuild_PreservesOpeningAndCleanupFailures(t *testing.T) {
 				wantErrors = append(wantErrors, openingErr)
 			}
 			bundle, err := testRuntimeFactoryWithOwners(logOwner, metricsOwner).Build(
-				context.Background(), dir, dir, "~default", "", "", interfaces.RuntimeModeBatch,
+				context.Background(), zap.NewNop(), dir, dir, "~default", "", "", interfaces.RuntimeModeBatch,
 				false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
 				factory.RuntimeMetricsStorageConfig{}, loaded, stage, "", clockwork.NewFakeClock(),
 				"recording.json", nil, nil, false, nil, nil, nil, nil, scopes,
@@ -411,7 +434,7 @@ func TestBuild_FailedOpeningRetainsRetryableCleanupWithoutRepeatingReleasedResou
 				testRuntimeMetricsOwnerFunc(func(factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) { return metricsSink, nil }),
 			)
 			bundle, err := owner.Build(
-				context.Background(), dir, dir, "candidate", "", "", interfaces.RuntimeModeBatch,
+				context.Background(), zap.NewNop(), dir, dir, "candidate", "", "", interfaces.RuntimeModeBatch,
 				false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
 				factory.RuntimeMetricsStorageConfig{}, loaded, "candidate-runtime", "", clockwork.NewFakeClock(),
 				"recording.json", nil, nil, false, nil, nil, nil, nil,
@@ -642,7 +665,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	bundle, err := testRuntimeFactoryWithSinks(logDir, metricsDir).Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
@@ -678,7 +701,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 
 	disabledBundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -857,7 +880,7 @@ func testDefinitionMapper() *definitionmapping.Mapper {
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
+		testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		platformclock.Real{}, testDefinitionMapper(),
@@ -883,7 +906,7 @@ func testRuntimeFactoryWithSinkCallbacks(
 
 func testRuntimeFactoryWithOwners(logOwner factory.RuntimeLogOwner, metricsOwner factory.RuntimeMetricsOwner) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		zap.NewNop(), testRuntimeLoggerFactory,
+		testRuntimeLoggerFactory,
 		logOwner, metricsOwner,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),

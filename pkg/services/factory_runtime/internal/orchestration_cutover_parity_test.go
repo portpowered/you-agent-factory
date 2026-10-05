@@ -112,7 +112,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		t.Fatalf("loadedFactoryFixture: %v", err)
 	}
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -166,13 +166,13 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	}
 	workflows := cutoverJavaScriptWorkflows()
 	bundle, err := factoryinternal.NewRuntimeFactory(
-		zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
+		testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows)),
 		platformclock.Real{}, testDefinitionMapper(),
 		runtimeopening.NewEngineOpening(nil, nil, nil, nil, nil, nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
 	).Build(
-		context.Background(), dir, dir, "~default", "",
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,

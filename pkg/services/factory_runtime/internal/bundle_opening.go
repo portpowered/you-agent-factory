@@ -94,6 +94,7 @@ func (opening *BundleOpening) Open(
 	)
 	bundle, err := opening.runtimeFactory.Build(
 		ctx,
+		spec.BaseLogger,
 		spec.Dir,
 		spec.FolderPath,
 		sessionID,
