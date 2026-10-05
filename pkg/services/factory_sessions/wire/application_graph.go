@@ -126,7 +126,6 @@ func NewRoot(
 	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
-	scope ProcessDurableScope,
 ) (*Root, error) {
 	root, err := service.NewRoot(
 		providerSessions,
@@ -140,7 +139,6 @@ func NewRoot(
 		webhooksPorts,
 		workersPorts,
 		operatorSettings,
-		scope,
 	)
 	if err != nil {
 		return nil, err

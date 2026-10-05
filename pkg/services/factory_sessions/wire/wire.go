@@ -7,6 +7,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
@@ -17,11 +18,13 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
@@ -40,7 +43,9 @@ import (
 	sessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewRequestPreparation constructs the private request-normalization
@@ -238,6 +243,7 @@ func NewRuntimeAssembly(
 	recordedHistory RecordedHistory,
 	gatewayStreams *GatewayStreams,
 	host sessionservice.Host,
+	processDurable durableexecution.Service,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
 		registry, state, streams, invoker, control, activation,
@@ -256,6 +262,7 @@ func NewRuntimeAssembly(
 		recordedHistory,
 		gatewayStreams,
 		host,
+		processDurable,
 	)
 	if err != nil {
 		return nil, err
@@ -312,4 +319,51 @@ func NewDurableExecution(
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
 		liveChangeCoordinator,
 	)
+}
+
+// NewProcessDurableExecution constructs the process durable owner before Assembly.
+// The legacy execution factory remains an opening compatibility bridge until T17.
+func NewProcessDurableExecution(
+	resolveHome factorysessions.HomeDirectoryResolver,
+	factory FactorySessionExecutionFactory,
+	providerOverride ProviderOverrideService,
+	clock factoryruntime.Clock,
+	scope ProcessDurableScope,
+	workerService workers.Service,
+) (durableexecution.Service, error) {
+	home, err := resolveHome()
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: resolve home: %w", err)
+	}
+	processDurable, err := factory(
+		home,
+		factorysessions.PersistencePolicyEnabled,
+		providerOverride,
+		clock,
+		nil,
+		factoryruntime.JavaScriptWorkerSettings{},
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
+	}
+	if router, ok := processDurable.(interface {
+		SetPersistenceRouting(func(string) (runtimepersist.Store, error), func() string)
+	}); ok {
+		router.SetPersistenceRouting(nil, scope.CurrentProjectRoot)
+	}
+	if router, ok := processDurable.(interface {
+		SetResumeRuntimeScopeResolver(func(string) (factorysessionexecution.ResumeRuntimeScope, error))
+	}); ok {
+		router.SetResumeRuntimeScopeResolver(scope.ResumeRuntimeScope)
+	}
+	if binder, ok := processDurable.(interface {
+		SetWorkerExecution(interface {
+			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+		}, factoryruntime.ResourceCapacityLeaseAdmission, string, string, providers.Service, *workers.MockWorkersConfig, platformprocess.CommandRunner)
+	}); ok {
+		binder.SetWorkerExecution(workerService, nil, "", "", providerOverride, nil, nil)
+	}
+	return processDurable, nil
 }

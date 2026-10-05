@@ -68,6 +68,7 @@ var servicesSet = wire.NewSet(
 	factorysessionwire.NewScopeControl,
 	factorysessionwire.NewRecordedHistory,
 	factorysessionwire.NewProcessDurableScope,
+	factorysessionwire.NewProcessDurableExecution,
 	factorysessionwire.NewScopeActivation,
 	provideInvocationWorldStateProjector,
 	factorysessionwire.NewStreamObserver,

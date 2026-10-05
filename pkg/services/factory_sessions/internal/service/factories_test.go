@@ -79,7 +79,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.Webhooks,
 		fixture.Workers,
 		fixture.OperatorSettings,
-		nil,
 	)
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -48,6 +49,7 @@ func NewAssembly(
 	recordedHistory legacyservice.RecordedHistory,
 	gatewayStreams *stream.Manager,
 	projectionReader runtimebinding.SessionProjectionOwner,
+	processDurable durableexecution.Service,
 ) (roles.RuntimeAssembly, error) {
 	if activation == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
@@ -91,6 +93,7 @@ func NewAssembly(
 		recordedHistory,
 		gatewayStreams,
 		projectionReader,
+		processDurable,
 	)
 	assembly, ok := assemblyRole.(*legacyservice.Assembly)
 	if !ok || assembly == nil {
@@ -122,15 +125,6 @@ func NewRootFromAssembly(
 	}
 	if root.Assembly != nil && root.Assembly != concrete {
 		return nil, fmt.Errorf("construct Factory Sessions: process root is already bound to another assembly")
-	}
-	if root.factorySessionExecutionFactory != nil {
-		processDurable, err := root.buildProcessDurableExecution()
-		if err != nil {
-			return nil, err
-		}
-		if err := concrete.BindProcessDurable(processDurable); err != nil {
-			return nil, err
-		}
 	}
 	root.Assembly = concrete
 	root.liveChangeCoordinator = liveChangeCoordinator

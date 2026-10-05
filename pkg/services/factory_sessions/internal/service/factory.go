@@ -11,10 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -157,7 +154,6 @@ type OperatorSettingsPorts struct {
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
 // Its Assembly is bound after the other process services have been composed.
 type Root struct {
-	processDurableScope legacyservice.ProcessDurableScope
 	*legacyservice.Assembly
 	startFlights                     singleflight.Group
 	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
@@ -220,7 +216,6 @@ func NewRoot(
 	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
-	scope legacyservice.ProcessDurableScope,
 ) (*Root, error) {
 	if err := validateOwnerPorts(
 		providerSessions,
@@ -239,7 +234,6 @@ func NewRoot(
 	}
 
 	root := &Root{
-		processDurableScope:              scope,
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerService:                    workersPorts.Service,
 		modelService:                     modelsPorts.Service,
@@ -287,44 +281,6 @@ func NewRoot(
 	}
 	root.runtimeRoot = factoryRuntime.RuntimeRoot
 	return root, nil
-}
-
-func (r *Root) buildProcessDurableExecution() (durableexecution.Service, error) {
-	home, err := r.resolveHome()
-	if err != nil {
-		return nil, fmt.Errorf("construct Factory Sessions durable owner: resolve home: %w", err)
-	}
-	processDurable, err := r.factorySessionExecutionFactory(
-		home,
-		factorysessions.PersistencePolicyEnabled,
-		r.providerOverride,
-		r.clock,
-		nil,
-		factoryruntime.JavaScriptWorkerSettings{},
-		nil,
-		nil,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
-	}
-	if router, ok := processDurable.(interface {
-		SetPersistenceRouting(func(string) (runtimepersist.Store, error), func() string)
-	}); ok {
-		router.SetPersistenceRouting(nil, r.processDurableScope.CurrentProjectRoot)
-	}
-	if router, ok := processDurable.(interface {
-		SetResumeRuntimeScopeResolver(func(string) (factorysessionexecution.ResumeRuntimeScope, error))
-	}); ok {
-		router.SetResumeRuntimeScopeResolver(r.processDurableScope.ResumeRuntimeScope)
-	}
-	if binder, ok := processDurable.(interface {
-		SetWorkerExecution(interface {
-			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-		}, factoryruntime.ResourceCapacityLeaseAdmission, string, string, providers.Service, *workers.MockWorkersConfig, platformprocess.CommandRunner)
-	}); ok {
-		binder.SetWorkerExecution(r.workerService, nil, "", "", r.providerOverride, nil, nil)
-	}
-	return processDurable, nil
 }
 
 // validateOwnerPorts checks the fixed owner contracts in declaration order.

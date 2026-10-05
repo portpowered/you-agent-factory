@@ -92,9 +92,10 @@ func NewAssembly(
 	recordedHistory RecordedHistory,
 	gatewayStreams *stream.Manager,
 	projectionReader runtimebinding.SessionProjectionOwner,
+	processDurable durableexecution.Service,
 ) roles.RuntimeAssembly {
 	return &Assembly{
-		SessionGateway:               &Service{},
+		SessionGateway:               &Service{durable: processDurable},
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,

@@ -42,7 +42,7 @@ func (owner *closingDurableOwner) Close() error {
 func TestAssemblyCloseDrainsProcessDurableOwner(t *testing.T) {
 	failure := errors.New("durable shutdown failed")
 	owner := &closingDurableOwner{err: failure}
-	assembly := &Assembly{SessionGateway: &Service{durable: owner}}
+	assembly := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, owner).(*Assembly)
 	if err := assembly.Close(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("Close error = %v, want %v", err, failure)
 	}
@@ -336,7 +336,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}

@@ -5,10 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"io/fs"
@@ -170,7 +177,6 @@ func TestNewRootRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
 	t.Parallel()
 
 	factory, err := NewRoot(
-		nil,
 		nil,
 		nil,
 		nil,
@@ -347,6 +353,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		nil,
 		streams,
 		NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, in.clock, nil, in.newJavaScriptCheckpointStore, zap.NewNop()),
+		nil,
 	)
 }
 
@@ -545,5 +552,123 @@ func TestNewInvocationOwnerRequiresInputReader(t *testing.T) {
 	owner, err := NewInvocationOwner(nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || owner != nil {
 		t.Fatalf("owner=%v error=%v, want missing input reader", owner, err)
+	}
+}
+
+// processDurableFixture observes requests after the owner provider has supplied
+// the selected collaborators; no process graph or external effects are built.
+type processDurableFixture struct {
+	durableexecution.Service
+	projectRoot func() string
+	resumeScope func(string) (execution.ResumeRuntimeScope, error)
+	worker      interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	}
+	provider providers.Service
+}
+
+func (f *processDurableFixture) SetPersistenceRouting(_ func(string) (runtimepersist.Store, error), projectRoot func() string) {
+	f.projectRoot = projectRoot
+}
+func (f *processDurableFixture) SetResumeRuntimeScopeResolver(resolve func(string) (execution.ResumeRuntimeScope, error)) {
+	f.resumeScope = resolve
+}
+func (f *processDurableFixture) SetWorkerExecution(worker interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}, _ factoryruntime.ResourceCapacityLeaseAdmission, _, _ string, provider providers.Service, _ *workers.MockWorkersConfig, _ platformprocess.CommandRunner) {
+	f.worker = worker
+	f.provider = provider
+}
+
+type processDurableScopeFixture struct {
+	project string
+	err     error
+}
+
+func (f *processDurableScopeFixture) CurrentProjectRoot() string { return f.project }
+func (f *processDurableScopeFixture) ResumeRuntimeScope(project string) (execution.ResumeRuntimeScope, error) {
+	if project != f.project {
+		return execution.ResumeRuntimeScope{}, factorysessions.ErrSessionNotFound
+	}
+	return execution.ResumeRuntimeScope{}, f.err
+}
+
+type processDurableWorkerFixture struct {
+	workers.Service
+	err error
+}
+
+func (f processDurableWorkerFixture) Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{}, f.err
+}
+
+type processDurableProviderFixture struct{ providers.Service }
+
+func TestProcessDurableOwnerPreservesSelectedFactsAndErrors(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("selected worker failure")
+	resumeFailure := errors.New("selected resume failure")
+	scope := &processDurableScopeFixture{project: "project-first", err: resumeFailure}
+	clock := &recordingClock{}
+	provider := &processDurableProviderFixture{}
+	owner := &processDurableFixture{}
+	factory := func(home string, policy factorysessions.PersistencePolicy, selected providers.Service, selectedClock factoryruntime.Clock, presets map[string]struct{}, settings factoryruntime.JavaScriptWorkerSettings, mocks *workers.MockWorkersConfig, integrations []operatorsettings.ACPIntegration) (durableexecution.Service, error) {
+		if home != "selected-home" || policy != factorysessions.PersistencePolicyEnabled || selected != provider || presets != nil || mocks != nil || integrations != nil {
+			t.Fatal("process construction changed selected inputs")
+		}
+		selectedClock.Now()
+		return owner, nil
+	}
+	_, err := NewProcessDurableExecution(func() (string, error) { return "selected-home", nil }, factory, provider, clock, scope, processDurableWorkerFixture{err: failure})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clock.calls != 1 {
+		t.Fatalf("construction did not exercise selected clock: calls=%d error=%v", clock.calls, err)
+	}
+	if root := owner.projectRoot(); root != "project-first" {
+		t.Fatalf("project = %q", root)
+	}
+	scope.project = "project-second"
+	if root := owner.projectRoot(); root != "project-second" {
+		t.Fatalf("project resolver captured stale facts: %q", root)
+	}
+	if _, err := owner.resumeScope("project-second"); !errors.Is(err, resumeFailure) {
+		t.Fatalf("resume cause = %v", err)
+	}
+	if _, err := owner.resumeScope("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing project = %v", err)
+	}
+	if _, err := owner.worker.Execute(context.Background(), workers.ExecuteRequest{}); !errors.Is(err, failure) {
+		t.Fatalf("worker cause = %v", err)
+	}
+	if owner.provider != provider {
+		t.Fatal("worker request lost selected provider")
+	}
+}
+
+func TestProcessDurableOwnerPreservesConstructionFailureCauses(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"home", "factory"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			injected := errors.New(stage + " failure")
+			resolve := func() (string, error) {
+				if stage == "home" {
+					return "", injected
+				}
+				return "home", nil
+			}
+			failFactory := func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock, map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig, []operatorsettings.ACPIntegration) (durableexecution.Service, error) {
+				if stage == "home" {
+					t.Fatal("construction continued after home failure")
+				}
+				return nil, injected
+			}
+			result, err := NewProcessDurableExecution(resolve, failFactory, nil, platformclock.Real{}, nil, nil)
+			if result != nil || !errors.Is(err, injected) {
+				t.Fatalf("%s result = %v, error = %v", stage, result, err)
+			}
+		})
 	}
 }
