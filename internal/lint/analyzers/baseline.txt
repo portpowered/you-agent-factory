@@ -3156,7 +3156,6 @@ transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/int
 transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/prompt_stream.go#transport-platform-selection#pkg/platform/logging.EnsureLogger::count=1
 transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-concurrency#make(chan)::count=2
 transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-concurrency#sync.Mutex::count=1
-transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-platform-selection#pkg/platform/logging.EnsureLogger::count=2
 transport-recorded-site|pkg/transports/cli/run|pkg/transports/cli/run/factory_invocation_input.go#transport-lifecycle#context.WithCancel::count=1
 
 # Migrated Petri root references: exact compiler-observed file/symbol counts.
