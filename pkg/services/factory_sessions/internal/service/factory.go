@@ -71,15 +71,14 @@ type FactoryRuntimePorts struct {
 // FactoryDefinitionsPorts contains Factory Definitions-owned opening
 // collaborators.
 type FactoryDefinitionsPorts struct {
-	Validator                     factorydefinitions.Validator
-	NamedPaths                    factorydefinitions.NamedPathResolver
-	Service                       factorydefinitions.Service
-	RuntimeRouter                 *factorysessions.DefinitionRuntimeRouter
-	InitialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory
-	LoadFactory                   factorydefinitions.LoadedFactoryLoader
-	NewLoadedFactory              factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig            factorydefinitions.ReplayRuntimeConfigDecoder
-	CaptureLoadedFactorySnapshot  factorydefinitions.LoadedFactorySnapshotCapturer
+	Validator                    factorydefinitions.Validator
+	NamedPaths                   factorydefinitions.NamedPathResolver
+	Service                      factorydefinitions.Service
+	RuntimeRouter                *factorysessions.DefinitionRuntimeRouter
+	LoadFactory                  factorydefinitions.LoadedFactoryLoader
+	NewLoadedFactory             factorydefinitions.LoadedFactorySourceFactory
+	DecodeReplayConfig           factorydefinitions.ReplayRuntimeConfigDecoder
+	CaptureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer
 }
 
 // FactorySessionsPorts contains Factory Sessions-owned opening collaborators.
@@ -171,8 +170,8 @@ type Root struct {
 	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
-	initialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
 	factoryRuntimeAssembler          FactoryRuntimeAssembler
+	initialActivation                factoryruntime.InitialRuntimeActivationOperation
 	workService                      work.Service
 	providerSessions                 providersessions.Service
 	factoryDefinitionValidator       factorydefinitions.Validator
@@ -216,6 +215,7 @@ func NewRoot(
 	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
+	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 ) (*Root, error) {
 	if err := validateOwnerPorts(
 		providerSessions,
@@ -232,8 +232,12 @@ func NewRoot(
 	); err != nil {
 		return nil, err
 	}
+	if initialActivation == nil {
+		return nil, fmt.Errorf("initial Runtime activation is required")
+	}
 
 	root := &Root{
+		initialActivation:                initialActivation,
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerService:                    workersPorts.Service,
 		modelService:                     modelsPorts.Service,
@@ -249,7 +253,6 @@ func NewRoot(
 		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
-		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
 		factoryRuntimeAssembler:          factoryRuntime.FactoryRuntimeAssembler,
 		workService:                      workPorts.Service,
 		providerSessions:                 providerSessions.Service,
@@ -353,7 +356,6 @@ func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
 		portRequirement{"named path resolver", group.NamedPaths},
 		portRequirement{"service", group.Service},
 		portRequirement{"runtime router", group.RuntimeRouter},
-		portRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
 		portRequirement{"loaded factory loader", group.LoadFactory},
 		portRequirement{"loaded factory source factory", group.NewLoadedFactory},
 		portRequirement{"replay runtime config decoder", group.DecodeReplayConfig},
@@ -480,77 +482,6 @@ func missingPortDependency(value any) bool {
 	default:
 		return false
 	}
-}
-
-func (r *Root) openRuntimeWithOptions(
-	ctx context.Context,
-	definition factorydefinitions.RuntimeSelection,
-	runtime factoryruntime.RuntimeSelection,
-	session *factorysessions.SessionStartRequest,
-	canonicalSessionIDGenerated bool,
-	worker workers.RuntimeSelection,
-	recording recordings.RuntimeSelection,
-	modelCacheDirectory string,
-	operatorDefaults operatorsettings.ResolvedDefaults,
-	logger *zap.Logger,
-	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
-	replayInput *recordings.LoadReplayInputResult,
-) (runtimeProducts, error) {
-	return openRuntime(
-		ctx,
-		definition,
-		runtime,
-		session,
-		canonicalSessionIDGenerated,
-		worker,
-		recording,
-		modelCacheDirectory,
-		operatorDefaults,
-		logger,
-		r.clock,
-		r.providerOverride,
-		r.invocationMetricsRecorder,
-		r.providerCommandRunner,
-		r.scriptCommandRunner,
-		r.submissionRecorder,
-		r.dispatchRecorder,
-		r.durableExecutionFactory,
-		r.workerService,
-		r.modelService,
-		r.automationService,
-		r.factorySessionsRuntimeAssembly,
-		r.factorySessionExecutionFactory,
-		r.recordingsService,
-		r.recordingsRuntime,
-		r.workersMockCommandRunnerFactory,
-		r.factoryDefinitions,
-		r.definitionRuntimeRouter,
-		r.factoryScaffoldInitializer,
-		r.editableFactoryValidator,
-		r.initialFactorySnapshotFactory,
-		r.factoryRuntimeAssembler,
-		r.workService,
-		r.providerSessions,
-		r.factoryDefinitionValidator,
-		r.namedPaths,
-		r.factoryWorkflows,
-		r.workflowPreview,
-		r.loadFactory,
-		r.newLoadedFactory,
-		r.decodeReplayConfig,
-		r.captureLoadedFactorySnapshot,
-		r.webhooksService,
-		r.resolveClock,
-		r.newSessionLogger,
-		r.providerFromCommandRunnerFactory,
-		r.processRuntimeFactory,
-		r.ensureOperatorBackendScope,
-		r.generateRuntimeInstanceID,
-		r.resolveHome,
-		r.providerIdentities,
-		definitionSnapshot,
-		replayInput,
-	)
 }
 
 func (r *Root) openForRequest(

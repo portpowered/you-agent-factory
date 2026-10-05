@@ -18,6 +18,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -150,6 +151,7 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 type testFactoryOption func(*testFactoryConfig)
 
 type testFactoryConfig struct {
+	engineOpening             *EngineOpening
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
@@ -190,25 +192,23 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
 	}
 	workerAttempts, _ := workerSessionsService.(factory.WorkerAttemptOpener)
-	runtime, err := New(
-		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil, nil,
+	opening := cfg.engineOpening
+	if opening == nil {
+		opening = NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil,
+			interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
+				return interfaces.WorkPropagationModeOutputAsPayload
+			}), testRuntimeWorkService{},
+			func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
+			func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening())
+	}
+	runtime, err := opening.Open(
+		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil,
 		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock, platformclock.Real{},
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
-		cfg.restoredWorldState, false, unavailableProviderSessions{},
+		cfg.restoredWorldState, false,
 		nil, nil, cfg.submissionHooks,
 		cfg.dispatchRecorder, cfg.completionRecorder, cfg.petriMutationRecorder,
 		cfg.completionDeliveryPlanner,
-		nil,
-		nil,
-		interfaces.WorkPropagationPolicyFunc(func(
-			*interfaces.FactoryWorkstationConfig,
-		) interfaces.WorkPropagationMode {
-			return interfaces.WorkPropagationModeOutputAsPayload
-		}),
-		testRuntimeWorkService{},
-		func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
-		func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) },
-		platformfilesystem.Local{},
 	)
 	if err != nil {
 		return nil, err

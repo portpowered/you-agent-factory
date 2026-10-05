@@ -10,9 +10,9 @@ import (
 
 // New constructs the parent-private orchestration owner.
 func New(
-	newID factoryruntime.IDGenerator,
+	mapper internalservice.DefinitionMapper,
 	workflows factoryruntime.JavaScriptWorkflowDefinitions,
 	runtime factoryruntime.JavaScriptWorkflowRuntime,
 ) orchestration.Service {
-	return internalservice.New(newID, workflows, runtime)
+	return internalservice.New(mapper, workflows, runtime)
 }

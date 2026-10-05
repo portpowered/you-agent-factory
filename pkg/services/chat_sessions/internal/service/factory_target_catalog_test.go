@@ -27,10 +27,7 @@ func newTestService(t *testing.T, profile operatorsettings.ACPAgentProfile, entr
 		},
 	}
 
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	return service
 }
 

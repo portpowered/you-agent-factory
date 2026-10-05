@@ -203,7 +203,7 @@ func (record sessionRecord) committedControlTurn() (chatsessions.Turn, bool) {
 // now must be non-nil; eventsAppender and eventsReader may be nil for a
 // Store a caller knows will never exercise Sequence or AcknowledgeAttachment
 // (most existing Store tests predate the sequencer and never call either).
-// logger is optional and defaults to a no-op logger when omitted. Every
+// logger must be selected and non-nil; quiet callers pass logging.NoopLogger{}. Every
 // dependency is injected directly here, once, through this one canonical
 // constructor -- general-backend-standards.md §2 forbids a secondary
 // injector such as a post-construction `With<X>` mutator, so callers that do
@@ -212,17 +212,13 @@ func (record sessionRecord) committedControlTurn() (chatsessions.Turn, bool) {
 // because this package also owns the unrelated FactoryTargetCatalog
 // Service's own New constructor (service.go); Go does not allow two
 // same-named top-level functions in one package.
-func NewStore(newID IDGenerator, now Clock, eventsAppender EventsAppender, eventsReader EventsReader, logger ...logging.Logger) *Store {
-	var provided logging.Logger
-	if len(logger) > 0 {
-		provided = logger[0]
-	}
+func NewStore(newID IDGenerator, now Clock, eventsAppender EventsAppender, eventsReader EventsReader, logger logging.Logger) *Store {
 	return &Store{
 		sessions:       make(map[string]sessionRecord),
 		newID:          newID,
 		now:            now,
 		eventsAppender: eventsAppender,
 		eventsReader:   eventsReader,
-		logger:         logging.EnsureLogger(provided),
+		logger:         logger,
 	}
 }

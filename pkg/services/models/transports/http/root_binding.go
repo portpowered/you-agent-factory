@@ -32,7 +32,7 @@ type RootBinding struct {
 }
 
 // NewHandlerFromRoot constructs an HTTP adapter that calls through the supplied
-// Models root. Tests inject a focused fake implementing ModelsRoot without
+// Models root and explicitly selected logger. Tests inject a focused fake implementing ModelsRoot without
 // constructing real catalog assemblers, asset caches, host supervisors, lease
 // managers, inference runtimes, or service-local Wire graphs.
 func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Handler {
@@ -41,9 +41,6 @@ func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Handler {
 	}
 	if binding.Content == nil {
 		binding.Content = noopContentPreparation{}
-	}
-	if logger == nil {
-		logger = zap.NewNop()
 	}
 	var scopes []models.RuntimeScopeRef
 	if !binding.Scope.IsZero() {

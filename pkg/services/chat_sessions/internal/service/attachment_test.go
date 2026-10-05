@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
@@ -15,7 +16,7 @@ import (
 // Attach/Detach calls.
 func newAttachTestSession(t *testing.T) (*Store, chatsessions.Session) {
 	t.Helper()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -170,7 +171,7 @@ func TestStore_Attach_UnknownSessionOrInvalidInputCreatesNoAttachment(t *testing
 	ctx := context.Background()
 
 	t.Run("unknown session", func(t *testing.T) {
-		store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+		store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 		_, err := store.Attach(ctx, chatsessions.AttachRequest{SessionID: "does-not-exist", ConnectionID: "conn-a"})
 		var notFound *chatsessions.NotFoundError
 		if !errors.As(err, &notFound) {
@@ -200,7 +201,7 @@ func TestStore_Attach_UnknownSessionOrInvalidInputCreatesNoAttachment(t *testing
 // unknown SessionID reports *NotFoundError naming Session.
 func TestStore_Detach_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	_, err := store.Detach(ctx, chatsessions.DetachRequest{SessionID: "does-not-exist", AttachmentID: "attachment-1"})
 	var notFound *chatsessions.NotFoundError

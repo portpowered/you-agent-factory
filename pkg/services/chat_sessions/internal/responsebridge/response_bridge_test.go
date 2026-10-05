@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -24,8 +26,11 @@ type bridgeSequencer struct {
 	sequenceErr             error
 	advanceErr              error
 	sequenceSawCancelledCtx bool
+	contextValues           []any
 	didFirst                chan struct{}
 }
+
+type bridgeContextKey struct{}
 
 func (s *bridgeSequencer) Sequence(ctx context.Context, req chatsessions.SequenceRequest) (chatsessions.SequenceResult, error) {
 	s.mu.Lock()
@@ -38,19 +43,24 @@ func (s *bridgeSequencer) Sequence(ctx context.Context, req chatsessions.Sequenc
 		return chatsessions.SequenceResult{}, s.sequenceErr
 	}
 	s.sequences = append(s.sequences, req)
+	s.contextValues = append(s.contextValues, ctx.Value(bridgeContextKey{}))
 	if len(s.sequences) == 1 {
 		close(s.didFirst)
 	}
 	return chatsessions.SequenceResult{ItemID: "chat-item-" + string(rune('0'+len(s.sequences))), AggregateSequence: events.AggregateSequence(len(s.sequences))}, nil
 }
 
-func (s *bridgeSequencer) AdvanceStreamHead(_ context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
+func (s *bridgeSequencer) AdvanceStreamHead(ctx context.Context, req chatsessions.AdvanceStreamHeadRequest) (chatsessions.AdvanceStreamHeadResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if ctx.Err() != nil {
+		return chatsessions.AdvanceStreamHeadResult{}, ctx.Err()
+	}
 	if s.advanceErr != nil {
 		return chatsessions.AdvanceStreamHeadResult{}, s.advanceErr
 	}
 	s.advances = append(s.advances, req)
+	s.contextValues = append(s.contextValues, ctx.Value(bridgeContextKey{}))
 	return chatsessions.AdvanceStreamHeadResult{Session: chatsessions.Session{Version: req.ExpectedVersion + 1}}, nil
 }
 
@@ -171,8 +181,15 @@ func TestServiceRunWithoutBridgeDependenciesDelegatesInvoke(t *testing.T) {
 // retained tail and its sequencing context remains usable after the invoke
 // context has been cancelled.
 func TestServiceRunDrainsTerminalTailWithNonCancelledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), bridgeContextKey{}, "caller-value"))
+	defer cancel()
 	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
 	nextStarted := make(chan struct{})
+	nextFinished := make(chan struct{})
+	drainStarted := make(chan struct{})
+	drainFinished := make(chan struct{})
+	detached := false
 	invokeReturned := make(chan struct{})
 	tail := factorysessions.FactoryResponseEvent{
 		FactorySessionID: "factory-1", EventID: "tail", Sequence: 1,
@@ -181,6 +198,7 @@ func TestServiceRunDrainsTerminalTailWithNonCancelledContext(t *testing.T) {
 	}
 	cursor := &factorysessions.ResponseEventCursor{
 		NextEvents: func(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			defer close(nextFinished)
 			close(nextStarted)
 			<-ctx.Done()
 			return nil, ctx.Err()
@@ -194,13 +212,19 @@ func TestServiceRunDrainsTerminalTailWithNonCancelledContext(t *testing.T) {
 				return nil, nil
 			}
 		},
-		DetachCursor: func() {},
+		DetachCursor: func() { detached = true },
 	}
 
 	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
-	got, err := New(sequencer, bridgeTarget{cursor: cursor}, nil, logging.NoopLogger{}).Run(context.Background(), "chat-1", 4, "factory-1", nil,
+	got, err := New(sequencer, bridgeTarget{cursor: cursor}, nil, logging.NoopLogger{}).Run(ctx, "chat-1", 4, "factory-1", func(liveCtx context.Context) {
+		close(drainStarted)
+		<-liveCtx.Done()
+		close(drainFinished)
+	},
 		func(context.Context) (factorysessions.InvocationResult, error) {
 			<-nextStarted
+			<-drainStarted
+			cancel()
 			close(invokeReturned)
 			return want, nil
 		},
@@ -213,6 +237,16 @@ func TestServiceRunDrainsTerminalTailWithNonCancelledContext(t *testing.T) {
 	}
 	if sequencer.sequenceSawCancelledCtx {
 		t.Fatal("tail Sequence received a cancelled context, want a delivery context that survives invoke completion")
+	}
+	if !detached || !reflect.DeepEqual(sequencer.contextValues, []any{"caller-value", "caller-value"}) {
+		t.Fatalf("cleanup/context values = %t/%v", detached, sequencer.contextValues)
+	}
+	for _, done := range []chan struct{}{nextFinished, drainFinished} {
+		select {
+		case <-done:
+		default:
+			t.Fatal("Run returned before a live consumer finished")
+		}
 	}
 }
 
@@ -586,17 +620,32 @@ type bridgeLogCall struct {
 	kv    []any
 }
 
-type bridgeRecordingLogger struct{ calls []bridgeLogCall }
+type bridgeRecordingLogger struct {
+	mu    sync.Mutex
+	calls []bridgeLogCall
+}
+
+func (l *bridgeRecordingLogger) record(level, msg string, kv []any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, bridgeLogCall{level: level, msg: msg, kv: append([]any(nil), kv...)})
+}
+
+func (l *bridgeRecordingLogger) snapshot() []bridgeLogCall {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]bridgeLogCall(nil), l.calls...)
+}
 
 func (l *bridgeRecordingLogger) Debug(msg string, kv ...any) {
-	l.calls = append(l.calls, bridgeLogCall{level: "debug", msg: msg, kv: append([]any(nil), kv...)})
+	l.record("debug", msg, kv)
 }
 func (l *bridgeRecordingLogger) Info(msg string, kv ...any) {
-	l.calls = append(l.calls, bridgeLogCall{level: "info", msg: msg, kv: append([]any(nil), kv...)})
+	l.record("info", msg, kv)
 }
-func (*bridgeRecordingLogger) Warn(string, ...any)    {}
-func (*bridgeRecordingLogger) Error(string, ...any)   {}
-func (*bridgeRecordingLogger) Verbose(string, ...any) {}
+func (l *bridgeRecordingLogger) Warn(msg string, kv ...any) { l.record("warn", msg, kv) }
+func (*bridgeRecordingLogger) Error(string, ...any)         {}
+func (*bridgeRecordingLogger) Verbose(string, ...any)       {}
 
 func TestServiceRunLogsSafeSuccessfulOutcome(t *testing.T) {
 	logger := &bridgeRecordingLogger{}
@@ -636,6 +685,9 @@ func TestServiceRunLogsSafeSuccessfulOutcome(t *testing.T) {
 	assertBridgeLogValue(t, logger.calls[0], "factory_session_id", "factory-1")
 	assertBridgeLogValue(t, logger.calls[1], "terminal_status", string(factorysessions.InvocationTerminalStatusCompleted))
 	assertBridgeLogValue(t, logger.calls[1], "error_class", "")
+	assertBridgeLogValue(t, logger.calls[1], "op", responseBridgeOperation)
+	assertBridgeLogValue(t, logger.calls[1], "chat_session_id", "chat-1")
+	assertBridgeLogValue(t, logger.calls[1], "factory_session_id", "factory-1")
 }
 
 func TestServiceRunLogsSafeFailedOutcome(t *testing.T) {
@@ -659,13 +711,15 @@ func TestServiceRunLogsSafeFailedOutcome(t *testing.T) {
 	}
 	assertBridgeLogValue(t, logger.calls[1], "terminal_status", string(factorysessions.InvocationTerminalStatusCompleted))
 	assertBridgeLogValue(t, logger.calls[1], "error_class", "response_event_subscription")
-	for _, call := range logger.calls {
-		if call.msg == unsafeSubscriptionError {
-			t.Fatalf("log message leaked unsafe subscription error %q", unsafeSubscriptionError)
-		}
-		for i := 1; i < len(call.kv); i += 2 {
-			if call.kv[i] == unsafeSubscriptionError {
-				t.Fatalf("log fields leaked unsafe subscription error %q: %+v", unsafeSubscriptionError, call)
+	assertBridgeLogPrivacy(t, logger.snapshot(), unsafeSubscriptionError)
+}
+
+func assertBridgeLogPrivacy(t *testing.T, calls []bridgeLogCall, canaries ...string) {
+	t.Helper()
+	for _, call := range calls {
+		for _, canary := range canaries {
+			if strings.Contains(fmt.Sprint(call.msg, call.kv), canary) {
+				t.Fatalf("diagnostic contains private canary %q: %+v", canary, call)
 			}
 		}
 	}
@@ -679,4 +733,53 @@ func assertBridgeLogValue(t *testing.T, call bridgeLogCall, key string, want any
 		}
 	}
 	t.Fatalf("log %+v missing %q=%#v", call, key, want)
+}
+
+func TestServiceRunSharedLoggerKeepsConcurrentScopeAttribution(t *testing.T) {
+	t.Parallel()
+	logger := &bridgeRecordingLogger{}
+	ready := make(chan struct{}, 2)
+	release := make(chan struct{})
+	done := make(chan struct{}, 2)
+	for _, scope := range []string{"one", "two"} {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+			_, err := New(sequencer, bridgeTarget{cursor: closedResponseCursor()}, nil, logger).Run(
+				context.Background(), "chat-"+scope, 1, "factory-"+scope, nil,
+				func(context.Context) (factorysessions.InvocationResult, error) {
+					ready <- struct{}{}
+					<-release
+					return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+				},
+			)
+			if err != nil {
+				t.Errorf("Run %s: %v", scope, err)
+			}
+		}()
+	}
+	<-ready
+	<-ready
+	close(release)
+	<-done
+	<-done
+	calls := logger.snapshot()
+	if len(calls) != 4 {
+		t.Fatalf("diagnostics = %+v, want two starts and outcomes", calls)
+	}
+	for _, scope := range []string{"one", "two"} {
+		levels := map[string]int{}
+		for _, call := range calls {
+			for i := 0; i+1 < len(call.kv); i += 2 {
+				if call.kv[i] == "chat_session_id" && call.kv[i+1] == "chat-"+scope {
+					assertBridgeLogValue(t, call, "factory_session_id", "factory-"+scope)
+					assertBridgeLogValue(t, call, "op", responseBridgeOperation)
+					levels[call.level]++
+				}
+			}
+		}
+		if levels["debug"] != 1 || levels["info"] != 1 {
+			t.Fatalf("scope %s diagnostics = %v", scope, levels)
+		}
+	}
 }

@@ -813,6 +813,51 @@ func TestClockForReplayRejectsMissingOrNilResolver(t *testing.T) {
 	}
 }
 
+func TestClockForReplayRetainsSelectedIdentityWithoutFallback(t *testing.T) {
+	t.Parallel()
+	selected := clockwork.NewFakeClock()
+	artifact := &factorydefinitions.ReplayArtifact{}
+	for _, explicit := range []bool{true, false} {
+		t.Run(fmt.Sprintf("explicit=%t", explicit), func(t *testing.T) {
+			t.Parallel()
+			var input factoryruntime.Clock
+			if explicit {
+				input = selected
+			}
+			got, err := clockForReplay(input, artifact,
+				func(received *factorydefinitions.ReplayArtifact) recordings.Clock {
+					if explicit || received != artifact {
+						t.Fatal("replay clock selection bypassed explicit precedence or changed the artifact")
+					}
+					return selected
+				},
+				func(factoryruntime.Clock) factoryruntime.Clock {
+					t.Fatal("selected clock reached the compatibility fallback")
+					return nil
+				})
+			if err != nil || got != selected {
+				t.Fatalf("clock = (%v, %v), want selected identity %v", got, err, selected)
+			}
+		})
+	}
+}
+
+func TestLiveOpeningRetainsInjectedClockWithoutReplayCollaborators(t *testing.T) {
+	t.Parallel()
+	selected := clockwork.NewFakeClock()
+	root := &Root{
+		clock: selected,
+		resolveClock: func(factoryruntime.Clock) factoryruntime.Clock {
+			t.Fatal("live opening attempted fallback clock selection")
+			return nil
+		},
+	}
+	got, err := root.clockForOpening(nil)
+	if err != nil || got != selected {
+		t.Fatalf("live clock = (%v, %v), want injected identity %v", got, err, selected)
+	}
+}
+
 func TestLoadRuntimeRejectsMissingOrNilSessionLoggerFactory(t *testing.T) {
 	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
 	if _, err := LoadRuntime("", "", "", operatorconfig.ResolvedDefaults{}, nil, root, nil, nil, nil, nil, nil, nil); err == nil {

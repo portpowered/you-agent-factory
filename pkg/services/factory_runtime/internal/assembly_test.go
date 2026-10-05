@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	"reflect"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 type stubAssemblyWorkerSessions struct {
@@ -55,35 +57,6 @@ func (opening *assemblyWorldStateOpening) ReconstructCanonicalFactoryWorldState(
 	opening.events = events
 	opening.tick = selectedTick
 	return opening.state, nil
-}
-
-func TestRuntimeOpeningWithFlushOnlySeedsResumeCanonicalEvents(t *testing.T) {
-	resumeEvents := []interfaces.FactoryEvent{{Id: "resume-event"}}
-	for name, events := range map[string][]interfaces.FactoryEvent{
-		"ordinary replay": nil,
-		"process resume":  resumeEvents,
-	} {
-		t.Run(name, func(t *testing.T) {
-			opening := &assemblyWorldStateOpening{}
-			wrapped := runtimeScopeWithFlush{
-				RuntimeScopeService:   opening,
-				flushInterval:         time.Second,
-				resumeCanonicalEvents: events,
-			}
-			if _, err := wrapped.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{}); err != nil {
-				t.Fatalf("OpenRuntime: %v", err)
-			}
-			if opening.request.FlushInterval != time.Second {
-				t.Fatalf("flush interval = %v, want 1s", opening.request.FlushInterval)
-			}
-			if len(opening.request.ReplayEvents) != len(events) {
-				t.Fatalf("seeded replay events = %d, want %d", len(opening.request.ReplayEvents), len(events))
-			}
-			if len(events) > 0 && opening.request.ReplayEvents[0].Id != events[0].Id {
-				t.Fatalf("seeded event ID = %q, want %q", opening.request.ReplayEvents[0].Id, events[0].Id)
-			}
-		})
-	}
 }
 
 func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
@@ -299,50 +272,54 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 	}
 }
 
-func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
-		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
+func TestNewBundleOpeningRequiresSelectedResourceOpening(t *testing.T) {
+	opening, err := NewBundleOpening(nil, nil, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "factory runtime resource opening is required") {
+		t.Fatalf("NewBundleOpening(nil) error = %v, want required dependency", err)
 	}
-	if assembly != nil {
-		t.Fatalf("NewAssembly(nil) = %#v, want nil assembly", assembly)
+	if opening != nil {
+		t.Fatalf("NewBundleOpening(nil) = %#v, want nil opening", opening)
 	}
 }
 
-func TestNewAssemblyRequiresWorkerSessionsService(t *testing.T) {
+func TestNewBundleOpeningRequiresWorkerSessionsService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, nil, nil, stubWorkersService{}, nil, nil, nil, nil)
+	opening, err := NewBundleOpening(runtimeFactory.Build, platformclock.Real{}, stubWorkersService{}, nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "worker sessions service is required") {
-		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
+		t.Fatalf("NewBundleOpening(nil worker sessions) error = %v, want required dependency", err)
 	}
-	if assembly != nil {
-		t.Fatalf("NewAssembly(nil factory) = %#v, want nil assembly", assembly)
+	if opening != nil {
+		t.Fatalf("NewBundleOpening(nil worker sessions) = %#v, want nil opening", opening)
 	}
 }
 
-func TestNewAssemblyRequiresWorkersService(t *testing.T) {
+func TestNewBundleOpeningRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
-		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
+	opening, err := NewBundleOpening(runtimeFactory.Build, platformclock.Real{}, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "workers service is required") {
+		t.Fatalf("NewBundleOpening(nil Workers service) error = %v, want required dependency", err)
 	}
-	if assembly != nil {
-		t.Fatalf("NewAssembly(nil Workers service) = %#v, want nil assembly", assembly)
+	if opening != nil {
+		t.Fatalf("NewBundleOpening(nil Workers service) = %#v, want nil opening", opening)
 	}
 }
 
-func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
+func TestNewBundleOpeningRetainsSelectedResourceBehavior(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	workerService := stubWorkersService{}
-	assembly, err := NewAssembly(runtimeFactory, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, workerService, platformclock.Real{}, nil, nil, nil)
+	timers := platformclock.NewDeterministic(time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC), time.Second)
+	opening, err := NewBundleOpening(runtimeFactory.Build, timers, workerService, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("NewAssembly() error = %v", err)
+		t.Fatalf("NewBundleOpening(nil, nil) error = %v", err)
 	}
-	if assembly == nil || assembly.runtimeFactory != runtimeFactory {
-		t.Fatalf("NewAssembly() = %#v, want supplied Runtime Factory", assembly)
+	if opening == nil || opening.runtimeBuild == nil {
+		t.Fatalf("NewBundleOpening(nil, nil) = %#v, want selected resource-opening behavior", opening)
 	}
-	if assembly.workerService != workerService {
-		t.Fatalf("NewAssembly() worker service = %#v, want supplied service", assembly.workerService)
+	if opening.workerAttemptScheduler != timers {
+		t.Fatal("opening substituted the selected worker timer source")
+	}
+	if opening.workerService != workerService {
+		t.Fatalf("NewBundleOpening(nil, nil) worker service = %#v, want supplied service", opening.workerService)
 	}
 }
 
@@ -835,5 +812,241 @@ func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime
 	if err != nil {
 		return nil, err
 	}
-	return NewRoot(orchestrationwire.New(newID, workflows, runtime), host, dispatchplanningwire.New(publisher, canceler))
+	mapper, err := definitionmapping.New(newID)
+	if err != nil {
+		return nil, err
+	}
+	return NewRoot(orchestrationwire.New(mapper, workflows, runtime), host, dispatchplanningwire.New(publisher, canceler))
+}
+
+func TestNewAssemblyRetainsSelectedBundleOpening(t *testing.T) {
+	opening := &BundleOpening{}
+	sidecars := NewSidecarOpening(nil, platformclock.Real{})
+	assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, &assemblyWorldStateOpening{}, nil, nil, nil)
+	if err != nil || assembly.bundleOpening == nil {
+		t.Fatalf("NewAssembly = %#v, %v; want selected opening", assembly, err)
+	}
+	if assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+		t.Fatalf("NewAssembly without recordings = %#v, %v; want required dependency failure", assembly, err)
+	}
+	if assembly, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+		t.Fatalf("NewAssembly without opening = %#v, %v; want required dependency failure", assembly, err)
+	}
+}
+
+func TestInitialRuntimeOpeningOwnsPartialRecordAndRetriesRelease(t *testing.T) {
+	t.Parallel()
+	clock := clockwork.NewFakeClock()
+	cleanup := initialRuntimeCloser(nil, clock)
+	openingErr := errors.New("session result validation failed")
+	finalizeErr := errors.New("recording finalization failed")
+	closeErr := errors.New("artifact release failed")
+	record := &openingRecordCleanupFake{finalizeErr: finalizeErr, closeErr: closeErr}
+	if err := cleanup(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	spec := factoryruntime.SessionBuildSpec{SessionID: "candidate", MetricsSessionID: "canonical",
+		CanonicalSessionIDGenerated: true, ResumeSourceCanonicalSessionID: "predecessor"}
+	opening, err := initialRuntimeOpening(record, spec, nil, clock, openingErr)
+	expected := factoryruntime.RuntimeInitialCompletion{SessionID: "candidate", MetricsSessionID: "canonical",
+		CanonicalSessionIDGenerated: true, ResumeSourceCanonicalSessionID: "predecessor"}
+	if opening.Completion != expected {
+		t.Fatalf("completion = %#v, want detached identities %#v", opening.Completion, expected)
+	}
+	if !errors.Is(err, openingErr) || opening.Activation.Service != nil || opening.Activation.WorkAndEventIngress != nil {
+		t.Fatalf("partial opening = %#v, %v; want original error and cleanup without publication", opening, err)
+	}
+	cleanup = opening.Activation.Close
+	err = errors.Join(openingErr, cleanup(t.Context()))
+	for _, expected := range []error{openingErr, finalizeErr, closeErr} {
+		if !errors.Is(err, expected) {
+			t.Fatalf("opening failure cleanup = %v, missing cause %v", err, expected)
+		}
+	}
+	if !record.finalizedAt.Equal(clock.Now().UTC()) {
+		t.Fatalf("finalized at %v, want selected clock", record.finalizedAt)
+	}
+	if !reflect.DeepEqual(record.events, []string{"finalize", "artifacts"}) {
+		t.Fatalf("failed release order = %v", record.events)
+	}
+	record.finalizeErr, record.closeErr = nil, nil
+	if err := cleanup(t.Context()); err != nil {
+		t.Fatalf("retry Close() = %v", err)
+	}
+	if err := cleanup(t.Context()); err != nil {
+		t.Fatalf("released Close() = %v", err)
+	}
+	if !reflect.DeepEqual(record.events, []string{"finalize", "artifacts", "finalize", "artifacts"}) {
+		t.Fatalf("release events = %v, want one successful retry", record.events)
+	}
+}
+
+type openingRecordCleanupFake struct {
+	factoryruntime.RuntimeRecord
+	events      []string
+	finalizedAt time.Time
+	finalizeErr error
+	closeErr    error
+}
+
+func TestInitialRuntimeOpeningDoesNotRepeatSuccessfulRecordRelease(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name          string
+		finalizeFails bool
+		want          []string
+	}{
+		{name: "finalization", finalizeFails: true, want: []string{"finalize", "artifacts", "finalize"}},
+		{name: "artifacts", want: []string{"finalize", "artifacts", "artifacts"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			closeErr := errors.New("release failed")
+			record := &openingRecordCleanupFake{}
+			if test.finalizeFails {
+				record.finalizeErr = closeErr
+			} else {
+				record.closeErr = closeErr
+			}
+			clock := clockwork.NewFakeClock()
+			cleanup := initialRuntimeCloser(record, clock)
+			if err := cleanup(t.Context()); !errors.Is(err, closeErr) {
+				t.Fatalf("Close() = %v, want %v", err, closeErr)
+			}
+			record.finalizeErr, record.closeErr = nil, nil
+			if err := cleanup(t.Context()); err != nil {
+				t.Fatalf("retry Close() = %v", err)
+			}
+			if !reflect.DeepEqual(record.events, test.want) {
+				t.Fatalf("release events = %v, want %v", record.events, test.want)
+			}
+		})
+	}
+}
+
+func (record *openingRecordCleanupFake) FinalizeRecording(at time.Time) error {
+	record.events = append(record.events, "finalize")
+	record.finalizedAt = at
+	return record.finalizeErr
+}
+
+func (record *openingRecordCleanupFake) CloseArtifacts() error {
+	record.events = append(record.events, "artifacts")
+	return record.closeErr
+}
+
+func TestInitialRuntimeOpeningDeclaresIngressOrRetainsValidationFailureCleanup(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		service factoryruntime.Service
+		valid   bool
+	}{
+		{name: "missing service"},
+		{name: "missing ingress", service: &boundControlRuntimeFake{}},
+		{name: "declared ingress", service: &wideOperationRuntimeFake{}, valid: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			record := &initialPublicationRecord{service: test.service}
+			opening, err := initialRuntimeOpening(record, factoryruntime.SessionBuildSpec{}, nil, clockwork.NewFakeClock(), nil)
+			if (err == nil) != test.valid || record.closes != 0 {
+				t.Fatalf("publication = %v, closes %d; want valid %v without release", err, record.closes, test.valid)
+			}
+			if test.valid {
+				if opening.Activation.Service != test.service {
+					t.Fatal("publication substituted selected service")
+				}
+				if _, err := opening.Activation.WorkAndEventIngress.SubmitWorkRequest(t.Context(), work.WorkRequest{}); err != nil {
+					t.Fatal(err)
+				}
+				if test.service.(*wideOperationRuntimeFake).submitCalls != 1 {
+					t.Fatal("declared ingress did not receive Work")
+				}
+			} else if opening.Activation.Service != nil || opening.Activation.WorkAndEventIngress != nil {
+				t.Fatal("validation failure published a candidate")
+			}
+			for range 2 {
+				if err := opening.Activation.Close(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if record.closes != 1 {
+				t.Fatalf("resource closes = %d, want one release", record.closes)
+			}
+		})
+	}
+}
+
+type initialPublicationRecord struct {
+	factoryruntime.RuntimeRecord
+	service factoryruntime.Service
+	closes  int
+}
+
+func (record *initialPublicationRecord) RuntimeService() factoryruntime.Service {
+	return record.service
+}
+
+func (record *initialPublicationRecord) CloseArtifacts() error {
+	record.closes++
+	return nil
+}
+
+func TestAssemblyObservationProgressPreservesScopedOwnerAndPublicationOrder(t *testing.T) {
+	t.Parallel()
+	for _, withoutRuntimePublisher := range []bool{false, true} {
+		t.Run(map[bool]string{false: "runtime and durable", true: "durable only"}[withoutRuntimePublisher], func(t *testing.T) {
+			t.Parallel()
+			var order []string
+			first := &openingObservationStub{progress: func(fragment workers.ProgressFragment) {
+				order = append(order, "first:"+fragment.Payload)
+			}}
+			second := &openingObservationStub{progress: func(fragment workers.ProgressFragment) {
+				order = append(order, "second:"+fragment.Payload)
+			}}
+			var factory func(string) workers.ProgressPublisher
+			if !withoutRuntimePublisher {
+				factory = func(sessionID string) workers.ProgressPublisher {
+					return func(fragment workers.ProgressFragment) {
+						order = append(order, sessionID+":"+fragment.Payload)
+					}
+				}
+			}
+			logger := zap.NewNop().With(zap.String("selection", "opening"))
+			assembly := &Assembly{progressFactory: func(selected *zap.Logger) func(string) workers.ProgressPublisher {
+				if selected != logger {
+					t.Fatal("progress substituted opening-selected logger")
+				}
+				return factory
+			}}
+			firstPublisher := assembly.sessionProgressPublisher("first-runtime", logger, true, first)
+			secondPublisher := assembly.sessionProgressPublisher("second-runtime", logger, true, second)
+			fragment := workers.ProgressFragment{DispatchID: "dispatch", Payload: "output"}
+			// Creating a peer publisher must not retarget an already-opened session.
+			firstPublisher(fragment)
+			secondPublisher(fragment)
+			// Replay suppresses runtime streams while retaining its durable observation.
+			assembly.sessionProgressPublisher("replay-runtime", logger, false, first)(fragment)
+			want := []string{"first:output", "second:output", "first:output"}
+			if !withoutRuntimePublisher {
+				want = []string{"first-runtime:output", "first:output", "second-runtime:output", "second:output", "first:output"}
+			}
+			if !reflect.DeepEqual(order, want) {
+				t.Fatalf("progress publication = %v, want %v", order, want)
+			}
+		})
+	}
+}
+
+type openingObservationStub struct {
+	progress func(workers.ProgressFragment)
+}
+
+func (*openingObservationStub) RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error {
+	return nil
+}
+
+func (observations *openingObservationStub) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	observations.progress(fragment)
 }

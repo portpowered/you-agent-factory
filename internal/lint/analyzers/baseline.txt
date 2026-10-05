@@ -2194,7 +2194,6 @@ testsleep-deadline-test|pkg/services/worker_sessions/transports/cli|pkg/services
 testsleep-deadline-test|pkg/services/worker_sessions/transports/cli|pkg/services/worker_sessions/transports/cli/stream_test.go::TestStreamMapsPostOpenContextCancellationToInterruptedAndClosesBody::deadline::3
 testsleep-deadline-test|pkg/services/worker_sessions/transports/http|pkg/services/worker_sessions/transports/http/handler_identity_test.go::TestListWorkerSessionsBySessionIDTimeoutDoesNotReturnStaleObservation::deadline::1
 testsleep-deadline-test|pkg/services/worker_sessions/transports/http|pkg/services/worker_sessions/transports/http/handler_identity_test.go::TestListWorkerSessionsBySessionIDTimeoutDoesNotReturnStaleObservation::deadline::2
-testsleep-deadline-test|pkg/services/workers/internal/service_test|pkg/services/workers/internal/service/execute_test.go::TestExecuteCancellationReachesRunnerAndEmitsOneCanceledTerminalObservation::deadline::1
 testsleep-deadline-test|pkg/services/workers/internal/services/runners/testing|pkg/services/workers/internal/services/runners/testing/runner_test.go::TestMockWorkerCommandRunner_GateSignalsArrivalAndWaitsForRelease::deadline::1
 testsleep-deadline-test|pkg/services/workers/internal/services/runners/wire|pkg/services/workers/internal/services/runners/wire/agent_failure_test.go::TestAgentRunnerPreservesCancellationAndDeadlineContext::deadline::1
 testsleep-deadline-test|pkg/services/workers/internal|pkg/services/workers/internal/agent_runner_root_test.go::TestAgentRunnerCancellationThroughServiceComposition::deadline::1

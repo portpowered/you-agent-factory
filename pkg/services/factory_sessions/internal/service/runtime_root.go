@@ -28,9 +28,6 @@ func ResolveRuntimeRoot(
 	if err != nil {
 		return RuntimeRoot{}, err
 	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	if runtimeInstanceID == "" {
 		if generateRuntimeInstanceID == nil {
 			return RuntimeRoot{}, fmt.Errorf("Factory Session runtime instance ID generator is required")

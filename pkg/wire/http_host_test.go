@@ -691,3 +691,33 @@ func TestWorkerSessionControlRouterKeepsUnknownIdentityNotFound(t *testing.T) {
 		t.Fatalf("unknown identity caused %d control calls, want zero", owner.controlCalls)
 	}
 }
+
+func TestDefaultBrowserOpenerNeverLaunchesRealBrowserInTestBinary(t *testing.T) {
+	t.Parallel()
+
+	if !testing.Testing() {
+		t.Fatal("testing.Testing() = false inside a test binary")
+	}
+	// Harness path: process wiring with no BrowserOpener edge and no opt-out.
+	selected := provideBrowserOpenerWith(
+		serviceedges.Edges{},
+		func(string) (string, bool) { return "", false },
+		hostBrowserOpener,
+	)
+	if err := selected(context.Background(), "http://localhost:7437/dashboard/ui"); !errors.Is(err, errBrowserLaunchInTestBinary) {
+		t.Fatalf("default opener error = %v, want %v", err, errBrowserLaunchInTestBinary)
+	}
+	if err := provideBrowserOpener(serviceedges.Edges{})(context.Background(), "http://x"); !errors.Is(err, errBrowserLaunchInTestBinary) {
+		t.Fatalf("provideBrowserOpener default error = %v, want refusal", err)
+	}
+	// Production selection (not a test binary) still yields the real host adapter.
+	if hostBrowserOpenerFor(false, "windows") == nil {
+		t.Fatal("production opener = nil")
+	}
+	// An injected fake still records the open.
+	var opened []string
+	fake := platformbrowser.Opener(func(_ context.Context, u string) error { opened = append(opened, u); return nil })
+	if err := provideBrowserOpener(serviceedges.Edges{BrowserOpener: fake})(context.Background(), "http://dash"); err != nil || len(opened) != 1 {
+		t.Fatalf("fake opener = (%v, %v)", opened, err)
+	}
+}

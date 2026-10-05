@@ -237,5 +237,6 @@ This file is an internal maintainer how-to, not a packaged CLI reference topic.
 Run the focused Markdown check after editing it:
 
 ```sh
-go run ./cmd/markdown-linter docs/internal/howtos/pinned-localai-backend-artifacts.md
+make docs-reference-check
+.cache/docs-markdown-lint/bin/gomarklint --config .gomarklint-docs.json docs/internal/howtos/pinned-localai-backend-artifacts.md
 ```

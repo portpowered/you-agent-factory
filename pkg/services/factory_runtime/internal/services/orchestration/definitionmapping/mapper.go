@@ -11,10 +11,17 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+// Mapping is the reusable definition behavior exposed to construction peers.
+// The result is opaque; runtime state stays behind the orchestration boundary.
+type Mapping interface {
+	Bind(context.Context, *interfaces.FactoryConfig) (orchestration.Binding, error)
+}
 
 // Mapper converts an authored Factory definition into the internal Petri
 // runtime state.
@@ -28,6 +35,15 @@ func New(newID factoryruntime.IDGenerator) (*Mapper, error) {
 		return nil, fmt.Errorf("construct Factory Runtime definition mapper: ID generator is required")
 	}
 	return &Mapper{newID: newID}, nil
+}
+
+// Bind maps one definition into detached state behind an opaque binding.
+func (cm *Mapper) Bind(ctx context.Context, cfg *interfaces.FactoryConfig) (orchestration.Binding, error) {
+	net, err := cm.Map(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return orchestration.NewPetriBinding(net), nil
 }
 
 func (cm *Mapper) Map(ctx context.Context, cfg *interfaces.FactoryConfig) (*state.Net, error) {

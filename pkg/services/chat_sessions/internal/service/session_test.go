@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
@@ -38,7 +39,7 @@ func validCreateRequest() chatsessions.CreateSessionRequest {
 func TestStore_CreateSession_Success(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
-	store := NewStore(sequentialIDs("session"), fixedClock(now), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(now), nil, nil, logging.NoopLogger{})
 
 	result, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -98,7 +99,7 @@ func TestStore_CreateSession_InvalidInputCreatesNoSession(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+			store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 			_, err := store.CreateSession(ctx, tt.mutate(validCreateRequest()))
 			if !errors.Is(err, tt.wantErr) {
@@ -118,7 +119,7 @@ func TestStore_CreateSession_InvalidInputCreatesNoSession(t *testing.T) {
 // Session cannot change what a later GetSession observes.
 func TestStore_CreateSession_ReturnsDetachedValue(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -140,7 +141,7 @@ func TestStore_CreateSession_ReturnsDetachedValue(t *testing.T) {
 // collide on generated session identity.
 func TestStore_CreateSession_UniqueIDs(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	first, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -157,7 +158,7 @@ func TestStore_CreateSession_UniqueIDs(t *testing.T) {
 
 func TestStore_GetSession_UnknownIDIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	_, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: "does-not-exist"})
 	if !errors.Is(err, chatsessions.ErrNotFound) {
@@ -184,8 +185,8 @@ func TestStore_GetSession_UnknownIDIsTypedNotFound(t *testing.T) {
 // other.
 func TestStore_InstancesShareNoState(t *testing.T) {
 	ctx := context.Background()
-	first := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
-	second := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	first := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
+	second := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	created, err := first.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -207,7 +208,7 @@ func TestStore_InstancesShareNoState(t *testing.T) {
 // succeeds for every one with no cross-session interference.
 func TestStore_CreateSession_ConcurrentDifferentSessionsAreIndependent(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	const n = 25
 	var wg sync.WaitGroup
@@ -489,7 +490,7 @@ func TestStore_AdvanceStreamHead_NeverMovesBackward(t *testing.T) {
 // session reports *NotFoundError.
 func TestStore_AdvanceStreamHead_UnknownSessionReportsNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	_, err := store.AdvanceStreamHead(ctx, advanceStreamHeadRequest("does-not-exist", 1, 0, 1))
 	if !errors.Is(err, chatsessions.ErrNotFound) {
