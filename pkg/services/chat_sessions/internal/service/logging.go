@@ -41,7 +41,7 @@ func classifyError(err error) string {
 // only operation names, entity identifiers, versions, and error
 // classifications cross this boundary.
 func (s *Store) logStart(op, sessionID string) {
-	if s == nil || s.logger == nil {
+	if s == nil {
 		return
 	}
 	s.logger.Debug("chat_sessions operation start", "op", op, "session_id", sessionID)
@@ -53,7 +53,7 @@ func (s *Store) logStart(op, sessionID string) {
 // extra carries only safe entity identifiers and versions the caller
 // supplies explicitly.
 func (s *Store) logOutcome(op, sessionID string, err error, extra ...any) {
-	if s == nil || s.logger == nil {
+	if s == nil {
 		return
 	}
 	if err != nil {

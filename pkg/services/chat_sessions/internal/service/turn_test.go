@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 )
 
@@ -21,7 +22,7 @@ func startTurnRequestID(id string) chatsessions.RequestIdentity {
 // for StartTurn calls.
 func newStartTurnTestSession(t *testing.T, now time.Time) (*Store, chatsessions.Session) {
 	t.Helper()
-	store := NewStore(sequentialIDs("session"), fixedClock(now), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(now), nil, nil, logging.NoopLogger{})
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -238,7 +239,7 @@ func TestStore_StartTurn_StaleVersionConflictLeavesStateUnchanged(t *testing.T) 
 // an unknown SessionID reports *NotFoundError and creates no turn.
 func TestStore_StartTurn_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	_, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{
 		RequestID:       startTurnRequestID("req-turn-1"),
@@ -290,7 +291,7 @@ func TestStore_StartTurn_GeneratedInvalidTurnLeavesSessionUnchanged(t *testing.T
 		id := ids[0]
 		ids = ids[1:]
 		return id
-	}, fixedClock(time.Now()), nil, nil)
+	}, fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
