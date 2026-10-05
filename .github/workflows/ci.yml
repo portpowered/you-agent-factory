@@ -845,7 +845,7 @@ jobs:
         run: make fmt-check
       - name: Race-check shared lint components
         if: always()
-        run: go test -race ./internal/lint/analyzers ./tools/golangcilintplugin -run 'CompilerMetadata|WireSelection|Plugin' -count=1 -timeout 15m
+        run: go test -race ./internal/lint/analyzers ./tools/golangcilintplugin -run 'CompilerMetadata|WireSelection|Plugin|PackagedFactoryCatalog' -count=1 -timeout 15m
       - name: Build and smoke-test shared lint plugin
         run: |
           make golangci-build

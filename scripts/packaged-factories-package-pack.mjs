@@ -384,11 +384,11 @@ export async function packAndVerify({
 	};
 }
 
-export function runCatalogDriftCheck(repositoryRoot) {
+export function runCatalogDriftCheck(repositoryRoot, launch = spawn) {
 	return new Promise((resolvePromise, rejectPromise) => {
-		const child = spawn(
-			"go",
-			["run", "./cmd/packagedfactorycatalogcheck", "-root", repositoryRoot],
+		const child = launch(
+			"make",
+			["repository-lint-run"],
 			{
 				cwd: repositoryRoot,
 				shell: process.platform === "win32",

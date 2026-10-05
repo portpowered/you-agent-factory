@@ -1,0 +1,17 @@
+{
+  "id": "example",
+  "name": "example",
+  "orchestrator": {
+    "javascript": {
+      "inlineSource": {
+        "encoding": "utf-8",
+        "inline": "/* @you-factory-meta\n{\"name\":\"@you/example\",\"id\":\"example\",\"version\":1}\n*/\nreturn {};\n"
+      },
+      "metadata": {
+        "name": "@you/example",
+        "version": "1"
+      }
+    },
+    "kind": "JAVASCRIPT"
+  }
+}
