@@ -85,7 +85,7 @@ func TestNew_RejectsNilDocument(t *testing.T) {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}
 
-	service, err := settingswire.NewService(nil, resolutionService, nil, nil, nil, nil, nil, nil, nil)
+	service, err := settingswire.NewService(nil, resolutionService, nil, nil, nil, nil, nil, logging.NoopLogger{}, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(nil, resolution) = (%v, %v), want error", service, err)
 	}
@@ -104,7 +104,7 @@ func TestNew_RejectsNilResolution(t *testing.T) {
 		nil,
 	)
 
-	service, err := settingswire.NewService(documentService, nil, nil, nil, nil, nil, nil, nil, nil)
+	service, err := settingswire.NewService(documentService, nil, nil, nil, nil, nil, nil, logging.NoopLogger{}, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(document, nil) = (%v, %v), want error", service, err)
 	}
@@ -333,6 +333,7 @@ func newFilesystemRoot(t *testing.T, createTemp operatorsettings.CreateTemporary
 	t.Helper()
 
 	return newFilesystemRootWithOptions(t, filesystemRootOptions{
+		logger:                logging.NoopLogger{},
 		files:                 platformfilesystem.Local{},
 		createTemp:            createTemp,
 		decode:                globalconfigmapping.Decode,
