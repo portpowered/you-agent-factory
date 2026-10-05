@@ -2,6 +2,7 @@ package analyzers
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/token"
 	"reflect"
@@ -20,7 +21,7 @@ func TestBaselineGrowthHistoryFailures(t *testing.T) {
 		{name: "unchanged", head: "old|a|b"},
 		{name: "new rule seed", head: "old|a|b\nnew|a|b"},
 		{name: "deletion", head: ""},
-		{name: "growth", head: "old|a|c", want: "old|a|c"},
+		{name: "growth", head: "old|a|b\nold|a|c", want: "old|a|c"},
 		{name: "missing git repository", failedCommand: "rev-parse", want: "rev-parse"},
 		{name: "missing origin", failedCommand: "merge-base", want: "merge-base"},
 		{name: "missing baseline object", failedCommand: "show", want: "read merge-base baseline"},
@@ -159,7 +160,7 @@ func TestMigratedRuleBaselineIsolation(t *testing.T) {
 }
 func TestBaselineGrowthRejectsEstablishedRuleKeys(t *testing.T) {
 	t.Parallel()
-	for _, head := range []string{"old|a|c", "old|a|b\nold|a|c", "new|x|y\nold|a|c"} {
+	for _, head := range []string{"old|a|b\nold|z|b\nold|a|c", "new|x|y\nold|a|b\nold|z|b\nold|a|c"} {
 		if _, err := CompareBaselineGrowth("old|a|b\nold|z|b", head); err == nil {
 			t.Fatalf("accepted %q", head)
 		}
@@ -190,9 +191,9 @@ func TestBaselineGrowthInterfaceMemberReplacement(t *testing.T) {
 		{"extra allowance", base, base + "\n" + prefix + retained + "," + opener, true},
 		{"duplicate member hides growth", base, prefix + opener + "," + opener + "," + retained, true},
 		{"empty member", base, prefix + opener + ",", true},
-		{"multiple member replacements", base, prefix + opener + ",other.go:Other", true},
-		{"other rule stays deletion only", "old|unit|a,b", "old|unit|a,c", true},
-		{"swap cannot offset another violation", base + "\nold|unit|a", prefix + retained + "," + opener + "\nold|unit|b", true},
+		{"multiple member replacements", base, prefix + opener + ",other.go:Other", false},
+		{"other rule replacement", "old|unit|a,b", "old|unit|a,c", false},
+		{"independent rule replacements", base + "\nold|unit|a", prefix + retained + "," + opener + "\nold|unit|b", false},
 		{"ambiguous prior allowance", base + "\n" + prefix + retained + ",other.go:Other", prefix + retained + "," + opener, true},
 		{"allowance deletion", base, "", false},
 	} {
@@ -204,6 +205,38 @@ func TestBaselineGrowthInterfaceMemberReplacement(t *testing.T) {
 			}
 			if err == nil && len(seeds) != 0 {
 				t.Fatalf("replacement seeded new rule IDs: %v", seeds)
+			}
+		})
+	}
+}
+
+func TestBaselineGrowthMultipleKeyReplacements(t *testing.T) {
+	t.Parallel()
+	var base, replacement []string
+	for i := range 22 {
+		base = append(base, fmt.Sprintf("petri-public|old|Member%02d|Type", i))
+		replacement = append(replacement, fmt.Sprintf("petri-public|new|Member%02d|Type", i))
+	}
+	const extra = "petri-public|z|Extra|Type"
+	for _, tc := range []struct {
+		name string
+		head []string
+		want string
+	}{
+		{"22 replacements", replacement, ""},
+		{"22 replacements and net growth", append(append([]string{}, replacement...), extra), extra},
+		{"pure addition", append(append([]string{}, base...), extra), extra},
+		{"different rule cannot offset growth", append(append([]string{}, replacement...), "other|unit|Retained", "other|unit|Extra"), "other|unit|Extra"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			seeds, err := CompareBaselineGrowth(strings.Join(append(append([]string{}, base...), "other|unit|Retained"), "\n"), strings.Join(tc.head, "\n"))
+			if tc.want == "" {
+				if err != nil || len(seeds) != 0 {
+					t.Fatalf("seeds=%v err=%v", seeds, err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err=%v, want added key %q", err, tc.want)
 			}
 		})
 	}
