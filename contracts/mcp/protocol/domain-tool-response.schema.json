@@ -32,6 +32,10 @@
         "details": {
           "type": "object",
           "additionalProperties": true
+        },
+        "workerSessionId": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

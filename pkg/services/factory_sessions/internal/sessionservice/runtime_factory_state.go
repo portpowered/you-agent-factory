@@ -189,22 +189,11 @@ func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.Observation
 // WorkerSessionsObservationForSession forwards the effective public Factory
 // Session identity through the replaceable runtime read projection.
 func (fs *SessionRuntime) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
-	var runtime factory.Service
-	if fs != nil && fs.sessionState != nil {
-		if instance, err := runtimebinding.BundleForSession(fs.sessionState, factorySessionID); err == nil && instance != nil {
-			runtime = instance.RuntimeService()
-		}
+	reader := sessionLifecycleReader{}
+	if fs != nil {
+		reader.state, reader.active = fs.sessionState, &fs.runtimeState
 	}
-	if runtime == nil {
-		runtime = fs.currentRuntimeService()
-	}
-	provider, _ := runtime.(interface {
-		WorkerSessionsObservationForSession(string) workersessions.ObservationService
-	})
-	if provider == nil {
-		return nil
-	}
-	return provider.WorkerSessionsObservationForSession(factorySessionID)
+	return reader.WorkerSessionsObservationForSession(factorySessionID)
 }
 
 func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {

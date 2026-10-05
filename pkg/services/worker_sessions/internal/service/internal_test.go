@@ -5203,8 +5203,8 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 func assertListPreservesBaseFactsWithoutProviderProjection(t *testing.T, registry *registry) {
 	t.Helper()
 	result, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{})
-	if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("ListWorkerSessionObservations(provider reference without projector) error = %v, want optional projection error", err)
+	if err != nil {
+		t.Fatalf("ListWorkerSessionObservations(provider reference without projector) error = %v, want metadata-only success", err)
 	}
 	if len(result.Observations) != 1 || result.Observations[0].WorkerSessionID != "worker-1" {
 		t.Fatalf("ListWorkerSessionObservations(provider reference without projector) = %#v, %v, want preserved base observation", result, err)

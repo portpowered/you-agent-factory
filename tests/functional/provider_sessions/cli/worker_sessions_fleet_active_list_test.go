@@ -101,7 +101,7 @@ func (a activeFleetFixture) assertPages(t *testing.T, ctx context.Context) {
 				t.Fatalf("active HTTP status=%d body=%s", httpPage.status, httpPage.raw)
 			}
 			for _, row := range httpPage.list.Sessions {
-				assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
+				assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "UNAVAILABLE")
 			}
 			assertActiveFleetPageParity(t, []byte(inputs.Stdout()), httpPage.raw)
 			wantCount := 2 - page
@@ -109,7 +109,7 @@ func (a activeFleetFixture) assertPages(t *testing.T, ctx context.Context) {
 				t.Fatalf("active page %d = %#v, want %d rows bounded by 2", page, cli, wantCount)
 			}
 			for _, row := range cli.Sessions {
-				assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
+				assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "UNAVAILABLE")
 				order = append(order, row.WorkerSessionID)
 			}
 			token = cli.PaginationContext.NextToken
@@ -217,6 +217,25 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 			assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "UNAVAILABLE")
 		}
 		assertActiveFleetPageParity(t, []byte(inputs.Stdout()), httpPage.raw)
+	}
+	f.providerFiles.mu.Lock()
+	listBlockedCalls := f.providerFiles.blockedCalls
+	f.providerFiles.mu.Unlock()
+	if listBlockedCalls != 0 {
+		t.Fatalf("fleet attempted denied native storage %d times", listBlockedCalls)
+	}
+	// Selected show retains its native read, even when that read is denied.
+	var selected workerSessionJSON
+	for workID, name := range works {
+		if name != "worker-session-fleet-alpha" {
+			continue
+		}
+		inputs := executeCLI(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL,
+			"worker-sessions", "show", "--session", sessions[workID], "--worker-session-id", expectedIDs[workID], "--output", "json")
+		decodeCLIJSON(t, inputs, &selected)
+		if selected.WorkerSessionID != expectedIDs[workID] || selected.FactorySessionID == nil || *selected.FactorySessionID != sessions[workID] || selected.State != "RUNNING" || selected.Transcript != "UNAVAILABLE" || selected.TokenUsage != nil || !selected.ProviderSessionAvailable || !containsString(selected.WorkIDs, workID) {
+			t.Fatalf("denied selected show lost captured identity: %#v", selected)
+		}
 	}
 	// The available terminal sibling uses a different path and keeps all usage
 	// and transcript facts while the active row's provider file is unavailable.

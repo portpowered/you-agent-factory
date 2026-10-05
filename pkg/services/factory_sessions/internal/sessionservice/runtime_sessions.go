@@ -231,17 +231,6 @@ func (fs *SessionRuntime) StartBackgroundSessionWithMetadata(
 	return err
 }
 
-func (fs *SessionRuntime) stopFactorySession(sessionID string) error {
-	if fs == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	err := runtimebinding.StopSession(fs.sessionState, &fs.runtimeState, sessionID, fs.StopLiveRuntime)
-	if err == nil && fs.releaseWorkAdmissionProjection != nil {
-		fs.releaseWorkAdmissionProjection(sessionID)
-	}
-	return err
-}
-
 func (fs *SessionRuntime) runSessionID() string {
 	if fs == nil {
 		return DefaultFactorySessionID

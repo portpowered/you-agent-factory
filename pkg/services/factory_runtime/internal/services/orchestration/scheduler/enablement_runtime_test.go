@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -13,7 +14,7 @@ import (
 )
 
 func TestEnablementEvaluator_SameNameGuardFailsClosedWithoutRegisteredParent(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := sameNameGuardNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: factorytoken.Color{Name: "alpha"}},
@@ -25,7 +26,7 @@ func TestEnablementEvaluator_SameNameGuardFailsClosedWithoutRegisteredParent(t *
 }
 
 func TestEnablementEvaluator_SameNameGuardDeduplicatesRegisteredParentCandidates(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := sameNameGuardNet()
 	parentA := &factorytoken.Token{ID: "a-parent", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha", WorkID: "project-work"}}
 	parentB := &factorytoken.Token{ID: "b-parent", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha", WorkID: "project-work"}}
@@ -49,7 +50,7 @@ func TestEnablementEvaluator_SameNameGuardDeduplicatesRegisteredParentCandidates
 }
 
 func TestEnablementEvaluator_SameNameGuardUsesOrderedCurrentParentChild(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := sameNameGuardNet()
 	historical := &factorytoken.Token{
 		ID:      "a-token-history",
@@ -91,7 +92,7 @@ func TestEnablementEvaluator_SameNameGuardUsesOrderedCurrentParentChild(t *testi
 }
 
 func TestEnablementEvaluator_SameNameGuardOnParentUsesOrderedCurrentChild(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"project:waiting":       {ID: "project:waiting"},
@@ -162,7 +163,7 @@ func TestEnablementEvaluator_SameNameGuardOnParentUsesOrderedCurrentChild(t *tes
 }
 
 func TestEnablementEvaluator_SameNameGuardDoesNotFallbackToHistoricalChild(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"project:waiting":       {ID: "project:waiting"},
@@ -240,7 +241,7 @@ func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistratio
 		{name: "contradictory registration", complete: true, contradictory: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			eval := NewEnablementEvaluator(nil, testNow, nil)
+			eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 			n := sameNameGuardNet()
 			transition := n.Transitions["match-items"]
 			transition.InputArcs[0].Guard = &petri.SameNameGuard{MatchBinding: "task"}
@@ -291,7 +292,7 @@ func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistratio
 }
 
 func TestEnablementEvaluator_SameNameGuardIgnoresRetiredRegistrationAfterRework(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := sameNameGuardNet()
 	parent := &factorytoken.Token{ID: "task-token", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "t20", WorkID: "task-work"}}
 	consumed := factorytoken.Token{ID: "review-2", PlaceID: "task:ready", Color: factorytoken.Color{Name: "t20", WorkID: "review-2", ParentID: "task-work"}}
@@ -318,7 +319,7 @@ func TestEnablementEvaluator_SameNameGuardIgnoresRetiredRegistrationAfterRework(
 }
 
 func TestEnablementEvaluator_SameNameParentGuardIgnoresRetiredRegistrationAfterRework(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := sameNameGuardNet()
 	transition := n.Transitions["match-items"]
 	transition.InputArcs[0].Guard = &petri.SameNameGuard{MatchBinding: "task"}
@@ -481,7 +482,7 @@ func TestRepeatedBindingHelpers_FailClosedForUnsupportedInputs(t *testing.T) {
 	if _, _, _, _, ok := repeatedBindingTokensForInput(&petri.Arc{Cardinality: petri.ArcCardinality{Mode: petri.CardinalityAll}}, &marking, 0); ok {
 		t.Fatal("non-single repeated-binding cardinality unexpectedly matched")
 	}
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	if got := eval.ExpandRepeatedBindings(nil, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, nil); got != nil {
 		t.Fatalf("nil topology expansion = %#v, want nil", got)
 	}
@@ -498,7 +499,7 @@ func TestRepeatedBindingHelpers_FailClosedForUnsupportedInputs(t *testing.T) {
 }
 
 func TestEnablementEvaluator_ContextPassedThrough(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -510,7 +511,7 @@ func TestEnablementEvaluator_ContextPassedThrough(t *testing.T) {
 }
 
 func TestEnablementEvaluator_NilSnapshotReturnsNoTransitions(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	if enabled := eval.FindEnabledTransitionsWithSnapshot(
 		context.Background(),
 		&state.Net{Transitions: map[string]*petri.Transition{"unused": {ID: "unused"}}},
@@ -545,7 +546,7 @@ func TestEnablementEvaluator_UsesInjectedClockForCronTimeWindowGuard(t *testing.
 	dueAt := base.Add(2 * time.Minute)
 	expiresAt := base.Add(7 * time.Minute)
 	currentTime := dueAt.Add(-time.Nanosecond)
-	eval := NewEnablementEvaluator(nil, func() time.Time { return currentTime }, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return currentTime }, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{interfaces.SystemTimePendingPlaceID: {ID: interfaces.SystemTimePendingPlaceID}},
@@ -580,7 +581,7 @@ func TestEnablementEvaluator_UsesInjectedClockForCronTimeWindowGuard(t *testing.
 }
 
 func TestEnablementEvaluator_OrdersEnabledTransitionsByID(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{"p-alpha": {ID: "p-alpha"}, "p-beta": {ID: "p-beta"}, "p-zeta": {ID: "p-zeta"}},
@@ -604,7 +605,7 @@ func TestEnablementEvaluator_OrdersEnabledTransitionsByID(t *testing.T) {
 }
 
 func TestEnablementEvaluator_SelectsOrdinaryTokensByStableID(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := &state.Net{
 		Places: map[string]*petri.Place{"p-work": {ID: "p-work"}},
 		Transitions: map[string]*petri.Transition{
@@ -630,7 +631,7 @@ func TestEnablementEvaluator_SelectsOrdinaryTokensByStableID(t *testing.T) {
 }
 
 func TestEnablementEvaluator_SelectsResourceTokensByStableID(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := &state.Net{
 		Places: map[string]*petri.Place{"slot:available": {ID: "slot:available"}},
 		Transitions: map[string]*petri.Transition{
@@ -655,7 +656,7 @@ func TestEnablementEvaluator_SelectsResourceTokensByStableID(t *testing.T) {
 }
 
 func TestEnablementEvaluator_ExpandsRepeatedWorkAndResourceBindingsForSameTransition(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := &state.Net{
 		Places: map[string]*petri.Place{"task:init": {ID: "task:init"}, "executor-slot:available": {ID: "executor-slot:available"}},
 		Transitions: map[string]*petri.Transition{

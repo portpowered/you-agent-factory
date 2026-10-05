@@ -111,7 +111,10 @@ func TestStartInitialFailurePreservesReplacementAndPeerSelection(t *testing.T) {
 				"initial", "/factory", &hostedInstanceFake{}, factorysessions.Target{},
 				interfaces.RuntimeModeService, lifecycle, stop, func(string) { removed = true },
 			)
-			assertInitialStartupRollback(t, phase, run, failed, err, startupErr, removed, &active, peerCtx, sessions, peer, expected, lifecycle)
+			if selected := active.Active(); selected == nil || selected.Context != peerCtx {
+				t.Fatal("startup rollback changed the surviving selection context")
+			}
+			assertInitialStartupRollback(t, phase, run, failed, err, startupErr, removed, &active, sessions, peer, expected, lifecycle)
 
 		})
 	}
@@ -179,18 +182,18 @@ func assertStartupRetryPreservesPeer(t *testing.T, failed *bool, start func() (f
 	if err != nil || run == nil || sessions.Resolve("retry") == nil {
 		t.Fatalf("retry = (%v, %v), want published live run", run, err)
 	}
-	if err := runtimebinding.StopSession(sessions, active, "retry", stop); err != nil {
+	if err := runtimebinding.StopSessionGeneration(sessions, active, sessions.Resolve("retry"), stop); err != nil {
 		t.Fatalf("close retry: %v", err)
 	}
 	if !run.Completed() || sessions.Resolve("retry") != nil || active.Active().SessionID != peer.ID {
 		t.Fatal("retry close did not join and retire only its own run")
 	}
-	if err := runtimebinding.StopSession(sessions, active, peer.ID, stop); err != nil {
+	if err := runtimebinding.StopSessionGeneration(sessions, active, peer, stop); err != nil {
 		t.Fatalf("close peer: %v", err)
 	}
 }
 
-func assertInitialStartupRollback(t *testing.T, phase string, run, failed factory.RuntimeRun, err, startupErr error, removed bool, active *runtimebinding.State, peerCtx context.Context, sessions *sessionruntime.Service, peer, expected *livesession.LiveSession, lifecycle startupReadinessLifecycle) {
+func assertInitialStartupRollback(t *testing.T, phase string, run, failed factory.RuntimeRun, err, startupErr error, removed bool, active *runtimebinding.State, sessions *sessionruntime.Service, peer, expected *livesession.LiveSession, lifecycle startupReadinessLifecycle) {
 	t.Helper()
 	if run != nil || (phase == "closed service with peer" && err != nil) ||
 		(phase != "closed service with peer" && !errors.Is(err, startupErr)) {
@@ -202,14 +205,14 @@ func assertInitialStartupRollback(t *testing.T, phase string, run, failed factor
 	if phase == "replacement during readiness" && removed {
 		t.Fatal("startup rollback invoked replacement removal effects")
 	}
-	assertInitialStartupSurvivors(t, active, peerCtx, sessions, peer, expected, lifecycle)
+	assertInitialStartupSurvivors(t, active, sessions, peer, expected, lifecycle)
 
 }
 
-func assertInitialStartupSurvivors(t *testing.T, active *runtimebinding.State, peerCtx context.Context, sessions *sessionruntime.Service, peer, expected *livesession.LiveSession, lifecycle startupReadinessLifecycle) {
+func assertInitialStartupSurvivors(t *testing.T, active *runtimebinding.State, sessions *sessionruntime.Service, peer, expected *livesession.LiveSession, lifecycle startupReadinessLifecycle) {
 	t.Helper()
 	selected := active.Active()
-	if selected == nil || selected.Context != peerCtx || selected.Handle != runtimebinding.HandleFromSession(expected) {
+	if selected == nil || selected.Handle != runtimebinding.HandleFromSession(expected) {
 		t.Fatalf("survivor selection = %#v", selected)
 	}
 	for _, session := range []*livesession.LiveSession{peer, expected} {
@@ -220,11 +223,11 @@ func assertInitialStartupSurvivors(t *testing.T, active *runtimebinding.State, p
 			t.Fatalf("survivor response stream: %v", err)
 		}
 	}
-	if err := runtimebinding.StopSession(sessions, active, expected.ID, lifecycle.Stop); err != nil {
+	if err := runtimebinding.StopSessionGeneration(sessions, active, expected, lifecycle.Stop); err != nil {
 		t.Fatalf("close surviving selection: %v", err)
 	}
 	if expected != peer {
-		if err := runtimebinding.StopSession(sessions, active, peer.ID, lifecycle.Stop); err != nil {
+		if err := runtimebinding.StopSessionGeneration(sessions, active, peer, lifecycle.Stop); err != nil {
 			t.Fatalf("close surviving peer: %v", err)
 		}
 	}

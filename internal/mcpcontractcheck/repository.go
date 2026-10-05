@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
+	workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
@@ -32,7 +34,12 @@ func Check(repositoryRoot string) ([]Diagnostic, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Validate(inputs), nil
+	diagnostics := Validate(inputs)
+	inventory, err := inventoryDiagnostics(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	return append(diagnostics, inventory...), nil
 }
 
 // LoadInputs projects authored, generated, registry, and alias values into
@@ -61,14 +68,11 @@ func LoadInputs(repositoryRoot string) (Inputs, error) {
 	}
 
 	bindings := mcpfactorysession.ProjectCanonicalToolHandlerBindings()
-	bindingByID := make(map[string]HandlerBinding, len(bindings))
 	for _, binding := range bindings {
-		bindingByID[binding.ToolID] = HandlerBinding(binding)
+		inputs.Registry = append(inputs.Registry, HandlerBinding(binding))
 	}
-	for _, record := range manifest.Tools {
-		if binding, ok := bindingByID[record.ID]; ok {
-			inputs.Registry = append(inputs.Registry, binding)
-		}
+	for _, binding := range workersessionmcp.ProjectCanonicalToolHandlerBindings() {
+		inputs.Registry = append(inputs.Registry, HandlerBinding(binding))
 	}
 	for _, resource := range manifest.Resources {
 		inputs.Resources = append(inputs.Resources, ResourceRecord{ID: resource.ID, URI: resource.URI, Name: resource.Name, Description: resource.Description, MIMEType: resource.MIMEType, Handler: resource.Handler})
@@ -102,6 +106,9 @@ func LoadInputs(repositoryRoot string) (Inputs, error) {
 		return Inputs{}, fmt.Errorf("legacy MCP catalog tools is not an object")
 	}
 	for id, record := range legacyProjection.Tools {
+		if strings.HasPrefix(id, "mcp.tool.you.worker_session.") {
+			continue
+		}
 		raw, ok := legacyTools[id].(map[string]any)
 		if !ok {
 			return Inputs{}, fmt.Errorf("legacy MCP tool %q is not an object", id)

@@ -88,6 +88,23 @@ func (s *JavaScriptRuntimeService) SetWorkerExecution(
 	if s == nil {
 		return
 	}
+	binding := s.newChildWorkerExecutionBinding(execution, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+	s.invokerMu.Lock()
+	s.workerExecution = binding
+	s.invokerMu.Unlock()
+}
+
+func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
+	execution childExecuteService,
+	admission factory.ResourceCapacityLeaseAdmission,
+	runtimeID, generationID string,
+	providerOverride providers.Service,
+	mockWorkers *workers.MockWorkersConfig,
+	commandRunnerOverride platformprocess.CommandRunner,
+) *childWorkerExecutionBinding {
+	if execution == nil {
+		return nil
+	}
 	binding := &childWorkerExecutionBinding{
 		execute:               execution,
 		runtimeID:             strings.TrimSpace(runtimeID),
@@ -131,13 +148,7 @@ func (s *JavaScriptRuntimeService) SetWorkerExecution(
 		}
 		s.PublishWorkerProgress(fragment)
 	}
-	s.invokerMu.Lock()
-	if execution == nil {
-		s.workerExecution = nil
-	} else {
-		s.workerExecution = binding
-	}
-	s.invokerMu.Unlock()
+	return binding
 }
 
 // SetWorkerProgressPublisher attaches the runtime-owned progress bridge to

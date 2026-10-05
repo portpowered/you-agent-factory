@@ -161,14 +161,16 @@ type SessionState struct {
 	// Process and Diagnostics are application lifecycle values owned by this
 	// canonical session record. The process root routes transport commands by
 	// session ID instead of retaining another runtime-opening graph.
-	Process                roles.ProcessRuntime
-	Diagnostics            factoryruntime.RuntimeLogDiagnostics
-	FactoryRuntime         factoryruntime.Service
-	ModelsScope            models.RuntimeScopeRef
-	Logger                 *zap.Logger
-	Reader                 roles.RuntimeReader
-	Projections            recordings.ProjectionService
-	Clock                  factoryruntime.Clock
+	Process        roles.ProcessRuntime
+	Diagnostics    factoryruntime.RuntimeLogDiagnostics
+	FactoryRuntime factoryruntime.Service
+	ModelsScope    models.RuntimeScopeRef
+	Logger         *zap.Logger
+	Reader         roles.RuntimeReader
+	Projections    recordings.ProjectionService
+	Clock          factoryruntime.Clock
+	// ProjectionBackendScope retains the opening override as a keyed fact.
+	ProjectionBackendScope string
 	OperatorSettingsPath   string
 	Recordings             recordings.Service
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning

@@ -55,6 +55,7 @@ func NewSessionRuntime(
 	namedPaths interfaces.NamedPathResolver,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
+	gateway roles.SessionGateway,
 ) *SessionRuntime {
 	if sessionState == nil || clock == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil {
 		return nil
@@ -87,6 +88,7 @@ func NewSessionRuntime(
 		namedPaths:                   namedPaths,
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
+		sessionGateway:               gateway,
 	}
 	host.runtimeState.SetStartup(startupBundle)
 	return host

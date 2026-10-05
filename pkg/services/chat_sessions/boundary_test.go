@@ -8,7 +8,7 @@ package chatsessions_test
 // not-found/busy/stale-version/invalid-transition/unsupported outcomes.
 // Import-boundary evidence (stdlib-only production imports, no ACP/HTTP/
 // CLI/OpenAPI/Factory Sessions/Worker Sessions/persistence dependency) is
-// covered by the repository's existing go run ./cmd/pkgboundarycheck tool
+// covered by the repository's shared compiler analyzers through make golangci
 // rather than a duplicate source-scanning test here.
 
 import (

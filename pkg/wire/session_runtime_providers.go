@@ -44,6 +44,7 @@ import (
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
+	"go.uber.org/zap"
 )
 
 // providerOverrideService keeps an optional edge replacement distinct from
@@ -577,34 +578,21 @@ func provideFactorySessionResponseEventRetentionLimits(
 	return edges.FactorySessionResponseEventRetentionLimits
 }
 
+// provideFactorySessionReconnectValidator preserves Recordings cursor validation.
+func provideFactorySessionReconnectValidator(projections recordings.ProjectionService) factorysessions.ReconnectCursorValidator {
+	return projections.ValidateReconnectReplay
+}
+
 // provideInvocationWorldStateProjector binds the already-injected Recordings projection.
 func provideInvocationWorldStateProjector(projections recordings.ProjectionService) factoryruntime.WorldStateProjector {
 	return projections.ReconstructFactoryWorldState
 }
 
-func provideFactorySessionsAssembly(
-	registry factorysessionwire.SessionRegistry,
-	state *factorysessionwire.SessionState,
-	streams factorysessionwire.StreamManager,
-	invoker factorysessionwire.InvocationService,
-	control factorysessionwire.SessionScopeControl,
-	activation factorysessionwire.SessionScopeActivation,
-	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	eventIDs factorysessions.ResponseEventIDGenerator,
-	sessionIDs factorysessions.SessionIDGenerator,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	directories factorysessionwire.DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
-	initialWorkFiles factorysessionwire.InitialWorkReader,
-	identity factorysessionwire.Identity,
-	responseStreams factorysessionwire.ResponseStreams,
-	clock factoryruntime.Clock,
-	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-	recordedSessionInventory recordings.RecordedSessionInventory,
-) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, invoker, control, activation, func() factoryruntime.JavaScriptCheckpointStore {
+// provideSessionCheckpointStoreFactory supplies session-owned checkpoint state.
+func provideSessionCheckpointStoreFactory() factoryruntime.JavaScriptCheckpointStoreFactory {
+	return func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, eventIDs, sessionIDs, resolveHome, directories, namedPaths, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
+	}
 }
 
 func provideFactorySessionsService(
@@ -770,6 +758,39 @@ func provideFactorySessionExecutionFactory(
 			liveChangeCoordinator,
 		)
 	}
+}
+
+// provideProcessDurableExecution selects the established process child mode
+// from reachable provider effects, then forwards complete owner collaborators.
+func provideProcessDurableExecution(
+	resolveHome factorysessions.HomeDirectoryResolver,
+	stores factorysessionwire.RuntimePersistenceStoreFactory,
+	clock factoryruntime.Clock,
+	syncWaits factorysessionwire.SyncWaitScheduler,
+	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
+	writer recordings.PortableRecordingWriter,
+	sessionIDs factorysessions.SessionIDGenerator,
+	responseIDs factorysessions.ResponseEventIDGenerator,
+	responses factorysessionwire.ResponseStreams,
+	liveChange factorysessionwire.LiveChangeCoordinator,
+	scope factorysessionwire.ProcessDurableScope,
+	workerService workers.Service,
+	providerOverride providerOverrideService,
+	allocator providerswire.PTYAllocator,
+	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
+	logger *zap.Logger,
+) (factorysessionwire.DurableExecutionService, error) {
+	mode := factorysessions.ChildExecutorModeFake
+	if providerOverride != nil || (adaptRunner != nil && allocator != nil) {
+		mode = factorysessions.ChildExecutorModeLive
+	}
+	return factorysessionwire.NewProcessDurableExecution(
+		resolveHome, mode, stores, clock, syncWaits,
+		factoryruntimewire.NewJavaScriptCheckpointSummaries(), workflows, orchestration,
+		writer, sessionIDs, responseIDs, responses, liveChange, scope, workerService,
+		providerOverride, logger,
+	)
 }
 
 func provideFactorySessionSyncWaitScheduler() factorysessionwire.SyncWaitScheduler {

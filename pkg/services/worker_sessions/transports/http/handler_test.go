@@ -614,6 +614,17 @@ func (s workServiceStub) GetWork(_ context.Context, _, workID string) (work.Read
 	return work.ReadModel{WorkID: "known-work"}, nil
 }
 
+func (s workServiceStub) ListWork(_ context.Context, _ string, _ work.ListOptions) (work.ListResult, error) {
+	result := work.ListResult{}
+	for _, model := range s.getResults {
+		result.Results = append(result.Results, model)
+	}
+	if s.getResult.WorkID != "" {
+		result.Results = append(result.Results, s.getResult)
+	}
+	return result, s.getErr
+}
+
 var _ observationService = (*fakeObservationService)(nil)
 var _ work.Service = workServiceStub{}
 

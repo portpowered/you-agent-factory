@@ -212,13 +212,6 @@ var canonicalToolHandlersByID = map[string]canonicalToolBinding{
 	}),
 }
 
-// IsCanonicalToolHandlerRegistered reports whether the live CallTool path
-// registers a handler for one canonical Factory Session tool name.
-func IsCanonicalToolHandlerRegistered(name string) bool {
-	_, ok := ResolveToolHandlerBinding(name)
-	return ok
-}
-
 // ResolveToolHandlerBinding resolves a canonical name through generated catalog
 // identity into the handwritten stable-ID registry.
 func ResolveToolHandlerBinding(name string) (ToolHandlerBinding, bool) {

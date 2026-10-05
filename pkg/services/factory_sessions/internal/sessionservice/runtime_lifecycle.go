@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -42,6 +44,12 @@ func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error
 	if runtime == nil {
 		return errors.New("start runtime: Factory Session runtime is required")
 	}
+	runtime.runtimeMu.Lock()
+	runtime.callerContext = initializer.CancellationOrigin(ctx)
+	if runtime.callerContext == nil {
+		runtime.callerContext = ctx
+	}
+	runtime.runtimeMu.Unlock()
 	runtime.startTime = runtime.clock.Now()
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if !serviceMode {

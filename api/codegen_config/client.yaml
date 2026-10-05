@@ -22,6 +22,11 @@ output-options:
     - saveEditableCurrentFactoryDefinition
     - getFactoryResponseEventsBySessionId
     - getWorkerSessionObservationByWorkerSessionId
+    - listWorkerSessions
+    - streamWorkerSessionEventsByTopLevelWorkerSessionId
+    - cancelWorkerSession
+    - terminateWorkerSession
+    - interruptWorkerSession
     - readWorkerSessionTranscriptByWorkerSessionId
     - streamWorkerSessionEventsByWorkerSessionId
   response-type-suffix: ClientResponse

@@ -1,5 +1,12 @@
 # Repository baselines
 
+> Package-boundary enforcement now runs through `make golangci` and the shared
+> `Construction` and `PackageBoundary` analyzers. The command and R-11 JSON
+> ledger are retired. Exact source/symbol/count debt lives in
+> `internal/lint/analyzers/baseline.txt`. Strict compiler ownership, stale-entry,
+> and merge-base growth checks guard these records. Historical tables below
+> retain their audit identities and do not describe current invocation paths.
+
 > Functional OS enforcement now uses depguard and forbidigo through `make
 > golangci`. The OS spawn baseline and machine eligibility inventory (historical
 > rows R-18/R-19 below) are retired; existing sites use the merge-base ratchet.

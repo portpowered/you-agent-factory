@@ -1,6 +1,8 @@
 package golangcilintplugin
 
 import (
+	"golang.org/x/tools/go/analysis"
+	"strings"
 	"testing"
 
 	"github.com/golangci/plugin-module-register/register"
@@ -27,6 +29,20 @@ func TestPluginConfiguration(t *testing.T) {
 	strictRules, _ := strict.BuildAnalyzers()
 	if len(ordinaryRules) == 0 || len(ordinaryRules) != len(strictRules) {
 		t.Fatal("configuration must retain the same nonempty rule set")
+	}
+	for _, rules := range [][]*analysis.Analyzer{ordinaryRules, strictRules} {
+		var boundary, wire *analysis.Analyzer
+		for _, rule := range rules {
+			if rule.Name == "packageboundary" {
+				boundary = rule
+			}
+			if strings.HasPrefix(rule.Name, "wireselection_") {
+				wire = rule
+			}
+		}
+		if boundary == nil || wire == nil || len(boundary.Requires) != 1 || boundary.Requires[0] != wire {
+			t.Fatal("boundary must consume its own invocation Wire snapshot")
+		}
 	}
 	for i, rule := range strictRules {
 		if rule.Flags.Lookup("check-stale").Value.String() != "true" {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -84,6 +85,19 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	// same-topic reconstruction the delegation's authority-adoption logic
 	// exists to handle.
 	sessionID := openSessionRuntimeReplaceDefaultTargetSession(t, baseURL, dir)
+	// The replacement persists its definition into the selected Factory folder;
+	// the peer owns a separate folder so shared authored files cannot alias it.
+	peerDir := support.ScaffoldFactory(t, sessionRuntimeReplaceFactoryConfig())
+	support.WriteAgentConfig(t, peerDir, "worker-a",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	peerID := openSessionRuntimeReplaceDefaultTargetSession(t, baseURL, peerDir)
+	assertSessionRuntimeReplaceInvocationCompleted(t,
+		postSessionRuntimeReplaceInvocation(t, baseURL, peerID, "peer before replacement"))
+	peerFactory := getSessionRuntimeReplaceCurrentFactory(t, baseURL, peerID)
+	peerBefore := support.GetFactoryResponseEventsAt(t, baseURL, peerID)
+	if len(peerBefore) == 0 {
+		t.Fatal("peer has no response history before replacement")
+	}
 
 	firstInvocation := postSessionRuntimeReplaceInvocation(t, baseURL, sessionID, "first dispatch, before replacement")
 	assertSessionRuntimeReplaceInvocationCompleted(t, firstInvocation)
@@ -103,6 +117,15 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	}
 
 	replaceSessionRuntimeCurrentFactory(t, baseURL, sessionID, "task")
+	if got := getSessionRuntimeReplaceCurrentFactory(t, baseURL, peerID); !reflect.DeepEqual(got, peerFactory) {
+		t.Fatalf("selected replacement changed peer Current Factory: got %#v, want %#v", got, peerFactory)
+	}
+	for _, action := range []string{"pause", "resume"} {
+		control := lifecycleIsolationControl(t, baseURL, sessionID, action)
+		if control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+			t.Fatalf("replacement %s = %#v, want ACCEPTED", action, control)
+		}
+	}
 
 	secondInvocation := postSessionRuntimeReplaceInvocation(t, baseURL, sessionID, "second dispatch, after replacement")
 	assertSessionRuntimeReplaceInvocationCompleted(t, secondInvocation)
@@ -134,6 +157,33 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 				event.EventId,
 				firstMax,
 			)
+		}
+	}
+	assertReplacementResponseCursor(t, baseURL, sessionID, firstMax, secondEvents)
+	assertSessionRuntimeReplaceInvocationCompleted(t,
+		postSessionRuntimeReplaceInvocation(t, baseURL, peerID, "peer after replacement and control"))
+	peerAfter := support.GetFactoryResponseEventsAt(t, baseURL, peerID)
+	if len(peerAfter) <= len(peerBefore) || !reflect.DeepEqual(peerAfter[:len(peerBefore)], peerBefore) {
+		t.Fatal("peer invocation lost retained response history")
+	}
+	assertResponseEventsAscendingSequence(t, peerAfter)
+	assertReplacementResponseCursor(t, baseURL, peerID,
+		peerBefore[len(peerBefore)-1].Sequence, peerAfter[len(peerBefore):])
+}
+
+func assertReplacementResponseCursor(t *testing.T, baseURL, sessionID string, cursor int64, want []factoryapi.FactoryResponseEvent) {
+	t.Helper()
+	stream := support.OpenFactoryResponseEventStreamAt(t,
+		support.SessionResponseEventsURLWithAfterSequence(baseURL, sessionID, cursor))
+	defer stream.Close()
+	if !stream.HasRetainedFrameCount || stream.RetainedFrameCount != len(want) {
+		t.Fatalf("session %s retained suffix count = %d (present=%v), want %d",
+			sessionID, stream.RetainedFrameCount, stream.HasRetainedFrameCount, len(want))
+	}
+	for _, event := range want {
+		frame := stream.NextFrame(30 * time.Second)
+		if frame.Event.Sequence <= cursor || !reflect.DeepEqual(frame.Event, event) {
+			t.Fatalf("session %s resumed event = %#v, want %#v after %d", sessionID, frame.Event, event, cursor)
 		}
 	}
 }

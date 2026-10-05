@@ -29,80 +29,78 @@ type Service struct {
 	results           factoryruntime.SessionResultProjectionOperation
 	responseEvents    responsestreamservice.Service
 	durable           durableexecution.Service
-	recordedHistory   func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+	recordedHistory   RecordedHistory
 	invoker           roles.SessionInvoker
 	activate          func(context.Context, string) error
 	activationGateway factorydefinitions.DefinitionActivationGateway
 }
 
-// bindRecordedSessionHistory connects each runtime gateway to the
-// process-scoped recorded-history read owned by the Factory Sessions assembly.
-// The gateway remains the owner of the opened runtime's durable execution, but
-// history must be read from the process-wide artifact inventory so the HTTP
-// transport sees the same combined session list as the root service.
-func (s *Service) bindRecordedSessionHistory(
-	lister func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error),
-) {
-	if s != nil {
-		s.recordedHistory = lister
-	}
-}
-
 // New constructs a session gateway with explicit host and dataplane dependencies.
-func New(host LegacyHost, responseStreams *responsestream.Registry) *Service {
+func New(host legacyHost, responseStreams *responsestream.Registry) *Service {
 	return NewWithResponseStreams(host, responseStreams)
 }
 
 // NewWithResponseStreams constructs a session gateway around an explicitly
 // injected response-stream registry.
-func NewWithResponseStreams(host LegacyHost, responseStreams *responsestream.Registry) *Service {
+func NewWithResponseStreams(host legacyHost, responseStreams *responsestream.Registry) *Service {
 	return NewWithStreamDependencies(host, host, host, responseStreams)
 }
 
 // NewWithStreamDependencies separates session control-plane callbacks from
 // canonical response-stream lookup and telemetry dependencies.
-func NewWithStreamDependencies(host Host, sessions stream.SessionResolver, observer stream.Observer, responseStreams *responsestream.Registry) *Service {
+func NewWithStreamDependencies(host legacyControlHost, sessions stream.SessionResolver, observer stream.Observer, responseStreams *responsestream.Registry) *Service {
 	return NewWithReconnectValidation(host, sessions, observer, responseStreams, nil, nil)
 }
 
 // NewWithReconnectValidation injects Recordings-owned reconnect validation
 // without exposing its ledger implementation to Factory Sessions.
 func NewWithReconnectValidation(
-	host Host,
+	host legacyControlHost,
 	sessions stream.SessionResolver,
 	observer stream.Observer,
 	responseStreams *responsestream.Registry,
 	reconnects factorysessions.ReconnectCursorValidator,
 	results factoryruntime.SessionResultProjectionOperation,
-) *Service {
-	return NewWithLiveChangeCoordinator(host, sessions, observer, responseStreams, reconnects, results, nil, nil)
-}
-
-// NewWithLiveChangeCoordinator constructs the session gateway with the
-// process-scoped coordinator supplied by Factory Sessions wire. Runtime state,
-// event history, application, clock, and logger remain operation inputs.
-func NewWithLiveChangeCoordinator(
-	host Host,
-	sessions stream.SessionResolver,
-	observer stream.Observer,
-	responseStreams *responsestream.Registry,
-	reconnects factorysessions.ReconnectCursorValidator,
-	results factoryruntime.SessionResultProjectionOperation,
-	responseEvents responsestreamservice.Service,
-	liveChange factorysessioncontracts.LiveChangeCoordinator,
 ) *Service {
 	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
 		return nil
 	}
-	durable := host.DurableExecution()
+	streams := stream.NewManagerWithResponseService(sessions, observer, responseStreams, nil)
+	return NewWithLiveChangeCoordinator(host, streams, reconnects, results, nil, nil, nil, host.DurableExecution(), nil, nil, nil)
+}
+
+// NewWithLiveChangeCoordinator constructs the session gateway with the
+// completed streams, process-scoped coordinator and durable capability supplied
+// directly by its caller. Runtime state, event history, application, clock, and
+// logger remain operation inputs.
+func NewWithLiveChangeCoordinator(
+	host Host,
+	streams *stream.Manager,
+	reconnects factorysessions.ReconnectCursorValidator,
+	results factoryruntime.SessionResultProjectionOperation,
+	responseEvents responsestreamservice.Service,
+	liveChange factorysessioncontracts.LiveChangeCoordinator,
+	history RecordedHistory,
+	durable durableexecution.Service,
+	invoker roles.SessionInvoker,
+	activate func(context.Context, string) error,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
+) *Service {
+	if host == nil || streams == nil {
+		return nil
+	}
 	return &Service{
-		host:           host,
-		liveChange:     liveChange,
-		streams:        stream.NewManagerWithResponseService(sessions, observer, responseStreams, responseEvents),
-		reconnects:     reconnects,
-		results:        results,
-		responseEvents: responseEvents,
-		durable:        durable,
+		host:              host,
+		liveChange:        liveChange,
+		streams:           streams,
+		reconnects:        reconnects,
+		results:           results,
+		responseEvents:    responseEvents,
+		durable:           durable,
+		recordedHistory:   history,
+		invoker:           invoker,
+		activate:          activate,
+		activationGateway: activationGateway,
 	}
 }
 

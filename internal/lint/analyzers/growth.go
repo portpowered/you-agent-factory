@@ -103,8 +103,8 @@ func loadBaselineHistory(readGit func(...string) (string, error), readHead func(
 }
 
 // CompareBaselineGrowth allows the first seed of a rule absent from base.
-// Established rules remain deletion-only except a single count-neutral
-// interface member replacement within the same package's existing allowance.
+// Established rules allow count-neutral key replacements. Interface allowances
+// additionally preserve their package-local member count.
 func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 	if err := compareServiceCycleCeilings(baseText, headText); err != nil {
 		return nil, err
@@ -113,6 +113,12 @@ func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 	rules := map[string]bool{}
 	for key := range base {
 		rules[strings.SplitN(key, "|", 2)[0]] = true
+	}
+	removed := map[string]int{}
+	for key := range base {
+		if _, exists := head[key]; !exists {
+			removed[strings.SplitN(key, "|", 2)[0]]++
+		}
 	}
 	seeded := map[string]bool{}
 	var added []string
@@ -137,6 +143,16 @@ func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 		}
 	}
 	sort.Strings(added)
+	var growth []string
+	for _, key := range added {
+		rule := strings.SplitN(key, "|", 2)[0]
+		if rule != "service-root-interface-count" && removed[rule] > 0 {
+			removed[rule]--
+			continue
+		}
+		growth = append(growth, key)
+	}
+	added = growth
 	if len(added) > 0 {
 		return nil, fmt.Errorf("established baseline rules gained keys; fix the violations instead:\n%s", strings.Join(added, "\n"))
 	}
@@ -156,16 +172,10 @@ func isInterfaceMemberReplacement(key string, base, head map[string]struct{}) bo
 	prefix := parts[0] + "|" + parts[1] + "|"
 	previous, baseCount := interfaceAllowanceMembers(prefix, base)
 	current, headCount := interfaceAllowanceMembers(prefix, head)
-	if baseCount != 1 || headCount != 1 || len(previous) != len(current) {
+	if baseCount != 1 || headCount != 1 || len(current) > len(previous) {
 		return false
 	}
-	removed := 0
-	for member := range previous {
-		if _, exists := current[member]; !exists {
-			removed++
-		}
-	}
-	return removed == 1
+	return true
 }
 
 func interfaceAllowanceMembers(prefix string, entries map[string]struct{}) (map[string]struct{}, int) {
