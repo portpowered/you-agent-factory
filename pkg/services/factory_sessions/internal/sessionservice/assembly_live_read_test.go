@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"path/filepath"
+	"reflect"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -12,11 +14,103 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 type workerSessionsObservationMarker struct{ workersessions.Service }
+
+type recordedInventoryStub struct {
+	result recordings.RecordedSessionInventoryResult
+	err    error
+	root   string
+}
+
+func (s *recordedInventoryStub) ListRecordedSessions(request recordings.RecordedSessionInventoryRequest) (recordings.RecordedSessionInventoryResult, error) {
+	s.root = request.RecordingRoot
+	return s.result, s.err
+}
+
+func TestRecordedHistoryPreservesScopeOrderingAndReadFailure(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	failure := errors.New("selected recording read failed")
+	inventory := &recordedInventoryStub{result: recordings.RecordedSessionInventoryResult{Sessions: []recordings.RecordedSessionSummary{
+		{FactorySessionID: "peer", ArtifactReference: "b", Format: recordings.RecordedSessionFormatV2JSONL},
+		{FactorySessionID: "chosen", ArtifactReference: "z", Format: recordings.RecordedSessionFormatV1JSON},
+		{FactorySessionID: "chosen", ArtifactReference: "a", Format: recordings.RecordedSessionFormatV2JSONL},
+	}}}
+	history := NewRecordedHistory(func() (string, error) { return "selected-home", nil }, inventory)
+	for _, scope := range []factorysessions.SessionListScope{factorysessions.SessionListScopeHistory, factorysessions.SessionListScopeAll} {
+		result, err := history.ListSessions(ctx, factorysessions.ListSessionsRequest{Scope: scope})
+		want := []factorysessions.RecordedSessionListSummary{
+			{SessionID: "chosen", Source: factorysessions.RecordedSessionListSourceHistory, ArtifactReference: "a", Format: "V2_JSONL"},
+			{SessionID: "chosen", Source: factorysessions.RecordedSessionListSourceHistory, ArtifactReference: "z", Format: "V1_JSON"},
+			{SessionID: "peer", Source: factorysessions.RecordedSessionListSourceHistory, ArtifactReference: "b", Format: "V2_JSONL"},
+		}
+		if err != nil || result.Scope != scope || !reflect.DeepEqual(result.RecordedSessions, want) {
+			t.Fatalf("%s history = %#v, %v", scope, result, err)
+		}
+		result.RecordedSessions[0].SessionID = "mutated"
+	}
+	if inventory.root != filepath.Join("selected-home", ".you-agent-factory", "recordings") {
+		t.Fatalf("recording root = %q", inventory.root)
+	}
+	inventory.err = failure
+	for _, request := range []factorysessions.ListSessionsRequest{
+		{}, {Scope: factorysessions.SessionListScopeLive}, {Scope: factorysessions.SessionListScopePersisted},
+		{Scope: factorysessions.SessionListScopeAll, ExcludeRecordedHistory: true},
+	} {
+		result, err := history.ListSessions(ctx, request)
+		if err != nil || len(result.RecordedSessions) != 0 {
+			t.Fatalf("excluded history = %#v, %v", result, err)
+		}
+	}
+	_, err := history.ListSessions(ctx, factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeHistory, ExcludeRecordedHistory: true})
+	if !errors.Is(err, failure) {
+		t.Fatalf("history error = %v, want wrapped inventory cause", err)
+	}
+	inventory.err = nil
+	inventory.result.Sessions = nil
+	result, err := history.ListSessions(ctx, factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeHistory})
+	if err != nil || result.RecordedSessions == nil || len(result.RecordedSessions) != 0 {
+		t.Fatalf("empty inventory = %#v, %v", result, err)
+	}
+	failedHome := NewRecordedHistory(func() (string, error) { return "", failure }, inventory)
+	if _, err := failedHome.ListSessions(ctx, factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll}); !errors.Is(err, failure) {
+		t.Fatalf("home error = %v, want wrapped home cause", err)
+	}
+}
+
+func TestRecordedHistoryPreservesUnavailableInventoryAndHomeErrors(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		home      factorysessions.HomeDirectoryResolver
+		inventory recordings.RecordedSessionInventory
+		scope     factorysessions.SessionListScope
+		wantError string
+	}{
+		{name: "history needs inventory", scope: factorysessions.SessionListScopeHistory, wantError: "recorded session inventory is required"},
+		{name: "all tolerates missing inventory", scope: factorysessions.SessionListScopeAll},
+		{name: "history needs home", inventory: &recordedInventoryStub{}, scope: factorysessions.SessionListScopeHistory, wantError: "recorded session home directory resolver is required"},
+		{name: "history rejects empty home", home: func() (string, error) { return "  ", nil }, inventory: &recordedInventoryStub{}, scope: factorysessions.SessionListScopeHistory, wantError: "resolve recorded session home directory: empty path"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			history := NewRecordedHistory(test.home, test.inventory)
+			result, err := history.ListSessions(context.Background(), factorysessions.ListSessionsRequest{Scope: test.scope})
+			if test.wantError != "" {
+				if err == nil || err.Error() != test.wantError {
+					t.Fatalf("history error = %v, want %q", err, test.wantError)
+				}
+			} else if err != nil || result.Scope != test.scope || len(result.RecordedSessions) != 0 {
+				t.Fatalf("optional history = %#v, %v", result, err)
+			}
+		})
+	}
+}
 
 type syncPreflightGatewayStub struct {
 	roles.SessionGateway

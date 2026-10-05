@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -16,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
@@ -146,14 +144,17 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 	request.Scope = scope
 	result := factorysessions.ListSessionsResult{Scope: scope}
 	if shouldIncludeRecordedHistory(scope, request.ExcludeRecordedHistory) {
-		if scope == factorysessions.SessionListScopeHistory && (a == nil || a.recordedSessionInventory == nil) {
-			return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
+		if a == nil || a.recordedHistory == nil {
+			if scope == factorysessions.SessionListScopeHistory {
+				return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
+			}
+		} else {
+			recorded, err := a.recordedHistory.ListSessions(ctx, request)
+			if err != nil {
+				return factorysessions.ListSessionsResult{}, err
+			}
+			result.RecordedSessions = recorded.RecordedSessions
 		}
-		recorded, err := a.listRecordedSessions()
-		if err != nil {
-			return factorysessions.ListSessionsResult{}, err
-		}
-		result.RecordedSessions = recorded
 	}
 	if scope == factorysessions.SessionListScopeHistory {
 		return result, nil
@@ -207,38 +208,6 @@ func (a *Assembly) listPersistedSessions(ctx context.Context, request factoryses
 func shouldIncludeRecordedHistory(scope factorysessions.SessionListScope, excluded bool) bool {
 	return scope == factorysessions.SessionListScopeHistory ||
 		(scope == factorysessions.SessionListScopeAll && !excluded)
-}
-
-func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionListSummary, error) {
-	if a == nil || a.recordedSessionInventory == nil {
-		return nil, nil
-	}
-	root, err := a.recordingRoot()
-	if err != nil {
-		return nil, err
-	}
-	listed, err := a.recordedSessionInventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{
-		RecordingRoot: root,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list recorded Factory Sessions: %w", err)
-	}
-	result := make([]factorysessions.RecordedSessionListSummary, 0, len(listed.Sessions))
-	for _, session := range listed.Sessions {
-		result = append(result, factorysessions.RecordedSessionListSummary{
-			SessionID:         session.FactorySessionID,
-			Source:            factorysessions.RecordedSessionListSourceHistory,
-			ArtifactReference: session.ArtifactReference,
-			Format:            string(session.Format),
-		})
-	}
-	sort.SliceStable(result, func(left, right int) bool {
-		if result[left].SessionID != result[right].SessionID {
-			return result[left].SessionID < result[right].SessionID
-		}
-		return result[left].ArtifactReference < result[right].ArtifactReference
-	})
-	return result, nil
 }
 
 // ReadDurableFactorySessionEventStream reads and materializes one finite

@@ -191,6 +191,13 @@ func NewStreamManager(state *SessionState, observer StreamObserver, responseRegi
 	return sessionstream.NewManagerWithResponseService(state, observer, responseRegistry, responses)
 }
 
+// RecordedHistory supplies independent recorded-session inventory reads.
+type RecordedHistory = sessionservice.RecordedHistory
+
+func NewRecordedHistory(resolveHome factorysessions.HomeDirectoryResolver, inventory recordings.RecordedSessionInventory) RecordedHistory {
+	return sessionservice.NewRecordedHistory(resolveHome, inventory)
+}
+
 // NewRuntimeAssembly builds the one owner-private Factory Sessions assembly
 // used by peer roots while canonical Wire completes the rest of the process
 // graph. It is an assembly capability, not a second published Service root.
@@ -213,7 +220,7 @@ func NewRuntimeAssembly(
 	responseStreams ResponseStreams,
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-	recordedSessionInventory recordings.RecordedSessionInventory,
+	recordedHistory RecordedHistory,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
 		registry, state, streams, invoker, control, activation,
@@ -229,7 +236,7 @@ func NewRuntimeAssembly(
 		responseStreams,
 		clock,
 		liveChangeCoordinator,
-		recordedSessionInventory,
+		recordedHistory,
 	)
 	if err != nil {
 		return nil, err

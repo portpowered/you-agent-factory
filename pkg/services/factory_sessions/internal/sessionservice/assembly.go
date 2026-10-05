@@ -45,7 +45,7 @@ type Assembly struct {
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
-	recordedSessionInventory     recordings.RecordedSessionInventory
+	recordedHistory              RecordedHistory
 	directoryInspection          roles.DirectoryInspection
 	namedPaths                   factorydefinitions.NamedPathResolver
 	initialWorkFiles             fileeffects.InitialWorkReader
@@ -86,7 +86,7 @@ func NewAssembly(
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-	recordedSessionInventory recordings.RecordedSessionInventory,
+	recordedHistory RecordedHistory,
 ) roles.RuntimeAssembly {
 	return &Assembly{
 		SessionGateway:               &Service{},
@@ -102,7 +102,7 @@ func NewAssembly(
 		eventIDs:                     eventIDs,
 		sessionIDs:                   sessionIDs,
 		resolveHome:                  resolveHome,
-		recordedSessionInventory:     recordedSessionInventory,
+		recordedHistory:              recordedHistory,
 		directoryInspection:          directoryInspection,
 		namedPaths:                   namedPaths,
 		initialWorkFiles:             initialWorkFiles,
@@ -661,21 +661,6 @@ func (a *Assembly) GetFactorySession(ctx context.Context, sessionID string) (fac
 
 func (a *Assembly) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
 	return controlplane.ListLiveFactorySessions(ctx, a)
-}
-
-func (a *Assembly) recordingRoot() (string, error) {
-	if a == nil || a.resolveHome == nil {
-		return "", fmt.Errorf("recorded session home directory resolver is required")
-	}
-	home, err := a.resolveHome()
-	if err != nil {
-		return "", fmt.Errorf("resolve recorded session home directory: %w", err)
-	}
-	home = strings.TrimSpace(home)
-	if home == "" {
-		return "", fmt.Errorf("resolve recorded session home directory: empty path")
-	}
-	return filepath.Join(home, ".you-agent-factory", "recordings"), nil
 }
 
 func (a *Assembly) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
