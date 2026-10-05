@@ -11,11 +11,21 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
+
+func TestInterruptPersistenceErrorIsNotInvalidRequest(t *testing.T) {
+	t.Parallel()
+	cause := errors.Join(recordings.ErrWorkerRecordingPersistence, workersessions.ErrInterruptValidation, errors.New("private-storage-detail"))
+	status, code, message := interruptErrorResponse(cause)
+	if status != http.StatusInternalServerError || code != "INTERNAL_ERROR" || message != "Worker Session interrupt persistence unavailable" {
+		t.Fatalf("persistence mapping=%d %s %s", status, code, message)
+	}
+}
 
 func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T) {
 	total := 17

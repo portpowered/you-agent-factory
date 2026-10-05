@@ -235,6 +235,9 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		"interrupt-ack-source",
 		"interrupt-ack-admission",
 		"interrupt-ack-completion",
+		"interrupt-input-write-failure",
+		"interrupt-input-read-failure",
+		"interrupt-intent-failure",
 	} {
 		if err := appendInvokeContinueInterruptScenario(t, rootDir, &setup.scenarios, &setup.routes, name, stdout); err != nil {
 			return invokeContinueScenarioSetup{}, err

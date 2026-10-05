@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -211,6 +212,8 @@ func interruptResultForError(
 
 func interruptErrorResponse(err error) (int, string, string) {
 	switch {
+	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
+		return http.StatusInternalServerError, "INTERNAL_ERROR", "Worker Session interrupt persistence unavailable"
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
 		errors.Is(err, workersessions.ErrInvalidInterruptMessage),

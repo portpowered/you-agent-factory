@@ -11,10 +11,26 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestInterruptPersistenceErrorPreservesPhaseAndSafeDiagnostic(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []workersessions.InterruptPhase{workersessions.InterruptPhaseValidation, workersessions.InterruptPhaseSourceCancellation, workersessions.InterruptPhaseSuccessorAdmission} {
+		t.Run(string(phase), func(t *testing.T) {
+			t.Parallel()
+			cause := errors.Join(recordings.ErrWorkerRecordingPersistence, workersessions.ErrInterruptValidation, errors.New("private-storage-detail"))
+			mapped := mapInterruptServiceError(&workersessions.InterruptError{Phase: phase, Cause: cause})
+			var typed *CLIError
+			if !errors.As(mapped, &typed) || typed.Code != "INTERNAL_ERROR" || typed.Phase != string(phase) || typed.Message != "Worker Session interrupt persistence unavailable" || !errors.Is(mapped, recordings.ErrWorkerRecordingPersistence) {
+				t.Fatalf("persistence mapping=%#v", mapped)
+			}
+		})
+	}
+}
 
 func TestControlLocalMapsAllActionsAndJSONResult(t *testing.T) {
 	for _, action := range []workersessions.ControlAction{

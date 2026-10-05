@@ -2,6 +2,7 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -15,6 +16,27 @@ import (
 // external store boundary loses only the selected phase acknowledgement.
 type interruptPhaseAckStore struct {
 	recordings.WorkerRecordingStore
+}
+
+func (store *interruptPhaseAckStore) PersistWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
+	if strings.Contains(key.RequestID, "interrupt-input-write-failure") {
+		return "", errors.New("private-input-write-detail")
+	}
+	return store.WorkerRecordingStore.PersistWorkerControlInput(ctx, key, input)
+}
+
+func (store *interruptPhaseAckStore) ReadWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, ref string) (json.RawMessage, error) {
+	if strings.Contains(key.RequestID, "interrupt-input-read-failure") {
+		return nil, errors.New("private-input-read-detail")
+	}
+	return store.WorkerRecordingStore.ReadWorkerControlInput(ctx, key, ref)
+}
+
+func (store *interruptPhaseAckStore) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	if record.Operation.Action == "interrupt" && strings.Contains(record.Operation.RequestID, "interrupt-intent-failure") {
+		return recordings.WorkerControlOperationRecord{}, false, errors.New("private-intent-detail")
+	}
+	return store.WorkerRecordingStore.BeginWorkerControlOperation(ctx, record)
 }
 
 func (store *interruptPhaseAckStore) AdvanceWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
@@ -40,6 +62,7 @@ func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 			defer cancel()
 			scenario := newS8InterruptScenario(t, ctx, name)
+			scenario.ids.interruptRequest = name + "-" + scenario.ids.interruptRequest
 			defer scenario.runner.releaseAll()
 			ids := scenario.ids
 			invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{

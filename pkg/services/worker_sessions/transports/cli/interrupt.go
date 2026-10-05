@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -432,6 +433,8 @@ func mapInterruptServiceError(err error) error {
 		phase = string(typed.Phase)
 	}
 	switch {
+	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
+		return newInterruptCLIError("INTERNAL_ERROR", "Worker Session interrupt persistence unavailable", phase, err)
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
 		errors.Is(err, workersessions.ErrInvalidInterruptMessage),

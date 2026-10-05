@@ -470,6 +470,9 @@ Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
 require secret redaction prevent safe recipe recovery, so interruption refuses
 before stopping; ordinary cancel and terminate remain available.
+An input write, input read, or intent persistence failure also refuses interruption
+before stopping the source. Repeating that request preserves the failure;
+use cancel or terminate to stop the still-running source.
 Durable replay validates the captured replacement input against the original
 request. Older request-only artifacts remain readable for result replay.
 Missing or corrupt captured input, or a stored control

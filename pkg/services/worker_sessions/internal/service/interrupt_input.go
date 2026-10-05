@@ -31,7 +31,7 @@ func encodeInterruptInput(plan interruptPlan) ([]byte, error) {
 	execution := plan.execution.Execution
 	// Explicit overrides have no durable configuration reference with which to
 	// restore their values. Never silently redact them into a different recipe.
-	if len(execution.EnvVars) != 0 || execution.WorkflowContext != nil || interruptPromptNeedsRedaction(execution.PromptRedaction) {
+	if !interruptExecutionReplaySafe(execution) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
 	input := durableInterruptInput{
@@ -53,12 +53,17 @@ func interruptPromptNeedsRedaction(redaction *workers.PromptRedaction) bool {
 	return redaction != nil && (redaction.FailClosed || redaction.RedactSystemPrompt || redaction.RedactUserMessage)
 }
 
+func interruptExecutionReplaySafe(execution workers.WorkstationExecutionRequest) bool {
+	return len(execution.EnvVars) == 0 && execution.WorkflowContext == nil &&
+		!interruptPromptNeedsRedaction(execution.PromptRedaction)
+}
+
 func validInterruptInput(input durableInterruptInput, req workersessions.InterruptRequest, attemptID string) bool {
 	reference := providers.SessionRef{Provider: input.ProviderReference.Provider, Kind: input.ProviderReference.Kind, ID: input.ProviderReference.ID}
 	start := workersessions.StartRequest{RequestID: req.RequestID, ID: req.SourceWorkerSessionID, Execution: input.Execution}
 	return input.Version == 1 && req.Validate() == nil && input.ReplacementMessage == req.ReplacementMessage &&
 		input.Execution.Execution.Dispatch.DispatchID == attemptID && reference.Validate() == nil && start.Validate() == nil &&
-		len(input.Execution.Execution.EnvVars) == 0
+		interruptExecutionReplaySafe(input.Execution.Execution)
 }
 
 // Inspect decoded string values, rather than encoded JSON, so escaping cannot

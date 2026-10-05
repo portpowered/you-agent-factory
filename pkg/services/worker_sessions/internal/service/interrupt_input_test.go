@@ -83,7 +83,7 @@ func assertInterruptInputSchema(t *testing.T, payload []byte) {
 
 func TestInterruptUnsafeRecipeRefusesBeforeSourceCancellation(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"env-override", "sensitive-prompt", "fail-closed", "secret-argument", "escaped-secret-token", "secret-reference", "secret-key", "non-json-token"} {
+	for _, scenario := range []string{"env-override", "workflow-context", "sensitive-prompt", "fail-closed", "secret-argument", "escaped-secret-token", "secret-reference", "secret-key", "non-json-token"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			r, plan, store := newDurableInterruptFixture(t)
@@ -108,6 +108,8 @@ func configureUnsafeInterruptRecipe(plan *interruptPlan, scenario string) {
 	switch scenario {
 	case "env-override":
 		plan.execution.Execution.EnvVars = map[string]string{"CUSTOM_VALUE": "private-recipe-override"}
+	case "workflow-context":
+		plan.execution.Execution.WorkflowContext = &workers.Context{EnvVars: map[string]string{"CUSTOM_VALUE": "private-recipe-override"}}
 	case "sensitive-prompt":
 		plan.execution.Execution.PromptRedaction = &workers.PromptRedaction{RedactSystemPrompt: true}
 	case "fail-closed":
