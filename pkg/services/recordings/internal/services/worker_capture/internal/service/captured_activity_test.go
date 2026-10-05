@@ -145,9 +145,10 @@ func TestFileWriterCapturedPagesPinHeadAndFenceCursors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if continued.Catalog.CommittedPosition != 2 || len(continued.Records) != 1 || continued.Records[0].Record.ID.Position != 2 || continued.NextToken != "" {
+	if continued.Catalog.CommittedPosition != 2 || len(continued.Records) != 1 || continued.Records[0].Record.ID.Position != 2 || continued.NextToken == "" {
 		t.Fatal("continuation advanced beyond the original committed head")
 	}
+	assertCapturedResumeTerminal(t, writer, record.WorkerSessionID, continued.NextToken)
 	other := journalRecord(t, "other-page", "other-worker")
 	if err := writer.PersistWorkerRecord(ctx, other); err != nil {
 		t.Fatal(err)
@@ -168,6 +169,14 @@ func TestFileWriterCapturedPagesPinHeadAndFenceCursors(t *testing.T) {
 	}
 	if _, err := otherProfile.ReadWorkerCapturedActivity(ctx, recordings.WorkerCapturedActivityRequest{WorkerSessionID: record.WorkerSessionID, NextToken: page.NextToken}); !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
 		t.Fatalf("cross-profile token: %v", err)
+	}
+}
+
+func assertCapturedResumeTerminal(t *testing.T, writer *FileWriter, id, token string) {
+	t.Helper()
+	resumed, err := writer.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: id, NextToken: token})
+	if err != nil || resumed.Catalog.CommittedPosition != 3 || len(resumed.Records) != 1 || resumed.Records[0].Record.ID.Position != 3 || resumed.NextToken != "" {
+		t.Fatalf("at-head continuation lost later terminal: %+v error=%v", resumed, err)
 	}
 }
 

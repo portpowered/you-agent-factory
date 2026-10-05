@@ -216,15 +216,22 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 		page.Records = append(page.Records, captured)
 	}
 	page.TokenUsage = capturedUsage(session, cursor.Head)
-	if end < cursor.Head {
-		cursor.After = end
-		data, err := json.Marshal(cursor)
-		if err != nil {
-			return recordings.WorkerCapturedActivityPage{}, err
-		}
-		page.NextToken = base64.RawURLEncoding.EncodeToString(data)
+	page.NextToken, err = cursor.continuation(end, page.Terminal != nil)
+	return page, err
+}
+
+func (cursor activityCursor) continuation(end uint64, terminal bool) (string, error) {
+	// A drained prefix without a captured terminal remains resumable. Interior
+	// page tokens pin their head; an at-head token can observe a later commit.
+	if end == cursor.Head && terminal {
+		return "", nil
 	}
-	return page, nil
+	cursor.After = end
+	data, err := json.Marshal(cursor)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
 }
 
 func (writer *FileWriter) pageCursor(token string, catalog recordings.WorkerSessionCatalogEntry) (activityCursor, error) {
@@ -243,8 +250,11 @@ func (writer *FileWriter) pageCursor(token string, catalog recordings.WorkerSess
 	var cursor activityCursor
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&cursor) != nil || decoder.Decode(new(any)) != io.EOF || cursor.Profile != expected.Profile || cursor.Session != expected.Session || cursor.Generation != expected.Generation || cursor.Head > expected.Head || cursor.Head == 0 || cursor.After >= cursor.Head {
+	if decoder.Decode(&cursor) != nil || decoder.Decode(new(any)) != io.EOF || cursor.Profile != expected.Profile || cursor.Session != expected.Session || cursor.Generation != expected.Generation || cursor.Head > expected.Head || cursor.Head == 0 || cursor.After > cursor.Head {
 		return activityCursor{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	if cursor.After == cursor.Head {
+		cursor.Head = expected.Head
 	}
 	return cursor, nil
 }

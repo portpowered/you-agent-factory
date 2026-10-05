@@ -352,8 +352,10 @@ recorded history independently of execution success.
 
 The default page size is 100 events. Use `--limit` to select 1 through 1000
 events. If the response includes `nextToken`, pass it with `--next-token` to
-read the next page from the same committed head. Start a new read without a
-token to observe activity captured since that head. Tokens belong to one
+read the next page from the same committed head. At the head of an unfinished
+capture, the response includes a resume token. A read with that token returns
+an empty events array until more records commit, then returns the new records.
+Tokens belong to one
 Worker Session, recording generation, and storage profile. The HTTP operation
 is `GET /worker-sessions/{worker_session_id}/logs` with `limit` and `nextToken`.
 Unknown IDs return 404, invalid limits or tokens return 400, and unavailable

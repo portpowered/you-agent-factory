@@ -39,6 +39,7 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	}
 	runner.waitStarted(t)
 	active := assertCapturedLogsCLIHTTPParity(t, server, "captured-worker")
+	resume := assertCapturedActiveHead(t, server, active)
 	shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/captured-worker")
 	if shown.ProviderSession != nil || shown.WorkerSessionId != "captured-worker" {
 		t.Fatalf("active unassociated Worker identity: %+v", shown)
@@ -46,6 +47,7 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	close(gate)
 	runner.waitCompleted(t)
 	ended := waitCapturedTerminal(t, server.URL(), "captured-worker")
+	assertCapturedHeadContinuation(t, server, resume, ended)
 	assertCapturedLogsCLIHTTPParity(t, server, "captured-worker")
 	assertCapturedSummaryUsage(t, server, "captured-worker")
 	if ended.CommittedPosition <= active.CommittedPosition || !ended.Events[0].Event.CapturedAt.Equal(*active.Events[0].Event.CapturedAt) {
@@ -72,6 +74,48 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 type capturedRecordingDirectory string
 
 func (d capturedRecordingDirectory) Getwd() (string, error) { return string(d), nil }
+
+func readCapturedContinuation(t *testing.T, server *support.FunctionalAPIServer, id, token string) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+url.PathEscape(id)+"/logs?nextToken="+url.QueryEscape(token))
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--next-token", token, "--server", server.URL(), "--output", "json"})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI captured continuation: %v %s", err, inputs.Stderr())
+	}
+	var cli factoryapi.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil || !reflect.DeepEqual(page, cli) {
+		t.Fatalf("CLI/HTTP continuation differs: CLI=%+v HTTP=%+v error=%v", cli, page, err)
+	}
+	return page
+}
+
+func assertCapturedActiveHead(t *testing.T, server *support.FunctionalAPIServer, active factoryapi.WorkerSessionLogPage) string {
+	t.Helper()
+	if active.NextToken == nil {
+		t.Fatal("active captured head omitted resume token")
+	}
+	empty := readCapturedContinuation(t, server, active.WorkerSessionId, *active.NextToken)
+	if empty.Events == nil || len(empty.Events) != 0 || empty.CommittedPosition != active.CommittedPosition || empty.NextToken == nil || *empty.NextToken != *active.NextToken || empty.Health != active.Health {
+		t.Fatalf("active at-head read lost empty array, watermark or resume token: %+v", empty)
+	}
+	return *empty.NextToken
+}
+
+func assertCapturedHeadContinuation(t *testing.T, server *support.FunctionalAPIServer, token string, ended factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	continued := readCapturedContinuation(t, server, ended.WorkerSessionId, token)
+	if len(continued.Events) == 0 || continued.CommittedPosition != ended.CommittedPosition || continued.NextToken != nil {
+		t.Fatalf("resume did not reach the captured terminal: %+v", continued)
+	}
+	first := continued.Events[0].Event.Position
+	if first <= 1 || !reflect.DeepEqual(continued.Events, ended.Events[first-1:]) {
+		t.Fatal("resume duplicated or changed records from the active prefix")
+	}
+	repeated := readCapturedContinuation(t, server, ended.WorkerSessionId, token)
+	if !reflect.DeepEqual(repeated, continued) {
+		t.Fatal("repeated continuation changed a completed capture")
+	}
+}
 
 func assertCapturedSummaryUsage(t *testing.T, server *support.FunctionalAPIServer, id string) {
 	t.Helper()
