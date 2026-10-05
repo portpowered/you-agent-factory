@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -49,7 +50,7 @@ func TestNewServiceExecuteManagedInferenceUsesModelsDespiteProviderRunner(t *tes
 		input.inferenceConfig,
 		input.inferenceDependencies,
 		nil,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return time.Unix(1, 0) },
 		nil,
 		nil,
@@ -259,7 +260,7 @@ func TestNewMockServiceExecutesMockThroughCanonicalWorkersBehavior(t *testing.T)
 			observations = append(observations, observation)
 			return nil
 		},
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return time.Unix(1, 0) },
 		nil,
 		nil,
@@ -318,7 +319,7 @@ func TestNewMockServiceRequiresExplicitMockComposition(t *testing.T) {
 		nil,
 		MockDependencies{},
 		nil,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return time.Unix(1, 0) },
 		nil,
 		nil,
@@ -404,7 +405,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 		},
 		runners.InferenceDependencies{Models: local},
 		nil,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return time.Unix(1, 0) },
 		nil,
 		nil,
@@ -457,7 +458,7 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 				input.inferenceConfig,
 				input.inferenceDependencies,
 				nil,
-				nil,
+				logging.NoopLogger{},
 				func() time.Time { return time.Unix(1, 0) },
 				nil,
 				nil,
