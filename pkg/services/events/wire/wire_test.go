@@ -60,24 +60,32 @@ func TestNewServiceLoggerModesPreserveObservations(t *testing.T) {
 			if !test.logged && len(logs) != 0 {
 				t.Fatalf("quiet mode emitted %d records", len(logs))
 			}
-			var accepted, duplicate bool
-			for _, entry := range logs {
-				if strings.Contains(fmt.Sprint(entry.Message, entry.ContextMap()), "owner-private-payload") {
-					t.Fatal("payload leaked to logger")
-				}
-				if entry.Message == "events append outcome" {
-					fields := entry.ContextMap()
-					if fields["topic"] != "chat-session/abc/events" || fields["source_id"] != "worker-1" || fields["position"] != uint64(1) {
-						t.Fatalf("unsafe or missing correlation: %v", fields)
-					}
-					accepted = accepted || fields["outcome"] == "accepted"
-					duplicate = duplicate || fields["outcome"] == "duplicate"
-				}
-			}
-			if test.logged && (!accepted || !duplicate) {
-				t.Fatal("supplied logger lost append outcomes")
+			if test.logged {
+				assertOwnerDiagnostics(t, logs)
 			}
 		})
+	}
+}
+
+func assertOwnerDiagnostics(t *testing.T, logs []observer.LoggedEntry) {
+	t.Helper()
+	var accepted, duplicate bool
+	for _, entry := range logs {
+		if strings.Contains(fmt.Sprint(entry.Message, entry.ContextMap()), "owner-private-payload") {
+			t.Fatal("payload leaked to logger")
+		}
+		if entry.Message != "events append outcome" {
+			continue
+		}
+		fields := entry.ContextMap()
+		if fields["topic"] != "chat-session/abc/events" || fields["source_id"] != "worker-1" || fields["position"] != uint64(1) {
+			t.Fatalf("unsafe or missing correlation: %v", fields)
+		}
+		accepted = accepted || fields["outcome"] == "accepted"
+		duplicate = duplicate || fields["outcome"] == "duplicate"
+	}
+	if !accepted || !duplicate {
+		t.Fatal("supplied logger lost append outcomes")
 	}
 }
 
@@ -95,7 +103,11 @@ func assertOwnerObservations(t *testing.T, service events.Service) {
 		t.Fatalf("duplicate = %+v, %v", duplicate, err)
 	}
 	read, err := service.Read(ctx, events.ReadRequest{Topic: req.Topic, From: events.Cursor{Topic: req.Topic}, Limit: 10})
-	if err != nil || read.Outcome != events.ReadOutcomeProgress || len(read.Records) != 1 || !reflect.DeepEqual(read.Records[0], first.Record) || read.Next.Position != 1 {
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := events.ReadResult{Records: []events.Record{first.Record}, Next: events.Cursor{Topic: req.Topic, Position: 1}, Retained: events.RetainedRange{Topic: req.Topic, Earliest: 1, Head: 1}, Outcome: events.ReadOutcomeProgress}
+	if !reflect.DeepEqual(read, want) {
 		t.Fatalf("read = %+v, %v", read, err)
 	}
 	child, cancel := context.WithCancel(ctx)
