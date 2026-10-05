@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -37,7 +39,7 @@ func BenchmarkWorkerSidecarAppend(b *testing.B) {
 			if err := local.WriteFile(path, data); err != nil {
 				b.Fatal(err)
 			}
-			writer, err := recordingswire.NewWorkerRecordingFileWriter(local, root)
+			writer, err := recordingswire.NewWorkerRecordingFileWriter(local, local, platformclock.Real{}, root, uuid.NewString())
 			if err != nil {
 				b.Fatal(err)
 			}

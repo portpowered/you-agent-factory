@@ -31,7 +31,7 @@ func TestFileWriterLegacyContinuationTerminalReplays(t *testing.T) {
 				t.Fatalf("legacy interruption = %#v, error %v", baseline, err)
 			}
 			want := persistLegacyContinuationTerminal(t, writer, kind)
-			reopened, err := NewFileWriter(local, writer.root)
+			reopened, err := newTestFileWriter(local, writer.root)
 			if err != nil {
 				t.Fatal(err)
 			}

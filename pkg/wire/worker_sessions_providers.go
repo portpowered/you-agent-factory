@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"path/filepath"
 	runtime "runtime"
 
@@ -86,9 +87,11 @@ func provideWorkerRecordingWriter(
 		if projectRoot == "" || !filepath.IsAbs(projectRoot) {
 			return nil, fmt.Errorf("resolve Worker recording project root: expected a non-empty absolute directory")
 		}
+		storage := platformreplay.NewLocal(runtime.GOOS)
 		writer, err = recordingswire.NewWorkerRecordingFileWriter(
-			platformreplay.NewLocal(runtime.GOOS),
+			storage, storage, platformclock.Ensure(edges.Clock),
 			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),
+			uuid.NewString(),
 		)
 		if err != nil {
 			return nil, err

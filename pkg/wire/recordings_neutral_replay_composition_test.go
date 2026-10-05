@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -55,7 +57,7 @@ func TestWorkerRecordingDefaultDurableRoot(t *testing.T) {
 	if directory.calls != 1 {
 		t.Fatalf("Getwd calls = %d, want one", directory.calls)
 	}
-	reopened, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), filepath.Join(root, ".you-agent-factory", "worker-recordings"))
+	reopened, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, filepath.Join(root, ".you-agent-factory", "worker-recordings"), uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +78,7 @@ func TestWorkerRecordingRootFailureAndOverride(t *testing.T) {
 	if !errors.Is(err, fault) {
 		t.Fatalf("root resolution error = %v", err)
 	}
-	override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
+	override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, t.TempDir(), uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +99,7 @@ func TestWorkerRecordingRejectsInvalidDefaultRoot(t *testing.T) {
 			if err == nil || writer != nil || !strings.Contains(err.Error(), "expected a non-empty absolute directory") {
 				t.Fatalf("invalid root %q: writer = %v, error = %v", root, writer, err)
 			}
-			override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
+			override, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), platformreplay.NewLocal(runtime.GOOS), platformclock.Real{}, t.TempDir(), uuid.NewString())
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -8,10 +8,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/google/uuid"
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -21,11 +26,17 @@ import (
 // FileWriter persists synced deltas; its map lock never covers disk I/O.
 // Each process owns one writer. Multiple processes must not share this store.
 type FileWriter struct {
-	storage  platformreplay.Storage
-	appender platformreplay.Appender
-	root     string
-	mu       sync.Mutex
-	entries  map[string]*recordingEntry
+	storage       platformreplay.Storage
+	appender      platformreplay.Appender
+	root          string
+	mu            sync.Mutex
+	entries       map[string]*recordingEntry
+	clock         recordings.WorkerCaptureClock
+	ownerEpoch    string
+	catalogMu     sync.Mutex
+	catalog       map[string]recordings.WorkerSessionCatalogEntry
+	catalogLoaded bool
+	rebuildMu     sync.Mutex
 }
 type recordingEntry struct {
 	mu       sync.Mutex
@@ -36,38 +47,47 @@ type recordingEntry struct {
 	order    []string
 }
 type recordingSession struct {
+	generation string
+	ownerEpoch string
+	capturedAt map[string]time.Time
 	projection recordings.WorkerRecordingProjection
 	records    []events.Record
 	identities map[events.AppendIdentity]events.Record
 }
 type workerJournalEntry struct {
-	Version           int                                 `json:"version"`
-	Kind              string                              `json:"kind"`
-	RecordingID       string                              `json:"recordingId"`
-	WorkerSessionID   string                              `json:"workerSessionId"`
-	Record            *events.Record                      `json:"record,omitempty"`
-	Topic             events.Topic                        `json:"topic,omitempty"`
-	Code              string                              `json:"code,omitempty"`
-	ExecutionTerminal *recordings.WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
+	RecordingGenerationID string                              `json:"recordingGenerationId,omitempty"`
+	OwnerEpoch            string                              `json:"ownerEpoch,omitempty"`
+	CapturedAt            *time.Time                          `json:"capturedAt,omitempty"`
+	Version               int                                 `json:"version"`
+	Kind                  string                              `json:"kind"`
+	RecordingID           string                              `json:"recordingId"`
+	WorkerSessionID       string                              `json:"workerSessionId"`
+	Record                *events.Record                      `json:"record,omitempty"`
+	Topic                 events.Topic                        `json:"topic,omitempty"`
+	Code                  string                              `json:"code,omitempty"`
+	ExecutionTerminal     *recordings.WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
 }
 
 var _ recordings.WorkerRecordingWriter = (*FileWriter)(nil)
+var _ recordings.WorkerRecordingStore = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingReader = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*FileWriter)(nil)
 
 // NewFileWriter requires the existing append-and-sync storage capability.
-func NewFileWriter(storage platformreplay.Storage, root string) (recordings.WorkerRecordingWriter, error) {
+func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, clock recordings.WorkerCaptureClock, root, ownerEpoch string) (recordings.WorkerRecordingStore, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("Worker recording file writer: storage is required")
 	}
-	appender, ok := storage.(platformreplay.Appender)
-	if !ok {
+	if appender == nil {
 		return nil, fmt.Errorf("Worker recording file writer: append storage is required")
 	}
 	if root == "" {
 		return nil, fmt.Errorf("Worker recording file writer: root is required")
 	}
-	return &FileWriter{storage: storage, appender: appender, root: root, entries: make(map[string]*recordingEntry)}, nil
+	if clock == nil || strings.TrimSpace(ownerEpoch) == "" {
+		return nil, fmt.Errorf("worker recording file writer: clock and owner epoch are required")
+	}
+	return &FileWriter{storage: storage, appender: appender, clock: clock, ownerEpoch: ownerEpoch, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry)}, nil
 }
 func (writer *FileWriter) entry(id string) *recordingEntry {
 	writer.mu.Lock()
@@ -118,15 +138,27 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	}
 	session := entry.session(record.RecordingID, record.WorkerSessionID)
 	projection, duplicate, err := session.prepareRecord(record.Record)
-	if err != nil || duplicate {
+	if err != nil {
 		return err
 	}
+	if duplicate {
+		writer.indexSession(session)
+		return nil
+	}
 	delta := workerJournalEntry{Version: 1, Kind: "record", RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Record: &record.Record}
+	if len(session.records) == 0 {
+		delta.RecordingGenerationID = uuid.NewString()
+		delta.OwnerEpoch = writer.ownerEpoch
+	}
+	capturedAt := writer.clock.Now().UTC()
+	delta.CapturedAt = &capturedAt
 	if err := writer.append(ctx, entry, delta); err != nil {
 		return err
 	}
 	session.acceptRecord(projection)
+	session.acceptMetadata(delta)
 	entry.commit(session)
+	writer.indexSession(session)
 	return nil
 }
 func (session *recordingSession) prepareRecord(record events.Record) (recordings.WorkerRecordingProjection, bool, error) {
@@ -233,6 +265,7 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, id string) (r
 			return recordings.WorkerRecordingSnapshot{}, err
 		}
 		snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
+			RecordingGenerationID: session.generation, OwnerEpoch: session.ownerEpoch, CapturedAt: maps.Clone(session.capturedAt),
 			WorkerSessionID: sessionID, Topic: p.Topic, Status: p.Status, LastPosition: p.LastPosition, Failure: p.Degradation,
 			ExecutionTerminal: cloneWorkerRecordingTerminal(p.ExecutionTerminal), Records: p.Records})
 		if p.Status == recordings.WorkerRecordingStatusIncomplete {
@@ -320,6 +353,10 @@ func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry) error {
 		session.records = result.Projection.Records
 		session.projection = result.Projection
 		session.projection.Records = nil
+		session.generation = legacy.RecordingGenerationID
+		session.ownerEpoch = legacy.OwnerEpoch
+		session.capturedAt = maps.Clone(legacy.CapturedAt)
+		session.ensureLegacyIdentity()
 		for _, record := range session.records {
 			session.identities[record.Identity()] = record
 		}
@@ -336,6 +373,9 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 		return recordings.ErrWorkerRecordingCompatibility
 	}
 	if delta.RecordingID != id || strings.TrimSpace(delta.WorkerSessionID) == "" {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	if delta.CapturedAt != nil && delta.CapturedAt.IsZero() {
 		return recordings.ErrWorkerRecordingReplay
 	}
 	session := entry.session(id, delta.WorkerSessionID)
@@ -364,6 +404,9 @@ func (session *recordingSession) applyRecordDelta(delta workerJournalEntry) erro
 	if delta.Record == nil || delta.Topic != "" || delta.Code != "" || delta.ExecutionTerminal != nil {
 		return recordings.ErrWorkerRecordingReplay
 	}
+	if (delta.RecordingGenerationID == "") != (delta.OwnerEpoch == "") || (len(session.records) > 0 && delta.RecordingGenerationID != "") {
+		return recordings.ErrWorkerRecordingReplay
+	}
 	projection, duplicate, err := session.prepareRecord(*delta.Record)
 	if err != nil {
 		return err
@@ -372,7 +415,32 @@ func (session *recordingSession) applyRecordDelta(delta workerJournalEntry) erro
 		return recordings.ErrWorkerRecordingDuplicate
 	}
 	session.acceptRecord(projection)
+	session.acceptMetadata(delta)
 	return nil
+}
+
+func (session *recordingSession) acceptMetadata(delta workerJournalEntry) {
+	if len(session.records) == 1 {
+		session.generation = delta.RecordingGenerationID
+		session.ownerEpoch = delta.OwnerEpoch
+		session.ensureLegacyIdentity()
+	}
+	if delta.CapturedAt != nil {
+		if session.capturedAt == nil {
+			session.capturedAt = make(map[string]time.Time)
+		}
+		session.capturedAt[strconv.FormatUint(uint64(delta.Record.ID.Position), 10)] = delta.CapturedAt.UTC()
+	}
+}
+
+func (session *recordingSession) ensureLegacyIdentity() {
+	if session.generation == "" {
+		digest := sha256.Sum256([]byte(session.projection.RecordingID + "\x00" + session.projection.WorkerSessionID))
+		session.generation = "legacy-" + hex.EncodeToString(digest[:])
+	}
+	if session.ownerEpoch == "" {
+		session.ownerEpoch = "historical"
+	}
 }
 
 func (writer *FileWriter) path(recordingID string) string {

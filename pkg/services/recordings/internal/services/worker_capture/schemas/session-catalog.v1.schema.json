@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-catalog.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workerSessionId", "recordingId", "recordingGenerationId", "origin", "ownerEpoch", "committedPosition"],
+  "properties": {
+    "version": {"const": 1},
+    "workerSessionId": {"type": "string", "minLength": 1},
+    "recordingId": {"type": "string", "minLength": 1},
+    "recordingGenerationId": {"type": "string", "minLength": 1},
+    "origin": {"enum": ["direct", "factory"]},
+    "factorySessionId": {"type": "string", "minLength": 1},
+    "ownerEpoch": {"type": "string", "minLength": 1},
+    "committedPosition": {"type": "integer", "minimum": 0}
+  }
+}

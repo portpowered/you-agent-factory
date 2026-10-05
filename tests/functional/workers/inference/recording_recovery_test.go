@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -199,22 +200,18 @@ func newWSRFT009DurableWriter(
 	storage platformreplay.Storage,
 ) *wsrFT009DurableWriter {
 	t.Helper()
-	delegate, err := recordingswire.NewWorkerRecordingFileWriter(storage, sidecarRoot)
+	appender, ok := storage.(platformreplay.Appender)
+	if !ok {
+		t.Fatal("test recording storage must support append")
+	}
+	delegate, err := recordingswire.NewWorkerRecordingFileWriter(storage, appender, platformclock.Real{}, sidecarRoot, uuid.NewString())
 	if err != nil {
 		t.Fatalf("NewWorkerRecordingFileWriter(): %v", err)
 	}
-	reader, ok := delegate.(recordings.WorkerRecordingReader)
-	if !ok {
-		t.Fatal("durable Worker writer does not expose a reader")
-	}
-	failureWriter, ok := delegate.(recordings.WorkerRecordingFailureWriter)
-	if !ok {
-		t.Fatal("durable Worker writer does not expose failure persistence")
-	}
 	return &wsrFT009DurableWriter{
 		delegate:         delegate,
-		reader:           reader,
-		failureWriter:    failureWriter,
+		reader:           delegate,
+		failureWriter:    delegate,
 		openingPersisted: make(chan struct{}),
 	}
 }

@@ -12,6 +12,13 @@ import (
 // Recordings-owned internal Worker capture package and are re-exported here
 // as the customer-facing service vocabulary.
 type (
+	WorkerCaptureClock                       = recordingcontracts.WorkerCaptureClock
+	WorkerCapturedActivityReader             = recordingcontracts.WorkerCapturedActivityReader
+	WorkerRecordingStore                     = recordingcontracts.WorkerRecordingStore
+	WorkerSessionCatalogEntry                = workerrecording.WorkerSessionCatalogEntry
+	WorkerCapturedRecord                     = workerrecording.WorkerCapturedRecord
+	WorkerCapturedActivityRequest            = workerrecording.WorkerCapturedActivityRequest
+	WorkerCapturedActivityPage               = workerrecording.WorkerCapturedActivityPage
 	WorkerSessionRecordingService            = recordingcontracts.WorkerSessionRecordingService
 	WorkerSessionRecording                   = recordingcontracts.WorkerSessionRecording
 	WorkerSessionRecordingFinalizer          = recordingcontracts.WorkerSessionRecordingFinalizer

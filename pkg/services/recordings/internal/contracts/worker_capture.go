@@ -2,9 +2,25 @@ package contracts
 
 import (
 	"context"
+	"time"
 
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
 )
+
+// WorkerCaptureClock supplies host commit-operation time.
+type WorkerCaptureClock interface{ Now() time.Time }
+
+type WorkerCapturedActivityReader interface {
+	LookupWorkerSessionCapture(context.Context, string) (workerrecording.WorkerSessionCatalogEntry, error)
+	ReadWorkerCapturedActivity(context.Context, workerrecording.WorkerCapturedActivityRequest) (workerrecording.WorkerCapturedActivityPage, error)
+}
+
+type WorkerRecordingStore interface {
+	WorkerRecordingWriter
+	WorkerRecordingReader
+	WorkerRecordingFailureWriter
+	WorkerCapturedActivityReader
+}
 
 // WorkerSessionRecordingService is the narrow capture capability used by
 // Worker Sessions before provider handoff.
