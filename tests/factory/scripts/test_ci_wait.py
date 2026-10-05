@@ -333,7 +333,7 @@ time.sleep = _sleep
             )
             return result, calls
 
-    def invoke_main(self, branch, run_gh, process_output=NO_PROCESS_OUTPUT):
+    def invoke_main(self, branch, run_gh, process_output=NO_PROCESS_OUTPUT, classification=False):
         """Run the script entrypoint while keeping process outcomes observable."""
         sleeps = []
         stderr = io.StringIO()
@@ -341,6 +341,8 @@ time.sleep = _sleep
         argv = ["ci-wait.py", branch]
         if process_output is not NO_PROCESS_OUTPUT:
             argv.append(process_output)
+        if classification:
+            argv.append("--classification")
         head = [TEST_HEAD]
 
         def compatibility_gh(*args, **kwargs):
@@ -451,6 +453,47 @@ time.sleep = _sleep
             sleeps,
             calls,
         )
+
+    def test_classification_initial_terminal_pr_preserves_receipt(self):
+        for state, label, reason in (("MERGED", "merged", "pr-merged"),
+                                     ("CLOSED", "review", "pr-closed")):
+            with self.subTest(state=state):
+                def gh(*args):
+                    return subprocess.CompletedProcess(args, 0, stdout=json.dumps(
+                        [{"number": 42, "state": state}]))
+                code, stdout, stderr, sleeps = self.invoke_main("lane", gh, classification=True)
+                self.assertEqual(code, 0)
+                self.assertEqual(stdout, label + "\n")
+                receipt = json.loads(stderr[stderr.index('{'):])
+                self.assertEqual(receipt, {"status": "ready", "pr": 42,
+                                          "prState": state, "reason": reason})
+                self.assertEqual(sleeps, [])
+
+    def test_classification_requires_both_confirmed_merge_fields(self):
+        receipts = [
+            {"prState": "MERGED", "reason": "pr-merged"},
+            {"prState": "OPEN", "reason": "pr-merged"},
+            {"prState": "MERGED", "reason": "deadline-requeue"},
+        ] + [{"prState": "OPEN", "reason": reason} for reason in (
+            "terminal-checks", "draft", "deadline-requeue", "no-checks-reported",
+            "pr-lookup-infrastructure-requeue")]
+        for fields in receipts:
+            with self.subTest(fields=fields):
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with (patch.object(self.module.sys, "argv", ["ci-wait.py", "lane", "--classification"]),
+                      redirect_stdout(stdout), redirect_stderr(stderr)):
+                    self.module.emit_result(**fields)
+                expected = "merged" if fields == receipts[0] else "review"
+                self.assertEqual(stdout.getvalue(), expected + "\n")
+                self.assertEqual(json.loads(stderr.getvalue()), {"status": "ready", **fields})
+
+    def test_classification_invalid_identity_retains_nonzero_failure(self):
+        code, stdout, stderr, _ = self.invoke_main(
+            "lane", lambda *args: self.fail("must not look up unsafe identity"),
+            process_output="PR #42 and PR #43", classification=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn("ambiguous", stderr)
 
     def test_process_output_classifier_accepts_one_identity_and_preserves_absence(
         self,
@@ -1891,7 +1934,7 @@ class MergeWaitTest(unittest.TestCase):
                 self.assertTrue(decision.was_queued)
                 self.assertNotIn("secret", decision.reason)
 
-    def invoke_poll(self, lifecycles, snapshots=(), deadline=6000, grace=600):
+    def invoke_poll(self, lifecycles, snapshots=(), deadline=6000, grace=600, classification=False):
         elapsed = [0]
         sleeps, lifecycle_calls = [], []
         lifecycle_iter = iter(lifecycles)
@@ -1904,7 +1947,8 @@ class MergeWaitTest(unittest.TestCase):
             sleeps.append(seconds)
             elapsed[0] += seconds
         stdout, stderr = io.StringIO(), io.StringIO()
-        with (patch.object(self.module.sys, "argv", ["ci-wait.py", "lane"]),
+        argv = ["ci-wait.py", "lane"] + (["--classification"] if classification else [])
+        with (patch.object(self.module.sys, "argv", argv),
               patch.object(self.module, "resolve_pr", return_value={"number": 100, "state": "OPEN"}),
               patch.object(self.module, "read_gh_json", return_value=self.module.JSONRead(
                   self.module.JSONReadStatus.OK, repository_payload())),
@@ -1916,7 +1960,27 @@ class MergeWaitTest(unittest.TestCase):
               patch.object(self.module, "NO_CHECKS_GRACE_SECONDS", grace),
               redirect_stdout(stdout), redirect_stderr(stderr)):
             self.module.main()
-        return json.loads(stdout.getvalue()), stderr.getvalue(), sleeps, lifecycle_calls, checks.call_count
+        receipt = stderr.getvalue()[stderr.getvalue().index('{\n  "status"'):] if classification else stdout.getvalue()
+        if classification:
+            self.assertEqual(stdout.getvalue(), "merged\n" if json.loads(receipt).get("reason") == "pr-merged" else "review\n")
+        return json.loads(receipt), stderr.getvalue(), sleeps, lifecycle_calls, checks.call_count
+
+    def test_classification_polling_merge_and_unmerged_release_paths(self):
+        empty = self.module.CurrentHeadSnapshot(
+            self.module.SnapshotStatus.EMPTY, "empty-current-head-check-set", TEST_HEAD)
+        cases = [([self.lifecycle(queue={"id": "MQE", "state": "QUEUED", "position": 1}),
+                   self.lifecycle(state="MERGED")], (), 6000, 600, "pr-merged"),
+                 ([self.lifecycle()], (self.snapshot(), self.snapshot()), 6000, 600, "checks-terminal"),
+                 ([self.lifecycle()], (self.snapshot("FAILURE"), self.snapshot("FAILURE")), 6000, 600, "checks-terminal"),
+                 ([self.lifecycle()], (empty,), 6000, 0, "no-checks-reported"),
+                 ([self.lifecycle(state="CLOSED")], (), 6000, 600, "pr-closed"),
+                 ([self.lifecycle(draft=True)], (), 6000, 600, "draft"),
+                 ([self.lifecycle()], (self.snapshot("PENDING"),), 0, 600, "deadline-requeue")]
+        for lifecycles, snapshots, deadline, grace, reason in cases:
+            with self.subTest(reason=reason):
+                receipt, _, _, _, _ = self.invoke_poll(
+                    lifecycles, snapshots, deadline, grace, classification=True)
+                self.assertEqual(receipt["reason"], reason)
 
     def test_main_open_draft_releases_without_check_reads_or_sleep(self):
         result, _, sleeps, calls, checks = self.invoke_poll([self.lifecycle(draft=True)])
