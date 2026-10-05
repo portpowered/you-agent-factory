@@ -31,9 +31,8 @@ type RuntimeLogSink interface {
 }
 
 // RuntimeLogScopeRequest contains the value selections for one private log
-// scope. The owner retains the base logger and all path, clock, ID, and
-// filesystem effects; callers provide only session/runtime identity and the
-// destination policy selected for this operation.
+// scope. The owner retains path, clock, ID, and filesystem effects; callers
+// provide session/runtime identity and the selected destination policy.
 type RuntimeLogScopeRequest struct {
 	SessionID         string
 	RuntimeInstanceID string
@@ -45,10 +44,12 @@ type RuntimeLogScopeRequest struct {
 }
 
 // RuntimeLogOwner is the process-scoped observability root for runtime logs.
-// Open returns one operation-private sink. The owner itself has no lifecycle
-// operation: closing a session closes only the returned scope.
+// Open extends the selected scoped logger with one operation-private sink.
+// The logger retains the process backend and this opening's correlation.
+// The owner has no lifecycle operation: closing a session closes only the
+// returned scope.
 type RuntimeLogOwner interface {
-	Open(RuntimeLogScopeRequest) (RuntimeLogSink, error)
+	Open(*zap.Logger, RuntimeLogScopeRequest) (RuntimeLogSink, error)
 }
 
 type RuntimeArtifactRoots struct {

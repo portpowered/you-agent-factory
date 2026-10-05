@@ -16,19 +16,18 @@ type modelsRuntimeBind struct {
 	Scope models.RuntimeScopeRef
 }
 
-// runtimeOpeningCleanup owns resources in acquisition order and releases them
-// exactly once in reverse order on either opening failure or runtime
-// shutdown. Add is safe to call concurrently with Close: a later Factory
-// Session build (for example a named-factory activation racing session
-// shutdown) can register a cleanup action after opening has already
-// returned, so both the action slice and the once-guarded release read it
-// under the same mutex.
+// runtimeOpeningCleanup releases owned resources on opening failure or runtime
+// shutdown, with Models retained until its consumers close. Successful releases
+// are removed; failed releases remain retryable. Close calls are serialized,
+// while Add can register newly acquired ownership during a release.
 type runtimeOpeningCleanup struct {
 	mu      sync.Mutex
 	actions []func() error
-	once    sync.Once
-	err     error
+	models  []func() error
+	closeMu sync.Mutex
 }
+
+var errRuntimeOpeningCleanupPending = errors.New("runtime opening cleanup still owns pending resources")
 
 func (cleanup *runtimeOpeningCleanup) Add(action func() error) {
 	if action == nil {
@@ -43,7 +42,10 @@ func (cleanup *runtimeOpeningCleanup) OwnModelsScope(
 	ctx context.Context,
 	bind modelsRuntimeBind,
 ) {
-	cleanup.Add(func() error {
+	if bind.Root == nil || bind.Scope.IsZero() {
+		return
+	}
+	closeScope := func() error {
 		closed, err := bind.Root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{
 			Scope: bind.Scope,
 		})
@@ -54,24 +56,83 @@ func (cleanup *runtimeOpeningCleanup) OwnModelsScope(
 			return fmt.Errorf("close Models runtime scope: Models service did not confirm the issued scope")
 		}
 		return nil
-	})
+	}
+	// Durable execution may still consume Models while it closes. Retain the
+	// existing lifetime order: release this scope after every other owned
+	// resource, even when durable execution was registered before Models opened.
+	cleanup.mu.Lock()
+	cleanup.models = append(cleanup.models, closeScope)
+	cleanup.mu.Unlock()
 }
 
 func (cleanup *runtimeOpeningCleanup) Close() error {
-	cleanup.once.Do(func() {
-		cleanup.mu.Lock()
-		actions := append([]func() error(nil), cleanup.actions...)
-		cleanup.actions = nil
-		cleanup.mu.Unlock()
-		for index := len(actions) - 1; index >= 0; index-- {
-			cleanup.err = errors.Join(cleanup.err, actions[index]())
-		}
-	})
-	return cleanup.err
+	cleanup.closeMu.Lock()
+	defer cleanup.closeMu.Unlock()
+	cleanup.mu.Lock()
+	actions := cleanup.actions
+	models := cleanup.models
+	cleanup.actions = nil
+	cleanup.models = nil
+	cleanup.mu.Unlock()
+	pending, closeErr := cleanup.releaseActions(actions)
+	cleanup.mu.Lock()
+	consumersAdded := len(cleanup.actions) != 0
+	cleanup.mu.Unlock()
+	// A failed consumer still owns its dependency. Release independent resources
+	// now, but keep Models available until every consumer has closed successfully.
+	if closeErr == nil && !consumersAdded {
+		models, closeErr = cleanup.releaseModels(models)
+	}
+	cleanup.mu.Lock()
+	cleanup.actions = append(pending, cleanup.actions...)
+	cleanup.models = append(models, cleanup.models...)
+	// Opening callers retain the retry capability only when Close reports an
+	// incomplete release. Ownership registered by a closer must not turn into
+	// a successful release merely because the original batch completed.
+	if closeErr == nil && (len(cleanup.actions) != 0 || len(cleanup.models) != 0) {
+		closeErr = errRuntimeOpeningCleanupPending
+	}
+	cleanup.mu.Unlock()
+	return closeErr
 }
 
-func (cleanup *runtimeOpeningCleanup) Unwind(cause error) error {
-	return errors.Join(cause, cleanup.Close())
+// A dependency release can itself register a consumer. Recheck between Models
+// releases so the remaining dependencies stay available until that consumer
+// closes on an explicit retry.
+func (cleanup *runtimeOpeningCleanup) releaseModels(actions []func() error) ([]func() error, error) {
+	var pending []func() error
+	var closeErr error
+	for index := len(actions) - 1; index >= 0; index-- {
+		cleanup.mu.Lock()
+		consumersAdded := len(cleanup.actions) != 0
+		cleanup.mu.Unlock()
+		if consumersAdded {
+			return append(actions[:index+1], pending...), closeErr
+		}
+		if err := actions[index](); err != nil {
+			closeErr = errors.Join(closeErr, err)
+			pending = append([]func() error{actions[index]}, pending...)
+		}
+	}
+	return pending, closeErr
+}
+
+func (*runtimeOpeningCleanup) releaseActions(actions []func() error) ([]func() error, error) {
+	var closeErr error
+	for index := len(actions) - 1; index >= 0; index-- {
+		if err := actions[index](); err != nil {
+			closeErr = errors.Join(closeErr, err)
+		} else {
+			actions[index] = nil
+		}
+	}
+	var pending []func() error
+	for _, action := range actions {
+		if action != nil {
+			pending = append(pending, action)
+		}
+	}
+	return pending, closeErr
 }
 
 func bindModelsRuntimeScope(
@@ -97,16 +158,16 @@ func bindModelsRuntimeScope(
 	opened, err := modelService.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
 		Config: scopeConfig,
 	})
+	bind := modelsRuntimeBind{Root: modelService, Scope: opened.Scope}
 	if err != nil {
-		return modelsRuntimeBind{}, err
+		// Preserve a partial scope so the opening owner can release it before
+		// returning the failure, or retain cleanup when release also fails.
+		return bind, err
 	}
 	if opened.Scope.IsZero() {
 		return modelsRuntimeBind{}, fmt.Errorf("construct runtime scope: Models service returned zero runtime scope")
 	}
-	return modelsRuntimeBind{
-		Root:  modelService,
-		Scope: opened.Scope,
-	}, nil
+	return bind, nil
 }
 
 func cloneOperatorModelOverlays(

@@ -126,6 +126,7 @@ func NewRoot(
 	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
+	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 ) (*Root, error) {
 	root, err := service.NewRoot(
 		providerSessions,
@@ -139,6 +140,7 @@ func NewRoot(
 		webhooksPorts,
 		workersPorts,
 		operatorSettings,
+		initialActivation,
 	)
 	if err != nil {
 		return nil, err

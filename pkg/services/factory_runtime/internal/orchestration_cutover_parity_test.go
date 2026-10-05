@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript"
@@ -31,7 +33,7 @@ func TestOrchestrationCompilePetriNetMatchesDefinitionMappingCutover(t *testing.
 	t.Parallel()
 
 	cfg := cutoverPetriFactoryConfig()
-	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, nil, nil))
+	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil))
 	orchestratedNet, err := compiler.CompilePetriNet(context.Background(), factory.OrchestrationCompileRequest{
 		Config: cfg,
 	})
@@ -56,7 +58,7 @@ func TestOrchestrationCompilePetriNetMatchesDefinitionMappingCutover(t *testing.
 func TestOrchestrationCompilePetriNetRejectsUnsupportedKindWithRuntimeDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, nil, nil))
+	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil))
 	_, err := compiler.CompilePetriNet(context.Background(), factory.OrchestrationCompileRequest{
 		Config: &factorydefinitions.FactoryConfig{
 			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
@@ -80,7 +82,7 @@ func TestOrchestrationCompileSelectsJavaScriptKindWithoutPetriNet(t *testing.T) 
 	t.Parallel()
 
 	workflows := cutoverJavaScriptWorkflows()
-	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, workflows, workflows))
+	compiler := factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows))
 	result, err := compiler.Compile(context.Background(), factory.OrchestrationCompileRequest{
 		Config: cutoverJavaScriptFactoryConfig(`workflow.final("ok");`),
 	})
@@ -109,14 +111,25 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadedFactoryFixture: %v", err)
 	}
-	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default", "",
-		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
+	// Retained legacy cutover wiring coverage; new opening unit fixtures use
+	// controlled compilation and engine effects instead of Wire providers.
+	bundle, err := factoryinternal.NewRuntimeFactory(
+		testRuntimeLoggerFactory, nil, nil, testRuntimeID, testRuntimeID,
+		localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil)),
+		platformclock.Real{}, testDefinitionMapper(),
+		runtimeopening.NewEngineOpening(nil, nil, nil, nil, factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
+			return factorydefinitions.WorkPropagationModeOutputAsPayload
+		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
+		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
+	).Build(
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
+		"", factorydefinitions.RuntimeModeBatch, false, nil, false,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
-		testRuntimeScopeService(newTestRuntimeLedger),
+		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
+		0, nil,
 		testRuntimeWorkers{},
 		sessions, sessions,
 		nil,
@@ -164,19 +177,20 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	}
 	workflows := cutoverJavaScriptWorkflows()
 	bundle, err := factoryinternal.NewRuntimeFactory(
-		nil, nil, nil, nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
+		testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
-		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, workflows, workflows)),
-		nil,
-		platformclock.Real{},
+		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows)),
+		platformclock.Real{}, testDefinitionMapper(),
+		runtimeopening.NewEngineOpening(nil, nil, nil, nil, nil, nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
+		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 	).Build(
-		context.Background(), dir, dir, "~default", "",
-		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
+		context.Background(), zap.NewNop(), dir, dir, "~default", "",
+		"", factorydefinitions.RuntimeModeBatch, false, nil, false,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
-		testRuntimeScopeService(newTestRuntimeLedger),
+		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
+		0, nil,
 		testRuntimeWorkers{},
 		sessions, sessions,
 		nil,

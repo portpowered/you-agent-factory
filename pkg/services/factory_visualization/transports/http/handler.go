@@ -24,10 +24,8 @@ type Dependencies struct {
 }
 
 // NewHandler constructs an inert Factory Visualization HTTP adapter.
+// The caller supplies the selected logger, including an explicit no-op for silence.
 func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	return &Adapter{
 		visualization: deps.VisualizationRoot,
 		logger:        logger,

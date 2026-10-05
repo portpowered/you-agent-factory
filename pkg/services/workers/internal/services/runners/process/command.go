@@ -8,6 +8,7 @@ package process
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -101,6 +102,14 @@ func AdaptPlatformCommandRunner(runner platformprocess.CommandRunner) CommandRun
 		return private.privateCommandRunner()
 	}
 	adapted := ExecCommandRunner{Runner: runner}
+	switch typed := runner.(type) {
+	case platformprocess.ExecCommandRunner:
+		adapted.Logger = typed.Logger
+	case *platformprocess.ExecCommandRunner:
+		if typed != nil {
+			adapted.Logger = typed.Logger
+		}
+	}
 	if _, ok := runner.(interface {
 		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
 	}); ok {
@@ -261,6 +270,7 @@ func (runner LoggingCommandRunner) Run(ctx context.Context, request CommandReque
 		return CommandResult{}, errors.New("workers logging command clock is required")
 	}
 	logger := commandExecutionLogger(request, runner.Logger)
+	request.ExecutionLogger = logger
 	logger.Info("command runner: request received", commandRequestLogFields(request)...)
 	logger.Verbose("command runner: verbose request details", commandRequestDetailsLogFields(request)...)
 	started := runner.Clock.Now()
@@ -290,6 +300,7 @@ func (runner LoggingCommandRunner) RunStreaming(
 		return CommandResult{}, errors.New("workers logging command clock is required")
 	}
 	logger := commandExecutionLogger(request, runner.Logger)
+	request.ExecutionLogger = logger
 	logger.Info("command runner: request received", commandRequestLogFields(request)...)
 	logger.Verbose("command runner: verbose request details", commandRequestDetailsLogFields(request)...)
 	started := runner.Clock.Now()
@@ -375,8 +386,8 @@ func cloneStringMap(values map[string]string) map[string]string {
 
 func platformRequest(request CommandRequest) platformprocess.CommandRequest {
 	return platformprocess.CommandRequest{
-		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
-		Env: request.Env, WorkDir: request.WorkDir,
+		Command: request.Command, Args: append([]string(nil), request.Args...), Stdin: append([]byte(nil), request.Stdin...),
+		Env: append([]string(nil), request.Env...), WorkDir: request.WorkDir,
 		ExecutionScopeID:         request.FactorySessionID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
@@ -384,13 +395,13 @@ func platformRequest(request CommandRequest) platformprocess.CommandRequest {
 }
 
 func workerRequest(request platformprocess.CommandRequest) CommandRequest {
-	return CommandRequest{
+	return CloneCommandRequest(CommandRequest{
 		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
 		Env: request.Env, WorkDir: request.WorkDir,
 		FactorySessionID:         request.ExecutionScopeID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
-	}
+	})
 }
 
 func publishCompleteOutput(observer platformprocess.OutputChunkObserver, result CommandResult) {
@@ -407,9 +418,9 @@ func publishCompleteOutput(observer platformprocess.OutputChunkObserver, result 
 
 func commandExecutionLogger(request CommandRequest, fallback logging.Logger) logging.Logger {
 	if request.ExecutionLogger != nil {
-		return logging.EnsureLogger(request.ExecutionLogger)
+		return request.ExecutionLogger
 	}
-	return logging.EnsureLogger(fallback)
+	return fallback
 }
 
 func workLogFields(metadata work.ExecutionMetadata, values ...any) []any {
@@ -573,6 +584,12 @@ func commandResultForLogging(
 }
 
 func commandContextLogger(logger logging.Logger, request CommandRequest) logging.Logger {
+	logger = commandExecutionLogger(request, logger)
+	// Platform cleanup logging is optional for standalone adapters. Preserve
+	// absence instead of replacing it with a private disabled effect.
+	if logger == nil {
+		return nil
+	}
 	fields := workLogFields(request.Execution,
 		"dispatch_id", request.DispatchID,
 		"transition_id", request.TransitionID,
@@ -584,7 +601,7 @@ func commandContextLogger(logger logging.Logger, request CommandRequest) logging
 	if request.WorkstationName != "" {
 		fields = append(fields, "workstation_name", request.WorkstationName)
 	}
-	return contextualLogger{logger: logging.EnsureLogger(logger), fields: fields}
+	return contextualLogger{logger: logger, fields: fields}
 }
 
 func commandRequestCorrelationFields(request CommandRequest, keysAndValues ...any) []any {
@@ -615,7 +632,13 @@ type contextualLogger struct {
 }
 
 func (logger contextualLogger) append(values []any) []any {
-	return append(append([]any(nil), values...), logger.fields...)
+	fields := append(append([]any(nil), values...), logger.fields...)
+	for index, value := range fields {
+		if ids, ok := value.([]string); ok {
+			fields[index] = slices.Clone(ids)
+		}
+	}
+	return fields
 }
 
 func (logger contextualLogger) Debug(message string, fields ...any) {

@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -17,17 +18,23 @@ import (
 
 // stubEventsAppender is a minimal EventsAppender double for tests that
 // construct a Service but do not themselves exercise Sequence.
-type stubEventsAppender struct{}
+type stubEventsAppender struct{ calls *int }
 
-func (stubEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+func (s stubEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	if s.calls != nil {
+		*s.calls++
+	}
 	return events.AppendResult{}, nil
 }
 
 // stubEventsReader is a minimal EventsReader double for tests that construct
 // a Service but do not themselves exercise AcknowledgeAttachment.
-type stubEventsReader struct{}
+type stubEventsReader struct{ calls *int }
 
-func (stubEventsReader) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+func (s stubEventsReader) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	if s.calls != nil {
+		*s.calls++
+	}
 	return events.ReadResult{}, nil
 }
 
@@ -56,12 +63,18 @@ func TestNewService_RequiresIDGenerator(t *testing.T) {
 	if err == nil || service != nil {
 		t.Fatalf("NewService(nil id generator) = (%v, %v), want construction failure", service, err)
 	}
+	if err.Error() != "construct chat sessions: id generator is required" {
+		t.Fatalf("changed construction error: %v", err)
+	}
 }
 
 func TestNewService_RequiresClock(t *testing.T) {
 	service, err := NewService(sequentialIDs("session"), nil, stubEventsAppender{}, stubEventsReader{})
 	if err == nil || service != nil {
 		t.Fatalf("NewService(nil clock) = (%v, %v), want construction failure", service, err)
+	}
+	if err.Error() != "construct chat sessions: clock is required" {
+		t.Fatalf("changed construction error: %v", err)
 	}
 }
 
@@ -70,12 +83,18 @@ func TestNewService_RequiresEventsAppender(t *testing.T) {
 	if err == nil || service != nil {
 		t.Fatalf("NewService(nil events appender) = (%v, %v), want construction failure", service, err)
 	}
+	if err.Error() != "construct chat sessions: events appender is required" {
+		t.Fatalf("changed construction error: %v", err)
+	}
 }
 
 func TestNewService_RequiresEventsReader(t *testing.T) {
 	service, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), stubEventsAppender{}, nil)
 	if err == nil || service != nil {
 		t.Fatalf("NewService(nil events reader) = (%v, %v), want construction failure", service, err)
+	}
+	if err.Error() != "construct chat sessions: events reader is required" {
+		t.Fatalf("changed construction error: %v", err)
 	}
 }
 
@@ -84,30 +103,63 @@ func TestNewService_RequiresEventsReader(t *testing.T) {
 // chatsessions.Service interface, without depending on any Store-internal
 // detail.
 func TestNewService_ConstructsAWorkingService(t *testing.T) {
-	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
-	service, err := NewService(sequentialIDs("session"), fixedClock(now), stubEventsAppender{}, stubEventsReader{})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewService returned a nil Service with a nil error")
-	}
-
-	ctx := context.Background()
-	created, err := service.CreateSession(ctx, validCreateRequest())
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	read, err := service.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
-	if err != nil {
-		t.Fatalf("GetSession: %v", err)
-	}
-	if read.Session.ID != created.Session.ID {
-		t.Fatalf("GetSession returned %q, want %q", read.Session.ID, created.Session.ID)
-	}
-
-	if _, err := service.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: "does-not-exist"}); !errors.Is(err, chatsessions.ErrNotFound) {
-		t.Fatalf("GetSession(unknown): got %v, want ErrNotFound", err)
+	t.Parallel()
+	for _, mode := range []string{"omitted", "nil", "noop", "capture", "capture-first", "nil-first"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+			first, later := &serviceCaptureLogger{}, &serviceCaptureLogger{}
+			var loggers []logging.Logger
+			switch mode {
+			case "nil":
+				loggers = []logging.Logger{nil}
+			case "noop":
+				loggers = []logging.Logger{logging.NoopLogger{}}
+			case "capture":
+				loggers = []logging.Logger{first}
+			case "capture-first":
+				loggers = []logging.Logger{first, later}
+			case "nil-first":
+				loggers = []logging.Logger{nil, later}
+			}
+			idCalls, clockCalls, eventCalls := 0, 0, 0
+			ids := sequentialIDs("session")
+			service, err := NewService(func() string { idCalls++; return ids() }, func() time.Time { clockCalls++; return at }, stubEventsAppender{calls: &eventCalls}, stubEventsReader{calls: &eventCalls}, loggers...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if idCalls != 0 || clockCalls != 0 || eventCalls != 0 || len(first.calls) != 0 || len(later.calls) != 0 {
+				t.Fatal("construction invoked effects")
+			}
+			got := exerciseServiceLoggerOperations(t, service)
+			quiet, err := NewService(sequentialIDs("session"), fixedClock(at), stubEventsAppender{}, stubEventsReader{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := exerciseServiceLoggerOperations(t, quiet)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("%s changed operation facts: %+v / %+v", mode, got, want)
+			}
+			if len(later.calls) != 0 {
+				t.Fatalf("later logger selected: %+v", later.calls)
+			}
+			if mode == "capture" || mode == "capture-first" {
+				if len(first.calls) != 18 {
+					t.Fatalf("selected logger received %d calls, want 18", len(first.calls))
+				}
+				for i, call := range first.calls {
+					wantLevel, wantMessage := "debug", "chat_sessions operation start"
+					if i%2 != 0 {
+						wantLevel, wantMessage = "info", "chat_sessions operation outcome"
+					}
+					if call.level != wantLevel || call.msg != wantMessage {
+						t.Fatalf("unexpected diagnostic: %+v", call)
+					}
+				}
+			} else if len(first.calls) != 0 {
+				t.Fatal("quiet construction emitted diagnostics")
+			}
+		})
 	}
 }
 
@@ -115,58 +167,171 @@ func TestNewService_ConstructsAWorkingService(t *testing.T) {
 // Service instances are fully isolated, matching the process-scoped-owner
 // guarantee the canonical provider must uphold.
 func TestNewService_InstancesShareNoState(t *testing.T) {
-	first, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), stubEventsAppender{}, stubEventsReader{})
+	t.Parallel()
+	a, b := &serviceCaptureLogger{}, &serviceCaptureLogger{}
+	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	first, err := NewService(sequentialIDs("first"), fixedClock(at), stubEventsAppender{}, stubEventsReader{}, a)
 	if err != nil {
-		t.Fatalf("NewService (first): %v", err)
+		t.Fatal(err)
 	}
-	second, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), stubEventsAppender{}, stubEventsReader{})
+	second, err := NewService(sequentialIDs("second"), fixedClock(at.Add(time.Hour)), stubEventsAppender{}, stubEventsReader{}, b)
 	if err != nil {
-		t.Fatalf("NewService (second): %v", err)
+		t.Fatal(err)
 	}
-
 	ctx := context.Background()
-	created, err := first.CreateSession(ctx, validCreateRequest())
+	one, err := first.CreateSession(ctx, validCreateRequest())
 	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
+		t.Fatal(err)
 	}
-	if _, err := second.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID}); !errors.Is(err, chatsessions.ErrNotFound) {
-		t.Fatalf("second Service observed the first Service's session: got %v, want ErrNotFound", err)
+	two, err := second.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := first.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: one.Session.ID})
+	if err != nil || read.Session != one.Session {
+		t.Fatalf("first read: %+v, %v", read, err)
+	}
+	if _, err := second.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: one.Session.ID}); !errors.Is(err, chatsessions.ErrNotFound) {
+		t.Fatalf("peer lookup: %v", err)
+	}
+	if len(a.calls) != 4 || len(b.calls) != 4 {
+		t.Fatalf("diagnostic attribution crossed: %+v / %+v", a.calls, b.calls)
+	}
+	read, err = second.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: two.Session.ID})
+	if err != nil || read.Session != two.Session || one.Session.CreatedAt != at || two.Session.CreatedAt != at.Add(time.Hour) {
+		t.Fatalf("instance facts crossed: %+v, %v", read, err)
 	}
 }
 
-// stubOperatorSettingsService is a minimal Operator Settings root double.
-// NewFactoryTargetCatalogService is a pure delegating constructor that calls
-// no method on either injected root before returning, so a structurally
-// satisfying zero value is enough to prove the delegation.
+// These existing provider tests are retained wiring integration, not component unit tests.
+type serviceLogCall struct {
+	level, msg string
+	kv         []any
+}
+type serviceCaptureLogger struct{ calls []serviceLogCall }
+
+func (l *serviceCaptureLogger) Debug(msg string, kv ...any) {
+	l.calls = append(l.calls, serviceLogCall{"debug", msg, kv})
+}
+func (l *serviceCaptureLogger) Info(msg string, kv ...any) {
+	l.calls = append(l.calls, serviceLogCall{"info", msg, kv})
+}
+func (l *serviceCaptureLogger) Warn(msg string, kv ...any) {
+	l.calls = append(l.calls, serviceLogCall{"warn", msg, kv})
+}
+func (l *serviceCaptureLogger) Error(msg string, kv ...any) {
+	l.calls = append(l.calls, serviceLogCall{"error", msg, kv})
+}
+func (l *serviceCaptureLogger) Verbose(msg string, kv ...any) {
+	l.calls = append(l.calls, serviceLogCall{"verbose", msg, kv})
+}
+
+// Controlled peers for the retained catalog provider compatibility witness.
 type stubOperatorSettingsService struct {
 	operatorsettings.Service
+	calls *int
 }
 
-// stubFactoryDefinitionsService is a minimal Factory Definitions root
-// double, for the same reason as stubOperatorSettingsService.
+func (s stubOperatorSettingsService) ResolveACPAgentProfile(string) (operatorsettings.ACPAgentProfile, error) {
+	*s.calls++
+	return operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/review"}, nil
+}
+
 type stubFactoryDefinitionsService struct {
-	factorydefinitions.Service
+	factorydefinitions.CatalogPathsService
+	calls     *int
+	installed *bool
 }
 
-func (stubFactoryDefinitionsService) ResolveCurrentFactoryLocation(
-	context.Context,
-	factorydefinitions.ResolveCurrentFactoryLocationRequest,
-) (factorydefinitions.ResolveCurrentFactoryLocationResult, error) {
-	return factorydefinitions.ResolveCurrentFactoryLocationResult{}, nil
-}
-
-// TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots proves this
-// package's NewFactoryTargetCatalogService is the thin delegation its doc
-// comment claims: it forwards the injected Operator Settings and Factory
-// Definitions roots straight through to internalservice.New and returns a
-// working, non-nil catalog service.
-func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T) {
-	service, err := NewFactoryTargetCatalogService(stubOperatorSettingsService{}, stubFactoryDefinitionsService{}, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("NewFactoryTargetCatalogService: unexpected error: %v", err)
+func (s stubFactoryDefinitionsService) ListEffectiveFactories(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	*s.calls++
+	if !*s.installed {
+		return factorydefinitions.ListEffectiveFactoriesResult{}, nil
 	}
-	if service == nil {
-		t.Fatal("NewFactoryTargetCatalogService returned a nil service with a nil error")
+	location := "/private/factories/review"
+	return factorydefinitions.ListEffectiveFactoriesResult{Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{Name: "@you/review", Location: &location}}}, nil
+}
+
+// Existing provider witness: retained wiring integration, not a unit test.
+func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"nil", "noop", "capture"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			capture := &serviceCaptureLogger{}
+			var logger logging.Logger
+			if mode == "noop" {
+				logger = logging.NoopLogger{}
+			}
+			if mode == "capture" {
+				logger = capture
+			}
+			profileCalls, catalogCalls, installed := 0, 0, true
+			service, err := NewFactoryTargetCatalogService(stubOperatorSettingsService{calls: &profileCalls}, stubFactoryDefinitionsService{calls: &catalogCalls, installed: &installed}, logger)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if profileCalls != 0 || catalogCalls != 0 || len(capture.calls) != 0 {
+				t.Fatal("construction invoked effects")
+			}
+			req := chatsessions.ResolveFactoryTargetCatalogRequest{OperatorSettingsPath: "/private/operator.json"}
+			result, err := service.ResolveFactoryTargetCatalog(context.Background(), req)
+			want := chatsessions.ResolveFactoryTargetCatalogResult{CurrentTarget: "factory:@you/review", Choices: []chatsessions.FactoryTargetCatalogChoice{{Value: "factory:@you/review", Name: "@you/review"}}}
+			if err != nil || !reflect.DeepEqual(result, want) {
+				t.Fatalf("%s success: %+v, %v", mode, result, err)
+			}
+			installed = false
+			result, err = service.ResolveFactoryTargetCatalog(context.Background(), req)
+			var typed *chatsessions.FactoryTargetCatalogError
+			if !errors.Is(err, chatsessions.ErrFactoryTargetCatalogEmpty) || !errors.As(err, &typed) || typed.Target != "" || typed.Cause != nil || !reflect.DeepEqual(result, chatsessions.ResolveFactoryTargetCatalogResult{}) {
+				t.Fatalf("%s failure: %+v, %v", mode, result, err)
+			}
+			if profileCalls != 2 || catalogCalls != 2 {
+				t.Fatalf("operation observations: %d / %d", profileCalls, catalogCalls)
+			}
+			var wantLogs []serviceLogCall
+			if mode == "capture" {
+				wantLogs = []serviceLogCall{
+					{"info", "chat_sessions.resolve_factory_target_catalog.started", nil},
+					{"info", "chat_sessions.resolve_factory_target_catalog.finished", []any{"choice_count", 1}},
+					{"info", "chat_sessions.resolve_factory_target_catalog.started", nil},
+					{"warn", "chat_sessions.resolve_factory_target_catalog.failed", []any{"reason", "catalog_empty"}},
+				}
+			}
+			if !reflect.DeepEqual(capture.calls, wantLogs) {
+				t.Fatalf("%s diagnostics: %+v, want %+v", mode, capture.calls, wantLogs)
+			}
+		})
+	}
+}
+
+func TestNewFactoryTargetCatalogService_RejectsMissingPeers(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []string{"settings", "definitions", "both"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			calls, installed := 0, true
+			var settings operatorsettings.Service = stubOperatorSettingsService{calls: &calls}
+			var definitions factorydefinitions.CatalogPathsService = stubFactoryDefinitionsService{calls: &calls, installed: &installed}
+			want := "construct chat sessions factory target catalog: operator settings root is required"
+			if missing != "definitions" {
+				settings = nil
+			}
+			if missing != "settings" {
+				definitions = nil
+			}
+			if missing == "definitions" {
+				want = "construct chat sessions factory target catalog: factory definitions catalog/path capability is required"
+			}
+			capture := &serviceCaptureLogger{}
+			service, err := NewFactoryTargetCatalogService(settings, definitions, capture)
+			if service != nil || err == nil || err.Error() != want {
+				t.Fatalf("missing %s: %v, %v", missing, service, err)
+			}
+			if calls != 0 || len(capture.calls) != 0 {
+				t.Fatal("rejected construction invoked effects")
+			}
+		})
 	}
 }
 
@@ -183,4 +348,66 @@ func TestNewResponseBridgeConstructsFromInjectedSequencer(t *testing.T) {
 	if bridge == nil {
 		t.Fatal("NewResponseBridge returned nil")
 	}
+}
+
+func exerciseServiceLoggerOperations(t *testing.T, store chatsessions.Service) []any {
+	t.Helper()
+	ctx := context.Background()
+	created, read, started, req := startServiceLoggerOperations(t, store)
+	retried, err := store.StartTurn(ctx, req)
+	if err != nil || !reflect.DeepEqual(retried, started) {
+		t.Fatalf("turn retry: %+v, %v", retried, err)
+	}
+	busy := req
+	busy.RequestID = chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn", JSONRPCStringID: "other"}
+	busy.ExpectedVersion = started.Session.Version
+	if _, err := store.StartTurn(ctx, busy); !errors.Is(err, chatsessions.ErrBusy) {
+		t.Fatalf("busy: %v", err)
+	}
+	control := chatsessions.RequestControlRequest{RequestID: chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "conn", JSONRPCStringID: "control"}, SessionID: created.Session.ID, ExpectedVersion: started.Session.Version, Action: chatsessions.ControlActionCancel}
+	intent, err := store.RequestControl(ctx, control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, err := store.RequestControl(ctx, control)
+	if err != nil || retry != intent {
+		t.Fatalf("control retry: %+v, %v", retry, err)
+	}
+	if intent.Intent.RequestedAt != created.Session.CreatedAt {
+		t.Fatal("control ignored injected time")
+	}
+	advanced, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{SessionID: created.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateCanceled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	final, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.Session.ActiveTurnID != "" || final.Session.Version != started.Session.Version+1 {
+		t.Fatalf("terminal facts: %+v", final)
+	}
+	return []any{created, read, started, retried, intent, retry, advanced, final}
+}
+
+func startServiceLoggerOperations(t *testing.T, store chatsessions.Service) (chatsessions.CreateSessionResult, chatsessions.GetSessionResult, chatsessions.StartTurnResult, chatsessions.StartTurnRequest) {
+	t.Helper()
+	ctx := context.Background()
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Session.ID != "session-1" || created.Session.Version != 1 {
+		t.Fatalf("unexpected session: %+v", created)
+	}
+	read, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := chatsessions.StartTurnRequest{RequestID: validCreateRequest().RequestID, SessionID: created.Session.ID, ExpectedVersion: 1}
+	started, err := store.StartTurn(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return created, read, started, req
 }

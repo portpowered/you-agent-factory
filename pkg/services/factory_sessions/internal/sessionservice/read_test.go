@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
@@ -24,7 +25,7 @@ func newTestEventsServiceForSessionService(t *testing.T) events.Service {
 
 func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factorysessionservice.Service {
 	t.Helper()
-	responseService, err := responsestreamwire.NewService(func() string { return "response-event-test-id" }, nil, newTestEventsServiceForSessionService(t))
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-test-id" }, nil, newTestEventsServiceForSessionService(t), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("construct response-stream service: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestService_SubscribeFactoryResponseEvents_RequiresInjectedResponseOwner(t 
 
 func TestService_SubscribeFactoryResponseEvents_DelegatesReconnectPolicyToPrivateService(t *testing.T) {
 	t.Parallel()
-	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" }, nil, newTestEventsServiceForSessionService(t))
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-outer" }, nil, newTestEventsServiceForSessionService(t), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("construct response-stream service: %v", err)
 	}

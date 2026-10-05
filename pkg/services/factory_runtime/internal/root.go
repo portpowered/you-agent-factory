@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -181,7 +182,7 @@ func (r *Root) finishActivation(
 		cleanupErr := closeActivation(activation, ctx)
 		if cleanupErr != nil {
 			r.retainFailedCleanup(request.RuntimeID, activation)
-			operationErr = fmt.Errorf("%w; unwind activation: %v", operationErr, cleanupErr)
+			operationErr = errors.Join(operationErr, fmt.Errorf("unwind activation: %w", cleanupErr))
 		}
 		r.clearActivating(request.RuntimeID)
 		return &factoryruntime.RuntimeActivationError{

@@ -130,7 +130,7 @@ func newService(
 		providers:         providersService,
 		providerOverride:  providerOverride,
 		observe:           observe,
-		logger:            logging.EnsureLogger(logger),
+		logger:            logger,
 		clock:             clock,
 		worktree:          worktree,
 		worktreeRelease:   worktreeRelease,

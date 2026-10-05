@@ -696,8 +696,6 @@ export function reconcileBotCandidate({
 		"--repo",
 		repository,
 		"--auto",
-		"--squash",
-		"--delete-branch",
 		"--match-head-commit",
 		commitSha,
 	]);

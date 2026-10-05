@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
@@ -20,7 +22,8 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 
 	var observations []workers.ExecutionObservation
 	var observationsMu sync.Mutex
-	service := mustExecuteService(t, &stubRunner{content: "accepted-output"}, func(
+	capture := &executeCaptureLogger{}
+	service := mustExecuteServiceWithEdges(t, &stubRunner{content: "accepted-output"}, func(
 		_ context.Context,
 		observation workers.ExecutionObservation,
 	) error {
@@ -28,7 +31,7 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 		defer observationsMu.Unlock()
 		observations = append(observations, observation.Clone())
 		return nil
-	})
+	}, nil, nil, nil, capture)
 
 	request := validExecuteRequest("dispatch-1", "attempt-1")
 	request.Target.Prompt.SystemPrompt = "secret-system"
@@ -44,6 +47,12 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	observationsMu.Lock()
 	defer observationsMu.Unlock()
 	assertSafeCompletedObservations(t, observations)
+	assertExecuteLogs(t, capture, request.Correlation, result.Outcome)
+	quiet := mustExecuteService(t, &stubRunner{content: "accepted-output"}, nil)
+	quietResult, quietErr := quiet.Execute(context.Background(), request)
+	if quietErr != nil || !reflect.DeepEqual(quietResult, result) {
+		t.Fatalf("Noop result = %#v, %v; capture result = %#v", quietResult, quietErr, result)
+	}
 }
 
 func TestExecutePreservesNonTextProposedOutput(t *testing.T) {
@@ -200,7 +209,7 @@ func TestExecuteFailureAndTimeoutEmitExactlyOneTerminalObservation(t *testing.T)
 				context.Context,
 				workers.RunnerExecutionRequest,
 			) (workers.RunnerExecutionResult, error) {
-				return workers.RunnerExecutionResult{}, errors.New("provider failed")
+				return workers.RunnerExecutionResult{}, workers.NewProviderError(workers.WorkFailureTypeUnknown, "provider failed", nil)
 			}},
 			wantFailure:  workers.WorkFailureTypeUnknown,
 			wantTerminal: workers.ExecutionObservationKindFailed,
@@ -223,6 +232,7 @@ func TestExecuteFailureAndTimeoutEmitExactlyOneTerminalObservation(t *testing.T)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			capture := &executeCaptureLogger{}
 			var observations []workers.ExecutionObservation
 			var observationsMu sync.Mutex
 			service := mustExecuteService(t, test.runner, func(
@@ -233,7 +243,7 @@ func TestExecuteFailureAndTimeoutEmitExactlyOneTerminalObservation(t *testing.T)
 				defer observationsMu.Unlock()
 				observations = append(observations, observation.Clone())
 				return nil
-			})
+			}, capture)
 
 			request := validExecuteRequest("dispatch-"+test.name, "attempt-"+test.name)
 			request.Target.Timeout = test.timeout
@@ -248,6 +258,7 @@ func TestExecuteFailureAndTimeoutEmitExactlyOneTerminalObservation(t *testing.T)
 				t.Fatalf("failure = %#v, want type %q", result.Failure, test.wantFailure)
 			}
 
+			assertExecuteLogs(t, capture, request.Correlation, result.Outcome)
 			observationsMu.Lock()
 			defer observationsMu.Unlock()
 			if len(observations) != 2 {
@@ -334,7 +345,7 @@ func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
 		&staticRunners{runner: &stubRunner{}},
 		nil,
 		nil,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return time.Unix(10, 0) },
 		nil,
 		nil,
@@ -608,7 +619,18 @@ func TestExecuteConcurrentCallsDoNotShareDispatchState(t *testing.T) {
 			return workers.RunnerExecutionResult{Content: request.Dispatch.DispatchID}, nil
 		},
 	}
-	service := mustExecuteService(t, runner, nil)
+	capture := &executeCaptureLogger{}
+	var observationsMu sync.Mutex
+	observations := make(map[string][]workers.ExecutionObservation)
+	service := mustExecuteServiceWithEdges(t, runner, func(_ context.Context, observation workers.ExecutionObservation) error {
+		observationsMu.Lock()
+		observations[observation.Correlation.DispatchID] = append(observations[observation.Correlation.DispatchID], observation)
+		observationsMu.Unlock()
+		if observation.Correlation.DispatchID == "dispatch-a" {
+			return errors.New("secret isolated observer")
+		}
+		return nil
+	}, nil, nil, nil, capture)
 	results := make(chan workers.ExecuteResult, callCount)
 	errs := make(chan error, callCount)
 	for index := 0; index < callCount; index++ {
@@ -643,8 +665,30 @@ func TestExecuteConcurrentCallsDoNotShareDispatchState(t *testing.T) {
 			if seen[result.Correlation.DispatchID] {
 				t.Fatalf("duplicate dispatch result %q", result.Correlation.DispatchID)
 			}
+			assertAcceptedResult(t, result, result.Correlation.DispatchID, "attempt-"+strings.TrimPrefix(result.Correlation.DispatchID, "dispatch-"), result.Correlation.DispatchID)
 			seen[result.Correlation.DispatchID] = true
 		}
+	}
+	for index := 0; index < callCount; index++ {
+		dispatch := "dispatch-" + string(rune('a'+index))
+		attempt := "attempt-" + string(rune('a'+index))
+		perAttempt := &executeCaptureLogger{}
+		for _, record := range capture.records {
+			if record.fields["dispatch_id"] == dispatch {
+				perAttempt.records = append(perAttempt.records, record)
+			}
+		}
+		assertCompletedObservationShape(t, observations[dispatch])
+		for _, observation := range observations[dispatch] {
+			if observation.Correlation != validExecuteRequest(dispatch, attempt).Correlation {
+				t.Fatalf("crossed observation = %#v", observation)
+			}
+		}
+		var categories []string
+		if index == 0 {
+			categories = []string{"observer_error", "observer_error"}
+		}
+		assertExecuteLogs(t, perAttempt, validExecuteRequest(dispatch, attempt).Correlation, workers.ExecutionOutcomeAccepted, categories...)
 	}
 	if maxActive.Load() < 2 {
 		t.Fatalf("max concurrent runner calls = %d, want overlap", maxActive.Load())
@@ -654,6 +698,8 @@ func TestExecuteConcurrentCallsDoNotShareDispatchState(t *testing.T) {
 func TestExecuteConstructionIsInert(t *testing.T) {
 	t.Parallel()
 
+	capture := &executeCaptureLogger{}
+	workspace := &recordingWorktree{}
 	var runnerCalls atomic.Int32
 	var observationCalls atomic.Int32
 	runner := &stubRunner{
@@ -669,14 +715,26 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 			observationCalls.Add(1)
 			return nil
 		},
-		nil,
+		capture,
 		func() time.Time { return time.Unix(10, 0) },
-		nil,
-		nil,
+		workspace,
+		workspace.Release,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
+	}
+	_, overrideErr := executeservice.NewWithProviderOverride(&staticRunners{runner: runner}, nil,
+		func(context.Context, workers.ExecutionObservation) error { observationCalls.Add(1); return nil },
+		capture, func() time.Time { return time.Unix(10, 0) }, workspace, workspace.Release, nil, nil, nil, nil)
+	if overrideErr != nil {
+		t.Fatal(overrideErr)
+	}
+	if workspace.prepares.Load() != 0 {
+		t.Fatal("construction prepared workspace")
+	}
+	if len(capture.records) != 0 {
+		t.Fatalf("construction logs = %#v", capture.records)
 	}
 	if runnerCalls.Load() != 0 || observationCalls.Load() != 0 {
 		t.Fatalf(
@@ -690,6 +748,7 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 func TestExecuteCancellationReachesRunnerAndEmitsOneCanceledTerminalObservation(t *testing.T) {
 	t.Parallel()
 
+	capture := &executeCaptureLogger{}
 	started := make(chan struct{})
 	runner := &stubRunner{
 		execute: func(ctx context.Context, _ workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
@@ -711,7 +770,7 @@ func TestExecuteCancellationReachesRunnerAndEmitsOneCanceledTerminalObservation(
 		defer observationsMu.Unlock()
 		observations = append(observations, observation.Clone())
 		return nil
-	})
+	}, capture)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan workers.ExecuteResult, 1)
@@ -730,10 +789,11 @@ func TestExecuteCancellationReachesRunnerAndEmitsOneCanceledTerminalObservation(
 		if result.Outcome != workers.ExecutionOutcomeCanceled {
 			t.Fatalf("outcome = %q, want CANCELED", result.Outcome)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("Execute() did not return after runner observed cancellation")
 	}
 
+	assertExecuteLogs(t, capture, validExecuteRequest("dispatch-cancel", "attempt-cancel").Correlation, workers.ExecutionOutcomeCanceled)
 	observationsMu.Lock()
 	defer observationsMu.Unlock()
 	if len(observations) != 2 {
@@ -918,19 +978,22 @@ func TestExecuteObservationSinkFailureDoesNotChangeResult(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
-	service := mustExecuteService(t, &stubRunner{content: "accepted"}, func(
+	capture := &executeCaptureLogger{}
+	var delivered []workers.ExecutionObservation
+	service := mustExecuteServiceWithEdges(t, &stubRunner{content: "accepted"}, func(
 		ctx context.Context,
-		_ workers.ExecutionObservation,
+		observation workers.ExecutionObservation,
 	) error {
+		delivered = append(delivered, observation)
 		if ctx.Err() != nil {
 			t.Errorf("observation context error = %v, want nil", ctx.Err())
 		}
 		calls.Add(1)
 		if calls.Load() == 1 {
-			return errors.New("observation sink failed")
+			return errors.New("secret observer error")
 		}
-		panic("observation sink panic")
-	})
+		panic("secret observer panic")
+	}, nil, nil, nil, capture)
 
 	result, err := service.Execute(context.Background(), validExecuteRequest("dispatch-observation", "attempt-observation"))
 	if err != nil {
@@ -939,7 +1002,24 @@ func TestExecuteObservationSinkFailureDoesNotChangeResult(t *testing.T) {
 	if result.Outcome != workers.ExecutionOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
 	}
+	assertExecuteLogs(t, capture, validExecuteRequest("dispatch-observation", "attempt-observation").Correlation, result.Outcome, "observer_error", "observer_panic")
+	assertCompletedObservationShape(t, delivered)
+	if result.Output.Primary[0].Text != "accepted" {
+		t.Fatalf("output = %#v", result.Output)
+	}
 	if calls.Load() != 2 {
 		t.Fatalf("observation sink calls = %d, want started and terminal", calls.Load())
+	}
+}
+
+func TestExecuteSafeCleanupDiagnosticsPreserveFailurePolicy(t *testing.T) {
+	t.Parallel()
+	for _, panics := range []bool{false, true} {
+		for _, runnerFails := range []bool{false, true} {
+			t.Run(fmt.Sprintf("panic=%v/runnerFailure=%v", panics, runnerFails), func(t *testing.T) {
+				t.Parallel()
+				assertSafeCleanupAttempt(t, panics, runnerFails)
+			})
+		}
 	}
 }

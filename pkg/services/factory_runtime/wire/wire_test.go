@@ -13,6 +13,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestNewAssemblyRejectsMissingResourceOwner(t *testing.T) {
+	t.Parallel()
+	opening, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	if opening != nil || err == nil || err.Error() != "factory runtime factory is required" {
+		t.Fatalf("NewAssembly(nil) = %v, %v; want no operation and missing owner error", opening, err)
+	}
+}
+
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
@@ -172,7 +180,11 @@ func (in newServiceInputs) callNewService() (factoryruntime.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewService(NewOrchestration(in.newID, in.workflows, in.workflowRuntime), host, NewDispatchPlanning(in.workersPublisher, in.workersCanceler))
+	mapper, err := NewDefinitionMapper(in.newID)
+	if err != nil {
+		return nil, err
+	}
+	return NewService(NewOrchestration(mapper, in.workflows, in.workflowRuntime), host, NewDispatchPlanning(in.workersPublisher, in.workersCanceler))
 }
 
 type recordingClock struct{ calls int }
@@ -180,4 +192,12 @@ type recordingClock struct{ calls int }
 func (c *recordingClock) Now() time.Time {
 	c.calls++
 	panic("clock read during inert construction")
+}
+
+func TestDefinitionMappingConstructorFailureReturnsNoCapability(t *testing.T) {
+	t.Parallel()
+	mapper, err := NewDefinitionMapper(nil)
+	if err == nil || mapper != nil {
+		t.Fatalf("NewDefinitionMapper(nil) = %v, %v; want no capability and required-ID error", mapper, err)
+	}
 }

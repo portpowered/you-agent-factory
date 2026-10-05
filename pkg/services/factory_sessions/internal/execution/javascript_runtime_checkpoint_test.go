@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -652,7 +653,7 @@ func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	var next atomic.Uint64
 	streams, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	}, nil, eventsService)
+	}, nil, eventsService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -881,6 +882,82 @@ func TestPublishWorkerProgress_StopsOnceTheWorkerIsReleased(t *testing.T) {
 
 	if got := state.responseEvents.RetentionAccounting().EventCount; got != 0 {
 		t.Fatalf("response events after release = %d, want 0", got)
+	}
+}
+
+func TestChildStartProgressBridgePreservesDurableOwnerAndPeer(t *testing.T) {
+	t.Parallel()
+	for _, sameOwner := range []bool{false, true} {
+		t.Run(fmt.Sprintf("bridge shares owner=%v", sameOwner), func(t *testing.T) {
+			t.Parallel()
+			service := newDurableResponseEventsService(t)
+			service.childValues = childTestValues{}
+			const sessionID = "dur-sess-1"
+			state := seedResponseEventSession(t, service, sessionID)
+			peer := seedResponseEventSession(t, service, "dur-sess-peer")
+			if err := service.ensureSessionResponseEvents("dur-sess-peer", peer); err != nil {
+				t.Fatal(err)
+			}
+			bridgeOwner := service
+			if !sameOwner {
+				bridgeOwner = newDurableResponseEventsService(t)
+			}
+			invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
+				Outcome: workers.ExecutionOutcomeAccepted,
+				Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText, Text: "done",
+				}}},
+			}}
+			invoker.onExecute = func(request workers.ExecuteRequest) {
+				request.Input.ProgressPublisher(workers.ProgressFragment{
+					CanonicalDraft: validMessageDeltaDraft(request.Correlation.DispatchID),
+				})
+			}
+			service.SetWorkerExecution(invoker, nil, "runtime", "generation", nil, nil, nil)
+			forwarded := 0
+			hooks := service.childExecutorHooksForStart(ChildExecutorModeLive, sessionID, nil, nil, nil, func(fragment workers.ProgressFragment) {
+				if fragment.DispatchID == "" || fragment.Correlation.DispatchID != fragment.DispatchID {
+					t.Fatalf("bridge lost dispatch correlation: %#v", fragment)
+				}
+				forwarded++
+				bridgeOwner.PublishWorkerProgress(fragment)
+			})
+			executor := hooks.NewChildExecutor(sessionID, newChildRecordSink(), factory.JavaScriptPolicy{})
+			if _, err := executor.Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "hello", ModelProvider: "codex"}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			cursor, err := service.SubscribeResponseEvents(t.Context(), sessionID, factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID})
+			if err != nil {
+				t.Fatalf("subscribe child progress: %v", err)
+			}
+			defer cursor.Detach()
+			observed, err := cursor.Next(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertBridgedChildProgress(t, observed, forwarded)
+			if state.responseEvents == nil || peer.responseEvents.RetentionAccounting().EventCount != 0 {
+				t.Fatal("child progress was lost or delivered to the peer")
+			}
+			before := state.responseEvents.RetentionAccounting().EventCount
+			invoker.request.Input.ProgressPublisher(workers.ProgressFragment{CanonicalDraft: validMessageDeltaDraft("late")})
+			if state.responseEvents.RetentionAccounting().EventCount != before {
+				t.Fatal("terminal child accepted late provider progress")
+			}
+		})
+	}
+}
+
+func assertBridgedChildProgress(t *testing.T, observed []responseevents.FactoryResponseEvent, forwarded int) {
+	t.Helper()
+	messages := 0
+	for _, event := range observed {
+		if strings.Contains(string(event.Payload), `"textDelta":"hello"`) {
+			messages++
+		}
+	}
+	if messages != 1 || len(terminalResponseEvents(observed)) != 1 || forwarded == 0 {
+		t.Fatalf("child responses = %#v, bridge calls = %d; want one native message and terminal", observed, forwarded)
 	}
 }
 

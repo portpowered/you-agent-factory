@@ -1,15 +1,23 @@
 package wire
 
 import (
+	"fmt"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"io/fs"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -19,9 +27,28 @@ import (
 // RuntimeFactory constructs hosted runtime bundles.
 type RuntimeFactory = factoryruntimeinternal.RuntimeFactory
 
+// DefinitionMapper holds reusable definition mapping behavior. Bind allocates
+// opaque, detached state while retaining only the selected ID generator.
+type DefinitionMapper = definitionmapping.Mapping
+
+func NewDefinitionMapper(newID factoryruntime.IDGenerator) (DefinitionMapper, error) {
+	mapper, err := definitionmapping.New(newID)
+	if err != nil {
+		return nil, err
+	}
+	return mapper, nil
+}
+
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly = factoryruntimeinternal.Assembly
+
+// NewInitialActivation binds initial behavior once; Open allocates scoped state.
+func NewInitialActivation(assembly factoryruntimeinternal.InitialAssembly, clock factoryruntime.Clock, logger *zap.Logger,
+	materialize func(*factorydefinitions.RuntimeSnapshot, string) (factorydefinitions.MutableLoadedFactorySource, error),
+) factoryruntime.InitialRuntimeActivationOperation {
+	return factoryruntimeinternal.NewInitialActivation(assembly, clock, logger, materialize).Open
+}
 
 // InputFileSystem is the Factory Runtime construction seam for its selected
 // input tree. The service root does not publish this host-effect port.
@@ -33,13 +60,6 @@ type InputFileSystem interface {
 
 // NewRuntimeFactory constructs a hosted runtime bundle factory.
 func NewRuntimeFactory(
-	quorumPolicy factorydefinitions.QuorumPolicyService,
-	outputShaping factorydefinitions.InvocationOutputShapingService,
-	workPropagation factorydefinitions.WorkPropagationPolicyService,
-	workService work.Service,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	invocationInterpolation factorydefinitions.InvocationInterpolationService,
-	baseLogger *zap.Logger,
 	loggerFactory factoryruntime.RuntimeLoggerFactory,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	runtimeMetrics factoryruntime.RuntimeMetricsOwner,
@@ -49,17 +69,24 @@ func NewRuntimeFactory(
 	inputFiles InputFileSystem,
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
-	providerSessions providersessions.Service,
 	workerAttemptScheduler platformclock.TimerSource,
+	definitionMapper DefinitionMapper,
+	interpolation factorydefinitions.InvocationInterpolationService,
+	providerSessions providersessions.Service,
+	quorumPolicy factorydefinitions.QuorumPolicyService,
+	outputShaping factorydefinitions.InvocationOutputShapingService,
+	workPropagation factorydefinitions.WorkPropagationPolicyService,
+	workService work.Service,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	dispatchOpening OutboxOpening,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	worldStateProjector factoryruntime.WorldStateProjector,
+	recordingsRuntime recordings.RuntimeScopeService,
 ) *RuntimeFactory {
+	engineOpening := runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping,
+		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening)
 	return factoryruntimeinternal.NewRuntimeFactory(
-		quorumPolicy,
-		outputShaping,
-		workPropagation,
-		workService,
-		decisionEnvelopes,
-		invocationInterpolation,
-		baseLogger,
 		loggerFactory,
 		runtimeLogs,
 		runtimeMetrics,
@@ -69,8 +96,10 @@ func NewRuntimeFactory(
 		inputFiles,
 		inputDirectoryWalker,
 		orchestrationCompilation,
-		providerSessions,
 		workerAttemptScheduler,
+		definitionMapper,
+		engineOpening,
+		submissionRecorder, dispatchRecorder, worldStateProjector, recordingsRuntime,
 	)
 }
 
@@ -78,15 +107,41 @@ func NewRuntimeFactory(
 // Wire. It does not start a runtime or sidecar.
 func NewAssembly(
 	runtimeFactory *RuntimeFactory,
+	workerAttemptScheduler platformclock.TimerSource,
+	workerService workers.Service,
 	workerSessions workersessions.Service,
 	workerAttempts factoryruntime.WorkerAttemptOpener,
-	workerService workers.Service,
-	metricsClock platformclock.TimerSource,
-	instanceHost InstanceHost,
-	preparation *RuntimePreparation,
 	requestResolver *WorkstationRequestExecutor,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
+	sidecars *SidecarOpening,
+	instanceHost InstanceHost,
+	preparation RuntimePreparation,
+	recordingsRuntime recordings.RuntimeScopeService,
+	automationService automations.Service,
+	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
+	completionFactory func(string) func(string),
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessions, workerAttempts, workerService, metricsClock, instanceHost, preparation, requestResolver)
+	if runtimeFactory == nil {
+		return nil, fmt.Errorf("factory runtime factory is required")
+	}
+	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService,
+		workerSessions, workerAttempts, requestResolver, recordingsRuntime, initialFactorySnapshot)
+	if err != nil {
+		return nil, err
+	}
+	return factoryruntimeinternal.NewAssembly(opening.Open,
+		sidecars,
+		instanceHost,
+		preparation,
+		recordingsRuntime,
+		automationService,
+		progressFactory, completionFactory)
+}
+
+type SidecarOpening = factoryruntimeinternal.SidecarOpening
+
+func NewSidecarOpening(automation automations.Service, metricsClock platformclock.TimerSource) *SidecarOpening {
+	return factoryruntimeinternal.NewSidecarOpening(automation, metricsClock)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator
@@ -98,13 +153,22 @@ func NewOrchestratorDefinitionValidator(
 }
 
 // RuntimePreparation is the inert preparation owner passed through the T15 bridge.
-type RuntimePreparation = runtimebuild.Service
+type RuntimePreparation = runtimebuild.ExecutionPreparation
 
 // NewRuntimePreparation constructs fixed preparation once in canonical Wire.
 func NewRuntimePreparation(workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factoryruntime.LoadedFactoryLoader, newID factoryruntime.IDGenerator,
-	baseLogger *zap.Logger) *RuntimePreparation {
-	return runtimebuild.New(workstationLoader, loadFactory, newID, baseLogger)
+	baseLogger *zap.Logger, providerOverride providers.Service,
+	providerCommandRunner platformprocess.CommandRunner, scriptCommandRunner platformprocess.CommandRunner,
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory) RuntimePreparation {
+	return runtimebuild.New(workstationLoader,
+		loadFactory,
+		newID,
+		baseLogger,
+		providerOverride,
+		providerCommandRunner,
+		scriptCommandRunner,
+		runtimebuild.MockCommandRunnerFactory(mockCommandRunnerFactory))
 }
 
 // Fixed typed roles consumed by canonical composition.
@@ -125,4 +189,10 @@ func NewWorkstationRequestExecutor(service workers.Service,
 ) *WorkstationRequestExecutor {
 	return runtime.NewWorkstationRequestExecutor(service, interpolation, invocationFiles, newID,
 		prompts, templateFields, invocationFiles, progress, expectedArtifacts, logger)
+}
+
+type OutboxOpening = dispatchplanning.OutboxOpening
+
+func NewOutboxOpening() OutboxOpening {
+	return dispatchplanningwire.NewOpening()
 }

@@ -536,8 +536,33 @@ fnd-12-replay-behavior-baselines:
 fnd-12-visualization-behavior-baselines:
 	$(GO) test ./pkg/services/factory_visualization/internal/service -run '^Test(ServiceProjectsRetainedAndLiveFactoryEvents|NewRejectsMissingDependencies)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-docs-reference-check:
-	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
+DOCS_MARKDOWN_CACHE ?= .cache/docs-markdown-lint
+
+docs-reference-check: SHELL := bash
+docs-reference-check: export GOBIN := $(abspath $(DOCS_MARKDOWN_CACHE)/bin)
+docs-reference-check: export PYTHONPATH := $(abspath $(DOCS_MARKDOWN_CACHE)/python)
+docs-reference-check: export GOTOOLCHAIN := local
+docs-reference-check: $(DOCS_MARKDOWN_CACHE)/ready
+	@test -r .gomarklint-docs.json || { printf '%s\n' 'Cannot read .gomarklint-docs.json' >&2; exit 1; }
+	$(PYTHON) -m check_jsonschema --schemafile .gomarklint-docs.schema.json .gomarklint-docs.json
+	@set -eu; \
+	config="$(abspath .gomarklint-docs.json)"; \
+	tool="$(GOBIN)/gomarklint$(if $(filter Windows_NT,$(OS)),.exe,)"; \
+	scratch=$$(mktemp -d); \
+	trap 'rm -f "$$scratch/input.md" "$$scratch/paths"; rmdir "$$scratch"' EXIT; \
+	find -H docs/README.md docs/reference \( -type f -o -type l \) -iname '*.md' -print0 > "$$scratch/paths"; \
+	while IFS= read -r -d '' source; do \
+	  printf 'Checking %s\n' "$$source"; \
+	  iconv -f UTF-8 -t UTF-8 "$$source" > "$$scratch/input.md"; \
+	  $(PYTHON) -m pymarkdown --disable-rules '*' --enable-rules MD047 --strict-config scan "$$scratch/input.md"; \
+	  if [ -s "$$scratch/input.md" ]; then "$$tool" --config "$$config" "$$scratch/input.md"; fi; \
+	done < "$$scratch/paths"
+
+$(DOCS_MARKDOWN_CACHE)/ready: SHELL := bash
+$(DOCS_MARKDOWN_CACHE)/ready: Makefile scripts/docs-markdown-lint-requirements.txt
+	GOBIN="$(abspath $(DOCS_MARKDOWN_CACHE)/bin)" GOTOOLCHAIN=local $(GO) install -p 1 github.com/shinagawa-web/gomarklint/v3@v3.3.1
+	$(PYTHON) -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --upgrade --target "$(abspath $(DOCS_MARKDOWN_CACHE)/python)" -r scripts/docs-markdown-lint-requirements.txt
+	@touch "$@"
 
 docs-reference-smoke:
 	$(MAKE) docs-reference-check
@@ -1074,7 +1099,7 @@ golangci: golangci-lint-run repository-lint-run
 
 LINT_MIGRATION_COHORT ?= all
 
-lint-migration-smoke: golangci-build
+lint-migration-smoke: $(if $(filter markdown,$(LINT_MIGRATION_COHORT)),$(DOCS_MARKDOWN_CACHE)/ready,golangci-build)
 	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(abspath $(GOLANGCI_REPOSITORY))"
 
 golangci-lint-run:

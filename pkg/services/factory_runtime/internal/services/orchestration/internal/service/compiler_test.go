@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -25,7 +27,7 @@ workflow.final("ok");
 func TestCompileSelectsPetriKindForLegacyDefinition(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalPetriFactoryConfig(),
 	})
@@ -43,7 +45,7 @@ func TestCompileSelectsPetriKindForLegacyDefinition(t *testing.T) {
 func TestCompileSelectsJavaScriptKindForInlineWorkflow(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalJavaScriptFactoryConfig(validInlineWorkflowSource),
 	})
@@ -68,7 +70,7 @@ return { ok: true };`
 		t.Fatalf("write workflow source: %v", err)
 	}
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	reader := factoryruntime.NewWorkflowSourceReader(dir, localWorkflowSourceFiles{})
 	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: &factorydefinitions.FactoryConfig{
@@ -101,7 +103,7 @@ return { ok: true };`
 func TestCompileRejectsUnsupportedOrchestrationKind(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: &factorydefinitions.FactoryConfig{
 			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
@@ -115,12 +117,12 @@ func TestCompileRejectsUnsupportedOrchestrationKind(t *testing.T) {
 func TestCompileRejectsMissingActivatedDefinition(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{})
 	assertCompileError(t, err, orchestration.ErrDefinitionUnavailable, "ORCHESTRATION_DEFINITION_UNAVAILABLE")
 }
 
-func TestCompileRejectsPetriCompileWithoutIDGenerator(t *testing.T) {
+func TestCompileRejectsPetriCompileWithoutDefinitionMapper(t *testing.T) {
 	t.Parallel()
 
 	compiler := internalservice.New(nil, testJavaScriptWorkflows(), testJavaScriptWorkflows())
@@ -133,7 +135,7 @@ func TestCompileRejectsPetriCompileWithoutIDGenerator(t *testing.T) {
 func TestCompileRejectsInvalidJavaScriptInlineSource(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalJavaScriptFactoryConfig(`workflow.final("ok");\nphase("setup";\n`),
 	})
@@ -155,7 +157,7 @@ func TestCompileRejectsInvalidJavaScriptInlineSource(t *testing.T) {
 func TestCompileRejectsJavaScriptMissingSource(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	_, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: &factorydefinitions.FactoryConfig{
 			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
@@ -170,7 +172,7 @@ func TestCompileRejectsJavaScriptMissingSource(t *testing.T) {
 func TestCompileIsInertAndDoesNotRequireRuntimeSideEffects(t *testing.T) {
 	t.Parallel()
 
-	compiler := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	compiler := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{
 		Config: minimalPetriFactoryConfig(),
 	})
@@ -252,4 +254,81 @@ func (localWorkflowSourceFiles) Stat(path string) (fs.FileInfo, error)      { re
 
 func testJavaScriptWorkflows() factoryruntime.JavaScriptWorkflows {
 	return factoryruntimejavascript.New(localWorkflowSourceFiles{}, os.UserHomeDir, filepath.EvalSymlinks)
+}
+
+func testDefinitionMapper(t *testing.T) *definitionmapping.Mapper {
+	t.Helper()
+	mapper, err := definitionmapping.New(testIDGenerator())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mapper
+}
+
+// The compiler boundary selects a kind and delegates mapping. It does not own
+// definition-mapping rules, which have their own component tests.
+type selectedDefinitionMapper struct {
+	context context.Context
+	config  *factorydefinitions.FactoryConfig
+	net     *state.Net
+	failure error
+	calls   int
+}
+
+func (m *selectedDefinitionMapper) Bind(ctx context.Context, cfg *factorydefinitions.FactoryConfig) (orchestration.Binding, error) {
+	m.context, m.config = ctx, cfg
+	m.calls++
+	if m.failure != nil {
+		return nil, m.failure
+	}
+	return orchestration.NewPetriBinding(m.net), nil
+}
+
+func TestCompileUsesInjectedDefinitionMappingBehavior(t *testing.T) {
+	t.Parallel()
+	for _, fails := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mapping failure=%t", fails), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cfg := minimalPetriFactoryConfig()
+			mapper := &selectedDefinitionMapper{net: &state.Net{}}
+			if fails {
+				mapper.failure = errors.New("selected mapping diagnostic")
+			}
+			compiler := internalservice.New(mapper, nil, nil)
+			result, err := compiler.Compile(ctx, orchestration.CompileRequest{Config: cfg})
+			if mapper.calls != 1 || mapper.context != ctx || mapper.config != cfg {
+				t.Fatalf("Map calls=%d context=%v config=%p; want one call with exact inputs", mapper.calls, mapper.context, mapper.config)
+			}
+			if fails {
+				assertCompileError(t, err, orchestration.ErrInvalidDefinition, "ORCHESTRATION_INVALID_DEFINITION")
+				var failure *orchestration.CompileError
+				if !errors.As(err, &failure) || failure.Orchestrator != orchestration.KindPetri || failure.Diagnostics[0].Message != mapper.failure.Error() || failure.Diagnostics[0].Path != "factory" {
+					t.Fatalf("Compile error=%v; want selected mapping diagnostic attributed to PETRI factory", err)
+				}
+				if result.Binding != nil {
+					t.Fatal("failed mapping published a binding")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			net := orchestration.PetriNet(result.Binding)
+			if result.Kind != orchestration.KindPetri || net != mapper.net {
+				t.Fatalf("compiled net=%p; want selected map result %p", net, mapper.net)
+			}
+		})
+	}
+}
+
+func TestJavaScriptCompilationDoesNotInvokePetriMapping(t *testing.T) {
+	t.Parallel()
+	mapper := &selectedDefinitionMapper{failure: errors.New("Petri mapping must not run")}
+	compiler := internalservice.New(mapper, testJavaScriptWorkflows(), nil)
+	result, err := compiler.Compile(context.Background(), orchestration.CompileRequest{Config: minimalJavaScriptFactoryConfig(validInlineWorkflowSource)})
+	if err != nil || result.Kind != orchestration.KindJavaScript || mapper.calls != 0 {
+		t.Fatalf("Compile kind=%s error=%v Petri calls=%d; want JavaScript success and no Petri mapping", result.Kind, err, mapper.calls)
+	}
 }
