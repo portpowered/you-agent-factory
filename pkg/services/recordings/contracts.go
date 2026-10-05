@@ -533,6 +533,7 @@ var (
 	ValidatePortableRecording                          = recordingcontracts.ValidatePortableRecording
 	ValidatePortableRecordingWithVersions              = recordingcontracts.ValidatePortableRecordingWithVersions
 	RedactDeclaredSecrets                              = recordingcontracts.RedactDeclaredSecrets
+	RedactDeclaredSecretText                           = recordingcontracts.RedactDeclaredSecretText
 	RedactCanonicalEvents                              = recordingcontracts.RedactCanonicalEvents
 	RedactPortableArtifact                             = recordingcontracts.RedactPortableArtifact
 	RedactPortableRecording                            = recordingcontracts.RedactPortableRecording

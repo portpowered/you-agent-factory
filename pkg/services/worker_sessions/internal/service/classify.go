@@ -737,6 +737,19 @@ func terminalDraft(state workersessions.State, result workersessions.TerminalRes
 	}, nil
 }
 func (r *registry) appendDraft(ctx context.Context, topic events.Topic, identity events.AppendIdentity, schemaID events.SchemaID, draft workers.Draft) (events.AppendResult, error) {
+	if len(draft.DeclaredSecretJSONPointers) > 0 {
+		secrets := make([]recordings.RecordingSecret, len(draft.DeclaredSecretJSONPointers))
+		for index, pointer := range draft.DeclaredSecretJSONPointers {
+			secrets[index] = recordings.RecordingSecret{JSONPointer: pointer, Provenance: recordings.RecordingSecretProvenanceDeclared}
+		}
+		safe, err := recordings.RedactDeclaredSecretText(recordings.RecordingRedactionRequest{Payload: draft.Payload, Secrets: secrets})
+		if err != nil {
+			// Invalid locations may themselves contain sensitive text. Do not
+			// return the decoder's pointer or original payload to a caller.
+			return events.AppendResult{}, recordings.ErrInvalidRecordingRedactionRequest
+		}
+		draft.Payload = safe.Payload
+	}
 	if err := workers.ValidateDraft(draft); err != nil {
 		return events.AppendResult{}, fmt.Errorf("worker sessions: invalid draft: %w", err)
 	}

@@ -9,6 +9,24 @@ import (
 	"testing"
 )
 
+func TestRedactDeclaredSecretTextKeepsTextAndStructuredTypes(t *testing.T) {
+	t.Parallel()
+	result, err := RedactDeclaredSecretText(RecordingRedactionRequest{
+		Payload: json.RawMessage(`{"text":"secret","structured":{"token":"secret"},"visible":"neighbor"}`),
+		Secrets: []RecordingSecret{
+			{JSONPointer: "/text", Provenance: RecordingSecretProvenanceDeclared},
+			{JSONPointer: "/structured", Provenance: RecordingSecretProvenanceDeclared},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recordingJSONValue(t, result.Payload, "/text") != "<redacted>" || recordingJSONValue(t, result.Payload, "/visible") != "neighbor" || result.RedactedCount != 2 {
+		t.Fatalf("safe typed payload = %s", result.Payload)
+	}
+	assertRedactedRecordingValue(t, result.Payload, "/structured")
+}
+
 func TestRedactDeclaredSecretsReplacesNestedClassifiedValues(t *testing.T) {
 	const equalLiteral = "declared-secret-equal-literal"
 	payload := json.RawMessage(`{
