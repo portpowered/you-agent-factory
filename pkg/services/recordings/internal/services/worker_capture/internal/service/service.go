@@ -53,7 +53,7 @@ func New(
 	return &Service{
 		events: eventService,
 		writer: writer,
-		logger: logging.EnsureLogger(logger),
+		logger: logger,
 		limit:  limit,
 	}, nil
 }
