@@ -990,7 +990,14 @@ func (s *recordedWorkerSessionObservation) observationReadScopeForWorker(ctx con
 		return scope, err
 	}
 	observation, lookupErr := s.Service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
-	if lookupErr != nil || !observation.Direct {
+	if lookupErr != nil {
+		if errors.Is(lookupErr, context.Canceled) || errors.Is(lookupErr, context.DeadlineExceeded) {
+			return "", lookupErr
+		}
+		// Live identity is optional for retained history and unavailable storage.
+		return scope, nil
+	}
+	if !observation.Direct {
 		return scope, nil
 	}
 	actual := strings.TrimSpace(observation.FactorySessionID)

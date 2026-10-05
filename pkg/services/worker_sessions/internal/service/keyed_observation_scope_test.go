@@ -19,7 +19,7 @@ func TestKeyedRuntimeControlsRejectForeignFactoryScopeBeforeEffects(t *testing.T
 				t.Parallel()
 				sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 				owner := newPerRuntimeAttemptFixture(t, "scoped-control", sink)
-				before := assertPerRuntimeAttemptState(t, owner, workersessions.StateRunning)
+				before := assertPerRuntimeAttemptState(t, t.Context(), owner, workersessions.StateRunning)
 				appends := sink.requestsFor("")
 				request := workersessions.ControlRequest{ID: owner.request.ID, FactorySessionID: scope, RequestID: "foreign-control"}
 				control := scopedRuntimeControl(owner.service, action)
@@ -40,7 +40,7 @@ func TestKeyedRuntimeControlsRejectForeignFactoryScopeBeforeEffects(t *testing.T
 					t.Fatal("foreign control invoked cancellation")
 				default:
 				}
-				after := assertPerRuntimeAttemptState(t, owner, workersessions.StateRunning)
+				after := assertPerRuntimeAttemptState(t, t.Context(), owner, workersessions.StateRunning)
 				if !reflect.DeepEqual(before, after) || !reflect.DeepEqual(appends, sink.requestsFor("")) {
 					t.Fatal("foreign control changed owner state or published history")
 				}

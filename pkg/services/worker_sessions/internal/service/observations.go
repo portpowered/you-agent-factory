@@ -979,6 +979,7 @@ func (s *observationSubscription) closeSource() {
 // observation. It is intentionally not part of the broad Worker Sessions
 // service contract; runtime projections discover this read capability only
 // when the composed capture service provides it.
+//nolint:contextcheck // Legacy optional reader accepts nil; normalize only that compatibility case.
 func (r *registry) LoadWorkerRecording(
 	ctx context.Context,
 	recordingID string,

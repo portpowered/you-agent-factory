@@ -143,6 +143,35 @@ func TestWorkerSessionReadFallbackCarriesOwningFactoryScope(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionOptionalScopeLookupPreservesCancellation(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		err      error
+		canceled bool
+	}{
+		{name: "lookup miss", err: workersessions.ErrObservationSessionNotFound},
+		{name: "unavailable", err: workersessions.ErrObservationProjectionUnavailable},
+		{name: "non-direct"},
+		{name: "canceled", err: workersessions.ErrObservationCanceled, canceled: true},
+		{name: "deadline", err: context.DeadlineExceeded, canceled: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			probe := &scopedWorkerReadProbe{err: test.err}
+			reader := &recordedWorkerSessionObservation{Service: probe, factorySessionID: "recording-session"}
+			scope, err := reader.observationReadScopeForWorker(t.Context(), "recorded-worker", "recording-session")
+			if test.canceled {
+				if !errors.Is(err, test.err) || scope != "" {
+					t.Fatalf("canceled lookup = %q, %v, want original error", scope, err)
+				}
+			} else if err != nil || scope != "recording-session" {
+				t.Fatalf("optional lookup = %q, %v, want retained scope", scope, err)
+			}
+		})
+	}
+}
+
 func TestInvokeWorkerRuntimeAttemptUsesSelectedEffectsAndResumeIdentity(t *testing.T) {
 	t.Parallel()
 	for _, outcome := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateCanceled} {

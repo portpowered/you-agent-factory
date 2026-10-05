@@ -53,7 +53,7 @@ func NewAssembly(
 		return nil, fmt.Errorf("Factory Runtime factory is required")
 	}
 	if workerSessions == nil {
-		return nil, fmt.Errorf("Worker Sessions service is required")
+		return nil, fmt.Errorf("worker sessions service is required")
 	}
 	if workerService == nil {
 		return nil, fmt.Errorf("Workers service is required")

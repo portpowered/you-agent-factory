@@ -195,7 +195,7 @@ func (f *RuntimeFactory) Build(
 	}
 	if workerSessions == nil {
 		_ = factoryhost.CloseBundleSinks(logSink, nil)
-		return nil, fmt.Errorf("Worker Sessions service is required")
+		return nil, fmt.Errorf("worker sessions service is required")
 	}
 	metricsSink, err := openRuntimeMetricsScope(
 		f.runtimeMetrics,
@@ -408,7 +408,7 @@ func assembleRuntimeBundle(
 		}
 	}
 	if workerAttempts == nil {
-		return nil, fmt.Errorf("Worker Sessions runtime attempt capability is required")
+		return nil, fmt.Errorf("worker sessions runtime attempt capability is required")
 	}
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {

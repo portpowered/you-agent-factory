@@ -78,7 +78,7 @@ func (a *runtimeAttempt) Complete(
 		}
 		if committed {
 			if state == workersessions.StateCompleted {
-				r.publishBufferedWorkerOutput(a.workerID, a.attemptID, result.Result)
+				r.publishBufferedWorkerOutput(context.WithoutCancel(ctx), a.workerID, a.attemptID, result.Result)
 			}
 			r.logTerminal(a.workerID, a.attemptID, final)
 			r.publishTerminalRecordOrLog(

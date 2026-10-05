@@ -783,7 +783,7 @@ func (r *registry) ensureObservationWithClock(
 // publishBufferedWorkerOutput retains successful buffered provider output before
 // the Worker terminal record. Streaming Workers already own their message
 // records; their returned result must not introduce a second copy.
-func (r *registry) publishBufferedWorkerOutput(id, attemptID string, result workers.WorkResult) {
+func (r *registry) publishBufferedWorkerOutput(ctx context.Context, id, attemptID string, result workers.WorkResult) {
 	output := result.Output
 	if output == "" && result.StructuredResult != nil {
 		raw, err := json.Marshal(result.StructuredResult)
@@ -807,7 +807,7 @@ func (r *registry) publishBufferedWorkerOutput(id, attemptID string, result work
 	payload, _ := json.Marshal(workers.MessagePayload{Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: output}}})
 	draft := workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseCompleted, Payload: payload, DispatchID: attemptID, Provenance: lifecycleProvenance(pub.provider)}
 	identity := events.AppendIdentity{SourceType: workersessions.WorkerObservationSourceType, SourceID: events.SourceID(publicWorkerID(id) + "/result"), SourceSequence: 1, SourceEventID: "result"}
-	_, err := r.appendDraft(context.Background(), r.observationTopic(id), identity, workersessions.WorkerObservationSchemaID, draft)
+	_, err := r.appendDraft(ctx, r.observationTopic(id), identity, workersessions.WorkerObservationSchemaID, draft)
 	if err == nil {
 		pub.hasMessage = true
 	}

@@ -960,7 +960,7 @@ func (r *registry) registerInvocationSupervision(
 			final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
 			return invocationPreparation{session: final, terminal: true, preAdmission: true, failure: workersessions.ErrStartAdmissionFailed}, nil
 		}
-		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		final, _ := r.Get(context.WithoutCancel(ctx), workersessions.GetRequest{ID: req.ID})
 		if options.serverOwned && r.runtimeAdmissionClosed(req.Execution.Execution.RuntimeID) && !final.Terminal() {
 			final = r.cancelInvocationBeforeAdmission(ctx, req.ID, attemptID)
 			return invocationPreparation{session: final, terminal: true, failure: workersessions.ErrStartServerStopping}, nil

@@ -606,8 +606,12 @@ func TestRuntimeProgressPublisher_CapturesScopeAndPreservesForwardingDecision(t 
 			t.Parallel()
 			forwarded := 0
 			calls := 0
-			operation := RuntimeProgressPublisher(func(_ context.Context, key RuntimeAttemptKey, fragment workers.ProgressFragment, next workers.ProgressPublisher) error {
+			ctx := t.Context()
+			operation := RuntimeProgressPublisher(func(gotCtx context.Context, key RuntimeAttemptKey, fragment workers.ProgressFragment, next workers.ProgressPublisher) error {
 				calls++
+				if gotCtx != ctx {
+					t.Error("publication lost its captured operation context")
+				}
 				if key != (RuntimeAttemptKey{RuntimeID: "owned-runtime", DispatchID: "logical-dispatch"}) {
 					t.Errorf("publication key = %#v, want captured runtime and logical dispatch", key)
 				}
@@ -619,7 +623,7 @@ func TestRuntimeProgressPublisher_CapturesScopeAndPreservesForwardingDecision(t 
 				}
 				return test.err
 			})
-			publish := operation.ForRuntime(" owned-runtime ", func(workers.ProgressFragment) { forwarded++ })
+			publish := operation.ForRuntime(ctx, " owned-runtime ", func(workers.ProgressFragment) { forwarded++ })
 			operation = func(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error {
 				t.Error("replacement operation used after scope capture")
 				return nil
@@ -641,7 +645,7 @@ func TestRuntimeProgressPublisher_RejectsProviderConflictBeforePublication(t *te
 		t.Error("conflicting provider reached publication")
 		return nil
 	})
-	operation.ForRuntime("runtime", func(workers.ProgressFragment) { t.Error("conflicting provider forwarded") })(workers.ProgressFragment{
+	operation.ForRuntime(t.Context(), "runtime", func(workers.ProgressFragment) { t.Error("conflicting provider forwarded") })(workers.ProgressFragment{
 		Provider:     "claude",
 		Continuation: &providers.ContinuationRef{Provider: "codex"},
 	})

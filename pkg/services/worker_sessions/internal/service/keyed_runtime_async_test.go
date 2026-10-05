@@ -59,7 +59,7 @@ func TestKeyedRuntimeWorkerIdentityDuplicateWithinFactorySession(t *testing.T) {
 				}
 				state = workersessions.StateCompleted
 			}
-			before := assertPerRuntimeAttemptState(t, owner, state)
+			before := assertPerRuntimeAttemptState(t, t.Context(), owner, state)
 			observation := assertPerRuntimeObservation(t, owner, state)
 			appends := sink.requestsFor("")
 			topic := workersessions.Topic(owner.request.ID, owner.request.Execution.Execution.FactorySessionID)
@@ -86,7 +86,7 @@ func TestKeyedRuntimeWorkerIdentityDuplicateWithinFactorySession(t *testing.T) {
 
 func assertDuplicateWorkerHistoryUnchanged(t *testing.T, owner *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, eventStore events.Service, before workersessions.Session, observation workersessions.Observation, appends []events.AppendRequest, records events.ReadResult) {
 	t.Helper()
-	if after := assertPerRuntimeAttemptState(t, owner, before.State); !reflect.DeepEqual(before, after) {
+	if after := assertPerRuntimeAttemptState(t, t.Context(), owner, before.State); !reflect.DeepEqual(before, after) {
 		t.Fatalf("duplicate changed retained owner: %#v", after)
 	}
 	if after := assertPerRuntimeObservation(t, owner, before.State); !reflect.DeepEqual(observation, after) {
@@ -155,8 +155,8 @@ func TestKeyedRuntimeAsyncAdmissionRejectsMissingEffectsBeforeReservation(t *tes
 			t.Parallel()
 			r := newTestRegistry(t)
 			var execution workers.Service = unusedExecution{t: t}
-			var clock platformclock.Source = r.clock
-			var scheduler platformclock.TimerSource = r.scheduler
+			clock := r.clock
+			scheduler := r.scheduler
 			want := ErrMissingExecution
 			switch missing {
 			case "execution":
@@ -214,14 +214,14 @@ func TestKeyedRuntimeAsyncDeadlineUsesSelectedSchedulerAndRetainsFacts(t *testin
 	}
 	peer := startSelectedEffectsInvocation(t, r, "deadline-peer", "success", 2043, "peer-runtime")
 	facts.SetTick(100)
-	if session := getCharacterizationSession(t, r, req.ID); session.State != workersessions.StateRunning {
+	if session := getCharacterizationSession(t, t.Context(), r, req.ID); session.State != workersessions.StateRunning {
 		t.Fatalf("fact advance changed lifecycle: %#v", session)
 	}
 	scheduler.SetTick(5)
 	if err := waitControlledSignal(observer.signals[workersessions.Topic(req.ID, req.Execution.Execution.FactorySessionID)], 30*time.Second); err != nil {
 		t.Fatal(err)
 	}
-	session := getCharacterizationSession(t, r, req.ID)
+	session := getCharacterizationSession(t, t.Context(), r, req.ID)
 	if session.State != workersessions.StateFailed || session.Result == nil || session.Result.Cause == nil || session.Result.Cause.Kind != workersessions.FailureCauseTimeout {
 		t.Fatalf("selected deadline: %#v, want FAILED/TIMEOUT", session)
 	}
@@ -229,7 +229,7 @@ func TestKeyedRuntimeAsyncDeadlineUsesSelectedSchedulerAndRetainsFacts(t *testin
 	if err != nil || observation.EndedAt == nil || !observation.EndedAt.Equal(facts.Now()) {
 		t.Fatalf("retained terminal facts: %#v, %v", observation, err)
 	}
-	if session := getCharacterizationSession(t, r, "deadline-peer"); session.State != workersessions.StateRunning {
+	if session := getCharacterizationSession(t, t.Context(), r, "deadline-peer"); session.State != workersessions.StateRunning {
 		t.Fatalf("deadline changed peer: %#v", session)
 	}
 	close(peer.release)
@@ -294,7 +294,7 @@ func TestKeyedRuntimeAsyncCloseDuringOpeningRejectsAdmissionAndJoinsCapture(t *t
 		t.Fatal(ctx.Err())
 	}
 	assertAsyncClosedOpeningRetained(t, r, req, sink, recording)
-	if session := getCharacterizationSession(t, r, "opening-peer"); session.State != workersessions.StateRunning {
+	if session := getCharacterizationSession(t, t.Context(), r, "opening-peer"); session.State != workersessions.StateRunning {
 		t.Fatalf("scope close changed peer: %#v", session)
 	}
 	close(peer.release)

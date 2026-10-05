@@ -16,14 +16,14 @@ type RuntimeProgressPublisher func(context.Context, RuntimeAttemptKey, workers.P
 // ForRuntime captures the runtime and publication operation before Workers
 // execution is assembled. Only an explicit standalone bypass may forward output
 // without supervision; rejected or terminal attempts stay suppressed.
-func (publish RuntimeProgressPublisher) ForRuntime(runtimeID string, next workers.ProgressPublisher) workers.ProgressPublisher {
+func (publish RuntimeProgressPublisher) ForRuntime(ctx context.Context, runtimeID string, next workers.ProgressPublisher) workers.ProgressPublisher {
 	runtimeID = strings.TrimSpace(runtimeID)
 	return func(fragment workers.ProgressFragment) {
 		if !providerFragmentAgrees(fragment) {
 			return
 		}
 		key := RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: strings.TrimSpace(fragment.Correlation.DispatchID)}
-		err := publish(context.Background(), key, fragment, next)
+		err := publish(ctx, key, fragment, next)
 		if errors.Is(err, ErrRuntimeProgressUnsupervised) && fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
 			next(fragment)
 		}

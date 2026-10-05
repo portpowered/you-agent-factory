@@ -308,7 +308,8 @@ func NewRuntimeBuild(
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
 			}
-			providerSessionProgress := workersessions.RuntimeProgressPublisher(workerAttempts.PublishRuntimeProgress).ForRuntime(spec.RuntimeInstanceID, progressPublisher)
+			// Progress callbacks outlive build admission; preserve its values without its cancellation.
+			providerSessionProgress := workersessions.RuntimeProgressPublisher(workerAttempts.PublishRuntimeProgress).ForRuntime(context.WithoutCancel(ctx), spec.RuntimeInstanceID, progressPublisher)
 			if workerService == nil {
 				return nil, fmt.Errorf("Workers service is required")
 			}

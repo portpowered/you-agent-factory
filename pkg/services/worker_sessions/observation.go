@@ -175,9 +175,7 @@ type ReadTranscriptByWorkerSessionIDRequest struct {
 }
 
 func (r ReadTranscriptByWorkerSessionIDRequest) Validate() error {
-	return (GetObservationByWorkerSessionIDRequest{
-		WorkerSessionID: r.WorkerSessionID, FactorySessionID: r.FactorySessionID,
-	}).Validate()
+	return GetObservationByWorkerSessionIDRequest(r).Validate()
 }
 
 // StreamObservationsRequest names one exact Provider Session identity and the

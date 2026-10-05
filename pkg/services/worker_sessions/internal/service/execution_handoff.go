@@ -110,7 +110,7 @@ func (r *registry) publishExecution(
 			r.finishSupervisionPublication(supervision)
 			<-supervision.done
 		}
-		r.completeSupervision(sessionID, supervision, result, dispatchErr)
+		r.completeSupervision(attemptContext, sessionID, supervision, result, dispatchErr)
 		dispatchDone <- dispatchErr
 	}()
 	select {
@@ -541,7 +541,7 @@ func cloneSessionContinuation(value *workers.ProviderContinuationRef) *workers.P
 	return &clone
 }
 
-func (r *registry) completeSupervision(id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
+func (r *registry) completeSupervision(ctx context.Context, id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
 	snapshot := supervision.completionSnapshot()
 	if snapshot.deadlineExceeded {
 		result = timeoutDispatchResult(result)
@@ -560,7 +560,7 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 		return
 	}
 	if supervision.runtimeKey.RuntimeID != "" && dispatchErr == nil && snapshot.action == "" && result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCompleted {
-		r.publishBufferedWorkerOutput(id, snapshot.dispatchID, result.Result)
+		r.publishBufferedWorkerOutput(context.WithoutCancel(ctx), id, snapshot.dispatchID, result.Result)
 	}
 	r.completeTerminalSupervision(id, supervision, snapshot, result, dispatchErr, priorState)
 }
