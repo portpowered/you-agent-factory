@@ -134,6 +134,8 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		testInitialOpeningChildInvocation(t, sessions, process, child, effects, api.WaitForURL(t))
 	})
 
+	runInitialOpeningCompatibilityScenarios(t, sessions, process, api.WaitForURL(t), home)
+
 	t.Run("failed resource opening retries with the same identity", func(t *testing.T) {
 		t.Parallel()
 		testFailedInitialOpeningRetry(t, sessions, process, failed, effects, failure)

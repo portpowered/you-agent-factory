@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -40,6 +39,39 @@ type inputFileSystem interface {
 	Stat(string) (fs.FileInfo, error)
 }
 
+// engineOpening opens scoped state using the already selected runtime behavior.
+type engineOpening interface {
+	Open(
+		net *state.Net,
+		runtimeScheduler scheduler.Scheduler,
+		statelessService workers.Service,
+		workerSessionsService workersessions.Service,
+		workerAttempts factory.WorkerAttemptOpener,
+		runtimeDefinitions interfaces.RuntimeDefinitionLookup,
+		invocationFileReader interfaces.FileReader,
+		workflowContext *factory_context.FactoryContext,
+		publicSessionID string,
+		runtimeMode interfaces.RuntimeMode,
+		logger factory.Logger,
+		clock factory.Clock,
+		workerAttemptScheduler platformclock.TimerSource,
+		inlineDispatch bool,
+		eventHistory recordings.RuntimeLedger,
+		recordingID string,
+		runtimeID string,
+		worldStateProjector factory.WorldStateProjector,
+		restoredWorldState *interfaces.FactoryWorldState,
+		skipRestoredDispatchReconciliation bool,
+		submissionRecorder recordings.SubmissionRecorder,
+		factoryEventRecorder factory.FactoryEventRecorder,
+		submissionHooks []factory.SubmissionHook,
+		dispatchRecorder recordings.DispatchRecorder,
+		completionRecorder factory.CompletionRecorder,
+		petriMutationRecorder factory.PetriMutationRecorder,
+		completionDeliveryPlanner factory.CompletionDeliveryPlanner,
+	) (factoryhost.Engine, error)
+}
+
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 
 type RuntimeFactory struct {
@@ -52,7 +84,7 @@ type RuntimeFactory struct {
 	inputFiles               inputFileSystem
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
-	engineOpening            *runtime.EngineOpening
+	engineOpening            engineOpening
 	definitionMapper         definitionmapping.Mapping
 	workerAttemptScheduler   platformclock.TimerSource
 	submissionRecorder       recordings.SubmissionRecorder
@@ -73,7 +105,7 @@ func NewRuntimeFactory(
 	orchestrationCompilation factory.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper definitionmapping.Mapping,
-	engineOpening *runtime.EngineOpening,
+	engineOpening engineOpening,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	worldStateProjector factory.WorldStateProjector,

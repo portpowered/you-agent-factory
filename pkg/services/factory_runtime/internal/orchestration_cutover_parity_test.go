@@ -111,7 +111,18 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadedFactoryFixture: %v", err)
 	}
-	bundle, err := testRuntimeFactory(testRuntimeScopeService(newTestRuntimeLedger)).Build(
+	// Retained legacy cutover wiring coverage; new opening unit fixtures use
+	// controlled compilation and engine effects instead of Wire providers.
+	bundle, err := factoryinternal.NewRuntimeFactory(
+		testRuntimeLoggerFactory, nil, nil, testRuntimeID, testRuntimeID,
+		localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil)),
+		platformclock.Real{}, testDefinitionMapper(),
+		runtimeopening.NewEngineOpening(nil, nil, nil, nil, factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
+			return factorydefinitions.WorkPropagationModeOutputAsPayload
+		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
+		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
+	).Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false,
 		"", factory.RuntimeLogStorageConfig{},

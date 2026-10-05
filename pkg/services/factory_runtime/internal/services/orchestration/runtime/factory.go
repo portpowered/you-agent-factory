@@ -190,7 +190,7 @@ func (opening *EngineOpening) Open(
 	workflowContext *factory_context.FactoryContext,
 	publicSessionID string,
 	runtimeMode interfaces.RuntimeMode,
-	logger logging.Logger,
+	logger factory.Logger,
 	clock factory.Clock,
 	workerAttemptScheduler platformclock.TimerSource,
 	inlineDispatch bool,
