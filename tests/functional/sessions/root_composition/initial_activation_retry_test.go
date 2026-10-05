@@ -35,16 +35,17 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	failure := errors.New("controlled initial input directory opening failure")
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
+	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	gate := &initialOpeningGate{entered: make(chan struct{}), release: make(chan struct{})}
 	files := &initialOpeningDirectories{
 		failedPath: filepath.Join(failed.candidateDir, factorydefinitions.InputsDir),
 		gatedPath:  filepath.Join(canceled.candidateDir, factorydefinitions.InputsDir),
-		failure:    failure, gate: gate,
+		failure:    failure, gate: gate, effects: effects,
 	}
 	api := support.NewProcessAPIServer()
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		FactoryRuntimeDirectories: files,
-		ScriptCommandRunner:       initialOpeningScriptRunner{},
+		ScriptCommandRunner:       initialOpeningScriptRunner{effects: effects},
 		APIServerStarter:          api.Start,
 	})
 	if err != nil {
@@ -80,7 +81,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		assertInitialOpeningInvocation(t, sessions, failed.peerID)
 		failed.startCandidate(t, sessions)
 		assertInitialOpeningInvocation(t, sessions, failed.candidateID)
-		assertInitialOpeningDuplicate(t, sessions, failed)
+		assertInitialOpeningDuplicate(t, sessions, failed, effects)
 		assertInitialOpeningInvocation(t, sessions, failed.peerID)
 	})
 	t.Run("cancellation while opening unwinds before same identity retry", func(t *testing.T) {
@@ -229,14 +230,21 @@ func assertInitialOpeningHistoryPreserved(t *testing.T, sessions factorysessions
 	}
 }
 
-func assertInitialOpeningDuplicate(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario) {
+func assertInitialOpeningDuplicate(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, effects *initialOpeningEffects) {
 	t.Helper()
 	before := initialOpeningHistory(t, sessions, scenario.candidateID)
+	openingEffects := effects.forScenario(scenario)
+	if openingEffects[filepath.Clean(scenario.candidateDir)+"|worker.run"] == 0 {
+		t.Fatal("candidate invocation was not observed at its selected command-runner edge")
+	}
 	_, err := sessions.Start(t.Context(), scenario.request())
 	if err == nil || !strings.Contains(err.Error(), "already active") {
 		t.Fatalf("duplicate ActivationOnly Start error = %v, want already-active diagnostic", err)
 	}
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.candidateID, before)
+	if after := effects.forScenario(scenario); !reflect.DeepEqual(after, openingEffects) {
+		t.Fatalf("duplicate Start executed candidate-owned external effects: before %v, after %v", openingEffects, after)
+	}
 }
 
 type initialOpeningGate struct {
@@ -251,13 +259,16 @@ type initialOpeningDirectories struct {
 	failure               error
 	gate                  *initialOpeningGate
 	failed, gated         atomic.Bool
+	effects               *initialOpeningEffects
 }
 
 func (files *initialOpeningDirectories) Stat(path string) (fs.FileInfo, error) {
+	files.effects.record("runtime.stat", path)
 	return os.Stat(path)
 }
 
 func (files *initialOpeningDirectories) MkdirAll(path string, mode fs.FileMode) error {
+	files.effects.record("runtime.mkdir", path)
 	if filepath.Clean(path) == files.failedPath && files.failed.CompareAndSwap(false, true) {
 		return files.failure
 	}
@@ -268,11 +279,38 @@ func (files *initialOpeningDirectories) MkdirAll(path string, mode fs.FileMode) 
 	return os.MkdirAll(path, mode)
 }
 
-type initialOpeningScriptRunner struct{}
+type initialOpeningScriptRunner struct{ effects *initialOpeningEffects }
 
-func (initialOpeningScriptRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (runner initialOpeningScriptRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.effects.record("worker.run", request.WorkDir)
 	if request.Command != "initial-opening-script" {
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected worker command %q", request.Command)
 	}
 	return platformprocess.CommandResult{Stdout: []byte("initial opening COMPLETE")}, nil
+}
+
+// Attribute external observations to scenario-owned paths so parallel peer
+// activity cannot conceal or imitate a duplicate candidate opening.
+type initialOpeningEffects struct {
+	mu    sync.Mutex
+	calls map[string]int
+}
+
+func (effects *initialOpeningEffects) record(operation, path string) {
+	effects.mu.Lock()
+	defer effects.mu.Unlock()
+	effects.calls[filepath.Clean(path)+"|"+operation]++
+}
+
+func (effects *initialOpeningEffects) forScenario(scenario initialOpeningScenario) map[string]int {
+	effects.mu.Lock()
+	defer effects.mu.Unlock()
+	result := make(map[string]int)
+	for key, count := range effects.calls {
+		path := filepath.Clean(scenario.candidateDir)
+		if strings.HasPrefix(key, path+string(filepath.Separator)) || strings.HasPrefix(key, path+"|") {
+			result[key] = count
+		}
+	}
+	return result
 }
