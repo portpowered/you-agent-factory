@@ -94,6 +94,16 @@ paths:
       summary: List top-level Worker Session observations
       description: Lists Worker Session observations through their stable top-level identity across the process. With no scope parameter, the fleet-wide view includes direct and Factory-originated observations. Explicit direct or factory scope filters remain available. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope, and limit is applied after filtering.
       parameters:
+        - name: history
+          in: query
+          required: false
+          description: active selects owned nonterminal Worker Sessions; all includes retained history; archived selects ended or owner-lost sessions. Omission retains the process-local compatibility view. Explicit history pages freeze membership and observations for five minutes of idle time. Expired or evicted cursors must be restarted from the first page.
+          schema:
+            type: string
+            enum:
+              - active
+              - all
+              - archived
         - name: scope
           in: query
           required: false
@@ -357,7 +367,7 @@ paths:
         - Worker Sessions
       operationId: streamWorkerSessionEventsByTopLevelWorkerSessionId
       summary: Stream top-level Worker Session events
-      description: Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+      description: Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true. after_position is exclusive; after_sequence is its compatibility alias. stream_generation_id fences a recorded stream generation. Invalid, future, unavailable, and stale cursors use the same typed errors as scoped event streams.
       parameters:
         - $ref: '#/components/parameters/WorkerSessionID'
         - name: replayOnly
@@ -367,6 +377,9 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/WorkerSessionAfterPosition'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/WorkerSessionStreamGenerationID'
       responses:
         '200':
           description: Retained then live Worker Session event frames.
@@ -3928,6 +3941,15 @@ components:
           description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
         parse:
           $ref: '#/components/schemas/WorkerSessionParseDiagnostics'
+        predecessorWorkerSessionId:
+          type: string
+          description: Source Worker Session when this session was admitted by continue or interrupt.
+        successorWorkerSessionId:
+          type: string
+          description: Successor admitted from this session by continue or interrupt, when known.
+        provider:
+          type: string
+          description: Provider identity bound to this attempt, available before any Provider Session reference.
     WorkerSessionTurnUsage:
       type: object
       additionalProperties: false

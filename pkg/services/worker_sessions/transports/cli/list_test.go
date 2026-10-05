@@ -634,3 +634,39 @@ func TestWorkerSessionsListTransportErrorClassifiesClientTimeout(t *testing.T) {
 		t.Fatalf("refused error code = %s, want FACTORY_UNREACHABLE", refused.Code)
 	}
 }
+
+func TestListHistorySelectionAndValidation(t *testing.T) {
+	t.Parallel()
+	for _, history := range []string{"", "active", "all", "archived", "recent"} {
+		t.Run(history, func(t *testing.T) {
+			t.Parallel()
+			var output bytes.Buffer
+			called := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				if r.URL.Query().Get("history") != history {
+					t.Errorf("history query = %q", r.URL.Query().Get("history"))
+				}
+				_, _ = io.WriteString(w, `{"sessions":[]}`)
+			}))
+			defer server.Close()
+			err := NewList(testHTTPProtocol(t))(ListConfig{Context: t.Context(), Server: server.URL, History: history, HistorySet: true, Output: &output})
+			if history == "" || history == "recent" {
+				if err == nil || called || cliErrorCode(err) != "WORKER_SESSION_HISTORY_INVALID" {
+					t.Fatalf("invalid history err=%v called=%t", err, called)
+				}
+			} else if err != nil || !called {
+				t.Fatalf("history err=%v called=%t", err, called)
+			}
+		})
+	}
+}
+
+func TestListHistoryRejectsWorkScopeBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t))(ListConfig{Context: t.Context(), WorkID: "work", History: "all", HistorySet: true, Output: &output})
+	if err == nil || cliErrorCode(err) != "WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED" {
+		t.Fatalf("Work history error = %v", err)
+	}
+}

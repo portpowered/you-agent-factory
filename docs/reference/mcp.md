@@ -31,9 +31,16 @@ you --server http://127.0.0.1:8080 server mcp
 
 Call `you.worker_session.list` with optional `scope`, `state`, `limit`, and
 `nextToken` filters. Call `you.worker_session.read` with `workerSessionId` and
-`view`: `summary` (default), `transcript`, or `events`. The events view returns
+`view`: `summary` (default), `transcript`, `events`, or `logs`. The events view returns
 retained frames only, with a default limit of 100 and a maximum of 1000.
 `truncated` is true when another retained frame exists.
+
+The logs view returns the captured log page in `result.logs`, alongside the
+observation in `result.session`. Use `limit` (1 to 1000, default 100) to bound
+each page. Pass the returned `nextToken` to the next logs request. Poll until
+the session is terminal and `committedPosition` stops advancing. Check `health`
+before treating the capture as complete. `nextToken` is accepted only with
+`view: logs`; `limit` is accepted with `events` and `logs`.
 
 Call `you.worker_session.control` with `workerSessionId` and `operation`:
 `CANCEL`, `TERMINATE`, or `INTERRUPT`. `INTERRUPT` also requires `requestId`,
@@ -149,6 +156,17 @@ modify the file or use the `you` CLI to add a custom provider.
 
 The published MCP manifest in `@you-agent-factory/api/mcp` defines the tools,
 resources, and skill available from the server.
+
+## Discover Worker Sessions
+
+Call `you.worker_session.list` with `history: "active"` for owned nonterminal Worker Sessions.
+Use `history: "archived"` for retained ended or owner-lost sessions.
+Omit `history` or set it to `"all"` to combine both views.
+
+Origin `scope`, lifecycle `state`, and `limit` filter the selection before pagination.
+Continue with the returned `nextToken` and the same filters.
+Explicit history pages preserve their sampled membership and observations.
+If the snapshot expires, restart from the first page.
 
 ## Choose A Project Root
 

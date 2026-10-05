@@ -334,6 +334,15 @@ you --server http://localhost:7437 worker-sessions read --worker-session-id <wor
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id> --view logs --output json
 ```
 
+Use `worker-sessions list --history active` to discover owned nonterminal Worker Sessions.
+Use `--history archived` for retained ended or owner-lost sessions after a host restart.
+Use `--history all` to combine both views. Omission preserves the process-local compatibility view.
+History filters require fleet-wide listing without `--work-id`.
+
+Explicit history pages freeze membership and observations. Later sessions do not enter an existing page sequence.
+Cursors expire after five minutes of inactivity and can expire earlier under snapshot memory pressure.
+Restart from the first page when a cursor expires. The MCP `you.worker_session.list` tool defaults `history` to `all`.
+
 Use `read --view logs` to read a finite page of captured activity while the
 Worker runs or after execution ends. This view reads Portos recordings and
 does not require a Provider Session reference or provider transcript files.
@@ -344,6 +353,14 @@ Worker Session without provider transcript files. The summary preserves captured
 identity, start time, usage, and capture health. Unknown end times and durations
 remain absent. A history without a captured terminal remains readable through
 `read --view logs`, but its summary is unavailable.
+
+Session summaries include the recorded `provider` even before a Provider Session
+reference is available. Recorded continuation links appear as
+`predecessorWorkerSessionId` and `successorWorkerSessionId`; missing legacy facts
+remain omitted.
+Archived source summaries derive the successor from its committed opening in
+the same profile and Factory scope. Successor admission does not rewrite the
+source history. Ambiguous captured links report an unavailable projection.
 
 Logs pages include the recording generation, committed position, capture
 health, and ordered events. New committed events include `capturedAt`, the
@@ -366,6 +383,13 @@ Worker Session, recording generation, and storage profile. The HTTP operation
 is `GET /worker-sessions/{worker_session_id}/logs` with `limit` and `nextToken`.
 Unknown IDs return 404, invalid limits or tokens return 400, and unavailable
 recordings return 503. A selected host failure remains an error.
+
+Use `read --view logs --follow` to emit committed events as NDJSON through the
+captured terminal. Combine it with `--next-token` to resume an acknowledged
+prefix. Follow reads new captured records when live events arrive and checks
+for later commits. It backfills from capture when live event history expires.
+Incomplete history remains an explicit error after its captured prefix.
+Cancel follow to detach the observer while the Worker continues.
 
 Canceling a logs read detaches the observer and returns
 `WORKER_SESSION_LOGS_INTERRUPTED`; the admitted Worker keeps running. Retry
@@ -551,6 +575,11 @@ session is covered end to end by the repository's functional CLI check,
 including list, show, live and terminal stream frames, and read.
 
 ### Turn context usage
+
+Archived Worker Session timing uses the recorded start and the host's terminal
+capture time. The duration includes capture completion and has basis
+`RECORDED_TIMESTAMPS`. Captures without both timestamps leave end and duration
+unavailable. Restart does not create missing timestamps.
 
 When supported provider usage evidence exists, `show --output json` and the
 Worker Session API return `turnUsage` beside `tokenUsage`:

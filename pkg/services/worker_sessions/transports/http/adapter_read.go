@@ -392,6 +392,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	ctx context.Context,
 	workerSessionID string,
 	replayOnly bool,
+	cursor *workersessions.ObservationCursor,
 ) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
 	if a == nil || a.topLevel == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
@@ -416,6 +417,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 		WorkerSessionID: workerSessionID,
 		Limit:           workersessions.DefaultObservationStreamLimit,
 		ReplayOnly:      replayOnly,
+		Cursor:          cursor,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream top-level Worker Session events: %w", err)

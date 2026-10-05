@@ -45,7 +45,7 @@ func (stubExecution) InvokeModel(context.Context, string, modelinference.Request
 func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T) {
 	t.Parallel()
 	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-	service, err := wire.NewService(stubExecution{}, unusedEventsAppender{t: t}, logging.NoopLogger{}, clock, clock, unavailableProviderSessions{}, nil, nil)
+	service, err := wire.NewService(stubExecution{}, unusedEventsAppender{t: t}, logging.NoopLogger{}, clock, clock, unavailableProviderSessions{}, nil, nil, new(wire.HistorySnapshotBudget))
 	if err != nil {
 		t.Fatalf("NewService() error = %v, want nil", err)
 	}

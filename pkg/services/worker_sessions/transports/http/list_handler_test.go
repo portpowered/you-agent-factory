@@ -36,6 +36,41 @@ func TestListWorkerSessionsTranslatesPositiveLimit(t *testing.T) {
 	}
 }
 
+func TestListWorkerSessionsHistoryQuery(t *testing.T) {
+	t.Parallel()
+	for _, history := range []string{"active", "all", "archived", "", "recent"} {
+		t.Run(history, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{}}}
+			recorder := httptest.NewRecorder()
+			value := factoryapi.ListWorkerSessionsParamsHistory(history)
+			NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessions(recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions", nil), factoryapi.ListWorkerSessionsParams{History: &value})
+			if history == "" || history == "recent" {
+				if recorder.Code != http.StatusBadRequest || service.topLevelCalled {
+					t.Fatalf("invalid history status=%d called=%t", recorder.Code, service.topLevelCalled)
+				}
+			} else if recorder.Code != http.StatusOK || service.topLevelRequest.History != workersessions.ObservationHistory(history) {
+				t.Fatalf("history status=%d request=%#v", recorder.Code, service.topLevelRequest)
+			}
+		})
+	}
+}
+
+func TestListWorkerSessionsHistoryUnavailable(t *testing.T) {
+	t.Parallel()
+	service := &fakeObservationService{topLevelErr: workersessions.ErrObservationProjectionUnavailable}
+	recorder := httptest.NewRecorder()
+	history := factoryapi.ListWorkerSessionsParamsHistory("archived")
+	NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessions(recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions", nil), factoryapi.ListWorkerSessionsParams{History: &history})
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusInternalServerError || response.Code != factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE {
+		t.Fatalf("unavailable history status=%d response=%#v", recorder.Code, response)
+	}
+}
+
 func TestListWorkerSessionsRejectsNonPositiveLimit(t *testing.T) {
 	limit := factoryapi.WorkerSessionLimit(0)
 	service := &fakeObservationService{}
@@ -400,4 +435,14 @@ func (r *fleetWorkReader) ListWork(_ context.Context, session string, options wo
 		})
 	}
 	return result, nil
+}
+
+func TestListWorkerSessionsWorkHistoryRejectsBeforeEffects(t *testing.T) {
+	t.Parallel()
+	service := &fakeObservationService{}
+	recorder := httptest.NewRecorder()
+	NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessionsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/factory/worker-sessions?workId=work&history=all", nil), factoryapi.SessionID("factory"), factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work"})
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("Work history status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
 }

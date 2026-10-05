@@ -60,6 +60,8 @@ func TestSubscribeRequestValidate(t *testing.T) {
 			wantErr: ErrCursorTopicMismatch,
 		},
 		{"zero limit", func(r SubscribeRequest) SubscribeRequest { r.Limit = 0; return r }, ErrInvalidReadLimit},
+		{"negative byte budget", func(r SubscribeRequest) SubscribeRequest { r.MaxPendingBytes = -1; return r }, ErrInvalidReadLimit},
+		{"positive byte budget", func(r SubscribeRequest) SubscribeRequest { r.MaxPendingBytes = 1024; return r }, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

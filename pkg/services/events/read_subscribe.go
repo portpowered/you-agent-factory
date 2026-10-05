@@ -199,6 +199,11 @@ type SubscribeRequest struct {
 	Topic Topic
 	From  Cursor
 	Limit int
+	// MaxPendingBytes optionally bounds retained catch-up, live queued records,
+	// and the last delivered record together. Zero preserves count-only delivery.
+	// A sequential consumer releases its previous record by calling Next again;
+	// it must finish processing that record before doing so.
+	MaxPendingBytes int
 }
 
 // Validate reports whether r names a well-formed, topic-bound subscription.
@@ -212,7 +217,7 @@ func (r SubscribeRequest) Validate() error {
 	if !r.From.BelongsTo(r.Topic) {
 		return ErrCursorTopicMismatch
 	}
-	if r.Limit <= 0 {
+	if r.Limit <= 0 || r.MaxPendingBytes < 0 {
 		return ErrInvalidReadLimit
 	}
 	return nil
