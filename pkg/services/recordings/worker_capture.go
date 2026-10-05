@@ -104,6 +104,7 @@ var (
 	ErrInvalidWorkerControlOperation        = workerrecording.ErrInvalidWorkerControlOperation
 	ErrInvalidWorkerRecordingRequest        = workerrecording.ErrInvalidWorkerRecordingRequest
 	ErrMissingWorkerRecordingWriter         = errors.New("recordings: Worker recording writer is required")
+	ErrMissingWorkerControlOperationStore   = errors.New("recordings: Worker control operation store is required")
 	ErrWorkerRecordingSubscribe             = errors.New("recordings: Worker recording subscription failed")
 	ErrWorkerRecordingOpening               = workerrecording.ErrWorkerRecordingOpening
 	ErrWorkerRecordingPersistence           = errors.New("recordings: Worker recording persistence failed")

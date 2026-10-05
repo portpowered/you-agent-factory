@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -38,7 +39,7 @@ func TestCapturedLogsRetainCommittedIdentityAndDetachedTime(t *testing.T) {
 			ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"MESSAGE"}`),
 		}, CapturedAt: &stamp}},
 	}}
-	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, fake)
+	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, fake, testutil.UnavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func TestCapturedLogsReturnSafeTypedStorageOutcomes(t *testing.T) {
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, &capturedActivityFake{err: cell.source})
+			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, &capturedActivityFake{err: cell.source}, testutil.UnavailableWorkerControlStore{})
 			if err != nil {
 				t.Fatal(err)
 			}

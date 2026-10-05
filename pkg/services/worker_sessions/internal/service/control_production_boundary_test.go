@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -94,7 +95,7 @@ func newObservationService(
 	if projection == nil {
 		projection = unavailableProviderSessions{}
 	}
-	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), projection, nil)
+	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), projection, nil, testutil.UnavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}

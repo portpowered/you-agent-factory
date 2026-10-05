@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
@@ -55,7 +56,7 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 		t.Fatalf("events wire NewService() error = %v", err)
 	}
 	service := newLiveSessionService(runner)
-	sessions, err = workersessionswire.NewService(service, eventsService, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, nil)
+	sessions, err = workersessionswire.NewService(service, eventsService, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, nil, testutil.UnavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("Worker Sessions wire NewService() error = %v", err)
 	}

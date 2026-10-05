@@ -745,6 +745,8 @@ func (r *identityCharacterizationRunner) Run(ctx context.Context, req platformpr
 // edge. Capture and the codec are production implementations; this stores raw
 // source records and uses the public reducer for reads, without allocating IDs.
 type identityRecordingWriter struct {
+	// These identity fixtures do not claim operation-journal durability.
+	testutil.UnavailableWorkerControlStore
 	root    string
 	storage platformreplay.Local
 	mu      sync.Mutex

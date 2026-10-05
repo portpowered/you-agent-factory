@@ -23,6 +23,28 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Narrowing the injected writer deliberately models a capture-only external
+// effect. Process admission must refuse it before any provider is invoked.
+type captureOnlyWorkerWriter struct {
+	recordings.WorkerRecordingWriter
+	recordings.WorkerRecordingReader
+}
+
+func TestWorkerControlsRefuseCaptureOnlyStoreAtProcessAdmission(t *testing.T) {
+	t.Parallel()
+	store := newWSRFT004RecordingStore()
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: captureOnlyWorkerWriter{WorkerRecordingWriter: store, WorkerRecordingReader: store},
+	})
+	if process != nil {
+		support.CleanupProcess(t, process)
+		t.Fatal("capture-only store admitted a process without durable control storage")
+	}
+	if !errors.Is(err, recordings.ErrMissingWorkerControlOperationStore) {
+		t.Fatalf("process admission = %v, want missing control store refusal", err)
+	}
+}
+
 // TestWSRFT004DurableOpeningGatesProviderHandoff proves the opening barrier
 // through the canonical root-built process. The recording writer is an
 // injected deterministic persistence edge wrapped only to observe accepted
@@ -331,6 +353,8 @@ func queueWSRFT004ProviderResult(
 }
 
 type wsrFT004RecordingProbe struct {
+	// This fixture owns capture faults, not durable controls.
+	testutil.UnavailableWorkerControlStore
 	delegate          recordings.WorkerRecordingWriter
 	failOpening       bool
 	failPosition      events.AggregateSequence
@@ -356,6 +380,7 @@ func newWSRFT004RecordingProbe(t *testing.T, failOpening bool) *wsrFT004Recordin
 }
 
 type wsrFT004RecordingStore struct {
+	testutil.UnavailableWorkerControlStore
 	mu        sync.Mutex
 	snapshots map[string]recordings.WorkerRecordingSnapshot
 }

@@ -243,7 +243,9 @@ func runRealHostPartialInterrupt(t *testing.T, process support.Process) {
 	}
 }
 
-type failingSuccessorStore struct{}
+type failingSuccessorStore struct {
+	testutil.UnavailableWorkerControlStore
+}
 
 func (failingSuccessorStore) PersistWorkerRecord(_ context.Context, record recordings.WorkerRecordingRecord) error {
 	if record.WorkerSessionID == "successor" {

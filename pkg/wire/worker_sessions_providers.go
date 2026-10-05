@@ -113,10 +113,11 @@ func provideWorkerSessionsService(
 	scheduler platformclock.TimerSource,
 	recorder recordings.WorkerSessionRecordingService,
 	writer recordings.WorkerRecordingWriter,
+	operations recordings.WorkerControlOperationStore,
 ) (workersessions.Service, error) {
 	// Legacy injected writers still support execution without captured reads.
 	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

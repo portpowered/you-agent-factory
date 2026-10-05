@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"reflect"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -30,4 +32,21 @@ func NewWorkerRecordingFileWriter(
 	ownerEpoch string,
 ) (recordings.WorkerRecordingStore, error) {
 	return workerrecordingwire.NewFileWriter(storage, appender, directory, clock, root, ownerEpoch)
+}
+
+// NewWorkerControlOperationStore selects the control capability of the same
+// recording writer. It performs no IO and never supplies an alternate ledger.
+func NewWorkerControlOperationStore(writer recordings.WorkerRecordingWriter) (recordings.WorkerControlOperationStore, error) {
+	store, ok := writer.(recordings.WorkerControlOperationStore)
+	if !ok || store == nil {
+		return nil, recordings.ErrMissingWorkerControlOperationStore
+	}
+	value := reflect.ValueOf(store)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if value.IsNil() {
+			return nil, recordings.ErrMissingWorkerControlOperationStore
+		}
+	}
+	return store, nil
 }

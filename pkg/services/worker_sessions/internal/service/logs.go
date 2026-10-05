@@ -128,8 +128,9 @@ func NewWithCapturedActivity(
 	clock platformclock.Source, scheduler platformclock.TimerSource,
 	providerSessions providersessions.Service, recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
+	operations recordings.WorkerControlOperationStore,
 ) (workersessions.Service, error) {
-	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording)
+	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording, operations)
 	if err != nil {
 		return nil, err
 	}
