@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -652,7 +653,7 @@ func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	var next atomic.Uint64
 	streams, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	}, nil, eventsService)
+	}, nil, eventsService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
