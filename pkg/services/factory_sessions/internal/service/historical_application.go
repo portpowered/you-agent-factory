@@ -7,11 +7,13 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // HistoricalApplicationInspection is the read-only replay selected for a CLI
-// run. It has no live Factory Session or application runtime registration.
+// run. A checkpoint retains its existing execution owner through the public
+// Sessions route until cleanup, without a live Factory runtime registration.
 type HistoricalApplicationInspection struct {
 	Replay                 *factorysessions.HistoricalReplayInspection
 	Diagnostics            factoryruntime.RuntimeLogDiagnostics
@@ -57,11 +59,31 @@ func (r *Root) InspectHistoricalApplication(
 		}
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay inspection is unavailable")
 	}
+	release := func() {}
+	if products.historicalReplay.Checkpoint != nil {
+		binder, ok := r.SessionGateway.(interface {
+			BindHistoricalExecution(string, durableexecution.Service) func()
+		})
+		if !ok {
+			if products.closeArtifacts != nil {
+				_ = products.closeArtifacts()
+			}
+			return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay Sessions routing is unavailable")
+		}
+		release = binder.BindHistoricalExecution(products.historicalReplay.Session.SessionID, products.execution)
+	}
+	closeInspection := func() error {
+		defer release()
+		if products.closeArtifacts != nil {
+			return products.closeArtifacts()
+		}
+		return nil
+	}
 	return HistoricalApplicationInspection{
 		Replay:                 products.historicalReplay,
 		Diagnostics:            products.diagnostics,
 		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...),
 		ResumeRecoveryMetadata: products.resumeRecoveryMetadata,
-		Close:                  products.closeArtifacts,
+		Close:                  closeInspection,
 	}, true, nil
 }

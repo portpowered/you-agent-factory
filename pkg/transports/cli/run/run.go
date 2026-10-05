@@ -411,15 +411,14 @@ func runHistoricalReplay(ctx context.Context, cfg RunConfig, runner RuntimeRunne
 	if runner == nil {
 		return fmt.Errorf("run historical replay: runtime runner is required")
 	}
-	if err := runner.Run(ctx); err != nil {
-		return err
+	// Keep the acquired inspection owner alive while presenting its public
+	// facts. Running the lifecycle afterwards joins continuation and releases it,
+	// including when output fails.
+	presentationErr := emitHistoricalReplayInspection(cfg.Output, *replay)
+	if presentationErr == nil {
+		presentationErr = emitReplayMetadataWarnings(replayMetadataOutput(cfg), warnings)
 	}
-	if err := emitHistoricalReplayInspection(cfg.Output, *replay); err != nil {
-		return err
-	}
-	return emitReplayMetadataWarnings(
-		replayMetadataOutput(cfg), warnings,
-	)
+	return errors.Join(presentationErr, runner.Run(ctx))
 }
 
 func prepareRunStartup(ctx context.Context, cfg RunConfig, discloseHome bool) error {

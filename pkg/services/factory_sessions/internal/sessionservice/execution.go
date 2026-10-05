@@ -25,8 +25,43 @@ func (s *Service) durableExecution() (durableexecution.Service, error) {
 	return s.durable, nil
 }
 
+// replayExecutionBinding scopes the existing replay owner to its inspection.
+type replayExecutionBinding struct{ owner durableexecution.Service }
+
+// BindHistoricalExecution attaches an existing owner to the addressed public
+// route without publishing a live Factory runtime. Cleanup releases only this
+// inspection's binding, including when another inspection replaced it.
+func (s *Service) BindHistoricalExecution(sessionID string, owner durableexecution.Service) func() {
+	binding := &replayExecutionBinding{owner: owner}
+	s.replayMu.Lock()
+	if s.replayExecutions == nil {
+		s.replayExecutions = make(map[string]*replayExecutionBinding)
+	}
+	s.replayExecutions[sessionID] = binding
+	s.replayMu.Unlock()
+	return func() {
+		s.replayMu.Lock()
+		defer s.replayMu.Unlock()
+		if s.replayExecutions[sessionID] == binding {
+			delete(s.replayExecutions, sessionID)
+		}
+	}
+}
+
+func (s *Service) executionForSession(sessionID string) (durableexecution.Service, error) {
+	if s != nil {
+		s.replayMu.RLock()
+		binding := s.replayExecutions[sessionID]
+		s.replayMu.RUnlock()
+		if binding != nil {
+			return binding.owner, nil
+		}
+	}
+	return s.durableExecution()
+}
+
 func (s *Service) ApplyDurableLiveChange(ctx context.Context, sessionID string, request factorysessions.LiveChangeRequest, runtime factoryruntime.Service, projectRoot string) (factorysessions.LiveChangeResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LiveChangeResult{}, err
 	}
@@ -40,7 +75,7 @@ func (s *Service) ApplyDurableLiveChange(ctx context.Context, sessionID string, 
 }
 
 func (s *Service) RecoverDurableLiveChange(ctx context.Context, sessionID, requestID string) (factorysessions.LiveChangeResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LiveChangeResult{}, err
 	}
@@ -70,7 +105,7 @@ func (s *Service) StartSync(ctx context.Context, request factorysessions.StartRe
 }
 
 func (s *Service) ResumeInterruptedSession(ctx context.Context, sessionID string, request factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.AsyncStartResult{}, err
 	}
@@ -78,7 +113,7 @@ func (s *Service) ResumeInterruptedSession(ctx context.Context, sessionID string
 }
 
 func (s *Service) GetSession(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.SessionReadResult{}, err
 	}
@@ -86,7 +121,7 @@ func (s *Service) GetSession(ctx context.Context, sessionID string) (factorysess
 }
 
 func (s *Service) Pause(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -94,7 +129,7 @@ func (s *Service) Pause(ctx context.Context, sessionID string, request factoryse
 }
 
 func (s *Service) Resume(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -102,7 +137,7 @@ func (s *Service) Resume(ctx context.Context, sessionID string, request factorys
 }
 
 func (s *Service) Cancel(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -110,7 +145,7 @@ func (s *Service) Cancel(ctx context.Context, sessionID string, request factorys
 }
 
 func (s *Service) Terminate(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -118,7 +153,7 @@ func (s *Service) Terminate(ctx context.Context, sessionID string, request facto
 }
 
 func (s *Service) Approve(ctx context.Context, sessionID string, request factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -126,7 +161,7 @@ func (s *Service) Approve(ctx context.Context, sessionID string, request factory
 }
 
 func (s *Service) RetryDispatch(ctx context.Context, sessionID string, request factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -134,7 +169,7 @@ func (s *Service) RetryDispatch(ctx context.Context, sessionID string, request f
 }
 
 func (s *Service) InterruptDispatch(ctx context.Context, sessionID string, request factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -142,7 +177,7 @@ func (s *Service) InterruptDispatch(ctx context.Context, sessionID string, reque
 }
 
 func (s *Service) GetResult(ctx context.Context, sessionID string, request factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.ResultReadResult{}, err
 	}
@@ -150,7 +185,7 @@ func (s *Service) GetResult(ctx context.Context, sessionID string, request facto
 }
 
 func (s *Service) ListDispatches(ctx context.Context, sessionID string) (factorysessions.ListDispatchesResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.ListDispatchesResult{}, err
 	}
@@ -162,7 +197,7 @@ func (s *Service) QueryDispatches(ctx context.Context, request factorysessions.D
 }
 
 func (s *Service) GetDispatch(ctx context.Context, sessionID, dispatchID string) (factorysessions.DispatchDetail, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.DispatchDetail{}, err
 	}
@@ -170,7 +205,7 @@ func (s *Service) GetDispatch(ctx context.Context, sessionID, dispatchID string)
 }
 
 func (s *Service) ListArtifacts(ctx context.Context, sessionID string) (factorysessions.ListArtifactsResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.ListArtifactsResult{}, err
 	}
@@ -178,7 +213,7 @@ func (s *Service) ListArtifacts(ctx context.Context, sessionID string) (factorys
 }
 
 func (s *Service) GetArtifact(ctx context.Context, sessionID, artifactID string) (factorysessions.ArtifactDetail, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.ArtifactDetail{}, err
 	}
@@ -186,7 +221,7 @@ func (s *Service) GetArtifact(ctx context.Context, sessionID, artifactID string)
 }
 
 func (s *Service) ReadEvents(ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
-	execution, err := s.durableExecution()
+	execution, err := s.executionForSession(sessionID)
 	if err != nil {
 		return factorysessions.EventReadResult{}, err
 	}

@@ -990,3 +990,32 @@ func (runtimeHostDiagnosticsRunner) Run(context.Context) error { return nil }
 func (r runtimeHostDiagnosticsRunner) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
 	return r.diagnostics
 }
+
+func TestHistoricalReplayOutputFailureStillJoinsOwnerCleanup(t *testing.T) {
+	t.Parallel()
+	outputErr := errors.New("inspection output failed")
+	cleanupErr := errors.New("inspection cleanup failed")
+	var output bytes.Buffer
+	writer := &inspectionFailureWriter{output: &output, err: outputErr}
+	cleaned := false
+	err := runHistoricalReplay(t.Context(), RunConfig{Output: writer}, stubFactoryService{run: func(context.Context) error {
+		cleaned = true
+		if output.Len() == 0 {
+			t.Error("cleanup preceded inspection presentation")
+		}
+		return cleanupErr
+	}}, &factorysessions.HistoricalReplayInspection{}, nil)
+	if !cleaned || !errors.Is(err, outputErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("inspection cleanup lost causes: %v cleaned=%v", err, cleaned)
+	}
+}
+
+type inspectionFailureWriter struct {
+	output *bytes.Buffer
+	err    error
+}
+
+func (w *inspectionFailureWriter) Write(data []byte) (int, error) {
+	_, _ = w.output.Write(data)
+	return 0, w.err
+}
