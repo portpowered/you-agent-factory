@@ -1,0 +1,399 @@
+package observer_test
+
+import (
+ "context"
+ "crypto/sha256"
+ "encoding/json"
+ "io"
+ "net/http"
+ "net/http/httptest"
+ "os"
+ "path/filepath"
+ "errors"
+ "fmt"
+ "sync"
+ "sort"
+ "testing"
+ "time"
+
+ "github.com/google/uuid"
+ "github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+ sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+ "github.com/portpowered/infinite-you/pkg/services/work"
+
+ "github.com/portpowered/infinite-you/pkg/services/edges"
+ models "github.com/portpowered/infinite-you/pkg/services/models"
+)
+
+// Narrow public acquisition/fault/cancellation checks; full capability is separate.
+func TestLifecycleProfileModelDiagnostic(t *testing.T) { runModelDiagnostic(t,"model_diagnostic") }
+func TestLifecycleProfileModelFaultDiagnostic(t *testing.T) { runModelDiagnostic(t,"model_fault_diagnostic") }
+func TestLifecycleProfileModelCancelDiagnostic(t *testing.T) { runModelDiagnostic(t,"model_cancel_diagnostic") }
+func runModelDiagnostic(t *testing.T,mode string) {
+ if testing.Short(){t.Skip("dedicated public Models acquisition diagnostic")}
+ r:=newSampleProfile(mode);defer r.emit(t);r.load(t)
+ baselineobservation.Close();defer baselineobservation.Close()
+ ctx,cancel:=context.WithTimeout(t.Context(),time.Minute);defer cancel()
+ r.session(t,ctx,smokeArtifact(t))
+}
+
+func checkModelDiagnosticResult(mode,text string,result sessions.InvocationResult,err error)error {
+ if err!=nil{return err}
+ expected:=sessions.InvocationTerminalStatusCompleted;code:=""
+ if text=="profile-model-peer" {
+  if mode=="model_fault_diagnostic"{expected=sessions.InvocationTerminalStatusFailed;code=string(sessions.InvocationErrorCodeRuntimeFailure)}
+  if mode=="model_cancel_diagnostic"{expected=sessions.InvocationTerminalStatusCanceled;code=string(sessions.InvocationErrorCodeCanceled)}
+ }
+ if result.Status!=expected || result.ErrorCode!=code || result.RequestID!=text || result.TraceID==""{return fmt.Errorf("unexpected public model outcome: %#v",result)}
+ return nil
+}
+func TestLifecycleProfileDriverModelDiagnosticOutcomes(t *testing.T) {
+ t.Parallel()
+ for _,mode:=range []string{"model_diagnostic","model_fault_diagnostic","model_cancel_diagnostic"}{
+  result:=sessions.InvocationResult{RequestID:"profile-model-peer",TraceID:"trace",Status:sessions.InvocationTerminalStatusCompleted}
+  if mode=="model_fault_diagnostic"{result.Status=sessions.InvocationTerminalStatusFailed;result.ErrorCode=string(sessions.InvocationErrorCodeRuntimeFailure)}
+  if mode=="model_cancel_diagnostic"{result.Status=sessions.InvocationTerminalStatusCanceled;result.ErrorCode=string(sessions.InvocationErrorCodeCanceled)}
+  if err:=checkModelDiagnosticResult(mode,result.RequestID,result,nil);err!=nil{t.Fatal(err)}
+  wrong:=result;wrong.Status=sessions.InvocationTerminalStatusTimedOut
+  if checkModelDiagnosticResult(mode,result.RequestID,wrong,nil)==nil{t.Fatal("timeout accepted as declared outcome")}
+  wrong=result;wrong.TraceID="";if checkModelDiagnosticResult(mode,result.RequestID,wrong,nil)==nil{t.Fatal("unattributed outcome accepted")}
+  cause:=errors.New("transport failed");if !errors.Is(checkModelDiagnosticResult(mode,result.RequestID,result,cause),cause){t.Fatal("original transport failure lost")}
+ }
+}
+
+func profileModelFactory(t *testing.T)string {
+ t.Helper();folder:=t.TempDir()
+ config:=`{"name":"profile-model","workTypes":[{"name":"task","handlingBehavior":["DEFAULT"],"states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"resources":[{"name":"embed-cache","type":"MODEL","capacity":2,"model":"embed","backend":"localai-llamacpp","loadPolicy":"ON_DEMAND"}],"invocationSignature":{"parameters":[{"name":"text","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"}]}]},"workers":[{"name":"embed-worker","type":"MODEL_WORKER","model":"embed","modelLocality":"LOCAL","modelProvider":"CODEX","resources":[{"name":"embed-cache","capacity":1}],"operations":[{"name":"EMBED","inputs":[{"name":"text","required":true,"contentTypes":["TEXT"]}],"outputs":[{"name":"embedding","contentTypes":["JSON"]}]}]}],"workstations":[{"name":"embed","type":"MODEL_INVOKE","worker":"embed-worker","operation":"EMBED","operationBindings":[{"slot":"text","selector":{"type":"TEXT"}}],"inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`
+ if err:=os.WriteFile(filepath.Join(folder,"factory.json"),[]byte(config),0600);err!=nil{t.Fatal(err)}
+ workstation:=filepath.Join(folder,"workstations","embed");if err:=os.MkdirAll(workstation,0700);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(workstation,"AGENTS.md"),[]byte("---\ntype: MODEL_INVOKE\n---\nEmbed the selected text.\n"),0600);err!=nil{t.Fatal(err)}
+ return folder
+}
+
+func (r *sampleProfile) modelDiagnostic(t *testing.T,ctx context.Context,service sessions.Service,home string,artifact artifactIdentity,bootstrap []string,gate *profileModelGate,mode string) {
+ folder:=profileModelFactory(t);id:=uuid.NewString();ops:=publicCycleOperations(service,home,folder)
+ cycle:=&profileCycle{SessionID:id,Generations:[]string{},RuntimeIDs:[]string{}}
+ defer func(){cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop();gate.release("profile-model-work");if err:=ops.Close(cleanup,cycle);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}()
+ generation,runtimeID,err:=ops.Open(ctx,cycle,false);if err!=nil{t.Fatal(err)};cycle.Generations=append(cycle.Generations,generation);cycle.RuntimeIDs=append(cycle.RuntimeIDs,runtimeID)
+ routes:=[]string{"profile-model-work","profile-model-peer"}
+ peerCtx,cancelPeer:=context.WithCancel(ctx);defer cancelPeer()
+ done:=make(chan error,2);started,joined:=0,0
+ defer func(){
+  cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
+  for _,text:=range routes{gate.release(text)}
+  for joined<started{select{case err:=<-done:joined++;if err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)};case <-cleanup.Done():r.CleanupErrors=append(r.CleanupErrors,"public model Work not joined");t.Error("public model Work not joined");return}}
+  for _,text:=range routes[:started]{if err:=gate.join(cleanup,text);err!=nil{r.CleanupErrors=append(r.CleanupErrors,err.Error());t.Error(err)}}
+ }()
+ var scope string
+ for _,text:=range routes {
+  started++
+  go func(){invokeCtx:=ctx;if text=="profile-model-peer"{invokeCtx=peerCtx};result,err:=service.Invoke(invokeCtx,sessions.SessionInvokeRequest{SessionID:id,Correlation:sessions.SessionOperationCorrelation{RequestID:text},ContentProvided:true,Content:[]work.WorkContentPart{{Type:work.WorkContentPartTypeText,Text:text}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}});t.Logf("public model outcome mode=%s route=%s result=%#v error=%v",mode,text,result,err);done<-checkModelDiagnosticResult(mode,text,result,err)}()
+  // Observe terminal refusal as well as acquisition; a held peer cannot return.
+  select{case request:=<-gate.routes[text].observed:
+   if scope!="" && scope!=request.Scope.String(){t.Fatal("public model Work changed scope")};scope=request.Scope.String()
+  case err=<-done:joined++;t.Fatalf("Work ended before acquisition: %v",err)
+  case <-ctx.Done():t.Fatal(ctx.Err())}
+ }
+ attempt:=&profileAttempt{SessionID:&id,Generations:cycle.Generations}
+ active:=r.capture(t,artifact,"CAPACITY_ACTIVE",attempt,bootstrap);
+ slot:=scope+"|EMBED";leaseIDs:=map[string]bool{};ownerID:=""
+ for _,owner:=range active.Report.Owners{if owner.Leases!=nil && owner.Leases.CapacityHolders[slot]==2{
+  if ownerID!=""{t.Fatal("duplicate Models capacity owner")};ownerID=owner.OwnerIdentity
+  for _,lease:=range owner.Leases.LeaseRecords{if lease.Scope==scope && lease.ModelName=="embed" && lease.Status=="ACTIVE" && lease.Claimed{if leaseIDs[lease.Key]{t.Fatal("duplicate active lease")};leaseIDs[lease.Key]=true}}
+ }}
+ if len(leaseIDs)!=2 || ownerID==""{t.Fatal("missing two real same-slot Models capacity holders")}
+ leaseList:=[]string{};for key:=range leaseIDs{leaseList=append(leaseList,key)};sort.Strings(leaseList)
+ // Retain the acquired witness before releasing. An unexpected terminal or
+ // cleanup failure must leave the active snapshot with release still false.
+ witnessIndex:=len(r.CapacityWitnesses)
+ r.CapacityWitnesses=append(r.CapacityWitnesses,profileCapacityWitness{Origin:"composed_public_models",Scenario:mode,SessionID:id,ScopeID:scope,ModelName:"embed",OwnerIdentity:ownerID,Slot:slot,Holders:2,PublicCapacity:2,InvocationIDs:append([]string{},routes...),LeaseIDs:leaseList,Multiplicity:"exercised",Checkpoints:[]profileCheckpoint{active}})
+
+ if mode=="model_cancel_diagnostic" {
+  if err=gate.release(routes[0]);err!=nil{t.Fatal(err)}
+  select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}
+  if err=ops.Cancel(ctx,cycle);err!=nil{t.Fatal(err)}
+  cancelPeer() // Cancel the owned caller wait after the public stop joined.
+ } else {for _,text:=range routes{if err=gate.release(text);err!=nil{t.Fatal(err)}}}
+ for joined<started{select{case err=<-done:joined++;if err!=nil{t.Fatal(err)};case <-ctx.Done():t.Fatal(ctx.Err())}}
+ for _,text:=range routes{if err=gate.join(ctx,text);err!=nil{t.Fatal(err)}}
+ released:=r.capture(t,artifact,"CAPACITY_RELEASED",attempt,bootstrap);
+ found:=0
+ for _,owner:=range released.Report.Owners{if owner.OwnerIdentity!=ownerID{continue};if owner.Leases.CapacityHolders[slot]!=0{t.Fatal("capacity remained held after terminal Works")};for _,lease:=range owner.Leases.LeaseRecords{if leaseIDs[lease.Key] && (lease.Status=="RELEASED" || lease.Status=="EXPIRED"){found++}}}
+ if found!=2{t.Fatal("released lease records missing or active")}
+ witness:=&r.CapacityWitnesses[witnessIndex]
+ witness.Checkpoints=append(witness.Checkpoints,released)
+ witness.Released=true
+ if err:=validateProfileCapacityWitness(*witness);err!=nil{witness.Released=false;t.Fatal(err)}
+ t.Logf("composed public acquisition session=%s scope=%s owner=%s slot=%s leases=%v; two holders, public capacity=2",id,scope,ownerID,slot,leaseIDs)
+}
+
+// Installed only at ModelInvocationBackend, after the real Models owner has
+// acquired capacity. Calling this component directly is synthetic calibration,
+// never a composed capacity witness. Routes are immutable after construction.
+type profileModelGate struct {
+ mu sync.Mutex
+ routes map[string]*profileModelRoute
+ scope string
+}
+
+type profileModelRoute struct {
+ observed chan models.InvokeModelRequest
+ release chan struct{}
+ returned chan struct{}
+ once sync.Once
+ entered bool // guarded by profileModelGate.mu
+ failure error
+}
+
+func newProfileModelGate(failures map[string]error)(*profileModelGate,error) {
+ if len(failures)==0{return nil,fmt.Errorf("model gate requires declared Work routes")}
+ gate:=&profileModelGate{routes:map[string]*profileModelRoute{}}
+ for text,failure:=range failures {
+  if text==""{return nil,fmt.Errorf("empty model Work route")}
+  gate.routes[text]=&profileModelRoute{observed:make(chan models.InvokeModelRequest,1),release:make(chan struct{}),returned:make(chan struct{}),failure:failure}
+ }
+ return gate,nil
+}
+
+// Rearm only after every entered external call returned. No owner state changes.
+func (g *profileModelGate) reset(mode string)error {
+ g.mu.Lock();defer g.mu.Unlock()
+ for _,route:=range g.routes{if route.entered{select{case <-route.returned:default:return fmt.Errorf("cannot reset an unjoined model effect")}}}
+ var failure error;if mode=="model_fault_diagnostic"{failure=errors.New("profile controlled inference failure")}
+ fresh,err:=newProfileModelGate(map[string]error{"profile-model-work":nil,"profile-model-peer":failure});if err!=nil{return err}
+ g.routes=fresh.routes;g.scope=""
+ return nil
+}
+
+func detachedModelGateRequest(request models.InvokeModelRequest) models.InvokeModelRequest {
+ request.Inputs=append([]models.InferenceInput(nil),request.Inputs...)
+ for i:=range request.Inputs{if ref:=request.Inputs[i].Artifact;ref!=nil{copy:=*ref;request.Inputs[i].Artifact=&copy}}
+ if request.Input.Artifact!=nil{copy:=*request.Input.Artifact;request.Input.Artifact=&copy}
+ request.Parameters=append([]models.OperationParameter(nil),request.Parameters...)
+ for i:=range request.Parameters{request.Parameters[i]=request.Parameters[i].Clone()}
+ return request
+}
+
+func (g *profileModelGate) invoke(ctx context.Context,request models.InvokeModelRequest)([]models.InferenceContent,[]models.InferenceArtifact,error) {
+ if err:=ctx.Err();err!=nil{return nil,nil,err}
+ if request.Scope.IsZero() || request.ModelName!="embed" || request.Operation!=models.OperationEMBED || len(request.Inputs)!=1 || request.Inputs[0].Name!="text" {
+  return nil,nil,fmt.Errorf("unexpected scoped EMBED effect")
+ }
+ g.mu.Lock()
+ route:=g.routes[request.Inputs[0].Content]
+ if route==nil || route.entered {g.mu.Unlock();return nil,nil,fmt.Errorf("unexpected or repeated model Work route")}
+ scope:=request.Scope.String()
+ if g.scope!="" && g.scope!=scope {g.mu.Unlock();return nil,nil,fmt.Errorf("model Work routes changed explicit session scope")}
+ g.scope=scope;route.entered=true
+ g.mu.Unlock()
+ defer close(route.returned)
+ // Buffered observation cannot prevent cancellation or cleanup. Copy all
+ // reference-bearing input/parameter values before publishing the observation.
+ route.observed<-detachedModelGateRequest(request)
+ select{case <-route.release:case <-ctx.Done():return nil,nil,ctx.Err()}
+ if err:=ctx.Err();err!=nil{return nil,nil,err}
+ if route.failure!=nil{return nil,nil,route.failure}
+ return []models.InferenceContent{{Name:"embedding",Modality:models.ModalityJSON,ContentType:"application/json",MediaType:"application/json",Content:"[101]"}},nil,nil
+}
+
+func (g *profileModelGate) accepted(ctx context.Context,text string)(models.InvokeModelRequest,error) {
+ route:=g.routes[text]
+ if route==nil{return models.InvokeModelRequest{},fmt.Errorf("undeclared model Work route")}
+ select{case request:=<-route.observed:return request,nil;case <-ctx.Done():return models.InvokeModelRequest{},ctx.Err()}
+}
+
+func (g *profileModelGate) release(text string)error {
+ route:=g.routes[text];if route==nil{return fmt.Errorf("undeclared model Work route")}
+ route.once.Do(func(){close(route.release)})
+ return nil
+}
+
+// The backend-return barrier precedes the public terminal Work barrier. A
+// caller must join both before CAPACITY_RELEASED; this alone proves no release.
+func (g *profileModelGate) join(ctx context.Context,text string)error {
+ route:=g.routes[text];if route==nil{return fmt.Errorf("undeclared model Work route")}
+ select{case <-route.returned:return nil;case <-ctx.Done():return ctx.Err()}
+}
+
+func modelGateUnitRequest(t *testing.T,text,scope string) models.InvokeModelRequest {
+ t.Helper();ref,err:=(models.RuntimeScopeRef{}).Parse(scope);if err!=nil{t.Fatal(err)}
+ return models.InvokeModelRequest{Scope:ref,ModelName:"embed",Operation:models.OperationEMBED,Inputs:[]models.InferenceInput{{Name:"text",Content:text}},Parameters:[]models.OperationParameter{{Name:"nested",Value:map[string]any{"values":[]any{"original"}}}}}
+}
+
+func TestLifecycleProfileDriverModelGateHeldMultiplicity(t *testing.T) {
+ t.Parallel()
+ gate,err:=newProfileModelGate(map[string]error{"first":nil,"second":nil});if err!=nil{t.Fatal(err)}
+ // These are component callbacks, not Models acquisitions or a public journey.
+ ctx,cancel:=context.WithCancel(t.Context());defer cancel()
+ done:=make(chan error,2)
+ for _,text:=range []string{"first","second"} {
+  request:=modelGateUnitRequest(t,text,"synthetic-scope")
+  go func(){content,artifacts,err:=gate.invoke(ctx,request);if err==nil && (len(content)!=1 || content[0].Content!="[101]" || len(artifacts)!=0){err=errors.New("wrong controlled output")};done<-err}()
+  observed,err:=gate.accepted(ctx,text);if err!=nil{t.Fatal(err)}
+  if observed.Scope.String()!="synthetic-scope" || observed.Inputs[0].Content!=text{t.Fatal("lost route attribution")}
+  select{case <-done:t.Fatal("held effect returned before release");default:}
+ }
+ for _,text:=range []string{"first","second"}{if err=gate.release(text);err!=nil{t.Fatal(err)};if err=gate.release(text);err!=nil{t.Fatal(err)}}
+ for range 2{if err=<-done;err!=nil{t.Fatal(err)}}
+ for _,text:=range []string{"first","second"}{if err=gate.join(ctx,text);err!=nil{t.Fatal(err)}}
+}
+
+func TestLifecycleProfileDriverModelGateFaultAndCancellation(t *testing.T) {
+ t.Parallel()
+ fault:=models.ErrInferenceTimeout
+ for _,mode:=range []string{"fault","cancel"}{t.Run(mode,func(t *testing.T){
+  gate,err:=newProfileModelGate(map[string]error{"work":fault});if err!=nil{t.Fatal(err)}
+  ctx,cancel:=context.WithCancel(t.Context());defer cancel()
+  done:=make(chan error,1);request:=modelGateUnitRequest(t,"work","synthetic-scope")
+  go func(){_,_,err:=gate.invoke(ctx,request);done<-err}()
+  if _,err=gate.accepted(ctx,"work");err!=nil{t.Fatal(err)}
+  want:=fault;if mode=="cancel"{cancel();want=context.Canceled}else{if err=gate.release("work");err!=nil{t.Fatal(err)}}
+  if err=<-done;!errors.Is(err,want){t.Fatalf("lost cause: %v, want %v",err,want)}
+  if err=gate.join(t.Context(),"work");err!=nil{t.Fatal(err)}
+ })}
+}
+
+func TestLifecycleProfileDriverModelGateRejectsInvalidEffects(t *testing.T) {
+ t.Parallel()
+ for _,change:=range []func(*models.InvokeModelRequest){
+  func(r *models.InvokeModelRequest){r.Scope=models.RuntimeScopeRef{}},
+  func(r *models.InvokeModelRequest){r.ModelName="peer"},func(r *models.InvokeModelRequest){r.Operation="TTS"},
+  func(r *models.InvokeModelRequest){r.Inputs=nil},func(r *models.InvokeModelRequest){r.Inputs[0].Name="audio"},
+  func(r *models.InvokeModelRequest){r.Inputs[0].Content="undeclared"},
+ }{
+  gate,err:=newProfileModelGate(map[string]error{"work":nil});if err!=nil{t.Fatal(err)}
+  request:=modelGateUnitRequest(t,"work","synthetic-scope");change(&request)
+  if _,_,err=gate.invoke(t.Context(),request);err==nil{t.Fatal("invalid effect accepted")}
+  select{case <-gate.routes["work"].observed:t.Fatal("invalid request published acquisition");default:}
+ }
+ gate,err:=newProfileModelGate(map[string]error{"work":nil,"peer":nil});if err!=nil{t.Fatal(err)}
+ if err=gate.release("work");err!=nil{t.Fatal(err)}
+ if _,_,err=gate.invoke(t.Context(),modelGateUnitRequest(t,"work","synthetic-scope"));err!=nil{t.Fatal(err)}
+ for _,request:=range []models.InvokeModelRequest{modelGateUnitRequest(t,"work","synthetic-scope"),modelGateUnitRequest(t,"peer","other-scope")} {
+  if _,_,err=gate.invoke(t.Context(),request);err==nil{t.Fatal("duplicate/foreign-scope effect accepted")}
+ }
+ for _,routes:=range []map[string]error{nil,{"":nil}}{if _,err=newProfileModelGate(routes);err==nil{t.Fatal("invalid route declaration accepted")}}
+ for _,operation:=range []func()error{func()error{return gate.release("absent")},func()error{return gate.join(t.Context(),"absent")},func()error{_,err:=gate.accepted(t.Context(),"absent");return err}}{if operation()==nil{t.Fatal("unknown route accepted")}}
+ canceled,stop:=context.WithCancel(t.Context());stop()
+ if _,_,err=gate.invoke(canceled,modelGateUnitRequest(t,"peer","synthetic-scope"));!errors.Is(err,context.Canceled){t.Fatal("lost pre-admission cancellation",err)}
+ if _,err=gate.accepted(canceled,"peer");!errors.Is(err,context.Canceled){t.Fatal("canceled acceptance wait",err)}
+ if err=gate.join(canceled,"peer");!errors.Is(err,context.Canceled){t.Fatal("missing return barrier guessed joined",err)}
+}
+
+func TestLifecycleProfileDriverModelGateDetachedObservation(t *testing.T) {
+ t.Parallel()
+ gate,err:=newProfileModelGate(map[string]error{"work":nil});if err!=nil{t.Fatal(err)}
+ request:=modelGateUnitRequest(t,"work","synthetic-scope")
+ ctx,cancel:=context.WithCancel(t.Context());defer cancel()
+ done:=make(chan error,1);go func(){_,_,err:=gate.invoke(ctx,request);done<-err}()
+ observed,err:=gate.accepted(ctx,"work");if err!=nil{t.Fatal(err)}
+ request.Inputs[0].Content="changed"
+ request.Parameters[0].Value.(map[string]any)["values"].([]any)[0]="changed"
+ if observed.Inputs[0].Content!="work" || observed.Parameters[0].Value.(map[string]any)["values"].([]any)[0]!="original"{t.Fatal("observation aliases caller data")}
+ if err=gate.release("work");err!=nil{t.Fatal(err)}
+ if err=<-done;err!=nil{t.Fatal(err)}
+}
+
+// The controlled host implements only the external process lifetime. Models
+// still owns readiness, acquisition, release and retained lease disposition.
+type profileModelHost struct { endpoint string; stopped chan struct{}; once sync.Once }
+func (h *profileModelHost) HealthEndpoint()string{return h.endpoint}
+func (h *profileModelHost) Wait()error{<-h.stopped;return nil}
+func (h *profileModelHost) Stop(ctx context.Context)error{
+ if err:=ctx.Err();err!=nil{return err};h.once.Do(func(){close(h.stopped)});return nil
+}
+type profileModelEffects struct {endpoint string}
+func (e profileModelEffects) Start(ctx context.Context,_ edges.HostProcessStartSpec)(interface{HealthEndpoint()string;Wait()error;Stop(context.Context)error},error){
+ if err:=ctx.Err();err!=nil{return nil,err}
+ return &profileModelHost{endpoint:e.endpoint,stopped:make(chan struct{})},nil
+}
+func (e profileModelEffects) Negotiate(ctx context.Context,endpoint string,r edges.ModelHostProtocolNegotiationRequest)(edges.ModelHostProtocolNegotiationResult,error){
+ if err:=ctx.Err();err!=nil{return edges.ModelHostProtocolNegotiationResult{},err}
+ if endpoint!=e.endpoint || r.Backend!="localai-llamacpp"{return edges.ModelHostProtocolNegotiationResult{},fmt.Errorf("unexpected controlled model protocol")}
+ return edges.ModelHostProtocolNegotiationResult{ProtocolVersion:"localai-backend-v1",Backend:r.Backend,Ready:true},nil
+}
+func (profileModelEffects) Check(ctx context.Context,_ edges.ModelHostCompatibilityRequest)error{return ctx.Err()}
+type profileRejectModelNetwork struct{}
+func (profileRejectModelNetwork) Do(r *http.Request)(*http.Response,error){return nil,fmt.Errorf("profile forbids model download: %s",r.URL)}
+
+// Author the same content-addressed cache contract used by the existing public
+// Models fixture. These bytes are inert substitutes, never real model assets.
+func profileModelCache(home,kind,source,name string,body []byte)(string,error){
+ digest:=fmt.Sprintf("%x",sha256.Sum256(body))
+ identity:=fmt.Sprintf("%s|%s|%s:%d:%s",kind,source,name,len(body),digest)
+ base:=filepath.Join(home,".agent-factory","models")
+ if kind=="backend"{base=filepath.Join(base,"backend-artifacts")}
+ folder:=filepath.Join(base,".you-content-addressed",kind,fmt.Sprintf("%x",sha256.Sum256([]byte(identity))))
+ if err:=os.MkdirAll(folder,0700);err!=nil{return "",err}
+ if err:=os.WriteFile(filepath.Join(folder,name),body,0600);err!=nil{return "",err}
+ data,err:=json.Marshal(map[string]any{"kind":kind,"identity":identity,"source":source,"sourceKey":source,"artifacts":[]map[string]any{{"Name":name,"Bytes":len(body),"SHA256":digest}}})
+ if err!=nil{return "",err};return folder,os.WriteFile(filepath.Join(folder,".you-assets.json"),data,0600)
+}
+
+func profileModelEdges(t *testing.T,home string,gate *profileModelGate)edges.Edges{
+ t.Helper()
+ host:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){if r.URL.Path=="/health"{w.WriteHeader(http.StatusOK);return};http.NotFound(w,r)}))
+ t.Cleanup(host.Close)
+ definition,ok:=(models.BuiltInCatalog{}).ModelDefinitionFor("embed");if !ok{t.Fatal("source lacks built-in embed model")}
+ name:=filepath.Base(definition.Source);for i,c:=range name{if c=='@'{name=name[:i];break}}
+ if _,err:=profileModelCache(home,"model",definition.Source,name,[]byte("controlled profile embedding weights"));err!=nil{t.Fatal(err)}
+ body:=[]byte("controlled profile backend")
+ selection:=edges.ModelBackendArtifactSelection{Name:"profile-backend.tar.gz",Location:"https://github.com/portpowered/infinite-you/releases/download/profile-fixture/profile-backend.tar.gz",Bytes:int64(len(body)),SHA256:fmt.Sprintf("%x",sha256.Sum256(body))}
+ source:="backend://localai-llamacpp/release://"+fmt.Sprintf("%x",sha256.Sum256([]byte(selection.Location)))
+ if _,err:=profileModelCache(home,"backend",source,selection.Name,body);err!=nil{t.Fatal(err)}
+ effects:=profileModelEffects{endpoint:host.URL}
+ return edges.Edges{
+ ModelAssetHTTPClient:profileRejectModelNetwork{},ModelAssetHostPlatform:models.AssetHostPlatform{OperatingSystem:"linux",Architecture:"amd64"},
+ ModelAssetResolveHomeDirectory:func()(string,error){return home,nil},ModelAssetResolveEnvironment:func(string)string{return ""},
+ ModelAssetMakeDirectories:os.MkdirAll,ModelAssetInspectPath:os.Stat,ModelAssetWriteFile:os.WriteFile,ModelAssetRenamePath:os.Rename,ModelAssetRemovePath:os.Remove,
+ ModelAssetReadFile:os.ReadFile,ModelAssetReadDirectory:os.ReadDir,ModelAssetCreateFile:func(p string)(io.WriteCloser,error){return os.Create(p)},ModelAssetOpenFile:func(p string)(io.ReadCloser,error){return os.Open(p)},
+ ModelHostProcessLauncher:effects,ModelHostHTTPClient:host.Client(),ModelRuntimeHTTPClient:host.Client(),ModelHostProtocolNegotiator:effects,ModelHostCompatibilityChecker:effects,
+ ModelResolveBackendArtifact:func(ctx context.Context,r edges.ModelBackendArtifactSelectionRequest)(edges.ModelBackendArtifactSelection,error){if err:=ctx.Err();err!=nil{return edges.ModelBackendArtifactSelection{},err};if r.Backend!="localai-llamacpp" || r.ProtocolVersion!="localai-backend-v1"{return edges.ModelBackendArtifactSelection{},fmt.Errorf("unexpected profile backend selection")};return selection,nil},
+ ModelInvocationBackend:gate.invoke,
+ }
+}
+
+func TestLifecycleProfileDriverControlledHostJoin(t *testing.T){
+ t.Parallel();effects:=profileModelEffects{endpoint:"http://owned"}
+ h,err:=effects.Start(t.Context(),edges.HostProcessStartSpec{});if err!=nil{t.Fatal(err)}
+ done:=make(chan error,1);go func(){done<-h.Wait()}()
+ select{case <-done:t.Fatal("host wait did not hold lifetime");default:}
+ canceled,stop:=context.WithCancel(t.Context());stop()
+ if err=h.Stop(canceled);!errors.Is(err,context.Canceled){t.Fatal("lost stop cancellation",err)}
+ select{case <-done:t.Fatal("failed stop claimed join");default:}
+ if err=h.Stop(t.Context());err!=nil{t.Fatal(err)};if err=h.Stop(t.Context());err!=nil{t.Fatal(err)}
+ if err=<-done;err!=nil{t.Fatal(err)}
+ if _,err=effects.Start(canceled,edges.HostProcessStartSpec{});!errors.Is(err,context.Canceled){t.Fatal("lost launch cancellation",err)}
+ if _,err=effects.Negotiate(t.Context(),"http://foreign",edges.ModelHostProtocolNegotiationRequest{Backend:"localai-llamacpp"});err==nil{t.Fatal("foreign host accepted")}
+ request,_:=http.NewRequestWithContext(t.Context(),http.MethodGet,"https://profile.invalid/model",nil)
+ if _,err=(profileRejectModelNetwork{}).Do(request);err==nil{t.Fatal("download permitted")}
+}
+
+func TestLifecycleProfileDriverModelFixtureEffects(t *testing.T){
+ t.Parallel();gate,err:=newProfileModelGate(map[string]error{"work":nil});if err!=nil{t.Fatal(err)}
+ effect:=profileModelEdges(t,t.TempDir(),gate)
+ selected,err:=effect.ModelResolveBackendArtifact(t.Context(),edges.ModelBackendArtifactSelectionRequest{Backend:"localai-llamacpp",ProtocolVersion:"localai-backend-v1"});if err!=nil{t.Fatal(err)}
+ if selected.Bytes<1 || len(selected.SHA256)!=64{t.Fatal("missing cached fixture identity")}
+ if _,err=effect.ModelResolveBackendArtifact(t.Context(),edges.ModelBackendArtifactSelectionRequest{Backend:"foreign"});err==nil{t.Fatal("foreign backend accepted")}
+ canceled,stop:=context.WithCancel(t.Context());stop()
+ if _,err=effect.ModelResolveBackendArtifact(canceled,edges.ModelBackendArtifactSelectionRequest{Backend:"localai-llamacpp",ProtocolVersion:"localai-backend-v1"});!errors.Is(err,context.Canceled){t.Fatal("lost selection cancellation",err)}
+ home,err:=effect.ModelAssetResolveHomeDirectory();if err!=nil{t.Fatal(err)}
+ folder,err:=profileModelCache(home,"model","fixture://owned","weights.bin",[]byte("inert"));if err!=nil{t.Fatal(err)}
+ data,err:=effect.ModelAssetReadFile(filepath.Join(folder,"weights.bin"));if err!=nil || string(data)!="inert"{t.Fatal("cached bytes unavailable",err)}
+ metadata,err:=effect.ModelAssetReadFile(filepath.Join(folder,".you-assets.json"));if err!=nil{t.Fatal(err)}
+ var decoded struct{Identity string;Artifacts []struct{Name,SHA256 string;Bytes int}}
+ if err=json.Unmarshal(metadata,&decoded);err!=nil{t.Fatal(err)}
+ if decoded.Identity=="" || len(decoded.Artifacts)!=1 || decoded.Artifacts[0].Bytes!=5 || decoded.Artifacts[0].SHA256!=fmt.Sprintf("%x",sha256.Sum256(data)){t.Fatal("cache lost content attribution")}
+}
+
+func TestLifecycleProfileDriverGateResetRequiresJoin(t *testing.T) {
+ t.Parallel()
+ gate,err:=newProfileModelGate(map[string]error{"profile-model-work":nil});if err!=nil{t.Fatal(err)}
+ ctx,cancel:=context.WithCancel(t.Context());defer cancel();done:=make(chan error,1)
+ go func(){_,_,err:=gate.invoke(ctx,modelGateUnitRequest(t,"profile-model-work","synthetic-scope"));done<-err}()
+ if _,err=gate.accepted(ctx,"profile-model-work");err!=nil{t.Fatal(err)}
+ if gate.reset("model_diagnostic")==nil{t.Fatal("reset accepted unjoined effect")}
+ gate.release("profile-model-work");if err=<-done;err!=nil{t.Fatal(err)}
+ if err=gate.reset("model_fault_diagnostic");err!=nil{t.Fatal(err)}
+ if gate.scope!="" || gate.routes["profile-model-peer"].failure==nil{t.Fatal("reset lost scenario isolation")}
+}

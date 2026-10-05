@@ -21,6 +21,14 @@ linters:
     - depguard
     - revive
     - gocyclo
+    - bodyclose
+    - contextcheck
+    - errcheck
+    - errorlint
+    - govet
+    - ineffassign
+    - nilerr
+    - staticcheck
   settings:
     forbidigo:
       # Examples remain functional source; they cannot escape the OS boundary.
@@ -113,6 +121,9 @@ linters:
   exclusions:
     generated: lax
     rules:
+      # Preserve the retired pkg-only rule scope and generated exclusions.
+      - linters: [bodyclose, contextcheck, errcheck, errorlint, govet, ineffassign, nilerr, staticcheck]
+        path-except: '^pkg/'
       - linters: [revive, gocyclo]
         path-except: '^(cmd|internal|pkg|tests)/'
       # The logging boundary applies to production code under cmd, internal and pkg.

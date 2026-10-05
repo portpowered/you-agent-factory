@@ -8,46 +8,17 @@ import (
 )
 
 func writeBoundaryFindings(writer io.Writer, findings scanResult) {
-	for _, finding := range findings.rootPackageFindings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] unapproved root package family: %s\n", finding.packagePath)
-		fmt.Fprintf(writer, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
-		fmt.Fprintln(writer, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
-	}
-	writeRetiredPackageRootFindings(writer, findings.retiredPackageRootFindings)
-	writeHandwrittenGeneratedFindings(writer, findings.handwrittenGeneratedFindings)
 	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
 	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
-	writeExternalServiceImplementationFindings(writer, findings.externalImplementationFindings)
-	writeTransportBehaviorFindings(writer, findings.transportBehaviorFindings)
-	writeTransportBehaviorFindings(writer, findings.recordedTransportBehaviorFindings)
-	writeStaleTransportBehaviorBaselineEntries(writer, findings.staleTransportBehaviorEntries)
-	writeFunctionalProcessEdgeFindings(writer, findings.functionalProcessEdgeFindings)
-	writeConstructedServiceEdgesFindings(writer, findings.constructedServiceEdgesFindings)
-	writeProcessEdgeContractFindings(writer, findings.processEdgeContractFindings)
-	writeTestWorkNormalizationFindings(writer, findings.testWorkNormalizationFindings)
 	writeProductionDefaultFindings(writer, findings.productionDefaultFindings)
 	writeProductionDefaultFindings(writer, findings.recordedProductionDefaultFindings)
 	writeStaleProductionDefaultBaselineEntries(writer, findings.staleProductionDefaultEntries)
-	writeInitializerBehaviorFindings(writer, findings.initializerBehaviorFindings)
-	writeInitializerBehaviorFindings(writer, findings.recordedInitializerBehaviorFindings)
-	writeStaleInitializerBehaviorBaselineEntries(writer, findings.staleInitializerBehaviorEntries)
-	writeTestBehaviorFindings(writer, findings.testBehaviorFindings)
-	writeTestBehaviorFindings(writer, findings.recordedTestBehaviorFindings)
-	writeStaleTestBehaviorBaselineEntries(writer, findings.staleTestBehaviorEntries)
-	writePetriPublicSurfaceFindings(writer, findings.petriPublicSurfaceFindings)
-	writePetriPublicSurfaceFindings(writer, findings.recordedPetriPublicSurfaceFindings)
-	writeStalePetriPublicSurfaceBaselineEntries(writer, findings.stalePetriPublicSurfaceEntries)
-	writeProviderEffectOwnershipFindings(writer, findings.providerEffectOwnershipFindings)
 }
 
 func writeBaselineSummaries(writer io.Writer, findings scanResult) {
 	writeServiceConstructionBaselineSummary(writer, findings.serviceConstructionBaselineCount)
-	writeTransportBehaviorBaselineSummary(writer, findings.transportBehaviorBaselineCount)
 	writeProductionDefaultBaselineSummary(writer, findings.productionDefaultBaselineCount)
-	writeInitializerBehaviorBaselineSummary(writer, findings.initializerBehaviorBaselineCount)
-	writeTestBehaviorBaselineSummary(writer, findings.testBehaviorBaselineCount)
-	writePetriPublicSurfaceBaselineSummary(writer, findings.petriPublicSurfaceBaselineCount)
 }
 
 func writeGeneratedCodeExceptionSummary(writer io.Writer, policy boundaryPolicy) {
@@ -56,14 +27,6 @@ func writeGeneratedCodeExceptionSummary(writer io.Writer, policy boundaryPolicy)
 		return
 	}
 	fmt.Fprintf(writer, "[agent-factory:pkg-boundary] active generated-code exceptions: %s\n", strings.Join(exceptions, ", "))
-}
-
-func writeRetiredPackageRootFindings(writer io.Writer, findings []retiredPackageRootFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited retired package root: %s\n", finding.packagePath)
-		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
-		fmt.Fprintf(writer, "  remediation: move the code to %s and delete the retired root.\n", finding.canonicalOwner)
-	}
 }
 
 func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
@@ -119,20 +82,4 @@ func writeServiceConstructionBaselineSummary(writer io.Writer, count int) {
 		count,
 	)
 	fmt.Fprintln(writer, "  deletion gate: inject each service role from pkg/wire or move the invariant to its owning service, then delete the exact baseline entry.")
-}
-
-func writeExternalServiceImplementationFindings(writer io.Writer, findings []transportServiceImplementationFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited external service subpackage import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
-		fmt.Fprintln(writer, "  reason: service subpackages are owner-internal for ordinary consumers; pkg/wire is the unrestricted composition-root exception.")
-		fmt.Fprintln(writer, "  remediation: import the exact pkg/services/<service-name> root and use its published contract.")
-	}
-}
-
-func writeHandwrittenGeneratedFindings(writer io.Writer, findings []handwrittenGeneratedFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] handwritten Go file in generated-only package: %s (%s)\n", finding.packagePath, finding.filePath)
-		fmt.Fprintln(writer, "  reason: generated-only packages may contain only files with the standard Code generated ... DO NOT EDIT. marker.")
-		fmt.Fprintln(writer, "  remediation: move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping.")
-	}
 }

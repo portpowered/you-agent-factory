@@ -1,7 +1,7 @@
 package ctor
 
 import (
-	bb "m/pkg/services/b"
+	bb "m/pkg/services/b" // want "initializer-boundary-service-coupling"
 )
 
 func Use() int {

@@ -1,0 +1,689 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LifecycleProfileReport",
+  "$defs": {
+    "profileCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "timestamp",
+        "fixtureScope",
+        "factorySessionID",
+        "runtimeGenerationIDs",
+        "artifact",
+        "owners",
+        "ownerInventoryComplete",
+        "liveGoroutines",
+        "barriers",
+        "findings",
+        "ownerDiscovery",
+        "totals",
+        "bootstrapSessionIDs"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "Q0",
+            "HOST_BASELINE",
+            "SAMPLE_CLOSED",
+            "CYCLE_OPEN",
+            "CYCLE_REPLACED",
+            "CYCLE_CLOSED",
+            "CAPACITY_ACTIVE",
+            "CAPACITY_RELEASED",
+            "Q2"
+          ]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fixtureScope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "factorySessionID": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtimeGenerationIDs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "artifact": {
+          "$ref": "checkpoint.schema.json#/properties/artifact"
+        },
+        "owners": {
+          "$ref": "checkpoint.schema.json#/properties/owners"
+        },
+        "ownerInventoryComplete": {
+          "type": "boolean"
+        },
+        "liveGoroutines": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "barriers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "joined",
+              "error"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "joined": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "ownerDiscovery": {
+          "$ref": "checkpoint.schema.json#/properties/ownerDiscovery"
+        },
+        "totals": {
+          "$ref": "checkpoint.schema.json#/properties/totals"
+        },
+        "bootstrapSessionIDs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "mode",
+    "manifestPath",
+    "manifestSHA256",
+    "hostWindow",
+    "complete",
+    "baselineQualified",
+    "lastBarrier",
+    "errors",
+    "cleanupErrors",
+    "attempts",
+    "summaries",
+    "cycles",
+    "capacityWitnesses",
+    "finalCheckpoints",
+    "overhead"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "mode": {
+      "enum": [
+        "profile",
+        "capability",
+        "samples_capability",
+        "model_diagnostic",
+        "model_fault_diagnostic",
+        "model_cancel_diagnostic"
+      ]
+    },
+    "manifestPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "manifestSHA256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "hostWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmed",
+        "authorityReference",
+        "host",
+        "cpu",
+        "memory",
+        "cache",
+        "startedUTC",
+        "endedUTC",
+        "coTenantBreach"
+      ],
+      "properties": {
+        "confirmed": {
+          "type": "boolean"
+        },
+        "authorityReference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cpu": {
+          "type": "string",
+          "minLength": 1
+        },
+        "memory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cache": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startedUTC": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endedUTC": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coTenantBreach": {
+          "type": "boolean"
+        }
+      }
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "baselineQualified": {
+      "const": false
+    },
+    "lastBarrier": {
+      "type": "string",
+      "minLength": 1
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "cleanupErrors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attemptID",
+          "kind",
+          "ordinal",
+          "factorySessionID",
+          "runtimeGenerationIDs",
+          "durationNs",
+          "valid",
+          "noise",
+          "errors",
+          "barriers",
+          "checkpoints"
+        ],
+        "properties": {
+          "attemptID": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "inert",
+              "session"
+            ]
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "factorySessionID": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runtimeGenerationIDs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "durationNs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "noise": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "barriers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "joined",
+                "error"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "joined": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/profileCheckpoint"
+            }
+          }
+        }
+      }
+    },
+    "summaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inert",
+        "session"
+      ],
+      "properties": {
+        "inert": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "validCount",
+            "attemptCount",
+            "medianNs",
+            "p95Ns",
+            "minNs",
+            "maxNs"
+          ],
+          "properties": {
+            "validCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "attemptCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "medianNs": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "p95Ns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "minNs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "maxNs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "validCount",
+            "attemptCount",
+            "medianNs",
+            "p95Ns",
+            "minNs",
+            "maxNs"
+          ],
+          "properties": {
+            "validCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "attemptCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "medianNs": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "p95Ns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "minNs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "maxNs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "cycles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cycle",
+          "factorySessionID",
+          "runtimeGenerationIDs",
+          "complete",
+          "barriers",
+          "errors",
+          "checkpoints",
+          "runtimeInstanceIDs"
+        ],
+        "properties": {
+          "cycle": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "factorySessionID": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runtimeGenerationIDs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "barriers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "joined",
+                "error"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "joined": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/profileCheckpoint"
+            }
+          },
+          "runtimeInstanceIDs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "capacityWitnesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "origin",
+          "scopeID",
+          "ownerIdentity",
+          "slot",
+          "holders",
+          "publicCapacity",
+          "invocationIDs",
+          "releasedUnderOwnerPolicy",
+          "multiplicityDisposition",
+          "checkpoints",
+          "factorySessionID",
+          "modelName",
+          "leaseIDs"
+        ],
+        "properties": {
+          "origin": {
+            "enum": [
+              "composed_public_models",
+              "synthetic_calibration"
+            ]
+          },
+          "scopeID": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ownerIdentity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "slot": {
+            "type": "string",
+            "minLength": 1
+          },
+          "holders": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "publicCapacity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "invocationIDs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "releasedUnderOwnerPolicy": {
+            "type": "boolean"
+          },
+          "multiplicityDisposition": {
+            "enum": [
+              "exercised",
+              "public_capacity_one"
+            ]
+          },
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/profileCheckpoint"
+            }
+          },
+          "factorySessionID": {
+            "type": "string",
+            "minLength": 1
+          },
+          "modelName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "leaseIDs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "scenario": {
+            "enum": [
+              "model_diagnostic",
+              "model_fault_diagnostic",
+              "model_cancel_diagnostic"
+            ]
+          }
+        }
+      }
+    },
+    "finalCheckpoints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profileCheckpoint"
+      }
+    },
+    "overhead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "methodSHA256",
+        "registrationCallbacks",
+        "retainedOwnerCallbacks",
+        "snapshotCount",
+        "captureOutsideSpanNs",
+        "serializationOutsideSpanNs",
+        "matchedFinalRequired"
+      ],
+      "properties": {
+        "methodSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "registrationCallbacks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retainedOwnerCallbacks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "snapshotCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "captureOutsideSpanNs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serializationOutsideSpanNs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "matchedFinalRequired": {
+          "const": true
+        }
+      }
+    }
+  }
+}

@@ -189,3 +189,240 @@ repair code during independent validation. Composed zero Models activity
 keeps RQ-2-COMPOSED-CAPACITY BLOCKED; P01/I01/VAL01 remain later gates.
 Review owns terminal CI, current-main reconciliation and
 immediate lint/pkg-file-count before merge.
+
+## Dedicated lifecycle profile preparation and sample capability
+
+The prepared artifact supports narrow sample and composed capabilities, and the
+full lifecycle profile. The composed capability uses one shared process for one
+joined replacement cycle and success, failure and cancellation Models scenarios
+in distinct explicit sessions. Each Models scenario holds two real same-slot
+leases, observes public terminal outcomes, and joins cleanup. Complete capability
+reports have three attributed witnesses, one cycle, no timing samples and null
+statistics; baselineQualified remains false. Standalone Models diagnostics remain
+incomplete reports by design.
+
+Use clean committed tooling and clean source. Compilation is optional and occurs
+only in preparation, using cached Go 1.25 with GOPROXY=off. Preparation retains
+build stdout, stderr and exit status and writes an absolute artifact path and
+SHA256, source/tree/tool identities, all overlay/backing hashes, toolchain/build
+information and owned preparation/runtime environment paths in profile-manifest.json.
+Before any Go child runs, Python copies the already cached exact go.mod toolchain,
+expanded required modules and .mod/.info/.ziphash metadata into preparation/.
+Each copied input has source/path/SHA256 attribution in preparation-inputs.json;
+the profile manifest records its hash. Copies use separate bytes, with no shared
+cache writes, hardlinks or downloads. Preparation starts with an empty owned
+build cache; repeated preparation can reuse that same owned cache. Its preflight
+reserves 512MiB for a cold build within the 2GiB output budget. On repeated
+preparation, already counted cache/artifact bytes reduce the 384MiB cache/artifact
+allowance; a 128MiB temporary-file floor remains. Also account for other lane-owned
+output directories before running.
+Missing cached inputs or unsupported replace/exclude directives fail actionably.
+Use --cached-module-cache and --cached-go-root for explicit read-only input paths
+when default GOMODCACHE/GOPATH and exact cached auto-toolchain discovery do not fit.
+All preparation children receive owned HOME/USERPROFILE, AppData, XDG config/cache,
+Go cache/module/temp and TEMP/TMP paths. GOENV/GOWORK/GOPROXY/GOSUMDB/telemetry are
+off, GOFLAGS is empty, and GOTOOLCHAIN remains auto with the copied exact toolchain.
+Wrong pins, dirty sources/tooling, unsupported transforms and failed builds
+remove any previous profile handoff and exit nonzero. Existing preparation
+without --build-profile remains available for provisional development checks.
+Preparation copies the checkpoint and profile schemas beside the manifests so
+read-only validators can resolve local references without compiling.
+
+```powershell
+$env:GOPROXY = 'off'
+$pinWorkspace = Join-Path (Split-Path (Get-Location).Path -Parent) 'fi-t27-profiler-pin-source-20261004'
+# Allocate this lane-owned source once, from existing local Git objects.
+git worktree add --detach $pinWorkspace 95e213cfb35b50236fd7a34ad66c797d2ee7b5b6
+$pinOutput = Join-Path (Get-Location).Path '.artifacts/profile-pin'
+python tests/stress/observer/prepare.py --source-workspace $pinWorkspace --output $pinOutput --mode pin --build-profile
+$env:OBSERVER_PROFILE_MANIFEST = Join-Path $pinOutput 'profile-manifest.json'
+$env:OBSERVER_REPORT = Join-Path $pinOutput 'samples.json'
+$artifact = Join-Path $pinOutput 'observer.test.exe'
+& $artifact '-test.run=^TestLifecycleProfile$' '-test.short=true' '-test.count=1' '-test.timeout=1m' '-test.v'
+& $artifact '-test.run=^TestLifecycleProfileSamplesCapability$' '-test.short=false' '-test.count=1' '-test.timeout=5m' '-test.v'
+```
+
+Repeat preparation with --mode candidate and the lane worktree as source for
+candidate compatibility. Tests do not build artifacts. The running artifact
+verifies its own hash and the supplied preparation/overlay/backing hashes before
+construction. It applies the manifest's owned home, profile, AppData, config,
+cache and temporary directories. Preparation uses detached cached build inputs;
+runtime uses fresh owned cache paths and never invokes Go or downloads assets.
+
+Inert timing starts immediately before BuildProcess and ends when Process.Close
+returns. Session timing starts immediately before explicit Start and ends after
+terminal Work and public Close return. Fixture creation, idle host readiness,
+owner snapshots, sorting and serialization occur outside those spans. Go
+ time.Now/time.Since uses monotonic elapsed integer nanoseconds; UTC timestamps
+only identify the run. Failure stops completeness without retry or replacement.
+Every attempted sample, failure, cleanup error and noisy valid duration remains
+in the raw report and test output. Preserve full stdout/stderr and exit status.
+
+The statistics helper uses all valid values, sorted ascending, arithmetic mean
+of the middle pair for even N and nearest-rank p95 ceil(0.95*N), one-based.
+At N=10 p95 equals max. Capability summaries contain counts with null timing
+statistics; samples capability cycles and capacityWitnesses are empty arrays. No ordinary test has
+a wall-clock performance threshold. Report tests also reject failed barriers,
+missing owners, null known-empty attempt arrays and mismatched artifact bytes.
+
+SAMPLE_CLOSED follows public close acknowledgment. HOST_BASELINE follows joined
+readiness and bootstrap inventory. Q2 follows canceled/joined Execute and server
+and successful Process.Close. Cleanup uses fresh bounded contexts; failures
+remain incomplete. Owners, retained lease records and per-slot integer holders
+are observed under their existing locks without expiration or state mutation.
+The report records retained constructor callbacks, snapshot count and elapsed
+capture outside spans. The report's serialization field records the first
+encoding pass. The required `<report>.overhead.json` receipt records both
+encoding passes, the final report write, and their total, with the exact report
+SHA256. Retain both files and require the receipt hash to match the report;
+an encoding or write failure fails the selector and leaves the report incomplete.
+Receipt encoding/write and raw test logging are additional outside-span costs,
+explicitly excluded from the receipt's measured span. They must also use the
+same procedure in later baseline/final runs.
+Match this method, instrumented bytes, fixture, cache/environment and barriers
+between later baseline/final runs; do not subtract guessed instrumentation cost.
+
+Focused checks (from the isolated source workspace, with absolute overlay):
+
+```powershell
+python -m unittest discover -s tests/stress/observer -p test_profile_prepare.py
+$overlay = Join-Path $pinOutput 'overlay.json'
+Push-Location $pinWorkspace
+go test -overlay $overlay -p 1 -count=1 -short=true -run '^Test(ObserverReport|LifecycleProfileReport|LifecycleProfileDriver)' ./tests/stress/observer
+go test -overlay $overlay -p 1 -count=1 -run TestInProcessObserver ./pkg/platform/baselineobservation ./pkg/services/factory_runtime/internal/services/instance_host/internal/service ./pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service
+Pop-Location
+```
+
+The complete composed capability uses the same prepared artifact and owned environment:
+
+```powershell
+$env:OBSERVER_REPORT = Join-Path $pinOutput 'replacement.json'
+& $artifact '-test.run=^TestLifecycleProfileCapability$' '-test.short=false' '-test.count=1' '-test.timeout=5m' '-test.v'
+# Expected exit 0, complete:true, baselineQualified:false.
+```
+
+It opens one explicitly allocated session, completes Work, cancels, replaces that
+same session with a fresh runtime, completes Work again, and closes. CYCLE_OPEN
+follows Start and terminal Work; CYCLE_REPLACED follows Cancel, replacement Start
+(including prior runtime cleanup), and terminal Work; CYCLE_CLOSED follows public
+Close and owned stop. Each checkpoint retains both known generation identities
+where available, runtime instance IDs, actual handle identities, owner discovery
+status, lease records/statuses, per-slot integer holders/totals, and live goroutines.
+The current handle must exist exactly once; the replaced handle must be absent;
+after close both scenario handles must be absent. Bootstrap handles remain visible.
+Read-only snapshots neither expire overdue ACTIVE records nor remove RELEASED or
+EXPIRED records. Capture, sorting and serialization occur outside sample spans.
+
+The sequential driver accepts up to 100 cycles on one compatible shared process;
+unit callbacks prove exactly 100 contiguous cycles with distinct session/runtime
+identities. The real capability runs only one cycle. The full selector runs all 100; no
+100-real-cycle retention verdict is claimed by narrow capability evidence.
+Failed cycles retain their partial checkpoints, attempted/failed barriers and
+causes; no automatic retry replaces a failed cycle. Every attempted Start receives
+owned Close cleanup on failure, using a fresh bounded context, even if the main
+context is canceled. Cleanup errors are joined with the original cause. Execute
+and server are canceled/joined before Process.Close; a failed join prevents Q2.
+The method hash covers the named sample, cycle and report templates in that order
+(UTF-8 name, NUL, raw template bytes, NUL); individual backing hashes remain in the
+manifest. Match these bytes and barriers during later baseline/final validation.
+
+Full workload is 10 inert and 10 explicit-session samples plus 100 joined
+open/replace/close cycles and three composed Models scenarios. It requires the
+operator's explicit no-co-tenant window authority before any construction. Only
+in that confirmed window, run the supplied prebuilt artifact (no build):
+
+The handoff's `profileCommand` contains the absolute artifact invocation with the
+exact full selector, `-test.short=false`, one run and a 10-minute timeout. Before
+running it, apply the manifest's owned `childPaths` environment as above, set
+`OBSERVER_PROFILE_MANIFEST` and the absolute `OBSERVER_REPORT` destination, and
+set `OBSERVER_HOST_WINDOW_REFERENCE` to the operator's confirmed no-co-tenant
+window authority. The command alone does not authorize a measurement window;
+without that reference the selector refuses before construction.
+
+```powershell
+$env:OBSERVER_HOST_WINDOW_REFERENCE = '<absolute operator authority record or approved window ID>'
+$env:OBSERVER_PROFILE_MANIFEST = Join-Path $pinOutput 'profile-manifest.json'
+$env:OBSERVER_REPORT = Join-Path $pinOutput 'profile.json'
+& $artifact '-test.run=^TestLifecycleProfile$' '-test.count=1' '-test.short=false' '-test.timeout=10m' '-test.v' *> (Join-Path $pinOutput 'profile.raw.txt')
+$LASTEXITCODE | Set-Content (Join-Path $pinOutput 'profile.exit.txt')
+```
+
+The reference is an operator assertion, never automatic host-idleness detection.
+Record actual host/window/cache conditions alongside raw output; cease the run if
+the window is breached. No window is currently supplied. Do not execute the full
+workload on the shared host. All valid timings, including noise, contribute to
+median/p95/min/max; 20 contiguous attempts and 100 complete cycles are required.
+Fault/cancellation expectations do not convert unexpected failures to success.
+Gate routes are rearmed only after all entered effects return and the previous
+scenario closes; observation never releases/rewrites Models owner state. The
+successful report retains each scenario's session/scope/leases/checkpoints.
+Even a complete full report has baselineQualified:false: independent validation
+owns qualification and comparison.
+OBS-VAL/FI-PREREQ-BASELINE-OBS independently qualifies this exact supplied
+artifact; T27-P01 owns the confirmed no-co-tenant measurement window and actual
+baseline; T22-P01 owns the matching <=10% median/p95 comparison. I01 and VAL01
+remain separate. Author delivery stops at pushed head, non-draft PR, CI started
+and addressed blocking feedback; review owns hosted race, terminal CI and merge.
+
+Capacity report validation now requires the composed witness to retain the
+Factory Session, model scope, model name, owner, slot, invocation IDs and lease
+IDs. Both CAPACITY_ACTIVE and CAPACITY_RELEASED checkpoints must carry joined
+barriers and matching artifact/runtime identities. The active slot's integer
+count must match the witness, and each named lease must be claimed and ACTIVE.
+After joined cleanup the slot has zero holders while every named record remains
+RELEASED or EXPIRED. Existing owner policy retains the claimed flag on terminal
+records; validation does not rewrite it. Synthetic calibration cannot satisfy
+this completeness check. The public acquisition fixture populates this witness only after real held
+acquisition and joined public terminal results; accounting fixtures alone do not
+prove composed Models activity.
+
+
+The controlled Models gate is supplied in `profile-model-gate.go.txt`. Install
+its `invoke` callback at the existing `ModelInvocationBackend` edge after
+Models owner acquisition. Declare each Work input before construction; accepted
+observations preserve the real request scope and detached inputs/parameters.
+Two routes can remain held concurrently, and every route must keep the same
+explicit-session model scope. Unexpected models, operations, inputs, duplicate
+routes and changed scopes fail closed. Release is idempotent; controlled inference
+faults and cancellation retain their original error causes. Join the callback's
+return **and** the public terminal Work before taking CAPACITY_RELEASED: a
+callback-return barrier alone cannot prove lease release. Gate tests run under
+the focused `TestLifecycleProfileDriver` selector and are synthetic component
+calibration, never composed public capacity evidence. This gate is wired
+into the public capability at the existing Models effect boundary. The method hash also
+includes the gate template after the sample, cycle and report templates.
+
+The controlled Models fixture now supplies cached inert model/backend bytes,
+loopback health, negotiated protocol, and a joinable host lifetime at the existing
+external-effect edges. Its component tests establish stop/join and refusal of
+downloads. Component fixture tests alone
+do not establish real capacity acquisition or baseline acceptance; the composed
+capability supplies public session acquisition evidence.
+
+`TestLifecycleProfileModelDiagnostic` is a narrow public acquisition selector
+on the prepared artifact (`-test.short=false -test.count=1 -test.timeout=2m`).
+Set `OBSERVER_REPORT` to an absolute diagnostic output path. It starts an
+explicit session with the published invocation content contract, holds two
+EMBED calls at the controlled effect, records CAPACITY_ACTIVE, then joins both
+the effect and terminal Work before CAPACITY_RELEASED. The scenario asserts
+two attributed ACTIVE claimed leases and two integer holders in one slot, followed by
+zero holders and both retained RELEASED/EXPIRED records. It closes the session
+and joins the host and process. Public configured capacity is 2; this narrow
+selector proves same-slot multiplicity but does not prove fault/cancellation composition
+or the complete capability. Its report uses mode `model_diagnostic` and stays
+`complete:false`, with empty samples and an attributed capacityWitness; raw checkpoints and
+attribution remain available. It skips before construction under `-short`.
+
+`TestLifecycleProfileModelFaultDiagnostic` uses the same two-holder public
+scenario and returns a controlled inference error for the held peer. It requires
+FAILED/INVOCATION_RUNTIME_FAILURE while the other Work completes.
+`TestLifecycleProfileModelCancelDiagnostic` completes one Work, then cancels the
+explicit session while its peer remains held, then cancels the owned peer caller
+context after the public stop joins. It requires the peer's public
+CANCELED/INVOCATION_CANCELED outcome and joins its callback before observation.
+Both selectors require zero holders and retained terminal leases, followed by
+session, Execute/server and Process.Close joins. Run each on the prepared
+artifact with `-test.short=false -test.count=1 -test.timeout=2m -test.v` and its
+own absolute `OBSERVER_REPORT`. Raw output preserves the public result, Work and
+session IDs, and error classification. Their diagnostic reports stay incomplete;
+these narrow selectors do not establish the full profile or timing acceptance.
