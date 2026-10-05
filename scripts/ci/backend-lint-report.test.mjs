@@ -605,10 +605,16 @@ socket.on("close", () => process.exit(name === "middle" ? 0 : 7));
 	writeFileSync(fixture, `.PHONY: first middle last\nfirst middle last:\n\t@"${execPath.replaceAll("\\", "/")}" "${script}" $@\n`);
 	const groups = new Map();
 	const signals = [];
+	const releases = [];
+	const diagnostics = new Map();
 	const active = new Map();
 	const peaks = new Map();
 	const children = [];
 	const sockets = new Set();
+	const release = (socket, signal) => {
+		releases.push({ run: signal.run, name: signal.name });
+		socket.write("release");
+	};
 	const server = createServer((socket) => {
 		sockets.add(socket);
 		socket.on("close", () => sockets.delete(socket));
@@ -617,26 +623,35 @@ socket.on("close", () => process.exit(name === "middle" ? 0 : 7));
 			input += data;
 			if (!input.includes("\n")) return;
 			const signal = JSON.parse(input.trim());
+			socket.signal = signal;
 			signals.push(signal);
 			const count = (active.get(signal.run) || 0) + 1;
 			active.set(signal.run, count);
 			peaks.set(signal.run, Math.max(peaks.get(signal.run) || 0, count));
 			socket.on("close", () => active.set(signal.run, active.get(signal.run) - 1));
-			if (signal.run === "success") { socket.write("release"); return; }
+			if (signal.run === "success") { release(socket, signal); return; }
 			const group = groups.get(signal.run) || [];
 			group.push(socket);
 			groups.set(signal.run, group);
 			// The first pair must both start before either is released. The
 			// third can only start once Make has joined a released target.
-			if (group.length === 2) { for (const peer of group) peer.write("release"); }
-			if (group.length === 3) socket.write("release");
+			if (group.length === 2) { for (const peer of group) release(peer, peer.signal); }
+			if (group.length === 3) release(socket, signal);
 		});
 	});
 	t.after(async () => {
-		for (const child of children) if (child.exitCode === null) child.kill();
+		// Kill the owned process group on POSIX: killing only Make leaves its
+		// gated descendants holding output pipes open, so close never arrives.
+		for (const child of children) if (child.exitCode === null && child.signalCode === null) {
+			if (platform === "win32") child.kill();
+			else process.kill(-child.pid, "SIGKILL");
+		}
 		for (const socket of sockets) socket.destroy();
 		server.close();
-		await Promise.all(children.map((child) => child.exitCode === null ? once(child, "close") : Promise.resolve()));
+		await Promise.all(children.map((child) => !child.closed ? once(child, "close") : Promise.resolve()));
+		for (const directory of new Set(signals.map((signal) => join(signal.temp, "..")))) {
+			if (existsSync(directory)) removeLintRun(directory);
+		}
 		rmSync(root, { recursive: true, force: true });
 	});
 	server.listen(0, "127.0.0.1");
@@ -644,13 +659,27 @@ socket.on("close", () => process.exit(name === "middle" ? 0 : 7));
 	const launch = (run, extra = []) => {
 		const reportPath = join(root, `${run}.json`);
 		const child = spawn(make, ["--no-print-directory", "lint", "LINT_TARGETS=first middle last", "LINT_JOBS=2", `LINT_REPORT_FILE=${reportPath.replaceAll("\\", "/")}`, `NODE=${execPath.replaceAll("\\", "/")}`, ...extra], {
+			detached: platform !== "win32",
 			cwd: repository, env: { ...process.env, MAKEFILES: fixture, LINT_TEST_PORT: String(server.address().port), LINT_TEST_RUN: run },
 		});
 		children.push(child);
-		let output = "";
-		child.stdout.on("data", (data) => { output += data; });
-		child.stderr.on("data", (data) => { output += data; });
-		return once(child, "close").then(([code]) => ({ code, output, reportPath }));
+		child.once("close", () => { child.closed = true; });
+		const state = { output: "" };
+		diagnostics.set(run, state);
+		child.stdout.on("data", (data) => { state.output += data; });
+		child.stderr.on("data", (data) => { state.output += data; });
+		// A failure ceiling, not synchronization: all progress uses IPC signals.
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				const logs = signals.map((signal) => {
+					const path = join(signal.temp, "..", `${signal.name}.log`);
+					return { run: signal.run, name: signal.name, output: existsSync(path) ? readFileSync(path, "utf8") : "not observed" };
+				});
+				reject(new Error(`Make phase ${run} stalled\nstarts=${JSON.stringify(signals)}\nreleases=${JSON.stringify(releases)}\nchildren=${JSON.stringify([...diagnostics])}\ntargetLogs=${JSON.stringify(logs)}`));
+			}, 45000);
+			child.once("error", (error) => { clearTimeout(timer); reject(error); });
+			child.once("close", (code) => { clearTimeout(timer); resolve({ code, output: state.output, reportPath }); });
+		});
 	};
 	const results = await Promise.all([launch("one"), launch("two")]);
 	for (const result of results) {

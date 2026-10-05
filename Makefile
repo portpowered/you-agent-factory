@@ -332,7 +332,12 @@ endef
 # that recursive builds can receive the dry-run flag; on the measured Windows
 # Make implementation that still launched real work. These aggregators remain
 # serialized to preserve the old stop-on-failure behavior even with -j.
+# Before GNU Make 4.4, even a targeted .NOTPARALLEL serializes the whole
+# invocation. The lint scheduler is a separate recursive invocation and must
+# retain its explicit job budget on those versions too.
+ifeq (,$(filter lint-observe-selected,$(MAKECMDGOALS)))
 .NOTPARALLEL: default test
+endif
 # Bare `make` runs the complete generation, frontend, build, test, and lint
 # pipeline. Use `make build` when only the Go binary is needed.
 default: default-pipeline-banner generate-api ui-deps ui-build build test lint
