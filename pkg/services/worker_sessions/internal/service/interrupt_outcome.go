@@ -189,7 +189,9 @@ func validInterruptOutcome(req workersessions.InterruptRequest, result workerses
 	}
 	switch result.Phase {
 	case workersessions.InterruptPhaseValidation, workersessions.InterruptPhaseSourceCancellation:
-		return !result.Accepted
+		// Admission starts only after source join. Earlier failure snapshots
+		// cannot establish a successor, even if its identity matches the request.
+		return !result.Accepted && result.Successor.ID == "" && result.Source.SuccessorWorkerSessionID == ""
 	case workersessions.InterruptPhaseSuccessorAdmission:
 		return result.Source.State == workersessions.StateCanceled && (!result.Accepted || interruptSuccessorAdmittedState(result.Successor.State))
 	default:

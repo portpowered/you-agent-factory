@@ -486,6 +486,8 @@ result containing unknown fields, duplicate JSON members, field-name case aliase
 provider metadata, or private diagnostics, reports persistence
 unavailable without returning that content, stopping a Worker Session, or
 admitting a successor.
+A saved validation or source-cancellation failure cannot establish successor admission.
+Contradictory successor facts report persistence unavailable and do not repeat execution.
 If an intent or phase write loses its acknowledgement, the host reloads the
 journal and proceeds only when the exact attempted record is confirmed durable.
 This check does not repeat source cancellation or successor admission.

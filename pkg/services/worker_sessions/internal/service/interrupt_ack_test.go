@@ -15,6 +15,39 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestInterruptFailedReplayCannotClaimAdmissionBeforeSourceJoin(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []workersessions.InterruptPhase{workersessions.InterruptPhaseValidation, workersessions.InterruptPhaseSourceCancellation} {
+		for _, fact := range []string{"successor", "source-link"} {
+			t.Run(string(phase)+"/"+fact, func(t *testing.T) {
+				t.Parallel()
+				r, plan, store := newDurableInterruptFixture(t)
+				operation, err := r.beginInterruptIntent(t.Context(), plan)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result := r.interruptResultSnapshot(plan.request, phase, false)
+				if fact == "successor" {
+					result.Successor = workersessions.Session{ID: plan.request.SuccessorWorkerSessionID, State: workersessions.StateRunning}
+				} else {
+					result.Source.SuccessorWorkerSessionID = plan.request.SuccessorWorkerSessionID
+				}
+				operation.Operation.Phase = "FAILED"
+				operation.FailureCode = string(phase)
+				operation.Result, _ = json.Marshal(durableInterruptOutcome{InterruptResult: result})
+				store.records = []recordings.WorkerControlOperationRecord{operation.Detached()}
+				calls := 0
+				plan.supervision.installCancel(func() { calls++ })
+				replayed, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+				if !found || !errors.Is(replayErr, recordings.ErrWorkerRecordingPersistence) || replayed.Accepted || replayed.Successor.ID != "" || calls != 0 || len(store.records) != 1 {
+					t.Fatalf("contradictory failure replay=%#v found=%v err=%v effects=%d", replayed, found, replayErr, calls)
+				}
+				assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
+			})
+		}
+	}
+}
+
 type interruptPendingCaptureReader struct {
 	entry     recordings.WorkerSessionCatalogEntry
 	page      recordings.WorkerCapturedActivityPage

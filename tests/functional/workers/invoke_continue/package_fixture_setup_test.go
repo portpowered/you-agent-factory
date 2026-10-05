@@ -239,6 +239,7 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		"interrupt-ack-completion",
 		"interrupt-input-write-failure",
 		"interrupt-input-read-failure",
+		"interrupt-input-corrupt",
 		"interrupt-intent-failure",
 		"interrupt-admission-failure",
 		"interrupt-phase-conflict",

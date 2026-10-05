@@ -33,6 +33,9 @@ func (store *interruptPhaseAckStore) PersistWorkerControlInput(ctx context.Conte
 }
 
 func (store *interruptPhaseAckStore) ReadWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, ref string) (json.RawMessage, error) {
+	if strings.Contains(key.RequestID, "interrupt-input-corrupt") {
+		return json.RawMessage(`{"replacementMessage":"private-corrupt-input-detail"}`), nil
+	}
 	if strings.Contains(key.RequestID, "interrupt-input-read-failure") {
 		return nil, errors.New("private-input-read-detail")
 	}
