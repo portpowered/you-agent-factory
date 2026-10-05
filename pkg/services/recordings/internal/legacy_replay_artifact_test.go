@@ -769,16 +769,7 @@ func TestReplayInputMetadataFailurePreservesSelectedDiagnosticsAndOwnership(t *t
 						}, selected,
 					)
 					result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "private-recording-path", MetadataOnly: true})
-					var inputErr *recordings.ReplayInputError
-					if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != scenario.wantCode {
-						t.Fatalf("error = %v, want %s", err, scenario.wantCode)
-					}
-					if scenario.wantCause != nil && !errors.Is(err, scenario.wantCause) {
-						t.Fatalf("lost cause: %v", err)
-					}
-					if result.Metadata != nil || result.Portable != nil || result.Legacy != nil || result.ArtifactDigest != "" || closes != scenario.wantCloses {
-						t.Fatalf("result = %#v, closes = %d, want %d", result, closes, scenario.wantCloses)
-					}
+					inputErr := assertMetadataFailureResult(t, result, err, scenario.wantCode, scenario.wantCause, closes, scenario.wantCloses)
 					if variant == "capture" {
 						capturedError = inputErr
 						assertMetadataFailureLogs(t, capture.infos, errors.Is(err, context.DeadlineExceeded))
@@ -789,6 +780,21 @@ func TestReplayInputMetadataFailurePreservesSelectedDiagnosticsAndOwnership(t *t
 			}
 		})
 	}
+}
+
+func assertMetadataFailureResult(t *testing.T, result recordings.LoadReplayInputResult, err error, wantCode recordings.ReplayArtifactDiagnosticCode, wantCause error, closes, wantCloses int) *recordings.ReplayInputError {
+	t.Helper()
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != wantCode {
+		t.Fatalf("error = %v, want %s", err, wantCode)
+	}
+	if wantCause != nil && !errors.Is(err, wantCause) {
+		t.Fatalf("lost cause: %v", err)
+	}
+	if result.Metadata != nil || result.Portable != nil || result.Legacy != nil || result.ArtifactDigest != "" || closes != wantCloses {
+		t.Fatalf("result = %#v, closes = %d, want %d", result, closes, wantCloses)
+	}
+	return inputErr
 }
 
 type metadataFailureReader struct {

@@ -969,21 +969,6 @@ func TestReplayInputLoaderMetadataModeReadsBoundedBytesOfLargeRecordings(t *test
 	for _, variant := range []string{"capture", "noop"} {
 		t.Run(variant, func(t *testing.T) {
 			t.Parallel()
-			var selectedLogger logging.Logger = logging.NoopLogger{}
-			if variant == "capture" {
-				capture := &capturingReplayInputLogger{}
-				selectedLogger = capture
-				t.Cleanup(func() {
-					if len(capture.entries) == 0 {
-						t.Error("selected capture received no replay input records")
-					}
-					for _, entry := range capture.entries {
-						if entry.fields["operation"] != "load_replay_input" {
-							t.Errorf("replay correlation = %#v", entry)
-						}
-					}
-				})
-			}
 
 			const sessionID = "00000000-0000-4000-8000-0000000000aa"
 			tests := map[string]struct {
@@ -1005,6 +990,21 @@ func TestReplayInputLoaderMetadataModeReadsBoundedBytesOfLargeRecordings(t *test
 			for name, test := range tests {
 				t.Run(name, func(t *testing.T) {
 					t.Parallel()
+					var selectedLogger logging.Logger = logging.NoopLogger{}
+					if variant == "capture" {
+						capture := &capturingReplayInputLogger{}
+						selectedLogger = capture
+						t.Cleanup(func() {
+							if len(capture.entries) == 0 {
+								t.Error("selected capture received no replay input records")
+							}
+							for _, entry := range capture.entries {
+								if entry.fields["operation"] != "load_replay_input" {
+									t.Errorf("replay correlation = %#v", entry)
+								}
+							}
+						})
+					}
 					counter := new(int)
 					loader := recordingswire.NewReplayInputLoader(
 						func(string) ([]byte, error) {
@@ -1042,24 +1042,24 @@ func TestReplayInputMetadataRejectsEmptyAndTruncatedReservations(t *testing.T) {
 	for _, variant := range []string{"capture", "noop"} {
 		t.Run(variant, func(t *testing.T) {
 			t.Parallel()
-			var selectedLogger logging.Logger = logging.NoopLogger{}
-			if variant == "capture" {
-				capture := &capturingReplayInputLogger{}
-				selectedLogger = capture
-				t.Cleanup(func() {
-					if len(capture.entries) == 0 {
-						t.Error("selected capture received no replay input records")
-					}
-					for _, entry := range capture.entries {
-						if entry.fields["operation"] != "load_replay_input" {
-							t.Errorf("replay correlation = %#v", entry)
-						}
-					}
-				})
-			}
 			for _, payload := range []string{"", `{"schemaVersion":"replay.v1","events":[`, `{"schemaVersion":"replay.v1","events":[]} trailing`} {
 				t.Run(fmt.Sprintf("bytes-%d", len(payload)), func(t *testing.T) {
 					t.Parallel()
+					var selectedLogger logging.Logger = logging.NoopLogger{}
+					if variant == "capture" {
+						capture := &capturingReplayInputLogger{}
+						selectedLogger = capture
+						t.Cleanup(func() {
+							if len(capture.entries) == 0 {
+								t.Error("selected capture received no replay input records")
+							}
+							for _, entry := range capture.entries {
+								if entry.fields["operation"] != "load_replay_input" {
+									t.Errorf("replay correlation = %#v", entry)
+								}
+							}
+						})
+					}
 					loader := recordingswire.NewReplayInputLoader(os.ReadFile, func(string) (*recordings.ReplayArtifact, error) {
 						t.Fatal("metadata must not load replay")
 						return nil, nil
