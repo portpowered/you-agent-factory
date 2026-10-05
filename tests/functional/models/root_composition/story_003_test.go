@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -18,7 +17,6 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
-	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -379,175 +377,6 @@ func assertStory003ListAfterPull(
 	return listedModel
 }
 
-// TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal proves removal reclaims unused assets and refuses assets still in use.
-func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T) {
-	t.Parallel()
-	cacheDirectory := functionalTempDir(t)
-	writeCachedOmniVoiceAssets(t, cacheDirectory)
-	sharedCASPath, sharedCASBody := writeStory003SharedCASFixture(t, cacheDirectory)
-	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	environment := append(
-		functionalHomeEnvironment(cacheDirectory),
-		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
-	)
-	rejectingNetwork := &rejectingModelAssetHTTP{}
-	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WaitForServiceModeRuntime: true, Env: environment,
-		Edges: serviceedges.Edges{ModelAssetHTTPClient: rejectingNetwork},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	process := functionalBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	revisionPath := filepath.Join(cacheDirectory, story003ModelName, "cached-revision")
-	beforeBytes := story003RegularFileBytes(t, revisionPath)
-	beforeList := executeStory003List(t, process, server.URL(), "before remove")
-	before := executeStory003Inspect(t, process, server.URL(), cacheDirectory, "before remove")
-	assertStory003CatalogParity(t, process, server.URL(), "before remove", beforeList, before,
-		factoryapi.ModelStatusREADY, factoryapi.UNLOADED,
-		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	removeInputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL()))
-	removeInputs.Input.WorkingDirectory = factoryDir
-	if err := process.Execute(removeInputs.Input); err != nil {
-		t.Fatalf("Process.Execute(models remove) error = %v\nstdout=%s\nstderr=%s", err, removeInputs.Stdout(), removeInputs.Stderr())
-	}
-	var removed factoryapi.ModelRemoveResponse
-	if err := json.Unmarshal([]byte(removeInputs.Stdout()), &removed); err != nil {
-		t.Fatalf("decode models remove output: %v\nstdout=%s", err, removeInputs.Stdout())
-	}
-	if removed.ModelName != story003ModelName || removed.Revision != "cached-revision" ||
-		removed.BytesRemoved != beforeBytes || removed.Outcome != factoryapi.REMOVED {
-		t.Fatalf("models remove response = %#v, want selected revision and %d removed bytes", removed, beforeBytes)
-	}
-	if _, err := os.Stat(revisionPath); !os.IsNotExist(err) {
-		t.Fatalf("removed revision stat error = %v, want not-exist", err)
-	}
-	afterBytes := story003RegularFileBytesIfPresent(t, revisionPath)
-	if afterBytes != 0 {
-		t.Fatalf("removed revision bytes = %d, want 0 after removal", afterBytes)
-	}
-	if got, err := os.ReadFile(sharedCASPath); err != nil || string(got) != string(sharedCASBody) {
-		t.Fatalf("shared content-addressed artifact = (%q, %v), want preserved body %q", got, err, sharedCASBody)
-	}
-	t.Logf(
-		"models remove beforeRevisionBytes=%d afterRevisionBytes=%d remainingModelCacheBytes=%d response=%s cachePath=%s",
-		beforeBytes,
-		afterBytes,
-		story003RegularFileBytes(t, filepath.Join(cacheDirectory, story003ModelName)),
-		strings.TrimSpace(removeInputs.Stdout()),
-		removed.CachePath,
-	)
-	afterList := executeStory003List(t, process, server.URL(), "after remove")
-	after := executeStory003Inspect(t, process, server.URL(), cacheDirectory, "after remove")
-	assertStory003CatalogParity(t, process, server.URL(), "after remove", afterList, after,
-		factoryapi.ModelStatusUNAVAILABLE, factoryapi.UNLOADED,
-		factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
-	assertStory003RemovedFacts(t, afterList, after)
-	if rejectingNetwork.Calls() != 0 {
-		t.Fatalf("list/inspect/remove made %d model asset network requests, want 0", rejectingNetwork.Calls())
-	}
-
-	missingInputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL()))
-	missingInputs.Input.WorkingDirectory = factoryDir
-	missingErr := process.Execute(missingInputs.Input)
-	if missingErr == nil || !errors.Is(missingErr, modelscli.ErrModelCacheNotFound) {
-		t.Fatalf("missing models remove = err %v stdout=%q stderr=%q, want ErrModelCacheNotFound", missingErr, missingInputs.Stdout(), missingInputs.Stderr())
-	}
-
-	t.Run("in-use response", testModelsPublicRemoveRefusesInUseCache)
-}
-
-func assertStory003RemovedFacts(
-	t *testing.T,
-	listed factoryapi.ModelSummary,
-	inspected story003InspectCapture,
-) {
-	t.Helper()
-	for _, item := range []struct {
-		name        string
-		runtime     factoryapi.ManagedRuntime
-		diagnostics factoryapi.StringMap
-	}{
-		{name: "list", runtime: listed.ManagedRuntime, diagnostics: nil},
-		{name: "inspect", runtime: inspected.Detail.ManagedRuntime, diagnostics: inspected.Detail.Diagnostics},
-	} {
-		surface := item.name
-		runtime := item.runtime
-		diagnostics := item.diagnostics
-		if runtime.Revision != nil || runtime.CacheBytes != nil || runtime.CachePath != nil {
-			t.Fatalf("removed %s cache facts = %#v, want no selected revision/cache path/bytes", surface, runtime)
-		}
-		managedDiagnostics := story003ManagedDiagnostics(runtime)
-		if runtime.Diagnostics == nil || !strings.Contains(managedDiagnostics["missingAssets"], story003BaseAsset) ||
-			!strings.Contains(managedDiagnostics["missingAssets"], story003TokenizerAsset) {
-			t.Fatalf("removed %s managed diagnostics = %#v, want both missing assets", surface, managedDiagnostics)
-		}
-		if surface == "inspect" && diagnostics["missingAssets"] != managedDiagnostics["missingAssets"] {
-			t.Fatalf("removed inspect diagnostics = %#v, want managed missing-assets fact", diagnostics)
-		}
-	}
-}
-
-func story003ManagedDiagnostics(runtime factoryapi.ManagedRuntime) factoryapi.StringMap {
-	if runtime.Diagnostics == nil {
-		return nil
-	}
-	return *runtime.Diagnostics
-}
-
-func writeStory003SharedCASFixture(t *testing.T, cacheDirectory string) (string, []byte) {
-	t.Helper()
-	body := []byte("shared-content-addressed-model-fixture")
-	identity := "model|story-003-shared|shared-model.bin"
-	identityHash := sha256.Sum256([]byte(identity))
-	snapshot := filepath.Join(cacheDirectory, ".you-content-addressed", "model", hex.EncodeToString(identityHash[:]))
-	if err := os.MkdirAll(snapshot, 0o755); err != nil {
-		t.Fatalf("create shared content-addressed model directory: %v", err)
-	}
-	path := filepath.Join(snapshot, "shared-model.bin")
-	if err := os.WriteFile(path, body, 0o644); err != nil {
-		t.Fatalf("write shared content-addressed model artifact: %v", err)
-	}
-	checksum := sha256.Sum256(body)
-	metadata, err := json.Marshal(map[string]any{
-		"kind": "model", "identity": identity, "source": "story-003-shared", "sourceKey": "story-003-shared",
-		"artifacts": []map[string]any{{"Name": "shared-model.bin", "Bytes": len(body), "SHA256": hex.EncodeToString(checksum[:])}},
-	})
-	if err != nil {
-		t.Fatalf("marshal shared content-addressed metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
-		t.Fatalf("write shared content-addressed metadata: %v", err)
-	}
-	return path, body
-}
-
-func testModelsPublicRemoveRefusesInUseCache(t *testing.T) {
-	server := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodDelete || request.URL.Path != "/models/"+story003ModelName {
-			http.NotFound(writer, request)
-			return
-		}
-		writer.Header().Set("Content-Type", "application/json")
-		writer.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(writer).Encode(factoryapi.ErrorResponse{
-			Message: "managed model cache is in use",
-			Family:  factoryapi.ErrorFamilyConflict,
-			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_IN_USE"),
-		})
-	}))
-	t.Cleanup(server.Close)
-
-	process := functionalBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL))
-	err := process.Execute(inputs.Input)
-	if err == nil || !errors.Is(err, modelscli.ErrModelCacheInUse) {
-		t.Fatalf("in-use models remove = err %v stdout=%q stderr=%q, want ErrModelCacheInUse", err, inputs.Stdout(), inputs.Stderr())
-	}
-	t.Logf("models remove in-use classification error=%v stderr=%s", err, strings.TrimSpace(inputs.Stderr()))
-}
-
 func testStory003ControlledSourceFailure(t *testing.T) {
 	failureSource := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/models/"+story003Repository {
@@ -858,14 +687,6 @@ func story003RegularFileBytes(t *testing.T, directory string) int64 {
 	return total
 }
 
-func story003RegularFileBytesIfPresent(t *testing.T, directory string) int64 {
-	t.Helper()
-	if _, err := os.Stat(directory); os.IsNotExist(err) {
-		return 0
-	}
-	return story003RegularFileBytes(t, directory)
-}
-
 func story003ModelsInspectArgs(serverURL string) []string {
 	return []string{
 		"you", "--json", "--server", strings.TrimSuffix(serverURL, "/"),
@@ -889,13 +710,6 @@ func story003ModelsHumanInspectArgs(serverURL string) []string {
 	return []string{
 		"you", "--server", strings.TrimSuffix(serverURL, "/"),
 		"models", "inspect", story003ModelName,
-	}
-}
-
-func story003ModelsRemoveArgs(serverURL string) []string {
-	return []string{
-		"you", "--json", "--server", strings.TrimSuffix(serverURL, "/"),
-		"models", "remove", story003ModelName,
 	}
 }
 

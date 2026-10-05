@@ -12,6 +12,9 @@ func TestFunctionalShapeOwnership(t *testing.T) {
 	useFixtures(t)
 	for _, tc := range []struct{ unit, rule string }{
 		{"tests/functional/providers/inference", ""},
+		{"tests/functional/automations/scheduling", ""},
+		{"tests/functional/automations/scheduling_test", ""},
+		{"tests/functional/automations", "functional-test-missing-subsection"},
 		{"tests/functional/internal/support/fixture", ""},
 		{"tests/functional/providers", "functional-test-missing-subsection"},
 		{"tests/functional", "functional-test-missing-subsection"},

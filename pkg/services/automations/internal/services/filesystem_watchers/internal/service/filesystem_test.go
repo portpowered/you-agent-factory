@@ -24,6 +24,31 @@ type pendingInputFiles struct {
 	err     error
 }
 
+func TestReadFileWithRetry_CancelsWithoutAdvancingFrozenTime(t *testing.T) {
+	t.Parallel()
+	clock := clockwork.NewFakeClock()
+	files := &pendingInputFiles{readyAt: 10}
+	fw := &watcher{clock: clock, files: files}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := fw.readFileWithRetry(ctx, "empty.md", 5, time.Second); done <- err }()
+	waitForFakeClockWaiters(t, clock, 1)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) || files.reads != 1 {
+			t.Fatalf("error/reads=%v/%d, want canceled/1", err, files.reads)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("cancel required time advancement")
+	}
+	clock.Advance(time.Hour)
+	if files.reads != 1 {
+		t.Fatal("read resumed after cancellation")
+	}
+}
+
 func (files *pendingInputFiles) ReadFile(string) ([]byte, error) {
 	files.reads++
 	if files.err != nil {
@@ -60,7 +85,7 @@ func TestReadFileWithRetry_UsesControlledClockAndPreservesReadOutcomes(t *testin
 			var content []byte
 			var err error
 			go func() {
-				content, err = fw.readFileWithRetry("input.md", 3, 50*time.Millisecond)
+				content, err = fw.readFileWithRetry(ctx, "input.md", 3, 50*time.Millisecond)
 				close(done)
 			}()
 			for range tc.waits {

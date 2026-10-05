@@ -1853,8 +1853,6 @@ testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_wa
 testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/debounce_test.go::waitForSubmitCount::deadline::1
 testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/debounce_test.go::waitForSubmitCount::deadline::2
 testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/debounce_test.go::waitForWatchDone::deadline::1
-testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/duplicate_test.go::TestFileWatcher_DuplicateLiveObservationSubmitsOnce::deadline::1
-testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/duplicate_test.go::TestFileWatcher_DuplicateLiveObservationSubmitsOnce::deadline::2
 testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/watcher_loop_test.go::TestFileWatcher_InjectedEventProcessesAfterDirectoryRegistration::deadline::1
 testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/watcher_loop_test.go::waitForRegisteredDirectory::deadline::1
 testsleep-deadline-test|pkg/services/automations/internal/services/filesystem_watchers/internal/service|pkg/services/automations/internal/services/filesystem_watchers/internal/service/watcher_test.go::waitForSubmission::deadline::1
@@ -2304,7 +2302,6 @@ testsleep-deadline-test|tests/functional/models/root_composition_test|tests/func
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/localai_omni_cli_server_parity_test.go::assertLocalAIOMNIServerReleased::deadline::1
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::runTTSCancellation::deadline::1
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::runTTSCancellation::deadline::2
-testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy::deadline::1
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::waitForTTSHostLifecycle::deadline::1
 testsleep-deadline-test|tests/functional/orchestration/petri/guards|tests/functional/orchestration/petri/guards/guard_cases_test.go::sharedGuardProviderTimeout::deadline::1
 testsleep-deadline-test|tests/functional/providers/acp_test|tests/functional/providers/acp/daemon_concurrency_test.go::TestProvidersACPRunsConcurrentPromptsOnIndependentRequestOwnedPeers::deadline::1
@@ -2545,7 +2542,6 @@ testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/ses
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::waitForFactorySessionDispatchStatus::sleep::1
 testsleep-sleep-test|tests/functional/sessions/root_composition_test|tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go::waitForP3P7RetainedTerminalDispatch::sleep::1
 testsleep-sleep-test|tests/functional/sessions/root_composition_test|tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go::waitForP3P7SessionWork::sleep::1
-testsleep-sleep-test|tests/functional/sessions/root_composition_test|tests/functional/sessions/root_composition/work_admission_response_stream_test.go::waitForDefaultSessionWorkCount::sleep::1
 testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/functional/transport/cli/session_resume/resume_smoke_test.go::waitForCLIResumeSmokeDispatchStatus::sleep::1
 testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/functional/transport/cli/session_resume/resume_smoke_test.go::waitForDurableSessionStatusViaCLI::sleep::1
 testsleep-sleep-test|tests/functional/work/recovery|tests/functional/work/recovery/helpers_test.go::waitForSessionInFlightDispatches::sleep::1
@@ -2678,11 +2674,6 @@ functional-test-missing-subsection|tests/functional/acceptance|tests/functional/
 functional-test-missing-subsection|tests/functional/acceptance|tests/functional/acceptance/invalid_quiet_outcomes_test.go
 functional-test-missing-subsection|tests/functional/acceptance|tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go
 functional-test-missing-subsection|tests/functional/acceptance|tests/functional/acceptance/provider_outcomes_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/cron_root_composition_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/doc.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/filesystem_watcher_root_composition_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/hosted_sources_root_composition_test.go
-functional-test-missing-subsection|tests/functional/automations|tests/functional/automations/script_poller_root_composition_test.go
 functional-test-missing-subsection|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go
 functional-test-missing-subsection|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/api_export_import_e2e_smoke_test.go
 functional-test-missing-subsection|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/automat_portability_fixture_test.go

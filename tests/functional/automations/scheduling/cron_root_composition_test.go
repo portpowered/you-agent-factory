@@ -206,9 +206,17 @@ func assertCronSessionTick(t *testing.T, baseURL, sessionID, directory string, r
 			t.Fatalf("cron output = %#v", response)
 		}
 		output := (*response.OutputWork)[0]
-		listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sessionID, "/work"))
-		if !support.HasWorkAtCustomerState(listed, support.StringPointerValue(output.WorkId), support.WorkCustomerLocation("task", "init")) {
-			t.Fatalf("cron public output missing: %#v", listed)
+		// Dispatch completion precedes publication of the public Work projection.
+		listed, err := support.WaitForObservation(10*time.Second,
+			func() (factoryapi.ListWorkResponse, error) {
+				return readWorkSnapshot(ctx, support.SessionWorkURL(baseURL, sessionID, "/work"))
+			},
+			func(listed factoryapi.ListWorkResponse) bool {
+				return support.HasWorkAtCustomerState(listed, support.StringPointerValue(output.WorkId), support.WorkCustomerLocation("task", "init"))
+			},
+		)
+		if err != nil {
+			t.Fatalf("cron public output missing: %v; last Work: %#v", err, listed)
 		}
 		return record
 	}

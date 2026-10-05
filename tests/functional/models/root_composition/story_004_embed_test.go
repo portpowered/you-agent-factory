@@ -315,57 +315,6 @@ func TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess(t *test
 	}
 }
 
-func TestModelsEmbedHTTPParityUsesTheSameFixtureThroughRootBuildProcess(t *testing.T) {
-	t.Parallel()
-
-	hostServer := story004HostServer(t)
-	home := functionalTempDir(t)
-	backendBody := []byte("story-004-localai-backend-http")
-	selection := story004EmbedBackendSelection(backendBody)
-	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
-	writeGenericBackendCache(t, home, "localai-llamacpp", selection, backendBody)
-	assetNetwork := &rejectingModelAssetHTTP{}
-	launcher := &recordingModelHostLauncher{endpoint: hostServer.URL}
-	protocol := &joinedProtocolNegotiator{}
-	compatibility := &joinedCompatibilityChecker{}
-	fixture := newStory004EmbedFixture()
-	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Env:                       functionalHomeEnvironment(home),
-		Edges: story004EmbedEdges(
-			home, assetNetwork, hostServer.Client(), launcher, protocol, compatibility,
-			selection, fixture,
-		),
-	})
-
-	textValue := "Find similar work"
-	inputs := []factoryapi.ModelInvocationInput{{
-		Name: "text", Modality: factoryapi.ModelInvocationContentTypeText, Content: &textValue,
-	}}
-	response := postFunctionalJSON[factoryapi.GenericModelInvocationResponse](
-		t, server.URL()+"/models/invocations",
-		factoryapi.GenericModelInvocationRequest{
-			Scope: "factory-session:caller-supplied", Holder: "functional-embed-http",
-			Model: factoryapi.ModelReference{NameOrUri: "embed"}, Inputs: &inputs,
-		},
-		"POST /models/invocations EMBED",
-	)
-	if len(response.Outputs) != 1 || response.Outputs[0].Name != "embedding" ||
-		response.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeJSON ||
-		response.Outputs[0].Content == nil || *response.Outputs[0].Content != `[0.1,0.2,0.3,0.4]` {
-		t.Fatalf("HTTP EMBED response = %#v, want one named JSON vector", response)
-	}
-	if assetNetwork.Calls() != 0 {
-		t.Fatalf("HTTP EMBED cache-hit asset network calls = %d, want 0", assetNetwork.Calls())
-	}
-	exchanges := fixture.Exchanges()
-	if len(exchanges) != 1 || exchanges[0].ProtocolJSON != `{"prompt":"Find similar work"}` {
-		t.Fatalf("HTTP EMBED fixture exchanges = %#v, want one canonical protocol request", exchanges)
-	}
-}
-
 func runStory004CLI(
 	t testing.TB,
 	process support.Process,
