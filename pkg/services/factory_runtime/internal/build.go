@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sync"
@@ -146,7 +147,7 @@ func (f *RuntimeFactory) Build(
 	workerAttempts factory.WorkerAttemptOpener,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
-) (*factoryhost.Bundle, error) {
+) (_ *factoryhost.Bundle, buildErr error) {
 	if f == nil || f.newID == nil {
 		return nil, fmt.Errorf("Factory Runtime ID generator is required")
 	}
@@ -169,6 +170,20 @@ func (f *RuntimeFactory) Build(
 	if f == nil || f.loggerFactory == nil {
 		return nil, fmt.Errorf("runtime logger factory is required")
 	}
+	// Retain ownership before the first open. Finalize the recording before
+	// closing its sinks, and preserve cleanup failures alongside the build error.
+	var logSink factory.RuntimeLogSink
+	var metricsSink factory.RuntimeMetricsSink
+	var runtimeScopeRecorder recordings.RuntimeRecorder
+	bundleBuilt := false
+	defer func() {
+		if !bundleBuilt {
+			if runtimeScopeRecorder != nil {
+				buildErr = errors.Join(buildErr, runtimeScopeRecorder.Finalize(clock.Now().UTC()))
+			}
+			buildErr = errors.Join(buildErr, factoryhost.CloseBundleSinks(logSink, metricsSink))
+		}
+	}()
 	logSink, runtimeInstanceID, err := openRuntimeLogScope(
 		f.runtimeLogs,
 		runtimeFileLoggingPolicy,
@@ -190,14 +205,12 @@ func (f *RuntimeFactory) Build(
 	)
 	structuredLogger := f.loggerFactory(logger, verbose)
 	if structuredLogger == nil {
-		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("runtime logger factory returned nil")
 	}
 	if workerSessions == nil {
-		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("worker sessions service is required")
 	}
-	metricsSink, err := openRuntimeMetricsScope(
+	metricsSink, err = openRuntimeMetricsScope(
 		f.runtimeMetrics,
 		runtimeMetricsPolicy,
 		runtimeMetricsDir,
@@ -208,20 +221,8 @@ func (f *RuntimeFactory) Build(
 		dir,
 	)
 	if err != nil {
-		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, err
 	}
-	bundleBuilt := false
-	runtimeScopeOwned := false
-	var runtimeScopeRecorder recordings.RuntimeRecorder
-	defer func() {
-		if !bundleBuilt {
-			if runtimeScopeOwned && runtimeScopeRecorder != nil {
-				_ = runtimeScopeRecorder.Finalize(clock.Now().UTC())
-			}
-			_ = factoryhost.CloseBundleSinks(logSink, metricsSink)
-		}
-	}()
 	net, err := f.compileOrchestrationNet(ctx, dir, loadedFactoryCfg.FactoryConfig(), logger)
 	if err != nil {
 		return nil, err
@@ -248,13 +249,12 @@ func (f *RuntimeFactory) Build(
 		FactorySessionID:   sessionID,
 		CanonicalSessionID: metricsSessionID,
 	})
+	runtimeScopeRecorder = opened.Recorder
 	if openErr != nil {
 		return nil, openErr
 	}
 	eventHistory := opened.Ledger
 	recording := opened.Recorder
-	runtimeScopeRecorder = opened.Recorder
-	runtimeScopeOwned = opened.Recorder != nil
 	if eventHistory == nil {
 		return nil, fmt.Errorf("Recordings runtime ledger is required")
 	}
@@ -646,7 +646,7 @@ func openRuntimeLogScope(
 		RootDirectory: runtimeLogDir, Policy: policy, Config: runtimeLogConfig,
 	})
 	if err != nil {
-		return nil, runtimeInstanceID, fmt.Errorf("open runtime log scope: %w", err)
+		return logSink, runtimeInstanceID, fmt.Errorf("open runtime log scope: %w", err)
 	}
 	if logSink == nil {
 		return nil, runtimeInstanceID, fmt.Errorf("runtime log owner returned nil scope")
@@ -712,7 +712,7 @@ func openRuntimeMetricsScope(
 		Config:        runtimeMetricsConfig,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("open runtime metrics scope: %w", err)
+		return metricsSink, fmt.Errorf("open runtime metrics scope: %w", err)
 	}
 	if metricsSink == nil {
 		return nil, fmt.Errorf("runtime metrics owner returned nil scope")
@@ -722,28 +722,40 @@ func openRuntimeMetricsScope(
 
 type closeOnceRuntimeLogSink struct {
 	factory.RuntimeLogSink
-	once sync.Once
-	err  error
+	mu     sync.Mutex
+	closed bool
 }
 
 func (sink *closeOnceRuntimeLogSink) Close() error {
 	if sink == nil || sink.RuntimeLogSink == nil {
 		return nil
 	}
-	sink.once.Do(func() { sink.err = sink.RuntimeLogSink.Close() })
-	return sink.err
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.closed {
+		return nil
+	}
+	err := sink.RuntimeLogSink.Close()
+	sink.closed = err == nil
+	return err
 }
 
 type closeOnceRuntimeMetricsSink struct {
 	factory.RuntimeMetricsSink
-	once sync.Once
-	err  error
+	mu     sync.Mutex
+	closed bool
 }
 
 func (sink *closeOnceRuntimeMetricsSink) Close() error {
 	if sink == nil || sink.RuntimeMetricsSink == nil {
 		return nil
 	}
-	sink.once.Do(func() { sink.err = sink.RuntimeMetricsSink.Close() })
-	return sink.err
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.closed {
+		return nil
+	}
+	err := sink.RuntimeMetricsSink.Close()
+	sink.closed = err == nil
+	return err
 }

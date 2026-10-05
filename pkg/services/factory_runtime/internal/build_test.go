@@ -2,6 +2,7 @@ package internal_test
 
 import (
 	"context"
+	"errors"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"io"
 	"os"
@@ -207,6 +208,7 @@ func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.
 }
 
 func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logDir := t.TempDir()
 	metricsDir := t.TempDir()
@@ -241,6 +243,67 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 	}
 	if got, want := events, []string{"recording.finalize", "log.close", "metrics.close"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("partial-opening cleanup order = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuild_PreservesOpeningAndCleanupFailures(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"log", "metrics", "recording", "engine"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+			loaded, err := loadedFactoryFixture(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			openingErr := errors.New("opening failed")
+			logErr := errors.New("log remains open")
+			metricsErr := errors.New("metrics remains open")
+			recordingErr := errors.New("recording remains open")
+			var events []string
+			logOwner := testRuntimeLogOwner{root: dir, closeErr: logErr, onClose: func() { events = append(events, "log.close") }}
+			metricsOwner := testRuntimeMetricsOwner{root: dir, closeErr: metricsErr, onClose: func() { events = append(events, "metrics.close") }}
+			scopes := &testRuntimeScopeServiceStub{
+				ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: stage},
+				recorder: &runtimeRecordingsRecorderStub{finalizeErr: recordingErr, onFinalize: func() {
+					events = append(events, "recording.finalize")
+				}},
+			}
+			wantEvents := []string{"recording.finalize", "log.close", "metrics.close"}
+			wantErrors := []error{logErr, metricsErr, recordingErr}
+			switch stage {
+			case "log":
+				logOwner.openErr = openingErr
+				wantEvents = []string{"log.close"}
+				wantErrors = []error{openingErr, logErr}
+			case "metrics":
+				metricsOwner.openErr = openingErr
+				wantEvents = []string{"log.close", "metrics.close"}
+				wantErrors = []error{openingErr, logErr, metricsErr}
+			case "recording":
+				scopes.openErr = openingErr
+				wantErrors = append(wantErrors, openingErr)
+			}
+			bundle, err := testRuntimeFactoryWithOwners(logOwner, metricsOwner).Build(
+				context.Background(), dir, dir, "~default", "", "", interfaces.RuntimeModeBatch,
+				false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
+				factory.RuntimeMetricsStorageConfig{}, loaded, stage, "", clockwork.NewFakeClock(),
+				"recording.json", nil, nil, false, nil, nil, nil, nil, scopes,
+				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
+			)
+			if bundle != nil || err == nil {
+				t.Fatalf("Build = (%v, %v), want no bundle and failure", bundle, err)
+			}
+			for _, cause := range wantErrors {
+				if !errors.Is(err, cause) {
+					t.Errorf("Build error %v lost cause %v", err, cause)
+				}
+			}
+			if !reflect.DeepEqual(events, wantEvents) {
+				t.Fatalf("cleanup order = %v, want %v", events, wantEvents)
+			}
+		})
 	}
 }
 
@@ -481,10 +544,16 @@ func testRuntimeFactoryWithSinkCallbacks(
 	onLogClose func(),
 	onMetricsClose func(),
 ) *factoryinternal.RuntimeFactory {
-	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory,
+	return testRuntimeFactoryWithOwners(
 		testRuntimeLogOwner{root: logDir, onClose: onLogClose},
 		testRuntimeMetricsOwner{root: metricsDir, onClose: onMetricsClose},
+	)
+}
+
+func testRuntimeFactoryWithOwners(logOwner factory.RuntimeLogOwner, metricsOwner factory.RuntimeMetricsOwner) *factoryinternal.RuntimeFactory {
+	return factoryinternal.NewRuntimeFactory(
+		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory,
+		logOwner, metricsOwner,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil,
@@ -519,6 +588,7 @@ func testRuntimeScopeService(
 }
 
 type testRuntimeScopeServiceStub struct {
+	openErr         error
 	ledger          recordings.RuntimeEventLedger
 	ledgerFactory   func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger
 	recorder        recordings.RuntimeRecorder
@@ -540,7 +610,7 @@ func (runtimeScopes *testRuntimeScopeServiceStub) OpenRuntime(
 	if runtimeScopes.ledgerFactory != nil {
 		ledger = runtimeScopes.ledgerFactory(request.Topology, request.Now, request.Definitions)
 	}
-	return recordings.RuntimeScopeResult{Ledger: ledger, Recorder: runtimeScopes.recorder}, nil
+	return recordings.RuntimeScopeResult{Ledger: ledger, Recorder: runtimeScopes.recorder}, runtimeScopes.openErr
 }
 
 func (*testRuntimeScopeServiceStub) Projection() recordings.ProjectionService { return nil }
@@ -578,6 +648,7 @@ type testRuntimeLogSink struct {
 	logger   *zap.Logger
 	artifact factory.RuntimeLogArtifact
 	onClose  func()
+	closeErr error
 }
 
 func (sink *testRuntimeLogSink) Logger() *zap.Logger                  { return sink.logger }
@@ -586,24 +657,27 @@ func (sink *testRuntimeLogSink) Close() error {
 	if sink != nil && sink.onClose != nil {
 		sink.onClose()
 	}
-	return nil
+	return sink.closeErr
 }
 
 type testRuntimeLogOwner struct {
-	root    string
-	onClose func()
+	root     string
+	onClose  func()
+	openErr  error
+	closeErr error
 }
 
 func (owner testRuntimeLogOwner) Open(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
-	return &testRuntimeLogSink{logger: zap.NewNop(), onClose: owner.onClose, artifact: factory.RuntimeLogArtifact{
+	return &testRuntimeLogSink{logger: zap.NewNop(), onClose: owner.onClose, closeErr: owner.closeErr, artifact: factory.RuntimeLogArtifact{
 		Path: filepath.Join(owner.root, request.RuntimeInstanceID+".runtime.log"), RootDir: owner.root,
 		StartTimeUTC: time.Now().UTC(), Config: request.Config,
-	}}, nil
+	}}, owner.openErr
 }
 
 type testRuntimeMetricsSink struct {
 	artifact factory.RuntimeMetricsArtifact
 	onClose  func()
+	closeErr error
 }
 
 func (s *testRuntimeMetricsSink) Counter(context.Context, string, float64, factory.Fields) error {
@@ -619,7 +693,7 @@ func (s *testRuntimeMetricsSink) Close() error {
 	if s != nil && s.onClose != nil {
 		s.onClose()
 	}
-	return nil
+	return s.closeErr
 }
 func (s *testRuntimeMetricsSink) Path() string { return s.artifact.Path }
 func (s *testRuntimeMetricsSink) Artifact() factory.RuntimeMetricsArtifact {
@@ -627,19 +701,22 @@ func (s *testRuntimeMetricsSink) Artifact() factory.RuntimeMetricsArtifact {
 }
 
 type testRuntimeMetricsOwner struct {
-	root    string
-	onClose func()
+	root     string
+	onClose  func()
+	openErr  error
+	closeErr error
 }
 
 func (owner testRuntimeMetricsOwner) Open(request factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) {
-	return &testRuntimeMetricsSink{onClose: owner.onClose, artifact: factory.RuntimeMetricsArtifact{
+	return &testRuntimeMetricsSink{onClose: owner.onClose, closeErr: owner.closeErr, artifact: factory.RuntimeMetricsArtifact{
 		Path: filepath.Join(owner.root, request.Scope.RuntimeInstanceID+".runtime-metrics.log"), RootDir: owner.root,
 		StartTimeUTC: time.Now().UTC(),
-	}}, nil
+	}}, owner.openErr
 }
 
 type runtimeRecordingsRecorderStub struct {
-	onFinalize func()
+	onFinalize  func()
+	finalizeErr error
 }
 
 func (*runtimeRecordingsRecorderStub) BindRecordingLifecycle(
@@ -660,7 +737,7 @@ func (recorder *runtimeRecordingsRecorderStub) Finalize(time.Time) error {
 	if recorder != nil && recorder.onFinalize != nil {
 		recorder.onFinalize()
 	}
-	return nil
+	return recorder.finalizeErr
 }
 
 var _ recordings.RuntimeRecorder = (*runtimeRecordingsRecorderStub)(nil)

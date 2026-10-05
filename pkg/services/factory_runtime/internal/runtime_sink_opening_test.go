@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -79,6 +80,39 @@ func TestRuntimeObservabilityOpeningClosesScopesOnce(t *testing.T) {
 	}
 }
 
+func TestRuntimeObservabilityOpeningRetriesFailedClose(t *testing.T) {
+	t.Parallel()
+	fixture := newRuntimeScopeOpeningFixture()
+	closeErr := errors.New("scope remains open")
+	fixture.logScope.closeErr = closeErr
+	fixture.metricsScope.closeErr = closeErr
+	openedLog, openedMetrics := openRuntimeScopeFixture(t, fixture)
+	for _, scope := range []interface{ Close() error }{openedLog, openedMetrics} {
+		if err := scope.Close(); !errors.Is(err, closeErr) {
+			t.Fatalf("failed close = %v, want %v", err, closeErr)
+		}
+	}
+	fixture.logScope.closeErr = nil
+	fixture.metricsScope.closeErr = nil
+	var callers sync.WaitGroup
+	for range 8 {
+		callers.Add(1)
+		go func() {
+			defer callers.Done()
+			if err := openedLog.Close(); err != nil {
+				t.Errorf("retry log close: %v", err)
+			}
+			if err := openedMetrics.Close(); err != nil {
+				t.Errorf("retry metrics close: %v", err)
+			}
+		}()
+	}
+	callers.Wait()
+	if fixture.logScope.closeCalls != 2 || fixture.metricsScope.closeCalls != 2 {
+		t.Fatalf("close calls = (%d, %d), want one failure and one success per scope", fixture.logScope.closeCalls, fixture.metricsScope.closeCalls)
+	}
+}
+
 type runtimeScopeOpeningFixture struct {
 	logOwner       runtimeLogOwnerFunc
 	metricsOwner   runtimeMetricsOwnerFunc
@@ -140,6 +174,7 @@ func (owner runtimeMetricsOwnerFunc) Open(request factory.RuntimeMetricsScopeReq
 type runtimeSinkStub struct {
 	mu         sync.Mutex
 	closeCalls int
+	closeErr   error
 }
 
 func (*runtimeSinkStub) Logger() *zap.Logger { return zap.NewNop() }
@@ -150,12 +185,13 @@ func (sink *runtimeSinkStub) Close() error {
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
 	sink.closeCalls++
-	return nil
+	return sink.closeErr
 }
 
 type runtimeMetricsSinkStub struct {
 	mu         sync.Mutex
 	closeCalls int
+	closeErr   error
 }
 
 func (*runtimeMetricsSinkStub) Counter(context.Context, string, float64, factory.Fields) error {
@@ -171,7 +207,7 @@ func (sink *runtimeMetricsSinkStub) Close() error {
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
 	sink.closeCalls++
-	return nil
+	return sink.closeErr
 }
 func (*runtimeMetricsSinkStub) Path() string { return "metrics" }
 func (*runtimeMetricsSinkStub) Artifact() factory.RuntimeMetricsArtifact {
