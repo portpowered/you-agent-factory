@@ -123,7 +123,7 @@ export function validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow
 		throw new Error("functional diagnostics workflow contract requires workflow text");
 	}
 
-	const functionalJob = workflowJobSection(workflow, "backend-coverage");
+	const functionalJob = workflowJobSection(workflow, "backend-functional-coverage");
 	const verdictMarker = "      - name: Report functional coverage verdict";
 	const uploadMarker = "      - name: Upload functional test diagnostics";
 	const verdictOffset = functionalJob.indexOf(verdictMarker);
@@ -140,11 +140,7 @@ export function validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow
 
 	const nextStepOffset = functionalJob.indexOf("\n      - name:", uploadOffset + uploadMarker.length);
 	const uploadStep = functionalJob.slice(uploadOffset, nextStepOffset < 0 ? undefined : nextStepOffset);
-	requireWorkflowMatch(
-		uploadStep,
-		/^        if: always\(\) && matrix\.suite == 'functional'\s*$/m,
-		"functional diagnostics upload must run after failures and only for the functional matrix row",
-	);
+	requireWorkflowMatch(uploadStep, /^        if: always\(\)\s*$/m, "functional diagnostics upload must run after failures");
 	requireWorkflowMatch(
 		uploadStep,
 		/^        uses: actions\/upload-artifact@v4\s*$/m,
@@ -153,28 +149,45 @@ export function validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow
 	requireWorkflowMatch(
 		uploadStep,
 		/^          name: functional-test-diagnostics\s*$/m,
-		"raw evidence must join the existing functional diagnostics artifact",
-	);
-	requireWorkflowMatch(
-		uploadStep,
-		/^            \.artifacts\/functional-test-viz\/raw-failures\/index\.json\s*$/m,
-		"functional diagnostics artifact must include the raw failure index",
-	);
-	requireWorkflowMatch(
-		uploadStep,
-		/^            \.artifacts\/functional-test-viz\/raw-failures\/\*\.jsonl\s*$/m,
-		"functional diagnostics artifact must include package-keyed raw failure files",
-	);
-	requireWorkflowMatch(
-		uploadStep,
-		/^          if-no-files-found: ignore\s*$/m,
-		"an all-green run must not fail when raw files are absent",
+		"aggregate diagnostics must use the functional-test-diagnostics artifact",
 	);
 	requireWorkflowMatch(
 		uploadStep,
 		/^          retention-days: 14\s*$/m,
 		"functional diagnostic retention must remain 14 days",
 	);
+
+	// Raw failure evidence is produced per shard, where the tests run.
+	const shardJob = workflowJobSection(workflow, "backend-functional-shard");
+	const rawMarker = "      - name: Upload functional raw failure evidence";
+	const rawOffset = shardJob.indexOf(rawMarker);
+	if (rawOffset < 0) {
+		throw new Error("workflow contract is missing the functional raw failure upload step");
+	}
+	const rawNext = shardJob.indexOf("\n      - name:", rawOffset + rawMarker.length);
+	const rawStep = shardJob.slice(rawOffset, rawNext < 0 ? undefined : rawNext);
+	requireWorkflowMatch(rawStep, /^        if: always\(\)\s*$/m, "functional raw failure upload must run after failures");
+	requireWorkflowMatch(
+		rawStep,
+		/^        uses: actions\/upload-artifact@v4\s*$/m,
+		"functional raw failure evidence must use the pinned artifact action",
+	);
+	requireWorkflowMatch(
+		rawStep,
+		/^            \.artifacts\/functional-shards\/functional-coverage-shard-\$\{\{ matrix\.shard \}\}\/raw-failures\/index\.json\s*$/m,
+		"functional raw failure artifact must include the raw failure index",
+	);
+	requireWorkflowMatch(
+		rawStep,
+		/^            \.artifacts\/functional-shards\/functional-coverage-shard-\$\{\{ matrix\.shard \}\}\/raw-failures\/\*\.jsonl\s*$/m,
+		"functional raw failure artifact must include package-keyed raw failure files",
+	);
+	requireWorkflowMatch(
+		rawStep,
+		/^          if-no-files-found: ignore\s*$/m,
+		"an all-green run must not fail when raw files are absent",
+	);
+	requireWorkflowMatch(rawStep, /^          retention-days: 14\s*$/m, "functional raw failure retention must remain 14 days");
 
 	return { name: "functional-diagnostics-artifact-workflow", status: "pass" };
 }

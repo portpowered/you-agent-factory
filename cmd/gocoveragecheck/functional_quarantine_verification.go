@@ -27,6 +27,9 @@ type functionalQuarantineSelectorVerification struct {
 	overlapCoverage bool
 	once            sync.Once
 	err             error
+	// skipped marks a verification that another job performs; it neither runs
+	// nor reports.
+	skipped bool
 }
 
 type functionalQuarantineRatchetVerification struct {
@@ -128,6 +131,9 @@ func (verification *functionalQuarantineSelectorVerification) wait() error {
 	}
 	verification.once.Do(func() {
 		verification.err = <-verification.done
+		if verification.skipped {
+			return
+		}
 		status := "complete"
 		if verification.err != nil {
 			status = "failed"

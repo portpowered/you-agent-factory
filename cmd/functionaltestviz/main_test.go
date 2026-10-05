@@ -240,6 +240,25 @@ func TestCoverageCommandArgumentsKeepsProbeOptIn(t *testing.T) {
 	}
 }
 
+func TestCoverageCommandArgumentsForwardsShardMerge(t *testing.T) {
+	t.Parallel()
+
+	base := config{jobs: 8, quarantinePath: "quarantine.json", profilePath: "coverage.out"}
+	if args := coverageCommandArguments(base); slicesContainsString(args, "-merge-shards") {
+		t.Fatalf("default coverage args = %v, want shard merge omitted", args)
+	}
+
+	merged := base
+	merged.mergeShards = ".artifacts/functional-shards"
+	merged.shardCount = 4
+	args := coverageCommandArguments(merged)
+	for _, expected := range []string{"-merge-shards", ".artifacts/functional-shards", "-shard-count", "4"} {
+		if !slicesContainsString(args, expected) {
+			t.Fatalf("merged coverage args = %v, want %q", args, expected)
+		}
+	}
+}
+
 func slicesContainsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

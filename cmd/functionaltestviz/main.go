@@ -24,6 +24,8 @@ type config struct {
 	coverageBuildDiagnosticsPath string
 	coverageTestPackages         string
 	coverageCoverPackages        string
+	mergeShards                  string
+	shardCount                   int
 	rawFailureDir                string
 	rawFailureMaxBytes           int64
 	verdictPath                  string
@@ -65,6 +67,8 @@ func parseConfig() config {
 	flag.StringVar(&cfg.profilePath, "profile", "", "coverage profile path used by -run-suite")
 	flag.StringVar(&cfg.coverageBuildDiagnosticsPath, "coverage-build-diagnostics", "", "optional coverage compile-probe cache diagnostic path used by -run-suite")
 	flag.StringVar(&cfg.coverageTestPackages, "test-packages", "", "optional space-separated go test packages passed to gocoveragecheck")
+	flag.StringVar(&cfg.mergeShards, "merge-shards", "", "optional functional shard artifact directory; gocoveragecheck merges the shards and runs the gate without running tests")
+	flag.IntVar(&cfg.shardCount, "shard-count", 0, "number of functional shards expected under -merge-shards")
 	flag.StringVar(&cfg.coverageCoverPackages, "cover-packages", "", "optional comma-separated packages passed to gocoveragecheck -coverpkg")
 	flag.StringVar(&cfg.rawFailureDir, "raw-failure-dir", "", "optional directory for bounded failed-package go test JSON")
 	flag.Int64Var(&cfg.rawFailureMaxBytes, "raw-failure-max-bytes", 0, "maximum retained failed-package event bytes")

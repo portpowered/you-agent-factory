@@ -116,6 +116,12 @@ type config struct {
 	stream                         bool
 	timeout                        time.Duration
 	totalOnly                      bool
+	functionalQuarantineRatchet    bool
+	shardIndex                     int
+	shardCount                     int
+	shardTimings                   string
+	shardManifestOutput            string
+	mergeShards                    string
 	phaseTiming                    *coveragePhaseTimer
 }
 
@@ -176,6 +182,9 @@ func execute(cfg config) error {
 		defer cfg.phaseTiming.emit()
 	}
 	result, err := run(cfg)
+	if errors.Is(err, errShardRunComplete) {
+		return nil
+	}
 	if err != nil {
 		result.packageFloorPolicy = cfg.packageFloorPolicyValue()
 		result.detailedDiagnostics = cfg.detailedDiagnostics
@@ -262,11 +271,20 @@ func parseConfig() config {
 	flag.BoolVar(&cfg.stream, "stream", false, "stream coverage-test child stdout and stderr to their output sinks while running")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.BoolVar(&cfg.totalOnly, "total-only", false, "disable package-local coverage gates while retaining per-package reporting")
+	flag.BoolVar(&cfg.functionalQuarantineRatchet, "functional-quarantine-ratchet", false, "with -validate-functional-quarantine, also run the quarantined tests and require each to still fail (the ratchet an unsharded coverage run performs in process)")
+	flag.IntVar(&cfg.shardIndex, "shard-index", -1, "functional shard mode: run only this zero-based slice of the selected packages and write its profile, timing, and manifest without evaluating floors")
+	flag.IntVar(&cfg.shardCount, "shard-count", 0, "number of functional shards; required with -shard-index or -merge-shards")
+	flag.StringVar(&cfg.shardTimings, "shard-timings", "", "checked-in per-package elapsed table used to balance functional shards")
+	flag.StringVar(&cfg.shardManifestOutput, "shard-manifest-output", "", "path for the shard manifest naming the full selected set and this shard's slice")
+	flag.StringVar(&cfg.mergeShards, "merge-shards", "", "functional aggregate mode: directory holding one functional-coverage-shard-N directory per shard; runs no tests, verifies the partition, merges profiles and timings, and runs the unchanged gate")
 	flag.Parse()
 	return cfg
 }
 
 func validateConfig(cfg config) error {
+	if err := validateShardConfig(cfg); err != nil {
+		return err
+	}
 	if strings.TrimSpace(cfg.rawFailureDir) != "" {
 		if cfg.suite != functionalCoverageSuite {
 			return fmt.Errorf("configure raw functional failure capture: -suite must be %q (got %q)", functionalCoverageSuite, cfg.suite)
@@ -368,6 +386,12 @@ func executeFunctionalQuarantineValidation(cfg config) error {
 		return err
 	}
 
+	if cfg.functionalQuarantineRatchet {
+		if err := runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot); err != nil {
+			return err
+		}
+	}
+
 	fmt.Fprintf(stdoutWriter, "Functional quarantine validation: manifest=%s selectors=%d status=pass\n", filepath.ToSlash(path), len(manifest.Entries))
 	return nil
 }
@@ -433,8 +457,13 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	if err != nil {
 		return coverageResult{}, err
 	}
-	selectorVerification := startFunctionalQuarantineSelectorVerification(cfg, targetOS, logicalCPUs, repoRoot)
-	if selectorVerification != nil {
+	var selectorVerification *functionalQuarantineSelectorVerification
+	if cfg.shardRunMode() {
+		selectorVerification = skippedQuarantineVerification()
+	} else if !cfg.shardAggregateMode() {
+		selectorVerification = startFunctionalQuarantineSelectorVerification(cfg, targetOS, logicalCPUs, repoRoot)
+	}
+	if selectorVerification != nil && !selectorVerification.skipped {
 		selectorVerification.overlapCoverage = true
 		selectorVerification.ratchet = startFunctionalQuarantineRatchetVerification(
 			selectorVerification.manifest,
@@ -445,6 +474,10 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 		defer func() {
 			runErr = errors.Join(runErr, selectorVerification.waitAll())
 		}()
+	}
+
+	if cfg.shardAggregateMode() {
+		return runShardAggregateProfile(cfg, profilePath, repoRoot)
 	}
 
 	var coverPackages []string
@@ -488,6 +521,13 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 		return coverageResult{}, err
 	}
 
+	if prepared.shard != nil {
+		if err := writeShardManifest(cfg.shardManifestOutput, *prepared.shard); err != nil {
+			return coverageResult{}, err
+		}
+		fmt.Fprintf(stdoutWriter, "Functional shard %d/%d: packages=%d of %d assigned-weight=%.1fs\n", prepared.shard.ShardIndex+1, prepared.shard.ShardCount, len(prepared.shard.ShardPackages), len(prepared.shard.SelectedPackages), prepared.shard.AssignedWeight)
+	}
+
 	runErr = cfg.measureCoveragePhase(coveragePhaseTest, func() error {
 		return executeCoverageInvocationPlan(
 			cfg,
@@ -502,6 +542,9 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	})
 	if runErr != nil {
 		return coverageResult{}, runErr
+	}
+	if prepared.shard != nil {
+		return coverageResult{}, errShardRunComplete
 	}
 	if err := cfg.measureCoveragePhase(coveragePhaseCanonicalize, func() error {
 		var err error
@@ -522,6 +565,40 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 
 	cfg.beginCoveragePhase(coveragePhaseManifest)
 	result, err = applyCoverageManifestGate(cfg, evaluated.result, prepared.repoRoot, evaluated.baselinePackages)
+	if err != nil {
+		cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusError)
+		return result, err
+	}
+	return result, nil
+}
+
+// runShardAggregateProfile replaces the test run and canonicalization phases of
+// an aggregate run with the shard merge, then continues through the same
+// evaluation and package-floor gate as an unsharded run.
+func runShardAggregateProfile(cfg config, profilePath string, repoRoot string) (coverageResult, error) {
+	coverPackages, err := resolveCoverPackages(cfg)
+	if err != nil {
+		return coverageResult{}, err
+	}
+	coverPackages = filterCoverageRequirementPackages(cfg.suite, coverPackages)
+	var canonicalBlocks map[string]coverageBlock
+	if err := cfg.measureCoveragePhase(coveragePhaseCanonicalize, func() error {
+		var err error
+		canonicalBlocks, err = runShardAggregate(cfg, profilePath, repoRoot, coverPackages)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
+	}
+	var evaluated evaluatedCoverageRun
+	if err := cfg.measureCoveragePhase(coveragePhaseEvaluate, func() error {
+		var err error
+		evaluated, err = evaluateCoverageRun(cfg, profilePath, repoRoot, coverPackages, canonicalBlocks)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
+	}
+	cfg.beginCoveragePhase(coveragePhaseManifest)
+	result, err := applyCoverageManifestGate(cfg, evaluated.result, repoRoot, evaluated.baselinePackages)
 	if err != nil {
 		cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusError)
 		return result, err

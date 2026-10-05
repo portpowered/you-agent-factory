@@ -207,6 +207,16 @@ FUNCTIONAL_TEST_GO ?= $(GO)
 # can be reported by its compact terminal verdict step. An unset path preserves
 # the historical fail-fast target behavior.
 FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
+# Sharded functional coverage: each shard runs one balanced slice of the selected
+# packages (functional-coverage-shard); the aggregate sets FUNCTIONAL_MERGE_SHARDS
+# to the directory holding every shard's artifact and runs the unchanged gate
+# through functional-test-viz without running tests.
+FUNCTIONAL_SHARD_COUNT ?= 4
+FUNCTIONAL_SHARD_INDEX ?= 0
+FUNCTIONAL_SHARD_TIMINGS ?= scripts/ci/functional-shard-timings.json
+FUNCTIONAL_SHARD_ROOT ?= .artifacts/functional-shards
+FUNCTIONAL_SHARD_DIR ?= $(FUNCTIONAL_SHARD_ROOT)/functional-coverage-shard-$(FUNCTIONAL_SHARD_INDEX)
+FUNCTIONAL_MERGE_SHARDS ?=
 PACKAGE_BOUNDARY_ROOT ?= .
 PACKAGE_BOUNDARY_ALL ?= 0
 PACKAGE_BOUNDARY_BASE_REF ?=
@@ -291,7 +301,7 @@ endef
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-maintenance test-integration test-localai-runner-v2-component test-localai-runner-v2-prebuilt test-integration-models-managed-process build-integration-models-managed-process-helper test-integration-models-asr-live-correlation build-integration-models-asr-live-correlation-harness test-contract test-stress test-release
-.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-test-viz
+.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-test-viz functional-coverage-shard
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-backend-conformance test-backend-conformance-live test-root-process-acceptance long-tests long-tests-managed-runtime
@@ -727,7 +737,17 @@ functional-test-viz:
 		-package-manifest "$(GO_FUNCTIONAL_COVERAGE_MANIFEST)" \
 		-package-floor-policy "$(GO_COVERAGE_FLOOR_POLICY)" \
 		-test-timeout "$(GO_COVERAGE_TIMEOUT)" \
-		$(if $(FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS),-coverage-build-diagnostics "$(FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS)",)
+		$(if $(FUNCTIONAL_MERGE_SHARDS),-merge-shards "$(FUNCTIONAL_MERGE_SHARDS)" -shard-count $(FUNCTIONAL_SHARD_COUNT),) 		$(if $(FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS),-coverage-build-diagnostics "$(FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS)",)
+
+# functional-coverage-shard runs shard FUNCTIONAL_SHARD_INDEX of
+# FUNCTIONAL_SHARD_COUNT: the same package selection, quarantine subtraction,
+# flake retry, and raw-failure capture as an unsharded run, restricted to this
+# shard's slice. It writes only the shard's profile, timing summary, and
+# manifest; floors are evaluated once, by the aggregate. Quarantine selector
+# verification is skipped here and runs once in its own job.
+functional-coverage-shard:
+	@mkdir -p "$(FUNCTIONAL_SHARD_DIR)"
+	@$(GO) run ./cmd/gocoveragecheck 		-suite functional 		-stream 		-jobs $(FUNCTIONAL_DEFAULT_JOBS) 		-timeout "$(GO_COVERAGE_TIMEOUT)" 		-functional-quarantine "$(FUNCTIONAL_QUARANTINE)" 		-shard-index $(FUNCTIONAL_SHARD_INDEX) 		-shard-count $(FUNCTIONAL_SHARD_COUNT) 		-shard-timings "$(FUNCTIONAL_SHARD_TIMINGS)" 		-shard-manifest-output "$(FUNCTIONAL_SHARD_DIR)/shard-manifest.json" 		-profile "$(FUNCTIONAL_SHARD_DIR)/coverage.out" 		-timing-output "$(FUNCTIONAL_SHARD_DIR)/timing.json" 		-raw-failure-dir "$(FUNCTIONAL_SHARD_DIR)/raw-failures" 		-raw-failure-max-bytes $(FUNCTIONAL_RAW_FAILURE_MAX_BYTES) 		$(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,)
 
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)

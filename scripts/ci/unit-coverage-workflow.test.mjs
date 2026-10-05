@@ -59,20 +59,14 @@ test("the preserved ACP SDK remains part of the installable root module", () => 
 
 test("unit coverage uses a shallow checkout and an explicit reusable Go cache", () => {
 	const job = backendCoverageJob(read(".github/workflows/ci.yml"));
-	assert.match(job, /timeout-minutes: \$\{\{ matrix\.suite == 'unit' && 15 \|\| 80 \}\}/);
+	assert.match(job, /timeout-minutes: 15/);
 
 	const unitCheckout = stepSection(
 		job,
 		"      - uses: actions/checkout@v4\n        if: matrix.suite == 'unit'",
-		"      - uses: actions/checkout@v4\n        if: matrix.suite == 'functional'",
-	);
-	assert.match(unitCheckout, /fetch-depth: 1/);
-	const functionalCheckout = stepSection(
-		job,
-		"      - uses: actions/checkout@v4\n        if: matrix.suite == 'functional'",
 		"      - uses: actions/setup-go@v5",
 	);
-	assert.match(functionalCheckout, /fetch-depth: 0/);
+	assert.match(unitCheckout, /fetch-depth: 1/);
 
 	const moduleCache = stepSection(job, "      - name: Restore Go module cache", "      - name: Prefetch complete Go dependency graph");
 	const modulePrefetch = stepSection(job, "      - name: Prefetch complete Go dependency graph", "      - name: Restore unit coverage Go build and test cache");

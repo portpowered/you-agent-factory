@@ -269,6 +269,9 @@ func coverageCommandArguments(cfg config) []string {
 	if strings.TrimSpace(cfg.coverageCoverPackages) != "" {
 		args = append(args, "-coverpkg", cfg.coverageCoverPackages)
 	}
+	if strings.TrimSpace(cfg.mergeShards) != "" {
+		args = append(args, "-merge-shards", cfg.mergeShards, "-shard-count", strconv.Itoa(cfg.shardCount))
+	}
 	if strings.TrimSpace(cfg.rawFailureDir) != "" {
 		args = append(args,
 			"-raw-failure-dir", cfg.rawFailureDir,

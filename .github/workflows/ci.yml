@@ -24,6 +24,10 @@ env:
   # go directive can make setup-go download the newer toolchain into GOMODCACHE
   # before cache restore, which causes cache extraction collisions on CI.
   GO_VERSION: 1.25.0
+  # Number of parallel functional coverage shards. It must equal the length of
+  # the backend-functional-shard matrix; scripts/ci/functional-coverage-workflow.test.mjs
+  # asserts they agree.
+  FUNCTIONAL_SHARD_COUNT: "4"
 
 jobs:
   classify:
@@ -259,10 +263,11 @@ jobs:
     needs: classify
     if: always() && needs.classify.outputs.run_backend != 'false'
     runs-on: ubuntu-latest
-    # The functional runner enforces the 75m merge-full budget. The unit lane
-    # has a fifteen-minute ceiling so a cache regression cannot quietly turn the
-    # required coverage check back into the longest pull-request job.
-    timeout-minutes: ${{ matrix.suite == 'unit' && 15 || 80 }}
+    # The unit lane has a fifteen-minute ceiling so a cache regression cannot
+    # quietly turn the required coverage check back into the longest
+    # pull-request job. Functional coverage runs in the sharded
+    # backend-functional-* jobs below.
+    timeout-minutes: 15
     # Both lanes upsert their own reporting comment on the pull request,
     # mirroring Backend Lint. Each uses a distinct HTML-comment marker, so the
     # two reports never find, overwrite, or delete each other's comment. Every
@@ -288,8 +293,6 @@ jobs:
         include:
           - suite: unit
             label: Unit
-          - suite: functional
-            label: Functional
     steps:
       - name: Record job start time
         shell: bash
@@ -299,30 +302,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
-      - uses: actions/checkout@v4
-        if: matrix.suite == 'functional'
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
       - uses: actions/setup-go@v5
         if: matrix.suite == 'unit'
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
-      - uses: actions/setup-go@v5
-        if: matrix.suite == 'functional'
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-      - name: Select functional runner parallelism
-        if: matrix.suite == 'functional'
-        id: functional-parallelism
-        shell: bash
-        run: |
-          runner_cpus="$(nproc 2>/dev/null || true)"
-          functional_jobs=12
-          echo "Functional CI runner: logical_cpus=${runner_cpus:-unknown} jobs=$functional_jobs"
-          echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
       - name: Restore Go module cache
         id: go-module-cache
         uses: actions/cache@v4
@@ -343,39 +327,6 @@ jobs:
           key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
           restore-keys: |
             unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
-      # Deps-only functional build cache: compiled std and third-party
-      # packages only. Coverage instruments just pkg/..., so these objects are
-      # reusable by every instrumented test binary, while module packages stay
-      # cold (they change on every commit; caching them cost a ~4 min restore of
-      # a ~7 GB cache and failed to save). The key is exact, with no
-      # restore-keys, so a go.mod/go.sum or Go version change refills it.
-      # Only pushes to main save it; every other run restores read-only.
-      - name: Restore functional dependency build cache
-        if: matrix.suite == 'functional'
-        id: functional-deps-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: functional-deps-build-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - name: Build functional dependency build cache
-        if: matrix.suite == 'functional' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.functional-deps-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          module_path="$(go list -m)"
-          mapfile -t dep_packages < <(go list -deps -test -f '{{if not .ForTest}}{{.ImportPath}}{{end}}' ./pkg/... ./tests/functional/... | grep -v "^${module_path}" | grep -v '\.test$' | grep -v '\[' | sort -u)
-          go build -p=4 "${dep_packages[@]}" runtime/coverage
-          du -sh ~/.cache/go-build
-      - name: Save functional dependency build cache
-        if: matrix.suite == 'functional' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.functional-deps-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/go-build
-          key: ${{ steps.functional-deps-cache.outputs.cache-primary-key }}
-      - uses: actions/setup-node@v4
-        if: matrix.suite == 'functional'
-        with:
-          node-version: ${{ env.NODE_VERSION }}
       - name: Run LocalAI Runner V2 controlled component matrix
         if: matrix.suite == 'unit'
         run: make test-localai-runner-v2-component
@@ -516,68 +467,273 @@ jobs:
               issue_number: context.issue.number,
               body: publication.body,
             });
-      # This is the authoritative Linux functional run. Pull requests and
-      # pushes to main use the same complete non-short tier. The run expands
-      # ./tests/functional/... once, subtracts only the versioned quarantine,
-      # and writes package plus top-level test outcomes before the coverage
-      # gate returns, including on failure. The supervisor starts the unchanged
-      # quarantine validator in the same critical-path window and joins both
-      # independent verdicts before returning.
-      - name: Run Linux functional coverage with concurrent quarantine verification
-        if: matrix.suite == 'functional'
-        timeout-minutes: 75
+
+  # Functional coverage is split across FUNCTIONAL_SHARD_COUNT parallel shards.
+  # Every shard selects the same quarantined package set, runs only its
+  # time-balanced slice (scripts/ci/functional-shard-timings.json), and uploads
+  # its profile, timing summary, and a manifest of the full selected set and its
+  # slice. A shard evaluates no floors: the Backend Functional Coverage job below
+  # is the single place the gate runs, over the merged profiles.
+  backend-functional-shard:
+    name: Backend Functional Coverage Shard ${{ matrix.shard }}
+    needs: classify
+    if: always() && needs.classify.outputs.run_backend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Restore Go module cache
+        id: go-module-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+            go-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+      - name: Prefetch complete Go dependency graph
+        run: go list -deps -test -mod=readonly ./... > /dev/null
+      - name: Select functional runner parallelism
+        id: functional-parallelism
         shell: bash
-        run: bash scripts/ci/run-functional-coverage-with-quarantine.sh
+        run: |
+          runner_cpus="$(nproc 2>/dev/null || true)"
+          functional_jobs=12
+          echo "Functional CI runner: logical_cpus=${runner_cpus:-unknown} jobs=$functional_jobs"
+          echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
+      # Deps-only functional build cache: compiled std and third-party
+      # packages only. Coverage instruments just pkg/..., so these objects are
+      # reusable by every instrumented test binary, while module packages stay
+      # cold (they change on every commit; caching them cost a ~4 min restore of
+      # a ~7 GB cache and failed to save). The key is exact, with no
+      # restore-keys, so a go.mod/go.sum or Go version change refills it.
+      # Only shard 0 on a push to main saves it; every other run restores
+      # read-only.
+      - name: Restore functional dependency build cache
+        id: functional-deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: functional-deps-build-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Build functional dependency build cache
+        if: matrix.shard == 0 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.functional-deps-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          module_path="$(go list -m)"
+          mapfile -t dep_packages < <(go list -deps -test -f '{{if not .ForTest}}{{.ImportPath}}{{end}}' ./pkg/... ./tests/functional/... | grep -v "^${module_path}" | grep -v '\.test$' | grep -v '\[' | sort -u)
+          go build -p=4 "${dep_packages[@]}" runtime/coverage
+          du -sh ~/.cache/go-build
+      - name: Save functional dependency build cache
+        if: matrix.shard == 0 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.functional-deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.functional-deps-cache.outputs.cache-primary-key }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Run functional coverage shard
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          mkdir -p "$FUNCTIONAL_SHARD_DIR"
+          make functional-coverage-shard 2>&1 | tee "$FUNCTIONAL_SHARD_DIR/command.log"
         env:
+          FUNCTIONAL_SHARD_INDEX: ${{ matrix.shard }}
+          FUNCTIONAL_SHARD_COUNT: ${{ env.FUNCTIONAL_SHARD_COUNT }}
+          FUNCTIONAL_SHARD_DIR: .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}
+          FUNCTIONAL_SHORT: "false"
+          FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}
+          # Retry at most five failing top-level tests once on this same
+          # commit; a pass on retry is recorded as a flake in the ledger.
+          FUNCTIONAL_FLAKE_RETRY_MAX: "5"
+          FUNCTIONAL_FLAKE_LEDGER: .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/flake-ledger.json
+          FUNCTIONAL_FLAKE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Record functional flake ledger
+        if: always() && hashFiles('scripts/ci/flake-ledger-summary.mjs') != ''
+        run: node scripts/ci/flake-ledger-summary.mjs --ledger .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/flake-ledger.json
+      # The aggregate requires every file below, so a shard that fails or is
+      # cancelled before producing them can never contribute partial coverage.
+      - name: Upload functional coverage shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-coverage-shard-${{ matrix.shard }}
+          path: |
+            .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/shard-manifest.json
+            .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/coverage.out
+            .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/timing.json
+            .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/command.log
+            .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/flake-ledger.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload functional raw failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-raw-failures-shard-${{ matrix.shard }}
+          path: |
+            .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/raw-failures/index.json
+            .artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}/raw-failures/*.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The retained runtime quarantine selector check, the quarantined-test ratchet,
+  # and the pinned-package evidence run once here, in parallel with the shards,
+  # instead of in every shard or on the aggregate's critical path.
+  backend-functional-quarantine:
+    name: Backend Functional Quarantine
+    needs: classify
+    if: always() && needs.classify.outputs.run_backend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Restore Go module cache
+        id: go-module-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+            go-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+      - name: Prefetch complete Go dependency graph
+        run: go list -deps -test -mod=readonly ./... > /dev/null
+      - name: Restore functional dependency build cache
+        id: functional-deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: functional-deps-build-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Verify functional quarantine selectors, ratchet, and package evidence
+        shell: bash
+        run: bash scripts/ci/verify-functional-quarantine-packages.sh
+        env:
+          FUNCTIONAL_QUARANTINE_RATCHET: "true"
           FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
           FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
-          # Retry at most five failing top-level tests once on this same
-          # commit; a pass on retry is recorded as a flake in the ledger.
-          FUNCTIONAL_FLAKE_RETRY_MAX: "5"
-          FUNCTIONAL_FLAKE_LEDGER: .artifacts/functional-test-viz/flake-ledger.json
-          FUNCTIONAL_FLAKE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
-          FUNCTIONAL_TEST_TIER: "merge-full"
-          FUNCTIONAL_TEST_TRIGGER: ${{ github.event_name == 'push' && 'push-main' || 'pull_request' }}
-          FUNCTIONAL_TEST_BUDGET: "75m"
-          FUNCTIONAL_SHORT: "false"
-          FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}
-          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
-          FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
-          FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/functional-test-viz/coverage-build-diagnostics.json
       - name: Upload Linux quarantine package evidence
-        if: always() && matrix.suite == 'functional'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: functional-quarantine-package-evidence
           path: .artifacts/functional-test-viz/quarantine-package-evidence.txt
           if-no-files-found: error
           retention-days: 14
+
+  # The required "Backend Functional Coverage" check. It fails unless every
+  # shard and the quarantine check succeeded, then merges the shard profiles and
+  # timings and runs the unchanged evaluation and package-floor gate.
+  backend-functional-coverage:
+    name: Backend Functional Coverage
+    needs: [classify, backend-functional-shard, backend-functional-quarantine]
+    if: always() && needs.classify.outputs.run_backend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+      # Package-floor enforcement is BLOCKING (the Makefile default,
+      # GO_COVERAGE_FLOOR_POLICY ?= blocking). A measured package with no
+      # manifest entry is held to the lane's default floor
+      # (cmd/gocoveragecheck/manifest_default_floor.go).
+      #
+      # Do not reintroduce an advisory override here.
+    steps:
+      # Fail closed first: a shard or the quarantine check that failed, was
+      # cancelled, or was skipped must never be gated on partial coverage.
+      - name: Require every functional shard and the quarantine check
+        shell: bash
+        env:
+          SHARD_RESULT: ${{ needs.backend-functional-shard.result }}
+          QUARANTINE_RESULT: ${{ needs.backend-functional-quarantine.result }}
+        run: |
+          status=0
+          for pair in "backend-functional-shard=$SHARD_RESULT" "backend-functional-quarantine=$QUARANTINE_RESULT"; do
+            if [ "${pair#*=}" != "success" ]; then
+              echo "::error title=Functional coverage is incomplete::${pair%%=*} result was '${pair#*=}'; coverage is never gated on partial shards."
+              status=1
+            fi
+          done
+          exit "$status"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Restore Go module cache
+        id: go-module-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+            go-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+      - name: Prefetch complete Go dependency graph
+        run: go list -deps -test -mod=readonly ./... > /dev/null
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Download functional coverage shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: functional-coverage-shard-*
+          path: .artifacts/functional-shards
+      - name: Merge functional coverage shards and run the coverage gate
+        timeout-minutes: 20
+        shell: bash
+        run: make functional-test-viz
+        env:
+          FUNCTIONAL_MERGE_SHARDS: .artifacts/functional-shards
+          FUNCTIONAL_SHARD_COUNT: ${{ env.FUNCTIONAL_SHARD_COUNT }}
+          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+          FUNCTIONAL_TEST_TIER: "merge-full"
+          FUNCTIONAL_TEST_TRIGGER: ${{ github.event_name == 'push' && 'push-main' || 'pull_request' }}
+          FUNCTIONAL_TEST_BUDGET: "75m"
+          FUNCTIONAL_SHORT: "false"
+          FUNCTIONAL_DEFAULT_JOBS: "4"
+          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
+          FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
       # Ordinary test and coverage-gate failures are deferred by the runner so
       # this step is the only failing log for those outcomes. Timeout and
       # infrastructure failures keep the full run step failed instead.
       - name: Report functional coverage verdict
-        if: always() && matrix.suite == 'functional'
+        if: always()
         run: bash scripts/ci/publish-functional-coverage-verdict.sh
         env:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
-      - name: Record functional flake ledger
-        if: always() && matrix.suite == 'functional' && hashFiles('scripts/ci/flake-ledger-summary.mjs') != ''
-        run: node scripts/ci/flake-ledger-summary.mjs --ledger .artifacts/functional-test-viz/flake-ledger.json
-      - name: Upload functional flake ledger
-        if: always() && matrix.suite == 'functional'
-        uses: actions/upload-artifact@v4
-        with:
-          name: functional-flake-ledger
-          path: .artifacts/functional-test-viz/flake-ledger.json
-          if-no-files-found: ignore
-          retention-days: 30
       - name: Upload functional test diagnostics
-        if: always() && matrix.suite == 'functional'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: functional-test-diagnostics
@@ -587,23 +743,17 @@ jobs:
             .artifacts/functional-test-viz/coverage-summary.json
             .artifacts/functional-test-viz/coverage.out
             .artifacts/functional-test-viz/command.log
-            .artifacts/functional-test-viz/quarantine-package-evidence.txt
             .artifacts/functional-test-viz/diagnostic-status.txt
             .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
             .artifacts/functional-test-viz/functional-coverage-verdict.txt
             .artifacts/functional-test-viz/coverage-build-diagnostics.json
-            .artifacts/functional-test-viz/raw-failures/index.json
-            .artifacts/functional-test-viz/raw-failures/*.jsonl
-            .artifacts/functional-test-viz/c09-critical-path/quarantine-status.txt
-            .artifacts/functional-test-viz/c09-critical-path/coverage-status.txt
-            .artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt
           if-no-files-found: ignore
           retention-days: 14
       # Reporting only. Both steps below are fail-open: a missing or malformed
       # artifact writes an explicit "unavailable" body and exits 0, so a
       # renderer or API failure can never turn a passing suite red.
       - name: Render functional coverage pull request comment
-        if: always() && matrix.suite == 'functional'
+        if: always()
         continue-on-error: true
         run: bash scripts/ci/publish-functional-coverage-comment.sh
         env:
@@ -613,7 +763,7 @@ jobs:
           FUNCTIONAL_COVERAGE_COMMENT_FILE: .artifacts/functional-test-viz/functional-coverage-comment.md
           FUNCTIONAL_COVERAGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Publish functional coverage inventory to the pull request
-        if: always() && matrix.suite == 'functional' && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/github-script@v7
         env:
@@ -1042,7 +1192,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-functional-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1085,7 +1235,7 @@ jobs:
           FRONTEND_COVERAGE_RESULT: ${{ needs.ui-coverage.result }}
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
-          BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
+          BACKEND_RESULT: ${{ (needs.backend-coverage.result == 'success' && needs.backend-functional-coverage.result || needs.backend-coverage.result) == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || (needs.backend-coverage.result == 'success' && needs.backend-functional-coverage.result || needs.backend-coverage.result) == 'success' && needs.backend-integration.result || (needs.backend-coverage.result == 'success' && needs.backend-functional-coverage.result || needs.backend-coverage.result) }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           BACKEND_MODELS_RESULT: ${{ needs.backend-models-verification.result }}
           RUN_BACKEND_LINT: "true"

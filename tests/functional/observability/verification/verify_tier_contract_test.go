@@ -656,8 +656,9 @@ func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testin
 }
 
 // TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog
-// now proves CI invokes the supervisor whose coverage child owns the single
-// Make-owned functional report entrypoint.
+// proves the sharded CI aggregate and the retained supervisor (used by the
+// controlled raw failure witness) both reach the single Make-owned functional
+// report entrypoint.
 func TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	workflow, err := os.ReadFile(filepath.Join(repoRoot, ".github", "workflows", "ci.yml"))

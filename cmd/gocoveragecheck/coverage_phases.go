@@ -13,6 +13,7 @@ type preparedCoverageRun struct {
 	repoRoot                    string
 	testPackages                []string
 	expectedFunctionalInventory *functionalTestInventory
+	shard                       *shardManifest
 }
 
 func prepareCoverageRunWithFunctionalMetadata(
@@ -35,6 +36,7 @@ func prepareCoverageRunWithFunctionalMetadata(
 
 	var functionalSelection *functionalCoverageSelection
 	var expectedFunctionalInventory *functionalTestInventory
+	var shard *shardManifest
 	if strings.TrimSpace(cfg.functionalQuarantine) != "" {
 		var selection functionalCoverageSelection
 		var selectedPackages []string
@@ -61,6 +63,16 @@ func prepareCoverageRunWithFunctionalMetadata(
 		}
 		if functionalSelection == nil {
 			functionalSelection = &selection
+		}
+		if cfg.shardRunMode() {
+			manifest, err := buildShardManifest(cfg, selectedFunctionalPackages(selection))
+			if err != nil {
+				return preparedCoverageRun{}, err
+			}
+			selection = restrictSelectionToPackages(selection, manifest.ShardPackages)
+			*functionalSelection = selection
+			selectedPackages = selectedFunctionalPackages(selection)
+			shard = &manifest
 		}
 		expected := selectedFunctionalTestInventory(selection)
 		expectedFunctionalInventory = &expected
@@ -97,6 +109,7 @@ func prepareCoverageRunWithFunctionalMetadata(
 		repoRoot:                    repoRoot,
 		testPackages:                testPackages,
 		expectedFunctionalInventory: expectedFunctionalInventory,
+		shard:                       shard,
 	}, nil
 }
 

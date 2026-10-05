@@ -156,21 +156,31 @@ func TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics(t *testi
 		t.Fatalf("read CI workflow: %v", err)
 	}
 	body := string(workflow)
-	functionalStep := "- name: Run Linux functional coverage with concurrent quarantine verification"
-	start := strings.Index(body, functionalStep)
-	if start < 0 {
-		t.Fatalf("functional coverage workflow step is missing")
-	}
-	section := body[start:]
-	if next := strings.Index(section[len(functionalStep):], "\n      - name:"); next >= 0 {
-		section = section[:len(functionalStep)+next]
-	}
-	for _, required := range []string{
-		"timeout-minutes: 75",
-		"run: bash scripts/ci/run-functional-coverage-with-quarantine.sh",
+	for _, step := range []struct {
+		name     string
+		required []string
+	}{
+		{
+			name:     "- name: Run functional coverage shard",
+			required: []string{"timeout-minutes: 40", "make functional-coverage-shard"},
+		},
+		{
+			name:     "- name: Merge functional coverage shards and run the coverage gate",
+			required: []string{"timeout-minutes: 20", "run: make functional-test-viz", "FUNCTIONAL_MERGE_SHARDS:"},
+		},
 	} {
-		if !strings.Contains(section, required) {
-			t.Fatalf("functional coverage workflow step missing %q:\n%s", required, section)
+		start := strings.Index(body, step.name)
+		if start < 0 {
+			t.Fatalf("functional coverage workflow step %q is missing", step.name)
+		}
+		section := body[start:]
+		if next := strings.Index(section[len(step.name):], "\n      - "); next >= 0 {
+			section = section[:len(step.name)+next]
+		}
+		for _, required := range step.required {
+			if !strings.Contains(section, required) {
+				t.Fatalf("functional coverage workflow step %q missing %q:\n%s", step.name, required, section)
+			}
 		}
 	}
 }

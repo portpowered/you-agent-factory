@@ -47,23 +47,36 @@ test("workflow lint isolates the guarded raw failure fixture from shared CI", ()
 });
 
 test("functional diagnostics artifact uploads bounded raw failure evidence after the verdict", () => {
+	const shardPath = ".artifacts/functional-shards/functional-coverage-shard-${{ matrix.shard }}";
 	const workflow = `name: CI
 jobs:
-  backend-coverage:
+  backend-functional-shard:
+    steps:
+      - name: Upload functional raw failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-raw-failures-shard
+          path: |
+            ${shardPath}/raw-failures/index.json
+            ${shardPath}/raw-failures/*.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Finish
+        run: true
+
+  backend-functional-coverage:
     steps:
       - name: Report functional coverage verdict
-        if: always() && matrix.suite == 'functional'
+        if: always()
         run: bash scripts/ci/publish-functional-coverage-verdict.sh
       - name: Upload functional test diagnostics
-        if: always() && matrix.suite == 'functional'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: functional-test-diagnostics
           path: |
             .artifacts/functional-test-viz/command.log
-            .artifacts/functional-test-viz/raw-failures/index.json
-            .artifacts/functional-test-viz/raw-failures/*.jsonl
-          if-no-files-found: ignore
           retention-days: 14
       - name: Finish
         run: true
@@ -78,7 +91,7 @@ jobs:
 			validateFunctionalDiagnosticsArtifactWorkflowContract({
 				workflow: workflow.replace("raw-failures/index.json\n", ""),
 			}),
-		/workflow contract failed: functional diagnostics artifact must include the raw failure index/,
+		/workflow contract failed: functional raw failure artifact must include the raw failure index/,
 	);
 });
 

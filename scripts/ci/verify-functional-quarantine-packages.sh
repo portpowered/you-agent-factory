@@ -8,6 +8,12 @@ output_path="${FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT:-.artifacts/functional-test
 test_timeout="${FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT:-15m}"
 quarantine="${FUNCTIONAL_QUARANTINE:-tests/functional/functional-quarantine.json}"
 go_bin="${GO:-go}"
+# The sharded coverage workflow runs the quarantined-test ratchet here, once,
+# instead of inside every coverage shard.
+ratchet_args=()
+if [[ "${FUNCTIONAL_QUARANTINE_RATCHET:-}" == "true" ]]; then
+  ratchet_args=(-functional-quarantine-ratchet)
+fi
 
 if ! command -v jq >/dev/null 2>&1; then
   printf '%s\n' 'jq is required to verify the structured go test package events' >&2
@@ -42,6 +48,7 @@ record "functional-quarantine-evidence-command=go test -list=^Test -json -count=
   -suite functional \
   -functional-quarantine "$quarantine" \
   -validate-functional-quarantine \
+  "${ratchet_args[@]}" \
   -short=false \
   "-timeout=$test_timeout"
 
