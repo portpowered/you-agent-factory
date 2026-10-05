@@ -39,7 +39,8 @@ type Service struct {
 	logger          logging.Logger
 }
 
-// New constructs an inert response-event bridge.
+// New constructs an inert response-event bridge with the caller-selected logger.
+// Callers supply an explicit NoopLogger when diagnostics are disabled.
 func New(
 	sequencer Sequencer,
 	factorySessions factorysessions.Service,
@@ -50,7 +51,7 @@ func New(
 		sequencer:       sequencer,
 		factorySessions: factorySessions,
 		workerEvents:    workerEvents,
-		logger:          logging.EnsureLogger(logger),
+		logger:          logger,
 	}
 }
 
@@ -160,9 +161,6 @@ func (s *Service) Run(
 // logStart records the bridge's stable identifiers without source response
 // payloads, prompt text, provider commands, or paths.
 func (s *Service) logStart(chatSessionID, factorySessionID string) {
-	if s == nil || s.logger == nil {
-		return
-	}
 	s.logger.Debug(
 		"chat_sessions response bridge start",
 		"op", responseBridgeOperation,
@@ -180,9 +178,6 @@ func (s *Service) logOutcome(
 	status factorysessions.InvocationTerminalStatus,
 	failureClass string,
 ) {
-	if s == nil || s.logger == nil {
-		return
-	}
 	s.logger.Info(
 		"chat_sessions response bridge outcome",
 		"op", responseBridgeOperation,
