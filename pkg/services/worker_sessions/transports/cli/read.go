@@ -21,6 +21,7 @@ import (
 
 // ReadConfig holds parameters for the Worker Sessions read command.
 type ReadConfig struct {
+	Follow          bool
 	ArtifactRef     string
 	View            string
 	Limit           int
@@ -114,11 +115,11 @@ func validateReadConfig(config ReadConfig) error {
 	if config.View == "logs" && strings.TrimSpace(config.SessionID) != "" {
 		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--view logs uses the top-level Worker Session ID; omit --session", nil)
 	}
-	if config.View != "logs" && (config.Limit != 0 || config.NextToken != "" || config.ArtifactRef != "") {
-		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--limit and --next-token require --view logs", nil)
+	if config.View != "logs" && (config.Follow || config.Limit != 0 || config.NextToken != "" || config.ArtifactRef != "") {
+		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--follow, --limit and --next-token require --view logs", nil)
 	}
-	if config.ArtifactRef != "" && (config.Limit != 0 || config.NextToken != "") {
-		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--artifact-ref cannot be combined with --limit or --next-token", nil)
+	if config.ArtifactRef != "" && (config.Follow || config.Limit != 0 || config.NextToken != "") {
+		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--artifact-ref cannot be combined with --follow, --limit or --next-token", nil)
 	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")

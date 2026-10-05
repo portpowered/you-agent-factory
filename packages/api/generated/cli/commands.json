@@ -10122,6 +10122,30 @@
             "since": "1.0.0"
           }
         },
+        "you.worker-sessions.read.flag.follow": {
+          "id": "you.worker-sessions.read.flag.follow",
+          "long": "follow",
+          "usage": "follow committed Worker Session logs until the captured terminal",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.follow",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.read.flag.view": {
           "id": "you.worker-sessions.read.flag.view",
           "long": "view",

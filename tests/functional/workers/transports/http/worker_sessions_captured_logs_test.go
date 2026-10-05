@@ -47,9 +47,10 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	if shown.ProviderSession != nil || shown.WorkerSessionId != "captured-worker" {
 		t.Fatalf("active unassociated Worker identity: %+v", shown)
 	}
-	close(gate)
+	followed := readCapturedLiveFollow(t, server, "captured-worker", gate)
 	runner.waitCompleted(t)
 	ended := waitCapturedTerminal(t, server.URL(), "captured-worker")
+	assertCapturedFollowPages(t, server, ended, followed, resume)
 	assertCapturedHeadContinuation(t, server, resume, ended)
 	assertCapturedLogsCLIHTTPParity(t, server, "captured-worker")
 	assertCapturedSummaryUsage(t, server, "captured-worker")

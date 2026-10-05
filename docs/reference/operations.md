@@ -384,6 +384,13 @@ is `GET /worker-sessions/{worker_session_id}/logs` with `limit` and `nextToken`.
 Unknown IDs return 404, invalid limits or tokens return 400, and unavailable
 recordings return 503. A selected host failure remains an error.
 
+Use `read --view logs --follow` to emit committed events as NDJSON through the
+captured terminal. Combine it with `--next-token` to resume an acknowledged
+prefix. Follow reads new captured records when live events arrive and checks
+for later commits. It backfills from capture when live event history expires.
+Incomplete history remains an explicit error after its captured prefix.
+Cancel follow to detach the observer while the Worker continues.
+
 Canceling a logs read detaches the observer and returns
 `WORKER_SESSION_LOGS_INTERRUPTED`; the admitted Worker keeps running. Retry
 against the same host to read its committed activity. An unreachable host
