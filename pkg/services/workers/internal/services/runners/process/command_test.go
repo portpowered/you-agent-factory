@@ -226,9 +226,24 @@ func assertLoggingCommandOutcome(t *testing.T, tc loggingCommandOutcomeCase, str
 	} else {
 		result, err = runner.Run(t.Context(), request)
 	}
-	if err != tc.err || !errors.Is(err, tc.err) || !reflect.DeepEqual(result, tc.result) {
+	assertCommandErrorIdentity(t, err, tc.err)
+	if !reflect.DeepEqual(result, tc.result) {
 		t.Fatalf("Run() = %#v, %v; want %#v, %v", result, err, tc.result, tc.err)
 	}
+	assertLoggingCommandCompletion(t, logger, tc)
+}
+
+func assertCommandErrorIdentity(t *testing.T, got, want error) {
+	t.Helper()
+	// Compare the original values as well as matching through the error chain:
+	// wrapping preserves errors.Is but changes the returned error's identity.
+	if reflect.ValueOf(got) != reflect.ValueOf(want) || !errors.Is(got, want) {
+		t.Fatalf("error identity changed: got %v, want %v", got, want)
+	}
+}
+
+func assertLoggingCommandCompletion(t *testing.T, logger *recordingLogger, tc loggingCommandOutcomeCase) {
+	t.Helper()
 	completion := logger.byEventWithLevel("command_runner.completed")
 	if len(completion) != 1 {
 		t.Fatalf("completion records = %#v, want one", completion)
@@ -745,9 +760,8 @@ func TestLoggingCommandRunnerAddsNoRawOutputDiagnostics(t *testing.T) {
 			commandContextLogger(logging.NoopLogger{}, got).Info("safe context", "event_name", "context.forwarded", "stdout_bytes", 13)
 			return CommandResult{Stdout: []byte("secret-stdout"), Stderr: []byte("accepted tail"), ExitCode: 9}, wantErr
 		})}
-	if _, err := runner.Run(t.Context(), request); err != wantErr {
-		t.Fatalf("error identity changed: %v", err)
-	}
+	_, err := runner.Run(t.Context(), request)
+	assertCommandErrorIdentity(t, err, wantErr)
 	for _, entry := range capture.entries {
 		for key, value := range entry.fields {
 			for _, secret := range []string{"secret-args", "secret-stdin", "secret-env", "secret-error", "secret-stdout"} {
@@ -922,6 +936,11 @@ func TestAdaptCommandRunnerPreservesLifecycleAndProjectionIsolation(t *testing.T
 	if request.Args[0] != "--fixture" || request.Env[0] != "VISIBLE=1" || string(request.Stdin) != "input" {
 		t.Fatal("effect mutated caller request")
 	}
+	assertProjectedCommandLifecycleAndFallback(t, request, result, observer)
+}
+
+func assertProjectedCommandLifecycleAndFallback(t *testing.T, request CommandRequest, result CommandResult, observer *commandLifecycleRecorder) {
+	t.Helper()
 	// A private runner projected to the platform boundary keeps buffered fallback
 	// output ordered and copied, without inventing a second command execution.
 	calls := 0

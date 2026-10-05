@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -404,7 +405,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 		},
 		runners.InferenceDependencies{Models: local},
 		nil,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return time.Unix(1, 0) },
 		nil,
 		nil,
