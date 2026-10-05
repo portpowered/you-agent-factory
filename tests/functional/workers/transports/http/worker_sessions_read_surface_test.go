@@ -82,6 +82,7 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 		t.Fatalf("in-flight Worker Session state = %q, want STARTING or RUNNING", inFlight.Sessions[0].State)
 	}
 	activeLogs := assertCapturedLogsCLIHTTPParity(t, server, inFlight.Sessions[0].WorkerSessionId)
+	assertCapturedFactoryReplayCompatibility(t, server, sessionID, workID, activeLogs.WorkerSessionId, false)
 
 	close(gate)
 	runner.waitCompleted(t)
@@ -101,6 +102,7 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	}
 	endedLogs := assertCapturedLogsCLIHTTPParity(t, server, completed.Sessions[0].WorkerSessionId)
 	assertCapturedSummaryUsage(t, server, completed.Sessions[0].WorkerSessionId)
+	assertCapturedFactoryReplayCompatibility(t, server, sessionID, workID, endedLogs.WorkerSessionId, true)
 	if endedLogs.CommittedPosition <= activeLogs.CommittedPosition {
 		t.Fatalf("ended capture did not advance: active=%d ended=%d", activeLogs.CommittedPosition, endedLogs.CommittedPosition)
 	}

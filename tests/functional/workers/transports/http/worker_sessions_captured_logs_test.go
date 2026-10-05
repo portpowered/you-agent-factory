@@ -1,12 +1,14 @@
 package http_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -220,8 +222,91 @@ func assertCapturedReplayTimes(t *testing.T, baseURL string, page factoryapi.Wor
 	}
 	for index, frame := range frames {
 		want := page.Events[index].Event
-		if frame.Event.Position != want.Position || frame.Event.CapturedAt == nil || !frame.Event.CapturedAt.Equal(*want.CapturedAt) {
+		if !reflect.DeepEqual(frame.Event, want) {
 			t.Fatalf("SSE and logs differ at record %d: %+v %+v", index, frame.Event, want)
 		}
 	}
+}
+
+// Factory streams retain Factory Event identity, which is independent of the
+// Worker journal's sequence. Those events have no Worker commit timestamp;
+// neither eventTime nor a coincident journal position may supply capturedAt.
+func assertCapturedFactoryReplayCompatibility(t *testing.T, server *support.FunctionalAPIServer, sessionID, workID, workerID string, terminal bool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), functionalWorkerSignalTimeout)
+	defer cancel()
+	endpoint := server.URL() + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions/" + url.PathEscape(workerID) + "/events?replayOnly=true"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("Factory replay status=%d", response.StatusCode)
+	}
+	frames := readCapturedFiniteFactoryReplay(t, response, terminal)
+	inputs := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "stream", "--session", sessionID, "--worker-session-id", workerID, "--replay-only", "--server", server.URL()})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("Factory CLI replay: %v %s", err, inputs.Stderr())
+	}
+	cliFrames, summary := decodeWorkScopedWorkerSessionCLIStream(t, inputs.Stdout())
+	if summary == nil || summary.Complete != terminal || summary.EventsEmitted != int64(len(cliFrames)) || len(cliFrames) != len(frames) {
+		t.Fatalf("Factory replay completion/count: summary=%+v CLI=%d HTTP=%d", summary, len(cliFrames), len(frames))
+	}
+	for index, frame := range frames {
+		assertWorkScopedWorkerSessionEventIdentity(t, frame, sessionID, workerID, workID)
+		assertCapturedFactoryReplayIdentity(t, cliFrames[index].Event, frame.Event)
+	}
+}
+
+func assertCapturedFactoryReplayIdentity(t *testing.T, cli *workScopedCLIEvent, event factoryapi.WorkerSessionEventRecord) {
+	t.Helper()
+	if cli == nil || event.SourceType != "factory_event" || event.CapturedAt != nil ||
+		cli.Position != event.Position || cli.SourceType != event.SourceType || cli.SourceID != event.SourceId || cli.SourceEventID != event.SourceEventId ||
+		cli.SourceSequence != event.SourceSequence || cli.SchemaID != event.SchemaId || cli.CapturedAt != nil {
+		t.Fatalf("Factory replay identity or unknown commit time changed: CLI=%+v HTTP=%+v", cli, event)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(cli.Payload, &payload); err != nil || !reflect.DeepEqual(payload, event.Payload) {
+		t.Fatalf("Factory replay changed payload: CLI=%s HTTP=%+v error=%v", cli.Payload, event.Payload, err)
+	}
+}
+
+func readCapturedFiniteFactoryReplay(t *testing.T, response *http.Response, terminal bool) []factoryapi.WorkerSessionEvent {
+	t.Helper()
+	var frames []factoryapi.WorkerSessionEvent
+	var summary *factoryapi.WorkerSessionReplaySummary
+	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 4096), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var frame factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame.ReplaySummary != nil {
+			summary = frame.ReplaySummary
+		}
+		switch frame.Delivery {
+		case "RECORD", "TERMINAL_REPLAY":
+			frames = append(frames, frame)
+		case "REPLAY_SUMMARY":
+		default:
+			t.Fatalf("unexpected finite replay delivery: %+v", frame)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) == 0 || summary == nil || summary.Complete != terminal || summary.EventsEmitted != int64(len(frames)) {
+		t.Fatalf("Factory HTTP replay completion/count: frames=%d summary=%+v", len(frames), summary)
+	}
+	return frames
 }
