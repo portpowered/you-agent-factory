@@ -257,19 +257,19 @@ func (capture *capture) accept(record events.Record) error {
 	}
 	lastPosition := capture.lastPosition
 	opened := capture.opened
-	history := cloneWorkerRecords(capture.history)
+	previousProjection := capture.projection
 	capture.mu.Unlock()
 
 	if opened && record.ID.Position != lastPosition+1 {
 		return fmt.Errorf("%w: expected aggregate position %d, got %d", recordings.ErrWorkerRecordingOrder, lastPosition+1, record.ID.Position)
 	}
-	history = append(history, record.Detached())
-	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:     capture.request.RecordingID,
-		WorkerSessionID: capture.request.WorkerSessionID,
-		Topic:           capture.request.Topic,
-		Records:         history,
-	})
+	// The live acceptance projection describes only accepted source records.
+	// Close may have supplied an execution terminal ahead of its source record;
+	// preserve the full-reduction behavior by reconciling that fact separately.
+	previousProjection.ExecutionTerminal = nil
+	previousProjection.Degradation = ""
+	previousProjection.InterruptionReason = ""
+	projection, err := (recordings.WorkerRecordingCodec{}).AdvanceWorkerRecording(previousProjection, record)
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,8 @@ func (capture *capture) accept(record events.Record) error {
 	capture.mu.Lock()
 	capture.identities[identity] = record.Detached()
 	capture.lastPosition = record.ID.Position
-	capture.history = history
+	capture.history = append(capture.history, projection.Records[0])
+	projection.Records = nil
 	capture.projection = projection
 	capture.terminal = projection.Complete
 	if !capture.opened {
@@ -544,6 +545,7 @@ func (capture *capture) WorkerRecordingProjection() (recordings.WorkerRecordingP
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
 	projection := cloneWorkerProjection(capture.projection)
+	projection.Records = cloneWorkerRecords(capture.history)
 	if reader, ok := capture.writer.(recordings.WorkerRecordingReader); ok {
 		snapshot, err := reader.LoadWorkerRecording(context.Background(), capture.request.RecordingID)
 		if err != nil {

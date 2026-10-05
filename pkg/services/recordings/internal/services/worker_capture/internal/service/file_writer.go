@@ -41,12 +41,14 @@ type FileWriter struct {
 	rebuildMu     sync.Mutex
 }
 type recordingEntry struct {
-	mu       sync.Mutex
-	loaded   bool
-	exists   bool
-	damaged  bool
-	sessions map[string]*recordingSession
-	order    []string
+	mu        sync.Mutex
+	pendingMu sync.Mutex
+	pending   []*pendingWorkerRecord
+	loaded    bool
+	exists    bool
+	damaged   bool
+	sessions  map[string]*recordingSession
+	order     []string
 }
 type recordingSession struct {
 	generation       string
@@ -135,42 +137,16 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 		return recordings.ErrInvalidWorkerRecordingRequest
 	}
 	entry := writer.entry(record.RecordingID)
+	request := &pendingWorkerRecord{ctx: ctx, record: record}
+	entry.pendingMu.Lock()
+	entry.pending = append(entry.pending, request)
+	entry.pendingMu.Unlock()
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
-	if err := writer.hydrate(ctx, record.RecordingID, entry); err != nil {
-		return err
+	for !request.complete {
+		writer.persistPendingRecords(ctx, entry, record.RecordingID)
 	}
-	if entry.damaged {
-		return recordings.ErrWorkerRecordingReplay
-	}
-	session := entry.session(record.RecordingID, record.WorkerSessionID, record.Record.ID.Topic)
-	projection, duplicate, err := session.prepareRecord(record.Record)
-	if err != nil {
-		return err
-	}
-	if duplicate {
-		writer.indexSession(session)
-		return nil
-	}
-	delta := workerJournalEntry{Version: 1, Kind: "record", RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Record: &record.Record}
-	if len(session.records) == 0 {
-		// The injected epoch fences host lifetimes. Opening identity fences
-		// distinct captures within that lifetime, without a hidden ID effect.
-		identity, _ := json.Marshal([]string{writer.ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
-		generation := sha256.Sum256(identity)
-		delta.RecordingGenerationID = hex.EncodeToString(generation[:])
-		delta.OwnerEpoch = writer.ownerEpoch
-	}
-	capturedAt := writer.clock.Now().UTC()
-	delta.CapturedAt = &capturedAt
-	if err := writer.append(ctx, entry, delta); err != nil {
-		return err
-	}
-	session.acceptRecord(projection)
-	session.acceptMetadata(delta)
-	entry.commit(session)
-	writer.indexSession(session)
-	return nil
+	return request.err
 }
 func (session *recordingSession) prepareRecord(record events.Record) (recordings.WorkerRecordingProjection, bool, error) {
 	if accepted, ok := session.identities[record.Identity()]; ok {
@@ -270,16 +246,14 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, id string) (r
 	snapshot := recordings.WorkerRecordingSnapshot{RecordingID: id}
 	for _, sessionID := range entry.order {
 		session := entry.sessions[sessionID]
-		p, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-			RecordingID: id, WorkerSessionID: sessionID, Topic: session.projection.Topic, Failure: session.projection.Degradation,
-			ExecutionTerminal: session.projection.ExecutionTerminal, Records: session.records})
-		if err != nil {
-			return recordings.WorkerRecordingSnapshot{}, err
-		}
+		// Admission and hydration already run the canonical reducer. Replaying
+		// the entire prefix again here holds the shared recording append lock
+		// across work proportional to every session's accumulated history.
+		p := session.projection
 		snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
 			RecordingGenerationID: session.generation, OwnerEpoch: session.ownerEpoch, CapturedAt: maps.Clone(session.capturedAt),
 			WorkerSessionID: sessionID, Topic: p.Topic, Status: p.Status, LastPosition: p.LastPosition, Failure: p.Degradation,
-			ExecutionTerminal: cloneWorkerRecordingTerminal(p.ExecutionTerminal), Records: p.Records})
+			ExecutionTerminal: cloneWorkerRecordingTerminal(p.ExecutionTerminal), Records: cloneWorkerRecords(session.records)})
 		if p.Status == recordings.WorkerRecordingStatusIncomplete {
 			reason := session.projection.InterruptionReason
 			if reason == "" {

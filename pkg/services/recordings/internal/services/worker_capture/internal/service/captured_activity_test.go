@@ -20,6 +20,182 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type groupedAppendProbe struct {
+	platformreplay.Local
+	fault      string
+	calls      int
+	beforeSync func()
+}
+
+func (probe *groupedAppendProbe) AppendFile(path string, data []byte) error {
+	probe.calls++
+	if probe.beforeSync != nil {
+		probe.beforeSync()
+	}
+	if probe.fault == "before-sync" {
+		return errors.New("injected append failure")
+	}
+	if err := probe.Local.AppendFile(path, data); err != nil {
+		return err
+	}
+	if probe.fault == "after-sync" {
+		return errors.New("injected uncertain close")
+	}
+	return nil
+}
+
+func TestFileWriterCapturedGroupAdmissionAndUncertainRetry(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []string{"", "before-sync", "after-sync"} {
+		t.Run(fault, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			probe := &groupedAppendProbe{Local: local}
+			writer := journalWriter(t, probe)
+			opening := journalRecord(t, "grouped", "grouped-worker")
+			if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+				t.Fatal(err)
+			}
+			requests := groupedCaptureRequests(t, opening)
+			probe.fault = fault
+			probe.beforeSync = func() {
+				catalog, err := writer.LookupWorkerSessionCapture(t.Context(), opening.WorkerSessionID)
+				if err != nil || catalog.CommittedPosition != 1 {
+					t.Errorf("advertised unsynced group: %+v %v", catalog, err)
+				}
+			}
+			entry := writer.entry(opening.RecordingID)
+			entry.pending = append([]*pendingWorkerRecord(nil), requests...)
+			entry.mu.Lock()
+			writer.persistPendingRecords(t.Context(), entry, opening.RecordingID)
+			entry.mu.Unlock()
+			assertCapturedGroupResults(t, probe.calls, requests, fault)
+			probe.fault, probe.beforeSync = "", nil
+			for _, index := range []int{0, 4} {
+				if err := writer.PersistWorkerRecord(t.Context(), requests[index].record); err != nil {
+					t.Fatal(err)
+				}
+			}
+			snapshot, err := writer.LoadWorkerRecording(t.Context(), opening.RecordingID)
+			if err != nil || len(snapshot.Sessions) != 1 || len(snapshot.Sessions[0].Records) != 3 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete {
+				t.Fatalf("retry lost prefix or duplicated group: %+v %v", snapshot, err)
+			}
+		})
+	}
+}
+
+func assertCapturedGroupResults(t *testing.T, calls int, requests []*pendingWorkerRecord, fault string) {
+	t.Helper()
+	if calls != 2 {
+		t.Fatalf("appends=%d want opening plus one grouped sync", calls)
+	}
+	if !errors.Is(requests[2].err, recordings.ErrWorkerRecordingDuplicate) || !errors.Is(requests[3].err, recordings.ErrWorkerRecordingOrder) {
+		t.Fatal("invalid siblings admitted")
+	}
+	if requests[5].err != nil || !errors.Is(requests[6].err, context.Canceled) {
+		t.Fatal("committed duplicate or canceled sibling changed grouped outcome")
+	}
+	for _, index := range []int{0, 1, 4} {
+		if !requests[index].complete || (requests[index].err != nil) != (fault != "") {
+			t.Fatalf("request %d: %+v", index, requests[index])
+		}
+	}
+}
+
+func groupedCaptureRequests(t *testing.T, opening recordings.WorkerRecordingRecord) []*pendingWorkerRecord {
+	t.Helper()
+	output := opening
+	output.Record = mustRecord(t, workerOutputAppend(opening.Record.ID.Topic, opening.WorkerSessionID, 1, "output"), 2)
+	conflict := output
+	conflict.Record = output.Record.Detached()
+	conflict.Record.Payload = []byte(`{"changed":true}`)
+	skipped := opening
+	skipped.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, opening.WorkerSessionID), 4)
+	terminal := opening
+	terminal.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, opening.WorkerSessionID), 3)
+	requests := make([]*pendingWorkerRecord, 0, 7)
+	for _, record := range []recordings.WorkerRecordingRecord{output, output, conflict, skipped, terminal, opening} {
+		requests = append(requests, &pendingWorkerRecord{ctx: t.Context(), record: record})
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	requests = append(requests, &pendingWorkerRecord{ctx: canceled, record: terminal})
+	return requests
+}
+
+func TestFileWriterCapturedSnapshotsPreserveReducedHealthAndDetachedHistory(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	persistSharedCapturedHealth(t, writer)
+	first, err := writer.LoadWorkerRecording(t.Context(), "shared-health")
+	if err != nil || len(first.Sessions) != 3 {
+		t.Fatalf("shared snapshot=%+v error=%v", first, err)
+	}
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, reader := range []recordings.WorkerRecordingReader{writer, reopened} {
+		assertSharedCapturedHealth(t, reader, first)
+	}
+}
+
+func persistSharedCapturedHealth(t *testing.T, writer *FileWriter) {
+	t.Helper()
+	for _, id := range []string{"incomplete", "complete", "degraded"} {
+		record := journalRecord(t, "shared-health", id)
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+		record.Record = mustRecord(t, workerOutputAppend(record.Record.ID.Topic, id, 1, "captured-content"), 2)
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+		switch id {
+		case "complete":
+			record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, id), 3)
+			if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+				t.Fatal(err)
+			}
+		case "degraded":
+			if err := writer.PersistWorkerRecordingFailure(t.Context(), recordings.WorkerRecordingFailure{
+				RecordingID: record.RecordingID, WorkerSessionID: id, Topic: record.Record.ID.Topic, Code: "PERSISTENCE_FAILED",
+				ExecutionTerminal: &recordings.WorkerRecordingTerminal{Position: 3, Phase: workers.PhaseCompleted, Status: "COMPLETED"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func assertSharedCapturedHealth(t *testing.T, reader recordings.WorkerRecordingReader, first recordings.WorkerRecordingSnapshot) {
+	t.Helper()
+	got, err := reader.LoadWorkerRecording(t.Context(), "shared-health")
+	if err != nil || !reflect.DeepEqual(got, first) {
+		t.Fatalf("recovered snapshot differs: %+v error=%v", got, err)
+	}
+	for index := range got.Sessions {
+		session := &got.Sessions[index]
+		projection, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: got, WorkerSessionID: session.WorkerSessionID})
+		if err != nil || projection.Projection.Status != session.Status || projection.Projection.LastPosition != session.LastPosition || !reflect.DeepEqual(projection.Projection.Records, session.Records) {
+			t.Fatalf("snapshot/replay disagree for %s: %+v error=%v", session.WorkerSessionID, projection, err)
+		}
+	}
+	for index := range got.Sessions {
+		session := &got.Sessions[index]
+		session.Records[0].Payload[0] = '!'
+		session.CapturedAt["1"] = time.Time{}
+		if session.ExecutionTerminal != nil {
+			session.ExecutionTerminal.Status = "mutated"
+		}
+	}
+	again, err := reader.LoadWorkerRecording(t.Context(), "shared-health")
+	if err != nil || !reflect.DeepEqual(again, first) {
+		t.Fatal("caller mutation changed committed snapshot")
+	}
+}
+
 func TestFileWriterCapturedUsageKeepsFrozenHeadAcrossRestart(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"os"
@@ -657,6 +658,9 @@ func TestWorkerCaptureDuplicateDeliveryIsIdempotentOnlyWhenIdentical(t *testing.
 		runCtx:     context.Background(),
 		opening:    make(chan struct{}),
 		identities: make(map[events.AppendIdentity]events.Record),
+		projection: recordings.WorkerRecordingProjection{
+			RecordingID: request.RecordingID, WorkerSessionID: request.WorkerSessionID, Topic: request.Topic,
+		},
 	}
 	opening := mustRecord(t, openingAppend(topic, request.WorkerSessionID), 1)
 	if err := capture.accept(opening); err != nil {
@@ -672,6 +676,50 @@ func TestWorkerCaptureDuplicateDeliveryIsIdempotentOnlyWhenIdentical(t *testing.
 	}
 	if writes != 1 {
 		t.Fatalf("durable writes = %d, want one write for one accepted record", writes)
+	}
+}
+
+func TestWorkerCaptureIncrementalPrefixesMatchReplay(t *testing.T) {
+	t.Parallel()
+	const sessionID = "worker-incremental"
+	topic := events.Topic("worker-session/" + sessionID + "/events")
+	request := recordings.WorkerSessionRecordingRequest{RecordingID: "incremental", WorkerSessionID: sessionID, Topic: topic}
+	for _, terminalAhead := range []bool{false, true} {
+		t.Run(fmt.Sprint("terminal-ahead-", terminalAhead), func(t *testing.T) {
+			t.Parallel()
+			handle := &capture{
+				request: request, runCtx: t.Context(), opening: make(chan struct{}),
+				identities: make(map[events.AppendIdentity]events.Record),
+				projection: recordings.WorkerRecordingProjection{RecordingID: request.RecordingID, WorkerSessionID: sessionID, Topic: topic},
+				writer:     recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error { return nil }),
+			}
+			records := []events.Record{
+				mustRecord(t, openingAppend(topic, sessionID), 1),
+				mustRecord(t, workerOutputAppend(topic, sessionID, 1, "first"), 2),
+				mustRecord(t, workerOutputAppend(topic, sessionID, 2, "second"), 3),
+				mustRecord(t, terminalAppend(topic, sessionID), 4),
+			}
+			for index, record := range records {
+				if terminalAhead && index == 2 {
+					handle.setExecutionTerminal(recordings.WorkerRecordingTerminal{Position: 4, Phase: workers.PhaseCompleted, Status: "COMPLETED"})
+				}
+				if err := handle.accept(record); err != nil {
+					t.Fatal(err)
+				}
+				want, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+					RecordingID: request.RecordingID, WorkerSessionID: sessionID, Topic: topic, Records: records[:index+1],
+				})
+				got, readErr := handle.WorkerRecordingProjection()
+				if err != nil || readErr != nil || !reflect.DeepEqual(got, want) {
+					t.Fatalf("prefix %d got=%+v want=%+v errors=%v/%v", index+1, got, want, readErr, err)
+				}
+				got.Records[0].Payload[0] = '!'
+				again, err := handle.WorkerRecordingProjection()
+				if err != nil || !reflect.DeepEqual(again, want) {
+					t.Fatal("caller mutation changed accepted prefix")
+				}
+			}
+		})
 	}
 }
 
