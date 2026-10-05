@@ -362,7 +362,7 @@ func defaultServerStartBuilder(
 	}
 	command := strings.TrimSpace(worker.Command)
 	if command == "" {
-		command = localmodels.DefaultOmniVoiceCommand
+		return modelseffects.HostProcessStartSpec{}, fmt.Errorf("supervised model worker requires an explicit command")
 	}
 	healthEndpoint, args, err := supervisedHealthEndpointAndArgs(worker.Args)
 	if err != nil {

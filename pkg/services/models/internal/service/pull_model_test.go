@@ -412,9 +412,6 @@ func mustConstructScopedPull(t *testing.T, fixture modelServiceFixture) scopedPu
 		t.Fatal(err)
 	}
 	root, err := modelsservice.NewRoot(resources, pull,
-		func(context.Context, apisurface.LocalInvocationRequest) (apisurface.LocalInvocationResult, error) {
-			return apisurface.LocalInvocationResult{}, nil
-		},
 		func(apisurface.RuntimeScopeRef) {}, func() {}, scopes, struct{ modelcatalog.Service }{}, struct{ scopedassets.Service }{},
 		&scopedLocalRootHost{}, struct{ inference.Service }{}, fixture.Logger, fixture.Clock, fixture.ModelPullMetrics, nil,
 		func(context.Context, string) (string, error) { return "", apisurface.ErrModelRevisionUnresolved }, nil, apisurface.AssetHostPlatform{})

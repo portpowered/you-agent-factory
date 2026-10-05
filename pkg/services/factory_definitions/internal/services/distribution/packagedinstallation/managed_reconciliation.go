@@ -136,6 +136,7 @@ func (service *Service) createManagedPackagedFactory(
 	result.Outcome = factorydefinitions.PackagedFactoryInstallCreated
 	result.PublishedContentID = installedID
 	result.InstalledContentID = installedID
+	service.managedContentIDs.Store(managedPublication(rootDir, name, rootFileName, payload), installedID)
 	return result, nil
 }
 
@@ -164,11 +165,7 @@ func (service *Service) reconcileManagedPackagedFactory(
 			fmt.Errorf("%w: factory %q already exists", factorydefinitions.ErrNamedFactoryAlreadyExists, name),
 		)
 	}
-	prepared, err := service.prepareManagedLayout(ctx, name, payload, rootFileName)
-	if err != nil {
-		return managedInstallFailure(result, name, rootDir, err)
-	}
-	publishedID, err := service.expectedManagedContentID(ctx, rootDir, name, prepared)
+	prepared, publishedID, err := service.prepareManagedContentIdentity(ctx, rootDir, name, rootFileName, payload)
 	if err != nil {
 		return managedInstallFailure(result, name, rootDir, err)
 	}
@@ -194,6 +191,12 @@ func (service *Service) reconcileManagedPackagedFactory(
 	outcome := factorydefinitions.PackagedFactoryInstallRefreshed
 	if stamped && stamp.InstalledContentID != installedID {
 		outcome = factorydefinitions.PackagedFactoryInstallCustomerModified
+	}
+	if prepared == nil {
+		prepared, err = service.prepareManagedLayout(ctx, name, payload, rootFileName)
+		if err != nil {
+			return managedInstallFailure(result, name, rootDir, err)
+		}
 	}
 	return service.refreshManagedPackagedFactory(
 		ctx,

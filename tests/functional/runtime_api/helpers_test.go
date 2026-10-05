@@ -19,7 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	runtimeapifixture "github.com/portpowered/infinite-you/tests/functional/sessions/root_composition/runtime_api_fixture"
+	runtimeapifixture "github.com/portpowered/infinite-you/tests/functional/sessions/isolation_and_recovery/runtime_api_fixture"
 )
 
 type runtimeOption func(*support.FunctionalAPIServerConfig)

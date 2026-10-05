@@ -176,10 +176,6 @@ func (stub stubModelsRoot) ReleaseLease(context.Context, modelinference.ReleaseL
 	return modelinference.ErrUnsupportedOperation
 }
 
-func (stub stubModelsRoot) InvokeLocal(context.Context, modelinference.LocalInvocationRequest) (modelinference.LocalInvocationResult, error) {
-	return modelinference.LocalInvocationResult{}, modelinference.ErrUnsupportedOperation
-}
-
 func TestRootAdapter_InvokeGenericUsesRequiredTextInputWhenOptionalSlotsSortFirst(t *testing.T) {
 	t.Parallel()
 

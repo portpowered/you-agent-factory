@@ -1,0 +1,13 @@
+package customer_lifecycles_test
+
+import "testing"
+
+// TestPackagedCLIAndRESTParityJourneys owns its immutable fixture until all customer scenarios finish.
+func TestPackagedCLIAndRESTParityJourneys(t *testing.T) {
+	t.Parallel()
+	resetfactorypackagedcross2State()
+	initializeFactorypackagedcrossFixture(t)
+	t.Run("TestPackagedFactoryInvokedByCLICanBeInspectedByAPI", testFactorypackagedcrossPackagedFactoryInvokedByCLICanBeInspectedByAPI)
+	t.Run("TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable", testFactorypackagedcrossPackagedFactoryContinuousServerWithoutInvocationRemainsReachable)
+	t.Run("TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree", testFactorypackagedcrossPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree)
+}

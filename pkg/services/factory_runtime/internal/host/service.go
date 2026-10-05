@@ -41,6 +41,9 @@ func (s *LifecycleService) Stop(handle factory.RuntimeRun) error {
 
 // StopWithClock finalizes artifacts with the selected invocation fact clock.
 func (s *LifecycleService) StopWithClock(handle factory.RuntimeRun, clock factory.Clock) error {
+	if clock == nil {
+		clock = s.clock
+	}
 	concrete, ok := handle.(*Handle)
 	if !ok || concrete == nil {
 		if handle == nil {

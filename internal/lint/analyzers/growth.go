@@ -3,6 +3,8 @@ package analyzers
 import (
 	"crypto/sha256"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,7 +80,67 @@ func readBaselineHistory(directory string) (string, string, error) {
 		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(baselinePath)))
 		return string(data), err
 	}
-	return loadBaselineHistory(readGit, readHead)
+	baseText, headText, err := loadBaselineHistory(readGit, readHead)
+	if err != nil {
+		return "", "", err
+	}
+	base, err := readGit("merge-base", "HEAD", "origin/main")
+	if err != nil {
+		return "", "", err
+	}
+	renames, err := readGit("diff", "--name-status", "--find-renames", strings.TrimSpace(base), "--", ":(top)tests/functional")
+	if err != nil {
+		return "", "", err
+	}
+	root, err := readGit("rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", "", err
+	}
+	readPackage := func(path string) (string, error) {
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(strings.TrimSpace(root), filepath.FromSlash(path)), nil, parser.PackageClauseOnly)
+		if err != nil {
+			return "", err
+		}
+		return file.Name.Name, nil
+	}
+	baseText, err = relocateTestSleepBaseline(baseText, renames, readPackage)
+	return baseText, headText, err
+}
+
+// File moves preserve existing exact timer debt. Git must identify the rename;
+// the function identity, finding kind and occurrence number remain unchanged.
+// Every other established rule retains the deletion-only policy.
+func relocateTestSleepBaseline(baseText, renames string, readPackage func(string) (string, error)) (string, error) {
+	lines := strings.Split(baseText, "\n")
+	for _, rename := range strings.Split(renames, "\n") {
+		fields := strings.Split(rename, "\t")
+		if len(fields) != 3 || !strings.HasPrefix(fields[0], "R") || !strings.HasSuffix(fields[2], "_test.go") {
+			continue
+		}
+		packageName, err := readPackage(fields[2])
+		if err != nil {
+			return "", fmt.Errorf("read renamed test package %s: %w", fields[2], err)
+		}
+		lines = relocateTestSleepFile(lines, fields[1], fields[2], packageName)
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+func relocateTestSleepFile(lines []string, oldPath, newPath, packageName string) []string {
+	unit := filepath.ToSlash(filepath.Dir(newPath))
+	if strings.HasSuffix(packageName, "_test") {
+		unit += "_test"
+	}
+	for index, line := range lines {
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) != 3 || !strings.HasPrefix(parts[0], "testsleep-") || !strings.HasPrefix(parts[2], oldPath+"::") {
+			continue
+		}
+		parts[1] = unit
+		parts[2] = newPath + strings.TrimPrefix(parts[2], oldPath)
+		lines[index] = strings.Join(parts, "|")
+	}
+	return lines
 }
 
 // Boundaries keep history/IO failure cases component-isolated in unit tests.

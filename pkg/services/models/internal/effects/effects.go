@@ -362,10 +362,6 @@ type HostCompatibilityChecker interface {
 	Check(context.Context, HostCompatibilityRequest) error
 }
 
-type RuntimeHTTPDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 type RuntimeTempFile interface {
 	Close() error
 	Name() string

@@ -1,0 +1,15 @@
+package customer_lifecycles_test
+
+import "testing"
+
+// TestOperatorSettingsJourneys owns its immutable fixture until all customer scenarios finish.
+func TestOperatorSettingsJourneys(t *testing.T) {
+	t.Parallel()
+	resetoperatorsettingsconfiguration3State()
+	initializeOperatorsettingsconfigurationFixture(t)
+	t.Run("TestCLIInitializationPersistsBackendScopeIdentity", testOperatorsettingsconfigurationCLIInitializationPersistsBackendScopeIdentity)
+	t.Run("TestCLIInitializationReusesBackendScopeIdentity", testOperatorsettingsconfigurationCLIInitializationReusesBackendScopeIdentity)
+	t.Run("TestCLISettingsUnknownFieldsPrecedenceAndSafeFailure", testOperatorsettingsconfigurationCLISettingsUnknownFieldsPrecedenceAndSafeFailure)
+	t.Run("TestCLIUsesOperatorDefaultsAndModelOverride", testOperatorsettingsconfigurationCLIUsesOperatorDefaultsAndModelOverride)
+	t.Run("TestCLIInitPersistsProviderAndModelSettings", testOperatorsettingsconfigurationCLIInitPersistsProviderAndModelSettings)
+}
