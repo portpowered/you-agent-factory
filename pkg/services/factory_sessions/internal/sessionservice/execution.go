@@ -203,7 +203,7 @@ func (s *Service) ListSessions(ctx context.Context, request factorysessions.List
 		!request.ExcludeRecordedHistory &&
 		(scope == factorysessions.SessionListScopeHistory || scope == factorysessions.SessionListScopeAll)
 	if scope == factorysessions.SessionListScopeHistory && includeRecordedHistory {
-		return s.recordedHistory(ctx, factorysessions.ListSessionsRequest{
+		return s.recordedHistory.ListSessions(ctx, factorysessions.ListSessionsRequest{
 			Scope:   factorysessions.SessionListScopeHistory,
 			Filters: request.Filters,
 		})
@@ -216,7 +216,7 @@ func (s *Service) ListSessions(ctx context.Context, request factorysessions.List
 	if err != nil || !includeRecordedHistory {
 		return result, err
 	}
-	history, err := s.recordedHistory(ctx, factorysessions.ListSessionsRequest{
+	history, err := s.recordedHistory.ListSessions(ctx, factorysessions.ListSessionsRequest{
 		Scope:   factorysessions.SessionListScopeHistory,
 		Filters: request.Filters,
 	})

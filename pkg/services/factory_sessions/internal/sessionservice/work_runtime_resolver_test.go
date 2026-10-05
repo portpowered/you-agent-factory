@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -900,21 +902,39 @@ func TestAnnotateRuntimeWorkStateSequencesUsesLatestCanonicalStateFact(t *testin
 	}
 }
 
-func TestServiceListSessionsUsesBoundRecordedHistoryForHistoryScope(t *testing.T) {
-	var got factorysessions.ListSessionsRequest
-	service := &Service{}
-	service.bindRecordedSessionHistory(func(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
-		got = request
-		return factorysessions.ListSessionsResult{
-			Scope: factorysessions.SessionListScopeHistory,
-			RecordedSessions: []factorysessions.RecordedSessionListSummary{{
-				SessionID:         "recorded-session",
-				Source:            factorysessions.RecordedSessionListSourceHistory,
-				ArtifactReference: "2026/08/24/recorded-session.jsonl",
-				Format:            factorysessions.RecordedSessionListFormatV2JSONL,
-			}},
-		}, nil
-	})
+type gatewayHistoryStub struct {
+	request factorysessions.ListSessionsRequest
+	result  factorysessions.ListSessionsResult
+	err     error
+}
+
+func (h *gatewayHistoryStub) ListSessions(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	h.request = request
+	return h.result, h.err
+}
+
+type gatewayHistoryHost struct {
+	LegacyHost
+	durable durableexecution.Service
+}
+
+func (h gatewayHistoryHost) DurableExecution() durableexecution.Service { return h.durable }
+
+func newGatewayHistoryFixture(history RecordedHistory, durable durableexecution.Service) *Service {
+	host := gatewayHistoryHost{durable: durable}
+	return NewWithLiveChangeCoordinator(host, host, host, &responsestream.Registry{}, nil, nil, nil, nil, history)
+}
+
+func TestServiceListSessionsUsesInjectedRecordedHistoryForHistoryScope(t *testing.T) {
+	t.Parallel()
+	history := &gatewayHistoryStub{result: factorysessions.ListSessionsResult{
+		Scope: factorysessions.SessionListScopeHistory,
+		RecordedSessions: []factorysessions.RecordedSessionListSummary{{
+			SessionID: "recorded-session", Source: factorysessions.RecordedSessionListSourceHistory,
+			ArtifactReference: "2026/08/24/recorded-session.jsonl", Format: factorysessions.RecordedSessionListFormatV2JSONL,
+		}},
+	}}
+	service := newGatewayHistoryFixture(history, nil)
 
 	result, err := service.ListSessions(context.Background(), factorysessions.ListSessionsRequest{
 		Scope: factorysessions.SessionListScopeHistory,
@@ -922,11 +942,87 @@ func TestServiceListSessionsUsesBoundRecordedHistoryForHistoryScope(t *testing.T
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if got.Scope != factorysessions.SessionListScopeHistory {
-		t.Fatalf("history request scope = %q, want history", got.Scope)
+	if history.request.Scope != factorysessions.SessionListScopeHistory {
+		t.Fatalf("history request scope = %q, want history", history.request.Scope)
 	}
 	if len(result.RecordedSessions) != 1 || result.RecordedSessions[0].SessionID != "recorded-session" {
-		t.Fatalf("recorded sessions = %#v, want bound history row", result.RecordedSessions)
+		t.Fatalf("recorded sessions = %#v, want injected history row", result.RecordedSessions)
+	}
+	history.err = errors.New("injected recorded history read failure")
+	if _, err := service.ListSessions(context.Background(), history.request); !errors.Is(err, history.err) {
+		t.Fatalf("history failure = %v", err)
+	}
+}
+
+type gatewayHistoryDurableStub struct {
+	durableexecution.Service
+	request factorysessions.ListSessionsRequest
+	result  factorysessions.ListSessionsResult
+	err     error
+}
+
+func (d *gatewayHistoryDurableStub) ListSessions(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	d.request = request
+	return d.result, d.err
+}
+
+func TestInjectedGatewayHistoryPreservesMergedOrderingAndFailures(t *testing.T) {
+	t.Parallel()
+	history := &gatewayHistoryStub{result: factorysessions.ListSessionsResult{
+		RecordedSessions: []factorysessions.RecordedSessionListSummary{
+			{SessionID: "second", ArtifactReference: "a"}, {SessionID: "first", ArtifactReference: "a"},
+		},
+	}}
+	durable := &gatewayHistoryDurableStub{result: factorysessions.ListSessionsResult{
+		Scope:            factorysessions.SessionListScopeAll,
+		DurableSessions:  []factorysessions.DurableSessionListSummary{{SessionID: "persisted"}},
+		RecordedSessions: []factorysessions.RecordedSessionListSummary{{SessionID: "first", ArtifactReference: "b"}},
+	}}
+	service := newGatewayHistoryFixture(history, durable)
+	request := factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll,
+		Filters: factorysessions.SessionListFilters{Statuses: []factorysessions.LifecycleStatus{factorysessions.LifecycleStatusPaused}, ProjectBoundary: "selected-project"}}
+	result, err := service.ListSessions(context.Background(), request)
+	if err != nil || result.Scope != request.Scope || len(result.DurableSessions) != 1 || result.DurableSessions[0].SessionID != "persisted" {
+		t.Fatalf("combined sessions = %#v, %v", result, err)
+	}
+	want := []factorysessions.RecordedSessionListSummary{
+		{SessionID: "first", ArtifactReference: "a"}, {SessionID: "first", ArtifactReference: "b"},
+		{SessionID: "second", ArtifactReference: "a"},
+	}
+	if !reflect.DeepEqual(result.RecordedSessions, want) || !reflect.DeepEqual(durable.request, request) || history.request.Scope != factorysessions.SessionListScopeHistory || !reflect.DeepEqual(history.request.Filters, request.Filters) {
+		t.Fatalf("merged history = %#v; durable/history requests = %#v/%#v", result.RecordedSessions, durable.request, history.request)
+	}
+	history.err = errors.New("injected history failure")
+	if result, err := service.ListSessions(context.Background(), request); !errors.Is(err, history.err) || len(result.DurableSessions) != 0 {
+		t.Fatalf("history failure returned partial success = %#v, %v", result, err)
+	}
+	durable.err = errors.New("injected durable failure")
+	history.request = factorysessions.ListSessionsRequest{}
+	if _, err := service.ListSessions(context.Background(), request); !errors.Is(err, durable.err) || history.request.Scope != "" {
+		t.Fatalf("durable failure = %v; history request = %#v", err, history.request)
+	}
+}
+
+func TestInjectedGatewayHistoryKeepsScopeExclusionPolicy(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []factorysessions.SessionListScope{"", factorysessions.SessionListScopeLive,
+		factorysessions.SessionListScopePersisted, factorysessions.SessionListScopeHistory, factorysessions.SessionListScopeAll} {
+		t.Run(string(scope), func(t *testing.T) {
+			t.Parallel()
+			history := &gatewayHistoryStub{err: errors.New("history must not be selected")}
+			durable := &gatewayHistoryDurableStub{}
+			service := newGatewayHistoryFixture(history, durable)
+			request := factorysessions.ListSessionsRequest{Scope: scope, ExcludeRecordedHistory: true}
+			if _, err := service.ListSessions(context.Background(), request); err != nil || history.request.Scope != "" {
+				t.Fatalf("excluded history = %v, request = %#v", err, history.request)
+			}
+			if scope == "" {
+				request.Scope = factorysessions.DefaultSessionListScope
+			}
+			if !reflect.DeepEqual(durable.request, request) {
+				t.Fatalf("durable request = %#v, want %#v", durable.request, request)
+			}
+		})
 	}
 }
 

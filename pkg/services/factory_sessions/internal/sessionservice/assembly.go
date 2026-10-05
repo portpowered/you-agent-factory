@@ -474,9 +474,9 @@ func (a *Assembly) Complete(
 		a.sessionResultProjection,
 		a.responseStreams,
 		a.liveChangeCoordinator,
+		a.recordedHistory,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
-	gateway.bindRecordedSessionHistory(a.ListSessions)
 	invoker := a.invoker
 	bound.Invoker = invoker
 	a.registry.Upsert(session, true)
