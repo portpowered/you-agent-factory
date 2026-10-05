@@ -126,10 +126,6 @@ func discoverPackagesMatching(root string, include func(string) bool) ([]string,
 	return discoverPackagesUnderMatching(filepath.FromSlash(rootPath), modulePath+"/"+rootPath, include)
 }
 
-func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
-	return discoverPackagesUnderMatching(rootDir, importPrefix, testlanes.IsUnitPackage)
-}
-
 func discoverPackagesUnderMatching(rootDir, importPrefix string, include func(string) bool) ([]string, error) {
 	packageSet := make(map[string]struct{})
 	err := filepath.WalkDir(rootDir, func(path string, entry os.DirEntry, walkErr error) error {

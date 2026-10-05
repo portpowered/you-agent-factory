@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
 func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
@@ -27,7 +29,7 @@ func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
 	writeTestPackageFile(t, root, "services/workers/provider/functionaltests")
 	writeTestPackageFile(t, root, "ignored/testdata/nested")
 
-	packages, err := discoverPackagesUnder(root, modulePath+"/pkg")
+	packages, err := discoverPackagesUnderMatching(root, modulePath+"/pkg", testlanes.IsUnitPackage)
 	if err != nil {
 		t.Fatalf("discoverPackagesUnder() error = %v", err)
 	}
@@ -66,7 +68,7 @@ func TestDiscoverPackagesExcludesBuildConstrainedTestFiles(t *testing.T) {
 		t.Fatalf("write constrained test: %v", err)
 	}
 
-	packages, err := discoverPackagesUnder(root, modulePath+"/pkg")
+	packages, err := discoverPackagesUnderMatching(root, modulePath+"/pkg", testlanes.IsUnitPackage)
 	if err != nil {
 		t.Fatalf("discoverPackagesUnder() error = %v", err)
 	}
@@ -77,7 +79,7 @@ func TestDiscoverPackagesExcludesBuildConstrainedTestFiles(t *testing.T) {
 }
 
 func TestDiscoverPackagesReportsListFailure(t *testing.T) {
-	_, err := discoverPackagesUnder(filepath.Join(t.TempDir(), "missing"), modulePath+"/pkg")
+	_, err := discoverPackagesUnderMatching(filepath.Join(t.TempDir(), "missing"), modulePath+"/pkg", testlanes.IsUnitPackage)
 	if err == nil {
 		t.Fatal("discoverPackagesUnder() error = nil, want missing-root failure")
 	}
