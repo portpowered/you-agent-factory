@@ -172,12 +172,12 @@ func (a activeFleetFixture) assertEmptyReads(t *testing.T, ctx context.Context) 
 		inputs := executeCLI(t, ctx, f.process, env, c.factoryDir, args...)
 		var empty workerSessionListJSON
 		decodeCLIJSON(t, inputs, &empty)
-		assertBoundedFleetEmptyPage(t, empty, "active no-match CLI")
+		assertBoundedFleetEmptyPage(t, empty, 20, "active no-match CLI")
 		httpPage := fetchBoundedFleetHTTPPageWithQuery(t, ctx, f.baseURL, query)
 		if httpPage.status != http.StatusOK {
 			t.Fatalf("no-match HTTP=%d %s", httpPage.status, httpPage.raw)
 		}
-		assertBoundedFleetEmptyPage(t, httpPage.list, "active no-match HTTP")
+		assertBoundedFleetEmptyPage(t, httpPage.list, 20, "active no-match HTTP")
 		assertNormalizedFleetJSONEqual(t, "active no-match", []byte(inputs.Stdout()), httpPage.raw)
 	}
 }

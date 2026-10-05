@@ -93,8 +93,7 @@ func (recordedWebhookFailureRunner) Run(context.Context, platformprocess.Command
 func reseteventsfactoryevents5State() {
 	var freshFactoryEventsCLIProcess support.ApplicationProcess
 	factoryEventsCLIProcess = freshFactoryEventsCLIProcess
-	var freshRecordedWebhookEffects = recordedWebhookEffectRouter{nextPort: 24000, servers: make(map[int]*support.ProcessAPIServer), resolvers: make(map[string]*functionalWebhookSecretResolver), appenders: make(map[string]webhooks.DeadLetterAppender)}
-	recordedWebhookEffects = freshRecordedWebhookEffects
+	recordedWebhookEffects = recordedWebhookEffectRouter{nextPort: 24000, servers: make(map[int]*support.ProcessAPIServer), resolvers: make(map[string]*functionalWebhookSecretResolver), appenders: make(map[string]webhooks.DeadLetterAppender)}
 	var freshRecordedWebhookClock = clockwork.NewFakeClockAt(time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC))
 	recordedWebhookClock = freshRecordedWebhookClock
 }

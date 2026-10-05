@@ -783,9 +783,8 @@ func copyC06Directory(sourceDir, targetDir string) error {
 	})
 }
 func resettransporthttpserver7State() {
-	var freshC06SharedHTTPFixtureState struct {
+	c06SharedHTTPFixtureState = struct {
 		sync.Mutex
 		fixture *c06SharedHTTPFixture
-	}
-	c06SharedHTTPFixtureState = freshC06SharedHTTPFixtureState
+	}{}
 }

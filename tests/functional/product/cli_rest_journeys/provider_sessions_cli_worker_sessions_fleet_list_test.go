@@ -349,22 +349,22 @@ func assertBoundedFleetNoMatch(t *testing.T, ctx context.Context, process suppor
 	}
 	var cliList workerSessionListJSON
 	decodeCLIJSON(t, inputs, &cliList)
-	assertBoundedFleetEmptyPage(t, cliList, "CLI no-match")
+	assertBoundedFleetEmptyPage(t, cliList, boundedFleetPageSize, "CLI no-match")
 
 	page := fetchBoundedFleetHTTPPageWithQuery(t, ctx, baseURL, url.Values{
 		"state": {"RUNNING"}, "limit": {fmt.Sprint(boundedFleetPageSize)},
 	})
-	assertBoundedFleetEmptyPage(t, page.list, "HTTP no-match")
+	assertBoundedFleetEmptyPage(t, page.list, boundedFleetPageSize, "HTTP no-match")
 	assertNormalizedFleetJSONEqual(t, "no-match page", []byte(inputs.Stdout()), page.raw)
 }
 
-func assertBoundedFleetEmptyPage(t *testing.T, page workerSessionListJSON, label string) {
+func assertBoundedFleetEmptyPage(t *testing.T, page workerSessionListJSON, maxResults int, label string) {
 	t.Helper()
 	if page.Sessions == nil || len(page.Sessions) != 0 {
 		t.Fatalf("%s sessions=%#v, want non-nil empty array", label, page.Sessions)
 	}
-	if page.PaginationContext == nil || page.PaginationContext.MaxResults != boundedFleetPageSize || strings.TrimSpace(page.PaginationContext.NextToken) != "" {
-		t.Fatalf("%s pagination=%#v, want maxResults=%d without token", label, page.PaginationContext, boundedFleetPageSize)
+	if page.PaginationContext == nil || page.PaginationContext.MaxResults != maxResults || strings.TrimSpace(page.PaginationContext.NextToken) != "" {
+		t.Fatalf("%s pagination=%#v, want maxResults=%d without token", label, page.PaginationContext, maxResults)
 	}
 }
 

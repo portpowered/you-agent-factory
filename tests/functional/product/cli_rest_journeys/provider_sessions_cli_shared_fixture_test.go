@@ -564,9 +564,8 @@ func copyWorkerSessionsCLIDirectory(srcDir, dstDir string) error {
 	})
 }
 func resetprovidersessionscli5State() {
-	var freshWorkerSessionsCLISharedFixtureState struct {
+	workerSessionsCLISharedFixtureState = struct {
 		sync.Once
 		fixture *workerSessionsCLISharedFixture
-	}
-	workerSessionsCLISharedFixtureState = freshWorkerSessionsCLISharedFixtureState
+	}{}
 }
