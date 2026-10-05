@@ -6,21 +6,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
-
-func (s *Service) bindRootCapabilities(
-	invoker roles.SessionInvoker,
-	activate func(context.Context, string) error,
-	activationGateway factorydefinitions.DefinitionActivationGateway,
-) {
-	if s == nil {
-		return
-	}
-	s.invoker = invoker
-	s.activate = activate
-	s.activationGateway = activationGateway
-}
 
 func (s *Service) InvokeFactorySession(
 	ctx context.Context,

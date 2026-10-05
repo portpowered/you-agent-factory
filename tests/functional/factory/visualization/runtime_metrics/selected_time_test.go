@@ -18,6 +18,8 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // Each immutable time pair gets an isolated process/profile and explicit session.
@@ -80,6 +82,7 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 	scheduler.SetTick(originTick + 10000)
 	awaitSelectedTimeSignal(t, scheduler.registered)
 	assertSelectedMemorySamples(t, fixture.metrics, 2)
+	assertSelectedGatewayControls(t, fixture)
 	close(release)
 	support.WaitForSessionTerminalStatus(t, fixture.url, fixture.session, 30*time.Second)
 	assertSelectedRuntimeEventTime(t, fixture, factoryapi.FactoryEventTypeWorkRequest, base)
@@ -87,6 +90,107 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 	assertSelectedRuntimeEventTime(t, fixture, factoryapi.FactoryEventTypeDispatchResponse, base.Add(time.Hour))
 	assertSelectedTimeWork(t, fixture)
 	fixture.command.Stop(t)
+	assertSelectedGatewayMetricFacts(t, fixture, base)
+	assertSelectedGatewayControlLogs(t, fixture)
+}
+
+func assertSelectedGatewayControls(t *testing.T, fixture selectedTimeFixture) {
+	t.Helper()
+	for _, action := range []string{"pause", "resume"} {
+		response, err := http.Post(fixture.url+"/factory-sessions/"+fixture.session+"/"+action,
+			"application/json", strings.NewReader(`{"requestId":"selected-`+action+`","reason":"private control reason"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var control factoryapi.FactorySessionLifecycleControlResponse
+		err = json.NewDecoder(response.Body).Decode(&control)
+		response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusOK ||
+			control.Operation != factoryapi.FactorySessionLifecycleControlKind(strings.ToUpper(action)) ||
+			control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+			t.Fatalf("selected %s control = %#v, status=%d, error=%v", action, control, response.StatusCode, err)
+		}
+	}
+}
+
+func assertSelectedGatewayControlLogs(t *testing.T, fixture selectedTimeFixture) {
+	t.Helper()
+	seen := map[string]int{}
+	for _, entry := range fixture.logs.FilterMessage("factory session lifecycle control").All() {
+		fields := entry.ContextMap()
+		operation, _ := fields["operation"].(string)
+		if operation != "PAUSE" && operation != "RESUME" {
+			continue
+		}
+		if fields["session_id"] != fixture.session || fields["outcome"] != "ACCEPTED" ||
+			fields["request_id"] != "selected-"+strings.ToLower(operation) {
+			t.Fatalf("selected control diagnostic lost correlation/outcome: %v", fields)
+		}
+		encoded, err := json.Marshal(fields)
+		if err != nil || strings.Contains(string(encoded), "private control reason") {
+			t.Fatalf("control diagnostic exposed private reason: %s, error=%v", encoded, err)
+		}
+		seen[operation]++
+	}
+	if seen["PAUSE"] != 1 || seen["RESUME"] != 1 {
+		t.Fatalf("selected control diagnostics = %v, want one PAUSE and RESUME", seen)
+	}
+}
+
+type selectedGatewayMetric struct {
+	Name      string    `json:"metric_name"`
+	SessionID string    `json:"session_id"`
+	RuntimeID string    `json:"runtime_instance_id"`
+	Time      time.Time `json:"ts"`
+	Reason    string    `json:"reason"`
+	Outcome   string    `json:"outcome"`
+}
+
+func selectedGatewayMetrics(t *testing.T, root string) []selectedGatewayMetric {
+	t.Helper()
+	var records []selectedGatewayMetric
+	for _, path := range functionalMetricArtifactPaths(t, root) {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(contents)), "\n") {
+			var record selectedGatewayMetric
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				t.Fatal(err)
+			}
+			records = append(records, record)
+		}
+	}
+	return records
+}
+
+func assertSelectedGatewayMetricFacts(t *testing.T, fixture selectedTimeFixture, base time.Time) {
+	t.Helper()
+	var samples []time.Time
+	controls := map[string]int{}
+	for _, record := range selectedGatewayMetrics(t, fixture.metrics) {
+		if record.Name != "runtime.memory.heap_alloc" && record.Name != "runtime.lifecycle_control" {
+			continue
+		}
+		if record.SessionID != fixture.session || record.RuntimeID == "" {
+			t.Fatalf("selected metric lost session/runtime correlation: %#v", record)
+		}
+		if record.Name == "runtime.memory.heap_alloc" {
+			samples = append(samples, record.Time)
+		} else {
+			if !record.Time.Equal(base.Add(time.Hour)) || record.Outcome != "ACCEPTED" {
+				t.Fatalf("control metric selected time/outcome = %#v", record)
+			}
+			controls[record.Reason]++
+		}
+	}
+	if len(samples) != 2 || !samples[0].Equal(base) || !samples[1].Equal(base.Add(time.Hour)) {
+		t.Fatalf("memory sample fact times = %v, want [%v %v]", samples, base, base.Add(time.Hour))
+	}
+	if controls["PAUSE"] != 1 || controls["RESUME"] != 1 {
+		t.Fatalf("selected control metrics = %v, want one PAUSE and RESUME", controls)
+	}
 }
 
 // Hide replay TickSetter: this source is controlled by the operator fixture,
@@ -137,6 +241,7 @@ func (runner *selectedTimeRunner) Run(ctx context.Context, request platformproce
 type selectedTimeFixture struct {
 	url, session, metrics string
 	command               *support.ProcessCommand
+	logs                  *observer.ObservedLogs
 }
 
 func startSelectedTimeRun(t *testing.T, facts platformclock.Source, scheduler platformclock.TimerSource, runner platformprocess.CommandRunner) selectedTimeFixture {
@@ -150,8 +255,10 @@ func startSelectedTimeRun(t *testing.T, facts platformclock.Source, scheduler pl
 func startSelectedTimeHost(t *testing.T, dir string, facts platformclock.Source, scheduler platformclock.TimerSource, runner platformprocess.CommandRunner) selectedTimeFixture {
 	t.Helper()
 	api := support.NewProcessAPIServer()
+	core, logs := observer.New(zap.InfoLevel)
 	process := support.BuildProcess(t, serviceedges.Edges{
 		Clock: facts, ProcessScheduler: scheduler, ProviderCommandRunner: runner, APIServerStarter: api.Start,
+		ProcessLogger: zap.New(core),
 	})
 	session := uuid.NewString()
 	metrics := filepath.Join(t.TempDir(), "metrics")
@@ -172,9 +279,9 @@ func startSelectedTimeHost(t *testing.T, dir string, facts platformclock.Source,
 		readiness = source.readiness
 	}
 	if readiness == nil {
-		return selectedTimeFixture{url: api.WaitForURL(t), session: session, metrics: metrics, command: command}
+		return selectedTimeFixture{url: api.WaitForURL(t), session: session, metrics: metrics, command: command, logs: logs}
 	}
-	return selectedTimeFixture{url: readiness.WaitForURL(t, api), session: session, metrics: metrics, command: command}
+	return selectedTimeFixture{url: readiness.WaitForURL(t, api), session: session, metrics: metrics, command: command, logs: logs}
 }
 
 func awaitSelectedTimeSignal(t *testing.T, signal <-chan struct{}) {

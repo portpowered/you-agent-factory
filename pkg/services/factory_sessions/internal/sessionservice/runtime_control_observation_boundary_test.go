@@ -322,3 +322,23 @@ func (fake *gatewayEventRuntimeFake) SubscribeFactoryEvents(
 	fake.reconnect = reconnect
 	return fake.stream, fake.err
 }
+
+// dependencyHost controls only the gateway's external host calls in these tests.
+type dependencyHost struct {
+	Host
+	requireSession      func(string) (*livesession.LiveSession, error)
+	sessionFactory      func(string) (factoryruntime.Service, error)
+	backendScopeID      func() string
+	logicalSessionKeyID func(*livesession.LiveSession) string
+}
+
+func (h dependencyHost) RequireSession(id string) (*livesession.LiveSession, error) {
+	return h.requireSession(id)
+}
+func (h dependencyHost) SessionFactory(id string) (factoryruntime.Service, error) {
+	return h.sessionFactory(id)
+}
+func (h dependencyHost) BackendScopeID() string { return h.backendScopeID() }
+func (h dependencyHost) LogicalSessionKeyID(session *livesession.LiveSession) string {
+	return h.logicalSessionKeyID(session)
+}

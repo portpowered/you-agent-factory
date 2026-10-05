@@ -202,6 +202,7 @@ type RuntimeAssembly interface {
 
 // SessionGateway exposes bound session operations; live startup belongs to Root.
 type SessionGateway interface {
+	CloseFactorySession(context.Context, string) error
 	StartDurable(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
 	Invoke(context.Context, factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error)
 	Get(context.Context, factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error)

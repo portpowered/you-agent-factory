@@ -272,7 +272,7 @@ func (r *Bundle) FinalizeRecording(finishedAt time.Time) error {
 	if r == nil || r.Recording == nil {
 		return nil
 	}
-	return r.Recording.Finalize(finishedAt)
+	return withoutRunCancellation(r.Recording.Finalize(finishedAt))
 }
 
 func (r *Bundle) CloseArtifacts() error {
@@ -289,4 +289,11 @@ func (r *Bundle) CloseArtifacts() error {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+// RecordProducerError retains an invocation failure before runtime finalization.
+func (r *Bundle) RecordProducerError(err error) {
+	if r != nil && r.Recording != nil {
+		r.Recording.RecordError(err)
+	}
 }

@@ -99,10 +99,18 @@ type concurrentOutputCall struct {
 
 func newConcurrentOutputCall(t *testing.T, number int, flags []string) *concurrentOutputCall {
 	t.Helper()
+	return newConcurrentOutputCallWithProviderOverride(t, number, flags, true)
+}
+
+func newConcurrentOutputCallWithProviderOverride(t *testing.T, number int, flags []string, override bool) *concurrentOutputCall {
+	t.Helper()
 	marker := fmt.Sprintf("F14-C%02d", number)
 	args := append([]string{"you", "run"}, flags...)
-	args = append(args, "--named", goalFactoryName, "--executor-provider", "codex",
-		"--executor-model", "gpt-5-codex", "--no-record", "owned input "+marker)
+	args = append(args, "--named", goalFactoryName)
+	if override {
+		args = append(args, "--executor-provider", "codex")
+	}
+	args = append(args, "--executor-model", "gpt-5-codex", "--no-record", "owned input "+marker)
 	fixture, inputs, factoryDir := newMachineOutputInputs(t, args, goalFactoryName)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
 	sessionID := opened.Session.Id
@@ -155,6 +163,7 @@ type concurrentOutputRunner struct {
 	entryOnce, releaseOnce sync.Once
 	calls                  atomic.Int64
 	delegate               platformprocess.CommandRunner
+	command                atomic.Value
 }
 
 func (runner *concurrentOutputRunner) release() {
@@ -166,6 +175,7 @@ func (runner *concurrentOutputRunner) Run(ctx context.Context, request platformp
 	if request.ExecutionScopeID != runner.sessionID {
 		return platformprocess.CommandResult{}, errors.New("provider effect entered peer session")
 	}
+	runner.command.Store(request.Command)
 	runner.entryOnce.Do(func() { close(runner.entered) })
 	select {
 	case <-runner.gate:
@@ -368,10 +378,11 @@ func assertConcurrentOutputConflict(t *testing.T, number int, flags []string) {
 // while retaining explicit sessions and scenario-owned provider routes.
 func TestInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
 	t.Parallel()
-	for round, tty := range []bool{false, true} {
-		t.Run(fmt.Sprintf("tty=%t", tty), func(t *testing.T) {
-			quiet := newConcurrentOutputCall(t, 20+round*2, []string{"--quiet"})
-			normal := newConcurrentOutputCall(t, 21+round*2, nil)
+	for round, policy := range []struct{ tty, override bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+		t.Run(fmt.Sprintf("tty=%t/providerOverride=%t", policy.tty, policy.override), func(t *testing.T) {
+			tty := policy.tty
+			quiet := newConcurrentOutputCallWithProviderOverride(t, 20+round*2, []string{"--quiet"}, policy.override)
+			normal := newConcurrentOutputCallWithProviderOverride(t, 21+round*2, nil, policy.override)
 			for _, call := range []*concurrentOutputCall{quiet, normal} {
 				call.inputs.Input.StdoutIsTTY = &tty
 				call.inputs.Input.StderrIsTTY = &tty
@@ -390,6 +401,11 @@ func TestInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
 			normal.runner.release()
 			quiet.join(t)
 			normal.join(t)
+			for _, call := range []*concurrentOutputCall{quiet, normal} {
+				if command := call.runner.command.Load(); command != "codex" {
+					t.Fatalf("selected provider command = %q, want codex", command)
+				}
+			}
 			assertInjectedOutputDiagnostics(t, quiet)
 			assertInjectedOutputDiagnostics(t, normal)
 			assertConcurrentOutputSuccess(t, 0, quiet, []*concurrentOutputCall{quiet, normal})

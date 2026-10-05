@@ -168,6 +168,7 @@ type terminalRecording struct {
 	finalizeCalls int
 	finishedAt    time.Time
 	finalizeErr   error
+	producerErr   error
 }
 
 func (*terminalRecording) BindRecordingLifecycle(
@@ -179,14 +180,14 @@ func (*terminalRecording) BindRecordingLifecycle(
 func (*terminalRecording) Start(context.Context)               {}
 func (*terminalRecording) Stop()                               {}
 func (*terminalRecording) RecordEvent(interfaces.FactoryEvent) {}
-func (*terminalRecording) RecordError(error)                   {}
+func (r *terminalRecording) RecordError(err error)             { r.producerErr = errors.Join(r.producerErr, err) }
 func (*terminalRecording) Finish(time.Time)                    {}
 func (*terminalRecording) Flush() error                        { return nil }
 func (*terminalRecording) Err() error                          { return nil }
 func (r *terminalRecording) Finalize(finishedAt time.Time) error {
 	r.finalizeCalls++
 	r.finishedAt = finishedAt
-	return r.finalizeErr
+	return errors.Join(r.producerErr, r.finalizeErr)
 }
 
 var _ recordings.RuntimeRecorder = (*terminalRecording)(nil)
@@ -307,7 +308,7 @@ func TestStopPreservesFailuresAfterCanceledRun(t *testing.T) {
 		"joined failure": fmt.Errorf("runtime stopped: %w", errors.Join(context.Canceled, runFailure)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			recording := &terminalRecording{finalizeErr: flushErr}
+			recording := &terminalRecording{finalizeErr: errors.Join(context.Canceled, flushErr)}
 			handle := &factoryhost.Handle{
 				Bundle: &factoryhost.Bundle{Recording: recording}, RunDone: make(chan struct{}),
 			}
@@ -585,5 +586,21 @@ func TestWaitForStart_AllowsIncompleteDrainToReachHostedTransport(t *testing.T) 
 
 	if err := factoryhost.WaitForStart(context.Background(), handle, platformclock.Real{}); err != nil {
 		t.Fatalf("WaitForStart: %v, want transport-visible startup", err)
+	}
+}
+
+func TestRuntimeRecordingCancellationKeepsStorageFailureDuringCleanup(t *testing.T) {
+	t.Parallel()
+	storageErr := errors.New("terminal storage unavailable")
+	recording := &terminalRecording{finalizeErr: storageErr}
+	bundle := &factoryhost.Bundle{Recording: recording}
+	bundle.RecordProducerError(context.Canceled)
+	at := time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)
+	err := bundle.FinalizeRecording(at)
+	if !errors.Is(recording.producerErr, context.Canceled) || !errors.Is(err, storageErr) || errors.Is(err, context.Canceled) {
+		t.Fatalf("recorded producer = %v, cleanup = %v, want retained producer cancellation and visible storage failure", recording.producerErr, err)
+	}
+	if recording.finalizeCalls != 1 || recording.finishedAt != at {
+		t.Fatalf("terminal recording finalization = (%d, %v)", recording.finalizeCalls, recording.finishedAt)
 	}
 }
