@@ -10,7 +10,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
 const (
@@ -22,7 +21,7 @@ const (
 
 // DefinitionMapper compiles one definition into detached per-activation state.
 type DefinitionMapper interface {
-	Map(context.Context, *factorydefinitions.FactoryConfig) (*state.Net, error)
+	Bind(context.Context, *factorydefinitions.FactoryConfig) (orchestration.Binding, error)
 }
 
 // Compiler selects orchestration kind, compiles activated definitions, and
@@ -186,7 +185,7 @@ func (c *Compiler) compilePetri(
 			},
 		)
 	}
-	net, err := c.mapper.Map(ctx, cfg)
+	binding, err := c.mapper.Bind(ctx, cfg)
 	if err != nil {
 		return nil, compileError(
 			orchestration.ErrInvalidDefinition,
@@ -198,7 +197,7 @@ func (c *Compiler) compilePetri(
 			},
 		)
 	}
-	return orchestration.NewPetriBinding(net), nil
+	return binding, nil
 }
 
 func (c *Compiler) compileJavaScript(

@@ -185,3 +185,11 @@ func (c *recordingClock) Now() time.Time {
 	c.calls++
 	panic("clock read during inert construction")
 }
+
+func TestDefinitionMappingConstructorFailureReturnsNoCapability(t *testing.T) {
+	t.Parallel()
+	mapper, err := NewDefinitionMapper(nil)
+	if err == nil || mapper != nil {
+		t.Fatalf("NewDefinitionMapper(nil) = %v, %v; want no capability and required-ID error", mapper, err)
+	}
+}

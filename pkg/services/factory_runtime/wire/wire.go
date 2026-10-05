@@ -34,7 +34,7 @@ func NewService(orchestration Orchestration, instanceHost InstanceHost, dispatch
 }
 
 // NewOrchestration constructs the inert orchestration owner.
-func NewOrchestration(mapper *DefinitionMapper, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime) Orchestration {
+func NewOrchestration(mapper DefinitionMapper, workflows factoryruntime.JavaScriptWorkflowDefinitions, runtime factoryruntime.JavaScriptWorkflowRuntime) Orchestration {
 	return orchestrationwire.New(mapper, workflows, runtime)
 }
 

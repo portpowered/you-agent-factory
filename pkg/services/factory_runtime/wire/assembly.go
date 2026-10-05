@@ -23,12 +23,16 @@ import (
 // RuntimeFactory constructs hosted runtime bundles.
 type RuntimeFactory = factoryruntimeinternal.RuntimeFactory
 
-// DefinitionMapper holds reusable definition mapping behavior. Map allocates
-// a new net for each opening while retaining only the selected ID generator.
-type DefinitionMapper = definitionmapping.Mapper
+// DefinitionMapper holds reusable definition mapping behavior. Bind allocates
+// opaque, detached state while retaining only the selected ID generator.
+type DefinitionMapper = definitionmapping.Mapping
 
-func NewDefinitionMapper(newID factoryruntime.IDGenerator) (*DefinitionMapper, error) {
-	return definitionmapping.New(newID)
+func NewDefinitionMapper(newID factoryruntime.IDGenerator) (DefinitionMapper, error) {
+	mapper, err := definitionmapping.New(newID)
+	if err != nil {
+		return nil, err
+	}
+	return mapper, nil
 }
 
 // Assembly owns the product-policy dependencies used to assemble each
@@ -55,7 +59,7 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
-	definitionMapper *DefinitionMapper,
+	definitionMapper DefinitionMapper,
 	engineOpening *EngineOpening,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(

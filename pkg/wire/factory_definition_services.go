@@ -516,7 +516,7 @@ func provideFactoryRuntimeRoot(
 }
 
 // provideRuntimeOrchestration completes the process owner with both workflow ports.
-func provideRuntimeOrchestration(mapper *factoryruntimewire.DefinitionMapper, workflows factoryruntime.JavaScriptWorkflows) factoryruntimewire.Orchestration {
+func provideRuntimeOrchestration(mapper factoryruntimewire.DefinitionMapper, workflows factoryruntime.JavaScriptWorkflows) factoryruntimewire.Orchestration {
 	return factoryruntimewire.NewOrchestration(mapper, workflows, workflows)
 }
 

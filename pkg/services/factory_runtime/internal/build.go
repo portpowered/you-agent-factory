@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
@@ -51,7 +52,7 @@ type RuntimeFactory struct {
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
 	engineOpening            *runtime.EngineOpening
-	definitionMapper         *definitionmapping.Mapper
+	definitionMapper         definitionmapping.Mapping
 	workerAttemptScheduler   platformclock.TimerSource
 }
 
@@ -66,7 +67,7 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
-	definitionMapper *definitionmapping.Mapper,
+	definitionMapper definitionmapping.Mapping,
 	engineOpening *runtime.EngineOpening,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
@@ -563,12 +564,12 @@ func (f *RuntimeFactory) compileOrchestrationNet(
 		}
 		return net, nil
 	case factory.OrchestrationKindJavaScript:
-		net, err := f.definitionMapper.Map(ctx, cfg)
+		binding, err := f.definitionMapper.Bind(ctx, cfg)
 		if err != nil {
 			logger.Error("failed to map JavaScript factory runtime net", zap.Error(err))
 			return nil, fmt.Errorf("compile factory orchestration: %w", err)
 		}
-		return net, nil
+		return orchestration.PetriNet(binding), nil
 	default:
 		return nil, fmt.Errorf("compile factory orchestration: unsupported orchestration kind %q", compiled.Kind)
 	}

@@ -275,10 +275,13 @@ type selectedDefinitionMapper struct {
 	calls   int
 }
 
-func (m *selectedDefinitionMapper) Map(ctx context.Context, cfg *factorydefinitions.FactoryConfig) (*state.Net, error) {
+func (m *selectedDefinitionMapper) Bind(ctx context.Context, cfg *factorydefinitions.FactoryConfig) (orchestration.Binding, error) {
 	m.context, m.config = ctx, cfg
 	m.calls++
-	return m.net, m.failure
+	if m.failure != nil {
+		return nil, m.failure
+	}
+	return orchestration.NewPetriBinding(m.net), nil
 }
 
 func TestCompileUsesInjectedDefinitionMappingBehavior(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
@@ -26,14 +27,14 @@ func TestSharedMapperKeepsConcurrentOpeningStateDetached(t *testing.T) {
 	results := make(chan result, 2)
 	for range 2 {
 		go func() {
-			net, err := mapper.Map(t.Context(), config)
-			results <- result{net: net, err: err}
+			binding, err := mapper.Bind(t.Context(), config)
+			results <- result{net: orchestration.PetriNet(binding), err: err}
 		}()
 	}
 	first, second := <-results, <-results
 	for _, mapped := range []result{first, second} {
 		if mapped.err != nil {
-			t.Fatalf("Map: %v", mapped.err)
+			t.Fatalf("Bind: %v", mapped.err)
 		}
 		if mapped.net.Resources["gpu"] == nil || mapped.net.Resources["gpu"].Capacity != 2 {
 			t.Fatalf("mapped resources = %#v, want selected GPU capacity", mapped.net.Resources)
