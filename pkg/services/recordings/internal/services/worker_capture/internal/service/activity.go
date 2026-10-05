@@ -213,6 +213,11 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 		if stamp, ok := session.capturedAt[strconv.FormatUint(uint64(record.ID.Position), 10)]; ok {
 			captured.CapturedAt = timePointer(stamp)
 		}
+		if request.BoundPayload {
+			if err := writer.boundCapturedPayload(session, &captured); err != nil {
+				return recordings.WorkerCapturedActivityPage{}, err
+			}
+		}
 		page.Records = append(page.Records, captured)
 	}
 	page.TokenUsage = capturedUsage(session, cursor.Head)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -33,6 +34,7 @@ func (s *LogReader) ReadLogs(ctx context.Context, req workersessions.ReadLogsReq
 	}
 	page, err := s.reader.ReadWorkerCapturedActivity(ctx, recordings.WorkerCapturedActivityRequest{
 		WorkerSessionID: req.WorkerSessionID, Limit: req.Limit, NextToken: req.NextToken,
+		BoundPayload: true,
 	})
 	if err != nil {
 		s.logger.Info("worker session logs read", "workerSessionID", req.WorkerSessionID, "outcome", "unavailable")
@@ -65,9 +67,34 @@ func (s *LogReader) ReadLogs(ctx context.Context, req workersessions.ReadLogsReq
 	for _, captured := range page.Records {
 		event := projectObservationEvent(captured.Record, req.WorkerSessionID)
 		event.CapturedAt = captured.CapturedAt
+		event.Truncated = captured.Truncated
+		event.OriginalBytes = captured.OriginalBytes
+		event.ReturnedBytes = captured.ReturnedBytes
+		event.ArtifactRef = captured.ArtifactRef
 		result.Events = append(result.Events, event.Clone())
 	}
 	// Pages can be requested repeatedly while active; log only safe metadata.
 	s.logger.Debug("worker session logs read", "workerSessionID", req.WorkerSessionID, "outcome", "success", "event_count", len(result.Events), "committed_position", result.CommittedPosition)
 	return result, nil
+}
+
+func (s *LogReader) ReadLogsArtifact(ctx context.Context, id, ref string) (io.ReadCloser, error) {
+	if err := (workersessions.ReadLogsRequest{WorkerSessionID: id}).Validate(); err != nil {
+		return nil, err
+	}
+	reader, ok := s.reader.(recordings.WorkerCapturedArtifactReader)
+	if !ok || ctx == nil {
+		return nil, workersessions.ErrLogsUnavailable
+	}
+	stream, err := reader.ReadWorkerCapturedArtifact(ctx, id, ref)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return nil, workersessions.ErrObservationSessionNotFound
+	case errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest):
+		return nil, workersessions.ErrInvalidLogsRequest
+	case err != nil:
+		return nil, workersessions.ErrLogsUnavailable
+	default:
+		return stream, nil
+	}
 }

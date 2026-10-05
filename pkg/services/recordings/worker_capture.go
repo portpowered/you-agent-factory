@@ -14,6 +14,7 @@ import (
 type (
 	WorkerCaptureClock                       = recordingcontracts.WorkerCaptureClock
 	WorkerCapturedActivityReader             = recordingcontracts.WorkerCapturedActivityReader
+	WorkerCapturedArtifactReader             = recordingcontracts.WorkerCapturedArtifactReader
 	WorkerRecordingStore                     = recordingcontracts.WorkerRecordingStore
 	WorkerSessionCatalogEntry                = workerrecording.WorkerSessionCatalogEntry
 	WorkerCapturedRecord                     = workerrecording.WorkerCapturedRecord

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -28,6 +29,10 @@ func (h *Handler) ReadWorkerSessionLogs(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
 		return
 	}
+	if params.ArtifactRef != nil {
+		h.readLogsArtifact(w, r, string(id), params)
+		return
+	}
 	req := workersessions.ReadLogsRequest{WorkerSessionID: string(id)}
 	if params.Limit != nil {
 		req.Limit = *params.Limit
@@ -50,6 +55,28 @@ func (h *Handler) ReadWorkerSessionLogs(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	h.writeJSON(w, http.StatusOK, response)
+}
+
+func (h *Handler) readLogsArtifact(w http.ResponseWriter, r *http.Request, id string, params factoryapi.ReadWorkerSessionLogsParams) {
+	if params.Limit != nil || params.NextToken != nil || *params.ArtifactRef == "" {
+		h.writeLogsError(w, workersessions.ErrInvalidLogsRequest)
+		return
+	}
+	reader, ok := h.adapter.logs.(workersessions.LogsArtifactService)
+	if !ok {
+		h.writeLogsError(w, workersessions.ErrLogsUnavailable)
+		return
+	}
+	stream, err := reader.ReadLogsArtifact(r.Context(), id, *params.ArtifactRef)
+	if err != nil {
+		h.writeLogsError(w, err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, stream)
 }
 
 func (h *Handler) writeLogsError(w http.ResponseWriter, err error) {
@@ -87,6 +114,12 @@ func workerSessionLogPageToAPI(page workersessions.LogPage) (factoryapi.WorkerSe
 				SourceType: event.SourceType, SourceId: event.SourceID, SourceSequence: int64(event.SourceSequence),
 				SourceEventId: event.SourceEventID, SchemaId: event.SchemaID, Payload: payload, CapturedAt: event.CapturedAt,
 			},
+		}
+		if event.Truncated {
+			frame.Event.Truncated = &event.Truncated
+			frame.Event.OriginalBytes = &event.OriginalBytes
+			frame.Event.ReturnedBytes = &event.ReturnedBytes
+			frame.Event.ArtifactRef = &event.ArtifactRef
 		}
 		if page.FactorySessionID != "" {
 			frame.FactorySessionId = &page.FactorySessionID

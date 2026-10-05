@@ -3,11 +3,16 @@ package workersessions
 import (
 	"context"
 	"errors"
+	"io"
 )
 
 // LogsService reads finite, committed activity without consulting provider files.
 type LogsService interface {
 	ReadLogs(context.Context, ReadLogsRequest) (LogPage, error)
+}
+
+type LogsArtifactService interface {
+	ReadLogsArtifact(context.Context, string, string) (io.ReadCloser, error)
 }
 
 // CapturedObservationReader inspects durable terminal identity without granting

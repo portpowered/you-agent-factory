@@ -21,14 +21,19 @@ type WorkerSessionCatalogEntry struct {
 
 // WorkerCapturedRecord separates host commit metadata from source-native payloads.
 type WorkerCapturedRecord struct {
-	Record     events.Record
-	CapturedAt *time.Time
+	Record        events.Record
+	CapturedAt    *time.Time
+	Truncated     bool
+	OriginalBytes int64
+	ReturnedBytes int64
+	ArtifactRef   string
 }
 
 type WorkerCapturedActivityRequest struct {
 	WorkerSessionID string
 	Limit           int
 	NextToken       string
+	BoundPayload    bool
 }
 
 // WorkerCapturedActivityPage contains only an accepted prefix of the journal.

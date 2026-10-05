@@ -8946,15 +8946,24 @@ type WorkerSessionEventDelivery string
 
 // WorkerSessionEventRecord defines model for WorkerSessionEventRecord.
 type WorkerSessionEventRecord struct {
+	// ArtifactRef Worker Session ID and record position used to retrieve the complete payload through the logs route.
+	ArtifactRef *string `json:"artifactRef,omitempty"`
+
 	// CapturedAt Host time at which Recordings committed this record. Omitted for older records and uncommitted live frames.
 	CapturedAt *time.Time               `json:"capturedAt,omitempty"`
 	Cursor     WorkerSessionEventCursor `json:"cursor"`
+
+	// OriginalBytes Byte count of the exact captured payload before truncation.
+	OriginalBytes *int64 `json:"originalBytes,omitempty"`
 
 	// Payload Source-native canonical event payload.
 	Payload map[string]interface{} `json:"payload"`
 
 	// Position Aggregate position assigned by the canonical Events ledger.
 	Position int64 `json:"position"`
+
+	// ReturnedBytes Byte count of the encoded payload preview.
+	ReturnedBytes *int64 `json:"returnedBytes,omitempty"`
 
 	// SchemaId Source-native payload schema identity.
 	SchemaId string `json:"schemaId"`
@@ -8970,6 +8979,9 @@ type WorkerSessionEventRecord struct {
 
 	// SourceType Source-native event family.
 	SourceType string `json:"sourceType"`
+
+	// Truncated True when logs return a preview instead of the complete captured payload.
+	Truncated *bool `json:"truncated,omitempty"`
 }
 
 // WorkerSessionExecutionMetadata defines model for WorkerSessionExecutionMetadata.
@@ -10130,7 +10142,9 @@ type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
 
 // ReadWorkerSessionLogsParams defines parameters for ReadWorkerSessionLogs.
 type ReadWorkerSessionLogsParams struct {
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+	// ArtifactRef Retrieve the exact captured payload identified by a truncated event. Cannot be combined with limit or nextToken.
+	ArtifactRef *string `form:"artifactRef,omitempty" json:"artifactRef,omitempty"`
+	Limit       *int    `form:"limit,omitempty" json:"limit,omitempty"`
 
 	// NextToken Optional base64-encoded token ID cursor.
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
@@ -21219,6 +21233,14 @@ func (siw *ServerInterfaceWrapper) ReadWorkerSessionLogs(w http.ResponseWriter, 
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ReadWorkerSessionLogsParams
+
+	// ------------- Optional query parameter "artifactRef" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "artifactRef", r.URL.Query(), &params.ArtifactRef)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "artifactRef", Err: err})
+		return
+	}
 
 	// ------------- Optional query parameter "limit" -------------
 

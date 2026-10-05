@@ -805,6 +805,10 @@ func executeGeneratedWorkerSessionsReadWithValues(
 	if err != nil {
 		return err
 	}
+	artifactRef, err := commandInputValue[string](values, "you.worker-sessions.read.flag.artifact-ref")
+	if err != nil {
+		return err
+	}
 	limit, err := commandInputValue[int](values, "you.worker-sessions.read.flag.limit")
 	if err != nil {
 		return err
@@ -842,7 +846,7 @@ func executeGeneratedWorkerSessionsReadWithValues(
 	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return read(workersessionscli.ReadConfig{
-		View: view, Limit: limit, NextToken: nextToken,
+		View: view, Limit: limit, NextToken: nextToken, ArtifactRef: artifactRef,
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		WorkerSessionID: workerSessionID, Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),

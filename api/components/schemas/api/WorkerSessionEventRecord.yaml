@@ -10,6 +10,22 @@ required:
   - schemaId
   - payload
 properties:
+  truncated:
+    type: boolean
+    description: True when logs return a preview instead of the complete captured payload.
+  originalBytes:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Byte count of the exact captured payload before truncation.
+  returnedBytes:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Byte count of the encoded payload preview.
+  artifactRef:
+    type: string
+    description: Worker Session ID and record position used to retrieve the complete payload through the logs route.
   capturedAt:
     type: string
     format: date-time

@@ -542,6 +542,10 @@ type ParseDiagnostic struct {
 // ObservationEvent is one detached canonical Events record projected without
 // exposing the Events store or its implementation.
 type ObservationEvent struct {
+	Truncated     bool
+	OriginalBytes int64
+	ReturnedBytes int64
+	ArtifactRef   string
 	// CapturedAt is present only when Recordings committed this record.
 	CapturedAt     *time.Time
 	Position       uint64

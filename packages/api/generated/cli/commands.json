@@ -10164,6 +10164,30 @@
             "since": "1.0.0"
           }
         },
+        "you.worker-sessions.read.flag.artifact-ref": {
+          "id": "you.worker-sessions.read.flag.artifact-ref",
+          "long": "artifact-ref",
+          "usage": "retrieve the complete captured payload from a truncated logs event",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.artifact-ref",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.read.flag.output": {
           "id": "you.worker-sessions.read.flag.output",
           "long": "output",

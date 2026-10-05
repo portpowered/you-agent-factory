@@ -390,6 +390,13 @@ paths:
       summary: Read captured Worker Session observations
       parameters:
         - $ref: '#/components/parameters/WorkerSessionID'
+        - name: artifactRef
+          in: query
+          required: false
+          description: Retrieve the exact captured payload identified by a truncated event. Cannot be combined with limit or nextToken.
+          schema:
+            type: string
+            minLength: 1
         - name: limit
           in: query
           required: false
@@ -403,6 +410,10 @@ paths:
         '200':
           description: A bounded captured prefix with its durable watermark.
           content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkerSessionLogPage'
@@ -4048,6 +4059,22 @@ components:
         - schemaId
         - payload
       properties:
+        truncated:
+          type: boolean
+          description: True when logs return a preview instead of the complete captured payload.
+        originalBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Byte count of the exact captured payload before truncation.
+        returnedBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Byte count of the encoded payload preview.
+        artifactRef:
+          type: string
+          description: Worker Session ID and record position used to retrieve the complete payload through the logs route.
         capturedAt:
           type: string
           format: date-time

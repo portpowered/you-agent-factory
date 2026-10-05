@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -31,8 +32,17 @@ func readLogs(config ReadConfig, jsonOutput bool) error {
 		query.Set("nextToken", config.NextToken)
 	}
 	parsed.RawQuery = query.Encode()
+	if config.ArtifactRef != "" {
+		query.Set("artifactRef", config.ArtifactRef)
+		parsed.RawQuery = query.Encode()
+		return readLogsArtifact(config, parsed.String(), jsonOutput)
+	}
+	return readLogsPage(config, parsed.String(), jsonOutput)
+}
+
+func readLogsPage(config ReadConfig, endpoint string, jsonOutput bool) error {
 	var page factoryapi.WorkerSessionLogPage
-	response, err := config.HTTP.GetJSON(config.Context, parsed.String(), &page)
+	response, err := config.HTTP.GetJSON(config.Context, endpoint, &page)
 	if err != nil {
 		return emitReadCLIError(config, jsonOutput, newCLIError("FACTORY_UNREACHABLE", "factory not reachable for Worker Session logs", err))
 	}
@@ -57,5 +67,25 @@ func readLogs(config ReadConfig, jsonOutput bool) error {
 	if page.NextToken != nil {
 		_, err = fmt.Fprintf(config.Output, "Next token: %s\n", *page.NextToken)
 	}
+	return err
+}
+
+func readLogsArtifact(config ReadConfig, endpoint string, jsonOutput bool) error {
+	req, err := http.NewRequestWithContext(config.Context, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return emitReadCLIError(config, jsonOutput, err)
+	}
+	response, err := config.HTTP.Execute(req)
+	if err != nil {
+		return emitReadCLIError(config, jsonOutput, newCLIError("FACTORY_UNREACHABLE", "factory not reachable for Worker Session payload", err))
+	}
+	if response.HTTP == nil {
+		return emitReadCLIError(config, jsonOutput, newCLIError("WORKER_SESSION_READ_FAILED", "Worker Session payload returned no HTTP response", nil))
+	}
+	defer func() { _ = response.HTTP.Body.Close() }()
+	if response.HTTP.StatusCode != http.StatusOK {
+		return emitReadCLIError(config, jsonOutput, workerSessionReadHTTPError(response.HTTP, response.HTTP.StatusCode))
+	}
+	_, err = io.Copy(config.Output, response.HTTP.Body)
 	return err
 }

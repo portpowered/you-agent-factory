@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"context"
+	"io"
 	"time"
 
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
@@ -13,6 +14,12 @@ type WorkerCaptureClock interface{ Now() time.Time }
 type WorkerCapturedActivityReader interface {
 	LookupWorkerSessionCapture(context.Context, string) (workerrecording.WorkerSessionCatalogEntry, error)
 	ReadWorkerCapturedActivity(context.Context, workerrecording.WorkerCapturedActivityRequest) (workerrecording.WorkerCapturedActivityPage, error)
+}
+
+// WorkerCapturedArtifactReader retrieves the exact committed payload of one
+// oversized record within the selected Worker Session and profile.
+type WorkerCapturedArtifactReader interface {
+	ReadWorkerCapturedArtifact(context.Context, string, string) (io.ReadCloser, error)
 }
 
 type WorkerRecordingStore interface {

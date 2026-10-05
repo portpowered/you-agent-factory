@@ -1858,6 +1858,20 @@ export interface components {
      */
     WorkerSessionEventDelivery: WorkerSessionEventDelivery;
     WorkerSessionEventRecord: {
+      /** @description True when logs return a preview instead of the complete captured payload. */
+      truncated?: boolean;
+      /**
+       * Format: int64
+       * @description Byte count of the exact captured payload before truncation.
+       */
+      originalBytes?: number;
+      /**
+       * Format: int64
+       * @description Byte count of the encoded payload preview.
+       */
+      returnedBytes?: number;
+      /** @description Worker Session ID and record position used to retrieve the complete payload through the logs route. */
+      artifactRef?: string;
       /**
        * Format: date-time
        * @description Host time at which Recordings committed this record. Omitted for older records and uncommitted live frames.
@@ -8550,6 +8564,8 @@ export interface operations {
   readWorkerSessionLogs: {
     parameters: {
       query?: {
+        /** @description Retrieve the exact captured payload identified by a truncated event. Cannot be combined with limit or nextToken. */
+        artifactRef?: string;
         limit?: number;
         /** @description Optional base64-encoded token ID cursor. */
         nextToken?: components["parameters"]["NextToken"];
@@ -8569,6 +8585,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
+          "application/octet-stream": string;
           "application/json": components["schemas"]["WorkerSessionLogPage"];
         };
       };

@@ -361,6 +361,16 @@ is `GET /worker-sessions/{worker_session_id}/logs` with `limit` and `nextToken`.
 Unknown IDs return 404, invalid limits or tokens return 400, and unavailable
 recordings return 503. A selected host failure remains an error.
 
+Logs replace captured payloads larger than 1 MiB with a JSON `preview` object.
+The event includes `truncated: true`, `originalBytes`, `returnedBytes`, and
+`artifactRef`. The stored capture remains complete. Retrieve its exact payload
+with `read --view logs --worker-session-id <id> --artifact-ref <artifactRef>`.
+This writes the original payload bytes to stdout without adding an envelope or
+newline. HTTP clients use the same logs route with `artifactRef`; the response
+is streamed as `application/octet-stream`. Artifact retrieval cannot be combined
+with `limit` or `nextToken`, and a reference from another Worker Session is
+invalid.
+
 The unscoped top-level list is the fleet-wide view: it includes direct and
 Factory-originated observations across the process. Use `--scope direct`,
 `--scope factory`, or `--scope all` when an origin-specific view is needed.
