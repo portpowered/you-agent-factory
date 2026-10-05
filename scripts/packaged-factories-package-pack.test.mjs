@@ -34,11 +34,14 @@ test("catalog lint preflight uses shared Make lane and propagates process failur
 			assert.deepEqual(args, ["repository-lint-run"]);
 			assert.equal(options.cwd, "fixture root");
 			const child = new EventEmitter();
+			child.stdout = new EventEmitter();
+			child.stdout.setEncoding = () => {};
 			child.stderr = new EventEmitter();
 			child.stderr.setEncoding = () => {};
 			queueMicrotask(() => {
 				if (status === null) child.emit("error", new Error("cannot launch make"));
 				else {
+					child.stdout.emit("data", "stale: generated/manifest.json");
 					child.stderr.emit("data", "catalog lint rejected fixture");
 					child.emit("close", status);
 				}
@@ -46,7 +49,7 @@ test("catalog lint preflight uses shared Make lane and propagates process failur
 			return child;
 		});
 		if (status === 0) await promise;
-		else await assert.rejects(promise, status === null ? /cannot launch make/ : /catalog lint rejected fixture/);
+		else await assert.rejects(promise, status === null ? /cannot launch make/ : /stale: generated\/manifest.json\ncatalog lint rejected fixture/);
 	}
 });
 
