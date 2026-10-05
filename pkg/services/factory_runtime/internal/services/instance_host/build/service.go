@@ -158,6 +158,59 @@ func (s *Service) PrepareExecutionSpec(
 	return spec, nil
 }
 
+// ExecutionPreparation is the fixed behavior Assembly actually consumes. It
+// accepts candidate values and execution selections without engine hooks.
+type ExecutionPreparation interface {
+	PrepareExecutionValues(context.Context, BuildDefaults, SessionBuildValues, *zap.Logger,
+		providers.Service, platformprocess.CommandRunner, *workers.MockWorkersConfig) (PreparedExecutionValues, error)
+}
+
+// PreparedExecutionValues contains prepared candidate facts and selected edges.
+type PreparedExecutionValues struct {
+	PreparedSessionValues
+	ProviderOverride      providers.Service
+	ProviderCommandRunner platformprocess.CommandRunner
+	CommandRunnerOverride platformprocess.CommandRunner
+}
+
+func (s *Service) PrepareExecutionValues(ctx context.Context, defaults BuildDefaults, values SessionBuildValues,
+	logger *zap.Logger, replayProvider providers.Service, replayRunner platformprocess.CommandRunner,
+	mockWorkersConfig *workers.MockWorkersConfig,
+) (PreparedExecutionValues, error) {
+	spec, err := s.PrepareExecutionSpec(ctx, defaults, values, SessionBuildSpec{
+		BaseLogger: logger, ProviderOverride: replayProvider, ReplayCommandRunner: replayRunner,
+	}, mockWorkersConfig)
+	if err != nil {
+		return PreparedExecutionValues{}, err
+	}
+	return PreparedExecutionValues{
+		PreparedSessionValues: PreparedSessionValues{Dir: spec.Dir, FolderPath: spec.FolderPath,
+			SessionID: spec.SessionID, ExecutionBaseDir: spec.ExecutionBaseDir, RuntimeInstanceID: spec.RuntimeInstanceID,
+			LoadedFactoryCfg: spec.LoadedFactoryCfg, RecordPath: spec.RecordPath, WorkflowID: spec.WorkflowID},
+		ProviderOverride:      spec.ProviderOverride,
+		ProviderCommandRunner: spec.ProviderCommandRunner,
+		CommandRunnerOverride: spec.CommandRunnerOverride,
+	}, nil
+}
+
+// PreparedOpeningSpec combines prepared facts with Runtime-owned hooks. It
+// performs no effects and detaches the caller's hook slice.
+func PreparedOpeningSpec(prepared PreparedExecutionValues, selections SessionBuildSpec) SessionBuildSpec {
+	selections.Dir = prepared.Dir
+	selections.FolderPath = prepared.FolderPath
+	selections.SessionID = prepared.SessionID
+	selections.ExecutionBaseDir = prepared.ExecutionBaseDir
+	selections.RuntimeInstanceID = prepared.RuntimeInstanceID
+	selections.LoadedFactoryCfg = prepared.LoadedFactoryCfg
+	selections.RecordPath = prepared.RecordPath
+	selections.WorkflowID = prepared.WorkflowID
+	selections.ProviderOverride = prepared.ProviderOverride
+	selections.ProviderCommandRunner = prepared.ProviderCommandRunner
+	selections.CommandRunnerOverride = prepared.CommandRunnerOverride
+	selections.SubmissionHooks = append([]factory.SubmissionHook(nil), selections.SubmissionHooks...)
+	return selections
+}
+
 // SessionScopedRecordPath preserves the selected default path and scopes
 // non-default explicit paths by session identity.
 func SessionScopedRecordPath(basePath string, sessionID string) string {

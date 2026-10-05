@@ -428,10 +428,12 @@ func (*controlledEngine) GetEngineStateSnapshot(context.Context) (*legacysnapsho
 }
 
 type controlledEngineCall struct {
-	submit   recordings.SubmissionRecorder
-	dispatch recordings.DispatchRecorder
-	project  factory.WorldStateProjector
-	history  recordings.RuntimeLedger
+	submit    recordings.SubmissionRecorder
+	dispatch  recordings.DispatchRecorder
+	project   factory.WorldStateProjector
+	history   recordings.RuntimeLedger
+	runtimeID string
+	mutations factory.PetriMutationRecorder
 }
 type controlledEngineOpening struct{ calls []controlledEngineCall }
 
@@ -464,59 +466,27 @@ func (opening *controlledEngineOpening) Open(
 	petriMutationRecorder factory.PetriMutationRecorder,
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner,
 ) (factoryhost.Engine, error) {
-	opening.calls = append(opening.calls, controlledEngineCall{submissionRecorder, dispatchRecorder, worldStateProjector, eventHistory})
+	opening.calls = append(opening.calls, controlledEngineCall{submit: submissionRecorder, dispatch: dispatchRecorder, project: worldStateProjector, history: eventHistory, runtimeID: runtimeID, mutations: petriMutationRecorder})
 	return &controlledEngine{workflow: workflowContext}, nil
 }
 
 type controlledInitialAssembly struct {
-	failure    error
-	mutations  []factory.PetriMutationRecorder
-	progress   []workers.ProgressPublisher
-	runtimeIDs []string
+	failure        error
+	mutations      []factory.PetriMutationRecorder
+	progress       []workers.ProgressPublisher
+	runtimeIDs     []string
+	folderPaths    []string
+	definitionDirs []string
 }
 
-func (a *controlledInitialAssembly) Assemble(
-	ctx context.Context,
-	defaultWorkerModelProvider string,
-	defaultWorkerModel string,
-	applyOperatorDefaults bool,
-	recordPath string,
-	workflowID string,
-	defaultSessionID string,
-	metricsSessionID string,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	runtimeMode interfaces.RuntimeMode,
-	runtimeScheduler factory.Scheduler,
-	inlineDispatch bool,
-	runtimeLogDir string,
-	runtimeLogConfig factory.RuntimeLogStorageConfig,
-	runtimeFileLoggingPolicy factory.RuntimeFileLoggingPolicy,
-	runtimeMetricsPolicy factory.RuntimeMetricsPolicy,
-	runtimeMetricsDir string,
-	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
-	recordFlushInterval time.Duration,
-	backendScopeID string,
-	factoryRunnerID string,
-	verbose bool,
-	skipBuiltInPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	publishRuntimeStreams bool,
+func (a *controlledInitialAssembly) AssembleInitial(ctx context.Context, request factory.RuntimeActivationRequest,
+	loadedFactory interfaces.MutableLoadedFactorySource, clock factory.Clock, baseLogger *zap.Logger,
 	observations factory.SessionObservations,
-	dir string,
-	factoryRootDir string,
-	executionBaseDir string,
-	loadedFactory interfaces.MutableLoadedFactorySource,
-	runtimeInstanceID string,
-	replayArtifact *interfaces.ReplayArtifact,
-	resumeInput *recordings.LoadResumeInputResult,
-	restoredWorldState *interfaces.FactoryWorldState,
-	restoredEventHistory []interfaces.FactoryEvent,
-	serviceMode bool,
 ) (*factory.RuntimeInitialOpening, error) {
 	a.mutations = append(a.mutations, observations.RecordPetriTokenMutations)
 	a.progress = append(a.progress, observations.PublishWorkerProgress)
-	a.runtimeIDs = append(a.runtimeIDs, runtimeInstanceID)
-	return &factory.RuntimeInitialOpening{Activation: &factory.RuntimeActivation{}, Spec: factory.SessionBuildSpec{FolderPath: factoryRootDir, LoadedFactoryCfg: loadedFactory}}, a.failure
+	a.runtimeIDs = append(a.runtimeIDs, request.RuntimeID)
+	a.folderPaths = append(a.folderPaths, request.Inputs.Definition.Directory)
+	a.definitionDirs = append(a.definitionDirs, loadedFactory.FactoryDir())
+	return &factory.RuntimeInitialOpening{Activation: &factory.RuntimeActivation{}}, a.failure
 }

@@ -466,12 +466,12 @@ func assembleTestRuntimeRecord(
 	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
-) (factory.RuntimeReplacementBuilder, factory.RuntimeRecord, factory.SessionBuildSpec, error) {
+) (factory.RuntimeReplacementBuilder, factory.RuntimeRecord, factory.RuntimeInitialCompletion, error) {
 	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request, nil)
 	if opening == nil {
-		return nil, nil, factory.SessionBuildSpec{}, err
+		return nil, nil, factory.RuntimeInitialCompletion{}, err
 	}
-	return opening.ReplacementBuilder, opening.Record, opening.Spec, err
+	return opening.ReplacementBuilder, opening.Record, opening.Completion, err
 }
 
 func assembleTestInitialOpening(
@@ -555,7 +555,9 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		snapshots = append(snapshots, source)
 		return nil, nil
 	}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(scopes).Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, snapshot)
+	engines := &controlledEngineOpening{}
+	runtimeOwner := testRuntimeFactoryWithEffectsAndOpening(testRuntimeLogOwner{}, testRuntimeMetricsOwner{}, nil, nil, nil, scopes, engines)
+	opening, err := factoryinternal.NewBundleOpening(runtimeOwner.Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,8 +571,8 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = initial.CloseArtifacts() })
-	if spec.RuntimeInstanceID != "initial-runtime" || recorded.RecordingID != "initial-runtime" {
-		t.Fatalf("initial identity = %q/%q", spec.RuntimeInstanceID, recorded.RecordingID)
+	if initial.StreamGeneration() != "initial-runtime" || recorded.RecordingID != "initial-runtime" {
+		t.Fatalf("initial identity = %q/%q", initial.StreamGeneration(), recorded.RecordingID)
 	}
 	if replacement, err := builder.BuildReplacement(t.Context(), dir, dir, "candidate", dir); !errors.Is(err, loadErr) || replacement != nil {
 		t.Fatalf("failed replacement = %#v, %v, want load failure without resource", replacement, err)
@@ -583,13 +585,13 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = replacement.CloseArtifacts() })
 	assertReplacementSelections(t, initial, replacement, recorded, clock)
-	assertReplacementBuildValues(t, replacement, recorded, spec, dir)
+	assertReplacementBuildValues(t, initial, replacement, recorded, spec, engines.calls[0], dir)
 	if len(snapshots) != 2 || snapshots[0] != initial.LoadedRuntimeConfig() || snapshots[1] != replacement.LoadedRuntimeConfig() {
 		t.Fatalf("selected snapshot sources = %#v, want independent initial and replacement candidates", snapshots)
 	}
 }
 
-func assertReplacementBuildValues(t *testing.T, replacement factory.RuntimeRecord, recorded recordings.RuntimeScopeRequest, spec factory.SessionBuildSpec, dir string) {
+func assertReplacementBuildValues(t *testing.T, initial, replacement factory.RuntimeRecord, recorded recordings.RuntimeScopeRequest, spec factory.RuntimeInitialCompletion, engine controlledEngineCall, dir string) {
 	t.Helper()
 	if recorded.FactorySessionID != "candidate" || recorded.RecordPath != "recording.candidate.json" {
 		t.Fatalf("replacement recording selections = %#v", recorded)
@@ -597,8 +599,8 @@ func assertReplacementBuildValues(t *testing.T, replacement factory.RuntimeRecor
 	if replacement.LoadedRuntimeConfig().FactoryDir() != dir || replacement.LoadedRuntimeConfig().RuntimeBaseDir() != dir {
 		t.Fatal("replacement changed the selected factory or execution directory")
 	}
-	if spec.RuntimeInstanceID != "initial-runtime" || spec.PetriMutationRecorder != nil {
-		t.Fatal("replacement mutated the initial caller's spec")
+	if initial.StreamGeneration() != "initial-runtime" || spec.SessionID != "candidate" || engine.runtimeID != "initial-runtime" || engine.mutations != nil {
+		t.Fatal("replacement mutated the initial recording or completion identity")
 	}
 }
 

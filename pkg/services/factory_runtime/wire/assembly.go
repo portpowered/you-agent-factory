@@ -44,7 +44,7 @@ func NewDefinitionMapper(newID factoryruntime.IDGenerator) (DefinitionMapper, er
 type Assembly = factoryruntimeinternal.Assembly
 
 // NewInitialActivation binds initial behavior once; Open allocates scoped state.
-func NewInitialActivation(assembly *Assembly, clock factoryruntime.Clock, logger *zap.Logger,
+func NewInitialActivation(assembly factoryruntimeinternal.InitialAssembly, clock factoryruntime.Clock, logger *zap.Logger,
 	materialize func(*factorydefinitions.RuntimeSnapshot, string) (factorydefinitions.MutableLoadedFactorySource, error),
 ) factoryruntime.InitialRuntimeActivationOperation {
 	return factoryruntimeinternal.NewInitialActivation(assembly, clock, logger, materialize).Open
@@ -71,12 +71,21 @@ func NewRuntimeFactory(
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper DefinitionMapper,
-	engineOpening *EngineOpening,
+	interpolation factorydefinitions.InvocationInterpolationService,
+	providerSessions providersessions.Service,
+	quorumPolicy factorydefinitions.QuorumPolicyService,
+	outputShaping factorydefinitions.InvocationOutputShapingService,
+	workPropagation factorydefinitions.WorkPropagationPolicyService,
+	workService work.Service,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	dispatchOpening OutboxOpening,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	worldStateProjector factoryruntime.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 ) *RuntimeFactory {
+	engineOpening := runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping,
+		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening)
 	return factoryruntimeinternal.NewRuntimeFactory(
 		loggerFactory,
 		runtimeLogs,
@@ -97,16 +106,30 @@ func NewRuntimeFactory(
 // NewAssembly constructs the inert Factory Runtime assembly service selected by
 // Wire. It does not start a runtime or sidecar.
 func NewAssembly(
-	bundleOpening BundleOpening,
+	runtimeFactory *RuntimeFactory,
+	workerAttemptScheduler platformclock.TimerSource,
+	workerService workers.Service,
+	workerSessions workersessions.Service,
+	workerAttempts factoryruntime.WorkerAttemptOpener,
+	requestResolver *WorkstationRequestExecutor,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	sidecars *SidecarOpening,
 	instanceHost InstanceHost,
-	preparation *RuntimePreparation,
+	preparation RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
 	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(bundleOpening,
+	if runtimeFactory == nil {
+		return nil, fmt.Errorf("factory runtime factory is required")
+	}
+	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService,
+		workerSessions, workerAttempts, requestResolver, recordingsRuntime, initialFactorySnapshot)
+	if err != nil {
+		return nil, err
+	}
+	return factoryruntimeinternal.NewAssembly(opening.Open,
 		sidecars,
 		instanceHost,
 		preparation,
@@ -121,29 +144,6 @@ func NewSidecarOpening(automation automations.Service, metricsClock platformcloc
 	return factoryruntimeinternal.NewSidecarOpening(automation, metricsClock)
 }
 
-type BundleOpening = factoryruntimeinternal.BundleOpeningOperation
-
-// NewBundleOpening constructs the fixed bundle-opening behavior once in Wire.
-func NewBundleOpening(
-	runtimeFactory *RuntimeFactory,
-	workerAttemptScheduler platformclock.TimerSource,
-	workerService workers.Service,
-	workerSessions workersessions.Service,
-	workerAttempts factoryruntime.WorkerAttemptOpener,
-	requestResolver *WorkstationRequestExecutor,
-	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
-) (BundleOpening, error) {
-	if runtimeFactory == nil {
-		return nil, fmt.Errorf("factory runtime factory is required")
-	}
-	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver, recordingsRuntime, initialFactorySnapshot)
-	if err != nil {
-		return nil, err
-	}
-	return opening.Open, nil
-}
-
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator
 // validator injected into Factory Definition validation by Wire.
 func NewOrchestratorDefinitionValidator(
@@ -153,14 +153,14 @@ func NewOrchestratorDefinitionValidator(
 }
 
 // RuntimePreparation is the inert preparation owner passed through the T15 bridge.
-type RuntimePreparation = runtimebuild.Service
+type RuntimePreparation = runtimebuild.ExecutionPreparation
 
 // NewRuntimePreparation constructs fixed preparation once in canonical Wire.
 func NewRuntimePreparation(workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factoryruntime.LoadedFactoryLoader, newID factoryruntime.IDGenerator,
 	baseLogger *zap.Logger, providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner, scriptCommandRunner platformprocess.CommandRunner,
-	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory) *RuntimePreparation {
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory) RuntimePreparation {
 	return runtimebuild.New(workstationLoader,
 		loadFactory,
 		newID,
@@ -191,27 +191,8 @@ func NewWorkstationRequestExecutor(service workers.Service,
 		prompts, templateFields, invocationFiles, progress, expectedArtifacts, logger)
 }
 
-// EngineOpening owns the reusable engine collaborators; each Open owns fresh state.
-type EngineOpening = runtime.EngineOpening
-
 type OutboxOpening = dispatchplanning.OutboxOpening
 
 func NewOutboxOpening() OutboxOpening {
 	return dispatchplanningwire.NewOpening()
-}
-
-func NewEngineOpening(
-	interpolation factorydefinitions.InvocationInterpolationService,
-	providerSessions providersessions.Service,
-	quorumPolicy factorydefinitions.QuorumPolicyService,
-	outputShaping factorydefinitions.InvocationOutputShapingService,
-	workPropagation factorydefinitions.WorkPropagationPolicyService,
-	workService work.Service,
-	workRequestIDs work.RequestIDGenerator,
-	newID factoryruntime.IDGenerator,
-	runtimeDirs factoryruntime.RuntimeDirectoryFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	dispatchOpening OutboxOpening,
-) *EngineOpening {
-	return runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping, workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening)
 }

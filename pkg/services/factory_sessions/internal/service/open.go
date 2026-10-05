@@ -389,7 +389,14 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if initial != nil {
 		opening.runtimebuildService = initial.ReplacementBuilder
 		opening.startupRuntime = initial.Record
-		opening.startupSpec = initial.Spec
+		opening.startupSpec = factoryruntime.SessionBuildSpec{
+			SessionID: initial.Completion.SessionID, MetricsSessionID: initial.Completion.MetricsSessionID,
+			CanonicalSessionIDGenerated:    initial.Completion.CanonicalSessionIDGenerated,
+			ResumeSourceCanonicalSessionID: initial.Completion.ResumeSourceCanonicalSessionID,
+		}
+		if initial.Record != nil {
+			opening.startupSpec.LoadedFactoryCfg = initial.Record.LoadedRuntimeConfig()
+		}
 		opening.runtimeLifecycle = initial.Lifecycle
 		opening.runtimeSidecars = initial.Sidecars
 		opening.activation = initial.Activation

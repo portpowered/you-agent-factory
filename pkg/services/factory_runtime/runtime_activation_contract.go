@@ -117,10 +117,19 @@ type SessionObservations = sessionobservations.Observations
 type RuntimeInitialOpening struct {
 	Record             RuntimeRecord
 	Activation         *RuntimeActivation
-	Spec               SessionBuildSpec
+	Completion         RuntimeInitialCompletion
 	ReplacementBuilder RuntimeReplacementBuilder
 	Lifecycle          RuntimeLifecycle
 	Sidecars           RuntimeSidecars
+}
+
+// RuntimeInitialCompletion contains only the session identities consumed during
+// completion. Build hooks and selected execution capabilities stay in Runtime.
+type RuntimeInitialCompletion struct {
+	SessionID                      string
+	MetricsSessionID               string
+	CanonicalSessionIDGenerated    bool
+	ResumeSourceCanonicalSessionID string
 }
 
 // InitialRuntimeActivationOperation opens initial session state through fixed

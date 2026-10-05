@@ -26,7 +26,7 @@ type Assembly struct {
 	bundleOpening     BundleOpeningOperation
 	sidecars          *SidecarOpening
 	instanceHost      instancehost.Service
-	preparation       *runtimebuild.Service
+	preparation       runtimebuild.ExecutionPreparation
 	recordingsRuntime recordings.RuntimeScopeService
 	automationService automations.Service
 	progressFactory   func(*zap.Logger) func(string) workers.ProgressPublisher
@@ -40,7 +40,7 @@ func NewAssembly(
 	bundleOpening BundleOpeningOperation,
 	sidecars *SidecarOpening,
 	instanceHost instancehost.Service,
-	preparation *runtimebuild.Service,
+	preparation runtimebuild.ExecutionPreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
 	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
@@ -129,7 +129,7 @@ func (a *Assembly) Assemble(
 	// that low-level effect at the composition boundary and Workers adapts it
 	// privately when Execute receives the runtime-scoped override.
 	replayCommandRunner := replayProcessRunner
-	spec, err := a.preparation.PrepareExecutionSpec(ctx,
+	spec, err := a.prepareOpeningSpec(ctx,
 		runtimebuild.BuildDefaults{
 			WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
 			ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
@@ -186,7 +186,7 @@ func (a *Assembly) Assemble(
 		)
 	}
 	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
-		replacementSpec, err := a.preparation.PrepareExecutionSpec(ctx,
+		replacementSpec, err := a.prepareOpeningSpec(ctx,
 			runtimebuild.BuildDefaults{
 				WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
 				ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
@@ -464,7 +464,11 @@ func initialRuntimeOpening(record factoryruntime.RuntimeRecord, spec factoryrunt
 	builder factoryruntime.RuntimeReplacementBuilder, clock factoryruntime.Clock, openingErr error,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	result := &factoryruntime.RuntimeInitialOpening{
-		Record: record, Spec: spec, ReplacementBuilder: builder,
+		Record: record, Completion: factoryruntime.RuntimeInitialCompletion{
+			SessionID: spec.SessionID, MetricsSessionID: spec.MetricsSessionID,
+			CanonicalSessionIDGenerated:    spec.CanonicalSessionIDGenerated,
+			ResumeSourceCanonicalSessionID: spec.ResumeSourceCanonicalSessionID,
+		}, ReplacementBuilder: builder,
 		Activation: &factoryruntime.RuntimeActivation{},
 	}
 	result.Activation.Close = initialRuntimeCloser(record, clock)
@@ -511,4 +515,17 @@ func initialRuntimeCloser(record factoryruntime.RuntimeRecord, clock factoryrunt
 		}
 		return errors.Join(finalizationErr, artifactsErr)
 	}
+}
+
+// prepareOpeningSpec sends only candidate facts to fixed preparation; legacy
+// engine hooks remain owned by this opening, never by its Wire role.
+func (a *Assembly) prepareOpeningSpec(ctx context.Context, defaults runtimebuild.BuildDefaults,
+	values runtimebuild.SessionBuildValues, selections factoryruntime.SessionBuildSpec, mockWorkersConfig *workers.MockWorkersConfig,
+) (factoryruntime.SessionBuildSpec, error) {
+	prepared, err := a.preparation.PrepareExecutionValues(ctx, defaults, values, selections.BaseLogger,
+		selections.ProviderOverride, selections.ReplayCommandRunner, mockWorkersConfig)
+	if err != nil {
+		return factoryruntime.SessionBuildSpec{}, err
+	}
+	return runtimebuild.PreparedOpeningSpec(prepared, selections), nil
 }

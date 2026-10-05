@@ -13,11 +13,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestNewBundleOpeningRejectsMissingResourceOwner(t *testing.T) {
+func TestNewAssemblyRejectsMissingResourceOwner(t *testing.T) {
 	t.Parallel()
-	opening, err := NewBundleOpening(nil, nil, nil, nil, nil, nil, nil, nil)
+	opening, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if opening != nil || err == nil || err.Error() != "factory runtime factory is required" {
-		t.Fatalf("NewBundleOpening(nil) = %v, %v; want no operation and missing owner error", opening, err)
+		t.Fatalf("NewAssembly(nil) = %v, %v; want no operation and missing owner error", opening, err)
 	}
 }
 

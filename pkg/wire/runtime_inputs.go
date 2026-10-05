@@ -47,15 +47,22 @@ import (
 // provideFactoryRuntimeAssembly binds process execution effects once. The
 // named runner roles preserve Wire's provider/script effect distinction.
 func provideFactoryRuntimeAssembly(
-	bundleOpening factoryruntimewire.BundleOpening,
+	runtimeFactory *factoryruntimewire.RuntimeFactory,
+	workerAttemptScheduler platformclock.TimerSource,
+	workerService workers.Service,
+	workerSessions workersessions.Service,
+	workerAttempts factoryruntime.WorkerAttemptOpener,
+	requestResolver *factoryruntimewire.WorkstationRequestExecutor,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	sidecars *factoryruntimewire.SidecarOpening,
 	instanceHost factoryruntimewire.InstanceHost,
-	preparation *factoryruntimewire.RuntimePreparation,
+	preparation factoryruntimewire.RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
 	automationService automations.Service,
 	streams factorysessionwire.RuntimeAssembly,
 ) (*factoryruntimewire.Assembly, error) {
-	return factoryruntimewire.NewAssembly(bundleOpening,
+	return factoryruntimewire.NewAssembly(runtimeFactory, workerAttemptScheduler, workerService, workerSessions,
+		workerAttempts, requestResolver, initialFactorySnapshot,
 		sidecars,
 		instanceHost,
 		preparation,
@@ -712,7 +719,7 @@ func provideRuntimePreparation(workstationLoader factorydefinitions.WorkstationL
 	providerCommandRunner factorysessionwire.ProviderCommandRunner,
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-) *factoryruntimewire.RuntimePreparation {
+) factoryruntimewire.RuntimePreparation {
 	return factoryruntimewire.NewRuntimePreparation(workstationLoader, loadFactory, newID, baseLogger,
 		providerOverride, providerCommandRunner, scriptCommandRunner, mockCommandRunnerFactory)
 }

@@ -3,68 +3,31 @@ package internal
 import (
 	"context"
 	"fmt"
-	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-type initialAssembly interface {
-	Assemble(
-		ctx context.Context,
-		defaultWorkerModelProvider string,
-		defaultWorkerModel string,
-		applyOperatorDefaults bool,
-		recordPath string,
-		workflowID string,
-		defaultSessionID string,
-		metricsSessionID string,
-		mockWorkersConfig *workers.MockWorkersConfig,
-		runtimeMode factorydefinitions.RuntimeMode,
-		runtimeScheduler factoryruntime.Scheduler,
-		inlineDispatch bool,
-		runtimeLogDir string,
-		runtimeLogConfig factoryruntime.RuntimeLogStorageConfig,
-		runtimeFileLoggingPolicy factoryruntime.RuntimeFileLoggingPolicy,
-		runtimeMetricsPolicy factoryruntime.RuntimeMetricsPolicy,
-		runtimeMetricsDir string,
-		runtimeMetricsConfig factoryruntime.RuntimeMetricsStorageConfig,
-		recordFlushInterval time.Duration,
-		backendScopeID string,
-		factoryRunnerID string,
-		verbose bool,
-		skipBuiltInPrerequisiteValidation bool,
-		invocationSkipPermissionsOverride *bool,
-		clock factoryruntime.Clock,
-		baseLogger *zap.Logger,
-		publishRuntimeStreams bool,
-		observations factoryruntime.SessionObservations,
-		dir string,
-		factoryRootDir string,
-		executionBaseDir string,
-		loadedFactory factorydefinitions.MutableLoadedFactorySource,
-		runtimeInstanceID string,
-		replayArtifact *factorydefinitions.ReplayArtifact,
-		resumeInput *recordings.LoadResumeInputResult,
-		restoredWorldState *factorydefinitions.FactoryWorldState,
-		restoredEventHistory []factorydefinitions.FactoryEvent,
-		serviceMode bool,
-	) (*factoryruntime.RuntimeInitialOpening, error)
+// InitialAssembly is the bounded initial-opening behavior; scheduler and replay
+// hook capabilities stay on the private compatibility assembly.
+type InitialAssembly interface {
+	AssembleInitial(context.Context, factoryruntime.RuntimeActivationRequest,
+		factorydefinitions.MutableLoadedFactorySource, factoryruntime.Clock, *zap.Logger,
+		factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error)
 }
 
 // InitialActivation owns fixed initial-opening behavior. It never stores an
 // opening's observations or mutable definition on the reusable owner.
 type InitialActivation struct {
-	assembly    initialAssembly
+	assembly    InitialAssembly
 	clock       factoryruntime.Clock
 	logger      *zap.Logger
 	materialize func(*factorydefinitions.RuntimeSnapshot, string) (factorydefinitions.MutableLoadedFactorySource, error)
 }
 
-func NewInitialActivation(assembly initialAssembly, clock factoryruntime.Clock, logger *zap.Logger,
+func NewInitialActivation(assembly InitialAssembly, clock factoryruntime.Clock, logger *zap.Logger,
 	materialize func(*factorydefinitions.RuntimeSnapshot, string) (factorydefinitions.MutableLoadedFactorySource, error),
 ) *InitialActivation {
 	return &InitialActivation{assembly: assembly, clock: clock, logger: logger, materialize: materialize}
@@ -88,13 +51,21 @@ func (a *InitialActivation) Open(ctx context.Context, request factoryruntime.Run
 			return nil, fmt.Errorf("apply worker reasoning effort override: %w", err)
 		}
 	}
+	return a.assembly.AssembleInitial(ctx, request, loaded, a.clock, a.logger, observations)
+}
+
+// AssembleInitial derives only scoped selections from the initial value request.
+func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.RuntimeActivationRequest,
+	loaded factorydefinitions.MutableLoadedFactorySource, clock factoryruntime.Clock, logger *zap.Logger,
+	observations factoryruntime.SessionObservations,
+) (*factoryruntime.RuntimeInitialOpening, error) {
 	metricsID := request.Inputs.Session.CanonicalSessionID
 	if metricsID == "" {
 		metricsID = request.FactorySessionID
 	}
 	// Sessions normalizes Definition.Directory to the opening workspace root.
 	// Snapshot.FactoryDir identifies the loaded definition, which may be nested.
-	return a.assembly.Assemble(ctx,
+	return a.Assemble(ctx,
 		request.Inputs.OperatorDefaults.WorkerModelProvider, request.Inputs.OperatorDefaults.WorkerModel, true,
 		request.Inputs.Recordings.RecordPath, request.Inputs.Recordings.WorkflowID,
 		request.FactorySessionID, metricsID, activationMockWorkers(request.Inputs.Workers.MockWorkers),
@@ -104,7 +75,7 @@ func (a *InitialActivation) Open(ctx context.Context, request factoryruntime.Run
 		request.Inputs.Recordings.FlushInterval, request.Inputs.Session.BackendScopeID,
 		request.Inputs.Workers.RunnerID, request.Runtime.Verbose,
 		request.Inputs.Workers.SkipBuiltInPrerequisiteValidation, request.Inputs.Workers.InvocationSkipPermissionsOverride,
-		a.clock, a.logger, true, observations,
+		clock, logger, true, observations,
 		request.Inputs.Definition.Directory, request.Inputs.Definition.Directory, request.Inputs.Definition.ExecutionBaseDir,
 		loaded, request.RuntimeID, nil, nil, nil, nil, request.Runtime.Mode == factorydefinitions.RuntimeModeService)
 }

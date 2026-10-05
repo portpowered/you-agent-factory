@@ -845,7 +845,14 @@ func TestInitialRuntimeOpeningOwnsPartialRecordAndRetriesRelease(t *testing.T) {
 	if err := cleanup(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	opening, err := initialRuntimeOpening(record, factoryruntime.SessionBuildSpec{}, nil, clock, openingErr)
+	spec := factoryruntime.SessionBuildSpec{SessionID: "candidate", MetricsSessionID: "canonical",
+		CanonicalSessionIDGenerated: true, ResumeSourceCanonicalSessionID: "predecessor"}
+	opening, err := initialRuntimeOpening(record, spec, nil, clock, openingErr)
+	expected := factoryruntime.RuntimeInitialCompletion{SessionID: "candidate", MetricsSessionID: "canonical",
+		CanonicalSessionIDGenerated: true, ResumeSourceCanonicalSessionID: "predecessor"}
+	if opening.Completion != expected {
+		t.Fatalf("completion = %#v, want detached identities %#v", opening.Completion, expected)
+	}
 	if !errors.Is(err, openingErr) || opening.Activation.Service != nil || opening.Activation.WorkAndEventIngress != nil {
 		t.Fatalf("partial opening = %#v, %v; want original error and cleanup without publication", opening, err)
 	}

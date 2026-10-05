@@ -131,8 +131,8 @@ func TestInitialActivationKeepsMutationAndProgressObservationsScopedAcrossCalls(
 				Recordings: factory.RuntimeActivationRecordingInputs{RecordPath: "recording.json"}},
 		}, observations[index])
 		assertUnpublishedOpeningFailure(t, result, openErr, resources.failure)
-		if result.Spec.FolderPath != dir || result.Spec.LoadedFactoryCfg.FactoryDir() != definitionDir {
-			t.Fatalf("opening workspace/definition = %q/%q, want %q/%q", result.Spec.FolderPath, result.Spec.LoadedFactoryCfg.FactoryDir(), dir, definitionDir)
+		if resources.folderPaths[index] != dir || resources.definitionDirs[index] != definitionDir {
+			t.Fatalf("opening workspace/definition = %q/%q, want %q/%q", resources.folderPaths[index], resources.definitionDirs[index], dir, definitionDir)
 		}
 	}
 	for index, sessionID := range []string{"candidate", "peer"} {
@@ -175,11 +175,21 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	sessions := &observationWorkerSessions{}
 	provider := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("selected provider")})
 	script := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("selected script")})
+	provider.Queue(platformprocess.CommandResult{Stdout: []byte("selected provider")})
+	script.Queue(platformprocess.CommandResult{Stdout: []byte("selected script")})
 	mock := &workers.MockWorkersConfig{}
 	decorations := 0
 	decorate := func(selected *workers.MockWorkersConfig, _ interfaces.RuntimeDefinitionLookup, next platformprocess.CommandRunner) platformprocess.CommandRunner {
 		if selected != mock {
 			t.Fatal("preparation changed the selected mock configuration")
+		}
+		output := "selected script"
+		if next == provider {
+			output = "selected provider"
+		}
+		result, runErr := next.Run(t.Context(), platformprocess.CommandRequest{Command: "controlled"})
+		if runErr != nil || string(result.Stdout) != output {
+			t.Fatalf("selected command output = %q, %v; want %q", result.Stdout, runErr, output)
 		}
 		decorations++
 		return next
@@ -203,14 +213,6 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	initial, err := assembleTestInitialOpening(t.Context(), assembly, dir, loaded, clockwork.NewFakeClock(),
 		factory.RuntimeActivationRequest{FactorySessionID: "candidate", RuntimeID: "initial"}, mock)
 	assertUnpublishedOpeningFailure(t, initial, err, resources.failure)
-	for runner, output := range map[platformprocess.CommandRunner]string{
-		initial.Spec.ProviderCommandRunner: "selected provider", initial.Spec.CommandRunnerOverride: "selected script",
-	} {
-		result, runErr := runner.Run(t.Context(), platformprocess.CommandRequest{Command: "controlled"})
-		if runErr != nil || string(result.Stdout) != output {
-			t.Fatalf("selected command output = %q, %v; want %q", result.Stdout, runErr, output)
-		}
-	}
 	if _, err := initial.ReplacementBuilder.BuildReplacement(t.Context(), dir, dir, "successor", dir); !errors.Is(err, resources.failure) {
 		t.Fatalf("replacement error = %v, want controlled resource failure", err)
 	}
