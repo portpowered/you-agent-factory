@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -14,6 +17,17 @@ import (
 type durableInterruptOutcome struct {
 	workersessions.InterruptResult
 	FailureCauses []string `json:"failureCauses,omitempty"`
+}
+
+// Treat the saved response as a versioned contract, just like captured input.
+// Silently discarding unknown fields could hide an incompatible/private row.
+func readInterruptOutcome(payload json.RawMessage, outcome *durableInterruptOutcome) error {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(outcome) != nil || decoder.Decode(new(any)) != io.EOF {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	return nil
 }
 
 type interruptFailureIdentity struct {

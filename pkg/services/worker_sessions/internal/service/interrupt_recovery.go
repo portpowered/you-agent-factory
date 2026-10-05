@@ -101,7 +101,7 @@ func decodeInterruptOutcome(req workersessions.InterruptRequest, record recordin
 		return decodePendingInterruptOutcome(req, record)
 	}
 	var outcome durableInterruptOutcome
-	if json.Unmarshal(record.Result, &outcome) != nil || !validInterruptOutcome(req, outcome.InterruptResult) {
+	if readInterruptOutcome(record.Result, &outcome) != nil || !validInterruptOutcome(req, outcome.InterruptResult) {
 		result = interruptResult(req, workersessions.InterruptPhaseValidation, false)
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
@@ -138,7 +138,7 @@ func decodePendingInterruptOutcome(req workersessions.InterruptRequest, record r
 		return result, newInterruptError(result.Phase, result, workersessions.ErrInterruptExecutionUnavailable)
 	}
 	var outcome durableInterruptOutcome
-	if json.Unmarshal(record.Result, &outcome) != nil || !validInterruptOutcome(req, outcome.InterruptResult) ||
+	if readInterruptOutcome(record.Result, &outcome) != nil || !validInterruptOutcome(req, outcome.InterruptResult) ||
 		len(outcome.FailureCauses) != 0 || record.FailureCode != "" || !validPendingInterruptSnapshot(req, record.Operation.Phase, outcome.InterruptResult) {
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}

@@ -957,3 +957,79 @@ func injectPrivateInterruptSessionContent(field string, session *workersessions.
 		session.ProviderSessionAssociation = &workersessions.ProviderSessionAssociation{WorkerSessionID: private}
 	}
 }
+
+func TestInterruptJournalReplayRejectsUnknownOutcomeFieldsWithoutEffects(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED", "FAILED"} {
+		for _, field := range []string{"top-level", "source", "successor", "trailing"} {
+			t.Run(phase+"/"+field, func(t *testing.T) {
+				t.Parallel()
+				r, plan, store := newDurableInterruptFixture(t)
+				operation, err := r.beginInterruptIntent(t.Context(), plan)
+				if err != nil {
+					t.Fatal(err)
+				}
+				outcome := unknownFieldInterruptOutcome(plan.request, phase)
+				operation.Operation.Phase = phase
+				if phase == "FAILED" {
+					operation.FailureCode = string(outcome.Phase)
+				}
+				operation.Result = injectUnknownInterruptOutcomeField(t, outcome, field)
+				store.records = []recordings.WorkerControlOperationRecord{operation.Detached()}
+				calls := 0
+				plan.supervision.installCancel(func() { calls++ })
+				result, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+				want := interruptResult(plan.request, workersessions.InterruptPhaseValidation, false)
+				var typed *workersessions.InterruptError
+				if !found || !errors.Is(replayErr, recordings.ErrWorkerRecordingPersistence) || !errors.As(replayErr, &typed) || !reflect.DeepEqual(result, want) || !reflect.DeepEqual(typed.Result, want) {
+					t.Fatalf("unknown field replay=%#v found=%v err=%v", result, found, replayErr)
+				}
+				assertPrivateInterruptContentAbsent(t, typed, replayErr)
+				if calls != 0 || len(store.records) != 1 {
+					t.Fatalf("refusal had effects: cancellations=%d journal rows=%d", calls, len(store.records))
+				}
+				assertNoSuccessor(t, r, "successor")
+			})
+		}
+	}
+}
+
+func unknownFieldInterruptOutcome(req workersessions.InterruptRequest, phase string) durableInterruptOutcome {
+	outcome := durableInterruptOutcome{InterruptResult: interruptResult(req, workersessions.InterruptPhaseSuccessorAdmission, phase != "SOURCE_STOPPED")}
+	outcome.Source = workersessions.Session{ID: req.SourceWorkerSessionID, State: workersessions.StateCanceled}
+	if outcome.Accepted {
+		outcome.Successor = workersessions.Session{ID: req.SuccessorWorkerSessionID, State: workersessions.StateRunning}
+	}
+	if phase == "FAILED" {
+		outcome.FailureCauses = []string{"PERSISTENCE_UNAVAILABLE"}
+	}
+	return outcome
+}
+
+func injectUnknownInterruptOutcomeField(t *testing.T, outcome durableInterruptOutcome, field string) json.RawMessage {
+	t.Helper()
+	payload, err := json.Marshal(outcome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if field == "trailing" {
+		return append(payload, []byte(` {"private":"private-provider-secret"}`)...)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	owner := document
+	switch field {
+	case "source":
+		owner = document["Source"].(map[string]any)
+	case "successor":
+		owner = document["Successor"].(map[string]any)
+	}
+	owner["unrecognizedProviderContent"] = "private-provider-secret"
+	payload, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
