@@ -440,6 +440,11 @@ func (r *Root) openInitialSessionEngine(ctx context.Context, opening *sessionRun
 			snapshot.Workers[index] = factorydefinitions.CloneWorkerConfig(*worker)
 		}
 	}
+	for index := range snapshot.Workstations {
+		if workstation, ok := opening.load.LoadedFactoryCfg.Workstation(snapshot.Workstations[index].Name); ok {
+			snapshot.Workstations[index] = factorydefinitions.CloneWorkstationConfig(*workstation)
+		}
+	}
 	inputs := runtimeActivationInputs(opening.configured.Definition, opening.configured.Session,
 		opening.canonicalSessionIDGenerated, opening.configured.Workers, opening.configured.Recordings,
 		opening.configured.ModelCacheDirectory, opening.configured.OperatorDefaults, nil)
