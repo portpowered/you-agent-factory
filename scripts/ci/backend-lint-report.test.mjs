@@ -309,7 +309,7 @@ test("a successful checker always reports zero violations", () => {
 test("a failed checker without a machine-readable count fails closed", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets({
-			"packaged-factory-consumption-check": {
+			"golangci": {
 				status: "fail",
 				output: "Report{MissingPackages:[]string{\"pkg/a\", \"pkg/b\"}}",
 			},
@@ -317,43 +317,45 @@ test("a failed checker without a machine-readable count fails closed", () => {
 	}));
 
 	assert.equal(summary.ok, false);
-	assert.equal(summary.targets.find((target) => target.name === "packaged-factory-consumption-check").violationCount, null);
+	assert.equal(summary.targets.find((target) => target.name === "golangci").violationCount, null);
 	assert.match(summary.failures.join("\n"), /without a reliable machine-readable violation count/);
-	assert.match(renderBackendLintVerdict(summary), /packaged-factory-consumption-check: baseline 1 -> current unknown \(delta unknown; unmeasured\)/);
+	assert.match(renderBackendLintVerdict(summary), /golangci: baseline 0 -> current unknown \(delta unknown; unmeasured\)/);
 });
 
-test("a missing allowed target is an explicit failed ratchet condition", () => {
+test("a missing required target is an explicit failed ratchet condition", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets(),
 	}));
 	const incomplete = summarizeBackendLintReport(report({
 		targets: summary.targets
-			.filter((target) => target.name !== "packaged-factory-consumption-check")
+			.filter((target) => target.name !== "golangci")
 			.map(({ policyStatus, baselineViolationCount, allowance, ...target }) => target),
 	}));
 
 	assert.equal(incomplete.ok, false);
 	assert.match(
 		renderBackendLintVerdict(incomplete),
-		/packaged-factory-consumption-check: baseline 1 -> current unknown \(delta unknown; not observed\)/,
+		/golangci .*must run.*not observed/,
 	);
 });
 
-test("structured finding growth exceeds an allowance even on one diagnostic line", () => {
+test("structured golangci findings fail without allowance even on one diagnostic line", () => {
 	const structuredTarget = (count) => ({
 		status: "fail",
 		output: `inventory report: Report{MissingPackages:[]string{${Array.from({ length: count }, (_, index) => `\"finding-${index}\"`).join(", ")}}}\nLINT_VIOLATION_COUNT: ${count}`,
 	});
 	const baseline = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "packaged-factory-consumption-check": structuredTarget(1) }),
+		targets: baselineTargets({ "golangci": structuredTarget(1) }),
 	}));
 	const grown = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "packaged-factory-consumption-check": structuredTarget(2) }),
+		targets: baselineTargets({ "golangci": structuredTarget(2) }),
 	}));
 
-	assert.equal(baseline.ok, true);
+	assert.equal(baseline.ok, false);
 	assert.equal(grown.ok, false);
-	assert.match(grown.failures.join("\n"), /packaged-factory-consumption-check reported 2 violation\(s\), exceeding its baseline allowance of 1/);
+	assert.equal(baseline.targets.find((target) => target.name === "golangci").violationCount, 1);
+	assert.equal(grown.targets.find((target) => target.name === "golangci").violationCount, 2);
+	assert.match(grown.failures.join("\n"), /golangci failed with 2 reported violation\(s\); no baseline allowance exists/);
 });
 
 test("repository-fixture-check has no allowance left to absorb a regression", () => {
