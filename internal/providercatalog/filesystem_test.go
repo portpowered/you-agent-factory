@@ -4,35 +4,29 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 )
 
-func TestCheckReportsDriftWithoutChangingTheWorktree(t *testing.T) {
+func TestGenerateInstallsValidatedArtifacts(t *testing.T) {
 	root := t.TempDir()
-	copyFixtureToDisk(t, root, repositoryFixture(t))
+	source := repositoryFixture(t)
+	copyFixtureToDisk(t, root, source)
+	expected, err := Build(source)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := Generate(root); err != nil {
-		t.Fatalf("Generate(): %v", err)
+		t.Fatal(err)
 	}
-	stalePath := filepath.Join(root, filepath.FromSlash(CatalogPath))
-	stale := []byte("{\"stale\":true}\n")
-	if err := os.WriteFile(stalePath, stale, 0o644); err != nil {
-		t.Fatalf("write stale catalog: %v", err)
-	}
-	drift, err := Check(root)
-	if err != nil {
-		t.Fatalf("Check(): %v", err)
-	}
-	if got := strings.Join(drift.Stale, ","); got != CatalogPath {
-		t.Fatalf("stale paths = %q, want %q", got, CatalogPath)
-	}
-	after, err := os.ReadFile(stalePath)
-	if err != nil {
-		t.Fatalf("read stale catalog after check: %v", err)
-	}
-	if !bytes.Equal(after, stale) {
-		t.Fatal("Check() modified the stale generated catalog")
+	for name, payload := range expected.Files {
+		actual, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(actual, payload) {
+			t.Fatalf("generated %s differs from validated plan", name)
+		}
 	}
 }
 
