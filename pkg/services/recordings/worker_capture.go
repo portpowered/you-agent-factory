@@ -12,6 +12,11 @@ import (
 // Recordings-owned internal Worker capture package and are re-exported here
 // as the customer-facing service vocabulary.
 type (
+	WorkerControlOperationStore              = recordingcontracts.WorkerControlOperationStore
+	WorkerControlTarget                      = workerrecording.WorkerControlTarget
+	WorkerControlOperation                   = workerrecording.WorkerControlOperation
+	WorkerControlOperationKey                = workerrecording.WorkerControlOperationKey
+	WorkerControlOperationRecord             = workerrecording.WorkerControlOperationRecord
 	WorkerCaptureClock                       = recordingcontracts.WorkerCaptureClock
 	WorkerCapturedActivityReader             = recordingcontracts.WorkerCapturedActivityReader
 	WorkerCapturedArtifactReader             = recordingcontracts.WorkerCapturedArtifactReader
@@ -95,6 +100,8 @@ func (writer WorkerRecordingWriterFunc) PersistWorkerRecord(
 }
 
 var (
+	ErrWorkerControlConflict                = workerrecording.ErrWorkerControlConflict
+	ErrInvalidWorkerControlOperation        = workerrecording.ErrInvalidWorkerControlOperation
 	ErrInvalidWorkerRecordingRequest        = workerrecording.ErrInvalidWorkerRecordingRequest
 	ErrMissingWorkerRecordingWriter         = errors.New("recordings: Worker recording writer is required")
 	ErrWorkerRecordingSubscribe             = errors.New("recordings: Worker recording subscription failed")

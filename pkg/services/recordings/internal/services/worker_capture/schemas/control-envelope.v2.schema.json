@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-control-envelope.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "recordingId",
+    "workerSessionId",
+    "recordingGenerationId",
+    "ownerEpoch",
+    "capturedAt",
+    "controlOperation"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "kind": {
+      "const": "control-operation"
+    },
+    "recordingId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workerSessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recordingGenerationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ownerEpoch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "controlOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "revision",
+        "operation"
+      ],
+      "properties": {
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "recordingId",
+            "workerSessionId",
+            "recordingGenerationId",
+            "ownerEpoch",
+            "expectedAttemptId"
+          ],
+          "properties": {
+            "recordingId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "workerSessionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "factorySessionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "recordingGenerationId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ownerEpoch": {
+              "type": "string",
+              "minLength": 1
+            },
+            "expectedAttemptId": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "$ref": "./control-operation.v1.schema.json"
+        },
+        "inputArtifactRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "failureCode": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "properties": {
+                  "action": {
+                    "const": "interrupt"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "inputArtifactRef"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "properties": {
+                  "phase": {
+                    "enum": [
+                      "COMPLETED",
+                      "FAILED"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "result"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "properties": {
+                  "phase": {
+                    "const": "FAILED"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "failureCode"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "version": 2,
+      "kind": "control-operation",
+      "recordingId": "recording-001",
+      "workerSessionId": "ws-001",
+      "recordingGenerationId": "generation-001",
+      "ownerEpoch": "owner-001",
+      "capturedAt": "2026-10-05T15:20:00Z",
+      "controlOperation": {
+        "target": {
+          "recordingId": "recording-001",
+          "workerSessionId": "ws-001",
+          "recordingGenerationId": "generation-001",
+          "ownerEpoch": "owner-001",
+          "expectedAttemptId": "attempt-001"
+        },
+        "revision": 1,
+        "operation": {
+          "version": 1,
+          "requestId": "cancel-001",
+          "workerSessionId": "ws-001",
+          "expectedAttemptId": "attempt-001",
+          "action": "cancel",
+          "phase": "INTENT",
+          "inputDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  ]
+}

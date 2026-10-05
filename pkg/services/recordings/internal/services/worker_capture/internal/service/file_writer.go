@@ -24,27 +24,33 @@ import (
 // FileWriter persists synced deltas; its map lock never covers disk I/O.
 // Each process owns one writer. Multiple processes must not share this store.
 type FileWriter struct {
-	storage       platformreplay.Storage
-	appender      platformreplay.Appender
-	directory     platformreplay.DirectoryScanner
-	root          string
-	mu            sync.Mutex
-	entries       map[string]*recordingEntry
-	clock         recordings.WorkerCaptureClock
-	ownerEpoch    string
-	catalogMu     sync.Mutex
-	catalog       map[string]recordings.WorkerSessionCatalogEntry
-	unavailable   map[string]struct{}
-	catalogLoaded bool
-	rebuildMu     sync.Mutex
+	storage            platformreplay.Storage
+	appender           platformreplay.Appender
+	directory          platformreplay.DirectoryScanner
+	root               string
+	mu                 sync.Mutex
+	entries            map[string]*recordingEntry
+	clock              recordings.WorkerCaptureClock
+	ownerEpoch         string
+	catalogMu          sync.Mutex
+	catalog            map[string]recordings.WorkerSessionCatalogEntry
+	unavailable        map[string]struct{}
+	catalogLoaded      bool
+	rebuildMu          sync.Mutex
+	controlIndexMu     sync.Mutex
+	controlIndex       map[string]*controlKeySlot
+	controlRebuildMu   sync.Mutex
+	controlIndexLoaded bool
 }
 type recordingEntry struct {
-	mu       sync.Mutex
-	loaded   bool
-	exists   bool
-	damaged  bool
-	sessions map[string]*recordingSession
-	order    []string
+	controlUnsynced bool
+	mu              sync.Mutex
+	loaded          bool
+	exists          bool
+	damaged         bool
+	sessions        map[string]*recordingSession
+	order           []string
+	operations      map[string][]recordings.WorkerControlOperationRecord
 }
 type recordingSession struct {
 	generation string
@@ -55,17 +61,18 @@ type recordingSession struct {
 	identities map[events.AppendIdentity]events.Record
 }
 type workerJournalEntry struct {
-	RecordingGenerationID string                              `json:"recordingGenerationId,omitempty"`
-	OwnerEpoch            string                              `json:"ownerEpoch,omitempty"`
-	CapturedAt            *time.Time                          `json:"capturedAt,omitempty"`
-	Version               int                                 `json:"version"`
-	Kind                  string                              `json:"kind"`
-	RecordingID           string                              `json:"recordingId"`
-	WorkerSessionID       string                              `json:"workerSessionId"`
-	Record                *events.Record                      `json:"record,omitempty"`
-	Topic                 events.Topic                        `json:"topic,omitempty"`
-	Code                  string                              `json:"code,omitempty"`
-	ExecutionTerminal     *recordings.WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
+	RecordingGenerationID string                                   `json:"recordingGenerationId,omitempty"`
+	OwnerEpoch            string                                   `json:"ownerEpoch,omitempty"`
+	CapturedAt            *time.Time                               `json:"capturedAt,omitempty"`
+	Version               int                                      `json:"version"`
+	Kind                  string                                   `json:"kind"`
+	RecordingID           string                                   `json:"recordingId"`
+	WorkerSessionID       string                                   `json:"workerSessionId"`
+	Record                *events.Record                           `json:"record,omitempty"`
+	Topic                 events.Topic                             `json:"topic,omitempty"`
+	Code                  string                                   `json:"code,omitempty"`
+	ExecutionTerminal     *recordings.WorkerRecordingTerminal      `json:"executionTerminal,omitempty"`
+	ControlOperation      *recordings.WorkerControlOperationRecord `json:"controlOperation,omitempty"`
 }
 
 var _ recordings.WorkerRecordingWriter = (*FileWriter)(nil)
@@ -330,6 +337,7 @@ func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordi
 	entry.order = loaded.order
 	entry.exists = loaded.exists
 	entry.damaged = loaded.damaged
+	entry.operations = loaded.operations
 	entry.loaded = true
 	return nil
 }
@@ -376,8 +384,19 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 	if err := json.Unmarshal(line, &delta); err != nil {
 		return fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingReplay, err)
 	}
+	if delta.Kind == "control-operation" {
+		decoder := json.NewDecoder(bytes.NewReader(line))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&delta); err != nil {
+			return recordings.ErrWorkerRecordingReplay
+		}
+		return entry.applyControlDelta(id, delta)
+	}
 	if delta.Version != 1 {
 		return recordings.ErrWorkerRecordingCompatibility
+	}
+	if delta.ControlOperation != nil {
+		return recordings.ErrWorkerRecordingReplay
 	}
 	if delta.RecordingID != id || strings.TrimSpace(delta.WorkerSessionID) == "" {
 		return recordings.ErrWorkerRecordingReplay
