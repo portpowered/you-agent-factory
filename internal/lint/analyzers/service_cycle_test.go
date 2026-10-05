@@ -108,7 +108,9 @@ func TestServiceCycleCeilingHistory(t *testing.T) {
 		{cycleOne, strings.Replace(cycleOne, "|1", "|bad", 1), true},
 		{cycleOne, strings.Replace(cycleOne, "|1", "|01", 1), true},
 		{cycleOne, strings.Replace(cycleOne, "internal/lint/analyzers", "elsewhere", 1), true},
-		{cycleOne + "old|a|b", cycleZero + "old|a|c", true},
+		{cycleOne + "old|a|b", cycleZero + "old|a|c", false},
+		{cycleOne + "old|a|b", cycleZero + "old|a|c\nold|a|d", true},
+		{cycleZero + "old|a|b", cycleOne + "old|a|c", true},
 	} {
 		if _, err := CompareBaselineGrowth(tc.base, tc.head); (err != nil) != tc.fail {
 			t.Fatalf("base %q head %q: %v", tc.base, tc.head, err)
