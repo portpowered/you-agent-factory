@@ -1897,3 +1897,15 @@ identify the next fixture/compute targets; they overlap and are not additive.
 Thirteen resolved sleep/deadline debt records are removed: the fixed sleep no
 longer exists, and existing signal-driven failure/cleanup ceilings now explain
 their purpose in code. No coverage floor or debt allowance is increased.
+
+
+### Hosted current-main rebase measurement
+
+The hosted functional job for `79cb69b1e7` succeeds: 332.773 seconds full
+supervisor (16:40:14.102Z through 16:45:46.875Z), 258.435 seconds coverage
+invocation, 820 final passes, two skips and no failures. It still exceeds five
+minutes. Required Backend Lint fails on the now-empty `tests/functional/workflow`
+package stub after its customer cases moved to Product customer journeys. The
+obsolete `doc.go` stub is removed rather than adding a shape exception. The
+new nine-suite consolidation and customer file-failure cases are the next hosted
+candidate. No checkpoint merge is claimed from this revision.
