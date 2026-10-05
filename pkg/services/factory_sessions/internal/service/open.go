@@ -199,10 +199,9 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 	var liveOwner durableexecution.Service
 	var replayClose func() error
 	if opening.load.HistoricalReplay.Checkpoint != nil {
-		liveOwner, replayClose, err = openPortableReplayDurableOwner(
+		liveOwner, replayClose, err = r.openPortableReplayDurableOwner(
 			opening.configured,
 			opening.root,
-			opening.logger,
 			r.clock,
 			r.providerOverride,
 			r.providerCommandRunner,
@@ -213,7 +212,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.factorySessionExecutionFactory,
 			r.providerIdentities,
 			r.resolveClock,
-			r.factoryRuntimeAssembler,
 		)
 		if err != nil {
 			return runtimeProducts{}, err
@@ -422,14 +420,13 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 }
 
 func (r *Root) openInitialSessionEngine(ctx context.Context, opening *sessionRuntimeOpening) (*factoryruntime.RuntimeInitialOpening, error) {
-	// Replacement and replay retain their compatibility assembly until the
-	// owning T15/T17 proofs retire it. Explicit initial snapshots use the fixed
-	// request operation and the durable owner already opened for this session.
-	if opening.configured.DefinitionSnapshot == nil || opening.load.ReplayArtifact != nil || opening.resumeInput != nil || opening.restoredWorldState != nil {
-		if r.factoryRuntimeAssembler == nil {
-			return nil, fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
+	if opening.configured.DefinitionSnapshot == nil {
+		resolved, err := r.resolveActivationSnapshot(ctx, opening.configured.Definition,
+			opening.configured.Recordings, nil, opening.resumeInput, opening.sessionID)
+		if err != nil {
+			return nil, err
 		}
-		return r.openLegacySessionEngine(ctx, opening)
+		opening.configured.DefinitionSnapshot = &resolved.snapshot
 	}
 	snapshot, err := opening.configured.DefinitionSnapshot.Clone()
 	if err != nil {
@@ -454,7 +451,11 @@ func (r *Root) openInitialSessionEngine(ctx context.Context, opening *sessionRun
 	}
 	inputs := runtimeActivationInputs(opening.configured.Definition, opening.configured.Session,
 		opening.canonicalSessionIDGenerated, opening.configured.Workers, opening.configured.Recordings,
-		opening.configured.ModelCacheDirectory, opening.configured.OperatorDefaults, nil)
+		opening.configured.ModelCacheDirectory, opening.configured.OperatorDefaults, opening.resumeInput)
+	inputs.RecoveryInput = factoryruntime.RuntimeActivationRecoveryInput{
+		WorldState: opening.restoredWorldState, EventHistory: opening.restoredEventHistory,
+		ReplayArtifact: opening.load.ReplayArtifact,
+	}
 	return r.initialActivation(ctx, factoryruntime.RuntimeActivationRequest{
 		RuntimeID: opening.configured.Runtime.RuntimeInstanceID, FactorySessionID: opening.sessionID,
 		Snapshot: snapshot, Runtime: opening.configured.Runtime, Inputs: inputs,
@@ -880,47 +881,4 @@ func setWorkerAttemptStarter(
 
 type historicalRecordingReader interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
-}
-
-func (r *Root) openLegacySessionEngine(ctx context.Context, opening *sessionRuntimeOpening) (*factoryruntime.RuntimeInitialOpening, error) {
-	return r.factoryRuntimeAssembler.Assemble(
-		ctx,
-		opening.configured.OperatorDefaults.WorkerModelProvider,
-		opening.configured.OperatorDefaults.WorkerModel,
-		opening.configured.Recordings.ReplayPath == "",
-		opening.configured.Recordings.RecordPath,
-		opening.configured.Recordings.WorkflowID,
-		opening.sessionID,
-		opening.metricsSessionID,
-		opening.configured.Workers.MockWorkers,
-		opening.configured.Runtime.Mode,
-		factoryruntime.Scheduler(nil),
-		false,
-		opening.configured.Runtime.LogDirectory,
-		opening.configured.Runtime.LogConfig,
-		factoryruntime.RuntimeFileLoggingPolicy(opening.configured.Runtime.FileLoggingPolicy),
-		factoryruntime.RuntimeMetricsPolicy(opening.configured.Runtime.MetricsPolicy),
-		opening.configured.Runtime.MetricsDirectory,
-		opening.configured.Runtime.MetricsConfig,
-		opening.configured.Recordings.FlushInterval,
-		opening.sessionSelection.BackendScopeID,
-		opening.configured.Workers.RunnerID,
-		opening.configured.Runtime.Verbose,
-		opening.configured.Workers.SkipBuiltInPrerequisiteValidation,
-		opening.configured.Workers.InvocationSkipPermissionsOverride,
-		opening.clock,
-		opening.logger,
-		true,
-		opening.observations,
-		opening.configured.Definition.Directory,
-		opening.root.FactoryRootDir,
-		opening.configured.Definition.ExecutionBaseDir,
-		opening.load.LoadedFactoryCfg,
-		opening.configured.Runtime.RuntimeInstanceID,
-		opening.load.ReplayArtifact,
-		opening.resumeInput,
-		opening.restoredWorldState,
-		opening.restoredEventHistory,
-		opening.configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
-	)
 }

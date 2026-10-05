@@ -704,3 +704,36 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 		}
 	}
 }
+
+func TestInitialActivationRequestDetachesSelectedRecoveryFacts(t *testing.T) {
+	t.Parallel()
+	config := interfaces.FactorySnapshot(`{"name":"recorded"}`)
+	at := time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+	request := factory.RuntimeActivationRequest{RuntimeID: "runtime", FactorySessionID: "candidate",
+		Snapshot: interfaces.RuntimeSnapshot{FactoryDir: "/factory", RuntimeBaseDir: "/factory",
+			EffectiveFactory: interfaces.FactoryConfig{Name: "factory"}, DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}},
+		Inputs: factory.RuntimeActivationInputs{RecoveryInput: factory.RuntimeActivationRecoveryInput{
+			WorldState:   &interfaces.FactoryWorldState{WorkItemsByID: map[string]work.FactoryWorkItem{"work": {ID: "work"}}},
+			EventHistory: []interfaces.FactoryEvent{{Id: "prefix"}},
+			ReplayArtifact: &interfaces.ReplayArtifact{Factory: &config, Events: []interfaces.FactoryEvent{{Id: "replayed"}},
+				Diagnostics: interfaces.ReplayDiagnostics{Notes: []string{"selected"}}, WallClock: &interfaces.ReplayWallClockMetadata{StartedAt: at}},
+		}},
+	}
+	detached, err := request.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Inputs.RecoveryInput.WorldState.WorkItemsByID["work"] = work.FactoryWorkItem{ID: "changed"}
+	request.Inputs.RecoveryInput.EventHistory[0].Id = "changed"
+	request.Inputs.RecoveryInput.ReplayArtifact.Events[0].Id = "changed"
+	request.Inputs.RecoveryInput.ReplayArtifact.Diagnostics.Notes[0] = "changed"
+	request.Inputs.RecoveryInput.ReplayArtifact.WallClock.StartedAt = time.Time{}
+	(*request.Inputs.RecoveryInput.ReplayArtifact.Factory)[0] = ' '
+	got := detached.Inputs.RecoveryInput
+	if got.WorldState.WorkItemsByID["work"].ID != "work" || got.EventHistory[0].Id != "prefix" || got.ReplayArtifact.Events[0].Id != "replayed" {
+		t.Fatalf("recovery retained caller mutations: %#v", got)
+	}
+	if got.ReplayArtifact.Diagnostics.Notes[0] != "selected" || !got.ReplayArtifact.WallClock.StartedAt.Equal(at) || string(*got.ReplayArtifact.Factory) != `{"name":"recorded"}` {
+		t.Fatalf("replay metadata lost or shared: %#v", got.ReplayArtifact)
+	}
+}
