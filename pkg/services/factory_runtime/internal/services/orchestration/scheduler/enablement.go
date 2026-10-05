@@ -15,7 +15,7 @@ import (
 )
 
 // EnablementEvaluator wraps transition enablement logic with structured logging.
-// When a logger is provided, each transition evaluation emits log output showing
+// Each transition evaluation uses the supplied logger to describe
 // the transition ID, whether it was enabled or disabled, and the reason for
 // disablement.
 type EnablementEvaluator struct {
@@ -25,7 +25,7 @@ type EnablementEvaluator struct {
 }
 
 // NewEnablementEvaluator creates an EnablementEvaluator with the given logger.
-// If logger is nil, logging is a no-op.
+// Logger is required; callers that disable diagnostics supply logging.NoopLogger{}.
 func NewEnablementEvaluator(
 	logger logging.Logger,
 	now func() time.Time,
@@ -35,7 +35,7 @@ func NewEnablementEvaluator(
 		panic("Factory Runtime scheduler clock is required")
 	}
 	return &EnablementEvaluator{
-		logger:        logging.EnsureLogger(logger),
+		logger:        logger,
 		now:           now,
 		runtimeConfig: runtimeConfig,
 	}

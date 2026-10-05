@@ -78,6 +78,7 @@ type FactoryEngine struct {
 
 // NewFactoryEngine creates a new engine for the given net and marking.
 // Subsystems are sorted by TickGroup on construction.
+// Logger is required; callers that disable diagnostics supply logging.NoopLogger{}.
 func NewFactoryEngine(
 	n *state.Net,
 	marking *petri.Marking,
@@ -130,7 +131,7 @@ func NewFactoryEngine(
 			ResultBuffer: resultBuffer,
 		},
 		subsystems:            sorted,
-		logger:                logging.EnsureLogger(logger),
+		logger:                logger,
 		clock:                 clock,
 		workRequestIDs:        workRequestIDs,
 		resultCh:              make(chan struct{}, 64),

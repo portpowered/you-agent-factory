@@ -3,8 +3,13 @@ package engine
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -505,4 +510,160 @@ func waitForNoRunningDispatches(t *testing.T, engine *FactoryEngine, timeout tim
 		time.Sleep(10 * time.Millisecond)
 	}
 	return fmt.Errorf("timed out waiting for running dispatches to drain, still have %d", len(engine.RunningDispatches()))
+}
+
+func TestFactoryEngineSelectedLoggerTickParity(t *testing.T) {
+	t.Parallel()
+	var outcomes []interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	for _, mode := range []string{"capture", "noop"} {
+		core, logs := observer.New(zapcore.DebugLevel)
+		logger := logging.NewZapLogger(zap.New(core).With(zap.String("session_id", "ticks")), false)
+		if mode == "noop" {
+			logger = logging.NoopLogger{}
+		}
+		outcomes = append(outcomes, runSelectedLoggerTicks(t, logger, "ticks"))
+		if mode == "noop" {
+			if logs.Len() != 0 {
+				t.Fatal("quiet tick leaked diagnostics")
+			}
+			continue
+		}
+		assertSelectedTickDiagnostics(t, logs)
+	}
+	// Topology instances are fresh, but their values and all projected state agree.
+	if !reflect.DeepEqual(outcomes[0], outcomes[1]) {
+		t.Fatalf("capture/Noop state differs: %+v / %+v", outcomes[0], outcomes[1])
+	}
+}
+
+func runSelectedLoggerTicks(t *testing.T, logger logging.Logger, scope string) interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+	marking := petri.NewMarking(scope)
+	dispatchID := scope + "-dispatch"
+	var effects []string
+	hook := newTestDispatchResultHook()
+	var engine *FactoryEngine
+	hook.submit = func(_ context.Context, dispatch work.WorkDispatch) error {
+		if engine.runtimeState.Dispatches[dispatch.DispatchID] == nil {
+			t.Fatal("dispatch forwarded before registration")
+		}
+		effects = append(effects, "forward:"+dispatch.DispatchID)
+		return nil
+	}
+	mover := &mockSubsystem{group: subsystems.Scheduler, execFn: func(_ context.Context, snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		if snap.TickCount > 1 {
+			return nil, nil
+		}
+		effects = append(effects, "move")
+		return &interfaces.TickResult{
+			Mutations:  []interfaces.MarkingMutation{{Type: interfaces.MutationMove, TokenID: "tok-task-1", FromPlace: "task:init", ToPlace: "task:complete"}},
+			Dispatches: []interfaces.DispatchRecord{{Dispatch: work.WorkDispatch{DispatchID: dispatchID, TransitionID: "transition", WorkerType: "script", InputTokens: workerexecution.InputTokens(factorytoken.ToWorker(*snap.Marking.Tokens["tok-task-1"])), Execution: work.ExecutionMetadata{TraceID: scope + "-trace", WorkIDs: []string{scope + "-work"}}}}},
+		}, nil
+	}}
+	reader := &mockSubsystem{group: subsystems.Tracer, execFn: func(_ context.Context, snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		effects = append(effects, snap.Marking.Tokens["tok-task-1"].PlaceID)
+		if snap.TickCount == 2 && (len(snap.Results) != 1 || snap.Dispatches[dispatchID] == nil) {
+			t.Fatal("completion retired before subsystem observation")
+		}
+		return &interfaces.TickResult{}, nil
+	}}
+	paused := true
+	engine = newTestFactoryEngineWithLogger(buildTestNet(), marking, []subsystems.Subsystem{reader, mover}, logger,
+		WithAutomaticTicksPaused(func() bool { return paused }), WithDispatchResultHook(hook),
+		WithDispatchRecorder(func(rec interfaces.FactoryDispatchRecord) { effects = append(effects, "record:"+rec.DispatchID) }),
+		WithCompletionRecorder(func(rec interfaces.FactoryCompletionRecord) { effects = append(effects, "completion:"+rec.DispatchID) }),
+		func(e *FactoryEngine) {
+			e.recordResponse = func(_ int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
+				effects = append(effects, "response:"+result.DispatchID)
+			}
+		},
+	)
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{RequestID: scope + "-request", WorkID: scope + "-work", WorkTypeID: "task", TraceID: scope + "-trace"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(effects) != 0 {
+		t.Fatal("paused tick executed effects")
+	}
+	paused = false
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	hook.results = []workerexecution.WorkResult{{DispatchID: dispatchID, TransitionID: "transition", Outcome: workerexecution.OutcomeAccepted}}
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	snap := engine.GetRuntimeStateSnapshot()
+	assertSelectedTickEffects(t, effects, snap, hook, scope)
+	return snap
+}
+
+func assertSelectedTickDiagnostics(t *testing.T, logs *observer.ObservedLogs) {
+	t.Helper()
+	for _, message := range []string{"engine: [START] running engine tick", "engine: [END] tick complete"} {
+		entries := logs.FilterMessage(message).All()
+		if len(entries) != 2 {
+			t.Fatalf("%s = %+v", message, entries)
+		}
+		for i, entry := range entries {
+			if entry.Level != zapcore.InfoLevel || entry.ContextMap()["tick"] != int64(i+1) {
+				t.Fatalf("tick diagnostic = %+v", entry)
+			}
+		}
+	}
+	entries := logs.FilterMessage("engine: executing subsystem").All()
+	if len(entries) != 4 || logs.FilterMessage("engine: skipping automatic tick while factory is paused").Len() != 1 {
+		t.Fatalf("subsystem/pause diagnostics = %+v", logs.All())
+	}
+	for _, entry := range entries {
+		if entry.Level != zapcore.DebugLevel || entry.ContextMap()["subsystem"] == nil {
+			t.Fatalf("subsystem diagnostic = %+v", entry)
+		}
+	}
+}
+
+func TestFactoryEngineSelectedLoggerScopeIsolation(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zapcore.DebugLevel)
+	for _, scope := range []string{"first", "second", "quiet"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			logger := logging.NewZapLogger(zap.New(core).With(zap.String("session_id", scope), zap.String("folder_path", "/"+scope), zap.String("factory_dir", "/factory/"+scope)), false)
+			if scope == "quiet" {
+				logger = logging.NoopLogger{}
+			}
+			runSelectedLoggerTicks(t, logger, scope)
+		})
+	}
+	t.Cleanup(func() {
+		if logs.Len() != 18 {
+			t.Fatalf("scoped records = %+v", logs.All())
+		}
+		for _, entry := range logs.All() {
+			fields := entry.ContextMap()
+			scope := fields["session_id"]
+			if scope != "first" && scope != "second" {
+				t.Fatalf("unexpected scope: %+v", entry)
+			}
+			if fields["folder_path"] != "/"+scope.(string) || fields["factory_dir"] != "/factory/"+scope.(string) {
+				t.Fatalf("crossed context: %+v", entry)
+			}
+		}
+	})
+}
+
+func assertSelectedTickEffects(t *testing.T, effects []string, snap interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], hook *testDispatchResultHook, scope string) {
+	t.Helper()
+	want := []string{"move", "record:" + scope + "-dispatch", "forward:" + scope + "-dispatch", "task:complete", "completion:" + scope + "-dispatch", "task:complete", "response:" + scope + "-dispatch"}
+	if !reflect.DeepEqual(effects, want) {
+		t.Fatalf("effects = %v, want %v", effects, want)
+	}
+	if len(snap.Dispatches) != 0 || len(snap.DispatchHistory) != 1 || snap.DispatchHistory[0].DispatchID != scope+"-dispatch" || snap.DispatchHistory[0].ConsumedTokens[0].Color.WorkID != scope+"-work" {
+		t.Fatalf("retirement or identity = %+v", snap)
+	}
+	if hook.submits[0].Execution.TraceID != scope+"-trace" || hook.submits[0].Execution.DispatchCreatedTick != 1 {
+		t.Fatalf("dispatch identity = %+v", hook.submits)
+	}
 }

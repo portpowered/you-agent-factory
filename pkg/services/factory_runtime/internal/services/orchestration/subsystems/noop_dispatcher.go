@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -59,7 +60,7 @@ func NewNoOpDispatcher(
 // enqueueResult callback with pass-through token colors. No external executor
 // is invoked.
 func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
-	evaluator := scheduler.NewEnablementEvaluator(nil, d.now, nil)
+	evaluator := scheduler.NewEnablementEvaluator(logging.NoopLogger{}, d.now, nil)
 	enabled := evaluator.FindEnabledTransitions(ctx, d.state, &snapshot.Marking)
 	if len(enabled) == 0 {
 		return nil, nil
