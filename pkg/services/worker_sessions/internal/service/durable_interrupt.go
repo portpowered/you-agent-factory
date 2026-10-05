@@ -49,9 +49,12 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 		}
 		return nil, nil
 	}
-	payload, _ := json.Marshal(plan.request)
 	if !interruptInputSafe(plan) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
+	}
+	payload, err := encodeInterruptInput(plan)
+	if err != nil {
+		return nil, err
 	}
 	intent := stopIntent(workersessions.ControlRequest{RequestID: plan.request.RequestID}, workersessions.ControlActionInterrupt, target)
 	digest := sha256.Sum256(payload)

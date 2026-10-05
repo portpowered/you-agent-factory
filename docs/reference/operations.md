@@ -465,8 +465,14 @@ message. A committed result preserves its phase and source/successor identity,
 state, and accepted predecessor/successor links without stopping or admitting
 another execution. Later continuations do not change these saved links. A recovered
 admission failure leaves the source stopped. Use session inspection for richer
-session metadata. Durable replay validates the captured replacement input against
-the original request. Missing or corrupt captured input, or a stored control
+session metadata. New interruptions capture the execution recipe and exact
+Provider Session reference before stopping the source. Inherited environment
+values stay out of that recipe. Explicit environment overrides or prompts that
+require secret redaction prevent safe recipe recovery, so interruption refuses
+before stopping; ordinary cancel and terminate remain available.
+Durable replay validates the captured replacement input against the original
+request. Older request-only artifacts remain readable for result replay.
+Missing or corrupt captured input, or a stored control
 result containing provider metadata or private diagnostics, reports persistence
 unavailable without returning that content, stopping a Worker Session, or
 admitting a successor.

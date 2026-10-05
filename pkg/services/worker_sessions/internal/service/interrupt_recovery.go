@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -39,8 +38,7 @@ func (r *registry) replayDurableInterrupt(ctx context.Context, req workersession
 		return result, true, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
 	payload, _ := json.Marshal(req)
-	digest := sha256.Sum256(payload)
-	if record.Operation.Action != "interrupt" || record.Operation.InputDigest != hex.EncodeToString(digest[:]) || record.Operation.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
+	if record.Operation.Action != "interrupt" || record.Operation.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
 		return result, true, newInterruptError(result.Phase, result, workersessions.ErrInterruptRequestIDConflict)
 	}
 	target.ExpectedAttemptID = record.Target.ExpectedAttemptID
@@ -67,10 +65,14 @@ func (r *registry) validateInterruptReplayInput(ctx context.Context, key recordi
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	stored, err := r.operations.ReadWorkerControlInput(ctx, key, record.InputArtifactRef)
-	if err != nil || !bytes.Equal(stored, payload) {
+	if err != nil {
 		return recordings.ErrWorkerRecordingPersistence
 	}
-	return nil
+	digest := sha256.Sum256(stored)
+	if operation.InputDigest != hex.EncodeToString(digest[:]) {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	return validateCapturedInterruptInput(stored, payload, req, record.Target.ExpectedAttemptID)
 }
 
 func (r *registry) interruptReplayCapture(ctx context.Context, id string) (recordings.WorkerControlTarget, error) {

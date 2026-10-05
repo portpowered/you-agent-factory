@@ -354,6 +354,45 @@ type publicInterruptOutcome struct {
 	err    error
 }
 
+// Explicit environment overrides cannot be reconstructed from a configuration
+// reference. Refuse replacement before stopping; exact termination still works.
+func TestInterruptUnsafeRecipeLeavesSourceControllable(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	defer cancel()
+	scenario := newS8InterruptScenario(t, ctx, "unsafe-recipe")
+	t.Cleanup(scenario.runner.releaseAll)
+	ids := scenario.ids
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+		envVars: map[string]string{"CUSTOM_TOKEN": "private-explicit-override"},
+	})
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
+	status, body, response := postS8InterruptError(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	if status < 400 || response.Code == "" || string(response.Phase) != "VALIDATION" || strings.Contains(body, "private-explicit-override") {
+		t.Fatalf("unsafe recipe HTTP status=%d response=%#v", status, response)
+	}
+	code, phase, err := executeS8InterruptCLIError(ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+	if err != nil || code != string(response.Code) || phase != "VALIDATION" {
+		t.Fatalf("unsafe recipe CLI code=%s phase=%s err=%v", code, phase, err)
+	}
+	if scenario.runner.CallCount() != 1 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 0 {
+		t.Fatal("refused interruption stopped the source or admitted a successor")
+	}
+	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", scenario.serverURL, "--json", "worker-sessions", "terminate", ids.workerA})
+	inputs.Input.Env = append([]string(nil), scenario.env...)
+	inputs.Input.WorkingDirectory = scenario.repositoryA.path
+	if err := scenario.manager.Execute(inputs.Input); err != nil {
+		t.Fatalf("exact terminate after unsafe recipe: %v stderr=%s", err, inputs.Stderr())
+	}
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	listed := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
+	if source := findS8Observation(t, listed, ids.workerA); source.State != "TERMINATED" || scenario.runner.CallCount() != 1 {
+		t.Fatalf("plain termination source=%#v provider calls=%d", source, scenario.runner.CallCount())
+	}
+}
+
 func postS8Interrupt(
 	t *testing.T,
 	ctx context.Context,
