@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"testing"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -21,7 +23,15 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	t.Parallel()
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)
-	server := startDirectWorkerSessionServer(t, runner)
+	dir := support.ScaffoldSingleStepFactory(t, "captured-direct-recovery")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+	home := t.TempDir()
+	config := support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env:   []string{"HOME=" + home, "USERPROFILE=" + home},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+	}
+	server := support.StartFunctionalAPIServer(t, config)
 	start := postDirectWorkerSession(t, t.Context(), server.URL(), "captured-request", "captured-worker", "captured-dispatch")
 	_ = start.Body.Close()
 	if start.StatusCode != http.StatusAccepted {
@@ -43,8 +53,25 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	}
 	assertCapturedPages(t, server, ended)
 	assertCapturedReplayTimes(t, server.URL(), ended)
+	// Stop the sole writer before reopening this store. A fresh root has no
+	// live Worker registry or provider-native files to recover identity from.
+	server.Close(t)
+	restarted := support.StartFunctionalAPIServer(t, config)
+	recovered := assertCapturedLogsCLIHTTPParity(t, restarted, "captured-worker")
+	if !reflect.DeepEqual(recovered.Events, ended.Events) || recovered.CommittedPosition != ended.CommittedPosition || recovered.RecordingGenerationId != ended.RecordingGenerationId {
+		t.Fatal("restart changed the committed history or generation")
+	}
+	assertCapturedSummaryUsage(t, restarted, "captured-worker")
+	archived := support.GetJSON[factoryapi.WorkerSessionObservation](t, restarted.URL()+"/worker-sessions/captured-worker")
+	if archived.State != factoryapi.WorkerSessionObservationStateCompleted || archived.ProviderSession != nil || archived.StartedAt == nil {
+		t.Fatalf("archived captured identity lost facts: %+v", archived)
+	}
 	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")
 }
+
+type capturedRecordingDirectory string
+
+func (d capturedRecordingDirectory) Getwd() (string, error) { return string(d), nil }
 
 func assertCapturedSummaryUsage(t *testing.T, server *support.FunctionalAPIServer, id string) {
 	t.Helper()

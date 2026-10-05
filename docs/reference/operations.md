@@ -339,6 +339,12 @@ Worker runs or after execution ends. This view reads Portos recordings and
 does not require a Provider Session reference or provider transcript files.
 The default `read` view remains `transcript`.
 
+After a host restart, `show --worker-session-id` can inspect a captured terminal
+Worker Session without provider transcript files. The summary preserves captured
+identity, start time, usage, and capture health. Unknown end times and durations
+remain absent. A history without a captured terminal remains readable through
+`read --view logs`, but its summary is unavailable.
+
 Logs pages include the recording generation, committed position, capture
 health, and ordered events. New committed events include `capturedAt`, the
 host capture time. Older events omit this field. Capture health describes the

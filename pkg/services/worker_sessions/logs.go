@@ -10,6 +10,12 @@ type LogsService interface {
 	ReadLogs(context.Context, ReadLogsRequest) (LogPage, error)
 }
 
+// CapturedObservationReader inspects durable terminal identity without granting
+// live execution authority. Histories without a terminal remain available as logs.
+type CapturedObservationReader interface {
+	GetObservationByWorkerSessionID(context.Context, GetObservationByWorkerSessionIDRequest) (Observation, error)
+}
+
 type ReadLogsRequest struct {
 	WorkerSessionID string
 	Limit           int

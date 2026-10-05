@@ -336,6 +336,11 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		if captured, ok := a.logs.(workersessions.CapturedObservationReader); ok {
+			observation, err = captured.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
+		}
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}

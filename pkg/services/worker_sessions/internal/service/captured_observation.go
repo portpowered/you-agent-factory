@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -25,12 +26,19 @@ func (r *registry) capturedObservationUsage(ctx context.Context, id string) *wor
 	if err != nil || snapshot.RecordingID != recordingID {
 		return nil
 	}
+	return capturedSnapshotUsage(snapshot, id, ^uint64(0))
+}
+
+func capturedSnapshotUsage(snapshot recordings.WorkerRecordingSnapshot, id string, head uint64) *workersessions.TokenUsage {
 	var usage *workersessions.TokenUsage
 	for _, session := range snapshot.Sessions {
 		if session.WorkerSessionID != id {
 			continue
 		}
 		for _, record := range session.Records {
+			if uint64(record.ID.Position) > head {
+				continue
+			}
 			var draft workers.Draft
 			if json.Unmarshal(record.Payload, &draft) != nil {
 				continue
