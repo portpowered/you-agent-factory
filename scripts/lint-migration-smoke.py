@@ -613,6 +613,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("manifest-authority")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "pkg/transports/cli/root_work.go", "package cli\nfunc executeWork(inputID string) string { return inputID }\n")
             fixtures.lint(root, "manifest-permitted", [])
             write(root, "pkg/transports/cli/root_work.go", "package cli\nfunc newRunCommand() {}\n")
