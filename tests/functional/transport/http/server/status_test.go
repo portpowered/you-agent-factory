@@ -1,4 +1,4 @@
-package status_test
+package server_test
 
 import (
 	"encoding/json"
@@ -15,6 +15,7 @@ import (
 // TestAPIStatusReportsReadyAfterStartup proves GET /status returns HTTP 200 with a
 // populated public runtime summary after the customer process starts.
 func TestAPIStatusReportsReadyAfterStartup(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, idleStatusTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -44,6 +45,7 @@ func TestAPIStatusReportsReadyAfterStartup(t *testing.T) {
 // TestAPIStatusDoesNotLeakInternalConfiguration proves GET /status returns only the
 // documented public StatusResponse fields and does not expose internal configuration.
 func TestAPIStatusDoesNotLeakInternalConfiguration(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, idleStatusTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,

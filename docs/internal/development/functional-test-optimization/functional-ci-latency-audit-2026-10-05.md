@@ -1,9 +1,39 @@
 # Functional CI latency audit
 
-Measured October 5, 2026. Local source revision:
+Measured October 5, 2026. Initial local source revision:
 `73d83286167b941e3f2f668bcc7425926481fd99`.
 
-## Finding
+## Current result
+
+The latest complete local Linux run passes all selected tests, quarantine and
+coverage gates: **3m11.29s overall / 2m56.714s test invocation**, at pushed
+revision `630fb269c5`. This is a warm-cache measurement with four-CPU affinity,
+not a hosted CI result. Hosted verification is pending in
+[PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867); no merge
+checkpoint has been claimed. The complete three-minute target remains unmet.
+
+The passing run contains 141 packages and 1,022 top-level tests (1,020 passed,
+two skipped). Recorded linker processes consumed 171.525s CPU; compilation
+consumed 8.931s CPU. These overlap execution and cannot be added to wall time.
+Two further test-binary removals are committed locally for follow-up validation.
+
+| Highest package execution latencies in the passing run | Seconds, rounded |
+| --- | ---: |
+| Models inference | 48.36 |
+| Factory review failure routing | 30.84 |
+| Chat Session ACP | 30.73 |
+| Providers ACP | 30.00 |
+| Provider Session details | 24.87 |
+| Packaged Factory invocation | 24.29 |
+| Session execution | 23.37 |
+| Factory runtime metrics | 22.86 |
+
+Package times include contention while other packages execute; measure a
+specific journey in isolation before attributing that whole duration to it.
+Detailed build/link measurements, baseline CI results and validation history
+follow below.
+
+## Initial finding
 
 The initial measurements below are followed by an [implementation and validation
 update](#implementation-and-validation-update) for the authorized cleanup.
@@ -894,3 +924,35 @@ Functional coverage now omits debugger-only DWARF while retaining Go runtime
 stack symbols/source coordinates and coverage counters. Other coverage lanes
 retain their existing flags. A fresh full-lane measurement is required to
 establish its actual elapsed saving.
+
+The Provider Sessions root constructor/effect-count tests were subsequently
+removed from the functional lane. They never called CLI/MCP/REST or checked
+customer files; current transcript discovery, inspection, association and replay
+journeys remain in their behavior subsections. Status HTTP journeys now share
+the existing HTTP server package, with independent scenarios running in parallel.
+The combined server suite passes in 4.274s locally. These changes remove two
+more test binaries; their saving is not included in the earlier measurements.
+
+### Passing full supervised run with reduced debug data
+
+The complete four-CPU Linux supervisor for `630fb269c5` **passed**, including
+tests, quarantine and existing coverage gates. It took **191.29s (3m11.29s)**
+overall; the test invocation took **176.714s (2m56.714s)**. It observed all
+141 expected packages and 1,022 top-level tests: 1,020 passed, two skipped,
+zero failed. Aggregate coverage was 61.2% against the unchanged 33.1% minimum;
+existing staged coverage holds remained in force. The previously deficient
+Models HTTP floor passed. Quarantine passed in 19.845s.
+
+The full command consumed 578.62s user CPU and 119.10s system CPU. Recorded
+tools included 142 linker processes consuming **171.525s CPU**, 143 compiler
+processes consuming **8.931s CPU**, and 27 vet processes consuming 0.242s CPU.
+Linker active wall intervals covered 160.770s; summed child wall time was
+607.187s. Different warm cache states and concurrent scenario fixes prevent
+attributing the entire 45.71s elapsed reduction from the prior failed run to
+DWARF removal alone. The passing measurement includes reporting and quarantine,
+unlike the earlier 220.85s direct coverage command.
+
+This establishes a passing local result below five minutes; the complete lane
+is still **11.29s above three minutes**. Hosted CI of the pushed head remains
+required before the first merge checkpoint. The two subsequent binary removals
+are not included here. Evidence is under `.artifacts/latency-audit/linux-link-opt/`.

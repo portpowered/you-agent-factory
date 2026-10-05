@@ -2650,7 +2650,6 @@ functional-test-missing-subsection|tests/functional/guards_batch|tests/functiona
 functional-test-missing-subsection|tests/functional/guards_batch|tests/functional/guards_batch/resource_contention_test.go
 functional-test-missing-subsection|tests/functional/guards_batch|tests/functional/guards_batch/resource_token_name_test.go
 functional-test-missing-subsection|tests/functional/operator_settings|tests/functional/operator_settings/doc.go
-functional-test-missing-subsection|tests/functional/provider_sessions|tests/functional/provider_sessions/build_process_inert_test.go
 functional-test-missing-subsection|tests/functional/provider_sessions|tests/functional/provider_sessions/doc.go
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_script_executor_test.go
 functional-test-missing-subsection|tests/functional/providers|tests/functional/providers/cli_script_executor_timeout_long_test.go
