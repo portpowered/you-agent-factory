@@ -52,6 +52,7 @@ func NewAssembly(
 	projectionReader runtimebinding.SessionProjectionOwner,
 	processDurable durableexecution.Service,
 	namedFactoryActivator func(context.Context, string) error,
+	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 ) (roles.RuntimeAssembly, error) {
 	if activation == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
@@ -97,6 +98,7 @@ func NewAssembly(
 		projectionReader,
 		processDurable,
 		namedFactoryActivator,
+		definitionActivationGateway,
 	)
 	assembly, ok := assemblyRole.(*legacyservice.Assembly)
 	if !ok || assembly == nil {

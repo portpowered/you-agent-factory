@@ -306,6 +306,7 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		legacyservice.SessionServiceHost(state, nil, nil, nil, "", in.identity, in.clock, nil, in.newJavaScriptCheckpointStore, nil),
 		nil,
 		legacyservice.NewNamedFactoryActivator(state),
+		legacyservice.NewKeyedDefinitionActivationGateway(state, in.clock),
 	)
 }
 

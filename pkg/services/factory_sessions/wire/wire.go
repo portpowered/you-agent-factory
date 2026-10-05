@@ -223,6 +223,10 @@ func NewNamedFactoryActivator(state *SessionState) NamedFactoryActivator {
 	return sessionservice.NewNamedFactoryActivator(state)
 }
 
+func NewKeyedDefinitionActivationGateway(state *SessionState, clock factoryruntime.Clock) factorydefinitions.DefinitionActivationGateway {
+	return sessionservice.NewKeyedDefinitionActivationGateway(state, clock)
+}
+
 // NewRuntimeAssembly builds the one owner-private Factory Sessions assembly
 // used by peer roots while canonical Wire completes the rest of the process
 // graph. It is an assembly capability, not a second published Service root.
@@ -250,6 +254,7 @@ func NewRuntimeAssembly(
 	host sessionservice.Host,
 	processDurable durableexecution.Service,
 	namedFactoryActivator NamedFactoryActivator,
+	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
 		registry, state, streams, invoker, control, activation,
@@ -270,6 +275,7 @@ func NewRuntimeAssembly(
 		host,
 		processDurable,
 		namedFactoryActivator,
+		definitionActivationGateway,
 	)
 	if err != nil {
 		return nil, err

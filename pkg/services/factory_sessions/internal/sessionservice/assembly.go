@@ -40,6 +40,7 @@ type Assembly struct {
 	gatewayStreams               *stream.Manager
 	projectionReader             runtimebinding.SessionProjectionOwner
 	namedFactoryActivator        func(context.Context, string) error
+	definitionActivationGateway  factorydefinitions.DefinitionActivationGateway
 	invoker                      roles.InvocationService
 	scopeControl                 SessionScopeControl
 	scopeActivation              SessionScopeActivation
@@ -95,6 +96,7 @@ func NewAssembly(
 	projectionReader runtimebinding.SessionProjectionOwner,
 	processDurable durableexecution.Service,
 	namedFactoryActivator func(context.Context, string) error,
+	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 ) roles.RuntimeAssembly {
 	return &Assembly{
 		SessionGateway:               &Service{durable: processDurable},
@@ -104,6 +106,7 @@ func NewAssembly(
 		gatewayStreams:               gatewayStreams,
 		projectionReader:             projectionReader,
 		namedFactoryActivator:        namedFactoryActivator,
+		definitionActivationGateway:  definitionActivationGateway,
 		invoker:                      invoker,
 		scopeControl:                 control,
 		scopeActivation:              activation,
@@ -489,7 +492,7 @@ func (a *Assembly) Complete(
 		runtime.durableExecution,
 		a.invoker,
 		a.namedFactoryActivator,
-		runtime.DefinitionActivationGateway(),
+		a.definitionActivationGateway,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	invoker := a.invoker
@@ -498,7 +501,7 @@ func (a *Assembly) Complete(
 	// The per-runtime gateway is returned to the operation caller. The
 	// process-scoped assembly keeps its original stable service slot so
 	// concurrent session completions cannot replace or race the shared root.
-	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
+	return runtime, gateway, invoker, definitionHost{runtime: runtime}, a.definitionActivationGateway, nil
 }
 
 type completionSessionIdentity struct {

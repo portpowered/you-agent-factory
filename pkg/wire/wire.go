@@ -250,6 +250,7 @@ var servicesSet = wire.NewSet(
 	factorysessionwire.NewRuntimeAssembly,
 	factorysessionwire.NewSessionHost,
 	factorysessionwire.NewNamedFactoryActivator,
+	factorysessionwire.NewKeyedDefinitionActivationGateway,
 	provideSessionCheckpointStoreFactory,
 	provideFactorySessionsCapability,
 	provideFactoryVisualizationMetricsQuery,

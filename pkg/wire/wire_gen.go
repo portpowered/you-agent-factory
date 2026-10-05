@@ -352,7 +352,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	namedFactoryActivator := wire3.NewNamedFactoryActivator(v14)
-	v87, err := wire3.NewRuntimeAssembly(v10, v14, v16, invocationService, v21, v25, javaScriptCheckpointStoreFactory, sessionResultProjectionOperation, responseEventIDGenerator, v13, homeDirectoryResolver, v26, namedPathResolver, initialWorkReader, v27, v11, clock, liveChangeCoordinator, v31, v16, host, durableexecutionService, namedFactoryActivator)
+	definitionActivationGateway := wire3.NewKeyedDefinitionActivationGateway(v14, clock)
+	v87, err := wire3.NewRuntimeAssembly(v10, v14, v16, invocationService, v21, v25, javaScriptCheckpointStoreFactory, sessionResultProjectionOperation, responseEventIDGenerator, v13, homeDirectoryResolver, v26, namedPathResolver, initialWorkReader, v27, v11, clock, liveChangeCoordinator, v31, v16, host, durableexecutionService, namedFactoryActivator, definitionActivationGateway)
 	if err != nil {
 		return nil, err
 	}
@@ -1097,7 +1098,7 @@ var servicesSet = wire11.NewSet(
 	provideAutomationsClock,
 	provideAutomationsScriptPollers,
 	provideAutomationsOwner, wire8.NewCursorScopes, wire8.NewSourceLifecycle, wire8.NewReconciliation, wire8.NewCron, wire8.NewFilesystemWatchers, provideAutomationsCommandRunner,
-	provideAutomationsRoot, wire11.Bind(new(automations.Service), new(automations.Root)), wire3.NewRuntimeAssembly, wire3.NewSessionHost, wire3.NewNamedFactoryActivator, provideSessionCheckpointStoreFactory,
+	provideAutomationsRoot, wire11.Bind(new(automations.Service), new(automations.Root)), wire3.NewRuntimeAssembly, wire3.NewSessionHost, wire3.NewNamedFactoryActivator, wire3.NewKeyedDefinitionActivationGateway, provideSessionCheckpointStoreFactory,
 	provideFactorySessionsCapability,
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,

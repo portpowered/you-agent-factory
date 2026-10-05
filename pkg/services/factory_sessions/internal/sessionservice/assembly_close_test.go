@@ -42,7 +42,7 @@ func (owner *closingDurableOwner) Close() error {
 func TestAssemblyCloseDrainsProcessDurableOwner(t *testing.T) {
 	failure := errors.New("durable shutdown failed")
 	owner := &closingDurableOwner{err: failure}
-	assembly := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, owner, nil).(*Assembly)
+	assembly := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, owner, nil, nil).(*Assembly)
 	if err := assembly.Close(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("Close error = %v, want %v", err, failure)
 	}
@@ -336,7 +336,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, NewNamedFactoryActivator(state)).(*Assembly)
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, NewNamedFactoryActivator(state), NewKeyedDefinitionActivationGateway(state, nil)).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}
@@ -650,7 +650,7 @@ func TestNamedFactoryActivatorFollowsSelectedGenerationAndPreservesPeers(t *test
 	register("selected", true, "first", failure)
 	register("peer", false, "peer", nil)
 	activate := NewNamedFactoryActivator(state)
-	assembly := NewAssembly(nil, state, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, activate).(*Assembly)
+	assembly := NewAssembly(nil, state, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, activate, nil).(*Assembly)
 	if err := assembly.ActivateNamedFactory(ctx, "first"); !errors.Is(err, failure) {
 		t.Fatalf("selected activation error = %v, want %v", err, failure)
 	}
@@ -682,5 +682,130 @@ func TestNamedFactoryActivatorPreservesMissingCapabilityErrors(t *testing.T) {
 	state.Register(sessionruntime.Registration{SessionID: "selected", Handle: &runtimebinding.SessionState{}, Select: true})
 	if err := activate(ctx, "factory"); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) || err.Error() != factorysessions.ErrRuntimeNotAvailable.Error()+": session activation owner is unavailable" {
 		t.Fatalf("missing owner error = %v", err)
+	}
+}
+
+func TestKeyedDefinitionGatewayFollowsAddressedFactsAndReplacement(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	now := time.Date(2026, 10, 5, 3, 4, 5, 0, time.FixedZone("selected", 3600))
+	gateway := NewKeyedDefinitionActivationGateway(state, projectionClockStub{now: now})
+	register := func(id, root string, selected bool) {
+		owner := &SessionRuntime{sessionState: state, factoryRootDir: root, dir: root + "/configured"}
+		owner.runtimeState.SetActive(context.Background(), id, nil)
+		record := &generationRuntimeRecord{service: &observeStubRuntime{}}
+		state.Registry().Upsert(&livesession.LiveSession{ID: id,
+			SessionState: livesession.SessionState{FolderPath: root + "/folder", FactoryDir: root + "/factory"},
+			Handle:       &runtimebinding.SessionState{Owner: owner, Handle: invocationQueryRun{record: record}},
+		}, selected)
+	}
+	register("selected", "/first", true)
+	register("peer", "/peer", false)
+	if got := gateway.RunSessionID(); got != "selected" {
+		t.Fatalf("run session = %q", got)
+	}
+	if got := gateway.SaveNow(); !got.Equal(now) || got.Location() != time.UTC {
+		t.Fatalf("save clock = %v", got)
+	}
+	assertKeyedDefinitionPaths(t, gateway, "selected", "/first")
+	selected, err := gateway.RequireSession("selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected.FactoryDir = "mutated"
+	assertKeyedDefinitionPaths(t, gateway, "selected", "/first")
+	register("selected", "/replacement", true)
+	assertKeyedDefinitionPaths(t, gateway, "selected", "/replacement")
+	state.Registry().Remove("selected")
+	assertKeyedDefinitionPaths(t, gateway, "peer", "/peer")
+	if _, err := gateway.RequireSession("selected"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("retired session error = %v", err)
+	}
+	failure := errors.New("activation failed")
+	if err := gateway.WithActivationLock(func() error { return failure }); !errors.Is(err, failure) {
+		t.Fatalf("locked operation error = %v", err)
+	}
+	if err := gateway.WithActivationLock(func() error { return nil }); err != nil {
+		t.Fatalf("lock retry = %v", err)
+	}
+}
+
+func assertKeyedDefinitionPaths(t *testing.T, gateway factorydefinitions.DefinitionActivationGateway, id, root string) {
+	t.Helper()
+	session := gateway.SessionForActivation(id)
+	if session == nil || session.FactoryDir != root+"/factory" {
+		t.Fatalf("addressed definition = %#v", session)
+	}
+	persist, folder := gateway.NamedFactoryActivationPaths(session)
+	want := root + "/folder"
+	if persist != want || folder != root+"/folder" || gateway.SessionFactoryPersistRoot(session) != want {
+		t.Fatalf("definition paths = %q/%q, persist=%q, want %q", persist, folder, gateway.SessionFactoryPersistRoot(session), want)
+	}
+}
+
+func TestKeyedDefinitionGatewayPreservesMissingActivationErrors(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	gateway := NewKeyedDefinitionActivationGateway(state, state.Clock())
+	ctx := context.Background()
+	for _, unavailable := range []bool{false, true} {
+		want := factorysessions.ErrSessionNotFound
+		if unavailable {
+			state.Registry().Upsert(&livesession.LiveSession{ID: "selected", Handle: &runtimebinding.SessionState{
+				Handle: invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}},
+			}}, true)
+			want = factorysessions.ErrRuntimeNotAvailable
+		}
+		for _, err := range []error{
+			gateway.RequireIdleRuntimeForSession(ctx, "selected"),
+			gateway.RequireIdleBeforeNamedFactoryActivation(ctx, "selected", nil),
+			gateway.ActivateSessionEditableFactory(ctx, nil, "selected", "root", "dir", "name", "runtime"),
+			gateway.SwapPersistedNamedFactoryRuntime(ctx, "selected", nil, "root", "folder", "dir", "name"),
+		} {
+			if !errors.Is(err, want) {
+				t.Fatalf("activation error = %v, want %v", err, want)
+			}
+		}
+	}
+}
+
+func TestKeyedDefinitionGatewayPreservesAddressedBuildFailureAndPeer(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	register := func(id string, failure error) {
+		owner := &SessionRuntime{sessionState: state, runtimeBuild: replacementRuntimeBuilderFunc(func(got context.Context, folder, dir, sessionID, base string) (factoryruntime.RuntimeRecord, error) {
+			if got != ctx || sessionID != id || folder != "folder" || dir != "factory" {
+				t.Fatalf("addressed build = %v/%q/%q/%q", got, sessionID, folder, dir)
+			}
+			return nil, failure
+		})}
+		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Owner: owner,
+			Handle: invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}},
+		}}, true)
+	}
+	gateway := NewKeyedDefinitionActivationGateway(state, state.Clock())
+	first := errors.New("selected build failed")
+	peer := errors.New("peer build failed")
+	register("selected", first)
+	register("peer", peer)
+	assertKeyedActivationBuildFailure(t, gateway, ctx, "selected", first)
+	next := errors.New("replacement build failed")
+	register("selected", next)
+	assertKeyedActivationBuildFailure(t, gateway, ctx, "selected", next)
+	assertKeyedActivationBuildFailure(t, gateway, ctx, "peer", peer)
+}
+
+func assertKeyedActivationBuildFailure(t *testing.T, gateway factorydefinitions.DefinitionActivationGateway, ctx context.Context, id string, failure error) {
+	t.Helper()
+	session := gateway.SessionForActivation(id)
+	for _, err := range []error{
+		gateway.ActivateSessionEditableFactory(ctx, session, id, "folder", "factory", "named", "runtime"),
+		gateway.SwapPersistedNamedFactoryRuntime(ctx, id, session, "persist", "folder", "factory", "named"),
+	} {
+		if !errors.Is(err, failure) || !errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) {
+			t.Fatalf("addressed build error = %v, want invalid factory and %v", err, failure)
+		}
 	}
 }

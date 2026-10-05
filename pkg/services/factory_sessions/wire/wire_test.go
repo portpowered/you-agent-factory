@@ -356,6 +356,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, in.clock, nil, in.newJavaScriptCheckpointStore, zap.NewNop()),
 		nil,
 		NewNamedFactoryActivator(state),
+		NewKeyedDefinitionActivationGateway(state, in.clock),
 	)
 }
 
