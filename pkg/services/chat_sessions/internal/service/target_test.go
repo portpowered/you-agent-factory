@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 )
 
@@ -23,7 +24,7 @@ func setTargetRequestID(id string) chatsessions.RequestIdentity {
 // for SetTarget calls.
 func newSetTargetTestSession(t *testing.T, now time.Time) (*Store, chatsessions.Session) {
 	t.Helper()
-	store := NewStore(sequentialIDs("session"), fixedClock(now), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(now), nil, nil, logging.NoopLogger{})
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -282,7 +283,7 @@ func TestStore_SetTarget_BusyWhileCommittedCloseAwaitsFanout(t *testing.T) {
 // an unknown SessionID reports *NotFoundError and mutates nothing.
 func TestStore_SetTarget_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	_, err := store.SetTarget(ctx, chatsessions.SetTargetRequest{
 		RequestID:       setTargetRequestID("req-1"),

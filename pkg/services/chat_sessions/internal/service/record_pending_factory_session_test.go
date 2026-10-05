@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 )
 
@@ -197,7 +198,7 @@ func TestStore_RecordPendingFactorySession_WrongCapturedEpisodeLeavesCurrentPend
 // recording against an unknown SessionID reports *NotFoundError.
 func TestStore_RecordPendingFactorySession_UnknownSessionIsTypedNotFound(t *testing.T) {
 	ctx := context.Background()
-	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil)
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Now()), nil, nil, logging.NoopLogger{})
 
 	_, err := store.RecordPendingFactorySession(ctx, chatsessions.RecordPendingFactorySessionRequest{
 		SessionID: "does-not-exist", ExpectedVersion: 1, Episode: 1, TurnID: "turn-1", FactorySessionID: "fs-pending-1",

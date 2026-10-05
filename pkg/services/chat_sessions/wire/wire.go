@@ -46,7 +46,8 @@ type EventsReader = internalservice.EventsReader
 // NewService constructs the singular in-memory Chat Sessions root from
 // explicit construction ports. newID, now, eventsAppender, and eventsReader
 // are required; logger is optional and defaults to a no-op logger when
-// omitted. This is the one canonical constructor for chatsessions.Service:
+// omitted or when its first argument is nil. Only the first logger argument
+// is selected. This is the one canonical constructor for chatsessions.Service:
 // production code has no alternate path to a Service value.
 func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eventsReader EventsReader, logger ...logging.Logger) (chatsessions.Service, error) {
 	if newID == nil {
@@ -61,7 +62,11 @@ func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eve
 	if eventsReader == nil {
 		return nil, fmt.Errorf("construct chat sessions: events reader is required")
 	}
-	return internalservice.NewStore(newID, now, eventsAppender, eventsReader, logger...), nil
+	var selected logging.Logger = logging.NoopLogger{}
+	if len(logger) > 0 && logger[0] != nil {
+		selected = logger[0]
+	}
+	return internalservice.NewStore(newID, now, eventsAppender, eventsReader, selected), nil
 }
 
 // NewFactoryTargetCatalogService constructs the Chat Sessions Factory

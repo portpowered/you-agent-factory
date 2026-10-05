@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 )
 
@@ -37,9 +40,15 @@ func (l captureLogger) Debug(msg string, kv ...any) {
 func (l captureLogger) Info(msg string, kv ...any) {
 	*l.calls = append(*l.calls, capturedLogCall{level: "info", msg: msg, kv: kv})
 }
-func (l captureLogger) Warn(msg string, kv ...any)    {}
-func (l captureLogger) Error(msg string, kv ...any)   {}
-func (l captureLogger) Verbose(msg string, kv ...any) {}
+func (l captureLogger) Warn(msg string, kv ...any) {
+	*l.calls = append(*l.calls, capturedLogCall{level: "warn", msg: msg, kv: kv})
+}
+func (l captureLogger) Error(msg string, kv ...any) {
+	*l.calls = append(*l.calls, capturedLogCall{level: "error", msg: msg, kv: kv})
+}
+func (l captureLogger) Verbose(msg string, kv ...any) {
+	*l.calls = append(*l.calls, capturedLogCall{level: "verbose", msg: msg, kv: kv})
+}
 
 func TestClassifyError_TableDriven(t *testing.T) {
 	for _, tt := range []struct {
@@ -250,13 +259,307 @@ func hasKV(kv []any, key string, value any) bool {
 func assertNoUnsafeFields(t *testing.T, calls []capturedLogCall, unsafeValues ...string) {
 	t.Helper()
 	for _, call := range calls {
-		for i := 0; i+1 < len(call.kv); i += 2 {
-			rendered := fmt.Sprintf("%v", call.kv[i+1])
+		for _, field := range append([]any{call.msg}, call.kv...) {
+			rendered := fmt.Sprint(field)
 			for _, unsafe := range unsafeValues {
-				if unsafe != "" && rendered == unsafe {
-					t.Fatalf("log call %+v carries unsafe field value %q", call, unsafe)
+				if unsafe != "" && strings.Contains(rendered, unsafe) {
+					t.Fatalf("diagnostic contains unsafe marker %q: %+v", unsafe, call)
 				}
 			}
 		}
 	}
+}
+
+func TestStore_SelectedLoggerPreservesQuietOperationResults(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	capture, calls := newCaptureLogger()
+	captured := NewStore(sequentialIDs("session"), fixedClock(at), nil, nil, capture)
+	quiet := NewStore(sequentialIDs("session"), fixedClock(at), nil, nil, logging.NoopLogger{})
+	if len(*calls) != 0 {
+		t.Fatal("construction logged")
+	}
+	got := exerciseStoreLoggerOperations(t, captured)
+	want := exerciseStoreLoggerOperations(t, quiet)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected/quiet results differ: %+v / %+v", got, want)
+	}
+	assertDiagnosticPairs(t, *calls)
+	assertSelectedOperationFields(t, *calls)
+	for _, call := range *calls {
+		if call.level == "info" && hasKV(call.kv, "error_class", "busy") && len(call.kv) != 6 {
+			t.Fatalf("rejected operation logged accepted fields: %+v", call)
+		}
+	}
+}
+
+// This component witness compares complete returned facts, not logger implementation details.
+func exerciseStoreLoggerOperations(t *testing.T, store *Store) []any {
+	t.Helper()
+	ctx := context.Background()
+	created, read, started, req := startStoreLoggerOperations(t, store)
+	retried, err := store.StartTurn(ctx, req)
+	if err != nil || !reflect.DeepEqual(retried, started) {
+		t.Fatalf("turn retry: %+v, %v", retried, err)
+	}
+	busy := req
+	busy.RequestID = startTurnRequestID("other")
+	busy.ExpectedVersion = started.Session.Version
+	if _, err := store.StartTurn(ctx, busy); !errors.Is(err, chatsessions.ErrBusy) {
+		t.Fatalf("busy: %v", err)
+	}
+	control := chatsessions.RequestControlRequest{RequestID: controlRequestID("conn", "control"), SessionID: created.Session.ID, ExpectedVersion: started.Session.Version, Action: chatsessions.ControlActionCancel}
+	intent, err := store.RequestControl(ctx, control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, err := store.RequestControl(ctx, control)
+	if err != nil || retry != intent {
+		t.Fatalf("control retry: %+v, %v", retry, err)
+	}
+	if intent.Intent.RequestedAt != created.Session.CreatedAt {
+		t.Fatal("control ignored injected time")
+	}
+	advanced, err := store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{SessionID: created.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateCanceled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	final, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.Session.ActiveTurnID != "" || final.Session.Version != started.Session.Version+1 {
+		t.Fatalf("terminal facts: %+v", final)
+	}
+	return []any{created, read, started, retried, intent, retry, advanced, final}
+}
+
+func assertDiagnosticPairs(t *testing.T, calls []capturedLogCall) {
+	t.Helper()
+	if len(calls) == 0 || len(calls)%2 != 0 {
+		t.Fatalf("missing diagnostic pairs: %+v", calls)
+	}
+	for i := 0; i < len(calls); i += 2 {
+		start, outcome := calls[i], calls[i+1]
+		if start.level != "debug" || start.msg != "chat_sessions operation start" || outcome.level != "info" || outcome.msg != "chat_sessions operation outcome" {
+			t.Fatalf("unexpected diagnostic pair: %+v / %+v", start, outcome)
+		}
+		if len(start.kv) != 4 || start.kv[0] != "op" || start.kv[2] != "session_id" || !hasKV(outcome.kv, "op", start.kv[1]) || !hasKey(outcome.kv, "error_class") {
+			t.Fatalf("unexpected diagnostic fields: %+v / %+v", start, outcome)
+		}
+	}
+}
+
+func TestStore_SelectedDiagnosticsExcludeEmbeddedMarkers(t *testing.T) {
+	t.Parallel()
+	logger, calls := newCaptureLogger()
+	store := NewStore(sequentialIDs("session"), fixedClock(time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)), nil, nil, logger)
+	markers := []string{"PROMPT_SECRET", "ROOT_SECRET", "CREDENTIAL_SECRET", "COMMAND_SECRET", "REQUEST_SECRET", "ERROR_SECRET"}
+	req := validCreateRequest()
+	req.WorkingRoot = "/workspace/" + strings.Join(markers[:4], "/")
+	req.RequestID.JSONRPCStringID = "prefix-" + markers[4] + "-suffix"
+	created, err := store.CreateSession(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, err := store.StartTurn(context.Background(), chatsessions.StartTurnRequest{RequestID: req.RequestID, SessionID: created.Session.ID, ExpectedVersion: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.RequestControl(context.Background(), chatsessions.RequestControlRequest{RequestID: req.RequestID, SessionID: created.Session.ID, ExpectedVersion: started.Session.Version, Action: chatsessions.ControlActionCancel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sentinel := range []error{chatsessions.ErrStaleVersion, chatsessions.ErrBusy, chatsessions.ErrNotFound, chatsessions.ErrInvalidTransition, chatsessions.ErrRequiredValue, chatsessions.ErrUncommittedStreamPosition} {
+		before := len(*calls)
+		store.logStart("markerFailure", created.Session.ID)
+		store.logOutcome("markerFailure", created.Session.ID, fmt.Errorf("prefix-%s-suffix: %w", markers[5], sentinel), "version", 99)
+		if len((*calls)[before+1].kv) != 6 || !hasKV((*calls)[before+1].kv, "error_class", classifyError(sentinel)) {
+			t.Fatalf("unsafe failure fields: %+v", (*calls)[before+1])
+		}
+	}
+	assertDiagnosticPairs(t, *calls)
+	assertNoUnsafeFields(t, *calls, markers...)
+	var absent *Store
+	absent.logStart("nil", "")
+	absent.logOutcome("nil", "", errors.New(markers[5]))
+}
+
+func TestStore_SelectedDiagnosticsAndStateStayIsolated(t *testing.T) {
+	t.Parallel()
+	a, ca := newCaptureLogger()
+	b, cb := newCaptureLogger()
+	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	first := NewStore(sequentialIDs("first"), fixedClock(at), nil, nil, a)
+	second := NewStore(sequentialIDs("second"), fixedClock(at.Add(time.Hour)), nil, nil, b)
+	one, err := first.CreateSession(context.Background(), validCreateRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := second.CreateSession(context.Background(), validCreateRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one.Session.CreatedAt != at || two.Session.CreatedAt != at.Add(time.Hour) {
+		t.Fatal("instance clocks crossed")
+	}
+	_, err = first.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: one.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstCount := len(*ca)
+	_, err = second.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: one.Session.ID})
+	if !errors.Is(err, chatsessions.ErrNotFound) || len(*ca) != firstCount {
+		t.Fatalf("peer lookup/state or logger crossed: %v", err)
+	}
+	for _, call := range *ca {
+		if hasKV(call.kv, "session_id", two.Session.ID) {
+			t.Fatalf("peer diagnostic in first: %+v", call)
+		}
+	}
+	if !hasKV((*cb)[len(*cb)-1].kv, "error_class", "not_found") {
+		t.Fatal("peer rejection missing from second logger")
+	}
+	read, err := second.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: two.Session.ID})
+	if err != nil || read.Session != two.Session {
+		t.Fatalf("second state changed: %+v, %v", read, err)
+	}
+	assertDiagnosticPairs(t, *ca)
+	assertDiagnosticPairs(t, *cb)
+}
+
+func assertSelectedOperationFields(t *testing.T, calls []capturedLogCall) {
+	t.Helper()
+	expected := []struct {
+		op    string
+		extra []any
+		class string
+	}{
+		{"CreateSession", []any{"version", uint64(1), "target_episode", uint64(1)}, ""},
+		{"GetSession", []any{"version", uint64(1), "target_episode", uint64(1)}, ""},
+		{"StartTurn", []any{"version", uint64(2), "turn_id", "session-2"}, ""},
+		{"StartTurn", []any{"version", uint64(2), "turn_id", "session-2"}, ""},
+		{"StartTurn", nil, "busy"},
+		{"RequestControl", []any{"request_kind", string(chatsessions.RequestIdentityKindJSONRPCString), "action", string(chatsessions.ControlActionCancel), "turn_id", "session-2", "target_episode", uint64(1)}, ""},
+		{"RequestControl", []any{"request_kind", string(chatsessions.RequestIdentityKindJSONRPCString), "action", string(chatsessions.ControlActionCancel), "turn_id", "session-2", "target_episode", uint64(1)}, ""},
+		{"AdvanceTurn", []any{"turn_id", "session-2", "state", string(chatsessions.TurnStateCanceled)}, ""},
+		{"GetSession", []any{"version", uint64(3), "target_episode", uint64(1)}, ""},
+	}
+	if len(calls) != len(expected)*2 {
+		t.Fatalf("diagnostic count: %d", len(calls))
+	}
+	for i, want := range expected {
+		startID := "session-1"
+		if i == 0 {
+			startID = ""
+		}
+		start := []any{"op", want.op, "session_id", startID}
+		outcome := append([]any{"op", want.op, "session_id", "session-1", "error_class", want.class}, want.extra...)
+		if !reflect.DeepEqual(calls[2*i].kv, start) || !reflect.DeepEqual(calls[2*i+1].kv, outcome) {
+			t.Fatalf("%s diagnostic fields: %+v / %+v, want %+v / %+v", want.op, calls[2*i].kv, calls[2*i+1].kv, start, outcome)
+		}
+	}
+}
+
+func TestStore_SelectedLoggerRejectedOperationsDoNotMutate(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"validation", "conflict", "busy", "not_found", "invalid_transition", "invariant_violation"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			logger, calls := newCaptureLogger()
+			store := NewStore(sequentialIDs("session"), fixedClock(time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)), nil, nil, logger)
+			ctx := context.Background()
+			created, err := store.CreateSession(ctx, validCreateRequest())
+			if err != nil {
+				t.Fatal(err)
+			}
+			started, err := store.StartTurn(ctx, chatsessions.StartTurnRequest{RequestID: startTurnRequestID("first"), SessionID: created.Session.ID, ExpectedVersion: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			*calls = nil
+			err = rejectStoreLoggerOperation(t, store, created, started, kind)
+			if err == nil {
+				t.Fatal("rejected operation returned nil error")
+			}
+			if len(*calls) != 2 || len((*calls)[1].kv) != 6 || !hasKV((*calls)[1].kv, "error_class", kind) {
+				t.Fatalf("failure diagnostics: %+v", *calls)
+			}
+			assertDiagnosticPairs(t, *calls)
+			after, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatalf("rejection mutated session: %+v / %+v, %v", before, after, err)
+			}
+		})
+	}
+}
+
+func startStoreLoggerOperations(t *testing.T, store *Store) (chatsessions.CreateSessionResult, chatsessions.GetSessionResult, chatsessions.StartTurnResult, chatsessions.StartTurnRequest) {
+	t.Helper()
+	ctx := context.Background()
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Session.ID != "session-1" || created.Session.Version != 1 {
+		t.Fatalf("unexpected session: %+v", created)
+	}
+	read, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := chatsessions.StartTurnRequest{RequestID: startTurnRequestID("turn"), SessionID: created.Session.ID, ExpectedVersion: 1}
+	started, err := store.StartTurn(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return created, read, started, req
+}
+
+func rejectStoreLoggerOperation(t *testing.T, store *Store, created chatsessions.CreateSessionResult, started chatsessions.StartTurnResult, kind string) error {
+	t.Helper()
+	ctx := context.Background()
+	var err error
+	switch kind {
+	case "validation":
+		_, err = store.CreateSession(ctx, chatsessions.CreateSessionRequest{})
+		var typed *chatsessions.ValidationError
+		if !errors.As(err, &typed) {
+			t.Fatalf("validation type: %v", err)
+		}
+	case "conflict":
+		_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{RequestID: startTurnRequestID("second"), SessionID: created.Session.ID, ExpectedVersion: 1})
+		var typed *chatsessions.ConflictError
+		if !errors.As(err, &typed) {
+			t.Fatalf("conflict type: %v", err)
+		}
+	case "busy":
+		_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{RequestID: startTurnRequestID("second"), SessionID: created.Session.ID, ExpectedVersion: started.Session.Version})
+		var typed *chatsessions.BusyError
+		if !errors.As(err, &typed) {
+			t.Fatalf("busy type: %v", err)
+		}
+	case "not_found":
+		_, err = store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: "missing"})
+		var typed *chatsessions.NotFoundError
+		if !errors.As(err, &typed) {
+			t.Fatalf("not-found type: %v", err)
+		}
+	case "invalid_transition":
+		_, err = store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{SessionID: created.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateCompleted})
+		if !errors.Is(err, chatsessions.ErrInvalidTransition) {
+			t.Fatalf("transition: %v", err)
+		}
+	case "invariant_violation":
+		_, err = store.AdvanceStreamHead(ctx, advanceStreamHeadRequest(created.Session.ID, 1, started.Session.Version, 1))
+		var typed *chatsessions.UncommittedStreamPositionError
+		if !errors.As(err, &typed) {
+			t.Fatalf("invariant type: %v", err)
+		}
+	}
+	return err
 }
