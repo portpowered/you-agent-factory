@@ -41,7 +41,7 @@ func sessionRuntimeSelection(request *factorysessions.SessionStartRequest) *fact
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func PrepareRuntime(
+func (r *Root) prepareRuntime(
 	ctx context.Context,
 	definitionRequest factorydefinitions.RuntimeSelection,
 	runtimeRequest factoryruntime.RuntimeSelection,
@@ -52,23 +52,6 @@ func PrepareRuntime(
 	modelCacheDirectory string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
 	baseLogger *zap.Logger,
-	clockEdge factoryruntime.Clock,
-	factoryDefinitionValidator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputLoader,
-	replayClock func(*factorydefinitions.ReplayArtifact) recordings.Clock,
-	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-	editableFactoryValidator factorysessions.EditableFactoryValidator,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	resolveClock factoryruntime.ClockResolver,
-	newSessionLogger factoryruntime.SessionLoggerFactory,
-	ensureOperatorBackendScope operatorconfig.BackendScopeEnsurer,
-	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	providerIdentities factorysessions.ProviderIdentityResolver,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
 ) (
@@ -82,12 +65,12 @@ func PrepareRuntime(
 	if err := factoryruntime.ValidateRecordReplayPaths(recordingRequest.RecordPath, recordingRequest.ReplayPath); err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
-	if factoryScaffoldInitializer == nil {
+	if r.factoryScaffoldInitializer == nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"Factory Definitions scaffold initializer is required",
 		)
 	}
-	if editableFactoryValidator == nil {
+	if r.editableFactoryValidator == nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"Factory Definitions editable validator is required",
 		)
@@ -98,21 +81,21 @@ func PrepareRuntime(
 		Workers:                     workerRequest, Recordings: recordingRequest, ModelCacheDirectory: modelCacheDirectory,
 		OperatorDefaults: operatorDefaults, DefinitionSnapshot: definitionSnapshot,
 	}
-	root, err = ResolveRuntimeRoot(prepared.Definition.Directory, baseLogger, prepared.Runtime.RuntimeInstanceID, generateRuntimeInstanceID, resolveHome)
+	root, err = ResolveRuntimeRoot(prepared.Definition.Directory, baseLogger, prepared.Runtime.RuntimeInstanceID, r.generateRuntimeInstanceID, r.resolveHome)
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
 	prepared.Definition.Directory = root.FactoryRootDir
 	prepared.Runtime.RuntimeInstanceID = root.RuntimeInstanceID
 	var resolveCurrentDir func(string) (string, error)
-	if namedPaths != nil {
-		resolveCurrentDir = namedPaths.ResolveCurrentDir
+	if r.namedPaths != nil {
+		resolveCurrentDir = r.namedPaths.ResolveCurrentDir
 	}
 	selectedDefinitionPath, err := resolveDefinitionPath(
 		&prepared.Definition,
 		prepared.Recordings.ReplayPath,
 		resolveCurrentDir,
-		resolveHome,
+		r.resolveHome,
 	)
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
@@ -124,12 +107,12 @@ func PrepareRuntime(
 		prepared.OperatorDefaults,
 		nil,
 		root,
-		loadFactory,
-		newLoadedFactory,
-		decodeReplayConfig,
-		replayInputs,
-		captureLoadedFactorySnapshot,
-		newSessionLogger,
+		r.loadFactory,
+		r.newLoadedFactory,
+		r.decodeReplayConfig,
+		r.recordingsRuntime,
+		r.captureLoadedFactorySnapshot,
+		r.newSessionLogger,
 		prepared.DefinitionSnapshot,
 		replayInput,
 		prepared.Session.SessionID,
@@ -141,31 +124,31 @@ func PrepareRuntime(
 	if load.HistoricalReplay != nil {
 		return prepared, root, load, nil, load.SessionLogger, nil
 	}
-	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, root.BaseLogger); err != nil {
+	if err := ensureBackendScope(r.ensureOperatorBackendScope, &prepared.Session, root.BaseLogger); err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
 	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
 		load.LoadedFactoryCfg,
-		providerIdentities,
+		r.providerIdentities,
 	); err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"validate Factory provider selections: %w",
 			err,
 		)
 	}
-	if factoryDefinitionValidator == nil {
+	if r.factoryDefinitionValidator == nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"Factory Definition validator is required",
 		)
 	}
 	if load.LoadedFactoryCfg != nil {
-		result := factoryDefinitionValidator.ValidateBlockingLoad(ctx, load.LoadedFactoryCfg.FactoryConfig())
+		result := r.factoryDefinitionValidator.ValidateBlockingLoad(ctx, load.LoadedFactoryCfg.FactoryConfig())
 		if err := factorydefinitions.NewBlockingFactoryLoadError(result); err != nil {
 			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 		}
 	}
 	selectedClock, clockErr := clockForReplay(
-		clockEdge, load.ReplayArtifact, replayClock, resolveClock,
+		r.clock, load.ReplayArtifact, r.recordingsRuntime.ReplayClock, r.resolveClock,
 	)
 	if clockErr != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, clockErr

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -19,131 +18,138 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-// openRuntime constructs one Factory Session and its domain-owned runtime state from
-// collaborators selected by the canonical process injector.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func openRuntime(
+// openRuntimeWithOptions opens session-owned state using the collaborators already
+// injected into this owner. Only invocation selections cross this boundary.
+func (r *Root) openRuntimeWithOptions(
 	ctx context.Context,
-	definitionRequest factorydefinitions.RuntimeSelection,
-	runtimeRequest factoryruntime.RuntimeSelection,
-	sessionRequest *factorysessions.SessionStartRequest,
+	definition factorydefinitions.RuntimeSelection,
+	runtime factoryruntime.RuntimeSelection,
+	session *factorysessions.SessionStartRequest,
 	canonicalSessionIDGenerated bool,
-	workerRequest workers.RuntimeSelection,
-	recordingRequest recordings.RuntimeSelection,
+	worker workers.RuntimeSelection,
+	recording recordings.RuntimeSelection,
 	modelCacheDirectory string,
 	operatorDefaults operatorsettings.ResolvedDefaults,
 	baseLogger *zap.Logger,
-	clockEdge factoryruntime.Clock,
-	providerOverride providers.Service,
-	invocationMetricsRecorder roles.InvocationMetricsRecorder,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	durableExecutionFactory DurableExecutionFactory,
-	workerService workers.Service,
-	modelService models.Service,
-	automationService automations.Service,
-	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
-	recordingsService recordings.Service,
-	recordingsRuntime recordings.RuntimeScopeService,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	factoryDefinitions factorydefinitions.Service,
-	definitionRuntimeRouter *factorysessions.DefinitionRuntimeRouter,
-	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-	editableFactoryValidator factorysessions.EditableFactoryValidator,
-	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
-	factoryRuntimeAssembler FactoryRuntimeAssembler,
-	workService work.Service,
-	providerSessions providersessions.Service,
-	factoryDefinitionValidator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
-	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	webhooksService webhooks.Service,
-	resolveClock factoryruntime.ClockResolver,
-	newSessionLogger factoryruntime.SessionLoggerFactory,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
-	processRuntimeFactory roles.ProcessRuntimeFactory,
-	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
-	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	providerIdentities factorysessions.ProviderIdentityResolver,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
 ) (products runtimeProducts, err error) {
-	if sessionRequest == nil {
-		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
+	opening, err := r.prepareRuntimeOpening(ctx, definition, runtime, session,
+		canonicalSessionIDGenerated, worker, recording, modelCacheDirectory,
+		operatorDefaults, baseLogger, definitionSnapshot, replayInput)
+	if err != nil {
+		return runtimeProducts{}, err
 	}
-	if recordingsService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings service is required")
+	if opening.load.HistoricalReplay != nil {
+		return r.openHistoricalSessionRuntime(opening)
 	}
-	if recordingsRuntime == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime scope is required")
+	cleanup := &runtimeOpeningCleanup{}
+	defer func() {
+		if err != nil {
+			if cleanupErr := cleanup.Close(); cleanupErr != nil {
+				err = errors.Join(err, cleanupErr)
+				products.closeArtifacts = cleanup.Close
+			}
+		}
+	}()
+	if err = r.openSessionDurableScopes(ctx, opening, cleanup); err != nil {
+		return runtimeProducts{}, err
 	}
-	selection := sessionRuntimeSelection(sessionRequest)
+	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
+		return runtimeProducts{}, err
+	}
+	return r.completeSessionOpening(ctx, opening, cleanup)
+}
+
+// sessionRuntimeOpening retains one opening's selections and partial results.
+// Its lifetime ends with the opening; peer openings never share this state.
+type sessionRuntimeOpening struct {
+	configured                  preparedRuntime
+	root                        RuntimeRoot
+	load                        RuntimeLoad
+	clock                       factoryruntime.Clock
+	logger                      *zap.Logger
+	sessionID                   string
+	metricsSessionID            string
+	providedCanonicalSessionID  string
+	canonicalSessionIDGenerated bool
+	sessionSelection            *factorysessions.SessionRuntimeSelection
+	operatorSettingsPath        string
+	recordingProjections        recordings.ProjectionService
+	providerForDurable          providers.Service
+	durableExecution            DurableExecution
+	modelsBind                  modelsRuntimeBind
+	resumeInput                 *recordings.LoadResumeInputResult
+	restoredWorldState          *factorydefinitions.FactoryWorldState
+	restoredEventHistory        []factorydefinitions.FactoryEvent
+	boardHistoryOpening         currentBoardHistoryOpening
+	runtimebuildService         runtimeports.RuntimeReplacementBuilder
+	startupRuntime              runtimeports.RuntimeInstance
+	startupSpec                 factoryruntime.SessionBuildSpec
+	runtimeLifecycle            runtimeports.RuntimeLifecycle
+	runtimeSidecars             runtimeports.RuntimeSidecarService
+}
+
+func (r *Root) prepareRuntimeOpening(
+	ctx context.Context,
+	definition factorydefinitions.RuntimeSelection,
+	runtime factoryruntime.RuntimeSelection,
+	session *factorysessions.SessionStartRequest,
+	canonicalSessionIDGenerated bool,
+	worker workers.RuntimeSelection,
+	recording recordings.RuntimeSelection,
+	modelCacheDirectory string,
+	operatorDefaults operatorsettings.ResolvedDefaults,
+	baseLogger *zap.Logger,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayInput *recordings.LoadReplayInputResult,
+) (*sessionRuntimeOpening, error) {
+	if session == nil {
+		return nil, fmt.Errorf("Factory Session runtime selection is required")
+	}
+	if r.recordingsService == nil {
+		return nil, fmt.Errorf("construct runtime scope: Recordings service is required")
+	}
+	if r.recordingsRuntime == nil {
+		return nil, fmt.Errorf("construct runtime scope: Recordings runtime scope is required")
+	}
+	selection := sessionRuntimeSelection(session)
 	providedCanonicalSessionID := strings.TrimSpace(selection.CanonicalSessionID)
-	sessionID := strings.TrimSpace(sessionRequest.SessionID)
+	sessionID := strings.TrimSpace(session.SessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
-	sessionRequest.SessionID = sessionID
-	configured, root, load, clock, logger, err := PrepareRuntime(
+	session.SessionID = sessionID
+	configured, root, load, clock, logger, err := r.prepareRuntime(
 		ctx,
-		definitionRequest,
-		runtimeRequest,
-		*sessionRequest,
+		definition,
+		runtime,
+		*session,
 		canonicalSessionIDGenerated,
-		workerRequest,
-		recordingRequest,
+		worker,
+		recording,
 		modelCacheDirectory,
 		operatorDefaults,
 		baseLogger,
-		clockEdge,
-		factoryDefinitionValidator,
-		namedPaths,
-		loadFactory,
-		newLoadedFactory,
-		decodeReplayConfig,
-		recordingsRuntime,
-		recordingsRuntime.ReplayClock,
-		factoryScaffoldInitializer,
-		editableFactoryValidator,
-		captureLoadedFactorySnapshot,
-		resolveClock,
-		newSessionLogger,
-		ensureOperatorBackendScope,
-		generateRuntimeInstanceID,
-		resolveHome,
-		providerIdentities,
 		definitionSnapshot,
 		replayInput,
 	)
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, err
 	}
 	// Resolve and validate the Factory Definition before allocating the
 	// canonical metrics identity. Invalid Current Factory or working-directory
 	// input must not consume a Factory Session identity or create a product
 	// lifecycle effect.
-	if err := ensureDefaultCanonicalSessionID(sessionRequest, recordingRequest.ReplayPath, generateRuntimeInstanceID); err != nil {
-		return runtimeProducts{}, err
+	if err := ensureDefaultCanonicalSessionID(session, recording.ReplayPath, r.generateRuntimeInstanceID); err != nil {
+		return nil, err
 	}
 	canonicalSessionIDGenerated = canonicalSessionIDGenerated ||
 		(providedCanonicalSessionID == "" && strings.TrimSpace(selection.CanonicalSessionID) != "")
@@ -154,6 +160,24 @@ func openRuntime(
 	if metricsSessionID == "" {
 		metricsSessionID = sessionID
 	}
+	if err := applyRuntimeWorkerReasoningEffort(configured, load); err != nil {
+		return nil, err
+	}
+	return &sessionRuntimeOpening{
+		configured:                  configured,
+		root:                        root,
+		load:                        load,
+		clock:                       clock,
+		logger:                      logger,
+		sessionID:                   sessionID,
+		metricsSessionID:            metricsSessionID,
+		providedCanonicalSessionID:  providedCanonicalSessionID,
+		canonicalSessionIDGenerated: canonicalSessionIDGenerated,
+		sessionSelection:            sessionSelection,
+	}, nil
+}
+
+func applyRuntimeWorkerReasoningEffort(configured preparedRuntime, load RuntimeLoad) error {
 	if effort := strings.TrimSpace(configured.Workers.WorkerReasoningEffort); effort != "" &&
 		load.LoadedFactoryCfg != nil {
 		if err := load.LoadedFactoryCfg.MutateWorkers(func(worker *factorydefinitions.FactoryWorkerConfig) error {
@@ -162,103 +186,98 @@ func openRuntime(
 			}
 			return nil
 		}); err != nil {
-			return runtimeProducts{}, fmt.Errorf("apply worker reasoning effort override: %w", err)
+			return fmt.Errorf("apply worker reasoning effort override: %w", err)
 		}
 	}
-	if load.HistoricalReplay != nil {
-		var liveOwner durableexecution.Service
-		var replayClose func() error
-		if load.HistoricalReplay.Checkpoint != nil {
-			liveOwner, replayClose, err = openPortableReplayDurableOwner(
-				configured,
-				root,
-				logger,
-				clockEdge,
-				providerOverride,
-				providerCommandRunner,
-				scriptCommandRunner,
-				workerService,
-				workersMockCommandRunnerFactory,
-				providerFromCommandRunnerFactory,
-				durableExecutionFactory,
-				factorySessionExecutionFactory,
-				providerIdentities,
-				resolveClock,
-				factoryRuntimeAssembler,
-				recordingsRuntime,
-				initialFactorySnapshotFactory,
-				loadFactory,
-				automationService,
-				submissionRecorder,
-				dispatchRecorder,
-			)
-			if err != nil {
-				return runtimeProducts{}, err
-			}
-		}
-		historicalProducts := historicalReplayRuntimeProducts(
-			logger,
-			*load.HistoricalReplay,
-			liveOwner,
-			replayClose,
+	return nil
+}
+
+func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (runtimeProducts, error) {
+	var err error
+	var liveOwner durableexecution.Service
+	var replayClose func() error
+	if opening.load.HistoricalReplay.Checkpoint != nil {
+		liveOwner, replayClose, err = openPortableReplayDurableOwner(
+			opening.configured,
+			opening.root,
+			opening.logger,
+			r.clock,
+			r.providerOverride,
+			r.providerCommandRunner,
+			r.scriptCommandRunner,
+			r.workerService,
+			r.workersMockCommandRunnerFactory,
+			r.providerFromCommandRunnerFactory,
+			r.durableExecutionFactory,
+			r.factorySessionExecutionFactory,
+			r.providerIdentities,
+			r.resolveClock,
+			r.factoryRuntimeAssembler,
+			r.recordingsRuntime,
+			r.initialFactorySnapshotFactory,
+			r.loadFactory,
+			r.automationService,
+			r.submissionRecorder,
+			r.dispatchRecorder,
 		)
-		historicalProducts.replayMetadataWarnings = append(
-			[]recordings.MetadataMismatchWarning(nil),
-			load.ReplayMetadataWarnings...,
-		)
-		return historicalProducts, nil
-	}
-	operatorSettingsPath, err := operatorConfigPath(sessionSelection.SystemConfigPath, sessionSelection.SystemConfigHome)
-	if err != nil {
-		return runtimeProducts{}, fmt.Errorf("resolve operator settings path for runtime transport: %w", err)
-	}
-	if clock == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
-	}
-	recordingProjections := recordingsRuntime.Projection()
-	if recordingProjections == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings projection is unavailable")
-	}
-	if durableExecutionFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: durable execution operation is required")
-	}
-	providerForDurable, err := resolveDurableExecutionProvider(
-		providerOverride,
-		configured.Workers.MockWorkers,
-		load.LoadedFactoryCfg,
-		providerCommandRunner,
-		workersMockCommandRunnerFactory,
-		providerFromCommandRunnerFactory,
-	)
-	if err != nil {
-		return runtimeProducts{}, err
-	}
-	// Retain ownership before the first scoped opening. An opening can return
-	// resources alongside an error, and later Models failures must also unwind
-	// the durable execution scope.
-	cleanup := &runtimeOpeningCleanup{}
-	defer func() {
 		if err != nil {
-			if cleanupErr := cleanup.Close(); cleanupErr != nil {
-				err = errors.Join(err, cleanupErr)
-				products.closeArtifacts = cleanup.Close
-			}
+			return runtimeProducts{}, err
 		}
-	}()
-	durableExecution, err := durableExecutionFactory(
-		configured.Definition,
-		configured.Session.Persistence,
-		sessionSelection.SystemConfigHome,
-		sessionSelection.SystemConfigPath,
-		configured.OperatorDefaults,
-		root,
-		clock,
-		providerForDurable,
-		configured.Workers.MockWorkers,
-		factorySessionExecutionFactory,
-		providerIdentities,
+	}
+	historicalProducts := historicalReplayRuntimeProducts(
+		opening.logger,
+		*opening.load.HistoricalReplay,
+		liveOwner,
+		replayClose,
 	)
-	if closer, ok := durableExecution.Service.(interface{ Close() error }); ok {
+	historicalProducts.replayMetadataWarnings = append(
+		[]recordings.MetadataMismatchWarning(nil),
+		opening.load.ReplayMetadataWarnings...,
+	)
+	return historicalProducts, nil
+}
+
+func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+	var err error
+	opening.operatorSettingsPath, err = operatorConfigPath(opening.sessionSelection.SystemConfigPath, opening.sessionSelection.SystemConfigHome)
+	if err != nil {
+		return fmt.Errorf("resolve operator settings path for runtime transport: %w", err)
+	}
+	if opening.clock == nil {
+		return fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
+	}
+	opening.recordingProjections = r.recordingsRuntime.Projection()
+	if opening.recordingProjections == nil {
+		return fmt.Errorf("construct runtime scope: Recordings projection is unavailable")
+	}
+	if r.durableExecutionFactory == nil {
+		return fmt.Errorf("construct runtime scope: durable execution operation is required")
+	}
+	opening.providerForDurable, err = resolveDurableExecutionProvider(
+		r.providerOverride,
+		opening.configured.Workers.MockWorkers,
+		opening.load.LoadedFactoryCfg,
+		r.providerCommandRunner,
+		r.workersMockCommandRunnerFactory,
+		r.providerFromCommandRunnerFactory,
+	)
+	if err != nil {
+		return err
+	}
+	opening.durableExecution, err = r.durableExecutionFactory(
+		opening.configured.Definition,
+		opening.configured.Session.Persistence,
+		opening.sessionSelection.SystemConfigHome,
+		opening.sessionSelection.SystemConfigPath,
+		opening.configured.OperatorDefaults,
+		opening.root,
+		opening.clock,
+		opening.providerForDurable,
+		opening.configured.Workers.MockWorkers,
+		r.factorySessionExecutionFactory,
+		r.providerIdentities,
+	)
+	if closer, ok := opening.durableExecution.Service.(interface{ Close() error }); ok {
 		cleanup.Add(func() error {
 			if err := closer.Close(); err != nil {
 				return fmt.Errorf("close durable Factory Session execution: %w", err)
@@ -267,189 +286,204 @@ func openRuntime(
 		})
 	}
 	if err != nil {
-		return runtimeProducts{}, err
+		return err
 	}
-	factorysessionexecutionService := durableExecution.Service
-	setPersistenceWarningLogger(factorysessionexecutionService, logger)
-	if factorySessionsRuntimeAssembly == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
+	setPersistenceWarningLogger(opening.durableExecution.Service, opening.logger)
+	if r.factorySessionsRuntimeAssembly == nil {
+		return fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
 	}
-	runtimeService := factorySessionsRuntimeAssembly
 	currentRuntimeConfig := func() *models.RuntimeConfig {
 		// The Models scope must snapshot the Factory Definition selected by this
 		// opening. CurrentRuntime is process-global and can belong to another
 		// concurrently opening Factory Session, which would bind this session's
 		// host launcher to the other session's worker endpoint.
-		return modelinvocation.ProjectModelsRuntimeConfig(load.LoadedFactoryCfg)
+		return modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg)
 	}
-	modelsBind, err := bindModelsRuntimeScope(
+	opening.modelsBind, err = bindModelsRuntimeScope(
 		ctx,
-		modelService,
-		configured.ModelCacheDirectory,
+		r.modelService,
+		opening.configured.ModelCacheDirectory,
 		currentRuntimeConfig,
-		durableExecution.OperatorModels,
+		opening.durableExecution.OperatorModels,
 	)
-	cleanup.OwnModelsScope(context.WithoutCancel(ctx), modelsBind)
+	cleanup.OwnModelsScope(context.WithoutCancel(ctx), opening.modelsBind)
 	if err != nil {
-		return runtimeProducts{}, err
+		return err
 	}
-	if workService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work service is required")
+	if r.workService == nil {
+		return fmt.Errorf("construct runtime scope: Work service is required")
 	}
-	if workerService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Workers service is required")
+	if r.workerService == nil {
+		return fmt.Errorf("construct runtime scope: Workers service is required")
 	}
-	if automationService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations service is required")
+	if r.automationService == nil {
+		return fmt.Errorf("construct runtime scope: Automations service is required")
 	}
-	service2 := automationService
-	mutationOwner, ok := factorysessionexecutionService.(interface {
-		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
-	})
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf(
-			"compose runtime: durable execution owner does not record Petri mutations",
-		)
+	return nil
+}
+
+func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
+	var err error
+	if strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
+		input := opening.configured.Recordings.ResumeInput
+		opening.resumeInput = &input
 	}
-	if factoryRuntimeAssembler == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
-	}
-	var resumeInput *recordings.LoadResumeInputResult
-	if strings.TrimSpace(configured.Recordings.ResumePath) != "" {
-		input := configured.Recordings.ResumeInput
-		resumeInput = &input
-	}
-	var restoredWorldState *factorydefinitions.FactoryWorldState
-	var restoredEventHistory []factorydefinitions.FactoryEvent
-	var boardHistoryOpening currentBoardHistoryOpening
 	// A portable resume input owns its selected-history reconstruction. Only a
 	// direct live opening should restore the current board recording; applying
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
-	canonicalSessionIDWasProvided := providedCanonicalSessionID != "" && !canonicalSessionIDGenerated
-	if load.ReplayArtifact == nil && resumeInput == nil && !canonicalSessionIDWasProvided {
-		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
-			boardHistoryOpening, err = inspectCurrentBoardHistory(
+	canonicalSessionIDWasProvided := opening.providedCanonicalSessionID != "" && !opening.canonicalSessionIDGenerated
+	if opening.load.ReplayArtifact == nil && opening.resumeInput == nil && !canonicalSessionIDWasProvided {
+		if strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" {
+			opening.boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,
-				durableExecution.Service,
-				sessionID,
+				opening.durableExecution.Service,
+				opening.sessionID,
 			)
 			if err != nil {
-				return runtimeProducts{}, err
+				return err
 			}
 		}
 		var restoredBoard *currentBoardHistory
 		restoredBoard, err = restoreCurrentBoardHistory(
-			recordingsService,
-			configured.Recordings.RecordPath,
-			sessionID,
-			boardHistoryOpening.allowMissingHistory,
+			r.recordingsService,
+			opening.configured.Recordings.RecordPath,
+			opening.sessionID,
+			opening.boardHistoryOpening.allowMissingHistory,
 		)
 		if err != nil {
 			logCurrentBoardHistoryFailure(
-				logger,
-				sessionID,
-				factoryruntime.RecordingPath(configured.Recordings.RecordPath).ForSession(sessionID),
+				opening.logger,
+				opening.sessionID,
+				factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID),
 				err,
 			)
-			return runtimeProducts{}, err
+			return err
 		}
 		if restoredBoard != nil {
-			restoredWorldState = restoredBoard.state
-			restoredEventHistory = restoredBoard.events
+			opening.restoredWorldState = restoredBoard.state
+			opening.restoredEventHistory = restoredBoard.events
 		}
 	}
-	runtimebuildService, startupRuntime, startupSpec, runtimeLifecycle, runtimeSidecars, err :=
-		factoryRuntimeAssembler.Assemble(
+	return nil
+}
+
+func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+	var err error
+	mutationOwner, ok := opening.durableExecution.Service.(interface {
+		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
+	})
+	if !ok {
+		return fmt.Errorf(
+			"compose runtime: durable execution owner does not record Petri mutations",
+		)
+	}
+	if r.factoryRuntimeAssembler == nil {
+		return fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
+	}
+	if err := r.restoreSessionOpeningHistory(ctx, opening); err != nil {
+		return err
+	}
+
+	opening.runtimebuildService, opening.startupRuntime, opening.startupSpec, opening.runtimeLifecycle, opening.runtimeSidecars, err =
+		r.factoryRuntimeAssembler.Assemble(
 			ctx,
-			configured.OperatorDefaults.WorkerModelProvider,
-			configured.OperatorDefaults.WorkerModel,
-			configured.Recordings.ReplayPath == "",
-			configured.Recordings.RecordPath,
-			configured.Recordings.WorkflowID,
-			sessionID,
-			metricsSessionID,
+			opening.configured.OperatorDefaults.WorkerModelProvider,
+			opening.configured.OperatorDefaults.WorkerModel,
+			opening.configured.Recordings.ReplayPath == "",
+			opening.configured.Recordings.RecordPath,
+			opening.configured.Recordings.WorkflowID,
+			opening.sessionID,
+			opening.metricsSessionID,
 			nil,
-			loadFactory,
-			providerOverride,
-			providerCommandRunner,
-			scriptCommandRunner,
-			configured.Workers.MockWorkers,
-			configured.Runtime.Mode,
+			r.loadFactory,
+			r.providerOverride,
+			r.providerCommandRunner,
+			r.scriptCommandRunner,
+			opening.configured.Workers.MockWorkers,
+			opening.configured.Runtime.Mode,
 			factoryruntime.Scheduler(nil),
 			false,
-			submissionRecorder,
-			dispatchRecorder,
-			configured.Runtime.LogDirectory,
-			configured.Runtime.LogConfig,
-			factoryruntime.RuntimeFileLoggingPolicy(configured.Runtime.FileLoggingPolicy),
-			factoryruntime.RuntimeMetricsPolicy(configured.Runtime.MetricsPolicy),
-			configured.Runtime.MetricsDirectory,
-			configured.Runtime.MetricsConfig,
-			configured.Recordings.FlushInterval,
-			sessionSelection.BackendScopeID,
-			configured.Workers.RunnerID,
-			configured.Runtime.Verbose,
-			configured.Workers.SkipBuiltInPrerequisiteValidation,
-			configured.Workers.InvocationSkipPermissionsOverride,
-			clock,
-			logger,
-			workersMockCommandRunnerFactory,
+			r.submissionRecorder,
+			r.dispatchRecorder,
+			opening.configured.Runtime.LogDirectory,
+			opening.configured.Runtime.LogConfig,
+			factoryruntime.RuntimeFileLoggingPolicy(opening.configured.Runtime.FileLoggingPolicy),
+			factoryruntime.RuntimeMetricsPolicy(opening.configured.Runtime.MetricsPolicy),
+			opening.configured.Runtime.MetricsDirectory,
+			opening.configured.Runtime.MetricsConfig,
+			opening.configured.Recordings.FlushInterval,
+			opening.sessionSelection.BackendScopeID,
+			opening.configured.Workers.RunnerID,
+			opening.configured.Runtime.Verbose,
+			opening.configured.Workers.SkipBuiltInPrerequisiteValidation,
+			opening.configured.Workers.InvocationSkipPermissionsOverride,
+			opening.clock,
+			opening.logger,
+			r.workersMockCommandRunnerFactory,
 			fanOutWorkerProgress(
-				runtimeService.InferenceProgressPublisherFactory(logger),
-				durableExecution.Service,
+				r.factorySessionsRuntimeAssembly.InferenceProgressPublisherFactory(opening.logger),
+				opening.durableExecution.Service,
 			),
-			runtimeService.DispatchCompletionObserverFactory(),
+			r.factorySessionsRuntimeAssembly.DispatchCompletionObserverFactory(),
 			mutationOwner.RecordPetriTokenMutations,
-			recordingProjections.ReconstructFactoryWorldState,
-			recordingsRuntime,
-			initialFactorySnapshotFactory,
-			configured.Definition.Directory,
-			root.FactoryRootDir,
-			configured.Definition.ExecutionBaseDir,
-			load.LoadedFactoryCfg,
-			configured.Runtime.RuntimeInstanceID,
-			load.ReplayArtifact,
-			resumeInput,
-			restoredWorldState,
-			restoredEventHistory,
-			service2,
-			configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
+			opening.recordingProjections.ReconstructFactoryWorldState,
+			r.recordingsRuntime,
+			r.initialFactorySnapshotFactory,
+			opening.configured.Definition.Directory,
+			opening.root.FactoryRootDir,
+			opening.configured.Definition.ExecutionBaseDir,
+			opening.load.LoadedFactoryCfg,
+			opening.configured.Runtime.RuntimeInstanceID,
+			opening.load.ReplayArtifact,
+			opening.resumeInput,
+			opening.restoredWorldState,
+			opening.restoredEventHistory,
+			r.automationService,
+			opening.configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)
-	cleanup.OwnRuntimeRecord(startupRuntime, clock)
+	cleanup.OwnRuntimeRecord(opening.startupRuntime, opening.clock)
 	if err != nil {
-		return runtimeProducts{}, err
+		return err
 	}
-	if strings.TrimSpace(startupSpec.SessionID) != sessionID {
-		return runtimeProducts{}, fmt.Errorf(
+	if strings.TrimSpace(opening.startupSpec.SessionID) != opening.sessionID {
+		return fmt.Errorf(
 			"construct runtime scope: built Factory Session ID %q does not match requested ID %q",
-			startupSpec.SessionID,
-			sessionID,
+			opening.startupSpec.SessionID,
+			opening.sessionID,
 		)
 	}
-	startupSpec.CanonicalSessionIDGenerated = canonicalSessionIDGenerated &&
-		sessionID == factorysessions.DefaultSessionID &&
-		metricsSessionID != factorysessions.DefaultSessionID
-	if boardHistoryOpening.hasDurableState && restoredWorldState == nil {
-		if runtimeLogger := startupRuntime.RuntimeLogger(); runtimeLogger != nil {
+	opening.startupSpec.CanonicalSessionIDGenerated = opening.canonicalSessionIDGenerated &&
+		opening.sessionID == factorysessions.DefaultSessionID &&
+		opening.metricsSessionID != factorysessions.DefaultSessionID
+	opening.warnMissingBoardHistory()
+	return nil
+}
+
+func (opening *sessionRuntimeOpening) warnMissingBoardHistory() {
+	if opening.boardHistoryOpening.hasDurableState && opening.restoredWorldState == nil {
+		if runtimeLogger := opening.startupRuntime.RuntimeLogger(); runtimeLogger != nil {
 			runtimeLogger.Warn(
 				"current Factory Session board recording is absent after durable state was preserved; board contents were lost, an empty board was initialized, and preserved durable state was not deleted",
-				zap.String("session_id", sessionID),
+				zap.String("session_id", opening.sessionID),
 				zap.String(
 					"recording_path",
-					factoryruntime.RecordingPath(configured.Recordings.RecordPath).ForSession(sessionID),
+					factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID),
 				),
 				zap.String("recovery", "missing_board_recording_after_durable_state"),
 			)
 		}
 	}
+}
+
+func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) (runtimeProducts, error) {
 	webhookSubscription, err := startFactoryWebhookSubscription(
 		ctx,
-		webhooksService,
-		startupRuntime.RecordingLedger(),
-		load.LoadedFactoryCfg,
-		load.ReplayArtifact == nil,
-		sessionID,
+		r.webhooksService,
+		opening.startupRuntime.RecordingLedger(),
+		opening.load.LoadedFactoryCfg,
+		opening.load.ReplayArtifact == nil,
+		opening.sessionID,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -459,86 +493,98 @@ func openRuntime(
 			return webhookSubscription(context.WithoutCancel(ctx))
 		})
 	}
-	if factoryDefinitions == nil {
+	if r.factoryDefinitions == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions service is required")
 	}
-	if definitionRuntimeRouter == nil {
+	if r.definitionRuntimeRouter == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions runtime router is required")
 	}
-	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := runtimeService.Complete(
-		root.FactoryRootDir,
-		clock,
-		logger,
-		startupRuntime.RuntimeLogger(),
-		runtimebuildService,
-		startupRuntime,
-		modelsBind.Scope,
-		startupSpec,
-		runtimeLifecycle,
-		runtimeSidecars,
-		factorysessionexecutionService,
-		factoryDefinitions,
-		sessionID,
-		configured.Definition.Directory,
-		configured.Definition.ExecutionBaseDir,
-		configured.Runtime.Mode,
-		sessionSelection.BackendScopeID,
-		sessionSelection.WorkFile,
-		configured.Recordings.WorkflowID,
+	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
+		opening.root.FactoryRootDir,
+		opening.clock,
+		opening.logger,
+		opening.startupRuntime.RuntimeLogger(),
+		opening.runtimebuildService,
+		opening.startupRuntime,
+		opening.modelsBind.Scope,
+		opening.startupSpec,
+		opening.runtimeLifecycle,
+		opening.runtimeSidecars,
+		opening.durableExecution.Service,
+		r.factoryDefinitions,
+		opening.sessionID,
+		opening.configured.Definition.Directory,
+		opening.configured.Definition.ExecutionBaseDir,
+		opening.configured.Runtime.Mode,
+		opening.sessionSelection.BackendScopeID,
+		opening.sessionSelection.WorkFile,
+		opening.configured.Recordings.WorkflowID,
 		nil,
-		loadFactory,
-		factoryScaffoldInitializer,
-		editableFactoryValidator,
+		r.loadFactory,
+		r.factoryScaffoldInitializer,
+		r.editableFactoryValidator,
 		func(
 			recorded []factorydefinitions.FactoryEvent,
 			cursor factorydefinitions.FactoryEventReconnectCursor,
 			scope factorydefinitions.FactoryEventReconnectScope,
 		) error {
-			return recordingProjections.ValidateReconnectReplay(recorded, cursor, scope)
+			return opening.recordingProjections.ValidateReconnectReplay(recorded, cursor, scope)
 		},
-		recordingProjections.ReconstructFactoryWorldState,
-		invocationMetricsRecorder,
+		opening.recordingProjections.ReconstructFactoryWorldState,
+		r.invocationMetricsRecorder,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	if bound := runtimebinding.SessionStateFrom(runtimeService.Resolve(sessionID)); bound != nil {
-		bound.SetMockWorkers(configured.Workers.MockWorkers)
+	if bound := runtimebinding.SessionStateFrom(r.factorySessionsRuntimeAssembly.Resolve(opening.sessionID)); bound != nil {
+		bound.SetMockWorkers(opening.configured.Workers.MockWorkers)
 	}
-	if binder, ok := startupRuntime.(interface {
+	if binder, ok := opening.startupRuntime.(interface {
 		BindModelsRuntimeScope(models.RuntimeScopeRef) error
 	}); ok {
-		if err := binder.BindModelsRuntimeScope(modelsBind.Scope); err != nil {
+		if err := binder.BindModelsRuntimeScope(opening.modelsBind.Scope); err != nil {
 			return runtimeProducts{}, fmt.Errorf("bind Models runtime scope to Factory Runtime: %w", err)
 		}
 	}
-	if err := definitionRuntimeRouter.Bind(
-		sessionID,
+	if err := r.definitionRuntimeRouter.Bind(
+		opening.sessionID,
 		definitionHost,
 		definitionActivationGateway,
 	); err != nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
 	}
 	cleanup.Add(func() error {
-		definitionRuntimeRouter.Unbind(sessionID)
+		r.definitionRuntimeRouter.Unbind(opening.sessionID)
 		return nil
 	})
-	if processRuntimeFactory == nil {
+	if r.processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
 	}
-	processRuntime, err := processRuntimeFactory.Bind(
+	processRuntime, err := r.processRuntimeFactory.Bind(
 		sessionRuntime,
 		factorysessions.RuntimeHostRequest{
-			Directory: configured.Definition.Directory, RuntimeMode: configured.Runtime.Mode,
-			WorkFile: sessionSelection.WorkFile, MockWorkers: configured.Workers.MockWorkers != nil,
-			Host: sessionSelection.Host.Host, Port: sessionSelection.Host.Port,
-			AutoPort: sessionSelection.Host.AutoPort, Pprof: sessionSelection.Host.Pprof,
+			Directory: opening.configured.Definition.Directory, RuntimeMode: opening.configured.Runtime.Mode,
+			WorkFile: opening.sessionSelection.WorkFile, MockWorkers: opening.configured.Workers.MockWorkers != nil,
+			Host: opening.sessionSelection.Host.Host, Port: opening.sessionSelection.Host.Port,
+			AutoPort: opening.sessionSelection.Host.AutoPort, Pprof: opening.sessionSelection.Host.Pprof,
 		},
-		startupRuntime.RuntimeLogger(),
+		opening.startupRuntime.RuntimeLogger(),
 	)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	return r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, service4, invocationDomain, processRuntime)
+}
+
+func (r *Root) bindSessionOpeningProducts(
+	ctx context.Context,
+	opening *sessionRuntimeOpening,
+	cleanup *runtimeOpeningCleanup,
+	sessionRuntime roles.ApplicationRuntime,
+	service4 roles.SessionGateway,
+	invocationDomain roles.SessionInvoker,
+	processRuntime roles.ProcessRuntime,
+) (runtimeProducts, error) {
 	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
@@ -552,60 +598,60 @@ func openRuntime(
 		resourceLeaseAdmission = admission
 	}
 	if err := bindDurableExecutionCapabilities(
-		sessionID,
-		durableExecution.Service,
-		workerService,
+		opening.sessionID,
+		opening.durableExecution.Service,
+		r.workerService,
 		rootRuntime,
 		resourceLeaseAdmission,
-		configured.Runtime.RuntimeInstanceID,
-		startupRuntime.StreamGeneration(),
-		startupRuntime.RecordingLedger(),
-		providerForDurable,
-		configured.Workers.MockWorkers,
-		providerCommandRunner,
-		runtimeProgressPublisher(startupRuntime),
-		runtimeWorkerAttemptStarter(startupRuntime),
+		opening.configured.Runtime.RuntimeInstanceID,
+		opening.startupRuntime.StreamGeneration(),
+		opening.startupRuntime.RecordingLedger(),
+		opening.providerForDurable,
+		opening.configured.Workers.MockWorkers,
+		r.providerCommandRunner,
+		runtimeProgressPublisher(opening.startupRuntime),
+		runtimeWorkerAttemptStarter(opening.startupRuntime),
 	); err != nil {
 		return runtimeProducts{}, err
 	}
 	opened := assembleRuntimeProducts(
 		ctx,
-		factoryDefinitions,
+		r.factoryDefinitions,
 		service4,
 		invocationDomain,
 		rootRuntime,
-		factoryWorkflows,
-		workflowPreview,
-		workService,
-		workerService,
-		modelsBind,
-		providerSessions,
-		startupRuntime,
+		r.factoryWorkflows,
+		r.workflowPreview,
+		r.workService,
+		r.workerService,
+		opening.modelsBind,
+		r.providerSessions,
+		opening.startupRuntime,
 		sessionRuntime,
 		processRuntime,
-		runtimeService,
-		recordingProjections,
-		configured.Definition.Directory,
-		configured.Runtime.RuntimeInstanceID,
-		sessionSelection.BackendScopeID,
+		r.factorySessionsRuntimeAssembly,
+		opening.recordingProjections,
+		opening.configured.Definition.Directory,
+		opening.configured.Runtime.RuntimeInstanceID,
+		opening.sessionSelection.BackendScopeID,
 		cleanup.Close,
-		sessionID,
+		opening.sessionID,
 	)
-	opened.engine = startupRuntime.RuntimeService()
-	opened.clock = clock
-	opened.recordings = recordingsService
+	opened.engine = opening.startupRuntime.RuntimeService()
+	opened.clock = opening.clock
+	opened.recordings = r.recordingsService
 	opened.orderlyStop = newOrderlyRecordingFlush(
-		recordingsService,
+		r.recordingsService,
 		opened.runtimeInstanceID,
-		configured.Recordings.RecordPath,
+		opening.configured.Recordings.RecordPath,
 	)
-	opened.operatorSettingsPath = operatorSettingsPath
-	opened.workerSettings = durableExecution.WorkerSettings
+	opened.operatorSettingsPath = opening.operatorSettingsPath
+	opened.workerSettings = opening.durableExecution.WorkerSettings
 	opened.replayMetadataWarnings = append(
 		[]recordings.MetadataMismatchWarning(nil),
-		load.ReplayMetadataWarnings...,
+		opening.load.ReplayMetadataWarnings...,
 	)
-	opened.recordings = recordingsService
+	opened.recordings = r.recordingsService
 	return opened, nil
 }
 
