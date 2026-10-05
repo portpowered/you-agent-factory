@@ -276,7 +276,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess",
+          "test": "tests/functional/product/customer_journeys/providers_discovery_discovery_test.go::TestCLIProvidersListShowsConfiguredProviders",
           "boundary": "cli"
         }
       ]
@@ -316,7 +316,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
+          "test": "tests/functional/product/customer_journeys/transport_acp_stdio_cli_serve_acp_prompt_test.go::TestServeACPCompletesOneFactoryPrompt",
           "boundary": "cli"
         }
       ]
@@ -1028,7 +1028,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot",
           "boundary": "rest"
         }
       ]
@@ -1129,7 +1129,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
+          "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
           "boundary": "rest"
         }
       ]
@@ -1164,7 +1164,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
+          "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
           "boundary": "rest"
         }
       ]
@@ -1334,7 +1334,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
           "boundary": "rest"
         }
       ]
@@ -1349,7 +1349,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
+          "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
           "boundary": "rest"
         }
       ]
@@ -1399,7 +1399,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
+          "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
           "boundary": "rest"
         }
       ]
@@ -1469,7 +1469,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
           "boundary": "rest"
         }
       ]
@@ -1668,10 +1668,15 @@
       "name": "setFactorySessionResourceCapacity",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/product/customer_journeys/sessions_resource_capacity_test.go::TestRESTResourceCapacityChangesPreserveRevisionAndIdempotency",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/shutdownServer",
@@ -1723,7 +1728,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
           "boundary": "rest"
         }
       ]
@@ -1807,7 +1812,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
           "boundary": "rest"
         }
       ]
@@ -1913,7 +1918,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
           "boundary": "sse"
         }
       ],

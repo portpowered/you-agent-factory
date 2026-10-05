@@ -1262,3 +1262,83 @@ renamed sources cannot pass through this mapping. One recovery helper retains
 its original name; no current symbol collision requires renaming it. Focused
 baseline-growth tests, custom analyzers, built-in lint and the affected Work
 recovery scenarios pass. Hosted required checks remain necessary.
+
+
+### Broader customer journey consolidation
+
+Four workflow fixture suites first converged into customer-workflows journeys,
+with parent-owned setup and cleanup. Three partial-start fixture-analysis tests
+and their failure-injection helpers were removed. The retained workflow suite
+passed three repetitions in 29.099s. Automation readiness now acknowledges each
+registered readiness timer without advancing the entire scheduler; three focused
+repetitions passed in 16.905s. This prevents filesystem initialization under CPU
+contention from expiring the session-open deadline through artificial time advance.
+
+A larger consolidation moves 28 suites into
+`tests/functional/product/customer_journeys`, removing 27 more binaries. It keeps
+original customer test names except 13 names clarified to describe REST, CLI,
+ACP and workflow behavior. Typed helper renames avoid package symbol collisions;
+scenario-owned sessions, profiles and cleanup stay independent. Two suites remain
+separate because they share existing timer-debt identities requiring further
+cleanup. The package remains under the approved Product functional domain and
+contains public calls, events, Work results and file outputs.
+
+The first measured larger layout ran all 939 top-level passes with two skips:
+87 packages, 941 top-level tests, **234.695s test wall**, **286.00s supervisor**.
+It consumed 843.37s user CPU and 174.57s system CPU. Its 82 links consumed
+**135.550s CPU** with **161.728s active linker wall**; 1,631 compile commands
+consumed **233.542s CPU**. The supervisor failed the Live Change package floor
+(198/349 statements, 56.7335%, against 57.77%) after the direct internal
+coordinator test was removed. Other unmeasured-package notes concern contract-only
+packages and are diagnostics, not the blocking regression. Raw evidence is in
+linux-meta-full. This failed supervisor is not a checkpoint.
+
+The next warm measurement uses the functional lane budget for in-package
+parallel tests as well as package builds. It took **216.264s test wall** and
+**229.10s supervisor wall**: 87 packages, 938 top-level passes, two skips and one
+failure. Its 80 links consumed **142.683s CPU** with **175.095s active wall**;
+four compile commands consumed **10.831s CPU**. Whole supervisor CPU was 661.79s
+user and 158.72s system. The remaining failure was the legacy config-alignment
+sweep; coverage floors were not evaluated. Raw evidence is in linux-meta-current.
+
+The removed internal coordinator test is replaced by a public REST resource
+capacity journey that verifies owned session/resource identities, accepted
+changes, stable replay decisions, request-ID conflicts, stale revisions, missing
+resources and subsequent valid changes. Three repetitions pass in 2.533s. The
+previously missing setFactorySessionResourceCapacity surface now has reviewed
+functional evidence; the total inventory still contains 156 reviewed surfaces.
+
+Durability resume now waits for canonical SESSION_COMPLETED through the public
+Factory Event history. The response endpoint retains the interrupted attempt;
+it cannot provide resumed completion. Private snapshot filesystem notifications
+were racing actual successful REST state on Windows. The snapshot-file-only
+case and its entire unused fixture are removed, along with cross-project private
+snapshot manipulation. Public restart recovery, checkpoint identity, final
+results and cross-project REST isolation remain covered, with three focused
+repetitions passing in 18.823s.
+
+The legacy config-alignment sweep and its three files are removed. They combine
+private flatten/readback analysis, five retired-alias rejection cells, cron
+startup, script retry timing, resource accounting and internal topology analysis.
+The current customer execution guarantees remain in focused workflow, Work,
+worker, resource-concurrency, automation and API suites. The new full measurement
+rechecks package floors after this cleanup; floors are not lowered to accommodate
+it. The coverage runner unit suite, focused built-in lint, custom analyzers and
+ordinary/functionallong compile checks pass.
+
+Recent pushes have no hosted checks because PR #2867 now conflicts with live
+main. The next source checkpoint must rebase onto the current main and receive
+fresh hosted verification. Local passing or failed measurements before that
+rebase do not establish hosted checkpoint latency.
+
+
+The cleanup follow-up, linux-meta-verified, took **213.292s test wall** and
+**225.97s supervisor wall**: 87 packages, 940 top-level tests, 936 passed, two
+skipped and two failed. Its 79 links consumed **130.353s CPU** with **163.365s
+active linker wall**; four compile commands consumed **8.850s CPU**. Whole
+supervisor CPU was 648.73s user and 152.52s system. Failures were a shared review
+fixture's session-open request returning HTTP 504 under contention, and a mock
+ACP test's temporary directory receiving writes during cleanup. Neither is an
+elapsed-time checkpoint, and coverage floors were not evaluated. Live main has
+since changed process/session lifecycle code; rebase and current-source
+verification precede further fixes rather than patching the superseded lifecycle.
