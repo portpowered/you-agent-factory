@@ -23,10 +23,16 @@ const testDebounceWindow = 50 * time.Millisecond
 type registeringDebounceClock struct {
 	clockwork.Clock
 	registered chan struct{}
+	completed  chan struct{}
 }
 
 func (c *registeringDebounceClock) AfterFunc(d time.Duration, fn func()) clockwork.Timer {
-	timer := c.Clock.AfterFunc(d, fn)
+	timer := c.Clock.AfterFunc(d, func() {
+		fn()
+		if c.completed != nil {
+			c.completed <- struct{}{}
+		}
+	})
 	c.registered <- struct{}{}
 	return timer
 }

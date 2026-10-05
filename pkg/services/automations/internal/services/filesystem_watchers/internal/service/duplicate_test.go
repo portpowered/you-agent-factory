@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,17 +13,26 @@ import (
 )
 
 type recordingHandledIdentities struct {
-	contains map[filesystemwatchers.ObservationIdentity]bool
-	recorded []filesystemwatchers.ObservationIdentity
+	mu        sync.Mutex
+	contains  map[filesystemwatchers.ObservationIdentity]bool
+	recorded  []filesystemwatchers.ObservationIdentity
+	committed chan filesystemwatchers.ObservationIdentity
 }
 
 func (s *recordingHandledIdentities) Contains(identity filesystemwatchers.ObservationIdentity) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.contains[identity]
 }
 
 func (s *recordingHandledIdentities) Record(identity filesystemwatchers.ObservationIdentity) error {
+	s.mu.Lock()
 	s.contains[identity] = true
 	s.recorded = append(s.recorded, identity)
+	s.mu.Unlock()
+	if s.committed != nil {
+		s.committed <- identity
+	}
 	return nil
 }
 
@@ -126,38 +136,59 @@ func TestHandleFile_DistinctPathSubmitsAfterDuplicate(t *testing.T) {
 func TestFileWatcher_DuplicateLiveObservationSubmitsOnce(t *testing.T) {
 	dir := setupWatchDir(t)
 	path := filepath.Join(dir, "request", "default", "live-dup.md")
+	clock := clockwork.NewFakeClock()
+	registeredClock := &registeringDebounceClock{
+		Clock: clock, registered: make(chan struct{}, 1), completed: make(chan struct{}, 2),
+	}
+	store := &recordingHandledIdentities{
+		contains:  make(map[filesystemwatchers.ObservationIdentity]bool),
+		committed: make(chan filesystemwatchers.ObservationIdentity, 2),
+	}
+	submitter := &recordingSubmitter{submitted: make(chan struct{}, 2)}
+	eventWatcher := newScriptedEventWatcher()
+	fw := newDebouncedTestWatcher(dir, submitter, registeredClock, eventWatcher)
+	fw.handledIdentities = store
+	cancel, done := startDebouncedWatch(t, fw, eventWatcher)
+	t.Cleanup(func() {
+		cancel()
+		waitForWatchDone(t, done)
+	})
+
+	// Complete empty discovery before publishing. Submission precedes the
+	// handled-identity commit, so only Record acknowledges duplicate readiness.
 	if err := writeLocalFile(path, []byte("live duplicate")); err != nil {
 		t.Fatal(err)
 	}
-
-	clock := clockwork.NewFakeClock()
-	submitter := &recordingSubmitter{submitted: make(chan struct{}, 2)}
-	eventWatcher := newScriptedEventWatcher()
-	fw := newDebouncedTestWatcher(dir, submitter, clock, eventWatcher)
-	cancel, done := startDebouncedWatch(t, fw, eventWatcher)
-	defer cancel()
-
-	eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
+	publishDebounceEvent(t, eventWatcher, registeredClock, fsnotify.Event{Name: path, Op: fsnotify.Create})
 	advanceDebounce(t, clock)
-	waitForSubmitCount(t, submitter, 1)
+	select {
+	case identity := <-store.committed:
+		if want := filesystemwatchers.ObservationIdentity("request/default/live-dup.md"); identity != want {
+			t.Fatalf("committed identity = %q, want %q", identity, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("first observation did not commit its handled identity")
+	}
+	waitForDebounceCompletion(t, registeredClock.completed)
 
-	eventWatcher.events <- fsnotify.Event{Name: path, Op: fsnotify.Write}
+	publishDebounceEvent(t, eventWatcher, registeredClock, fsnotify.Event{Name: path, Op: fsnotify.Write})
 	advanceDebounce(t, clock)
+	waitForDebounceCompletion(t, registeredClock.completed)
+	if got := submitter.submitCallCount(); got != 1 {
+		t.Fatalf("submit call count = %d, want 1 after duplicate live observation", got)
+	}
+	item := submitter.getWorkRequests()[0].Works[0]
+	if item.WorkTypeID != "request" || string(item.Payload.([]byte)) != "live duplicate" {
+		t.Fatalf("submitted Work = %#v, want request with exact live duplicate payload", item)
+	}
+}
 
-	deadline := time.After(200 * time.Millisecond)
-	for {
-		if submitter.submitCallCount() > 1 {
-			t.Fatalf("submit call count = %d, want 1 after duplicate live observation", submitter.submitCallCount())
-		}
-		select {
-		case <-submitter.submitted:
-			// Notifications only wake the loop; the count check is authoritative.
-		case <-deadline:
-			cancel()
-			waitForWatchDone(t, done)
-			return
-		case <-time.After(10 * time.Millisecond):
-		}
+func waitForDebounceCompletion(t *testing.T, completed <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-completed:
+	case <-time.After(time.Second):
+		t.Fatal("debounce callback did not complete")
 	}
 }
 
