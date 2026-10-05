@@ -71,6 +71,7 @@ type fakeChatSessionsService struct {
 	nextAttachmentID                  int
 	attachErr                         error
 	detachCalls                       []chatsessions.DetachRequest
+	detachAttachmentErrs              map[string]error
 	detachErrs                        []error
 	detachContextObserver             func(context.Context) error
 	detachErr                         error
@@ -281,6 +282,9 @@ func (f *fakeChatSessionsService) Detach(ctx context.Context, req chatsessions.D
 		if err != nil {
 			return chatsessions.DetachResult{}, err
 		}
+	}
+	if err := f.detachAttachmentErrs[req.AttachmentID]; err != nil {
+		return chatsessions.DetachResult{}, err
 	}
 	if f.detachErr != nil {
 		return chatsessions.DetachResult{}, f.detachErr
