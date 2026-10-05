@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -15,7 +14,6 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
@@ -159,6 +157,7 @@ type OperatorSettingsPorts struct {
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
 // Its Assembly is bound after the other process services have been composed.
 type Root struct {
+	processDurableScope legacyservice.ProcessDurableScope
 	*legacyservice.Assembly
 	startFlights                     singleflight.Group
 	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
@@ -221,6 +220,7 @@ func NewRoot(
 	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
+	scope legacyservice.ProcessDurableScope,
 ) (*Root, error) {
 	if err := validateOwnerPorts(
 		providerSessions,
@@ -239,6 +239,7 @@ func NewRoot(
 	}
 
 	root := &Root{
+		processDurableScope:              scope,
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerService:                    workersPorts.Service,
 		modelService:                     modelsPorts.Service,
@@ -309,47 +310,12 @@ func (r *Root) buildProcessDurableExecution() (durableexecution.Service, error) 
 	if router, ok := processDurable.(interface {
 		SetPersistenceRouting(func(string) (runtimepersist.Store, error), func() string)
 	}); ok {
-		router.SetPersistenceRouting(nil, func() string {
-			if current := r.Resolve(factorysessions.DefaultSessionID); current != nil {
-				return current.FactoryDir
-			}
-			if ids := r.ListLiveSessionIDs(); len(ids) == 1 {
-				if current := r.Resolve(ids[0]); current != nil {
-					return current.FactoryDir
-				}
-			}
-			return ""
-		})
+		router.SetPersistenceRouting(nil, r.processDurableScope.CurrentProjectRoot)
 	}
 	if router, ok := processDurable.(interface {
 		SetResumeRuntimeScopeResolver(func(string) (factorysessionexecution.ResumeRuntimeScope, error))
 	}); ok {
-		router.SetResumeRuntimeScopeResolver(func(projectRoot string) (factorysessionexecution.ResumeRuntimeScope, error) {
-			current := r.Resolve(factorysessions.DefaultSessionID)
-			if current == nil {
-				ids := r.ListLiveSessionIDs()
-				if len(ids) == 1 {
-					current = r.Resolve(ids[0])
-				}
-			}
-			if current == nil {
-				return factorysessionexecution.ResumeRuntimeScope{}, factorysessions.ErrRuntimeNotAvailable
-			}
-			if filepath.Clean(current.FactoryDir) != filepath.Clean(projectRoot) {
-				return factorysessionexecution.ResumeRuntimeScope{}, factorysessions.ErrSessionNotFound
-			}
-			instance := runtimebinding.BundleFromSession(current)
-			bound := runtimebinding.SessionStateFrom(current)
-			if instance == nil || bound == nil {
-				return factorysessionexecution.ResumeRuntimeScope{}, factorysessions.ErrRuntimeNotAvailable
-			}
-			admission, _ := instance.RuntimeService().(factoryruntime.ResourceCapacityLeaseAdmission)
-			return factorysessionexecution.ResumeRuntimeScope{
-				WorkerSettings: bound.WorkerSettingsSnapshot(), MockWorkers: bound.MockWorkersConfig(),
-				WorkerAttemptStarter:    factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(instance)),
-				WorkerResourceAdmission: admission, WorkerProgressPublisher: runtimeProgressPublisher(instance),
-			}, nil
-		})
+		router.SetResumeRuntimeScopeResolver(r.processDurableScope.ResumeRuntimeScope)
 	}
 	if binder, ok := processDurable.(interface {
 		SetWorkerExecution(interface {

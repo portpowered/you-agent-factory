@@ -181,6 +181,7 @@ func TestNewRootRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if factory != nil {
 		t.Fatalf("NewRoot() = %#v, want nil factory", factory)

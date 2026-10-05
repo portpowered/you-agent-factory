@@ -191,6 +191,13 @@ func NewStreamManager(state *SessionState, observer StreamObserver, responseRegi
 	return sessionstream.NewManagerWithResponseService(state, observer, responseRegistry, responses)
 }
 
+// ProcessDurableScope supplies independent project and resume queries.
+type ProcessDurableScope = sessionservice.ProcessDurableScope
+
+func NewProcessDurableScope(state *SessionState) ProcessDurableScope {
+	return sessionservice.NewProcessDurableScope(state)
+}
+
 // RecordedHistory supplies independent recorded-session inventory reads.
 type RecordedHistory = sessionservice.RecordedHistory
 

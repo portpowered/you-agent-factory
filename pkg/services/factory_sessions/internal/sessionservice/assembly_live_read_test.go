@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"path/filepath"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type workerSessionsObservationMarker struct{ workersessions.Service }
@@ -397,5 +399,123 @@ func assertCanonicalListProjection(t *testing.T, assembly *Assembly) {
 	}
 	if !listed[0].RuntimeAvailable || !listed[1].RuntimeAvailable || listed[0].Context.BackendScopeID == listed[1].Context.BackendScopeID {
 		t.Fatalf("list lost separate runtime projections: %#v", listed)
+	}
+}
+
+func TestProcessDurableScopePreservesProjectAndResumeSelection(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	scope := NewProcessDurableScope(state)
+	assertSelection := func(project string, wantError error) {
+		t.Helper()
+		if got := scope.CurrentProjectRoot(); got != project {
+			t.Fatalf("project = %q, want %q", got, project)
+		}
+		_, err := scope.ResumeRuntimeScope(project)
+		if !errors.Is(err, wantError) {
+			t.Fatalf("resume %q error = %v, want %v", project, err, wantError)
+		}
+	}
+	assertSelection("", factorysessions.ErrRuntimeNotAvailable)
+	first := &livesession.LiveSession{ID: "first", SessionState: livesession.SessionState{FactoryDir: filepath.Join("projects", "first")}}
+	state.Registry().Upsert(first, true)
+	assertSelection(first.FactoryDir, factorysessions.ErrRuntimeNotAvailable)
+	if _, err := scope.ResumeRuntimeScope("other"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("project mismatch = %v", err)
+	}
+	peer := &livesession.LiveSession{ID: "peer", SessionState: livesession.SessionState{FactoryDir: filepath.Join("projects", "peer")}}
+	state.Registry().Upsert(peer, true)
+	assertSelection("", factorysessions.ErrRuntimeNotAvailable)
+	defaultSession := &livesession.LiveSession{ID: factorysessions.DefaultSessionID, IsDefault: true, SessionState: livesession.SessionState{FactoryDir: first.FactoryDir}}
+	state.Registry().Upsert(defaultSession, false)
+	assertSelection(first.FactoryDir, factorysessions.ErrRuntimeNotAvailable)
+	// An absent runtime is different from a different project, even with peers.
+	if _, err := scope.ResumeRuntimeScope(peer.FactoryDir); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("default project mismatch = %v", err)
+	}
+	// Queries use current keyed facts after removal, rather than a captured Root.
+	state.Registry().Remove(factorysessions.DefaultSessionID)
+	state.Registry().Remove(first.ID)
+	assertSelection(peer.FactoryDir, factorysessions.ErrRuntimeNotAvailable)
+	peer.Handle = &runtimebinding.SessionState{Instance: &generationRuntimeRecord{}}
+	got, err := scope.ResumeRuntimeScope(peer.FactoryDir)
+	if err != nil || got.WorkerSettings != nil || got.MockWorkers != nil || got.WorkerAttemptStarter != nil || got.WorkerResourceAdmission != nil || got.WorkerProgressPublisher != nil {
+		t.Fatalf("optional resume capabilities = %#v, %v", got, err)
+	}
+}
+
+// Exercise capabilities through their actual invocation rather than proving
+// constructor or pointer identity. The record and service fallbacks are distinct.
+type resumeScopeRuntime struct {
+	factoryruntime.Service
+	factoryruntime.ResourceCapacityLeaseAdmission
+	attempts int
+	progress int
+	failure  error
+}
+
+func (r *resumeScopeRuntime) BeginWorkerAttempt(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	r.attempts++
+	return nil, r.failure
+}
+
+func (r *resumeScopeRuntime) RuntimeProgressPublisher() workers.ProgressPublisher {
+	return func(workers.ProgressFragment) { r.progress++ }
+}
+
+func (r *resumeScopeRuntime) AcquireResourceCapacityLease(context.Context, factoryruntime.ResourceCapacityLeaseRequest) (*factoryruntime.ResourceCapacityLease, error) {
+	return nil, r.failure
+}
+
+type resumeScopeRecord struct {
+	generationRuntimeRecord
+	*resumeScopeRuntime
+}
+
+func TestProcessDurableScopeRetainsSelectedCapabilitiesAndDetachedSettings(t *testing.T) {
+	t.Parallel()
+	for _, recordCapabilities := range []bool{false, true} {
+		t.Run(fmt.Sprint("recordCapabilities=", recordCapabilities), func(t *testing.T) {
+			t.Parallel()
+			state := newWorkResolverSessionState()
+			failure := errors.New("selected worker failure")
+			selected := &resumeScopeRuntime{failure: failure}
+			peer := &resumeScopeRuntime{}
+			var record runtimebinding.RuntimeInstance = &generationRuntimeRecord{service: selected}
+			if recordCapabilities {
+				record = &resumeScopeRecord{generationRuntimeRecord: generationRuntimeRecord{service: peer}, resumeScopeRuntime: selected}
+			}
+			bound := &runtimebinding.SessionState{Instance: record}
+			bound.SetWorkerSettings(&factoryruntime.JavaScriptWorkerSettings{DefaultModel: "selected-model"})
+			bound.SetMockWorkers(&workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: "selected-mock"}}})
+			project := filepath.Join("project", "selected")
+			state.Registry().Upsert(&livesession.LiveSession{ID: factorysessions.DefaultSessionID, IsDefault: true, SessionState: livesession.SessionState{FactoryDir: project}, Handle: bound}, false)
+			state.Registry().Upsert(&livesession.LiveSession{ID: "peer", SessionState: livesession.SessionState{FactoryDir: "other"}, Handle: &runtimebinding.SessionState{Instance: &generationRuntimeRecord{service: peer}}}, true)
+			scope := NewProcessDurableScope(state)
+			got, err := scope.ResumeRuntimeScope(filepath.Join(project, "."))
+			if err != nil || got.WorkerSettings.DefaultModel != "selected-model" || got.MockWorkers.MockWorkers[0].ID != "selected-mock" {
+				t.Fatalf("selected resume facts = %#v, %v", got, err)
+			}
+			got.WorkerSettings.DefaultModel = "mutated"
+			got.MockWorkers.MockWorkers[0].ID = "mutated"
+			again, err := scope.ResumeRuntimeScope(project)
+			if err != nil || again.WorkerSettings.DefaultModel != "selected-model" || again.MockWorkers.MockWorkers[0].ID != "selected-mock" {
+				t.Fatalf("resume facts were not detached: %#v, %v", again, err)
+			}
+			if _, err := got.WorkerAttemptStarter(context.Background(), workers.ExecuteRequest{}); !errors.Is(err, failure) {
+				t.Fatalf("selected worker error = %v", err)
+			}
+			got.WorkerProgressPublisher(workers.ProgressFragment{})
+			admissionError := failure
+			if recordCapabilities {
+				admissionError = nil // Admission always belongs to RuntimeService.
+			}
+			if _, err := got.WorkerResourceAdmission.AcquireResourceCapacityLease(context.Background(), factoryruntime.ResourceCapacityLeaseRequest{}); !errors.Is(err, admissionError) {
+				t.Fatalf("admission error = %v, want %v", err, admissionError)
+			}
+			if selected.attempts != 1 || selected.progress != 1 || peer.attempts != 0 || peer.progress != 0 {
+				t.Fatalf("worker effects crossed session selection: selected=%+v peer=%+v", selected, peer)
+			}
+		})
 	}
 }
