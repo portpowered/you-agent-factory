@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
@@ -273,7 +272,6 @@ func SessionServiceHost(
 	active *runtimebinding.State,
 	control SessionScopeControl,
 	releaseAdmission func(string),
-	durable durableexecution.Service,
 	backendScope string,
 	identityService identity.Service,
 	clock factoryruntime.Clock,
@@ -288,7 +286,7 @@ func SessionServiceHost(
 		sessionIdentityReader:   routing,
 		sessionProjectionReader: projection,
 		sessionLifecycleReader:  lifecycleReader,
-		state:                   state, durable: durable,
+		state:                   state,
 	}
 }
 

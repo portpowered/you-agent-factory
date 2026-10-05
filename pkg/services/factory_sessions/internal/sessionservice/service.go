@@ -48,25 +48,28 @@ func NewWithResponseStreams(host LegacyHost, responseStreams *responsestream.Reg
 
 // NewWithStreamDependencies separates session control-plane callbacks from
 // canonical response-stream lookup and telemetry dependencies.
-func NewWithStreamDependencies(host Host, sessions stream.SessionResolver, observer stream.Observer, responseStreams *responsestream.Registry) *Service {
+func NewWithStreamDependencies(host legacyControlHost, sessions stream.SessionResolver, observer stream.Observer, responseStreams *responsestream.Registry) *Service {
 	return NewWithReconnectValidation(host, sessions, observer, responseStreams, nil, nil)
 }
 
 // NewWithReconnectValidation injects Recordings-owned reconnect validation
 // without exposing its ledger implementation to Factory Sessions.
 func NewWithReconnectValidation(
-	host Host,
+	host legacyControlHost,
 	sessions stream.SessionResolver,
 	observer stream.Observer,
 	responseStreams *responsestream.Registry,
 	reconnects factorysessions.ReconnectCursorValidator,
 	results factoryruntime.SessionResultProjectionOperation,
 ) *Service {
-	return NewWithLiveChangeCoordinator(host, sessions, observer, responseStreams, reconnects, results, nil, nil, nil)
+	if host == nil {
+		return nil
+	}
+	return NewWithLiveChangeCoordinator(host, sessions, observer, responseStreams, reconnects, results, nil, nil, nil, host.DurableExecution())
 }
 
 // NewWithLiveChangeCoordinator constructs the session gateway with the
-// process-scoped coordinator supplied by Factory Sessions wire. Runtime state,
+// process-scoped coordinator and durable capability supplied directly by its caller. Runtime state,
 // event history, application, clock, and logger remain operation inputs.
 func NewWithLiveChangeCoordinator(
 	host Host,
@@ -78,11 +81,11 @@ func NewWithLiveChangeCoordinator(
 	responseEvents responsestreamservice.Service,
 	liveChange factorysessioncontracts.LiveChangeCoordinator,
 	history RecordedHistory,
+	durable durableexecution.Service,
 ) *Service {
 	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
 		return nil
 	}
-	durable := host.DurableExecution()
 	return &Service{
 		host:            host,
 		liveChange:      liveChange,

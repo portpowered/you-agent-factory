@@ -463,7 +463,7 @@ func (a *Assembly) Complete(
 	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(
 			runtime.sessionState, &runtime.runtimeState, a.scopeControl,
-			runtime.releaseWorkAdmissionProjection, runtime.durableExecution, runtime.backendScopeID,
+			runtime.releaseWorkAdmissionProjection, runtime.backendScopeID,
 			runtime.identity, runtime.clock, runtime.worldStateProjector,
 			runtime.newJavaScriptCheckpointStore, runtime.logger,
 		),
@@ -475,6 +475,7 @@ func (a *Assembly) Complete(
 		a.responseStreams,
 		a.liveChangeCoordinator,
 		a.recordedHistory,
+		runtime.durableExecution,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	invoker := a.invoker
