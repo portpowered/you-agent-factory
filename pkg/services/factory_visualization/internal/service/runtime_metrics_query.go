@@ -31,7 +31,7 @@ func NewRuntimeMetricsQuery(
 	if reader == nil {
 		return nil, errors.New("construct Factory Visualization metrics query: reader is required")
 	}
-	query := &metricsQuery{reader: reader, logger: logging.EnsureLogger(logger)}
+	query := &metricsQuery{reader: reader, logger: logger}
 	return RuntimeMetricsQuery(query.QueryRuntimeMetrics), nil
 }
 

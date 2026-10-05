@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -417,5 +419,397 @@ func assertDuration(
 	}
 	if *duration.P50 != wantP50 || *duration.P95 != wantP95 || duration.Samples != wantSamples || duration.Unit != wantUnit {
 		t.Fatalf("duration = %#v, want p50=%v p95=%v samples=%d unit=%q", duration, wantP50, wantP95, wantSamples, wantUnit)
+	}
+}
+
+// Each leaf owns its query, controlled reader and diagnostic capture. No real
+// reader, transport or process is assembled for these operation witnesses.
+func TestRuntimeMetricsQuerySelectedLoggerPreservesOutcomes(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{"MQ-U01 selected success", testSelectedMetricsSuccess},
+		{"MQ-U02 empty", testSelectedMetricsEmpty},
+		{"MQ-U03 reader precedence", testSelectedMetricsReaders},
+		{"MQ-U04 read failure", testSelectedMetricsReadFailure},
+		{"MQ-U05 partial stream failure", testSelectedMetricsPartialFailure},
+		{"MQ-U06 invalid usage", testSelectedMetricsInvalidUsage},
+		{"MQ-U07 invalid input", testSelectedMetricsInvalidInput},
+		{"MQ-U08 cancellation", testSelectedMetricsCancellation},
+		{"MQ-U09 typed reader error", testSelectedMetricsTypedError},
+		{"MQ-U10 independent scopes", testSelectedMetricsScopes},
+		{"MQ-U11 explicit Noop", testSelectedMetricsNoop},
+		{"MQ-U12 payload privacy", testSelectedMetricsPrivacy},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) { t.Parallel(); tc.run(t) })
+	}
+}
+
+type selectedMetricsLog struct {
+	level, message string
+	fields         []any
+}
+
+type selectedMetricsCapture struct {
+	entries []selectedMetricsLog
+}
+
+func (l *selectedMetricsCapture) Debug(msg string, fields ...any) {
+	l.entries = append(l.entries, selectedMetricsLog{"Debug", msg, append([]any(nil), fields...)})
+}
+func (l *selectedMetricsCapture) Verbose(msg string, fields ...any) {
+	l.entries = append(l.entries, selectedMetricsLog{"Verbose", msg, append([]any(nil), fields...)})
+}
+func (l *selectedMetricsCapture) Info(msg string, fields ...any) {
+	l.entries = append(l.entries, selectedMetricsLog{"Info", msg, append([]any(nil), fields...)})
+}
+func (l *selectedMetricsCapture) Warn(msg string, fields ...any) {
+	l.entries = append(l.entries, selectedMetricsLog{"Warn", msg, append([]any(nil), fields...)})
+}
+func (l *selectedMetricsCapture) Error(msg string, fields ...any) {
+	l.entries = append(l.entries, selectedMetricsLog{"Error", msg, append([]any(nil), fields...)})
+}
+
+type selectedMetricsRead struct {
+	records     []RuntimeMetricRecord
+	err         error
+	calls       []string
+	beforeVisit func()
+}
+
+func (r *selectedMetricsRead) Read(_ context.Context, root string) ([]RuntimeMetricRecord, error) {
+	r.calls = append(r.calls, "Read:"+root)
+	return r.records, r.err
+}
+
+type selectedMetricsStream struct{ *selectedMetricsRead }
+
+func (r *selectedMetricsStream) Stream(_ context.Context, root string, visit func(RuntimeMetricRecord) error) error {
+	r.calls = append(r.calls, "Stream:"+root)
+	for _, record := range r.records {
+		if r.beforeVisit != nil {
+			r.beforeVisit()
+		}
+		if err := visit(record); err != nil {
+			return err
+		}
+	}
+	return r.err
+}
+
+type selectedMetricsReader struct{ *selectedMetricsStream }
+
+func (r *selectedMetricsReader) StreamSelected(ctx context.Context, root string, selection platformmetrics.StreamSelection, visit func(RuntimeMetricRecord) error) error {
+	r.calls = append(r.calls, "Selected:"+root)
+	for _, record := range r.records {
+		fields := make(map[string]string)
+		for _, key := range selection.EnvelopeFields {
+			fields[key], _ = record[key].(string)
+		}
+		if selection.IncludeEnvelope != nil && !selection.IncludeEnvelope(platformmetrics.RuntimeMetricRecordEnvelope{Fields: fields}) {
+			continue
+		}
+		if err := visit(record); err != nil {
+			return err
+		}
+	}
+	return r.err
+}
+
+func selectedMetricsFixture(scope string) (RuntimeMetricsQueryRequest, []RuntimeMetricRecord) {
+	request := RuntimeMetricsQueryRequest{MetricsRoot: "metrics-" + scope, SessionID: "session-" + scope, RuntimeInstanceID: "runtime-" + scope}
+	record := metricRecord("provider.input_tokens", 7, request.SessionID, request.RuntimeInstanceID, "station", "model", "provider-"+scope, "", "tokens")
+	record["payload"] = "private-metrics-payload-sentinel"
+	return request, []RuntimeMetricRecord{record}
+}
+
+func selectedMetricsConstruct(t *testing.T, reader RuntimeMetricsReader, logger logging.Logger) RuntimeMetricsQuery {
+	t.Helper()
+	query, err := NewRuntimeMetricsQuery(reader, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return query
+}
+
+func selectedMetricsStart(request RuntimeMetricsQueryRequest) selectedMetricsLog {
+	return selectedMetricsLog{"Info", "Factory Runtime metrics query started", []any{"metrics_root", request.MetricsRoot, "session_id", request.SessionID, "runtime_instance_id", request.RuntimeInstanceID, "group_by", ""}}
+}
+
+func assertSelectedMetricsLogs(t *testing.T, capture *selectedMetricsCapture, want ...selectedMetricsLog) {
+	t.Helper()
+	if !reflect.DeepEqual(capture.entries, want) {
+		t.Fatalf("diagnostics = %#v, want %#v", capture.entries, want)
+	}
+}
+
+func assertSelectedMetricsSuccess(t *testing.T, result RuntimeMetricsQueryResult, request RuntimeMetricsQueryRequest) {
+	t.Helper()
+	want := RuntimeMetricsQueryResult{
+		Cost:         factoryvisualization.RuntimeMetricsCost{Availability: factoryvisualization.RuntimeMetricsCostUnavailable},
+		Totals:       factoryvisualization.RuntimeMetricsAggregate{InputTokens: 7},
+		Workstations: []factoryvisualization.RuntimeMetricsBreakdown{{Key: "station", Aggregate: factoryvisualization.RuntimeMetricsAggregate{InputTokens: 7}}},
+		WorkerTypes:  []factoryvisualization.RuntimeMetricsBreakdown{{Key: "model", Aggregate: factoryvisualization.RuntimeMetricsAggregate{InputTokens: 7}}},
+		Providers:    []factoryvisualization.RuntimeMetricsBreakdown{{Key: "provider-" + strings.TrimPrefix(request.SessionID, "session-"), Aggregate: factoryvisualization.RuntimeMetricsAggregate{InputTokens: 7}}},
+		UsageRows:    []factoryvisualization.RuntimeMetricsUsageRow{{FactorySessionID: request.SessionID, Provider: "provider-" + strings.TrimPrefix(request.SessionID, "session-"), InputTokens: characterizationInt64(7)}},
+	}
+	if !reflect.DeepEqual(result, want) {
+		t.Fatalf("result = %#v, want %#v", result, want)
+	}
+}
+
+func assertSelectedMetricsCompletion(t *testing.T, capture *selectedMetricsCapture, request RuntimeMetricsQueryRequest, count, groups int) {
+	t.Helper()
+	assertSelectedMetricsLogs(t, capture, selectedMetricsStart(request), selectedMetricsLog{"Info", "Factory Runtime metrics query completed", []any{
+		"metrics_root", request.MetricsRoot, "session_id", request.SessionID, "runtime_instance_id", request.RuntimeInstanceID,
+		"records_considered", count, "workstation_groups", groups, "worker_type_groups", groups, "provider_groups", groups,
+		"cost_availability", factoryvisualization.RuntimeMetricsCostUnavailable,
+	}})
+}
+
+func testSelectedMetricsSuccess(t *testing.T) {
+	request, records := selectedMetricsFixture("success")
+	ignored := metricRecord("provider.input_tokens", 99, "other", request.RuntimeInstanceID, "other", "other", "other", "", "tokens")
+	otherRuntime := metricRecord("provider.input_tokens", 99, request.SessionID, "other", "other", "other", "other", "", "tokens")
+	reader := &selectedMetricsRead{records: append(records, ignored, otherRuntime)}
+	capture := &selectedMetricsCapture{}
+	query := selectedMetricsConstruct(t, &selectedMetricsReader{&selectedMetricsStream{reader}}, capture)
+	if len(reader.calls) != 0 || len(capture.entries) != 0 {
+		t.Fatal("construction performed reads or logging")
+	}
+	result, err := query.QueryRuntimeMetrics(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSelectedMetricsSuccess(t, result, request)
+	assertSelectedMetricsCompletion(t, capture, request, 1, 1)
+	if !reflect.DeepEqual(reader.calls, []string{"Selected:" + request.MetricsRoot}) {
+		t.Fatalf("reader calls = %v", reader.calls)
+	}
+}
+
+func testSelectedMetricsEmpty(t *testing.T) {
+	request, _ := selectedMetricsFixture("empty")
+	capture := &selectedMetricsCapture{}
+	query := selectedMetricsConstruct(t, &selectedMetricsRead{}, capture)
+	result, err := query.QueryRuntimeMetrics(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := RuntimeMetricsQueryResult{
+		Cost:         factoryvisualization.RuntimeMetricsCost{Availability: factoryvisualization.RuntimeMetricsCostUnavailable},
+		Workstations: []factoryvisualization.RuntimeMetricsBreakdown{},
+		WorkerTypes:  []factoryvisualization.RuntimeMetricsBreakdown{},
+		Providers:    []factoryvisualization.RuntimeMetricsBreakdown{},
+		UsageRows:    []factoryvisualization.RuntimeMetricsUsageRow{},
+	}
+	if !reflect.DeepEqual(result, want) {
+		t.Fatalf("empty result = %#v", result)
+	}
+	assertSelectedMetricsCompletion(t, capture, request, 0, 0)
+}
+
+func testSelectedMetricsReaders(t *testing.T) {
+	for _, mode := range []string{"Read", "Stream"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			request, records := selectedMetricsFixture(mode)
+			base := &selectedMetricsRead{records: records}
+			var reader RuntimeMetricsReader = base
+			if mode == "Stream" {
+				reader = &selectedMetricsStream{base}
+			}
+			capture := &selectedMetricsCapture{}
+			result, err := selectedMetricsConstruct(t, reader, capture).QueryRuntimeMetrics(context.Background(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertSelectedMetricsSuccess(t, result, request)
+			assertSelectedMetricsCompletion(t, capture, request, 1, 1)
+			if !reflect.DeepEqual(base.calls, []string{mode + ":" + request.MetricsRoot}) {
+				t.Fatalf("reader calls = %v", base.calls)
+			}
+		})
+	}
+}
+
+func assertSelectedMetricsFailure(t *testing.T, result RuntimeMetricsQueryResult, err error, kind factoryvisualization.RuntimeMetricsQueryErrorKind, cause error) *RuntimeMetricsQueryError {
+	t.Helper()
+	var typed *RuntimeMetricsQueryError
+	if !errors.As(err, &typed) || typed.Kind != kind || typed.Cause == nil {
+		t.Fatalf("error = %v, want %s with cause", err, kind)
+	}
+	if !errors.Is(err, typed.Cause) || (cause != nil && !errors.Is(err, cause)) {
+		t.Fatalf("error cause not preserved: %v", err)
+	}
+	if !reflect.DeepEqual(result, RuntimeMetricsQueryResult{}) {
+		t.Fatalf("partial result = %#v", result)
+	}
+	return typed
+}
+
+func testSelectedMetricsReadFailure(t *testing.T)    { testSelectedMetricsReaderFailure(t, false) }
+func testSelectedMetricsPartialFailure(t *testing.T) { testSelectedMetricsReaderFailure(t, true) }
+func testSelectedMetricsReaderFailure(t *testing.T, partial bool) {
+	request, records := selectedMetricsFixture("failure")
+	cause := errors.New("controlled read failure")
+	base := &selectedMetricsRead{err: cause}
+	var reader RuntimeMetricsReader = base
+	if partial {
+		base.records = records
+		reader = &selectedMetricsStream{base}
+	}
+	capture := &selectedMetricsCapture{}
+	result, err := selectedMetricsConstruct(t, reader, capture).QueryRuntimeMetrics(context.Background(), request)
+	_ = assertSelectedMetricsFailure(t, result, err, factoryvisualization.RuntimeMetricsQueryReadFailed, cause)
+	assertSelectedMetricsLogs(t, capture, selectedMetricsStart(request), selectedMetricsLog{"Error", "Factory Runtime metrics query failed", []any{
+		"metrics_root", request.MetricsRoot, "session_id", request.SessionID, "runtime_instance_id", request.RuntimeInstanceID, "error", cause,
+	}})
+}
+
+func testSelectedMetricsInvalidUsage(t *testing.T) {
+	for _, rows := range []bool{false, true} {
+		t.Run(map[bool]string{false: "record", true: "rows"}[rows], func(t *testing.T) {
+			t.Parallel()
+			request, records := selectedMetricsFixture("invalid")
+			records[0]["value"] = 1.5
+			if rows {
+				records[0]["value"] = 2
+				cached := metricRecord("provider.cached_input_tokens", 3, request.SessionID, request.RuntimeInstanceID, "station", "model", "provider-invalid", "", "tokens")
+				records = append(records, cached)
+			}
+			capture := &selectedMetricsCapture{}
+			result, err := selectedMetricsConstruct(t, &selectedMetricsStream{&selectedMetricsRead{records: records}}, capture).QueryRuntimeMetrics(context.Background(), request)
+			typed := assertSelectedMetricsFailure(t, result, err, factoryvisualization.RuntimeMetricsQueryInvalidUsage, nil)
+			warning := selectedMetricsLog{"Warn", "Factory Runtime metrics usage record rejected", []any{"metrics_root", request.MetricsRoot, "metric_name", "provider.input_tokens", "error", typed.Cause}}
+			if rows {
+				warning = selectedMetricsLog{"Warn", "Factory Runtime metrics usage rows rejected", []any{"metrics_root", request.MetricsRoot, "error", typed.Cause}}
+			}
+			assertSelectedMetricsLogs(t, capture, selectedMetricsStart(request), warning)
+		})
+	}
+}
+
+func testSelectedMetricsInvalidInput(t *testing.T) {
+	for _, mode := range []string{"reader", "root", "group", "window"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			capture := &selectedMetricsCapture{}
+			if mode == "reader" {
+				if q, err := NewRuntimeMetricsQuery(nil, capture); q != nil || err == nil {
+					t.Fatal("missing reader accepted")
+				}
+				return
+			}
+			request, _ := selectedMetricsFixture(mode)
+			switch mode {
+			case "root":
+				request.MetricsRoot = " "
+			case "group":
+				request.GroupBy = "invalid"
+			case "window":
+				start := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+				end := start.Add(-time.Hour)
+				request.StartTimeUTC = start
+				request.EndTimeUTC = end
+			}
+			reader := &selectedMetricsRead{}
+			result, err := selectedMetricsConstruct(t, reader, capture).QueryRuntimeMetrics(context.Background(), request)
+			var typed *RuntimeMetricsQueryError
+			if !errors.As(err, &typed) || typed.Kind != factoryvisualization.RuntimeMetricsQueryInvalidInput || !reflect.DeepEqual(result, RuntimeMetricsQueryResult{}) {
+				t.Fatalf("invalid input result = %#v, error = %v", result, err)
+			}
+			if len(reader.calls) != 0 || len(capture.entries) != 0 {
+				t.Fatal("invalid input started operation")
+			}
+		})
+	}
+}
+
+func testSelectedMetricsCancellation(t *testing.T) {
+	for _, mode := range []string{"pre-cancelled", "cancelled stream", "deadline stream", "callback cancelled"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			request, records := selectedMetricsFixture(mode)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cause := context.Canceled
+			if mode == "deadline stream" {
+				cause = context.DeadlineExceeded
+			}
+			if mode == "pre-cancelled" {
+				cancel()
+			}
+			capture := &selectedMetricsCapture{}
+			reader := &selectedMetricsRead{records: records, err: cause}
+			if mode == "callback cancelled" {
+				reader.beforeVisit = cancel
+			}
+			result, err := selectedMetricsConstruct(t, &selectedMetricsStream{reader}, capture).QueryRuntimeMetrics(ctx, request)
+			if err != cause || !reflect.DeepEqual(result, RuntimeMetricsQueryResult{}) { //nolint:errorlint // The query must return the original context sentinel without wrapping.
+				t.Fatalf("cancel result = %#v, error = %v", result, err)
+			}
+			if mode == "pre-cancelled" {
+				if len(reader.calls) != 0 || len(capture.entries) != 0 {
+					t.Fatal("cancelled operation started")
+				}
+				return
+			}
+			assertSelectedMetricsLogs(t, capture, selectedMetricsStart(request))
+		})
+	}
+}
+
+func testSelectedMetricsTypedError(t *testing.T) {
+	request, _ := selectedMetricsFixture("typed")
+	cause := errors.New("typed cause")
+	want := &RuntimeMetricsQueryError{Kind: factoryvisualization.RuntimeMetricsQueryReadFailed, Message: "controlled typed error", Cause: cause}
+	capture := &selectedMetricsCapture{}
+	result, err := selectedMetricsConstruct(t, &selectedMetricsRead{err: want}, capture).QueryRuntimeMetrics(context.Background(), request)
+	_ = assertSelectedMetricsFailure(t, result, err, want.Kind, cause)
+	if err != want { //nolint:errorlint // Already typed reader errors must retain pointer identity.
+		t.Fatalf("typed error identity lost: %v", err)
+	}
+	assertSelectedMetricsLogs(t, capture, selectedMetricsStart(request))
+}
+
+func testSelectedMetricsScopes(t *testing.T) {
+	for _, scope := range []string{"left", "right"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			testSelectedMetricsScopedSuccess(t, scope, &selectedMetricsCapture{})
+		})
+	}
+}
+func testSelectedMetricsScopedSuccess(t *testing.T, scope string, logger logging.Logger) {
+	request, records := selectedMetricsFixture(scope)
+	result, err := selectedMetricsConstruct(t, &selectedMetricsRead{records: records}, logger).QueryRuntimeMetrics(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSelectedMetricsSuccess(t, result, request)
+	if capture, ok := logger.(*selectedMetricsCapture); ok {
+		assertSelectedMetricsCompletion(t, capture, request, 1, 1)
+	}
+}
+func testSelectedMetricsNoop(t *testing.T) {
+	testSelectedMetricsScopedSuccess(t, "noop", &selectedMetricsCapture{})
+	testSelectedMetricsScopedSuccess(t, "noop", logging.NoopLogger{})
+	request, _ := selectedMetricsFixture("noop")
+	cause := errors.New("quiet failure")
+	result, err := selectedMetricsConstruct(t, &selectedMetricsRead{err: cause}, logging.NoopLogger{}).QueryRuntimeMetrics(context.Background(), request)
+	_ = assertSelectedMetricsFailure(t, result, err, factoryvisualization.RuntimeMetricsQueryReadFailed, cause)
+}
+func testSelectedMetricsPrivacy(t *testing.T) {
+	request, records := selectedMetricsFixture("privacy")
+	records[0]["value"] = 1.5
+	capture := &selectedMetricsCapture{}
+	result, err := selectedMetricsConstruct(t, &selectedMetricsRead{records: records}, capture).QueryRuntimeMetrics(context.Background(), request)
+	_ = assertSelectedMetricsFailure(t, result, err, factoryvisualization.RuntimeMetricsQueryInvalidUsage, nil)
+	if strings.Contains(fmt.Sprint(err, capture.entries), "private-metrics-payload-sentinel") || strings.Contains(fmt.Sprint(capture.entries), "payload") {
+		t.Fatalf("payload leaked in diagnostics or public error: %v, %#v", err, capture.entries)
 	}
 }
