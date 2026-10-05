@@ -25,6 +25,25 @@ func (r *Root) Invoke(ctx context.Context, request factorysessions.SessionInvoke
 	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 		return r.Assembly.Invoke(ctx, request)
 	}
+	return r.invokeJavaScriptSession(ctx, sessionID, legacyservice.CanonicalInvocationRequest(request), projection)
+}
+
+// InvokeFactorySession is the compatibility invocation boundary consumed by
+// HTTP and remote CLI. Resolve JavaScript through the same scoped owner as
+// Invoke so it retains the opened session's worker and progress capabilities.
+func (r *Root) InvokeFactorySession(ctx context.Context, sessionID string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+	if r == nil || r.Assembly == nil {
+		return factorysessions.InvocationResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	projection, err := r.GetFactorySession(ctx, sessionID)
+	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+		return r.Assembly.InvokeFactorySession(ctx, sessionID, request)
+	}
+	return r.invokeJavaScriptSession(ctx, sessionID, request, projection)
+}
+
+func (r *Root) invokeJavaScriptSession(ctx context.Context, sessionID string, request factorysessions.InvocationRequest, projection factorysessions.SessionProjection) (factorysessions.InvocationResult, error) {
 	bound, err := r.applicationSessionState(sessionID)
 	if err != nil {
 		return factorysessions.InvocationResult{}, err
@@ -36,7 +55,7 @@ func (r *Root) Invoke(ctx context.Context, request factorysessions.SessionInvoke
 	target := factorysessions.InvocationTarget{FactoryDir: factoryDir, MockWorkersConfig: bound.MockWorkersConfig()}
 	result, err := sessioninvocation.InvokeJavaScriptFactoryViaSessions(
 		ctx, r, r, r.generateSessionID, sessionID, projection.Context, target,
-		legacyservice.CanonicalInvocationRequest(request),
+		request,
 		func(start *factorysessions.StartRequest) {
 			start.MockWorkers = bound.MockWorkersConfig()
 			start.WorkerSettings = bound.WorkerSettingsSnapshot()

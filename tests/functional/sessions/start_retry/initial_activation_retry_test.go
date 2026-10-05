@@ -76,6 +76,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	defaulted := newInitialOpeningDefaultProviderScenario(t, "", "")
 	parameterized := newInitialOpeningDefaultProviderScenario(t, "", "${model}")
 	durable := newInitialOpeningScenario(t)
+	child := newInitialOpeningChildScenario(t)
 	checkout := newInitialOpeningWorktreeScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
@@ -128,6 +129,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testInitialOpeningDurableMutation(t, sessions, process, durable, effects, persistence, api.WaitForURL(t))
 	})
+	t.Run("remote CLI child uses the explicitly opened session", func(t *testing.T) {
+		t.Parallel()
+		testInitialOpeningChildInvocation(t, sessions, process, child, effects, api.WaitForURL(t))
+	})
 
 	t.Run("failed resource opening retries with the same identity", func(t *testing.T) {
 		t.Parallel()
@@ -154,17 +159,22 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	} {
 		t.Run("selected operator defaults supply "+name, func(t *testing.T) {
 			t.Parallel()
-			peerHistory := scenario.startPeer(t, sessions)
-			request := scenario.request()
-			request.RuntimeSelection.OperatorDefaults = operatorsettings.ResolvedDefaults{
-				WorkerModelProvider: string(modelprovider.ProviderCodex), WorkerModel: "gpt-5-codex",
-			}
-			startInitialOpeningSession(t, sessions, request)
-			assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
-			assertInitialOpeningProviderSelection(t, effects, scenario.candidateDir)
-			assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+			testInitialOpeningOperatorDefaults(t, sessions, scenario, effects)
 		})
 	}
+}
+
+func testInitialOpeningOperatorDefaults(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, effects *initialOpeningEffects) {
+	t.Helper()
+	peerHistory := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	request.RuntimeSelection.OperatorDefaults = operatorsettings.ResolvedDefaults{
+		WorkerModelProvider: string(modelprovider.ProviderCodex), WorkerModel: "gpt-5-codex",
+	}
+	startInitialOpeningSession(t, sessions, request)
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	assertInitialOpeningProviderSelection(t, effects, scenario.candidateDir)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
 }
 
 func testInitialOpeningProviderSelection(t *testing.T, sessions factorysessions.Service, selected initialOpeningScenario, effects *initialOpeningEffects) {
