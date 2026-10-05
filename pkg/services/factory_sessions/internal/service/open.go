@@ -233,6 +233,18 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	// Retain ownership before the first scoped opening. An opening can return
+	// resources alongside an error, and later Models failures must also unwind
+	// the durable execution scope.
+	cleanup := &runtimeOpeningCleanup{}
+	defer func() {
+		if err != nil {
+			if cleanupErr := cleanup.Close(); cleanupErr != nil {
+				err = errors.Join(err, cleanupErr)
+				products.closeArtifacts = cleanup.Close
+			}
+		}
+	}()
 	durableExecution, err := durableExecutionFactory(
 		configured.Definition,
 		configured.Session.Persistence,
@@ -246,6 +258,14 @@ func openRuntime(
 		factorySessionExecutionFactory,
 		providerIdentities,
 	)
+	if closer, ok := durableExecution.Service.(interface{ Close() error }); ok {
+		cleanup.Add(func() error {
+			if err := closer.Close(); err != nil {
+				return fmt.Errorf("close durable Factory Session execution: %w", err)
+			}
+			return nil
+		})
+	}
 	if err != nil {
 		return runtimeProducts{}, err
 	}
@@ -269,27 +289,10 @@ func openRuntime(
 		currentRuntimeConfig,
 		durableExecution.OperatorModels,
 	)
+	cleanup.OwnModelsScope(context.WithoutCancel(ctx), modelsBind)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	cleanup := &runtimeOpeningCleanup{}
-	cleanup.OwnModelsScope(context.WithoutCancel(ctx), modelsBind)
-	if closer, ok := durableExecution.Service.(interface{ Close() error }); ok {
-		cleanup.Add(func() error {
-			if err := closer.Close(); err != nil {
-				return fmt.Errorf("close durable Factory Session execution: %w", err)
-			}
-			return nil
-		})
-	}
-	defer func() {
-		if err != nil {
-			if cleanupErr := cleanup.Close(); cleanupErr != nil {
-				err = errors.Join(err, cleanupErr)
-				products.closeArtifacts = cleanup.Close
-			}
-		}
-	}()
 	if workService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work service is required")
 	}
