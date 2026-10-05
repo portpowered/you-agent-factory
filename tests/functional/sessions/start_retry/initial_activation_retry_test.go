@@ -1,4 +1,4 @@
-package root_composition_test
+package start_retry_test
 
 import (
 	"context"
@@ -24,17 +24,40 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const initialOpeningReadCeiling = 5 * time.Second
+
+func initialOpeningFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "initial-opening-retry",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name": "process", "worker": "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
 // These scenarios share one immutable process shape and run as independent
 // explicit sessions. Only the dependent failure/cleanup/retry sequence within
 // each customer identity is serialized. The filesystem gate is an external
 // effect; all session publication, resources, events and Work execution are real.
 func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 
 	failure := errors.New("controlled initial input directory opening failure")
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
+	reused := newInitialOpeningScenario(t)
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	gate := &initialOpeningGate{entered: make(chan struct{}), release: make(chan struct{})}
 	files := &initialOpeningDirectories{
@@ -54,7 +77,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	support.CleanupProcess(t, process)
 	// Boot through the customer's command boundary before using its public
 	// identity-selecting service contract (HTTP Open cannot select an identity).
-	hostDir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
+	hostDir := support.ScaffoldFactory(t, initialOpeningFactoryConfig())
 	home := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
@@ -86,36 +109,94 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	t.Run("cancellation while opening unwinds before same identity retry", func(t *testing.T) {
 		t.Parallel()
-		t.Cleanup(gate.unblock)
-		peerHistory := canceled.startPeer(t, sessions)
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-		result := make(chan error, 1)
-		go func() {
-			_, err := sessions.Start(ctx, canceled.request())
-			result <- err
-		}()
-		select {
-		case <-gate.entered:
-		case <-time.After(rootProcessStreamReadCeiling):
-			t.Fatal("initial opening did not reach the filesystem gate")
-		}
-		cancel()
-		gate.unblock()
-		select {
-		case err := <-result:
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("canceled Start error = %v, want context.Canceled", err)
-			}
-		case <-time.After(rootProcessStreamReadCeiling):
-			t.Fatal("canceled initial opening did not return")
-		}
-		assertInitialOpeningNotPublished(t, sessions, canceled.candidateID)
-		assertInitialOpeningHistoryPreserved(t, sessions, canceled.peerID, peerHistory)
-		assertInitialOpeningInvocation(t, sessions, canceled.peerID)
-		canceled.startCandidate(t, sessions)
-		assertInitialOpeningInvocation(t, sessions, canceled.candidateID)
+		testCanceledInitialOpening(t, sessions, canceled, gate)
 	})
+	t.Run("closed recording preserves attributed history and live peer", func(t *testing.T) {
+		t.Parallel()
+		peerHistory := reused.startPeer(t, sessions)
+		request := reused.request()
+		recordPath := filepath.Join(t.TempDir(), "opening.replay.jsonl")
+		request.RuntimeSelection.Recording.RecordPath = recordPath
+		startInitialOpeningSession(t, sessions, request)
+		assertInitialOpeningInvocation(t, sessions, reused.candidateID)
+		firstHistory := initialOpeningHistory(t, sessions, reused.candidateID)
+		closeInitialOpeningSession(t, sessions, reused.candidateID)
+		assertInitialOpeningReplay(t, process, recordPath, reused.candidateID, firstHistory)
+		assertInitialOpeningHistoryPreserved(t, sessions, reused.peerID, peerHistory)
+		assertInitialOpeningInvocation(t, sessions, reused.peerID)
+	})
+}
+
+func testCanceledInitialOpening(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *initialOpeningGate) {
+	t.Helper()
+	t.Cleanup(gate.unblock)
+	peerHistory := scenario.startPeer(t, sessions)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := sessions.Start(ctx, scenario.request())
+		result <- err
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(initialOpeningReadCeiling):
+		t.Fatal("initial opening did not reach the filesystem gate")
+	}
+	cancel()
+	gate.unblock()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled Start error = %v, want context.Canceled", err)
+		}
+	case <-time.After(initialOpeningReadCeiling):
+		t.Fatal("canceled initial opening did not return")
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	scenario.startCandidate(t, sessions)
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+}
+
+func assertInitialOpeningReplay(t *testing.T, process support.Process, recordPath, sessionID string, history *factorydefinitions.FactoryEventStream) {
+	t.Helper()
+	directory, home := t.TempDir(), t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", directory, "--replay", recordPath, "--no-record",
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = directory
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("read finalized recording through replay: %v\n%s\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	output := inputs.Stdout()
+	for _, expected := range []string{"Replayed Factory Session: " + sessionID, "Status: SUCCEEDED", "state=\"complete\""} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("replay output = %q, want %q", output, expected)
+		}
+	}
+	lastPosition := -1
+	for _, event := range history.History {
+		position := strings.Index(output, fmt.Sprintf("%s (%s)", event.Type, event.Id))
+		if position <= lastPosition {
+			t.Fatalf("retained event %s missing or out of order in replay:\n%s", event.Id, output)
+		}
+		lastPosition = position
+	}
+}
+
+func closeInitialOpeningSession(t *testing.T, sessions factorysessions.Service, sessionID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), initialOpeningReadCeiling)
+	defer cancel()
+	result, err := sessions.Control(ctx, factorysessions.SessionControlRequest{
+		SessionID: sessionID, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose,
+	})
+	if err != nil || !result.Closed {
+		t.Fatalf("close owned session %s = %#v, %v", sessionID, result, err)
+	}
 }
 
 type initialOpeningScenario struct {
@@ -125,7 +206,7 @@ type initialOpeningScenario struct {
 
 func newInitialOpeningScenario(t *testing.T) initialOpeningScenario {
 	t.Helper()
-	config := processExecuteRuntimeOpeningFactoryConfig()
+	config := initialOpeningFactoryConfig()
 	config["workTypes"].([]map[string]any)[0]["handlingBehavior"] = []string{"DEFAULT"}
 	config["workers"] = []map[string]string{{"name": "worker-a", "type": string(factorydefinitions.WorkerTypeScript), "command": "initial-opening-script"}}
 	return initialOpeningScenario{
@@ -174,8 +255,16 @@ func startInitialOpeningSession(t *testing.T, sessions factorysessions.Service, 
 		t.Fatalf("Start explicit session = %#v, %v, want requested live identity", result, err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), rootProcessStreamReadCeiling)
+		// A journey may already have closed its session to observe persisted
+		// history. Cleanup owns only still-live IDs.
+		ctx, cancel := context.WithTimeout(context.Background(), initialOpeningReadCeiling)
 		defer cancel()
+		_, getErr := sessions.Get(ctx, factorysessions.SessionGetRequest{
+			SessionID: request.SessionID, Mode: factorysessions.SessionOperationModeLive,
+		})
+		if errors.Is(getErr, factorysessions.ErrSessionNotFound) {
+			return
+		}
 		result, err := sessions.Control(ctx, factorysessions.SessionControlRequest{
 			SessionID: request.SessionID, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose,
 		})
@@ -195,7 +284,7 @@ func assertInitialOpeningNotPublished(t *testing.T, sessions factorysessions.Ser
 
 func assertInitialOpeningInvocation(t *testing.T, sessions factorysessions.Service, sessionID string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), rootProcessStreamReadCeiling)
+	ctx, cancel := context.WithTimeout(t.Context(), initialOpeningReadCeiling)
 	defer cancel()
 	result, err := sessions.Invoke(ctx, factorysessions.SessionInvokeRequest{
 		SessionID: sessionID, ContentProvided: true,
