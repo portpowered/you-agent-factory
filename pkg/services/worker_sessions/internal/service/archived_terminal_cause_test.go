@@ -26,7 +26,7 @@ func (f *archivedCauseStore) ListWorkerControlOperations(_ context.Context, _ re
 
 func TestTerminalCauseArchivedUsesPhysicalTerminalAttemptAndExactCapture(t *testing.T) {
 	t.Parallel()
-	for _, variant := range []string{"applied", "stale-attempt", "store-loss", "missing-terminal", "wrong-position", "unknown-field", "aliased-id", "duplicate-id"} {
+	for _, variant := range []string{"applied", "stale-attempt", "store-loss", "missing-terminal", "wrong-position", "unknown-field", "aliased-id", "duplicate-id", "terminal-duplicate-attempt", "terminal-aliased-attempt", "terminal-unknown-field", "terminal-duplicate-status", "terminal-wrong-status", "terminal-wrong-phase"} {
 		t.Run(variant, func(t *testing.T) {
 			t.Parallel()
 			target := exactCaptureIdentity()
@@ -57,6 +57,9 @@ func TestTerminalCauseArchivedUsesPhysicalTerminalAttemptAndExactCapture(t *test
 			case "duplicate-id":
 				fake.records[0].Result = []byte(strings.Replace(string(payload), `"ID":`, `"ID":"foreign","ID":`, 1))
 			}
+			if strings.HasPrefix(variant, "terminal-") {
+				fake.snapshot.Sessions[0].Records[0].Payload = corruptArchivedTerminal(variant)
+			}
 			reader := &LogReader{reader: fake}
 			fake.page = page
 			observation, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: target.WorkerSessionID, FactorySessionID: target.FactorySessionID})
@@ -73,4 +76,23 @@ func TestTerminalCauseArchivedUsesPhysicalTerminalAttemptAndExactCapture(t *test
 			}
 		})
 	}
+}
+
+func corruptArchivedTerminal(variant string) []byte {
+	payload := `{"kind":"SESSION","phase":"CANCELED","dispatchId":"physical-attempt","payload":{"status":"TERMINATED"}}`
+	switch variant {
+	case "terminal-duplicate-attempt":
+		payload = strings.Replace(payload, `"dispatchId":`, `"dispatchId":"foreign","dispatchId":`, 1)
+	case "terminal-aliased-attempt":
+		payload = strings.Replace(payload, `"dispatchId":`, `"DispatchId":`, 1)
+	case "terminal-unknown-field":
+		payload = strings.Replace(payload, `"kind":`, `"private":"private-terminal-detail","kind":`, 1)
+	case "terminal-duplicate-status":
+		payload = strings.Replace(payload, `"status":`, `"status":"CANCELED","status":`, 1)
+	case "terminal-wrong-status":
+		payload = strings.Replace(payload, `"TERMINATED"`, `"CANCELED"`, 1)
+	case "terminal-wrong-phase":
+		payload = strings.Replace(payload, `"CANCELED"`, `"COMPLETED"`, 1)
+	}
+	return []byte(payload)
 }

@@ -360,6 +360,9 @@ Malformed saved stop results, including duplicate or aliased identity fields
 and unexpected private content, leave the operator cause unknown while the
 recorded terminal state remains readable. Factory controls fence the physical
 attempt independently of the logical dispatch ID returned by the control.
+Archived operator causes also require an unambiguous terminal event whose
+attempt, lifecycle phase and status match the recorded outcome. Conflicting
+terminal fields leave the cause unknown without changing the recorded state.
 
 Logs pages include the recording generation, committed position, capture
 health, and ordered events. New committed events include `capturedAt`, the

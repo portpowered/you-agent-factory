@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -24,7 +23,7 @@ func (s *LogReader) archivedTerminalCause(ctx context.Context, page recordings.W
 	if err != nil || snapshot.RecordingID != page.Catalog.RecordingID {
 		return nil
 	}
-	attemptID := capturedTerminalAttempt(snapshot, observation.WorkerSessionID, uint64(page.Terminal.Position))
+	attemptID := capturedTerminalAttempt(snapshot, observation.WorkerSessionID, uint64(page.Terminal.Position), observation.State)
 	if attemptID == "" {
 		return nil
 	}
@@ -40,7 +39,7 @@ func (s *LogReader) archivedTerminalCause(ctx context.Context, page recordings.W
 	return committedStopCause(records, target, observation.State)
 }
 
-func capturedTerminalAttempt(snapshot recordings.WorkerRecordingSnapshot, id string, position uint64) string {
+func capturedTerminalAttempt(snapshot recordings.WorkerRecordingSnapshot, id string, position uint64, state workersessions.State) string {
 	for _, session := range snapshot.Sessions {
 		if session.WorkerSessionID != id {
 			continue
@@ -50,7 +49,11 @@ func capturedTerminalAttempt(snapshot recordings.WorkerRecordingSnapshot, id str
 				continue
 			}
 			var draft workers.Draft
-			if json.Unmarshal(record.Payload, &draft) == nil && draft.Kind == workers.KindSession {
+			var terminal terminalSessionPayload
+			phase, err := terminalPhase(state)
+			if err == nil && readPendingInterruptOpeningJSON(record.Payload, &draft) == nil &&
+				draft.Kind == workers.KindSession && draft.Phase == phase &&
+				readPendingInterruptOpeningJSON(draft.Payload, &terminal) == nil && terminal.Status == string(state) {
 				return draft.DispatchID
 			}
 		}
