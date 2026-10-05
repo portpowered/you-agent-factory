@@ -31,7 +31,7 @@
       "path": "generated/cli/command-manifest.schema.json"
     },
     "generated.cli.commands": {
-      "artifactHash": "92d1d34ab275522874cb248dd08a8d61c989947870534d98fd0c1c05d8c68b8c",
+      "artifactHash": "1a7ffc344dfd5291517f10d9e697a4dcf5808b3bc7178156c2f2abdac9223529",
       "documentation": {
         "documentation": {
           "description": {
@@ -48,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "92d1d34ab275522874cb248dd08a8d61c989947870534d98fd0c1c05d8c68b8c",
+        "sourceHash": "1a7ffc344dfd5291517f10d9e697a4dcf5808b3bc7178156c2f2abdac9223529",
         "visibility": "public"
       },
       "family": "cli",
@@ -181,7 +181,7 @@
       "path": "generated/joined/contracts/manifest.schema.json"
     },
     "generated.mcp.manifest": {
-      "artifactHash": "6a355785a7182cbdc2c605e4b82aac88ddf2384f12addfab568a8f155ac0172b",
+      "artifactHash": "a59876f205c30125b00f807781b85944cc2ce2a68a39ace183e72f474565707c",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.mcp.manifest",
-        "sourceHash": "6a355785a7182cbdc2c605e4b82aac88ddf2384f12addfab568a8f155ac0172b",
+        "sourceHash": "a59876f205c30125b00f807781b85944cc2ce2a68a39ace183e72f474565707c",
         "visibility": "public"
       },
       "family": "mcp",
@@ -211,7 +211,7 @@
       "path": "generated/mcp/manifest.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "438177abe90ec5947c1d579088d6ad960f9c550a95c609cebb118bc72ba324fb",
+      "artifactHash": "20b949316430389789dda768702190861923ef252811a8e6992cac8e41645c14",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "438177abe90ec5947c1d579088d6ad960f9c550a95c609cebb118bc72ba324fb",
+        "sourceHash": "20b949316430389789dda768702190861923ef252811a8e6992cac8e41645c14",
         "visibility": "public"
       },
       "family": "openapi",

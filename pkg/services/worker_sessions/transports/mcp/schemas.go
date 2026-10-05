@@ -20,6 +20,11 @@ func listSchema() map[string]any {
 		"type":                 "object",
 		"additionalProperties": false,
 		"properties": map[string]any{
+			"history": map[string]any{
+				"type":    "string",
+				"enum":    []any{"active", "all", "archived"},
+				"default": "all",
+			},
 			"scope": map[string]any{
 				"type": "string",
 				"enum": []any{"direct", "factory", "all"},

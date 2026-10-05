@@ -168,7 +168,7 @@ func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter) (
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Env:   append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: writer, ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), WorkerRecordingWriter: writer, ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
 	})
 	return host, runner, dir
 }

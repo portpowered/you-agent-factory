@@ -8284,6 +8284,8 @@ export interface operations {
   listWorkerSessions: {
     parameters: {
       query?: {
+        /** @description active selects owned nonterminal Worker Sessions; all includes retained history; archived selects ended or owner-lost sessions. Omission retains the process-local compatibility view. Explicit history pages freeze membership and observations for five minutes of idle time. Expired or evicted cursors must be restarted from the first page. */
+        history?: PathsWorkerSessionsGetParametersQueryHistory;
         /** @description Origin scope to inspect. Omit for the fleet-wide view. */
         scope?: PathsWorkerSessionsGetParametersQueryScope;
         /** @description Optional repeated Worker Session lifecycle state filters. */
@@ -10409,6 +10411,13 @@ export interface operations {
     };
   };
 }
+export const PathsWorkerSessionsGetParametersQueryHistory = {
+  active: "active",
+  all: "all",
+  archived: "archived",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryHistory =
+  (typeof PathsWorkerSessionsGetParametersQueryHistory)[keyof typeof PathsWorkerSessionsGetParametersQueryHistory];
 export const PathsWorkerSessionsGetParametersQueryScope = {
   direct: "direct",
   factory: "factory",

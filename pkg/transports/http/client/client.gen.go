@@ -1612,6 +1612,13 @@ const (
 	SortByStateType SortBy = "state.type"
 )
 
+// Defines values for ListWorkerSessionsParamsHistory.
+const (
+	ListWorkerSessionsParamsHistoryActive   ListWorkerSessionsParamsHistory = "active"
+	ListWorkerSessionsParamsHistoryAll      ListWorkerSessionsParamsHistory = "all"
+	ListWorkerSessionsParamsHistoryArchived ListWorkerSessionsParamsHistory = "archived"
+)
+
 // Defines values for ListWorkerSessionsParamsScope.
 const (
 	ListWorkerSessionsParamsScopeAll     ListWorkerSessionsParamsScope = "all"
@@ -9956,6 +9963,9 @@ type GetMetricsCostsParams struct {
 
 // ListWorkerSessionsParams defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParams struct {
+	// History active selects owned nonterminal Worker Sessions; all includes retained history; archived selects ended or owner-lost sessions. Omission retains the process-local compatibility view. Explicit history pages freeze membership and observations for five minutes of idle time. Expired or evicted cursors must be restarted from the first page.
+	History *ListWorkerSessionsParamsHistory `form:"history,omitempty" json:"history,omitempty"`
+
 	// Scope Origin scope to inspect. Omit for the fleet-wide view.
 	Scope *ListWorkerSessionsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
 
@@ -9971,6 +9981,9 @@ type ListWorkerSessionsParams struct {
 	// NextToken Optional base64-encoded token ID cursor.
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
 }
+
+// ListWorkerSessionsParamsHistory defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsHistory string
 
 // ListWorkerSessionsParamsScope defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsScope string
@@ -19321,6 +19334,22 @@ func NewListWorkerSessionsRequest(server string, params *ListWorkerSessionsParam
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.History != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "history", runtime.ParamLocationQuery, *params.History); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Scope != nil {
 

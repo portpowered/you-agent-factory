@@ -1618,6 +1618,13 @@ const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
 
+// Defines values for ListWorkerSessionsParamsHistory.
+const (
+	ListWorkerSessionsParamsHistoryActive   ListWorkerSessionsParamsHistory = "active"
+	ListWorkerSessionsParamsHistoryAll      ListWorkerSessionsParamsHistory = "all"
+	ListWorkerSessionsParamsHistoryArchived ListWorkerSessionsParamsHistory = "archived"
+)
+
 // Defines values for ListWorkerSessionsParamsScope.
 const (
 	ListWorkerSessionsParamsScopeAll     ListWorkerSessionsParamsScope = "all"
@@ -10133,6 +10140,9 @@ type GetProviderSessionDetailsParams struct {
 
 // ListWorkerSessionsParams defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParams struct {
+	// History active selects owned nonterminal Worker Sessions; all includes retained history; archived selects ended or owner-lost sessions. Omission retains the process-local compatibility view. Explicit history pages freeze membership and observations for five minutes of idle time. Expired or evicted cursors must be restarted from the first page.
+	History *ListWorkerSessionsParamsHistory `form:"history,omitempty" json:"history,omitempty"`
+
 	// Scope Origin scope to inspect. Omit for the fleet-wide view.
 	Scope *ListWorkerSessionsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
 
@@ -10148,6 +10158,9 @@ type ListWorkerSessionsParams struct {
 	// NextToken Optional base64-encoded token ID cursor.
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
 }
+
+// ListWorkerSessionsParamsHistory defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsHistory string
 
 // ListWorkerSessionsParamsScope defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsScope string
@@ -21036,6 +21049,14 @@ func (siw *ServerInterfaceWrapper) ListWorkerSessions(w http.ResponseWriter, r *
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListWorkerSessionsParams
+
+	// ------------- Optional query parameter "history" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "history", r.URL.Query(), &params.History)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "history", Err: err})
+		return
+	}
 
 	// ------------- Optional query parameter "scope" -------------
 

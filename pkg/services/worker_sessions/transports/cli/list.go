@@ -30,6 +30,8 @@ type ListConfig struct {
 	SessionID     string
 	WorkID        string
 	Scope         string
+	History       string
+	HistorySet    bool
 	States        []string
 	Limit         int
 	LimitSet      bool
@@ -57,6 +59,7 @@ func NewList(transport clihttp.Protocol) func(ListConfig) error {
 func list(config ListConfig) error {
 	config.WorkID = strings.TrimSpace(config.WorkID)
 	config.Scope = strings.TrimSpace(config.Scope)
+	config.History = strings.TrimSpace(config.History)
 	config.NextToken = strings.TrimSpace(config.NextToken)
 	for index := range config.States {
 		config.States[index] = strings.TrimSpace(config.States[index])
@@ -71,7 +74,7 @@ func list(config ListConfig) error {
 		return emitCLIError(config, jsonOutput, err)
 	}
 	jsonOutput = config.JSON || format == "json"
-	endpoint, err := workerSessionsEndpoint(config.Server, config.SessionID, config.WorkID, config.Scope, config.States, config.Limit, config.LimitSet, config.MaxResults, config.NextToken)
+	endpoint, err := workerSessionsEndpoint(config.Server, config.SessionID, config.WorkID, config.Scope, config.History, config.States, config.Limit, config.LimitSet, config.MaxResults, config.NextToken)
 	if err != nil {
 		return err
 	}
@@ -145,7 +148,7 @@ func validateListConfig(config ListConfig) error {
 	if strings.TrimSpace(config.WorkID) != "" && scopedListHasTopLevelFilters(config) {
 		return newCLIError(
 			"WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED",
-			"--state, --limit, --max-results, and --next-token require fleet-wide listing; omit --work-id or use the Work-scoped list without those filters",
+			"--history, --state, --limit, --max-results, and --next-token require fleet-wide listing; omit --work-id or use the Work-scoped list without those filters",
 			nil,
 		)
 	}
@@ -166,6 +169,9 @@ func validateListBounds(config ListConfig) error {
 }
 
 func validateListScopeAndStates(config ListConfig) error {
+	if (config.HistorySet || config.History != "") && config.History != "active" && config.History != "all" && config.History != "archived" {
+		return newCLIError("WORKER_SESSION_HISTORY_INVALID", "--history must be active, all, or archived", nil)
+	}
 	if config.Scope != "" && config.Scope != "direct" && config.Scope != "factory" && config.Scope != "all" {
 		return newCLIError("WORKER_SESSION_SCOPE_INVALID", fmt.Sprintf("unsupported --scope value %q; supported values are direct, factory, and all", config.Scope), nil)
 	}
@@ -178,7 +184,7 @@ func validateListScopeAndStates(config ListConfig) error {
 }
 
 func scopedListHasTopLevelFilters(config ListConfig) bool {
-	return len(config.States) > 0 || config.LimitSet || config.Limit != 0 || config.MaxResultsSet || config.MaxResults != 0 || strings.TrimSpace(config.NextToken) != ""
+	return config.HistorySet || config.History != "" || len(config.States) > 0 || config.LimitSet || config.Limit != 0 || config.MaxResultsSet || config.MaxResults != 0 || strings.TrimSpace(config.NextToken) != ""
 }
 
 func validWorkerSessionState(state string) bool {
@@ -295,9 +301,9 @@ func workerSessionsListFailureStage(err error) string {
 	return "transport"
 }
 
-func workerSessionsEndpoint(server, sessionID, workID, scope string, states []string, limit int, limitSet bool, maxResults int, nextToken string) (url.URL, error) {
+func workerSessionsEndpoint(server, sessionID, workID, scope, history string, states []string, limit int, limitSet bool, maxResults int, nextToken string) (url.URL, error) {
 	if strings.TrimSpace(workID) == "" {
-		return topLevelWorkerSessionsEndpoint(server, scope, states, limit, limitSet, maxResults, nextToken)
+		return topLevelWorkerSessionsEndpoint(server, scope, history, states, limit, limitSet, maxResults, nextToken)
 	}
 	endpointURL, err := cliserver.RequestURL(server, sessionpath.WorkerSessionsCollectionPath(sessionID))
 	if err != nil {
@@ -313,7 +319,7 @@ func workerSessionsEndpoint(server, sessionID, workID, scope string, states []st
 	return *endpoint, nil
 }
 
-func topLevelWorkerSessionsEndpoint(server, scope string, states []string, limit int, limitSet bool, maxResults int, nextToken string) (url.URL, error) {
+func topLevelWorkerSessionsEndpoint(server, scope, history string, states []string, limit int, limitSet bool, maxResults int, nextToken string) (url.URL, error) {
 	endpointURL, err := cliserver.RequestURL(server, sessionpath.TopLevelWorkerSessionsCollectionPath())
 	if err != nil {
 		return url.URL{}, err
@@ -325,6 +331,9 @@ func topLevelWorkerSessionsEndpoint(server, scope string, states []string, limit
 	query := endpoint.Query()
 	if scope != "" {
 		query.Set("scope", scope)
+	}
+	if history != "" {
+		query.Set("history", history)
 	}
 	for _, state := range states {
 		query.Add("state", state)

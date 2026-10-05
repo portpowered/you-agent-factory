@@ -10,6 +10,7 @@ import (
 )
 
 type listInput struct {
+	History   *string   `json:"history"`
 	Scope     *string   `json:"scope"`
 	State     *[]string `json:"state"`
 	Limit     *int      `json:"limit"`
@@ -54,6 +55,13 @@ func decodeList(raw json.RawMessage) (listInput, error) {
 	_, err := decodeInput(raw, &input)
 	if err != nil {
 		return input, err
+	}
+	if input.History == nil {
+		history := "all"
+		input.History = &history
+	}
+	if !slices.Contains([]string{"active", "all", "archived"}, *input.History) {
+		return input, fmt.Errorf("history must be active, all or archived")
 	}
 	if input.Scope != nil && !slices.Contains([]string{"all", "direct", "factory"}, *input.Scope) {
 		return input, fmt.Errorf("scope must be all, direct or factory")

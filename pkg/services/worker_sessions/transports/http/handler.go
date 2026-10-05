@@ -140,7 +140,15 @@ func (h *Handler) ListWorkerSessions(
 		value := string(*params.NextToken)
 		nextToken = &value
 	}
-	response, err := h.adapter.ListTopLevelWorkerSessions(r.Context(), scope, states, maxResults, nextToken)
+	history := ""
+	if params.History != nil {
+		history = string(*params.History)
+		if history == "" {
+			h.writeMappedError(w, workersessions.ErrInvalidObservationHistory)
+			return
+		}
+	}
+	response, err := h.adapter.ListTopLevelWorkerSessions(r.Context(), scope, history, states, maxResults, nextToken)
 	if err != nil {
 		h.writeMappedError(w, err)
 		return
@@ -217,6 +225,10 @@ func (h *Handler) ListWorkerSessionsBySessionId(
 	}
 	if r == nil {
 		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	if r.URL.Query().Has("history") {
+		writeError(w, http.StatusBadRequest, "history requires fleet-wide listing", "BAD_REQUEST")
 		return
 	}
 	response, err := h.adapter.ListWorkerSessions(r.Context(), string(sessionID), workID)

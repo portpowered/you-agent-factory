@@ -77,7 +77,8 @@ func (a *Adapter) Call(ctx context.Context, name string, raw json.RawMessage) (j
 }
 
 func (a *Adapter) list(ctx context.Context, input listInput) (any, *toolError) {
-	params := client.ListWorkerSessionsParams{Limit: input.Limit, NextToken: input.NextToken}
+	history := client.ListWorkerSessionsParamsHistory(*input.History)
+	params := client.ListWorkerSessionsParams{Limit: input.Limit, NextToken: input.NextToken, History: &history}
 	if input.Scope != nil {
 		scope := client.ListWorkerSessionsParamsScope(*input.Scope)
 		params.Scope = &scope

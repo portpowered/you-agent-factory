@@ -654,6 +654,10 @@ func executeGeneratedWorkerSessionsListWithValues(
 	if err != nil {
 		return err
 	}
+	history, err := commandInputValue[string](values, "you.worker-sessions.list.flag.history")
+	if err != nil {
+		return err
+	}
 	states, err := commandInputValue[[]string](values, "you.worker-sessions.list.flag.state")
 	if err != nil {
 		return err
@@ -681,7 +685,7 @@ func executeGeneratedWorkerSessionsListWithValues(
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return list(workersessionscli.ListConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: workID, Scope: scope, States: states, Limit: limit, LimitSet: cmd.Flags().Changed("limit"), MaxResults: maxResults, MaxResultsSet: cmd.Flags().Changed("max-results"), NextToken: nextToken,
+		WorkID: workID, Scope: scope, History: history, HistorySet: cmd.Flags().Changed("history"), States: states, Limit: limit, LimitSet: cmd.Flags().Changed("limit"), MaxResults: maxResults, MaxResultsSet: cmd.Flags().Changed("max-results"), NextToken: nextToken,
 		OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,

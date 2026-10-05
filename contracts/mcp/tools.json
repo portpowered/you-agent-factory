@@ -4306,7 +4306,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "List Worker Session observations on the selected host. Maps to GET /worker-sessions.",
+            "canonicalEnglish": "List Worker Session observations on the selected host. Maps to GET /worker-sessions. History defaults to all retained sessions.",
             "id": "mcp.tool.you.worker_session.list.description"
           },
           "title": {
@@ -4318,6 +4318,10 @@
           {
             "limit": 2,
             "scope": "all"
+          },
+          {
+            "history": "archived",
+            "limit": 2
           }
         ],
         "formatVersion": "1.0.0",
@@ -4366,6 +4370,18 @@
             "id": "mcp.arg.you.worker_session.list.state",
             "name": "state",
             "required": false
+          },
+          "mcp.arg.you.worker_session.list.history": {
+            "constraints": {
+              "enum": [
+                "active",
+                "all",
+                "archived"
+              ]
+            },
+            "id": "mcp.arg.you.worker_session.list.history",
+            "name": "history",
+            "required": false
           }
         },
         "schema": {
@@ -4403,6 +4419,15 @@
                 "type": "string"
               },
               "type": "array"
+            },
+            "history": {
+              "type": "string",
+              "enum": [
+                "active",
+                "all",
+                "archived"
+              ],
+              "default": "all"
             }
           },
           "type": "object"

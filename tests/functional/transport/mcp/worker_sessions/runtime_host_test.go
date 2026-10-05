@@ -30,7 +30,7 @@ func runRealHostFactory(t *testing.T, process support.Process) {
 	})
 	waitProviderRequest(t, ctx, runner)
 	listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "factory"})["result"].(map[string]any)
-	assertRuntimeObservationParity(t, listed, getHost(t, host.URL()+"/worker-sessions?scope=factory"))
+	assertRuntimeObservationParity(t, listed, getHost(t, host.URL()+"/worker-sessions?history=all&scope=factory"))
 	workers := listed["sessions"].([]any)
 	if len(workers) != 1 {
 		t.Fatalf("Factory fleet: %v", listed)
@@ -106,7 +106,7 @@ func runRealHostControls(t *testing.T, process support.Process) {
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := controlHostRunner{started: make(chan (<-chan struct{}), 4)}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
 	})
 	session, ctx := startMCP(t, process, host.URL())
 	sibling := admitControlWorker(t, ctx, host.URL(), "sibling", runner)
@@ -114,7 +114,7 @@ func runRealHostControls(t *testing.T, process support.Process) {
 		id := "mcp-" + strings.ToLower(operation)
 		done := admitControlWorker(t, ctx, host.URL(), id, runner)
 		listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "direct"})["result"]
-		assertRuntimeObservationParity(t, listed, getHost(t, host.URL()+"/worker-sessions?scope=direct"))
+		assertRuntimeObservationParity(t, listed, getHost(t, host.URL()+"/worker-sessions?history=all&scope=direct"))
 		before := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"]
 		assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/"+id))
 		assertFactoryCLIParity(t, host, id, getHost(t, host.URL()+"/worker-sessions/"+id))
@@ -162,7 +162,7 @@ func assertFactoryWithoutReference(t *testing.T, ctx context.Context, session *m
 		t.Fatal("Factory provider boundary not reached")
 	}
 	fleet := callWorker(t, ctx, session, "list", map[string]any{"scope": "factory"})["result"].(map[string]any)
-	assertRuntimeObservationParity(t, fleet, getHost(t, host.URL()+"/worker-sessions?scope=factory"))
+	assertRuntimeObservationParity(t, fleet, getHost(t, host.URL()+"/worker-sessions?history=all&scope=factory"))
 	workers := fleet["sessions"].([]any)
 	if len(workers) != 1 {
 		t.Fatalf("no-reference Factory fleet: %v", fleet)
@@ -180,8 +180,8 @@ func assertFactoryWithoutReference(t *testing.T, ctx context.Context, session *m
 	if len(all["sessions"].([]any)) != 4 {
 		t.Fatalf("combined direct/Factory fleet omitted workers: %v", all)
 	}
-	assertRuntimeObservationParity(t, all, getHost(t, host.URL()+"/worker-sessions"))
-	assertCLIListParity(t, host, []string{"you", "worker-sessions", "list", "--server", host.URL(), "--json"}, getHost(t, host.URL()+"/worker-sessions"))
+	assertRuntimeObservationParity(t, all, getHost(t, host.URL()+"/worker-sessions?history=all"))
+	assertCLIListParity(t, host, []string{"you", "worker-sessions", "list", "--server", host.URL(), "--json", "--history", "all"}, getHost(t, host.URL()+"/worker-sessions?history=all"))
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": id, "operation": "TERMINATE"})
 	waitControlSignal(t, done)
 }
@@ -192,8 +192,8 @@ func assertFleetPages(t *testing.T, ctx context.Context, session *mcp.ClientSess
 	token := ""
 	for page := 0; page < 3; page++ {
 		args := map[string]any{"limit": 1}
-		query := url.Values{"limit": {"1"}}
-		cliArgs := []string{"you", "worker-sessions", "list", "--server", host.URL(), "--json", "--limit", "1"}
+		query := url.Values{"limit": {"1"}, "history": {"all"}}
+		cliArgs := []string{"you", "worker-sessions", "list", "--server", host.URL(), "--json", "--history", "all", "--limit", "1"}
 		if token != "" {
 			args["nextToken"] = token
 			query.Set("nextToken", token)
@@ -224,9 +224,9 @@ func assertFleetPages(t *testing.T, ctx context.Context, session *mcp.ClientSess
 	if len(empty["sessions"].([]any)) != 0 {
 		t.Fatalf("empty filtered fleet: %v", empty)
 	}
-	endpoint := host.URL() + "/worker-sessions?scope=direct&state=COMPLETED"
+	endpoint := host.URL() + "/worker-sessions?history=all&scope=direct&state=COMPLETED"
 	assertJSONEqual(t, empty, getHost(t, endpoint))
-	assertCLIListParity(t, host, []string{"you", "worker-sessions", "list", "--server", host.URL(), "--json", "--scope", "direct", "--state", "COMPLETED"}, empty)
+	assertCLIListParity(t, host, []string{"you", "worker-sessions", "list", "--server", host.URL(), "--json", "--history", "all", "--scope", "direct", "--state", "COMPLETED"}, empty)
 }
 
 func assertCLIListParity(t *testing.T, host *support.FunctionalAPIServer, args []string, expected any) {
@@ -239,8 +239,10 @@ func assertCLIListParity(t *testing.T, host *support.FunctionalAPIServer, args [
 	if err := json.Unmarshal([]byte(inputs.Stdout()), &actual); err != nil {
 		t.Fatal(err)
 	}
+	expected = cloneHistoryValue(t, expected)
 	normalizeActiveDuration(t, actual)
 	normalizeActiveDuration(t, expected)
+	assertIndependentHistoryCursors(t, actual, expected)
 	pages := make([]factoryapi.ListWorkerSessionsResponse, 2)
 	for index, value := range []any{actual, expected} {
 		encoded, err := json.Marshal(value)
@@ -258,6 +260,9 @@ func assertCLIListParity(t *testing.T, host *support.FunctionalAPIServer, args [
 // contract independently, then compare all remaining fields exactly.
 func assertRuntimeObservationParity(t *testing.T, actual, expected any) {
 	t.Helper()
+	actual = cloneHistoryValue(t, actual)
+	expected = cloneHistoryValue(t, expected)
+	assertIndependentHistoryCursors(t, actual, expected)
 	normalizeActiveDuration(t, actual)
 	normalizeActiveDuration(t, expected)
 	assertJSONEqual(t, actual, expected)
@@ -344,4 +349,120 @@ func assertCLIControlParity(t *testing.T, host *support.FunctionalAPIServer, exp
 		t.Fatalf("CLI JSON: %v, output=%s", err, inputs.Stdout())
 	}
 	assertJSONEqual(t, actual, expected)
+}
+
+// This scenario needs a stable admission window to assert fleet membership.
+// Its host/profile is isolated while the other MCP scenarios run in parallel.
+func runRealHostHistory(t *testing.T, process support.Process) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "mcp-history-host")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	runner := controlHostRunner{started: make(chan (<-chan struct{}), 4)}
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)}})
+	session, ctx := startMCP(t, process, host.URL())
+	firstDone := admitControlWorker(t, ctx, host.URL(), "history-a", runner)
+	secondDone := admitControlWorker(t, ctx, host.URL(), "history-b", runner)
+	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
+	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "hold history Factory worker"})
+	select {
+	case <-runner.started:
+	case <-ctx.Done():
+		t.Fatal("Factory provider boundary not reached")
+	}
+	active := historyParityPage(t, ctx, session, host, "active", "all", "")
+	if len(active["sessions"].([]any)) != 3 {
+		t.Fatalf("mixed active history = %v", active)
+	}
+	factoryCount := 0
+	for _, value := range active["sessions"].([]any) {
+		worker := value.(map[string]any)
+		if worker["direct"] == false {
+			factoryCount++
+			if worker["factorySessionId"] != opened.Session.Id {
+				t.Fatalf("Factory attribution = %v", worker)
+			}
+		}
+	}
+	if factoryCount != 1 {
+		t.Fatalf("Factory active count = %d", factoryCount)
+	}
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "history-a", "operation": "TERMINATE"})
+	waitControlSignal(t, firstDone)
+	archived := historyParityPage(t, ctx, session, host, "archived", "direct", "")
+	if workers := archived["sessions"].([]any); len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != "history-a" {
+		t.Fatalf("archived history = %v", archived)
+	}
+	page := callWorker(t, ctx, session, "list", map[string]any{"history": "all", "scope": "direct", "limit": 1})["result"].(map[string]any)
+	token := page["paginationContext"].(map[string]any)["nextToken"].(string)
+	if workers := page["sessions"].([]any); len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != "history-a" {
+		t.Fatalf("first frozen page = %v", page)
+	}
+	laterDone := admitControlWorker(t, ctx, host.URL(), "history-c", runner)
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "history-b", "operation": "TERMINATE"})
+	waitControlSignal(t, secondDone)
+	frozen := historyParityPage(t, ctx, session, host, "all", "direct", token)
+	workers := frozen["sessions"].([]any)
+	if len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != "history-b" || workers[0].(map[string]any)["state"] != "RUNNING" {
+		t.Fatalf("frozen continuation = %v", frozen)
+	}
+	assertToolError(t, callTool(t, ctx, session, "you.worker_session.list", map[string]any{"history": "archived", "scope": "direct", "nextToken": token}), "worker_session.invalid_request", false)
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "history-c", "operation": "TERMINATE"})
+	waitControlSignal(t, laterDone)
+}
+
+func historyParityPage(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, history, scope, token string) map[string]any {
+	t.Helper()
+	args := map[string]any{"history": history, "scope": scope}
+	query := url.Values{"history": {history}, "scope": {scope}}
+	cliArgs := []string{"you", "worker-sessions", "list", "--server", host.URL(), "--history", history, "--scope", scope, "--json"}
+	if token != "" {
+		args["nextToken"] = token
+		query.Set("nextToken", token)
+		cliArgs = append(cliArgs, "--next-token", token)
+	}
+	actual := callWorker(t, ctx, session, "list", args)["result"].(map[string]any)
+	assertRuntimeObservationParity(t, actual, getHost(t, host.URL()+"/worker-sessions?"+query.Encode()))
+	assertCLIListParity(t, host, cliArgs, actual)
+	return actual
+}
+
+type historyWorkingDirectory string
+
+func (dir historyWorkingDirectory) Getwd() (string, error) { return string(dir), nil }
+
+func cloneHistoryValue(t *testing.T, value any) any {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var copy any
+	if err := json.Unmarshal(encoded, &copy); err != nil {
+		t.Fatal(err)
+	}
+	return copy
+}
+
+// Independent first-page requests allocate distinct signed snapshots. Compare
+// the presence of continuation, then their public observations and bounds.
+// The scenarios replay each returned token across HTTP, CLI and MCP separately.
+func assertIndependentHistoryCursors(t *testing.T, actual, expected any) {
+	t.Helper()
+	left, lok := actual.(map[string]any)
+	right, rok := expected.(map[string]any)
+	if !lok || !rok || left["sessions"] == nil || right["sessions"] == nil {
+		return
+	}
+	lp, lok := left["paginationContext"].(map[string]any)
+	rp, rok := right["paginationContext"].(map[string]any)
+	if !lok || !rok {
+		return
+	}
+	lt, _ := lp["nextToken"].(string)
+	rt, _ := rp["nextToken"].(string)
+	if (lt == "") != (rt == "") {
+		t.Fatalf("continuation presence differs: %v / %v", lp, rp)
+	}
+	delete(lp, "nextToken")
+	delete(rp, "nextToken")
 }

@@ -57,7 +57,7 @@ func TestWorkerSessionValidationRejectsBeforeHTTP(t *testing.T) {
 		return nil, nil
 	})
 	cases := map[string][]string{
-		ToolList:                     {`null`, `[]`, `"text"`, `{`, `{} {}`, `{"unknown":1}`, `{"scope":null}`, `{"scope":"archive"}`, `{"state":["unknown"]}`, `{"state":"RUNNING"}`, `{"limit":0}`, `{"limit":1.5}`, `{"limit":"1"}`, `{"nextToken":" "}`},
+		ToolList:                     {`null`, `[]`, `"text"`, `{`, `{} {}`, `{"unknown":1}`, `{"history":null}`, `{"history":""}`, `{"history":"recent"}`, `{"history":1}`, `{"scope":null}`, `{"scope":"archive"}`, `{"state":["unknown"]}`, `{"state":"RUNNING"}`, `{"limit":0}`, `{"limit":1.5}`, `{"limit":"1"}`, `{"nextToken":" "}`},
 		ToolRead:                     {`{}`, `{"workerSessionId":" "}`, `{"workerSessionId":"w","view":"logs"}`, `{"workerSessionId":"w","limit":1}`, `{"workerSessionId":"w","view":"transcript","limit":1}`, `{"workerSessionId":"w","view":"events","limit":0}`, `{"workerSessionId":"w","view":"events","limit":1001}`, `{"workerSessionId":"w","view":null}`},
 		ToolControl:                  {`{}`, `{"workerSessionId":"w","operation":"KILL"}`, `{"workerSessionId":"w","operation":"CANCEL","requestId":"r"}`, `{"workerSessionId":"w","operation":"TERMINATE","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"CANCEL","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","successorWorkerSessionId":"s","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":" ","successorWorkerSessionId":"s","replacementMessage":"m"}`},
 		"you.worker_session.unknown": {`{}`},
@@ -241,5 +241,32 @@ func assertReplayCleanup(t *testing.T, calls int, closed bool, ctx context.Conte
 	t.Helper()
 	if calls != 2 || !closed || ctx.Err() != context.Canceled {
 		t.Fatalf("replay cleanup: calls=%d closed=%v context=%v", calls, closed, ctx.Err())
+	}
+}
+
+func TestWorkerSessionHistorySelection(t *testing.T) {
+	t.Parallel()
+	for _, history := range []string{"", "active", "all", "archived"} {
+		t.Run(history, func(t *testing.T) {
+			t.Parallel()
+			want := history
+			if want == "" {
+				want = "all"
+			}
+			adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+				if request.URL.Query().Get("history") != want {
+					t.Fatalf("history query = %v, want %s", request.URL.Query(), want)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"sessions":[]}`)), Header: make(http.Header)}, nil
+			})
+			input := `{}`
+			if history != "" {
+				input = `{"history":"` + history + `"}`
+			}
+			result := workerCall(t, adapter, ToolList, input)
+			if result["error"] != nil {
+				t.Fatalf("history result = %v", result)
+			}
+		})
 	}
 }

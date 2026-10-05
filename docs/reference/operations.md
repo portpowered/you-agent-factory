@@ -334,6 +334,15 @@ you --server http://localhost:7437 worker-sessions read --worker-session-id <wor
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id> --view logs --output json
 ```
 
+Use `worker-sessions list --history active` to discover owned nonterminal Worker Sessions.
+Use `--history archived` for retained ended or owner-lost sessions after a host restart.
+Use `--history all` to combine both views. Omission preserves the process-local compatibility view.
+History filters require fleet-wide listing without `--work-id`.
+
+Explicit history pages freeze membership and observations. Later sessions do not enter an existing page sequence.
+Cursors expire after five minutes of inactivity and can expire earlier under snapshot memory pressure.
+Restart from the first page when a cursor expires. The MCP `you.worker_session.list` tool defaults `history` to `all`.
+
 Use `read --view logs` to read a finite page of captured activity while the
 Worker runs or after execution ends. This view reads Portos recordings and
 does not require a Provider Session reference or provider transcript files.

@@ -423,7 +423,7 @@
       "id": "mcp.tool.you.worker_session.list",
       "name": "you.worker_session.list",
       "handler": "mcp.handler.you.worker_session.list",
-      "description": "List Worker Session observations on the selected host. Maps to GET /worker-sessions.",
+      "description": "List Worker Session observations on the selected host. Maps to GET /worker-sessions. History defaults to all retained sessions.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -459,6 +459,15 @@
           "nextToken": {
             "type": "string",
             "minLength": 1
+          },
+          "history": {
+            "type": "string",
+            "enum": [
+              "active",
+              "all",
+              "archived"
+            ],
+            "default": "all"
           }
         }
       }

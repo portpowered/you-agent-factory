@@ -150,6 +150,17 @@ modify the file or use the `you` CLI to add a custom provider.
 The published MCP manifest in `@you-agent-factory/api/mcp` defines the tools,
 resources, and skill available from the server.
 
+## Discover Worker Sessions
+
+Call `you.worker_session.list` with `history: "active"` for owned nonterminal Worker Sessions.
+Use `history: "archived"` for retained ended or owner-lost sessions.
+Omit `history` or set it to `"all"` to combine both views.
+
+Origin `scope`, lifecycle `state`, and `limit` filter the selection before pagination.
+Continue with the returned `nextToken` and the same filters.
+Explicit history pages preserve their sampled membership and observations.
+If the snapshot expires, restart from the first page.
+
 ## Choose A Project Root
 
 Workflow sources resolve from `cwd`. To use a different source root, add

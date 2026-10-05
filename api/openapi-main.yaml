@@ -115,6 +115,18 @@ paths:
         cursor for bounded pagination. State filters compose with the selected
         origin scope, and limit is applied after filtering.
       parameters:
+        - name: history
+          in: query
+          required: false
+          description: >-
+            active selects owned nonterminal Worker Sessions; all includes retained
+            history; archived selects ended or owner-lost sessions. Omission
+            retains the process-local compatibility view. Explicit history pages
+            freeze membership and observations for five minutes of idle time.
+            Expired or evicted cursors must be restarted from the first page.
+          schema:
+            type: string
+            enum: [active, all, archived]
         - name: scope
           in: query
           required: false
