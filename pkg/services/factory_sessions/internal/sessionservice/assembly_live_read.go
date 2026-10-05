@@ -38,11 +38,10 @@ func (a *Assembly) BuildSessionProjectionContext(
 	ctx context.Context,
 	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
-	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil || bound.Owner == nil {
+	if a == nil || a.projectionReader == nil {
 		return factorysessions.ProjectionContext{}, fmt.Errorf("%w: session projection owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
-	return bound.Owner.BuildSessionProjectionContext(ctx, session)
+	return a.projectionReader.BuildSessionProjectionContext(ctx, session)
 }
 
 // GetFactorySessionSyncPreflight uses the gateway attached to the selected

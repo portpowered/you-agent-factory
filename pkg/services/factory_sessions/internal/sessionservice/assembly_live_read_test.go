@@ -647,8 +647,9 @@ func TestAssemblyRuntimeScopeRecognizesExplicitDefaultSessionID(t *testing.T) {
 }
 
 type projectionOwnerStub struct {
-	status string
-	cfg    *factorydefinitions.FactoryConfig
+	statuses map[string]string
+	status   string
+	cfg      *factorydefinitions.FactoryConfig
 }
 
 type durableListStub struct {
@@ -722,6 +723,9 @@ func TestAssemblySubscribesToSelectedCanonicalSessionResponses(t *testing.T) {
 }
 
 func (owner projectionOwnerStub) BuildSessionProjectionContext(_ context.Context, session *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
+	if owner.statuses != nil {
+		owner.status = owner.statuses[session.ID]
+	}
 	return factorysessions.ProjectionContext{
 		FactorySessionID: session.ID,
 		Session: &factorysessions.ScopedLiveSessionSummary{
@@ -737,7 +741,7 @@ func (owner projectionOwnerStub) BuildSessionProjectionContext(_ context.Context
 
 func TestAssemblyReadsLiveResultFromCanonicalSession(t *testing.T) {
 	state := newWorkResolverSessionState()
-	assembly := &Assembly{state: state, registry: state.Registry(), sessionResultProjection: &canonicalInspectionResultProjectionFake{
+	assembly := &Assembly{state: state, registry: state.Registry(), projectionReader: projectionOwnerStub{cfg: &factorydefinitions.FactoryConfig{Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{Kind: factorydefinitions.OrchestratorKindJavaScript}}}, sessionResultProjection: &canonicalInspectionResultProjectionFake{
 		result: factoryruntime.SessionResultProjection{Live: factoryruntime.LiveSessionResult{SessionID: "result-1", Status: "SUCCEEDED"}},
 	}}
 	checkpoint := &canonicalInspectionCheckpointStore{records: []factorydefinitions.JavaScriptCheckpointRecord{{ID: "checkpoint-1", ArtifactID: "artifact-1"}}}
@@ -762,7 +766,7 @@ func TestAssemblyReadsLiveResultFromCanonicalSession(t *testing.T) {
 
 func TestAssemblyReadsFullProjectionFromCanonicalSessionRegistry(t *testing.T) {
 	state := newWorkResolverSessionState()
-	assembly := &Assembly{state: state, registry: state.Registry()}
+	assembly := &Assembly{state: state, registry: state.Registry(), projectionReader: projectionOwnerStub{statuses: map[string]string{"session-first": "running", "session-second": "paused"}}}
 	for _, record := range []struct {
 		id, status string
 		isDefault  bool

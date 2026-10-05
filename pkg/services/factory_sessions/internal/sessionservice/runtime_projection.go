@@ -110,6 +110,18 @@ type sessionProjectionReader struct {
 	checkpoints  factoryruntime.JavaScriptCheckpointStoreFactory
 }
 
+func (h keyedSessionHost) BuildSessionProjectionContext(ctx context.Context, session *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
+	bound := runtimebinding.SessionStateFrom(session)
+	reader := h.sessionProjectionReader
+	if bound != nil && reader.backendScope == "" {
+		reader.backendScope = bound.ProjectionBackendScope
+	}
+	if bound != nil && bound.Clock != nil {
+		reader.clock = bound.Clock
+	}
+	return reader.BuildSessionProjectionContext(ctx, session)
+}
+
 func (fs *SessionRuntime) projectionReader() sessionProjectionReader {
 	return sessionProjectionReader{
 		state: fs.sessionState, backendScope: fs.backendScopeID, identity: fs.identity,

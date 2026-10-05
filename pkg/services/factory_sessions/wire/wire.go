@@ -232,6 +232,7 @@ func NewRuntimeAssembly(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory RecordedHistory,
 	gatewayStreams *GatewayStreams,
+	projector factoryruntime.WorldStateProjector,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
 		registry, state, streams, invoker, control, activation,
@@ -249,6 +250,7 @@ func NewRuntimeAssembly(
 		liveChangeCoordinator,
 		recordedHistory,
 		gatewayStreams,
+		sessionservice.SessionServiceHost(state, nil, control, nil, "", identityService, clock, projector, newJavaScriptCheckpointStore, nil),
 	)
 	if err != nil {
 		return nil, err

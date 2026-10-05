@@ -346,6 +346,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		in.liveChangeCoordinator,
 		nil,
 		streams,
+		nil,
 	)
 }
 

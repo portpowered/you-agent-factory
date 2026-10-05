@@ -38,6 +38,7 @@ type Assembly struct {
 	state                        *sessionruntime.Service
 	streams                      StreamManager
 	gatewayStreams               *stream.Manager
+	projectionReader             runtimebinding.SessionProjectionOwner
 	invoker                      roles.InvocationService
 	scopeControl                 SessionScopeControl
 	scopeActivation              SessionScopeActivation
@@ -90,6 +91,7 @@ func NewAssembly(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory RecordedHistory,
 	gatewayStreams *stream.Manager,
+	projectionReader runtimebinding.SessionProjectionOwner,
 ) roles.RuntimeAssembly {
 	return &Assembly{
 		SessionGateway:               &Service{},
@@ -97,6 +99,7 @@ func NewAssembly(
 		state:                        state,
 		streams:                      streams,
 		gatewayStreams:               gatewayStreams,
+		projectionReader:             projectionReader,
 		invoker:                      invoker,
 		scopeControl:                 control,
 		scopeActivation:              activation,
@@ -459,6 +462,8 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Session runtime state is required")
 	}
 	bound.Owner = runtime
+	bound.Clock = clock
+	bound.ProjectionBackendScope = backendScopeID
 	bound.Logger = logger
 	runtime.startupSessionID = identity.id
 	runtime.bindRuntimeReadMetrics(startupRuntime)

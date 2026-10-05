@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
@@ -335,7 +336,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}
@@ -486,4 +487,55 @@ func assertGatewayStreamOutput(t *testing.T, ctx context.Context, subscription *
 			t.Fatalf("retained event %d = %#v, want sequence %d payload %q", i, event, firstSequence+int64(i), payload)
 		}
 	}
+}
+
+func TestAssemblyInjectedProjectionUsesSelectedFactsAndKeepsPeersReadable(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	processTime := time.Date(2026, 10, 5, 1, 0, 0, 0, time.UTC)
+	selectedTime := processTime.Add(time.Hour)
+	reader := SessionServiceHost(state, nil, nil, nil, "", projectionIdentityStub{}, projectionClockStub{now: processTime}, nil, nil, nil)
+	assembly := &Assembly{state: state, registry: state.Registry(), projectionReader: reader}
+	for _, id := range []string{"first", "peer"} {
+		registerIndependentProjectionSession(state, id)
+	}
+	first := state.Resolve("first")
+	bound := runtimebinding.SessionStateFrom(first)
+	bound.Clock = projectionClockStub{now: selectedTime}
+	bound.ProjectionBackendScope = "opening-override"
+	projection, err := assembly.GetFactorySession(t.Context(), first.ID)
+	if err != nil || projection.Context.FactorySessionID != first.ID || projection.Context.BackendScopeID != "opening-override" || !projection.Context.Now.Equal(selectedTime) {
+		t.Fatalf("selected projection = %#v, %v", projection, err)
+	}
+	failure := errors.New("selected observation failed")
+	first.Runtime.Factory.(*observeStubRuntime).err = failure
+	if _, err := assembly.GetFactorySession(t.Context(), first.ID); !errors.Is(err, failure) {
+		t.Fatalf("observation cause = %v", err)
+	}
+	peer, err := assembly.GetFactorySession(t.Context(), "peer")
+	if err != nil || peer.Context.BackendScopeID != "backend-peer" || peer.Context.LogicalSessionKeyID != "logical-peer" || !peer.Context.Now.Equal(processTime) {
+		t.Fatalf("peer projection after failure = %#v, %v", peer, err)
+	}
+	first.Runtime.Factory.(*observeStubRuntime).err = nil
+	bound.ProjectionBackendScope = ""
+	projection, err = assembly.GetFactorySession(t.Context(), first.ID)
+	if err != nil || projection.Context.BackendScopeID != "backend-first" {
+		t.Fatalf("retry projection = %#v, %v", projection, err)
+	}
+	state.Registry().Remove(first.ID)
+	if _, err := assembly.GetFactorySession(t.Context(), first.ID); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("removed projection = %v", err)
+	}
+	if _, err := reader.BuildSessionProjectionContext(t.Context(), nil); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing projection = %v", err)
+	}
+}
+
+func registerIndependentProjectionSession(state *sessionruntime.Service, id string) {
+	runtime := &observeStubRuntime{result: factoryruntime.ObserveResult{Observation: factoryruntime.Observation{Health: factoryruntime.ObservationHealth{StreamGenerationID: "generation-" + id}}}}
+	state.Registry().Upsert(&livesession.LiveSession{
+		ID: id, SessionState: livesession.SessionState{FolderPath: id},
+		Handle:  &runtimebinding.SessionState{Handle: invocationQueryRun{record: &generationRuntimeRecord{service: runtime}}},
+		Runtime: &factorysessions.LiveRuntime{Factory: runtime, BackendScopeID: "backend-" + id, RuntimeConfig: invocationQueryConfig{config: &factorydefinitions.FactoryConfig{}}},
+	}, id == "first")
 }

@@ -303,6 +303,7 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		in.liveChangeCoordinator,
 		legacyservice.NewRecordedHistory(in.resolveHome, in.recordedSessionInventory),
 		streams,
+		legacyservice.SessionServiceHost(state, nil, nil, nil, "", in.identity, in.clock, nil, in.newJavaScriptCheckpointStore, nil),
 	)
 }
 

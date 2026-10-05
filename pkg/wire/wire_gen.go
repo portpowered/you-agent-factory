@@ -199,7 +199,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	replayInputLoader := provideFactorySessionReplayInputs(v31, v32, v33, loggingLogger)
 	recordedSessionInventory := provideRecordedSessionInventory(edges2, replayInputLoader, loggingLogger)
 	v34 := wire3.NewRecordedHistory(homeDirectoryResolver, recordedSessionInventory)
-	v35, err := provideFactorySessionsAssembly(v10, v14, v16, v25, v21, v26, sessionResultProjectionOperation, responseEventIDGenerator, v13, homeDirectoryResolver, v27, namedPathResolver, v28, v29, v11, clock, v30, v34, v16)
+	v35, err := provideFactorySessionsAssembly(v10, v14, v16, v25, v21, v26, sessionResultProjectionOperation, responseEventIDGenerator, v13, homeDirectoryResolver, v27, namedPathResolver, v28, v29, v11, clock, v30, v34, v16, worldStateProjector)
 	if err != nil {
 		return nil, err
 	}
