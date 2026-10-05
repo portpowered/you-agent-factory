@@ -350,6 +350,74 @@ func TestWorkReadKeepsRuntimeGenerationDuringConcurrentReplacement(t *testing.T)
 	assertGenerationWorkSnapshot(t, oldSnapshot, "old-work", "old")
 }
 
+func TestProcessHostLateStopPreservesReplacementWorkAdmissions(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	assembly := &Assembly{state: state}
+	register := func(id, workID string) (*livesession.LiveSession, *admissionProjectionLedger) {
+		ledger := &admissionProjectionLedger{}
+		runtime := &generationWorkRuntime{snapshot: snapshotWithWork(t, workID)}
+		record := &generationRuntimeRecord{service: runtime, ledger: ledger}
+		registerGenerationSession(state, id, record, runtime)
+		session := state.Resolve(id)
+		owner := &SessionRuntime{
+			releaseWorkAdmissionProjection: assembly.releaseWorkAdmissionProjection,
+			retireWorkAdmissionProjection:  assembly.retireWorkAdmissionProjection,
+		}
+		bound := runtimebinding.SessionStateFrom(session)
+		bound.Handle = invocationQueryRun{record: record}
+		bound.Owner = owner
+		owner.runtimeState.SetActive(context.Background(), id, bound.Handle)
+		return session, ledger
+	}
+	previous, _ := register("selected", "old-work")
+	_, peerLedger := register("peer", "peer-work")
+	peer := requireGenerationWorkRuntime(t, assembly, "peer")
+	_ = requireGenerationWorkRuntime(t, assembly, "selected")
+	var replacement work.Runtime
+	var replacementLedger *admissionProjectionLedger
+	lifecycle := &hostLifecycleStub{onStop: func() {
+		_, replacementLedger = register("selected", "new-work")
+		replacement = requireGenerationWorkRuntime(t, assembly, "selected")
+	}}
+	control := NewScopeControl(state, func(run factory.RuntimeRun, _ factory.Clock) error {
+		return lifecycle.Stop(run)
+	}, zap.NewNop())
+	host := SessionServiceHost(state, nil, control, nil, "", nil, nil, nil, nil, nil)
+	if err := host.StopLiveSession(previous.ID); err != nil {
+		t.Fatalf("late previous-generation stop: %v", err)
+	}
+	// Admissions arriving after old-generation cleanup must still reach an
+	// already acquired replacement adapter, as well as a newly resolved reader.
+	for _, cell := range []struct {
+		id, workID, name string
+		ledger           *admissionProjectionLedger
+		runtime          work.Runtime
+	}{
+		{"selected", "new-work", "replacement", replacementLedger, replacement},
+		{"peer", "peer-work", "peer", peerLedger, peer},
+	} {
+		cell.ledger.AppendRecordedEvent(admissionProjectionEvent(t, "admission-"+cell.id, cell.id, 1,
+			work.WorkRequestEventWork{Name: cell.name, WorkID: cell.workID}))
+		for _, reader := range []work.Runtime{cell.runtime, requireGenerationWorkRuntime(t, assembly, cell.id)} {
+			snapshot, err := reader.ReadWorkSnapshot(context.Background())
+			if err != nil {
+				t.Fatalf("read %s after late stop: %v", cell.id, err)
+			}
+			assertGenerationWorkSnapshot(t, snapshot, cell.workID, cell.name)
+		}
+	}
+}
+
+func requireGenerationWorkRuntime(t *testing.T, assembly *Assembly, id string) work.Runtime {
+	t.Helper()
+	runtime, err := assembly.ResolveWorkRuntime(id)
+	if err != nil {
+		t.Fatalf("resolve %s Work runtime: %v", id, err)
+	}
+	return runtime
+}
+
 func TestRetireWorkAdmissionProjectionAfterRepeatedReplacement(t *testing.T) {
 	t.Parallel()
 

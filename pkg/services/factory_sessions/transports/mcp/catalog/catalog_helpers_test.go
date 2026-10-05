@@ -128,8 +128,8 @@ func TestCatalogInputSchemaToolPath_EscapesJSONPointerTokens(t *testing.T) {
 	}
 }
 
-func TestVerifyCatalogToolIdentityCompleteness_FailsWhenStableIDDuplicated(t *testing.T) {
-	discovered := mcpfactorysession.DiscoverTools()
+func TestVerifyCatalogToolIdentities_FailsWhenStableIDDuplicated(t *testing.T) {
+	discovered := []mcpfactorycatalog.CatalogToolIdentity{{ID: "mcp.tool.you.example.first", Name: "you.example.first"}, {ID: "mcp.tool.you.example.second", Name: "you.example.second"}}
 	catalog := []mcpfactorycatalog.CatalogToolIdentity{
 		{
 			ID:   mcpfactorycatalog.CatalogToolIDForName(discovered[0].Name),
@@ -140,24 +140,24 @@ func TestVerifyCatalogToolIdentityCompleteness_FailsWhenStableIDDuplicated(t *te
 			Name: discovered[1].Name,
 		},
 	}
-	err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:2])
+	err := mcpfactorycatalog.VerifyCatalogToolIdentities(catalog, discovered[:2])
 	if err == nil || !strings.Contains(err.Error(), "duplicate catalog stable ID") {
-		t.Fatalf("VerifyCatalogToolIdentityCompleteness() error = %v, want duplicate stable ID", err)
+		t.Fatalf("VerifyCatalogToolIdentities() error = %v, want duplicate stable ID", err)
 	}
 }
 
-func TestVerifyCatalogInputSchemaParity_FailsWhenCatalogMissingDiscoveredTool(t *testing.T) {
+func TestVerifyCatalogInputSchemas_FailsWhenCatalogMissingDiscoveredTool(t *testing.T) {
 	tool, ok := mcpfactorysession.ToolByName(mcpfactorysession.ToolListSessions)
 	if !ok {
 		t.Fatal("list tool missing from discovery")
 	}
-	err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(nil, []mcpfactorysession.ToolDefinition{tool})
+	err := mcpfactorycatalog.VerifyCatalogInputSchemas(nil, schemaProjections([]mcpfactorysession.ToolDefinition{tool}))
 	if err == nil || !strings.Contains(err.Error(), "missing input schema") {
-		t.Fatalf("VerifyCatalogInputSchemaParity() error = %v, want missing schema failure", err)
+		t.Fatalf("VerifyCatalogInputSchemas() error = %v, want missing schema failure", err)
 	}
 }
 
-func TestVerifyCatalogInputSchemaParity_FailsWhenCatalogContainsExtraSchema(t *testing.T) {
+func TestVerifyCatalogInputSchemas_FailsWhenCatalogContainsExtraSchema(t *testing.T) {
 	tool, ok := mcpfactorysession.ToolByName(mcpfactorysession.ToolListSessions)
 	if !ok {
 		t.Fatal("list tool missing from discovery")
@@ -166,9 +166,9 @@ func TestVerifyCatalogInputSchemaParity_FailsWhenCatalogContainsExtraSchema(t *t
 		{Name: tool.Name, Schema: tool.InputSchema},
 		{Name: "you.factory_session.extra_probe", Schema: tool.InputSchema},
 	}
-	err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(catalog, []mcpfactorysession.ToolDefinition{tool})
+	err := mcpfactorycatalog.VerifyCatalogInputSchemas(catalog, schemaProjections([]mcpfactorysession.ToolDefinition{tool}))
 	if err == nil || !strings.Contains(err.Error(), "extra input schema") {
-		t.Fatalf("VerifyCatalogInputSchemaParity() error = %v, want extra schema failure", err)
+		t.Fatalf("VerifyCatalogInputSchemas() error = %v, want extra schema failure", err)
 	}
 }
 

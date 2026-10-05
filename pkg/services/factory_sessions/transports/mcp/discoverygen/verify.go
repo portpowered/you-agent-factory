@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
@@ -66,7 +65,7 @@ func VerifyDiscoveryByteStability(value any) error {
 
 // VerifyDiscoveryToolIdentityCompleteness ensures generated discovery metadata
 // covers every discovered canonical tool exactly once by stable ID and name.
-func VerifyDiscoveryToolIdentityCompleteness(metadata DiscoveryMetadata, discovered []mcpfactorysession.ToolDefinition) error {
+func VerifyDiscoveryToolIdentityCompleteness(metadata DiscoveryMetadata, discovered []mcpfactorycatalog.CatalogToolIdentity) error {
 	identities := make([]mcpfactorycatalog.CatalogToolIdentity, 0, len(metadata.Tools))
 	for _, tool := range metadata.Tools {
 		identities = append(identities, mcpfactorycatalog.CatalogToolIdentity{
@@ -74,7 +73,7 @@ func VerifyDiscoveryToolIdentityCompleteness(metadata DiscoveryMetadata, discove
 			Name: tool.Name,
 		})
 	}
-	return mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(identities, discovered)
+	return mcpfactorycatalog.VerifyCatalogToolIdentities(identities, discovered)
 }
 
 func verifyDiscoveryInputSchemaModality(schema map[string]any) error {

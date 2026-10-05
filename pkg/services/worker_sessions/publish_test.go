@@ -32,6 +32,21 @@ func TestPublishCapturedUsagePreservesNativeTokenClasses(t *testing.T) {
 			t.Fatalf("captured %s = %d, present=%t, want %d", key, got, exists, want)
 		}
 	}
+	if _, exists := usage["totalTokens"]; exists {
+		t.Fatal("capture invented an unreported total token count")
+	}
+	for _, detail := range []string{`{"total_tokens":0}`, `{"totalTokens":0}`} {
+		publisher.Publish(workers.ProgressFragment{
+			DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "usage.updated", Payload: detail,
+		})
+		var reported map[string]int64
+		if err := json.Unmarshal(spy.published[len(spy.published)-1].Draft.Payload, &reported); err != nil {
+			t.Fatal(err)
+		}
+		if total, exists := reported["totalTokens"]; !exists || total != 0 {
+			t.Fatalf("capture lost explicit zero total: %s", detail)
+		}
+	}
 }
 
 // TestPublishRecordRequest_Validate_AcceptsWellFormedRequest proves a request

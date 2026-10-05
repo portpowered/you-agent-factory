@@ -83,7 +83,7 @@ func provideWorkerRecordingWriter(
 			return nil, fmt.Errorf("resolve Worker recording project root: expected a non-empty absolute directory")
 		}
 		storage := platformreplay.NewLocal(runtime.GOOS)
-		writer, err = recordingswire.NewWorkerRecordingFileWriter(
+		writer, err = ComposeWorkerRecordingStore(
 			storage, storage, storage, platformclock.Ensure(edges.Clock),
 			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),
 			uuid.NewString(),
@@ -93,6 +93,20 @@ func provideWorkerRecordingWriter(
 		}
 	}
 	return writer, nil
+}
+
+// ComposeWorkerRecordingStore assembles the durable capture role from explicit
+// filesystem and clock effects. Callers inject the returned service-root role
+// through Edges; service construction remains at the canonical Wire boundary.
+func ComposeWorkerRecordingStore(
+	storage platformreplay.Storage,
+	appender platformreplay.Appender,
+	directory platformreplay.DirectoryScanner,
+	clock recordings.WorkerCaptureClock,
+	root string,
+	ownerEpoch string,
+) (recordings.WorkerRecordingStore, error) {
+	return recordingswire.NewWorkerRecordingFileWriter(storage, appender, directory, clock, root, ownerEpoch)
 }
 
 // provideWorkerSessionsService constructs the canonical process supervisor.

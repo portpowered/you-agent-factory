@@ -629,7 +629,7 @@ type canonicalUsagePayload struct {
 	CachedInputTokens     *int64 `json:"cachedInputTokens,omitempty"`
 	OutputTokens          *int64 `json:"outputTokens,omitempty"`
 	ReasoningOutputTokens *int64 `json:"reasoningOutputTokens,omitempty"`
-	TotalTokens           int64  `json:"totalTokens"`
+	TotalTokens           *int64 `json:"totalTokens,omitempty"`
 	Model                 string `json:"model,omitempty"`
 }
 
@@ -642,12 +642,13 @@ func canonicalUsageDraftPayload(detail string) (canonicalUsagePayload, bool) {
 		return canonicalUsagePayload{}, false
 	}
 	if payload.InputTokens == nil && payload.CachedInputTokens == nil &&
-		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil {
+		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil && payload.TotalTokens == nil {
 		var native struct {
 			InputTokens           *int64 `json:"input_tokens"`
 			CachedInputTokens     *int64 `json:"cached_input_tokens"`
 			OutputTokens          *int64 `json:"output_tokens"`
 			ReasoningOutputTokens *int64 `json:"reasoning_output_tokens"`
+			TotalTokens           *int64 `json:"total_tokens"`
 		}
 		if json.Unmarshal([]byte(detail), &native) != nil {
 			return canonicalUsagePayload{}, false
@@ -656,10 +657,11 @@ func canonicalUsageDraftPayload(detail string) (canonicalUsagePayload, bool) {
 		payload.CachedInputTokens = native.CachedInputTokens
 		payload.OutputTokens = native.OutputTokens
 		payload.ReasoningOutputTokens = native.ReasoningOutputTokens
+		payload.TotalTokens = native.TotalTokens
 	}
 	if strings.TrimSpace(payload.Model) == "" &&
 		payload.InputTokens == nil && payload.CachedInputTokens == nil &&
-		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil {
+		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil && payload.TotalTokens == nil {
 		return canonicalUsagePayload{}, false
 	}
 	return payload, true

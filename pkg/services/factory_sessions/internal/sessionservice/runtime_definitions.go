@@ -86,18 +86,7 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 	}
 	dependencies.WithActivationLock = runtime.sessionState.WithActivationLock
 	dependencies.RequireIdleRuntimeForSession = runtime.requireIdleRuntimeForSession
-	dependencies.ActivateSessionEditableFactory = func(
-		ctx context.Context,
-		session *livesession.LiveSession,
-		sessionID, sessionRootDir, factoryDir, name, runtimeName string,
-	) error {
-		return ActivateSessionRuntime(
-			ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName,
-			runtime.buildReplacementFactoryRuntime,
-			runtime.requireIdleRuntimeForSession,
-			runtime.ReplaceSessionRuntime,
-		)
-	}
+	dependencies.ActivateSessionEditableFactory = runtime.activateSessionEditableFactory
 	dependencies.SaveNow = func() time.Time {
 		return runtime.clock.Now().UTC()
 	}
@@ -112,36 +101,7 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 			runtime.requireIdleRuntimeForSession, runtime.requireIdleRuntime,
 		)
 	}
-	dependencies.SwapPersistedNamedFactoryRuntime = func(
-		ctx context.Context,
-		sessionID string,
-		session *livesession.LiveSession,
-		persistRoot, folderPath, factoryDir, name string,
-	) error {
-		replacement, err := runtime.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
-		if err != nil {
-			return fmt.Errorf("%w: build replacement factory %q: %w", interfaces.ErrInvalidNamedFactory, name, err)
-		}
-		return ApplyNamedReplacement(
-			ctx,
-			sessionID,
-			session,
-			runtimebinding.HandleFromSession(session) != nil,
-			persistRoot,
-			name,
-			replacement,
-			runtime.requireIdleRuntimeForSession,
-			runtime.requireIdleRuntime,
-			runtime.ReplaceSessionRuntime,
-			func(rootDir, name string, replacement runtimeports.RuntimeInstance) error {
-				return ActivateStartupRuntime(
-					rootDir, name, replacement, &runtime.runtimeState, runtime.syncActiveSessionDir,
-					runtime.namedPaths.WriteCurrentPointer,
-				)
-			},
-			runtime.namedPaths.WriteCurrentPointer,
-		)
-	}
+	dependencies.SwapPersistedNamedFactoryRuntime = runtime.swapPersistedNamedFactoryRuntime
 	return dependencies
 }
 
@@ -150,4 +110,36 @@ func (h *SessionRuntime) requireDefinitions() interfaces.Service {
 		return nil
 	}
 	return h.definitions
+}
+
+// These addressed legacy operations remain the T17 opening compatibility bridge.
+func (fs *SessionRuntime) activateSessionEditableFactory(ctx context.Context, session *livesession.LiveSession, sessionID, sessionRootDir, factoryDir, name, runtimeName string) error {
+	return ActivateSessionRuntime(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName,
+		fs.buildReplacementFactoryRuntime, fs.requireIdleRuntimeForSession, fs.ReplaceSessionRuntime)
+}
+
+func (fs *SessionRuntime) swapPersistedNamedFactoryRuntime(ctx context.Context, sessionID string, session *livesession.LiveSession, persistRoot, folderPath, factoryDir, name string) error {
+	replacement, err := fs.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
+	if err != nil {
+		return fmt.Errorf("%w: build replacement factory %q: %w", interfaces.ErrInvalidNamedFactory, name, err)
+	}
+	return ApplyNamedReplacement(
+		ctx,
+		sessionID,
+		session,
+		runtimebinding.HandleFromSession(session) != nil,
+		persistRoot,
+		name,
+		replacement,
+		fs.requireIdleRuntimeForSession,
+		fs.requireIdleRuntime,
+		fs.ReplaceSessionRuntime,
+		func(rootDir, name string, replacement runtimeports.RuntimeInstance) error {
+			return ActivateStartupRuntime(
+				rootDir, name, replacement, &fs.runtimeState, fs.syncActiveSessionDir,
+				fs.namedPaths.WriteCurrentPointer,
+			)
+		},
+		fs.namedPaths.WriteCurrentPointer,
+	)
 }

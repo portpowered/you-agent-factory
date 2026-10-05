@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -50,9 +52,11 @@ import (
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	workersessionwire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	httpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
@@ -549,6 +553,7 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 
 type mcpServerBuilder func(
 	string,
+	string,
 	recordings.Service,
 	factorysessionwire.RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
@@ -568,11 +573,20 @@ func provideMCPServerBuilder(
 ) mcpServerBuilder {
 	return func(
 		projectRoot string,
+		serverURL string,
 		recordingsService recordings.Service,
 		prepare factorysessionwire.RequestPreparation,
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
 		sessions factorysessions.Service,
 	) (*mcpserver.Server, error) {
+		hostClient, err := httpclient.NewClient(serverURL, httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}))
+		if err != nil {
+			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
+		}
+		workerTools, err := workersessionwire.NewMCPAdapter(hostClient)
+		if err != nil {
+			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
+		}
 		workingRoot := strings.TrimSpace(projectRoot)
 		if workingRoot == "" {
 			var err error
@@ -595,6 +609,9 @@ func provideMCPServerBuilder(
 			Skills:    skills,
 			Resources: resources,
 			ToolOperation: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+				if strings.HasPrefix(name, "you.worker_session.") {
+					return workerTools.Call(ctx, name, raw)
+				}
 				if name == factorysessionmcp.ToolSubagent {
 					if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
 						return nil, err
@@ -653,7 +670,7 @@ func provideStdioHandler(
 		if intent.Stdin == nil || intent.Stdout == nil {
 			return errors.New("MCP stdio input and output are required")
 		}
-		server, err := buildServer(intent.ProjectRoot, recordingsRoot, prepare, workflowPreview, sessions)
+		server, err := buildServer(intent.ProjectRoot, intent.ServerURL, recordingsRoot, prepare, workflowPreview, sessions)
 		if err != nil {
 			return err
 		}

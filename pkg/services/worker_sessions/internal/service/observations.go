@@ -393,6 +393,11 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	// Provider references may recur across Factory Sessions. Select only within
 	// the requested owner, preserving deterministic order for retained attempts.
 	sortStrings(ids)
+	if r.publicationFor(ids[0]) != nil {
+		return r.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+			WorkerSessionID: ids[0], FactorySessionID: req.FactorySessionID,
+		})
+	}
 	projected, err := r.projectObservation(ctx, ids[0])
 	// Native transcript detail is optional; the retained association and
 	// lifecycle remain available when provider storage cannot be projected.

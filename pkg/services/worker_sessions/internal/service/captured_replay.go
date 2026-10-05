@@ -14,7 +14,12 @@ func (r *registry) replayCaptureTimes(ctx context.Context, id string) map[string
 	if publication == nil {
 		return nil
 	}
-	publication.mu.Lock()
+	// Publication may be waiting for an external append effect while holding
+	// this lock. Optional commit metadata must never delay finite replay of
+	// the already retained prefix; unavailable timestamps remain unknown.
+	if !publication.mu.TryLock() {
+		return nil
+	}
 	recordingID := publication.recordingID
 	publication.mu.Unlock()
 	if recordingID == "" {

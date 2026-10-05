@@ -65,7 +65,7 @@ type SessionRuntime struct {
 	scopeControl     SessionScopeControl
 	scopeActivation  SessionScopeActivation
 	openingSession   *livesession.LiveSession
-	sessionGateway   sessionGateway
+	sessionGateway   roles.SessionGateway
 	runtimeBuild     runtimeports.RuntimeReplacementBuilder
 	modelsScope      models.RuntimeScopeRef
 	runtimeLifecycle runtimeports.RuntimeLifecycle
@@ -90,6 +90,7 @@ type SessionRuntime struct {
 	invocationMetricsRecorder      roles.InvocationMetricsRecorder
 	baseLogger                     *zap.Logger
 	logger                         *zap.Logger
+	callerContext                  context.Context
 	startTime                      time.Time
 	clock                          factory.Clock
 	definitions                    interfaces.Service
@@ -256,6 +257,14 @@ func (fs *SessionRuntime) StopLiveRuntime(handle liveRuntimeHandle) error {
 	}
 	if fs.runtimeLifecycle == nil {
 		return fmt.Errorf("factory runtime lifecycle service is required")
+	}
+	fs.runtimeMu.RLock()
+	caller := fs.callerContext
+	fs.runtimeMu.RUnlock()
+	if caller != nil && errors.Is(caller.Err(), context.Canceled) {
+		if producer, ok := handle.RuntimeInstance().(interface{ RecordProducerError(error) }); ok {
+			producer.RecordProducerError(context.Canceled)
+		}
 	}
 	return fs.runtimeLifecycle.Stop(handle)
 }

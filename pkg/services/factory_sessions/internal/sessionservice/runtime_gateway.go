@@ -5,29 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
-
-type sessionGateway interface {
-	roles.SessionGateway
-	factorysessions.LiveControlService
-	factorysessions.LiveLifecycleControlService
-	JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore
-	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
-}
 
 // ResolveFactorySessionRuntimeScope resolves a public Factory Session selector
 // to its canonical identity and default-session status without building a full
@@ -146,15 +135,18 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 	request.Scope = scope
 	result := factorysessions.ListSessionsResult{Scope: scope}
 	if shouldIncludeRecordedHistory(scope, request.ExcludeRecordedHistory) {
-		if scope == factorysessions.SessionListScopeHistory && (a == nil || a.recordedSessionInventory == nil) {
-			return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
+		if a == nil || a.recordedHistory == nil {
+			if scope == factorysessions.SessionListScopeHistory {
+				return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
+			}
+		} else {
+			recorded, err := a.recordedHistory.ListSessions(ctx, request)
+			if err != nil {
+				return factorysessions.ListSessionsResult{}, err
+			}
+			result.RecordedSessions = recorded.RecordedSessions
+			result.Warnings = recorded.Warnings
 		}
-		recorded, warnings, err := a.listRecordedSessions()
-		if err != nil {
-			return factorysessions.ListSessionsResult{}, err
-		}
-		result.RecordedSessions = recorded
-		result.Warnings = warnings
 	}
 	if scope == factorysessions.SessionListScopeHistory {
 		return result, nil
@@ -210,38 +202,6 @@ func shouldIncludeRecordedHistory(scope factorysessions.SessionListScope, exclud
 		(scope == factorysessions.SessionListScopeAll && !excluded)
 }
 
-func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionListSummary, []factorysessions.RecordedSessionDiagnostic, error) {
-	if a == nil || a.recordedSessionInventory == nil {
-		return nil, nil, nil
-	}
-	root, err := a.recordingRoot()
-	if err != nil {
-		return nil, nil, err
-	}
-	listed, err := a.recordedSessionInventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{
-		RecordingRoot: root,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("list recorded Factory Sessions: %w", err)
-	}
-	result := make([]factorysessions.RecordedSessionListSummary, 0, len(listed.Sessions))
-	for _, session := range listed.Sessions {
-		result = append(result, factorysessions.RecordedSessionListSummary{
-			SessionID:         session.FactorySessionID,
-			Source:            factorysessions.RecordedSessionListSourceHistory,
-			ArtifactReference: session.ArtifactReference,
-			Format:            string(session.Format),
-		})
-	}
-	sort.SliceStable(result, func(left, right int) bool {
-		if result[left].SessionID != result[right].SessionID {
-			return result[left].SessionID < result[right].SessionID
-		}
-		return result[left].ArtifactReference < result[right].ArtifactReference
-	})
-	return result, append([]factorysessions.RecordedSessionDiagnostic(nil), listed.Warnings...), nil
-}
-
 // ReadDurableFactorySessionEventStream reads and materializes one finite
 // durable event stream behind the Factory Sessions boundary.
 func (s *Service) ReadDurableFactorySessionEventStream(
@@ -273,102 +233,39 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	return err
 }
 
-func (fs *SessionRuntime) durableExecutionService() durableexecution.Service {
-	if fs == nil {
-		return nil
-	}
-	return fs.durableExecution
-}
-
-func (fs *SessionRuntime) observeLiveLifecycleControl(
-	sessionID string,
-	operation factorysessions.LifecycleControlKind,
-	control factorysessions.ControlRequest,
-	outcome factorysessions.LifecycleControlOutcome,
-	status factorysessions.LifecycleStatus,
-	err error,
-) {
-	if fs == nil {
-		return
-	}
-	runtimebinding.ObserveLifecycleControl(fs.logger, fs.sessionState, sessionID, operation, control, outcome, status, err)
-}
-
 var _ roles.SessionGateway = (*Service)(nil)
 
-// AttachSessionGateway installs the Wire-constructed gateway used by all
-// SessionRuntime operations. It returns the same gateway for provider chaining.
-func (fs *SessionRuntime) AttachSessionGateway(gateway *Service) *Service {
-	if fs != nil && gateway != nil {
-		fs.sessionGateway = gateway
-	}
-	return gateway
-}
-
-// Gateway returns the single gateway attached to this Factory Session runtime.
+// Gateway returns the injected process gateway used by this runtime.
 func (fs *SessionRuntime) Gateway() roles.SessionGateway {
 	return fs.requireSessionGateway()
 }
 
-// ReconnectCursorValidator exposes the injected Recordings capability to the
-// gateway constructor without exposing the concrete ledger implementation.
-func (fs *SessionRuntime) ReconnectCursorValidator() factorysessions.ReconnectCursorValidator {
-	if fs == nil {
-		return nil
+// SessionServiceHost constructs keyed gateway reads and lifecycle effects from
+// explicit collaborators. Active record facts remain the T15 compatibility bridge.
+func SessionServiceHost(
+	state *sessionruntime.Service,
+	active *runtimebinding.State,
+	control SessionScopeControl,
+	releaseAdmission func(string),
+	backendScope string,
+	identityService identity.Service,
+	clock factoryruntime.Clock,
+	projector factoryruntime.WorldStateProjector,
+	checkpoints factoryruntime.JavaScriptCheckpointStoreFactory,
+	logger *zap.Logger,
+) Host {
+	routing := sessionIdentityReader{state: state, active: active, backendScope: backendScope, identity: identityService}
+	projection := sessionProjectionReader{state: state, backendScope: backendScope, identity: identityService, clock: clock, projector: projector, checkpoints: checkpoints}
+	lifecycleReader := sessionLifecycleReader{state: state, active: active, control: control, releaseAdmission: releaseAdmission, logger: logger}
+	return keyedSessionHost{
+		sessionIdentityReader:   routing,
+		sessionProjectionReader: projection,
+		sessionLifecycleReader:  lifecycleReader,
+		state:                   state,
 	}
-	return fs.reconnectCursorValidator
 }
 
-// SessionServiceHost exposes the runtime's lifecycle callbacks to the bounded
-// Session gateway.
-func SessionServiceHost(runtime *SessionRuntime) Host {
-	if runtime == nil {
-		return dependencyHost{}
-	}
-	resolveSyncPreflightTarget := func(
-		sessionID string,
-		logicalResolve *interfaces.FactorySessionLogicalResolveHint,
-	) (controlplane.SyncPreflightTarget, error) {
-		target, err := runtime.resolveSessionSyncPreflightTarget(sessionID, logicalResolve)
-		return controlplane.SyncPreflightTarget{
-			Session: target.session, Remapped: target.remapped, Unresolved: target.unresolved,
-		}, err
-	}
-	backendScopeID := func() string {
-		return runtimebinding.BackendScopeID(runtime.backendScopeID, nil)
-	}
-	logicalSessionKeyID := func(session *livesession.LiveSession) string {
-		if session == nil {
-			return ""
-		}
-		placement := session.Placement()
-		resolved, err := runtime.identity.Normalize(context.Background(), identity.NormalizeRequest{
-			BackendScopeID: backendScopeID(), FolderPath: placement.FolderPath, Target: placement.Target,
-		})
-		if err != nil {
-			return ""
-		}
-		return resolved.LogicalSessionKeyID
-	}
-	streamGenerationID := func(session *livesession.LiveSession) string {
-		return runtimebinding.StreamGenerationID(session)
-	}
-	return newSessionHost(
-		runtime.sessionState,
-		runtime.buildSessionProjectionContext,
-		resolveSyncPreflightTarget,
-		backendScopeID,
-		logicalSessionKeyID,
-		streamGenerationID,
-		runtime.WorkerSessionsObservationForSession,
-		runtime.stopFactorySession,
-		runtime.observeLiveLifecycleControl,
-		runtime.durableExecutionService,
-		runtime.newJavaScriptCheckpointStore,
-	)
-}
-
-func (fs *SessionRuntime) requireSessionGateway() sessionGateway {
+func (fs *SessionRuntime) requireSessionGateway() roles.SessionGateway {
 	if fs == nil {
 		return nil
 	}

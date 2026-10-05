@@ -17,13 +17,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// TestCLIInterruptedExitCode proves delivering the normal process interrupt to
-// an in-flight built you CLI command exits the documented cancellation code.
+// TestCLIInterruptedExitCode proves intentional cancellation of an in-process
+// command reaches both the joined command result and its stdout reader.
 func TestCLIInterruptedExitCode(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("os.Interrupt is not supported for child processes on Windows")
-	}
-
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
@@ -38,7 +34,14 @@ func TestCLIInterruptedExitCode(t *testing.T) {
 
 	_ = waitForDashboardURL(t, lines, scanErr, stderr, 120*time.Second)
 	interruptAndAssertCancellationExit(t, command, 60*time.Second)
-	waitForScannerCompletion(t, scanErr, "interrupted root process", 30*time.Second)
+	select {
+	case err := <-scanErr:
+		// The in-process harness forwards Execute's cancellation through
+		// CloseWithError; additional terminal failures must remain visible.
+		assertOnlyCancellation(t, err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("interrupted root process stdout scanner did not finish")
+	}
 	stopped = true
 }
 

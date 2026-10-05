@@ -16,8 +16,8 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -47,7 +47,7 @@ func (capturedHostClock) Now() time.Time { return time.Now() }
 func capturedFailureServer(t *testing.T, acceptedThrough uint64) (*support.FunctionalAPIServer, *functionalWorkerGate, *capturedFaultStore) {
 	t.Helper()
 	local := platformreplay.NewLocal(runtime.GOOS)
-	store, err := recordingwire.NewWorkerRecordingFileWriter(local, local, local, capturedHostClock{}, t.TempDir(), "captured-failure-owner")
+	store, err := processwire.ComposeWorkerRecordingStore(local, local, local, capturedHostClock{}, t.TempDir(), "captured-failure-owner")
 	if err != nil {
 		t.Fatal(err)
 	}

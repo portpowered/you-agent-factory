@@ -14,9 +14,9 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	recordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -51,7 +51,7 @@ func (gate *capturedScriptGate) RunStreaming(ctx context.Context, _ platformproc
 func TestWorkerSessionCapturedLogsActiveScriptWriteFailure(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)
-	store, err := recordingwire.NewWorkerRecordingFileWriter(local, local, local, capturedHostClock{}, t.TempDir(), "script-fault-owner")
+	store, err := processwire.ComposeWorkerRecordingStore(local, local, local, capturedHostClock{}, t.TempDir(), "script-fault-owner")
 	if err != nil {
 		t.Fatal(err)
 	}

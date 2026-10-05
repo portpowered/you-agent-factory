@@ -10,42 +10,44 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-type sessionSyncPreflightTarget struct {
-	session    *livesession.LiveSession
-	remapped   bool
-	unresolved bool
+// sessionIdentityReader reads routing facts without retaining the runtime host.
+// Active selection remains the runtimebinding.State compatibility bridge (T15).
+type sessionIdentityReader struct {
+	state        *sessionruntime.Service
+	active       *runtimebinding.State
+	backendScope string
+	identity     identity.Service
 }
 
-func (fs *SessionRuntime) resolveSessionSyncPreflightTarget(
+func (r sessionIdentityReader) ResolveSyncPreflightTarget(
 	sessionID string,
 	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
-) (sessionSyncPreflightTarget, error) {
-	if fs == nil {
-		return sessionSyncPreflightTarget{}, fmt.Errorf("factory service is required")
-	}
-	if session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID); err == nil {
-		return sessionSyncPreflightTarget{session: session}, nil
+) (controlplane.SyncPreflightTarget, error) {
+	if session, err := runtimebinding.RequireLiveSession(r.state, sessionID); err == nil {
+		return controlplane.SyncPreflightTarget{Session: session}, nil
 	} else if !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		return sessionSyncPreflightTarget{}, err
+		return controlplane.SyncPreflightTarget{}, err
 	}
 	if strings.TrimSpace(sessionID) == DefaultFactorySessionID {
-		if session := runtimebinding.DefaultSessionSuccessor(fs.sessionState, &fs.runtimeState); session != nil {
-			return sessionSyncPreflightTarget{session: session, remapped: true}, nil
+		if session := runtimebinding.DefaultSessionSuccessor(r.state, r.active); session != nil {
+			return controlplane.SyncPreflightTarget{Session: session, Remapped: true}, nil
 		}
 	}
 	if hasLogicalResolveHint(logicalResolve) {
-		return fs.resolveSessionSyncPreflightByLogicalKey(sessionID, logicalResolve)
+		return r.resolveByLogicalKey(sessionID, logicalResolve)
 	}
-	return sessionSyncPreflightTarget{}, nil
+	return controlplane.SyncPreflightTarget{}, nil
 }
 
 func hasLogicalResolveHint(hint *interfaces.FactorySessionLogicalResolveHint) bool {
@@ -54,73 +56,132 @@ func hasLogicalResolveHint(hint *interfaces.FactorySessionLogicalResolveHint) bo
 		strings.TrimSpace(hint.LogicalSessionKeyID) != ""
 }
 
-func (fs *SessionRuntime) resolveSessionSyncPreflightByLogicalKey(
+func (r sessionIdentityReader) resolveByLogicalKey(
 	requestedSessionID string,
 	hint *interfaces.FactorySessionLogicalResolveHint,
-) (sessionSyncPreflightTarget, error) {
-	configuredScope := fs.backendScopeID
-	serviceScope := runtimebinding.BackendScopeID(configuredScope, nil)
+) (controlplane.SyncPreflightTarget, error) {
+	serviceScope := r.BackendScopeID()
 	if serviceScope == "" || strings.TrimSpace(hint.BackendScopeID) != serviceScope {
-		return sessionSyncPreflightTarget{unresolved: true}, nil
+		return controlplane.SyncPreflightTarget{Unresolved: true}, nil
 	}
-	session := fs.identity.ResolveLogical(fs.sessionState.Registry(), serviceScope, hint.LogicalSessionKeyID)
+	session := r.identity.ResolveLogical(r.state.Registry(), serviceScope, hint.LogicalSessionKeyID)
 	if session == nil {
-		return sessionSyncPreflightTarget{unresolved: true}, nil
+		return controlplane.SyncPreflightTarget{Unresolved: true}, nil
 	}
 	remapped := strings.TrimSpace(requestedSessionID) != "" &&
 		session.ID != strings.TrimSpace(requestedSessionID)
-	return sessionSyncPreflightTarget{session: session, remapped: remapped}, nil
+	return controlplane.SyncPreflightTarget{Session: session, Remapped: remapped}, nil
+}
+
+func (r sessionIdentityReader) BackendScopeID() string {
+	var session *livesession.LiveSession
+	if r.state != nil {
+		session = r.state.Current()
+	}
+	return r.backendScopeForSession(session)
+}
+
+func (r sessionIdentityReader) backendScopeForSession(session *livesession.LiveSession) string {
+	scope := r.backendScope
+	if bound := runtimebinding.SessionStateFrom(session); bound != nil && strings.TrimSpace(scope) == "" {
+		scope = bound.ProjectionBackendScope
+	}
+	return runtimebinding.BackendScopeID(scope, session)
+}
+
+func (r sessionIdentityReader) LogicalSessionKeyID(session *livesession.LiveSession) string {
+	if session == nil {
+		return ""
+	}
+	placement := session.Placement()
+	resolved, err := r.identity.Normalize(context.Background(), identity.NormalizeRequest{
+		BackendScopeID: r.backendScopeForSession(session), FolderPath: placement.FolderPath, Target: placement.Target,
+	})
+	if err != nil {
+		return ""
+	}
+	return resolved.LogicalSessionKeyID
 }
 
 func (fs *SessionRuntime) buildSessionProjectionContext(
 	ctx context.Context,
 	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
+	return fs.projectionReader().BuildSessionProjectionContext(ctx, session)
+}
+
+// sessionProjectionReader reads keyed runtime facts without retaining a
+// SessionRuntime or re-entering its gateway. RuntimeRecord/Run access remains
+// the compatibility bridge owned by T15.
+type sessionProjectionReader struct {
+	state        *sessionruntime.Service
+	backendScope string
+	identity     identity.Service
+	clock        factoryruntime.Clock
+	projector    factoryruntime.WorldStateProjector
+	checkpoints  factoryruntime.JavaScriptCheckpointStoreFactory
+}
+
+func (h keyedSessionHost) BuildSessionProjectionContext(ctx context.Context, session *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
+	bound := runtimebinding.SessionStateFrom(session)
+	reader := h.sessionProjectionReader
+	if bound != nil && reader.backendScope == "" {
+		reader.backendScope = bound.ProjectionBackendScope
+	}
+	if bound != nil && bound.Clock != nil {
+		reader.clock = bound.Clock
+	}
+	return reader.BuildSessionProjectionContext(ctx, session)
+}
+
+func (fs *SessionRuntime) projectionReader() sessionProjectionReader {
+	return sessionProjectionReader{
+		state: fs.sessionState, backendScope: fs.backendScopeID, identity: fs.identity,
+		clock: fs.clock, projector: fs.worldStateProjector, checkpoints: fs.newJavaScriptCheckpointStore,
+	}
+}
+
+func (r sessionProjectionReader) BuildSessionProjectionContext(
+	ctx context.Context,
+	session *livesession.LiveSession,
+) (factorysessions.ProjectionContext, error) {
 	if session == nil {
 		return factorysessions.ProjectionContext{}, fmt.Errorf("%w", factorysessions.ErrSessionNotFound)
 	}
-	runtimeCfg, err := runtimebinding.RuntimeConfigForSession(fs.sessionState, session.ID)
+	runtimeCfg, err := runtimebinding.RuntimeConfigForSession(r.state, session.ID)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
-	observationResult, err := fs.observeRuntimeForSession(ctx, session.ID, factoryruntime.ObserveRequest{
+	selected, err := runtimebinding.RequireLiveSession(r.state, session.ID)
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
+	}
+	runtime := runtimebinding.ServiceForLiveRuntime(selected.Runtime)
+	if runtime == nil {
+		return factorysessions.ProjectionContext{}, fmt.Errorf("factory runtime observation is required")
+	}
+	observationResult, err := runtime.Observe(ctx, factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeFull,
 	})
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
 	bundle := runtimebinding.BundleFromSession(session)
-	var snapshot *legacysnapshot.Snapshot
-	if runtime := runtimebinding.ServiceForLiveRuntime(session.Runtime); runtime != nil {
-		if provider, ok := runtime.(legacysnapshot.WorkProvider); ok && provider != nil {
-			snapshot, err = provider.GetWorkStateSnapshot(ctx)
-			if err != nil {
-				return factorysessions.ProjectionContext{}, err
-			}
-		}
-	}
-	var sessionProjectionFacts *recordings.SessionProjectionFacts
-	if bundle != nil {
-		if reader, ok := bundle.RecordingLedger().(recordings.SessionProjectionReader); ok && reader != nil {
-			facts, factsErr := reader.CurrentSessionProjectionFacts()
-			if factsErr != nil {
-				return factorysessions.ProjectionContext{}, factsErr
-			}
-			sessionProjectionFacts = &facts
-		}
+	snapshot, sessionProjectionFacts, err := r.readProjectionFacts(ctx, session)
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
 	}
 	var checkpointStore factoryruntime.JavaScriptCheckpointStore
 	if interfaces.IsJavaScriptOrchestratorFactory(runtimeCfg.FactoryConfig()) {
-		checkpointStore = fs.requireSessionGateway().JavaScriptCheckpointStore(session)
+		checkpointStore = sessionCheckpointStore(session, r.checkpoints)
 	}
 	startedAt := time.Time{}
-	backendScopeID := ""
 	if bundle != nil {
 		startedAt = bundle.StartTime()
 	}
-	backendScopeID = runtimebinding.BackendScopeID(fs.backendScopeID, session)
+	backendScopeID := runtimebinding.BackendScopeID(r.backendScope, session)
 	placement := session.Placement()
-	resolvedIdentity, err := fs.identity.Normalize(ctx, identity.NormalizeRequest{
+	resolvedIdentity, err := r.identity.Normalize(ctx, identity.NormalizeRequest{
 		BackendScopeID: backendScopeID, FolderPath: placement.FolderPath, Target: placement.Target,
 	})
 	if err != nil {
@@ -132,8 +193,33 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
 		CheckpointStore: checkpointStore, SessionProjection: sessionProjectionFacts,
-		WorldStateProjector: fs.worldStateProjector, Now: fs.clock.Now().UTC(),
+		WorldStateProjector: r.projector, Now: r.clock.Now().UTC(),
 	})
+}
+
+func (r sessionProjectionReader) readProjectionFacts(ctx context.Context, session *livesession.LiveSession) (*legacysnapshot.Snapshot, *recordings.SessionProjectionFacts, error) {
+	var snapshot *legacysnapshot.Snapshot
+	var err error
+	if runtime := runtimebinding.ServiceForLiveRuntime(session.Runtime); runtime != nil {
+		if provider, ok := runtime.(legacysnapshot.WorkProvider); ok && provider != nil {
+			snapshot, err = provider.GetWorkStateSnapshot(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	var sessionProjectionFacts *recordings.SessionProjectionFacts
+	bundle := runtimebinding.BundleFromSession(session)
+	if bundle != nil {
+		if reader, ok := bundle.RecordingLedger().(recordings.SessionProjectionReader); ok && reader != nil {
+			facts, factsErr := reader.CurrentSessionProjectionFacts()
+			if factsErr != nil {
+				return nil, nil, factsErr
+			}
+			sessionProjectionFacts = &facts
+		}
+	}
+	return snapshot, sessionProjectionFacts, nil
 }
 
 // BuildSessionProjectionContext exposes the existing projection on the

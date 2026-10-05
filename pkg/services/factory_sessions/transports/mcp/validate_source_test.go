@@ -3,7 +3,6 @@ package factorysession_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
 var mcpWorkflowDefinitions = testutil.ScriptedJavaScriptWorkflowDefinitions{
@@ -45,57 +43,6 @@ var mcpWorkflowDefinitions = testutil.ScriptedJavaScriptWorkflowDefinitions{
 		}
 		return preview
 	},
-}
-
-func TestStableIDHandlerRegistryCoversGeneratedCanonicalDiscovery(t *testing.T) {
-	t.Parallel()
-
-	for _, tool := range mcpgenerated.LegacyDiscovery() {
-		binding, ok := mcpfactorysession.ResolveToolHandlerBinding(tool.Name)
-		if !ok {
-			t.Fatalf("generated tool %q (%s) has no handwritten handler binding", tool.Name, tool.ID)
-		}
-		if binding.ToolID != tool.ID {
-			t.Fatalf("tool %q binding tool ID = %q, want generated %q", tool.Name, binding.ToolID, tool.ID)
-		}
-		wantHandlerID := strings.Replace(tool.ID, "mcp.tool.", "mcp.handler.", 1)
-		if binding.HandlerID != wantHandlerID {
-			t.Fatalf("tool %q handler ID = %q, want contracted %q", tool.Name, binding.HandlerID, wantHandlerID)
-		}
-		if !mcpfactorysession.IsCanonicalToolHandlerRegistered(tool.Name) {
-			t.Fatalf("generated tool %q is not registered as canonical", tool.Name)
-		}
-	}
-}
-
-func TestStableIDHandlerRegistryMatchesAuthoredHandlerBindings(t *testing.T) {
-	t.Parallel()
-
-	payload, err := os.ReadFile(testutil.MustRepoPath(t, "contracts/mcp/tools.json"))
-	if err != nil {
-		t.Fatalf("read authored MCP catalog: %v", err)
-	}
-	var catalog struct {
-		Tools map[string]struct {
-			Name    string `json:"name"`
-			Handler struct {
-				ID string `json:"id"`
-			} `json:"handler"`
-		} `json:"tools"`
-	}
-	if err := json.Unmarshal(payload, &catalog); err != nil {
-		t.Fatalf("decode authored MCP catalog: %v", err)
-	}
-
-	for toolID, authored := range catalog.Tools {
-		binding, ok := mcpfactorysession.ResolveToolHandlerBinding(authored.Name)
-		if !ok {
-			t.Fatalf("authored tool %q (%s) has no handwritten handler binding", authored.Name, toolID)
-		}
-		if binding.ToolID != toolID || binding.HandlerID != authored.Handler.ID {
-			t.Fatalf("tool %q binding = %#v, want tool ID %q and handler ID %q", authored.Name, binding, toolID, authored.Handler.ID)
-		}
-	}
 }
 
 func TestStableIDHandlerRegistryPreservesSuccessAndDomainErrorOutcomes(t *testing.T) {

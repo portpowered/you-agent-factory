@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 func reconcileAppendOnlyCanonicalEvents(previous, projected []json.RawMessage) []json.RawMessage {
@@ -354,6 +355,42 @@ func NewJavaScriptExecutionService(
 	responseStreams responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (Service, error) {
+	return NewProcessDurableExecutionService(
+		projectRoot, childExecutorMode, directChildInvocation, persistenceChoice, clock, syncWaits,
+		checkpointSummaries, workflowDefinitions, orchestration, childValues,
+		workerPresetIDs, workerSettings, recordingWriter, generateSessionID,
+		generateResponseEventID, responseStreams, liveChangeCoordinator,
+		nil, nil, nil, nil, nil, nil,
+	)
+}
+
+// NewProcessDurableExecutionService validates the complete durable leaf using
+// the same construction policy as runtime-backed execution.
+func NewProcessDurableExecutionService(
+	projectRoot string,
+	childExecutorMode string,
+	directChildInvocation workers.InvocationExecutor,
+	persistenceChoice PersistenceChoice,
+	clock factory.Clock,
+	syncWaits SyncWaitScheduler,
+	checkpointSummaries factory.JavaScriptCheckpointSummaries,
+	workflowDefinitions factory.JavaScriptWorkflowDefinitions,
+	orchestration factory.OrchestrationJavaScriptExecution,
+	childValues factory.JavaScriptChildValues,
+	workerPresetIDs map[string]struct{},
+	workerSettings factory.JavaScriptWorkerSettings,
+	recordingWriter recording.PortableRecordingWriter,
+	generateSessionID internalcontracts.SessionIDGenerator,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	storeForRoot func(string) (runtimepersist.Store, error),
+	currentProjectRoot func() string,
+	resumeScope func(string) (ResumeRuntimeScope, error),
+	workerExecution childExecuteService,
+	providerOverride providers.Service,
+	logger *zap.Logger,
+) (Service, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {
 		return nil, NewValidationError("projectRoot", "projectRoot is required")
@@ -390,7 +427,7 @@ func NewJavaScriptExecutionService(
 	if err != nil {
 		return nil, err
 	}
-	return NewJavaScriptRuntimeService(
+	return NewProcessDurableRuntime(
 		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
 		checkpointSummaries,
 		workflowDefinitions, orchestration, childValues,
@@ -399,7 +436,52 @@ func NewJavaScriptExecutionService(
 		generateResponseEventID,
 		responseStreams,
 		liveChangeCoordinator,
+		storeForRoot, currentProjectRoot, resumeScope, workerExecution, providerOverride, logger,
 	), nil
+}
+
+// NewProcessDurableRuntime constructs the complete process durable leaf.
+// Routing and execution roles are installed before the runtime is published.
+func NewProcessDurableRuntime(
+	projectRoot string,
+	childExecutorMode string,
+	directChildInvocation workers.InvocationExecutor,
+	persistence runtimepersist.Store,
+	clock factory.Clock,
+	syncWaits SyncWaitScheduler,
+	checkpointSummaries factory.JavaScriptCheckpointSummaries,
+	workflowDefinitions factory.JavaScriptWorkflowDefinitions,
+	orchestration factory.OrchestrationJavaScriptExecution,
+	childValues factory.JavaScriptChildValues,
+	workerPresetIDs map[string]struct{},
+	workerSettings factory.JavaScriptWorkerSettings,
+	recordingWriter recording.PortableRecordingWriter,
+	generateSessionID internalcontracts.SessionIDGenerator,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	storeForRoot func(string) (runtimepersist.Store, error),
+	currentProjectRoot func() string,
+	resumeScope func(string) (ResumeRuntimeScope, error),
+	workerExecution childExecuteService,
+	providerOverride providers.Service,
+	logger *zap.Logger,
+) *JavaScriptRuntimeService {
+	service := NewJavaScriptRuntimeService(
+		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
+		checkpointSummaries, workflowDefinitions, orchestration, childValues,
+		workerPresetIDs, workerSettings, recordingWriter, generateSessionID,
+		generateResponseEventID, responseStreams, liveChangeCoordinator,
+	)
+	if service == nil {
+		return nil
+	}
+	service.persistenceStoreForRoot = storeForRoot
+	service.persistenceProjectRoot = currentProjectRoot
+	service.resumeRuntimeScope = resumeScope
+	service.persistenceWarningLogger = logger
+	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", providerOverride, nil, nil)
+	return service
 }
 
 // SmokeLiveChildProvider returns the Workers-facing fixture provider used by

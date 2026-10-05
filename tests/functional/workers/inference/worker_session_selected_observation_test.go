@@ -185,9 +185,10 @@ func assertSelectedObservationParity(t *testing.T, group *inferenceProcessGroup,
 		assertSelectedObservationFacts(t, row, matching[0], sessionID, workerID, providerID, state)
 	}
 	assertSelectedProviderEnrichment(t, matching[0], false)
-	for _, row := range []factoryapi.WorkerSessionObservation{workRows[0], shown} {
-		assertSelectedProviderEnrichment(t, row, variant == "available")
-	}
+	// Work-scoped compatibility retains native details; canonical identity
+	// reads derive facts from capture regardless of optional provider files.
+	assertSelectedProviderEnrichment(t, workRows[0], variant == "available")
+	assertSelectedProviderEnrichment(t, shown, false)
 }
 
 func assertSelectedObservationFacts(t *testing.T, row, fleet factoryapi.WorkerSessionObservation, sessionID, workerID, providerID, state string) {

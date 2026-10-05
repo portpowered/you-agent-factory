@@ -20,8 +20,28 @@ you server mcp
 
 The server speaks MCP JSON-RPC over stdin and stdout. Keep stdout reserved for
 protocol messages; process diagnostics use stderr. HTTP and SSE MCP transports
-are not supported, and the stdio server does not connect to a live Factory HTTP
-server.
+are not supported. Worker Session tools connect to the HTTP host selected by
+`--server`. Factory Session tools use the local process.
+
+To inspect Worker Sessions on a selected host, start the stdio server with:
+
+```bash
+you --server http://127.0.0.1:8080 server mcp
+```
+
+Call `you.worker_session.list` with optional `scope`, `state`, `limit`, and
+`nextToken` filters. Call `you.worker_session.read` with `workerSessionId` and
+`view`: `summary` (default), `transcript`, or `events`. The events view returns
+retained frames only, with a default limit of 100 and a maximum of 1000.
+`truncated` is true when another retained frame exists.
+
+Call `you.worker_session.control` with `workerSessionId` and `operation`:
+`CANCEL`, `TERMINATE`, or `INTERRUPT`. `INTERRUPT` also requires `requestId`,
+`successorWorkerSessionId`, and `replacementMessage`. Use the same values when
+retrying an interrupted request. Other operations reject these fields.
+
+A failed host connection returns retryable `worker_session.host_unavailable`.
+Worker Session tools use the selected host for every request.
 
 Configure these three host fields explicitly:
 

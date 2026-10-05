@@ -167,7 +167,7 @@ func TestStopSessionSelectsAnotherLiveRuntime(t *testing.T) {
 	active.SetActive(context.Background(), first.ID, runtimebinding.HandleFromSession(first))
 
 	var stopped factory.RuntimeRun
-	err := runtimebinding.StopSession(state, &active, first.ID, func(handle factory.RuntimeRun) error {
+	err := runtimebinding.StopSessionGeneration(state, &active, first, func(handle factory.RuntimeRun) error {
 		stopped = handle
 		return nil
 	})
@@ -195,7 +195,7 @@ func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
 	active.SetActive(context.Background(), terminal.ID, runtimebinding.HandleFromSession(terminal))
 
 	var stopped factory.RuntimeRun
-	err := runtimebinding.StopSession(state, &active, terminal.ID, func(handle factory.RuntimeRun) error {
+	err := runtimebinding.StopSessionGeneration(state, &active, terminal, func(handle factory.RuntimeRun) error {
 		stopped = handle
 		return nil
 	})
@@ -221,7 +221,7 @@ func TestStopSessionPreservesReplacementPublishedDuringStop(t *testing.T) {
 	var active runtimebinding.State
 	active.SetActive(context.Background(), old.ID, runtimebinding.HandleFromSession(old))
 	var replacement *livesession.LiveSession
-	err := runtimebinding.StopSession(state, &active, old.ID, func(handle factory.RuntimeRun) error {
+	err := runtimebinding.StopSessionGeneration(state, &active, old, func(handle factory.RuntimeRun) error {
 		if handle != runtimebinding.HandleFromSession(old) {
 			t.Fatal("stop targeted the replacement")
 		}
@@ -252,7 +252,7 @@ func TestStopSessionRetiresSessionWhenRuntimeAlreadyStopped(t *testing.T) {
 			var active runtimebinding.State
 			active.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
 
-			if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error {
+			if err := runtimebinding.StopSessionGeneration(state, &active, session, func(factory.RuntimeRun) error {
 				return stopErr
 			}); err != nil {
 				t.Fatalf("StopSession(%v): %v", stopErr, err)
@@ -273,7 +273,7 @@ func TestStopSessionFailedCleanupPreservesSelectionForRetry(t *testing.T) {
 	var active runtimebinding.State
 	active.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
 	failure := errors.New("owned stop failed")
-	if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error { return failure }); !errors.Is(err, failure) {
+	if err := runtimebinding.StopSessionGeneration(state, &active, session, func(factory.RuntimeRun) error { return failure }); !errors.Is(err, failure) {
 		t.Fatalf("failed stop = %v, want original failure", err)
 	}
 	if state.Resolve("a") != session || state.Resolve("b") != peer {
@@ -282,7 +282,7 @@ func TestStopSessionFailedCleanupPreservesSelectionForRetry(t *testing.T) {
 	if got := active.Current(nil); got != runtimebinding.HandleFromSession(session).RuntimeInstance() {
 		t.Fatal("failed cleanup redirected current runtime away from retryable session")
 	}
-	if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error { return nil }); err != nil {
+	if err := runtimebinding.StopSessionGeneration(state, &active, session, func(factory.RuntimeRun) error { return nil }); err != nil {
 		t.Fatalf("retry stop = %v", err)
 	}
 	if state.Resolve("a") != nil || active.Current(nil) != runtimebinding.HandleFromSession(peer).RuntimeInstance() {
@@ -304,7 +304,7 @@ func TestStopSessionCleanupKeepsNewActiveSelection(t *testing.T) {
 			var expected *livesession.LiveSession
 			selectedContext, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
-			err := runtimebinding.StopSession(state, &active, old.ID, func(factory.RuntimeRun) error {
+			err := runtimebinding.StopSessionGeneration(state, &active, old, func(factory.RuntimeRun) error {
 				expected = registerTestSession(state, "a")
 				if selection == "peer" {
 					expected = peer
@@ -366,7 +366,7 @@ func TestOpaqueBindingRoutesSessionServiceAndCleanup(t *testing.T) {
 
 	var runtimeState runtimebinding.State
 	runtimeState.SetActive(context.Background(), "bound-session", handle)
-	if err := runtimebinding.StopSession(sessions, &runtimeState, "bound-session", func(factory.RuntimeRun) error { return nil }); err != nil {
+	if err := runtimebinding.StopSessionGeneration(sessions, &runtimeState, sessions.Resolve("bound-session"), func(factory.RuntimeRun) error { return nil }); err != nil {
 		t.Fatalf("StopSession: %v", err)
 	}
 	if deactivationCalls != 1 {

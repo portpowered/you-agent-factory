@@ -224,7 +224,7 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 	if listBlockedCalls != 0 {
 		t.Fatalf("fleet attempted denied native storage %d times", listBlockedCalls)
 	}
-	// Selected show retains its native read, even when that read is denied.
+	// Canonical selected show uses capture even when native reads are denied.
 	var selected workerSessionJSON
 	for workID, name := range works {
 		if name != "worker-session-fleet-alpha" {
@@ -237,13 +237,26 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 			t.Fatalf("denied selected show lost captured identity: %#v", selected)
 		}
 	}
-	// The available terminal sibling uses a different path and keeps all usage
-	// and transcript facts while the active row's provider file is unavailable.
-	assertSuccessfulWorkerSession(t, ctx, f.process, env, c.factoryDir, f.baseURL, terminalOwner, terminalWork)
+	// The terminal sibling retains captured usage and the associated transcript
+	// envelope. Explicit transcript reads still cross the optional native edge
+	// during the compatibility interval; prove the fault on that boundary.
+	f.providerFiles.mu.Lock()
+	if f.providerFiles.blockedCalls != 0 {
+		f.providerFiles.mu.Unlock()
+		t.Fatal("canonical show attempted denied native storage")
+	}
+	f.providerFiles.blockedPath = filepath.Clean(filepath.Join(f.homeDir, ".codex", "sessions", "2026", "07", "27", "rollout-"+workerSessionsCodexSuccessID+".jsonl"))
+	f.providerFiles.mu.Unlock()
+	inputs, err := executeCLIExpectError(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL,
+		"worker-sessions", "read", "--session", terminalOwner, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
+	if err == nil || !strings.Contains(inputs.Stderr()+inputs.Stdout(), "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE") {
+		t.Fatalf("denied associated transcript = %v %s %s", err, inputs.Stdout(), inputs.Stderr())
+	}
 	f.providerFiles.mu.Lock()
 	blockedCalls := f.providerFiles.blockedCalls
 	f.providerFiles.blockedPath = ""
 	f.providerFiles.mu.Unlock()
+	assertSuccessfulWorkerSession(t, ctx, f.process, env, c.factoryDir, f.baseURL, terminalOwner, terminalWork)
 	if blockedCalls == 0 {
 		t.Fatal("optional-loss scenario never reached the exact owned filesystem fault")
 	}

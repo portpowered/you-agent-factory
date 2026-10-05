@@ -15,8 +15,8 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -80,7 +80,7 @@ func TestWorkerSessionCapturedLogsObserverCancellation(t *testing.T) {
 func capturedReadCancellationServer(t *testing.T) (*support.FunctionalAPIServer, *functionalWorkerGate, *capturedReadGate, chan struct{}) {
 	t.Helper()
 	local := platformreplay.NewLocal(runtime.GOOS)
-	writer, err := recordingwire.NewWorkerRecordingFileWriter(local, local, local, capturedHostClock{}, t.TempDir(), "captured-observer-owner")
+	writer, err := processwire.ComposeWorkerRecordingStore(local, local, local, capturedHostClock{}, t.TempDir(), "captured-observer-owner")
 	if err != nil {
 		t.Fatal(err)
 	}

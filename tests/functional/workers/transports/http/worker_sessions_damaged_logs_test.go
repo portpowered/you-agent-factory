@@ -16,8 +16,8 @@ import (
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	processwire "github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -40,7 +40,7 @@ func assertUnreadableCapturedRecovery(t *testing.T, config support.FunctionalAPI
 	local := platformreplay.NewLocal(runtime.GOOS)
 	storage := &capturedReadFault{Local: local}
 	storage.unavailable.Store(true)
-	store, err := recordingwire.NewWorkerRecordingFileWriter(storage, local, local, capturedHostClock{}, filepath.Dir(path), "unreadable-owner")
+	store, err := processwire.ComposeWorkerRecordingStore(storage, local, local, capturedHostClock{}, filepath.Dir(path), "unreadable-owner")
 	if err != nil {
 		t.Fatal(err)
 	}

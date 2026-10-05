@@ -461,7 +461,10 @@ func assertSuccessfulWorkerSessionWithProvider(t *testing.T, ctx context.Context
 	var shown workerSessionJSON
 	decodeCLIJSON(t, showInputs, &shown)
 	assertWorkerSessionIdentity(t, shown, sessionID, providerID, workID)
-	if shown.DurationMillis == nil || shown.TokenUsage == nil || shown.TokenUsage.TotalTokens == nil || *shown.TokenUsage.TotalTokens != 20 {
+	// Captured command output reports input/output only. The native transcript
+	// above reports a total, but canonical show must not copy that optional fact.
+	if shown.DurationMillis == nil || shown.TokenUsage == nil || shown.TokenUsage.InputTokens == nil || *shown.TokenUsage.InputTokens != 8 ||
+		shown.TokenUsage.OutputTokens == nil || *shown.TokenUsage.OutputTokens != 12 || shown.TokenUsage.TotalTokens != nil {
 		t.Fatalf("successful show omitted duration or token usage: %#v", shown)
 	}
 
