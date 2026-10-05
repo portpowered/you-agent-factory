@@ -40,9 +40,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err := scanRepositoryProductionDefaults(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
-	if err := scanRepositoryPetriBoundaries(repoRoot, &result); err != nil {
-		return scanResult{}, err
-	}
 	sortScanResult(&result)
 	return result, nil
 }
@@ -144,31 +141,6 @@ func scanRepositoryProductionDefaults(repoRoot string, result *scanResult) error
 		},
 	)
 	result.productionDefaultBaselineCount = len(baseline.Entries)
-	return nil
-}
-
-func scanRepositoryPetriBoundaries(repoRoot string, result *scanResult) error {
-	findings, err := scanPetriPublicSurface(repoRoot)
-	if err != nil {
-		return err
-	}
-	baseline, err := loadPetriPublicSurfaceBaseline(repoRoot)
-	if err != nil {
-		return err
-	}
-	result.petriPublicSurfaceFindings, result.stalePetriPublicSurfaceEntries, err =
-		partitionPetriPublicSurfaceFindings(findings, baseline)
-	if err != nil {
-		return err
-	}
-	result.recordedPetriPublicSurfaceFindings = recordedFindingsFromPartition(
-		findings,
-		result.petriPublicSurfaceFindings,
-		func(finding petriPublicSurfaceFinding) string {
-			return petriPublicSurfaceKey(finding.FilePath, finding.Symbol, finding.ImportPath)
-		},
-	)
-	result.petriPublicSurfaceBaselineCount = len(baseline.Entries)
 	return nil
 }
 

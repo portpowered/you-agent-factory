@@ -20,15 +20,11 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	writeProductionDefaultFindings(writer, findings.productionDefaultFindings)
 	writeProductionDefaultFindings(writer, findings.recordedProductionDefaultFindings)
 	writeStaleProductionDefaultBaselineEntries(writer, findings.staleProductionDefaultEntries)
-	writePetriPublicSurfaceFindings(writer, findings.petriPublicSurfaceFindings)
-	writePetriPublicSurfaceFindings(writer, findings.recordedPetriPublicSurfaceFindings)
-	writeStalePetriPublicSurfaceBaselineEntries(writer, findings.stalePetriPublicSurfaceEntries)
 }
 
 func writeBaselineSummaries(writer io.Writer, findings scanResult) {
 	writeServiceConstructionBaselineSummary(writer, findings.serviceConstructionBaselineCount)
 	writeProductionDefaultBaselineSummary(writer, findings.productionDefaultBaselineCount)
-	writePetriPublicSurfaceBaselineSummary(writer, findings.petriPublicSurfaceBaselineCount)
 }
 
 func writeGeneratedCodeExceptionSummary(writer io.Writer, policy boundaryPolicy) {

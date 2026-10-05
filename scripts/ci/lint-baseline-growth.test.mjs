@@ -96,3 +96,11 @@ test('recorded transport sites require their exact compiler source and owner', (
   assert.deepEqual(orphanTimingKeys(key, metadata.replace('adapter.go', 'other.go'), 'm/'), [key]);
   assert.deepEqual(orphanTimingKeys(key, 'm/pkg/transports/other||||adapter.go', 'm/'), [key]);
 });
+
+test('Petri reference debt requires its exact compiler source and owner', () => {
+  const key = 'petri-reference|pkg/a_test|pkg/a/p_test.go#pkg/services/factory_runtime.Net::count=2';
+  const metadata = 'm/pkg/a_test [m/pkg/a.test]||p_test.go||';
+  assert.deepEqual(orphanTimingKeys(key, metadata, 'm/'), []);
+  assert.deepEqual(orphanTimingKeys(key, metadata.replace('p_test.go', 'other_test.go'), 'm/'), [key]);
+  assert.deepEqual(orphanTimingKeys(key, 'm/pkg/a', 'm/'), [key]);
+});

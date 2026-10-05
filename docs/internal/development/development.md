@@ -886,3 +886,11 @@ The legacy transport walker and its JSON baseline are retired. Existing
 package-level transport debt also requires exact `transport-recorded-site`
 source/symbol/count keys in the shared analyzer baseline; neighboring files and
 additional occurrences fail. Compiler metadata rejects removed source owners.
+
+`Petripublic` also enforces references to the exact retired Factory Runtime and
+Factory Definitions root contracts, including private declarations, tests and
+captured values. Compiler identities preserve aliases and dot imports while
+ignoring local shadows and unrelated objects. Factory Runtime internals,
+generated sources and testdata retain their exemptions. Exact file/symbol/count
+debt uses `petri-reference` in the shared baseline; the Petri surface walker and
+its JSON store are retired. `petri-public` exported-type enforcement is unchanged.

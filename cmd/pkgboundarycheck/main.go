@@ -21,13 +21,6 @@ func main() {
 		}
 		return
 	}
-	if cfg.writePetriPublicSurfaceBaseline {
-		if err := createPetriPublicSurfaceBaseline(cfg); err != nil {
-			fmt.Fprintln(stderrWriter, err)
-			exitFunc(1)
-		}
-		return
-	}
 	if err := run(cfg, stdoutWriter, stderrWriter); err != nil {
 		fmt.Fprintln(stderrWriter, err)
 		exitFunc(1)

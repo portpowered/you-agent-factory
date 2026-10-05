@@ -225,10 +225,8 @@ func newRecordedScanResult(result scanResult) scanResult {
 	return scanResult{
 		serviceConstructionBaselineCount:    result.serviceConstructionBaselineCount,
 		productionDefaultBaselineCount:      result.productionDefaultBaselineCount,
-		petriPublicSurfaceBaselineCount:     result.petriPublicSurfaceBaselineCount,
 		recordedServiceConstructionFindings: append([]serviceConstructionFinding(nil), result.recordedServiceConstructionFindings...),
 		recordedProductionDefaultFindings:   append([]productionDefaultFinding(nil), result.recordedProductionDefaultFindings...),
-		recordedPetriPublicSurfaceFindings:  append([]petriPublicSurfaceFinding(nil), result.recordedPetriPublicSurfaceFindings...),
 	}
 }
 
@@ -251,15 +249,11 @@ func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recor
 	visible.productionDefaultFindings, recorded.productionDefaultFindings = splitRecordedFindings(visible.productionDefaultFindings, func(finding productionDefaultFinding) string {
 		return boundaryFindingFingerprint("production-default", finding)
 	}, baseline)
-	visible.petriPublicSurfaceFindings, recorded.petriPublicSurfaceFindings = splitRecordedFindings(visible.petriPublicSurfaceFindings, func(finding petriPublicSurfaceFinding) string {
-		return boundaryFindingFingerprint("petri-public-surface", finding)
-	}, baseline)
 }
 
 func clearVisibleRecordedFindings(visible *scanResult) {
 	visible.recordedServiceConstructionFindings = nil
 	visible.recordedProductionDefaultFindings = nil
-	visible.recordedPetriPublicSurfaceFindings = nil
 }
 
 // volatileBoundaryFindingFields names finding fields that move when unrelated
@@ -304,8 +298,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.productionDefaultFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.recordedProductionDefaultFindings)
-	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.petriPublicSurfaceFindings)
-	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.recordedPetriPublicSurfaceFindings)
 	return fingerprints
 }
 

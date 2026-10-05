@@ -8,13 +8,12 @@ import (
 )
 
 type config struct {
-	root                            string
-	packageRoot                     string
-	all                             bool
-	baseRef                         string
-	baselineCacheDir                string
-	writeProductionDefaultBaseline  bool
-	writePetriPublicSurfaceBaseline bool
+	root                           string
+	packageRoot                    string
+	all                            bool
+	baseRef                        string
+	baselineCacheDir               string
+	writeProductionDefaultBaseline bool
 }
 
 func parseConfig() config {
@@ -29,12 +28,6 @@ func parseConfig() config {
 		"create-production-default-selection-baseline",
 		false,
 		"create the deletion-only production default-selection baseline; fails when the file already exists or no debt exists",
-	)
-	flag.BoolVar(
-		&cfg.writePetriPublicSurfaceBaseline,
-		"create-petri-public-surface-baseline",
-		false,
-		"create the exact deletion-only Petri public-surface baseline; fails when the file exists or no debt exists",
 	)
 	flag.Parse()
 	return cfg
@@ -100,9 +93,7 @@ func countAlwaysBlockingViolations(findings scanResult) int {
 	return len(findings.rootPackageFindings) +
 		len(findings.retiredPackageRootFindings) +
 		len(findings.productionDefaultFindings) +
-		len(findings.staleProductionDefaultEntries) +
-		len(findings.petriPublicSurfaceFindings) +
-		len(findings.stalePetriPublicSurfaceEntries)
+		len(findings.staleProductionDefaultEntries)
 }
 
 func countProductionBoundaryViolations(findings scanResult) int {

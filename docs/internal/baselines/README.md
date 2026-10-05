@@ -142,7 +142,6 @@ literal matches for 28 rows and the source-aware witnesses above for two rows.
 | 13 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` |
 | 14 | `docs/internal/baselines/ownership-inventory.json` | `docs/internal/baselines/ownership-inventory.json` |
 | 16 | `docs/internal/baselines/package-target-test-only-baseline.json` | `docs/internal/baselines/package-target-test-only-baseline.json` |
-| 17 | `docs/internal/baselines/petri-public-surface-baseline.json` | `docs/internal/baselines/petri-public-surface-baseline.json` |
 | 18 | `docs/internal/baselines/service-construction-baseline.json` | `docs/internal/baselines/service-construction-baseline.json` |
 | 19 | `docs/internal/baselines/service-cycle-ceiling.json` | `docs/internal/baselines/service-cycle-ceiling.json` |
 | 22 | `docs/internal/baselines/unfinished-package-moves.json` | `docs/internal/baselines/unfinished-package-moves.json` |
@@ -176,7 +175,6 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 | `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | `cmd/unitlanebudget/main.go`, `cmd/unitlanebudget/budget.go` | Unit-lane performance gate | Three unit-lane wall samples plus package and test inventories | `make test-unit-latency-budget` | S-02 | `sha256:5dad63c005c56b9b57036844d1ac0288377bd466ccf115c546a9921a449b46e1` |
 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `make lint` → `ui-lint` | `ui/scripts/check-hardcoded-ui-copy.ts`, `ui/package.json:check:localized-copy` | Dashboard localization gate | Source location and literal finding | `cd ui && bun run check:localized-copy` | R-07 | `sha256:bb6ee7e94bc96d013f164dc81004471112e457fa8a22d11ab17c1804982c609a` |
 | `docs/internal/baselines/package-target-test-only-baseline.json` | `make lint` → `package-target-manifest-check` | `cmd/packagetargetmanifestcheck/manifest.go` | Package-target migration gate | Open-move package path and test-only source identity | `make package-target-manifest-check` | R-09 | `sha256:64c98e7f5ee3b25d74bda79ee50a571b1b3a21e985946bc34688b330df5af40a` |
-| `docs/internal/baselines/petri-public-surface-baseline.json` | `make lint` → `pkg-boundary` | `cmd/pkgboundarycheck/petri_public_surface.go` | Runtime public-boundary gate | File, symbol, kind, and migration identity | `make pkg-boundary` | R-10 | `sha256:07f84f9ce316d81ac4d80f13ec8435853274b3481136a8eb1db14e8f464599cc` |
 | `docs/internal/baselines/service-construction-baseline.json` | `make lint` → `pkg-boundary` | `cmd/pkgboundarycheck/service_baselines.go` | Service construction boundary | Source file, import path, symbol, and class | `make pkg-boundary` | R-11 | `sha256:a6c401bb41481149a3576bb7b29aa42f4999de122c88b70520d3e848de259059` |
 | `docs/internal/baselines/service-cycle-ceiling.json` | `make lint` → `service-cycle-check` | `cmd/servicecyclecheck/report.go` | Service dependency graph | Minimum feedback-arc-set weight of the service graph | `make service-cycle-check` | R-12 | `sha256:410eebddbff280ff10c346699cf4585877f5a752dd184901d24ef1595d1f764d` |
 | `docs/internal/baselines/unfinished-package-moves.json` | `make lint` → `ownership-inventory-check`, `package-target-manifest-check` | `internal/ownershipinventory/moves.go`, `cmd/packagetargetmanifestcheck/manifest.go` | Packaged Service Structure migration | Live `pkg/` package path and successor move row | `make ownership-inventory-check`, `make package-target-manifest-check` | R-15 | `sha256:21bb2cfc079413494f5d10b093b6f775fefa019385e6b4ec1ef95366e938f26f` |
@@ -219,7 +217,6 @@ content observations, not permission to rewrite a ratchet or snapshot.
 | S-02 | `go-unit-lane-latency-budget.v1.json` | 445 packages and 18,296 final-mode test identities; stored `reference.baseCommit` `605a6e5385698b67b7b140ea3b5f2219d7464276` identifies the hosted inventory capture |
 | R-07 | `hardcoded-ui-copy-baseline.txt` | 2 accepted literal findings |
 | R-09 | `package-target-test-only-baseline.json` | 31 test-only migration findings |
-| R-10 | `petri-public-surface-baseline.json` | 93 public-surface findings |
 | R-11 | `service-construction-baseline.json` | 4 construction findings |
 | R-12 | `service-cycle-ceiling.json` | Feedback-arc ceiling 13 |
 | R-15 | `unfinished-package-moves.json` | 37 open move rows |
@@ -266,7 +263,6 @@ artifact generator must not be relabelled as a maintenance mechanism.
 | R-06 | `docs/internal/baselines/go-unit-coverage-package-minimums.json` | Unit coverage gate — Go import package and minimum statement-coverage percentage | Run `make test-unit-coverage`. If a quality-floor change is approved, generate a candidate with `go run ./cmd/gocoveragecheck -suite unit -generate-manifest <candidate>`. Inspect it and manually apply only the approved change. | Candidate generation only. Never unattended-replace the manifest because current coverage could lower a quality floor. |
 | R-07 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | Dashboard localization gate — source location and literal finding | Run `cd ui && bun run check:localized-copy`. Move the copy to the catalog. Update the baseline only for a reviewed intentional exception. Never use the writer unattended. | Manual ratchet. `--write-baseline` would accept new user-facing hardcoded copy. |
 | R-09 | `docs/internal/baselines/package-target-test-only-baseline.json` | Package-target migration gate — open-move package path and test-only source identity | Run `make package-target-manifest-check`. Resolve the move or test-only edge, then remove its exact row. Do not add a new observation to make the migration check pass. | Manual deletion-only ratchet. `-create-test-only-baseline` refuses to overwrite an existing file. |
-| R-10 | `docs/internal/baselines/petri-public-surface-baseline.json` | Runtime public-boundary gate — file, symbol, kind, and migration identity | Run `make pkg-boundary`. Resolve a public-surface migration finding, then remove only its reviewed row. Never add a new public-surface debt row. | Manual deletion-only ratchet. The `-create-petri-public-surface-baseline` path refuses an existing baseline. |
 | R-11 | `docs/internal/baselines/service-construction-baseline.json` | Service construction boundary — source file, import path, symbol, and class | Run `make pkg-boundary`. Complete the construction migration, then remove the resolved row in the same reviewed change. Do not repin it to accept new construction debt. | Manual deletion-only ratchet. No canonical generator exists for this file. |
 | R-12 | `docs/internal/baselines/service-cycle-ceiling.json` | Service dependency graph — minimum feedback-arc-set weight | Run `make service-cycle-check`. Change the ceiling only when the graph change is intentional and reviewed. An increase hides a regression. A decrease records an unclaimed improvement. | Manual bidirectional ratchet. The checker rejects both unreviewed increases and decreases. |
 | R-15 | `docs/internal/baselines/unfinished-package-moves.json` | Packaged Service Structure migration — live `pkg/` package path and successor move row | Run `make ownership-inventory-check` and `make package-target-manifest-check`. Landing a move deletes its row. When no moves remain, delete the empty ledger with its consumers. | Manual shrink-only ledger. No generator exists because package ownership is derived from the live tree. |
@@ -645,3 +641,8 @@ loader and writer with the test-behavior walker. `TestBoundary` now uses only
 compiler-observed exact file/symbol/count keys in the shared analyzer baseline.
 Transport policy rules had no observed debt in either compiler configuration
 when migrated. The audit paragraph above describes historical paths.
+
+Petri root-contract references now use `petri-reference` exact compiler-observed
+file/symbol/count keys in `internal/lint/analyzers/baseline.txt`, alongside the
+existing `petri-public` exported-type keys. `make repolint` rejects count changes,
+stale findings and vanished source owners; the separate Petri JSON store is retired.

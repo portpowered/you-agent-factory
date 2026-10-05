@@ -11,10 +11,6 @@ type scanResult struct {
 	recordedProductionDefaultFindings   []productionDefaultFinding
 	staleProductionDefaultEntries       []productionDefaultBaselineEntry
 	productionDefaultBaselineCount      int
-	petriPublicSurfaceFindings          []petriPublicSurfaceFinding
-	recordedPetriPublicSurfaceFindings  []petriPublicSurfaceFinding
-	stalePetriPublicSurfaceEntries      []petriPublicSurfaceBaselineEntry
-	petriPublicSurfaceBaselineCount     int
 }
 
 type retiredPackageRoot struct {
