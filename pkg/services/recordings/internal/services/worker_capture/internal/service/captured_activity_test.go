@@ -147,6 +147,33 @@ func catalogMetadataRecord(t *testing.T, topic events.Topic, kind workers.Kind, 
 	return mustRecord(t, request, events.AggregateSequence(position))
 }
 
+func TestFileWriterCatalogSummaryModelOnlyUsageKeepsCounters(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	record := journalRecord(t, "model-updates", "summary-worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	for index, payload := range []string{`{"inputTokens":0,"model":"initial"}`, `{"model":"later","inputTokens":null}`} {
+		record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindUsage, payload, uint64(index+2))
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := mustCatalogSummary(t, writer)
+	if len(want.MetadataRecords) != 2 || want.MetadataRecords[0].ID.Position != 2 || want.MetadataRecords[1].ID.Position != 3 {
+		t.Fatalf("model-only update erased captured counters: %+v", want.MetadataRecords)
+	}
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := mustCatalogSummary(t, reopened); !reflect.DeepEqual(got.MetadataRecords, want.MetadataRecords) {
+		t.Fatalf("recovery lost usage/model facts: %+v", got.MetadataRecords)
+	}
+}
+
 func mustCatalogSummary(t *testing.T, reader recordings.WorkerCapturedActivityReader) recordings.WorkerCapturedCatalogItem {
 	t.Helper()
 	page, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})

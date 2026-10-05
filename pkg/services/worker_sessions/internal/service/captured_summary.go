@@ -97,10 +97,12 @@ func (s *LogReader) archivedCapturedFacts(ctx context.Context, page recordings.W
 	if err != nil || snapshot.RecordingID != page.Catalog.RecordingID {
 		return workersessions.ErrObservationProjectionUnavailable
 	}
-	observation.TokenUsage = capturedSnapshotUsage(snapshot, observation.WorkerSessionID, page.Catalog.CommittedPosition)
 	for _, session := range snapshot.Sessions {
 		if session.WorkerSessionID != observation.WorkerSessionID {
 			continue
+		}
+		if session.RecordingGenerationID != "" && session.RecordingGenerationID != page.Catalog.RecordingGenerationID {
+			return workersessions.ErrObservationProjectionUnavailable
 		}
 		for _, record := range session.Records {
 			if uint64(record.ID.Position) > page.Catalog.CommittedPosition {
@@ -109,8 +111,10 @@ func (s *LogReader) archivedCapturedFacts(ctx context.Context, page recordings.W
 			var draft workers.Draft
 			if json.Unmarshal(record.Payload, &draft) == nil {
 				applyCapturedSessionFacts(observation, draft)
+				applyCapturedUsageFacts(observation, draft)
 			}
 		}
+		applyCapturedTiming(observation, page.Terminal, page.Catalog.CommittedPosition, session.CapturedAt)
 	}
 	return observation.Validate()
 }

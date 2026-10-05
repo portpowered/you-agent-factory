@@ -33,6 +33,9 @@ func assertLegacyCapturedLogsRecovery(t *testing.T, config support.FunctionalAPI
 	if shown.State != factoryapi.WorkerSessionObservationStateCompleted || shown.ProviderSession != nil {
 		t.Fatalf("legacy history restored live ownership or provider association: %+v", shown)
 	}
+	if shown.EndedAt != nil || shown.DurationMillis != nil || shown.DurationBasis != "UNAVAILABLE" {
+		t.Fatalf("legacy missing terminal stamp invented timing: %+v", shown)
+	}
 	server.Close(t)
 	reopened := support.StartFunctionalAPIServer(t, config)
 	again := assertLegacyLogsCLIHTTPParity(t, reopened, current.WorkerSessionId)

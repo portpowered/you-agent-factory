@@ -566,6 +566,11 @@ including list, show, live and terminal stream frames, and read.
 
 ### Turn context usage
 
+Archived Worker Session timing uses the recorded start and the host's terminal
+capture time. The duration includes capture completion and has basis
+`RECORDED_TIMESTAMPS`. Captures without both timestamps leave end and duration
+unavailable. Restart does not create missing timestamps.
+
 When supported provider usage evidence exists, `show --output json` and the
 Worker Session API return `turnUsage` beside `tokenUsage`:
 

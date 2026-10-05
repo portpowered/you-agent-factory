@@ -39,7 +39,9 @@ func (session *recordingSession) rememberSummary(record events.Record) {
 	if draft.Kind == workers.KindUsage {
 		var usage workers.UsagePayload
 		if json.Unmarshal(draft.Payload, &usage) == nil {
-			session.summaryPositions[summaryUsage] = position
+			if capturedUsageCountersPresent(draft.Payload) {
+				session.summaryPositions[summaryUsage] = position
+			}
 			if usage.Model != "" {
 				session.summaryPositions[summaryModel] = position
 			}
@@ -75,6 +77,19 @@ func (session *recordingSession) rememberSummary(record events.Record) {
 			session.summaryPositions[slot] = position
 		}
 	}
+}
+
+func capturedUsageCountersPresent(payload json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payload, &fields) != nil {
+		return false
+	}
+	for _, field := range []string{"inputTokens", "cachedInputTokens", "outputTokens", "reasoningOutputTokens", "totalTokens"} {
+		if value := fields[field]; len(value) > 0 && string(value) != "null" {
+			return true
+		}
+	}
+	return false
 }
 
 func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []recordings.WorkerSessionCatalogEntry, generation string) ([]recordings.WorkerCapturedCatalogItem, error) {

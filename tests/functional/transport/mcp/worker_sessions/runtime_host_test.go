@@ -541,6 +541,18 @@ func assertArchivedProviderRecovery(t *testing.T, host *support.FunctionalAPISer
 		assertJSONEqual(t, observation, selected)
 		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
 		assertFactoryCLIParity(t, host, id, selected)
+		assertArchivedHostTiming(t, host, id)
+	}
+}
+
+func assertArchivedHostTiming(t *testing.T, host *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id)
+	observation := support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
+	logs := support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint+"/logs")
+	stamp := logs.Events[len(logs.Events)-1].Event.CapturedAt
+	if stamp == nil || observation.StartedAt == nil || observation.EndedAt == nil || !observation.EndedAt.Equal(*stamp) || observation.DurationMillis == nil || *observation.DurationMillis != stamp.Sub(*observation.StartedAt).Milliseconds() || observation.DurationBasis != "RECORDED_TIMESTAMPS" {
+		t.Fatalf("recovered Factory summary lost host capture timing: %+v terminal=%v", observation, stamp)
 	}
 }
 

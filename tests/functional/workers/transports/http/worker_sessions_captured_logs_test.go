@@ -70,6 +70,7 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	if archived.State != factoryapi.WorkerSessionObservationStateCompleted || archived.ProviderSession != nil || archived.StartedAt == nil {
 		t.Fatalf("archived captured identity lost facts: %+v", archived)
 	}
+	assertArchivedCapturedTiming(t, restarted, archived, recovered)
 	restarted.Close(t)
 	assertLegacyCapturedLogsRecovery(t, config, ended)
 	assertOversizedCapturedPayload(t, config, ended)
@@ -77,6 +78,26 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	assertDamagedCapturedRecovery(t, config, ended)
 	assertUnreadableCapturedRecovery(t, config, ended)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")
+}
+
+func assertArchivedCapturedTiming(t *testing.T, server *support.FunctionalAPIServer, archived factoryapi.WorkerSessionObservation, logs factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	stamp := logs.Events[len(logs.Events)-1].Event.CapturedAt
+	if stamp == nil || archived.StartedAt == nil || archived.EndedAt == nil || !archived.EndedAt.Equal(*stamp) || archived.DurationMillis == nil || *archived.DurationMillis != stamp.Sub(*archived.StartedAt).Milliseconds() || archived.DurationBasis != "RECORDED_TIMESTAMPS" {
+		t.Fatalf("archived summary lost host capture timing: %+v terminal=%v", archived, stamp)
+	}
+	listed := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions?history=archived")
+	if len(listed.Sessions) != 1 || !reflect.DeepEqual(listed.Sessions[0], archived) {
+		t.Fatalf("archived list/show facts differ: %+v %+v", listed, archived)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "show", "--worker-session-id", archived.WorkerSessionId, "--server", server.URL(), "--output", "json"})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatal(err)
+	}
+	var cli factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil || !reflect.DeepEqual(cli, archived) {
+		t.Fatalf("archived CLI/HTTP facts differ: %+v %v", cli, err)
+	}
 }
 
 type capturedRecordingDirectory string

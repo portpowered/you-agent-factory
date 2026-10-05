@@ -136,11 +136,10 @@ func capturedHistoryIdentity(item recordings.WorkerCapturedCatalogItem, owners m
 		var draft workers.Draft
 		if json.Unmarshal(record.Payload, &draft) == nil {
 			applyCapturedSessionFacts(&observation, draft)
-			if usage, _, ok := usageProjectionFromDraft(draft); ok {
-				observation.TokenUsage = usage
-			}
+			applyCapturedUsageFacts(&observation, draft)
 		}
 	}
+	applyCapturedTiming(&observation, item.Terminal, item.Catalog.CommittedPosition, item.CapturedAt)
 	return &observation, observation.Validate()
 }
 
