@@ -7,28 +7,25 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	boundedFleetObservationCount = 24
-	boundedFleetPageSize         = 20
+	boundedFleetObservationCount = 6
+	boundedFleetPageSize         = 4
 	boundedFleetSessionCount     = 3
 )
 
-// TestWorkerSessionsFleetListBoundedRootPages is the public promotion witness
-// for the bounded fleet reader. It uses one reusable root process and an
-// isolated set of explicit Factory Sessions, while the assertions stay at the
-// customer-facing CLI and HTTP boundaries.
+// TestWorkerSessionsFleetListBoundedRootPages proves continuation, attribution,
+// filtering and CLI/REST parity across three owned Factory Sessions. Two rows
+// per session cover both terminal states and cross a page boundary. This case
+// runs before parallel siblings because the root fleet view includes their rows.
 func testProvidersessionscliWorkerSessionsFleetListBoundedRootPages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -50,7 +47,7 @@ func testProvidersessionscliWorkerSessionsFleetListBoundedRootPages(t *testing.T
 	for index := 0; index < boundedFleetSessionCount; index++ {
 		factorySessionIDs = append(factorySessionIDs, caseFixture.openSession(t))
 	}
-	sourceCount := countBoundedFleetCatalogSources(t, baseURL, factorySessionIDs)
+	assertFleetSessionsVisible(t, baseURL, factorySessionIDs)
 
 	expected := make(map[string]boundedFleetExpectedObservation, len(workNames))
 	expectedByName := make(map[string]boundedFleetExpectedObservation, len(workNames))
@@ -117,19 +114,6 @@ func testProvidersessionscliWorkerSessionsFleetListBoundedRootPages(t *testing.T
 	assertBoundedFleetNoMatch(t, ctx, process, env, factoryDir, baseURL)
 	assertBoundedFleetMalformedToken(t, ctx, process, env, factoryDir, baseURL)
 
-	workingSetHighWater, workingSetErr := processWorkingSetHighWater()
-	commitBytes, commitErr := platformprocessmemory.CurrentCommit()
-	host, hostErr := os.Hostname()
-	if hostErr != nil {
-		host = "unknown"
-	}
-	t.Logf(
-		"bounded fleet witness fixture=worker-session-fleet-v1 host=%s go=%s/%s version=%s sources=%d pageReadCallsPerRequest=%d rows=%d pageSize=%d firstCLIElapsed=%s firstCLIBytes=%d firstHTTPElapsed=%s firstHTTPBytes=%d firstHTTPStatus=%d firstHTTPContentType=%q workingSetHighWaterBytes=%d workingSetError=%v commitBytes=%d commitError=%v",
-		host, runtime.GOOS, runtime.GOARCH, runtime.Version(), sourceCount, sourceCount,
-		boundedFleetObservationCount, boundedFleetPageSize, firstCLI.elapsed, len(firstCLI.raw),
-		firstHTTP.elapsed, len(firstHTTP.raw), firstHTTP.status, firstHTTP.headers.Get("Content-Type"),
-		workingSetHighWater, workingSetErr, commitBytes, commitErr,
-	)
 }
 
 type boundedFleetExpectedObservation struct {
@@ -143,7 +127,6 @@ type boundedFleetExpectedObservation struct {
 type boundedFleetPageCapture struct {
 	list    workerSessionListJSON
 	raw     []byte
-	elapsed time.Duration
 	status  int
 	headers http.Header
 }
@@ -167,7 +150,7 @@ func boundedFleetState(index int) string {
 	return "FAILED"
 }
 
-func countBoundedFleetCatalogSources(t *testing.T, baseURL string, expectedSessionIDs []string) int {
+func assertFleetSessionsVisible(t *testing.T, baseURL string, expectedSessionIDs []string) {
 	t.Helper()
 	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, strings.TrimSuffix(baseURL, "/")+"/factory-sessions")
 	known := make(map[string]struct{}, len(listed.Sessions))
@@ -181,9 +164,6 @@ func countBoundedFleetCatalogSources(t *testing.T, baseURL string, expectedSessi
 			t.Fatalf("bounded fleet Factory Session %q missing from root catalog: %#v", expectedSessionID, listed)
 		}
 	}
-	// The root fleet catalog always starts with the direct Worker Sessions
-	// service, then appends one source for each live Factory Session.
-	return 1 + len(known)
 }
 
 func fetchBoundedFleetCLIPage(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, nextToken string) boundedFleetPageCapture {
@@ -198,7 +178,6 @@ func fetchBoundedFleetCLIPage(t *testing.T, ctx context.Context, process support
 	inputs := support.FakeInputs(ctx, args)
 	inputs.Input.Env = append([]string(nil), env...)
 	inputs.Input.WorkingDirectory = factoryDir
-	started := time.Now()
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("bounded fleet CLI page token=%q: %v\nstdout:\n%s\nstderr:\n%s", nextToken, err, inputs.Stdout(), inputs.Stderr())
 	}
@@ -207,7 +186,7 @@ func fetchBoundedFleetCLIPage(t *testing.T, ctx context.Context, process support
 	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &listed); err != nil {
 		t.Fatalf("decode bounded fleet CLI page token=%q: %v\nstdout:\n%s", nextToken, err, inputs.Stdout())
 	}
-	return boundedFleetPageCapture{list: listed, raw: raw, elapsed: time.Since(started), status: http.StatusOK}
+	return boundedFleetPageCapture{list: listed, raw: raw, status: http.StatusOK}
 }
 
 func fetchBoundedFleetHTTPPage(t *testing.T, ctx context.Context, baseURL, nextToken string) boundedFleetPageCapture {
@@ -224,7 +203,6 @@ func fetchBoundedFleetHTTPPage(t *testing.T, ctx context.Context, baseURL, nextT
 	if err != nil {
 		t.Fatalf("build bounded fleet HTTP request: %v", err)
 	}
-	started := time.Now()
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("bounded fleet HTTP page token=%q: %v", nextToken, err)
@@ -242,7 +220,7 @@ func fetchBoundedFleetHTTPPage(t *testing.T, ctx context.Context, baseURL, nextT
 		t.Fatalf("decode bounded fleet HTTP page token=%q: %v\nbody:\n%s", nextToken, err, body)
 	}
 	return boundedFleetPageCapture{
-		list: listed, raw: body, elapsed: time.Since(started), status: response.StatusCode, headers: response.Header.Clone(),
+		list: listed, raw: body, status: response.StatusCode, headers: response.Header.Clone(),
 	}
 }
 
@@ -419,7 +397,6 @@ func fetchBoundedFleetHTTPPageWithQuery(t *testing.T, ctx context.Context, baseU
 	if err != nil {
 		t.Fatalf("build bounded fleet HTTP request: %v", err)
 	}
-	started := time.Now()
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("bounded fleet HTTP request: %v", err)
@@ -430,7 +407,7 @@ func fetchBoundedFleetHTTPPageWithQuery(t *testing.T, ctx context.Context, baseU
 		t.Fatalf("read bounded fleet HTTP response: %v", err)
 	}
 	capture := boundedFleetPageCapture{
-		raw: body, elapsed: time.Since(started), status: response.StatusCode, headers: response.Header.Clone(),
+		raw: body, status: response.StatusCode, headers: response.Header.Clone(),
 	}
 	if response.StatusCode == http.StatusOK {
 		if err := json.Unmarshal(body, &capture.list); err != nil {
@@ -536,7 +513,6 @@ func testProvidersessionscliWorkerSessionsFleetListCLIConcurrent(t *testing.T) {
 	fixture.releaseFleetGate()
 	completedOrder := assertFleetState(t, waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "COMPLETED", len(expectedWorks)), expectedWorks, factorySessionIDs, providerIDs, "COMPLETED")
 	assertSameWorkerSessionOrder(t, runningOrder, completedOrder, "RUNNING", "COMPLETED")
-	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, factorySessionIDs, expectedWorks, providerIDs, true, completedOrder)
 	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, factorySessionIDs, expectedWorks, providerIDs, true, completedOrder)
 	assertProviderCommandRoutesSince(t, fixture.runner, routeStart, map[string]struct{}{
 		"worker-session-fleet-alpha": {},

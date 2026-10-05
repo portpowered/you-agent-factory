@@ -1938,3 +1938,52 @@ exact nested aliases. This failed sample cannot establish behavior equivalence
 or a checkpoint. A repeat installs the corresponding source revision's registry
 and exact mapped aliases only for the private run, restoring the current native
 registry in cleanup. The memory limit is a Go GC target, not a hard RSS ceiling.
+
+The corrected registry repeat passes: **139.04s command wall / 134.011s package
+execution**, one link at **2.390s wall / 1.973 CPU seconds**, and peak RSS
+3,529,376 KiB (3.37 GiB). Whole-command CPU is 343.42 user plus 90.46 system
+seconds. No compiler action is recorded, so this is a warm-source-build sample;
+it must not be compared as a cold build with the earlier 133.03s experiment.
+The repository's actual profile evaluator passes unchanged total and active
+package gates at 61.4% total coverage. There are no failed Go JSON events;
+2,254 passing events include nested cases and wrappers and are not a count of
+distinct original top-level tests. The registry and retired source location
+are restored after execution. This still excludes the canonical supervisor and
+hosted runner.
+
+Increasing the same memory-limited binary to `-parallel=48` fails and is slower:
+**148.62s command wall / 143.450s package execution**, peak RSS 3,318,448 KiB
+(3.16 GiB), one link at 2.415s wall / 2.028 CPU seconds, whole-command CPU
+369.79 user plus 96.82 system seconds. The selected Worker Session MCP read
+exceeds its deadline, and two JavaScript ACP prompt cases receive request
+cancellation. Eight failed JSON events include affected parent wrappers.
+This concurrency setting is not a passing optimization and is not adopted.
+
+### Hosted nine-suite consolidation result
+
+Hosted run `37344044590` (`d9c1aa259f`) passes the complete functional supervisor
+in **320.437s** (17:05:45.416Z through 17:11:05.853Z), with **250.280s** coverage
+invocation, 755 final passes, two skips and no failures. Quarantine succeeds in
+56.975s while overlapping the coverage child. This sample is below the preceding
+332.773s result but still exceeds the five-minute checkpoint by 20.437s. The
+separate API package job fails on the retired Make selector described above;
+revision `38d312b762` carries its correction. The three-minute and two-minute
+checkpoints remain unmet. No merge is claimed.
+
+### Fleet pagination fixture cleanup
+
+The CLI/REST fleet continuation proof now uses six Workers across three owned
+Factory Sessions, with a four-row first page and two-row continuation. Each
+session still contributes both a COMPLETED and FAILED Worker Session. Ordered
+identity, attribution, filtered selection, malformed-token behavior, empty
+selection, public session visibility and CLI/REST parity assertions remain.
+The case documents its serial execution because the root fleet projection
+includes parallel siblings' rows. A duplicate identical terminal fleet read
+is removed; the active-to-terminal ordering proof remains.
+
+Process working-set/commit/hostname observations and response-stopwatch logs
+were performance diagnostics rather than customer assertions. They are removed,
+including the Windows and unsupported-platform memory helper files. Performance
+measurements stay in the audit harness. The focused pagination/concurrent-fleet
+pair passes three repetitions in 22.420s, and union-tag repository lint reports
+zero issues. These changes do not establish a full-lane latency result.
