@@ -39,7 +39,7 @@ func TestWorkerSessionHTTPListTerminateCharacterization(t *testing.T) {
 	server.FunctionalAPIServer = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Args: []string{"--session", sessionID},
 		Env:   server.env,
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
 		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
 			// Fleet listing and termination do not cover first-run installation;
 			// complete profile bootstrap before the hosted readiness clock starts.

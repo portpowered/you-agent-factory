@@ -1,0 +1,189 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+)
+
+type interruptInputStore struct {
+	stopOperationStore
+	input    json.RawMessage
+	writeErr error
+	readErr  error
+	corrupt  bool
+}
+
+func (s *interruptInputStore) PersistWorkerControlInput(_ context.Context, _ recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
+	if s.writeErr != nil {
+		return "", s.writeErr
+	}
+	s.input = append(json.RawMessage(nil), input...)
+	return "scoped-input", nil
+}
+
+func (s *interruptInputStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
+	if s.corrupt {
+		return json.RawMessage(`{}`), nil
+	}
+	return append(json.RawMessage(nil), s.input...), s.readErr
+}
+
+func newDurableInterruptFixture(t *testing.T) (*registry, interruptPlan, *interruptInputStore) {
+	t.Helper()
+	r, s, _ := newDurableStopFixture(t)
+	store := &interruptInputStore{}
+	r.operations = store
+	return r, interruptPlan{
+		request:    workersessions.InterruptRequest{RequestID: "interrupt-request", SourceWorkerSessionID: "worker", SuccessorWorkerSessionID: "successor", ReplacementMessage: "exact replacement"},
+		dispatchID: s.dispatchID, supervision: s,
+	}, store
+}
+
+func TestInterruptDurableInputRefusesBeforeCancellation(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"write", "read", "corrupt", "intent", "conflict", "secret", "escaped-secret"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			calls := 0
+			plan.supervision.installCancel(func() { calls++ })
+			private := errors.New("private-provider-secret")
+			want := configureInterruptInputFailure(&plan, store, failure, private)
+			result, err := r.runInterrupt(plan)
+			if !errors.Is(err, want) || result.Phase != workersessions.InterruptPhaseValidation || calls != 0 || result.Source.State != workersessions.StateRunning {
+				t.Fatalf("preflight result=%#v err=%v cancellation calls=%d", result, err, calls)
+			}
+			if strings.Contains(err.Error(), private.Error()) || len(store.records) != 0 {
+				t.Fatal("refused operation leaked diagnostics or committed intent")
+			}
+			if strings.Contains(failure, "secret") && len(store.input) != 0 {
+				t.Fatal("secret reached input store")
+			}
+			assertNoSuccessor(t, r, "successor")
+		})
+	}
+}
+
+func configureInterruptInputFailure(plan *interruptPlan, store *interruptInputStore, failure string, private error) error {
+	switch failure {
+	case "write":
+		store.writeErr = private
+	case "read":
+		store.readErr = private
+	case "corrupt":
+		store.corrupt = true
+	case "intent":
+		store.begin = func(context.Context, recordings.WorkerControlOperationRecord) error { return private }
+	case "conflict":
+		store.writeErr = recordings.ErrWorkerControlConflict
+		return workersessions.ErrInterruptRequestIDConflict
+	default:
+		secret := "private-provider-secret"
+		if failure == "escaped-secret" {
+			secret = "private\nsecret\""
+		}
+		plan.execution.Execution.EnvVars = map[string]string{"TOKEN": secret}
+		plan.request.ReplacementMessage = "prefix " + secret
+		return recordings.ErrInvalidRecordingRedactionRequest
+	}
+	return recordings.ErrWorkerRecordingPersistence
+}
+
+func TestInterruptDurableIntentRechecksAttemptAfterSync(t *testing.T) {
+	t.Parallel()
+	r, plan, store := newDurableInterruptFixture(t)
+	calls := 0
+	plan.supervision.installCancel(func() { calls++ })
+	store.begin = func(context.Context, recordings.WorkerControlOperationRecord) error {
+		plan.supervision.dispatchID = "new-attempt"
+		return nil
+	}
+	result, err := r.runInterrupt(plan)
+	if !errors.Is(err, workersessions.ErrInterruptSourceConflict) || result.Phase != workersessions.InterruptPhaseValidation || calls != 0 {
+		t.Fatalf("stale interrupt=%#v err=%v effects=%d", result, err, calls)
+	}
+	if len(store.records) != 2 || store.records[1].Operation.Phase != "FAILED" || store.records[1].Target.ExpectedAttemptID != plan.dispatchID {
+		t.Fatalf("stale facts=%#v", store.records)
+	}
+}
+
+func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
+	t.Parallel()
+	fixture := newInterruptRaceCharacterizationFixture(t, "durable-phases", false)
+	r := fixture.registry.(*registry)
+	store := &interruptInputStore{}
+	r.operations = store
+	capture := exactCaptureIdentity()
+	capture.WorkerSessionID = fixture.sourceID
+	capture.FactorySessionID = ""
+	pub := r.publicationFor(fixture.sourceID)
+	pub.mu.Lock()
+	pub.capture = capture
+	pub.mu.Unlock()
+	req := workersessions.InterruptRequest{
+		RequestID: "durable-request", SourceWorkerSessionID: fixture.sourceID,
+		SuccessorWorkerSessionID: fixture.successorID, ReplacementMessage: "exact replacement",
+	}
+	outcomes := startInterruptCharacterization(t, fixture.registry, req)
+	fixture.boundary.waitCancellation(t, fixture.sourceDispatch)
+	// The command boundary remains held until this signal releases its callback.
+	assertBoundaryEffects(t, fixture.boundary, 1, 1, "source join barrier")
+	fixture.boundary.releaseCancellation(fixture.sourceDispatch)
+	fixture.boundary.waitReturned(t, fixture.sourceDispatch)
+	outcome := <-outcomes
+	source := <-fixture.sourceResult
+	assertInterruptWins(t, fixture, outcome, source)
+	var phases []string
+	for _, record := range store.records {
+		phases = append(phases, record.Operation.Phase)
+	}
+	if !reflect.DeepEqual(phases, []string{"INTENT", "SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED"}) {
+		t.Fatalf("committed phases=%v", phases)
+	}
+	replayed, err := fixture.registry.Interrupt(t.Context(), req)
+	if err != nil || !reflect.DeepEqual(replayed, outcome.result) {
+		t.Fatalf("retry=%#v err=%v", replayed, err)
+	}
+	assertBoundaryEffects(t, fixture.boundary, 2, 1, "durable replay")
+}
+
+func TestInterruptDurablePhasesPreserveReservedIdentityAndSafeFailure(t *testing.T) {
+	t.Parallel()
+	r, plan, store := newDurableInterruptFixture(t)
+	operation, err := r.beginInterruptIntent(t.Context(), plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input workersessions.InterruptRequest
+	if json.Unmarshal(store.input, &input) != nil || input != plan.request || operation.Operation.SuccessorWorkerSessionID != "successor" || operation.InputArtifactRef != "scoped-input" {
+		t.Fatalf("captured input=%#v operation=%#v", input, operation)
+	}
+	if err := r.advanceInterruptPhase(t.Context(), operation, "SOURCE_STOPPED"); err != nil {
+		t.Fatal(err)
+	}
+	privateModel := "private-provider-secret"
+	result := workersessions.InterruptResult{
+		RequestID: plan.request.RequestID, SourceWorkerSessionID: "worker", SuccessorWorkerSessionID: "successor", Phase: workersessions.InterruptPhaseSuccessorAdmission,
+		Source: workersessions.Session{ID: "worker", State: workersessions.StateCanceled, Model: &privateModel},
+	}
+	if err := r.commitInterruptResult(t.Context(), operation, result, errors.New("private-provider-secret")); err != nil {
+		t.Fatal(err)
+	}
+	var phases []string
+	for _, record := range store.records {
+		phases = append(phases, record.Operation.Phase)
+		if record.Operation.SuccessorWorkerSessionID != "successor" || strings.Contains(string(record.Result), "private-provider-secret") {
+			t.Fatal("phase changed reservation or leaked data")
+		}
+	}
+	if !reflect.DeepEqual(phases, []string{"INTENT", "SOURCE_STOPPED", "FAILED"}) || operation.FailureCode != string(result.Phase) {
+		t.Fatalf("phases=%v operation=%#v", phases, operation)
+	}
+}

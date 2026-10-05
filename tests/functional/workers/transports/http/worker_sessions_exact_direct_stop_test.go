@@ -128,9 +128,10 @@ func TestExactStopDirectCancelJoinsWithoutAProviderReference(t *testing.T) {
 // intent. All recording writes, reads and control result persistence are real.
 type exactStopIntentGate struct {
 	recordings.WorkerRecordingStore
-	committed chan struct{}
-	proceed   chan struct{}
-	once      sync.Once
+	committed  chan struct{}
+	proceed    chan struct{}
+	once       sync.Once
+	commitOnce sync.Once
 }
 
 func (store *exactStopIntentGate) release() { store.once.Do(func() { close(store.proceed) }) }
@@ -138,7 +139,7 @@ func (store *exactStopIntentGate) release() { store.once.Do(func() { close(store
 func (store *exactStopIntentGate) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
 	accepted, created, err := store.WorkerRecordingStore.BeginWorkerControlOperation(ctx, record)
 	if err == nil && created && record.Target.WorkerSessionID == "natural-target" {
-		close(store.committed)
+		store.commitOnce.Do(func() { close(store.committed) })
 		select {
 		case <-store.proceed:
 		case <-ctx.Done():
@@ -158,7 +159,8 @@ func startExactNaturalStopServer(t *testing.T, runner *fleetCharacterizationRunn
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Args: []string{"--session", sessionID}, Env: server.env,
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner, WorkerRecordingWriter: store,
-			WorkerRecordingStoreObserver: func(backing recordings.WorkerRecordingStore) { store.WorkerRecordingStore = backing },
+			FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir),
+			WorkerRecordingStoreObserver:    func(backing recordings.WorkerRecordingStore) { store.WorkerRecordingStore = backing },
 		},
 		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
 			support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)

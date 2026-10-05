@@ -35,6 +35,12 @@ type invokeContinueStartedProcess struct {
 	processBuilds *atomic.Int32
 }
 
+type invokeContinueRecordingDirectory string
+
+func (directory invokeContinueRecordingDirectory) Getwd() (string, error) {
+	return string(directory), nil
+}
+
 func prepareInvokeContinuePackageRoot(t *testing.T, rootDir string) (string, string, error) {
 	t.Helper()
 	hostDir := filepath.Join(rootDir, "host-factory")
@@ -276,6 +282,7 @@ func startInvokeContinuePackageProcess(
 	processBuilds := &atomic.Int32{}
 	processBuilds.Add(1)
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		FactorySessionsWorkingDirectory: invokeContinueRecordingDirectory(hostDir),
 		// This route is complete before root construction and has no registration
 		// or session-based fallback after the process starts.
 		ProviderCommandRunner: route,

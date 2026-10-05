@@ -115,7 +115,7 @@ func startExactFactoryStopServer(t *testing.T, runner *fleetCharacterizationRunn
 	server := &fleetCharacterizationServer{env: []string{"HOME=" + home, "USERPROFILE=" + home, "HOMEDRIVE=" + filepath.VolumeName(home), "HOMEPATH=" + home[len(filepath.VolumeName(home)):]}, dir: dir}
 	server.FunctionalAPIServer = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Args: []string{"--session", sessionID}, Env: server.env,
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
 		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
 			support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
 		},

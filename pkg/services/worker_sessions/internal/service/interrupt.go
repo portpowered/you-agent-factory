@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -586,6 +587,10 @@ func interruptSourceAssociation(source workersessions.Session) (workersessions.P
 }
 
 func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptResult, error) {
+	return r.runDurableInterrupt(plan)
+}
+
+func (r *registry) runInterruptExecution(plan interruptPlan, operation *recordings.WorkerControlOperationRecord) (workersessions.InterruptResult, error) {
 	defer finishInterruptOperation(plan.supervision)
 	cancelResult := workers.WorkstationDispatchCancelResult{
 		DispatchID: plan.dispatchID,
@@ -628,6 +633,10 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 	}
 
 	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
+	if err := r.advanceInterruptPhase(boundaryContext, operation, "SOURCE_STOPPED"); err != nil {
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
+	}
 	continued, continueErr := r.Continue(boundaryContext, workersessions.ContinueRequest{
 		RequestID:                interruptContinuationRequestID(plan.request.RequestID),
 		SourceWorkerSessionID:    plan.request.SourceWorkerSessionID,
@@ -645,6 +654,9 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 		return result, newInterruptError(workersessions.InterruptPhaseSuccessorAdmission, result, cause)
 	}
 	result.Accepted = true
+	if err := r.advanceInterruptPhase(boundaryContext, operation, "SUCCESSOR_ADMITTED"); err != nil {
+		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
+	}
 	r.logger.Info(
 		"worker session interrupt",
 		"sourceWorkerSessionID", plan.request.SourceWorkerSessionID,
