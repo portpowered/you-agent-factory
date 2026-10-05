@@ -183,9 +183,10 @@ func (r *registry) advanceInterruptPhase(ctx context.Context, operation *recordi
 	next.Revision++
 	next.Operation.Phase = phase
 	accepted, err := r.operations.AdvanceWorkerControlOperation(ctx, next, operation.Revision)
-	if err != nil {
+	if err != nil && !errors.Is(err, recordings.ErrWorkerControlConflict) {
 		// Advance may have synced the row before losing its acknowledgement.
 		// Load reconciles uncertain journal bytes through the same sync boundary.
+		// An explicit conflict is a refusal, never an uncertain acknowledgement.
 		// Only the exact attempted snapshot licenses proceeding; never re-append
 		// a stage or infer admission from an opening/current session alone.
 		loaded, loadErr := r.operations.LoadWorkerControlOperation(ctx, interruptOperationKey(next))

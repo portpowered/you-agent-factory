@@ -489,6 +489,8 @@ admitting a successor.
 If an intent or phase write loses its acknowledgement, the host reloads the
 journal and proceeds only when the exact attempted record is confirmed durable.
 This check does not repeat source cancellation or successor admission.
+An explicit storage conflict stops the operation. Reloading a saved record
+cannot override that refusal or authorize successor admission.
 An operation with only a pending intent or joined source reports execution unavailable
 until its prior ownership and admission can be reconciled safely; submitting
 the same request does not blindly repeat its effects. If a joined

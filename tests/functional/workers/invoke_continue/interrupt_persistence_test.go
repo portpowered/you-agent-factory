@@ -77,3 +77,36 @@ func terminateS8AfterPersistenceRefusal(t *testing.T, ctx context.Context, scena
 		t.Fatalf("exact termination source=%#v provider calls=%d", source, scenario.runner.CallCount())
 	}
 }
+
+// A conflict is a definitive refusal even when a controlled store exposes a
+// matching synced row. The real host must join the source and stop before
+// successor admission; CLI and HTTP retries retain the same partial failure.
+func TestInterruptPhaseConflictLeavesJoinedSourceWithoutSuccessor(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	scenario := newS8InterruptScenario(t, ctx, "interrupt-phase-conflict")
+	scenario.ids.interruptRequest = "interrupt-phase-conflict-" + scenario.ids.interruptRequest
+	t.Cleanup(scenario.runner.releaseAll)
+	ids := scenario.ids
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+	})
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
+	status, body, first := postS8InterruptError(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	if status != http.StatusInternalServerError || string(first.Code) != "INTERNAL_ERROR" || string(first.Phase) != "SUCCESSOR_ADMISSION" || first.Source == nil || string(first.Source.State) != "CANCELED" || first.Successor != nil || strings.Contains(body, "private-") {
+		t.Fatalf("phase conflict status=%d response=%#v", status, first)
+	}
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	code, phase, err := executeS8InterruptCLIError(ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+	if err != nil || code != string(first.Code) || phase != string(first.Phase) {
+		t.Fatalf("CLI conflict replay code=%s phase=%s err=%v", code, phase, err)
+	}
+	repeatedStatus, _, repeated := postS8InterruptError(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	if repeatedStatus != status || !reflect.DeepEqual(first, repeated) || scenario.runner.CallCount() != 1 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 1 {
+		t.Fatal("phase conflict changed outcome or admitted a successor")
+	}
+	assertS8WorkNotAdvanced(t, scenario.fixture, scenario.session.id, ids.workA)
+	scenario.close(t)
+}

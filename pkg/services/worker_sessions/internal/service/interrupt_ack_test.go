@@ -135,6 +135,7 @@ type interruptAckStore struct {
 	loadErr          error
 	loads            int
 	rejectCompletion bool
+	conflictPhase    string
 }
 
 func (s *interruptAckStore) BeginWorkerControlOperation(ctx context.Context, intent recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
@@ -150,6 +151,9 @@ func (s *interruptAckStore) AdvanceWorkerControlOperation(ctx context.Context, n
 		return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
 	}
 	accepted, err := s.interruptInputStore.AdvanceWorkerControlOperation(ctx, next, expected)
+	if err == nil && next.Operation.Phase == s.conflictPhase {
+		return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerControlConflict
+	}
 	if err == nil && next.Operation.Phase == s.failPhase {
 		return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
 	}
@@ -286,6 +290,36 @@ func TestInterruptUncertainPhaseRefusesDisputedReload(t *testing.T) {
 				t.Fatalf("disputed %s: operation=%#v err=%v loads=%d rows=%d", field, operation, err, store.loads, len(store.records))
 			}
 			assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
+		})
+	}
+}
+
+func TestInterruptPhaseConflictDoesNotReloadOrAuthorizeEffects(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			r, plan, original := newDurableInterruptFixture(t)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store := &interruptAckStore{interruptInputStore: *original, conflictPhase: phase}
+			r.operations = store
+			for _, prior := range []string{"SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED"} {
+				before := operation.Detached()
+				err = r.advanceInterruptPhase(t.Context(), operation, prior)
+				if prior == phase {
+					if !errors.Is(err, recordings.ErrWorkerControlConflict) || !reflect.DeepEqual(*operation, before) || store.loads != 0 {
+						t.Fatalf("conflict gained authority: phase=%s err=%v loads=%d operation=%#v", phase, err, store.loads, operation)
+					}
+					assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
 		})
 	}
 }

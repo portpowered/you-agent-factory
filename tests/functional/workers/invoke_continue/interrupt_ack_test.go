@@ -63,6 +63,9 @@ func (store *interruptPhaseAckStore) AdvanceWorkerControlOperation(ctx context.C
 	if err != nil {
 		return accepted, err
 	}
+	if strings.Contains(record.Operation.RequestID, "interrupt-phase-conflict") && record.Operation.Phase == "SOURCE_STOPPED" {
+		return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerControlConflict
+	}
 	for name, phase := range map[string]string{
 		"interrupt-ack-source": "SOURCE_STOPPED", "interrupt-ack-admission": "SUCCESSOR_ADMITTED", "interrupt-ack-completion": "COMPLETED",
 	} {
