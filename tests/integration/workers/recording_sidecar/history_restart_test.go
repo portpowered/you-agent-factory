@@ -173,7 +173,7 @@ type historyHost struct {
 	stopped bool
 }
 
-func startHistoryHost(t *testing.T, ctx context.Context, binary, project string, env []string) *historyHost {
+func startHistoryHost(t *testing.T, ctx context.Context, binary, project string, env []string, runArgs ...string) *historyHost {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -184,7 +184,11 @@ func startHistoryHost(t *testing.T, ctx context.Context, binary, project string,
 		t.Fatal(err)
 	}
 	output := &historyOutput{changed: make(chan struct{}, 1)}
-	command := exec.CommandContext(ctx, binary, "server", "--listen", address)
+	args := []string{"server", "--listen", address}
+	if len(runArgs) != 0 {
+		args = append([]string{"run", "--with-server", "--listen", address}, runArgs...)
+	}
+	command := exec.CommandContext(ctx, binary, args...)
 	command.Dir, command.Env, command.Stdout, command.Stderr = project, env, output, output
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
