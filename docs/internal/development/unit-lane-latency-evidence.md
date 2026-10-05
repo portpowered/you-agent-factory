@@ -1,5 +1,11 @@
 # Go unit-lane latency evidence
 
+For the prepared monolith experiment, aggregate CPU measurements, scoped
+coverage comparisons, wiring-lane changes, and remaining package costs, see
+[consolidated Go unit execution evidence](unit-test-optimization/monolith-pipeline-evidence.md).
+The historical latency checker described below measures a different corpus
+and pipeline; its baseline is not an identical-scope CPU comparison.
+
 `make test-unit-fresh` remains the canonical uncached Go unit-lane entry point.
 It still discovers the same `pkg/...` test packages and invokes the same
 `go test` flags. Add `UNIT_TIMING_OUTPUT=<path>` when a machine-readable v2

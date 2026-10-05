@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -20,7 +19,7 @@ import (
 func TestEnsurePackagedFactories_ManagedInstallIsCurrentAndAdoptsEquivalentLegacyContent(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	legacy, err := installer.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
@@ -64,7 +63,7 @@ func TestEnsurePackagedFactories_ManagedInstallIsCurrentAndAdoptsEquivalentLegac
 func TestEnsurePackagedFactories_ManagedInstallReplacesInvalidEvidenceWithoutReplacingContent(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
@@ -104,7 +103,7 @@ func TestEnsurePackagedFactories_ManagedInstallReplacesInvalidEvidenceWithoutRep
 func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
@@ -122,8 +121,8 @@ func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *
 	updated := definition
 	updated.JSON = bytes.Replace(
 		updated.JSON,
-		[]byte("Persists goal progress"),
-		[]byte("Updated packaged goal progress"),
+		[]byte("fixture-v1"),
+		[]byte("fixture-v2"),
 		1,
 	)
 	if bytes.Equal(updated.JSON, definition.JSON) {
@@ -150,7 +149,7 @@ func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *
 	if err != nil {
 		t.Fatalf("read refreshed Factory: %v", err)
 	}
-	if !bytes.Contains(activeFactory, []byte("Updated packaged goal progress")) {
+	if !bytes.Contains(activeFactory, []byte("fixture-v2")) {
 		t.Fatal("active Factory does not contain the current packaged definition")
 	}
 	if _, err := os.Stat(refreshed[0].BackupDir); err != nil {
@@ -161,7 +160,7 @@ func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *
 func TestEnsurePackagedFactories_ManagedCustomerModificationIsReportedAndPreserved(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
@@ -195,7 +194,7 @@ func TestEnsurePackagedFactories_ManagedCustomerModificationIsReportedAndPreserv
 func TestEnsurePackagedFactories_ManagedReplacementFailurePreservesActiveAndCleansBackup(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	persistence := &failingManagedReplacementPersistence{
 		PackagedFactoryPersistence: packagedInstallationTestPersistence(),
@@ -208,7 +207,7 @@ func TestEnsurePackagedFactories_ManagedReplacementFailurePreservesActiveAndClea
 	}
 	before := snapshotDirectoryContents(t, created[0].FactoryDir)
 	updated := definition
-	updated.JSON = bytes.Replace(updated.JSON, []byte("Persists goal progress"), []byte("Replacement failure content"), 1)
+	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("Replacement failure content"), 1)
 
 	failed, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{updated})
 	if err == nil || !strings.Contains(err.Error(), "replacement unavailable") {
@@ -228,7 +227,7 @@ func TestEnsurePackagedFactories_ManagedReplacementFailurePreservesActiveAndClea
 func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBackup(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	basePersistence := packagedInstallationTestPersistence()
 	installer := New(basePersistence, platformfilesystem.Local{}, os.Mkdir)
@@ -238,7 +237,7 @@ func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBa
 	}
 	before := snapshotDirectoryContents(t, created[0].FactoryDir)
 	updated := definition
-	updated.JSON = bytes.Replace(updated.JSON, []byte("Persists goal progress"), []byte("nil replacement content"), 1)
+	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("nil replacement content"), 1)
 
 	failed, err := New(
 		&nilManagedReplacementPersistence{PackagedFactoryPersistence: basePersistence},
@@ -261,7 +260,7 @@ func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBa
 func TestEnsurePackagedFactories_ManagedStampPublicationFailureReportsFailedOutcome(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	fileSystem := &managedStampFailureFileSystem{Local: platformfilesystem.Local{}}
 	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir)
@@ -271,7 +270,7 @@ func TestEnsurePackagedFactories_ManagedStampPublicationFailureReportsFailedOutc
 	}
 	fileSystem.failStampRename = true
 	updated := definition
-	updated.JSON = bytes.Replace(updated.JSON, []byte("Persists goal progress"), []byte("stamp publication failure content"), 1)
+	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("stamp publication failure content"), 1)
 
 	failed, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{updated})
 	if err == nil || !strings.Contains(err.Error(), "publish packaged Factory management evidence") {
@@ -351,7 +350,7 @@ func TestContentIdentityReportsFilesystemInspectionFailures(t *testing.T) {
 func TestEnsurePackagedFactories_ManagedStampReadFailureIsActionable(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	fileSystem := &managedStampReadFailureFileSystem{Local: platformfilesystem.Local{}}
 	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir)
@@ -369,7 +368,7 @@ func TestEnsurePackagedFactories_ManagedPreparationRequiresPreparedLayout(t *tes
 	t.Parallel()
 
 	root := t.TempDir()
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	installer := New(
 		&nilManagedPreparationPersistence{PackagedFactoryPersistence: packagedInstallationTestPersistence()},
 		platformfilesystem.Local{},
@@ -384,7 +383,7 @@ func TestEnsurePackagedFactories_ManagedPreparationRequiresPreparedLayout(t *tes
 func TestEnsurePackagedFactories_ManagedBackupReservationFailureIsActionable(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	directoryCreator := func(path string, mode fs.FileMode) error {
 		if strings.Contains(path, managedBackupRoot) {
@@ -398,7 +397,7 @@ func TestEnsurePackagedFactories_ManagedBackupReservationFailureIsActionable(t *
 		t.Fatalf("initial ensure: %v", err)
 	}
 	updated := definition
-	updated.JSON = bytes.Replace(updated.JSON, []byte("Persists goal progress"), []byte("backup reservation failure content"), 1)
+	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("backup reservation failure content"), 1)
 	_, err = installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{updated})
 	if err == nil || !strings.Contains(err.Error(), "reserve packaged Factory backup") {
 		t.Fatalf("backup reservation error = %v, want actionable reservation error", err)
@@ -411,7 +410,7 @@ func TestEnsurePackagedFactories_ManagedBackupReservationFailureIsActionable(t *
 func TestEnsurePackagedFactories_ConcurrentManagedRefreshesConverge(t *testing.T) {
 	t.Parallel()
 
-	definition := publishedManagedTestDefinition(t)
+	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	persistence := &blockingManagedReplacementPersistence{
 		PackagedFactoryPersistence: packagedInstallationTestPersistence(),
@@ -423,7 +422,7 @@ func TestEnsurePackagedFactories_ConcurrentManagedRefreshesConverge(t *testing.T
 		t.Fatalf("initial ensure: %v", err)
 	}
 	updated := definition
-	updated.JSON = bytes.Replace(updated.JSON, []byte("Persists goal progress"), []byte("Concurrent refresh content"), 1)
+	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("Concurrent refresh content"), 1)
 
 	type ensureResult struct {
 		results []factorydefinitions.PackagedFactoryInstallResult
@@ -559,17 +558,4 @@ func (persistence *failingManagedReplacementPersistence) ReplaceFactoryLayout(
 	*factorydefinitions.PreparedFactoryLayoutPayload,
 ) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return nil, persistence.replaceErr
-}
-
-func publishedManagedTestDefinition(t *testing.T) factorydefinitions.PackagedDefinition {
-	t.Helper()
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("load packaged catalog: %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("packaged catalog is missing @you/goal")
-	}
-	return definition
 }

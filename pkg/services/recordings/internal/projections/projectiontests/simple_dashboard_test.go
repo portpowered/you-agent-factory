@@ -89,7 +89,11 @@ func loadReplayFixtureEvents(t *testing.T, rel ...string) []factoryapi.FactoryEv
 	if err != nil {
 		t.Fatalf("open replay fixture %s: %v", path, err)
 	}
-	defer file.Close()
+	t.Cleanup(func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("close replay fixture: %v", err)
+		}
+	})
 
 	scanner := bufio.NewScanner(file)
 	events := make([]factoryapi.FactoryEvent, 0)

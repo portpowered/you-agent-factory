@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -274,20 +275,19 @@ func TestResponsePresentation_LosslessConcurrentEnqueueDrainAndFinalizeRace(t *t
 	writer := &syncWriter{}
 	output := service.OpenLosslessOutput(writer)
 
+	if err := output.Enqueue([]byte("progress-initial")); err != nil {
+		t.Fatalf("initial Enqueue: %v", err)
+	}
+
 	const workers = 8
 	var accepted atomic.Int64
 	var enqueueWG sync.WaitGroup
 	enqueueWG.Add(workers)
-	stop := make(chan struct{})
+	const attemptsPerWorker = 32
 	for worker := 0; worker < workers; worker++ {
 		go func(id int) {
 			defer enqueueWG.Done()
-			for index := 0; ; index++ {
-				select {
-				case <-stop:
-					return
-				default:
-				}
+			for index := 0; index < attemptsPerWorker; index++ {
 				payload := fmt.Sprintf("progress-%d-%d", id, index)
 				if err := output.Enqueue([]byte(payload)); err == nil {
 					accepted.Add(1)
@@ -309,7 +309,6 @@ func TestResponsePresentation_LosslessConcurrentEnqueueDrainAndFinalizeRace(t *t
 	case <-time.After(3 * time.Second):
 		t.Fatal("lossless CloseAndDrain hung under concurrent enqueue pressure")
 	}
-	close(stop)
 	enqueueWG.Wait()
 
 	const terminal = "TERMINAL\n"
@@ -336,26 +335,22 @@ func TestResponsePresentation_FactoryEventStreamConcurrentPresentFinalizeRace(t 
 		return []byte(event.Id), true
 	})
 
+	stream.PresentFactoryEvents([]factorydefinitions.FactoryEvent{{Id: "event-initial"}})
+
 	const workers = 6
 	var presentWG sync.WaitGroup
 	presentWG.Add(workers)
-	stop := make(chan struct{})
+	const attemptsPerWorker = 32
 	for worker := 0; worker < workers; worker++ {
 		go func(id int) {
 			defer presentWG.Done()
-			for index := 0; ; index++ {
-				select {
-				case <-stop:
-					return
-				default:
-				}
+			for index := 0; index < attemptsPerWorker; index++ {
 				stream.PresentFactoryEvents([]factorydefinitions.FactoryEvent{
 					{Id: fmt.Sprintf("event-%d-%d", id, index)},
 				})
 			}
 		}(worker)
 	}
-	time.Sleep(25 * time.Millisecond)
 
 	const terminal = "TERMINAL\n"
 	finalizeDone := make(chan struct{})
@@ -377,7 +372,6 @@ func TestResponsePresentation_FactoryEventStreamConcurrentPresentFinalizeRace(t 
 	case <-time.After(3 * time.Second):
 		t.Fatal("Factory-event Finalize hung under concurrent Present pressure")
 	}
-	close(stop)
 	presentWG.Wait()
 
 	if finalizeErr != nil || !finalized {
@@ -400,21 +394,33 @@ func TestResponsePresentation_BestEffortConcurrentEnqueuePressureRace(t *testing
 	const workers = 8
 	var enqueueWG sync.WaitGroup
 	enqueueWG.Add(workers)
-	stop := make(chan struct{})
+	const attemptsPerWorker = contracts.DefaultProgressQueueCapacity/workers + 2
+	ready := make(chan struct{}, workers)
+	raceGate := make(chan struct{})
+	startRace := sync.OnceFunc(func() { close(raceGate) })
+	t.Cleanup(startRace)
 	for worker := 0; worker < workers; worker++ {
 		go func() {
 			defer enqueueWG.Done()
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-					_ = output.Enqueue([]byte("progress"))
-				}
+			for attempt := 0; attempt < attemptsPerWorker; attempt++ {
+				_ = output.Enqueue([]byte("progress"))
+			}
+			ready <- struct{}{}
+			<-raceGate
+			for attempt := 0; attempt < 32; attempt++ {
+				_ = output.Enqueue([]byte("progress"))
 			}
 		}()
 	}
-	time.Sleep(25 * time.Millisecond)
+	budget := time.After(3 * time.Second)
+	for worker := 0; worker < workers; worker++ {
+		select {
+		case <-ready:
+		case <-budget:
+			t.Fatal("best-effort enqueue blocked while filling backlog")
+		}
+	}
+	startRace()
 
 	drainDone := make(chan error, 1)
 	go func() {
@@ -426,13 +432,15 @@ func TestResponsePresentation_BestEffortConcurrentEnqueuePressureRace(t *testing
 		if err != nil {
 			t.Fatalf("CloseAndDrain: %v", err)
 		}
-	case <-time.After(3 * time.Second):
+	case <-budget:
 		t.Fatal("best-effort CloseAndDrain hung under concurrent enqueue pressure")
 	}
-	close(stop)
 	enqueueWG.Wait()
 
 	writer.release()
+	if err := output.Enqueue([]byte("late progress")); !errors.Is(err, contracts.ErrOutputClosed) {
+		t.Fatalf("Enqueue after drain = %v, want ErrOutputClosed", err)
+	}
 	if output.Dropped() == 0 {
 		t.Fatal("best-effort output did not report drops under concurrent backlog pressure")
 	}

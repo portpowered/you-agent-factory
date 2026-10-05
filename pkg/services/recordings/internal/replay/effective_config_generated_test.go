@@ -78,7 +78,6 @@ func embeddedFactoryDefinitions() []factoryConfigMutation {
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the embedded generated-factory artifact contract together across all authored sections.
 func assertEmbeddedGeneratedFactory(t *testing.T, generated factoryapi.Factory, factoryDir string) {
 	t.Helper()
 
@@ -108,6 +107,11 @@ func assertEmbeddedGeneratedFactory(t *testing.T, generated factoryapi.Factory, 
 	if workstation.Body == nil || *workstation.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("generated workstation body = %#v, want prompt file content", workstation.Body)
 	}
+	assertEmbeddedGeneratedFactoryMetadata(t, generated, factoryDir)
+}
+
+func assertEmbeddedGeneratedFactoryMetadata(t *testing.T, generated factoryapi.Factory, factoryDir string) {
+	t.Helper()
 	if generated.SourceDirectory == nil || *generated.SourceDirectory != factoryDir {
 		t.Fatalf("source directory = %#v, want %q", generated.SourceDirectory, factoryDir)
 	}

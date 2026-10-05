@@ -71,6 +71,8 @@ type unitTimingRun struct {
 // unitlane. PackageElapsedSecondsSum is expected to exceed WallSeconds when
 // independent packages overlap under go test's package scheduler.
 type unitTimingSummary struct {
+	Lane                     string              `json:"lane,omitempty"`
+	TestInventoryScope       string              `json:"testInventoryScope,omitempty"`
 	Version                  int                 `json:"version"`
 	Complete                 bool                `json:"complete"`
 	Run                      unitTimingRun       `json:"run"`
@@ -349,7 +351,11 @@ func sortedUnitTestNames(tests map[string]struct{}) []string {
 
 func renderUnitTimingSummary(summary unitTimingSummary) string {
 	var builder strings.Builder
-	builder.WriteString("\nUnit lane timing summary\n")
+	if summary.Lane != "" {
+		fmt.Fprintf(&builder, "\n%s lane timing summary\n", summary.Lane)
+	} else {
+		builder.WriteString("\nUnit lane timing summary\n")
+	}
 	if summary.Complete {
 		builder.WriteString("Capture: complete\n")
 	} else {
