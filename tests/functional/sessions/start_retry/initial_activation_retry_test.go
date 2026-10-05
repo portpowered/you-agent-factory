@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -74,6 +75,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	selected := newInitialOpeningProviderScenario(t)
 	defaulted := newInitialOpeningDefaultProviderScenario(t, "", "")
 	parameterized := newInitialOpeningDefaultProviderScenario(t, "", "${model}")
+	durable := newInitialOpeningScenario(t)
 	checkout := newInitialOpeningWorktreeScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
@@ -83,6 +85,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		}
 	}
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
+	persistence := &initialOpeningPersistence{effects: effects, sessionID: durable.candidateID, saved: make(chan struct{})}
 	gate := &initialOpeningGate{entered: make(chan struct{}), release: make(chan struct{})}
 	files := &initialOpeningDirectories{
 		failedPath: filepath.Join(failed.candidateDir, factorydefinitions.InputsDir),
@@ -95,10 +98,11 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		ProcessLogger:             zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
 		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
-		ScriptCommandRunner:       initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:     initialOpeningProviderRunner{effects: effects},
-		WorkersWorktreeGit:        initialOpeningWorktreeGit{effects: effects},
-		APIServerStarter:          api.Start,
+		FactorySessionRuntimePersistenceFileSystem: persistence,
+		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects},
+		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
+		APIServerStarter:                           api.Start,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
@@ -120,6 +124,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	if !ok {
 		t.Fatal("process did not expose its public Factory Sessions service")
 	}
+	t.Run("CLI Work reaches the opened durable mutation owner", func(t *testing.T) {
+		t.Parallel()
+		testInitialOpeningDurableMutation(t, sessions, process, durable, effects, persistence, api.WaitForURL(t))
+	})
 
 	t.Run("failed resource opening retries with the same identity", func(t *testing.T) {
 		t.Parallel()
@@ -135,14 +143,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	t.Run("selected Codex provider executes independently attributed sessions", func(t *testing.T) {
 		t.Parallel()
-		peerHistory := selected.startPeer(t, sessions)
-		startInitialOpeningSession(t, sessions, selected.request())
-		assertInitialOpeningInvocation(t, sessions, selected.candidateID)
-		initialOpeningHistory(t, sessions, selected.candidateID)
-		assertInitialOpeningProviderSelection(t, effects, selected.candidateDir)
-		assertInitialOpeningProviderSelection(t, effects, selected.peerDir)
-		assertInitialOpeningHistoryPreserved(t, sessions, selected.peerID, peerHistory)
-		assertInitialOpeningInvocation(t, sessions, selected.peerID)
+		testInitialOpeningProviderSelection(t, sessions, selected, effects)
 	})
 	t.Run("reused customer checkout survives session close and destination reuse", func(t *testing.T) {
 		t.Parallel()
@@ -164,6 +165,59 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 			assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
 		})
 	}
+}
+
+func testInitialOpeningProviderSelection(t *testing.T, sessions factorysessions.Service, selected initialOpeningScenario, effects *initialOpeningEffects) {
+	t.Helper()
+	peerHistory := selected.startPeer(t, sessions)
+	startInitialOpeningSession(t, sessions, selected.request())
+	assertInitialOpeningInvocation(t, sessions, selected.candidateID)
+	initialOpeningHistory(t, sessions, selected.candidateID)
+	assertInitialOpeningProviderSelection(t, effects, selected.candidateDir)
+	assertInitialOpeningProviderSelection(t, effects, selected.peerDir)
+	assertInitialOpeningHistoryPreserved(t, sessions, selected.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, selected.peerID)
+}
+
+func testInitialOpeningDurableMutation(t *testing.T, sessions factorysessions.Service, process support.Process, durable initialOpeningScenario, effects *initialOpeningEffects, persistence *initialOpeningPersistence, serverURL string) {
+	t.Helper()
+	peerHistory := durable.startPeer(t, sessions)
+	request := durable.request()
+	request.Persistence = factorysessions.PersistencePolicyEnabled
+	startInitialOpeningSession(t, sessions, request)
+	select {
+	case <-persistence.saved:
+		t.Fatal("activation persisted before CLI Work; cannot attribute the observation to its mutation callback")
+	default:
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", serverURL, "--session", durable.candidateID,
+		"submit", "batch", fmt.Sprintf(`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":"durable-observation","workTypeName":"task","payload":{"title":"prove durable observation ownership"}}]}`, durable.candidateID),
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+durable.home, "USERPROFILE="+durable.home)
+	inputs.Input.WorkingDirectory = durable.candidateDir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("CLI invoke opened session: %v stdout=%s stderr=%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), initialOpeningReadCeiling)
+	defer cancel()
+	select {
+	case <-persistence.saved:
+	case <-ctx.Done():
+		t.Fatalf("CLI Work did not reach its opened durable persistence effect: %v", ctx.Err())
+	}
+	writes := effects.forScenario(durable)
+	persisted := false
+	for path, count := range writes {
+		if strings.HasSuffix(path, durable.candidateID+".json|session.persist") && count > 0 {
+			persisted = true
+		}
+	}
+	if !persisted {
+		t.Fatalf("CLI Work produced no session-owned durable persistence effect: %v", writes)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, durable.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, durable.peerID)
 }
 
 func testInitialOpeningRecordedHistory(t *testing.T, sessions factorysessions.Service, process support.Process, reused initialOpeningScenario, logs *observer.ObservedLogs) {
@@ -525,6 +579,27 @@ func (runner initialOpeningScriptRunner) Run(_ context.Context, request platform
 type initialOpeningEffects struct {
 	mu    sync.Mutex
 	calls map[string]int
+}
+
+// Observe the selected persistence effect without decoding private snapshots.
+// A Petri Work completion persists through its opening-owned mutation callback.
+type initialOpeningPersistence struct {
+	platformfilesystem.Local
+	effects   *initialOpeningEffects
+	sessionID string
+	saved     chan struct{}
+	once      sync.Once
+}
+
+func (files *initialOpeningPersistence) WriteFile(path string, content []byte, mode fs.FileMode) error {
+	if err := files.Local.WriteFile(path, content, mode); err != nil {
+		return err
+	}
+	files.effects.record("session.persist", path)
+	if filepath.Base(path) == files.sessionID+".json" {
+		files.once.Do(func() { close(files.saved) })
+	}
+	return nil
 }
 
 func (effects *initialOpeningEffects) record(operation, path string) {
