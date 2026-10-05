@@ -1,6 +1,7 @@
 package mcpcontractcheck_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
@@ -38,6 +39,41 @@ func TestValidateCleanExplicitBoundaryInputs(t *testing.T) {
 
 	if diagnostics := mcpcontractcheck.Validate(inputs); len(diagnostics) != 0 {
 		t.Fatalf("Validate() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
+func TestCompleteRegistryUnionRejectsWorkerBindingDrift(t *testing.T) {
+	t.Parallel()
+	root := testutil.MustRepoRoot(t)
+	for _, mutation := range []string{"missing", "duplicate", "extra"} {
+		t.Run(mutation, func(t *testing.T) {
+			t.Parallel()
+			inputs, err := mcpcontractcheck.LoadInputs(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			index := -1
+			for i, binding := range inputs.Registry {
+				if binding.ToolID == "mcp.tool.you.worker_session.read" {
+					index = i
+				}
+			}
+			if index < 0 {
+				t.Fatal("complete union omitted the Worker Session registry")
+			}
+			switch mutation {
+			case "missing":
+				inputs.Registry = append(inputs.Registry[:index], inputs.Registry[index+1:]...)
+			case "duplicate":
+				inputs.Registry = append(inputs.Registry, inputs.Registry[index])
+			case "extra":
+				inputs.Registry = append(inputs.Registry, mcpcontractcheck.HandlerBinding{ToolID: "mcp.tool.you.worker_session.extra", HandlerID: "mcp.handler.you.worker_session.extra"})
+			}
+			diagnostics := mcpcontractcheck.Validate(inputs)
+			if len(diagnostics) == 0 || !strings.Contains(diagnosticText(diagnostics), "worker_session.") {
+				t.Fatalf("%s binding was accepted: %v", mutation, diagnostics)
+			}
+		})
 	}
 }
 

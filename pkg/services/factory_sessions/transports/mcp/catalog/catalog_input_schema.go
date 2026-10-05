@@ -77,6 +77,15 @@ func PrepareCatalogInputSchemaForParity(schema map[string]any) (map[string]any, 
 // schema matches the authored catalog after reference resolution and parity
 // normalization without mutating discovery maps.
 func VerifyCatalogInputSchemaParity(catalog []CatalogInputSchema, discovered []mcpfactorysession.ToolDefinition) error {
+	schemas := make([]CatalogInputSchema, 0, len(discovered))
+	for _, tool := range discovered {
+		schemas = append(schemas, CatalogInputSchema{Name: tool.Name, Schema: tool.InputSchema})
+	}
+	return VerifyCatalogInputSchemas(catalog, schemas)
+}
+
+// VerifyCatalogInputSchemas compares service-neutral schema projections.
+func VerifyCatalogInputSchemas(catalog, discovered []CatalogInputSchema) error {
 	byName := make(map[string]map[string]any, len(catalog))
 	for _, entry := range catalog {
 		if _, ok := byName[entry.Name]; ok {
@@ -89,12 +98,17 @@ func VerifyCatalogInputSchemaParity(catalog []CatalogInputSchema, discovered []m
 		byName[entry.Name] = prepared
 	}
 
+	seen := make(map[string]bool, len(discovered))
 	for _, tool := range discovered {
+		if seen[tool.Name] {
+			return fmt.Errorf("duplicate discovered input schema for tool %q", tool.Name)
+		}
+		seen[tool.Name] = true
 		catalogSchema, ok := byName[tool.Name]
 		if !ok {
 			return fmt.Errorf("catalog missing input schema for discovered tool %q", tool.Name)
 		}
-		discoveredSchema, err := PrepareCatalogInputSchemaForParity(tool.InputSchema)
+		discoveredSchema, err := PrepareCatalogInputSchemaForParity(tool.Schema)
 		if err != nil {
 			return fmt.Errorf("discovered tool %q input schema: %w", tool.Name, err)
 		}

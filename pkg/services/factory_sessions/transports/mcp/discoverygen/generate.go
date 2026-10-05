@@ -45,7 +45,7 @@ func DiscoveryGoArtifact(repositoryRoot string) ([]byte, error) {
 	source.WriteString("package generated\n\n")
 	source.WriteString("import \"encoding/json\"\n\n")
 	source.WriteString("// DiscoveryTool is one canonical generated MCP tools/list descriptor.\n")
-	source.WriteString("type DiscoveryTool struct {\n\tID string\n\tName string\n\tDescription string\n\tInputSchema json.RawMessage\n}\n\n")
+	source.WriteString("type DiscoveryTool struct {\n\tID string\n\tName string\n\tDescription string\n\tInputSchema json.RawMessage\n\tAnnotations json.RawMessage\n}\n\n")
 	manifest, err := LoadAuthoredManifest(repositoryRoot)
 	if err != nil {
 		return nil, err
@@ -70,13 +70,20 @@ func DiscoveryGoArtifact(repositoryRoot string) ([]byte, error) {
 		if marshalErr != nil {
 			return nil, fmt.Errorf("marshal input schema for %s: %w", id, marshalErr)
 		}
-		fmt.Fprintf(&source, "\t\t{ID: %s, Name: %s, Description: %s, InputSchema: json.RawMessage(%s)},\n",
-			strconv.Quote(tool.ID), strconv.Quote(tool.Name), strconv.Quote(tool.Description), strconv.Quote(string(schema)))
+		annotations, marshalErr := contractjoiner.MarshalCanonicalJSON(tool.Annotations)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		fmt.Fprintf(&source, "\t\t{ID: %s, Name: %s, Description: %s, InputSchema: json.RawMessage(%s), Annotations: json.RawMessage(%s)},\n",
+			strconv.Quote(tool.ID), strconv.Quote(tool.Name), strconv.Quote(tool.Description), strconv.Quote(string(schema)), strconv.Quote(string(annotations)))
 	}
 	source.WriteString("\t}\n}\n")
 	source.WriteString("\n// LegacyDiscovery returns the internal Factory Session adapter catalog. It is not registered as public MCP discovery.\nfunc LegacyDiscovery() []DiscoveryTool {\n\treturn []DiscoveryTool{\n")
 	legacyIDs := make([]string, 0, len(legacyMetadata.Tools))
 	for id := range legacyMetadata.Tools {
+		if strings.HasPrefix(id, "mcp.tool.you.worker_session.") {
+			continue
+		}
 		legacyIDs = append(legacyIDs, id)
 	}
 	slices.Sort(legacyIDs)
@@ -133,6 +140,20 @@ func discoveryMetadata(repositoryRoot string) (DiscoveryMetadata, error) {
 	metadata, err := ProjectManifestDiscovery(manifest)
 	if err != nil {
 		return DiscoveryMetadata{}, err
+	}
+	catalog, err := LoadResolvedCatalog(repositoryRoot)
+	if err != nil {
+		return DiscoveryMetadata{}, err
+	}
+	catalogMetadata, err := ProjectDiscoveryFromCatalogDocument(catalog)
+	if err != nil {
+		return DiscoveryMetadata{}, err
+	}
+	for id, tool := range metadata.Tools {
+		if strings.HasPrefix(id, "mcp.tool.you.worker_session.") {
+			tool.Annotations = catalogMetadata.Tools[id].Annotations
+		}
+		metadata.Tools[id] = tool
 	}
 	if err := VerifyDiscoveryByteStability(metadata); err != nil {
 		return DiscoveryMetadata{}, err

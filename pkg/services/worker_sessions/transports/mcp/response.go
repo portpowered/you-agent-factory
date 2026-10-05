@@ -24,9 +24,6 @@ func invalidRequest(err error) *toolError {
 
 func responseFailure(response *http.Response, err error, id string) *toolError {
 	if err != nil || response == nil {
-		if response != nil && response.Body != nil {
-			_ = response.Body.Close()
-		}
 		return &toolError{Code: "worker_session.host_unavailable", Message: "Selected Worker Session host is unavailable", Retryable: true, WorkerSessionID: id}
 	}
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
@@ -49,8 +46,13 @@ func responseFailure(response *http.Response, err error, id string) *toolError {
 		failure.Code = "worker_session.internal_error"
 	}
 	failure.Message = "Selected host rejected the Worker Session request"
+	readSafeFailureDetails(response, failure, id)
+	return failure
+}
+
+// The request owner closes the body after decoding, including transport failures.
+func readSafeFailureDetails(response *http.Response, failure *toolError, id string) {
 	if response.Body != nil {
-		defer func() { _ = response.Body.Close() }()
 		var upstream struct {
 			Code                     string `json:"code"`
 			Phase                    string `json:"phase"`
@@ -71,7 +73,6 @@ func responseFailure(response *http.Response, err error, id string) *toolError {
 			}
 		}
 	}
-	return failure
 }
 
 var safeUpstreamCodes = []string{
@@ -86,7 +87,6 @@ func decodeResponse(response *http.Response, err error, id string) (any, *toolEr
 	if response.Body == nil {
 		return nil, malformedResponse(id)
 	}
-	defer func() { _ = response.Body.Close() }()
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 16<<20))
 	var value json.RawMessage
 	if decoder.Decode(&value) != nil || len(value) == 0 || value[0] != '{' {
@@ -114,7 +114,6 @@ func decodeReplay(response *http.Response, err error, id string, limit int) (any
 	if response.Body == nil {
 		return nil, malformedResponse(id)
 	}
-	defer func() { _ = response.Body.Close() }()
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 4096), 4<<20)
 	page := eventPage{Events: make([]json.RawMessage, 0, limit)}

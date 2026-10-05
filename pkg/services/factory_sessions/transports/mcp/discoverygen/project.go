@@ -92,7 +92,9 @@ func projectDiscoveryTool(key string, raw any) (DiscoveryToolRecord, error) {
 		return DiscoveryToolRecord{}, fmt.Errorf("catalog tool %q input schema: %w", name, err)
 	}
 
+	annotations, _ := record["annotations"].(map[string]any)
 	return DiscoveryToolRecord{
+		Annotations: annotations,
 		ID:          id,
 		Name:        name,
 		Description: description,

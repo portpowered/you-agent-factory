@@ -111,14 +111,20 @@ func registerTools(server *mcp.Server, call toolCaller) error {
 		if schema["type"] != "object" {
 			return fmt.Errorf("register MCP tool %s: generated input schema must have object type", definition.Name)
 		}
-		addTool(server, definition.Name, definition.Description, definition.InputSchema, call)
+		var annotations *mcp.ToolAnnotations
+		if len(definition.Annotations) > 0 {
+			if err := json.Unmarshal(definition.Annotations, &annotations); err != nil {
+				return fmt.Errorf("register MCP tool %s: decode annotations: %w", definition.Name, err)
+			}
+		}
+		addTool(server, definition.Name, definition.Description, definition.InputSchema, annotations, call)
 	}
 	return nil
 }
 
-func addTool(server *mcp.Server, name, description string, inputSchema json.RawMessage, call toolCaller) {
+func addTool(server *mcp.Server, name, description string, inputSchema json.RawMessage, annotations *mcp.ToolAnnotations, call toolCaller) {
 	server.AddTool(&mcp.Tool{
-		Name: name, Description: description, InputSchema: inputSchema,
+		Name: name, Description: description, InputSchema: inputSchema, Annotations: annotations,
 	}, func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		raw, err := call(ctx, name, request.Params.Arguments)
 		if err != nil {

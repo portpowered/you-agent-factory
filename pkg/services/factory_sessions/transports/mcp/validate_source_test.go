@@ -88,6 +88,11 @@ func TestStableIDHandlerRegistryMatchesAuthoredHandlerBindings(t *testing.T) {
 	}
 
 	for toolID, authored := range catalog.Tools {
+		// The complete union is checked by mcpcontractcheck; this component
+		// owns only Factory Session handlers, including its private catalog.
+		if strings.HasPrefix(toolID, "mcp.tool.you.worker_session.") {
+			continue
+		}
 		binding, ok := mcpfactorysession.ResolveToolHandlerBinding(authored.Name)
 		if !ok {
 			t.Fatalf("authored tool %q (%s) has no handwritten handler binding", authored.Name, toolID)

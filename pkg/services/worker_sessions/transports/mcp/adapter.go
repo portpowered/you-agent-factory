@@ -32,7 +32,7 @@ type Adapter struct{ host HostClient }
 
 func New(host HostClient) (*Adapter, error) {
 	if host == nil {
-		return nil, fmt.Errorf("Worker Session MCP host client is required")
+		return nil, fmt.Errorf("worker session MCP host client is required")
 	}
 	return &Adapter{host: host}, nil
 }
@@ -90,11 +90,17 @@ func (a *Adapter) list(ctx context.Context, input listInput) (any, *toolError) {
 		params.State = &states
 	}
 	response, err := a.host.ListWorkerSessions(ctx, &params)
+	if response != nil && response.Body != nil {
+		defer func() { _ = response.Body.Close() }()
+	}
 	return decodeResponse(response, err, "")
 }
 
 func (a *Adapter) read(ctx context.Context, input readInput) (any, *toolError) {
 	response, err := a.host.GetWorkerSessionObservationByWorkerSessionId(ctx, input.WorkerSessionID)
+	if response != nil && response.Body != nil {
+		defer func() { _ = response.Body.Close() }()
+	}
 	session, failure := decodeResponse(response, err, input.WorkerSessionID)
 	if failure != nil {
 		return nil, failure
@@ -102,7 +108,10 @@ func (a *Adapter) read(ctx context.Context, input readInput) (any, *toolError) {
 	result := map[string]any{"session": session}
 	switch input.View {
 	case "transcript":
-		response, err = a.host.ReadWorkerSessionTranscriptByWorkerSessionId(ctx, input.WorkerSessionID)
+		response, err := a.host.ReadWorkerSessionTranscriptByWorkerSessionId(ctx, input.WorkerSessionID)
+		if response != nil && response.Body != nil {
+			defer func() { _ = response.Body.Close() }()
+		}
 		transcript, failure := decodeResponse(response, err, input.WorkerSessionID)
 		if failure != nil {
 			return nil, failure
@@ -112,7 +121,10 @@ func (a *Adapter) read(ctx context.Context, input readInput) (any, *toolError) {
 		replayOnly := true
 		replayCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		response, err = a.host.StreamWorkerSessionEventsByTopLevelWorkerSessionId(replayCtx, input.WorkerSessionID, &client.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{ReplayOnly: &replayOnly})
+		response, err := a.host.StreamWorkerSessionEventsByTopLevelWorkerSessionId(replayCtx, input.WorkerSessionID, &client.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{ReplayOnly: &replayOnly})
+		if response != nil && response.Body != nil {
+			defer func() { _ = response.Body.Close() }()
+		}
 		events, failure := decodeReplay(response, err, input.WorkerSessionID, input.Limit)
 		if failure != nil {
 			return nil, failure
@@ -134,6 +146,9 @@ func (a *Adapter) control(ctx context.Context, input controlInput) (any, *toolEr
 		response, err = a.host.InterruptWorkerSession(ctx, input.WorkerSessionID, client.InterruptWorkerSessionJSONRequestBody{
 			RequestId: *input.RequestID, SuccessorWorkerSessionId: *input.SuccessorWorkerSessionID, ReplacementMessage: *input.ReplacementMessage,
 		})
+	}
+	if response != nil && response.Body != nil {
+		defer func() { _ = response.Body.Close() }()
 	}
 	result, failure := decodeResponse(response, err, input.WorkerSessionID)
 	if failure != nil && input.SuccessorWorkerSessionID != nil && failure.Details != nil {

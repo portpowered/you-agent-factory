@@ -96,21 +96,7 @@ func TestWorkerSessionGeneratedRequestsAndResults(t *testing.T) {
 				if request.URL.Host != "selected-host:7437" || request.URL.Path != test.path || request.Method != test.method {
 					t.Fatalf("request = %s %s", request.Method, request.URL)
 				}
-				if test.name == "list" {
-					query := request.URL.Query()
-					if query.Get("scope") != "factory" || query.Get("limit") != "2" || query.Get("nextToken") != "opaque" || !slices.Equal(query["state"], []string{"RUNNING", "PAUSED"}) {
-						t.Fatalf("list query = %v", query)
-					}
-				}
-				if test.name == "interrupt" {
-					var input map[string]any
-					if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-						t.Fatal(err)
-					}
-					if len(input) != 3 || input["requestId"] != "request" || input["successorWorkerSessionId"] != "successor" || input["replacementMessage"] != "replacement" {
-						t.Fatalf("interrupt body = %v", input)
-					}
-				}
+				assertWorkerRequestInput(t, request, test.name)
 				return &http.Response{StatusCode: 200, Body: body}, nil
 			})
 			value := workerCall(t, adapter, test.tool, test.input)
@@ -165,9 +151,10 @@ func TestWorkerSessionReplayIsBoundedAndCloses(t *testing.T) {
 			result := value["result"].(map[string]any)
 			page := result["events"].(map[string]any)
 			events := page["events"].([]any)
-			if len(result) != 2 || len(events) != min(count, 2) || page["truncated"] != (count > 2) || calls != 2 || !body.closed || replayContext.Err() != context.Canceled {
+			if len(result) != 2 || len(events) != min(count, 2) || page["truncated"] != (count > 2) {
 				t.Fatalf("replay result=%v calls=%d closed=%v context=%v", value, calls, body.closed, replayContext.Err())
 			}
+			assertReplayCleanup(t, calls, body.closed, replayContext)
 			for i, event := range events {
 				if event.(map[string]any)["sequence"] != float64(i) || event.(map[string]any)["type"] != "capture_health" {
 					t.Fatalf("event order or payload changed: %v", events)
@@ -228,5 +215,31 @@ func TestWorkerSessionCancellationReachesSelectedHost(t *testing.T) {
 	raw, err := adapter.Call(ctx, ToolList, json.RawMessage(`{}`))
 	if err != nil || !strings.Contains(string(raw), `"worker_session.host_unavailable"`) {
 		t.Fatalf("canceled call = %s, %v", raw, err)
+	}
+}
+
+func assertWorkerRequestInput(t *testing.T, request *http.Request, name string) {
+	t.Helper()
+	if name == "list" {
+		query := request.URL.Query()
+		if query.Get("scope") != "factory" || query.Get("limit") != "2" || query.Get("nextToken") != "opaque" || !slices.Equal(query["state"], []string{"RUNNING", "PAUSED"}) {
+			t.Fatalf("list query = %v", query)
+		}
+	}
+	if name == "interrupt" {
+		var input map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			t.Fatal(err)
+		}
+		if len(input) != 3 || input["requestId"] != "request" || input["successorWorkerSessionId"] != "successor" || input["replacementMessage"] != "replacement" {
+			t.Fatalf("interrupt body = %v", input)
+		}
+	}
+}
+
+func assertReplayCleanup(t *testing.T, calls int, closed bool, ctx context.Context) {
+	t.Helper()
+	if calls != 2 || !closed || ctx.Err() != context.Canceled {
+		t.Fatalf("replay cleanup: calls=%d closed=%v context=%v", calls, closed, ctx.Err())
 	}
 }

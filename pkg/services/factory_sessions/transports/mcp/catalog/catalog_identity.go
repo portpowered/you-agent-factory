@@ -68,6 +68,15 @@ func CatalogToolIdentitiesFromCatalogDocument(value any) ([]CatalogToolIdentity,
 // VerifyCatalogToolIdentityCompleteness ensures every discovered canonical tool occurs
 // exactly once in the catalog by stable ID and public name and rejects extras and duplicates.
 func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discovered []mcpfactorysession.ToolDefinition) error {
+	identities := make([]CatalogToolIdentity, 0, len(discovered))
+	for _, tool := range discovered {
+		identities = append(identities, CatalogToolIdentity{ID: CatalogToolIDForName(tool.Name), Name: tool.Name})
+	}
+	return VerifyCatalogToolIdentities(catalog, identities)
+}
+
+// VerifyCatalogToolIdentities checks the complete service-neutral identity union.
+func VerifyCatalogToolIdentities(catalog, discovered []CatalogToolIdentity) error {
 	byID := make(map[string]string, len(catalog))
 	byName := make(map[string]string, len(catalog))
 	for _, entry := range catalog {
@@ -87,6 +96,12 @@ func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discov
 
 	discoveredByName := make(map[string]struct{}, len(discovered))
 	for _, tool := range discovered {
+		if _, duplicate := discoveredByName[tool.Name]; duplicate {
+			return fmt.Errorf("duplicate discovered public name %q", tool.Name)
+		}
+		if tool.ID != CatalogToolIDForName(tool.Name) {
+			return fmt.Errorf("discovered tool %q has invalid stable ID %q", tool.Name, tool.ID)
+		}
 		discoveredByName[tool.Name] = struct{}{}
 		wantID := CatalogToolIDForName(tool.Name)
 		catalogName, ok := byID[wantID]
