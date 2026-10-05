@@ -302,7 +302,7 @@ func docsSmokeProcess(t *testing.T) support.ApplicationProcess {
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	if closer, ok := docsSmokeProcessInst.(interface{ Close(context.Context) error }); ok {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:testsleep // bounded process shutdown, not a wait for test state
 		defer cancel()
 		if err := closer.Close(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "close docs smoke process: %v\n", err)

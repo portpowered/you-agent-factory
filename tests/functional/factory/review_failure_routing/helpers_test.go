@@ -461,6 +461,8 @@ func awaitReviewFailureQuiescence(t *testing.T, scenario *reviewFailureScenario)
 	deadline := time.Now().Add(reviewFailureEventTimeout)
 	var lastSignature string
 	stable := 0
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 	for time.Now().Before(deadline) {
 		dispatches := reviewFailureDispatches(t, scenario)
 		incomplete := 0
@@ -485,7 +487,7 @@ func awaitReviewFailureQuiescence(t *testing.T, scenario *reviewFailureScenario)
 			stable = 0
 		}
 		lastSignature = signature
-		time.Sleep(50 * time.Millisecond)
+		<-ticker.C
 	}
 	t.Fatal("review failure scenario did not reach quiescence before the deadline")
 }
