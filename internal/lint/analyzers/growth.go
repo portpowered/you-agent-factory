@@ -105,6 +105,9 @@ func loadBaselineHistory(readGit func(...string) (string, error), readHead func(
 // CompareBaselineGrowth allows the first seed of a rule absent from base.
 // Every rule already present remains deletion-only, even after key removals.
 func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
+	if err := compareServiceCycleCeilings(baseText, headText); err != nil {
+		return nil, err
+	}
 	base, head := parseBaseline(baseText), parseBaseline(headText)
 	rules := map[string]bool{}
 	for key := range base {
@@ -117,6 +120,12 @@ func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 			continue
 		}
 		rule := strings.SplitN(key, "|", 2)[0]
+		if rule == serviceCycleRule {
+			if !rules[rule] {
+				seeded[rule] = true
+			}
+			continue
+		}
 		if rules[rule] {
 			added = append(added, key)
 		} else {

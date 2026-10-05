@@ -421,7 +421,7 @@ test("incomplete or invalid checker records are harness failures", () => {
 
 	const invalidStatus = summarizeBackendLintReport(report({
 		targets: baselineTargets({
-			"service-cycle-check": { status: "unknown" },
+			"golangci": { status: "unknown" },
 		}),
 	}));
 
@@ -467,10 +467,10 @@ test("reporter CLI publishes the explicitly supplied tested SHA", (t) => {
 
 test("a no-allowance target is gated from its first failing run", () => {
 	const targets = baselineTargets({
-		"service-cycle-check": {
+		"golangci": {
 			status: "fail",
 			output: [
-				"cross-service cycle regression: minimum feedback arc weight is 43, above the recorded ceiling of 42.",
+				"service-cycle-weight: regression: measured 43, ceiling 42, drift +1; never raise the ceiling",
 				"LINT_VIOLATION_COUNT: 1",
 			].join("\n"),
 		},
@@ -478,34 +478,34 @@ test("a no-allowance target is gated from its first failing run", () => {
 	const summary = summarizeBackendLintReport(report({ targets }));
 	const verdict = renderBackendLintVerdict(summary);
 
-	assert.equal(BACKEND_LINT_ALLOWANCES["service-cycle-check"], undefined);
+	assert.equal(BACKEND_LINT_ALLOWANCES["golangci"], undefined);
 	assert.equal(summary.ok, false);
-	assert.equal(summary.targets.find((target) => target.name === "service-cycle-check").violationCount, 1);
-	assert.match(verdict, /service-cycle-check: baseline 0 -> current 1 \(delta \+1; new failure\)/);
+	assert.equal(summary.targets.find((target) => target.name === "golangci").violationCount, 1);
+	assert.match(verdict, /golangci: baseline 0 -> current 1 \(delta \+1; new failure\)/);
 	assert.match(
 		summary.failures.join("\n"),
-		/service-cycle-check failed with 1 reported violation\(s\); no baseline allowance exists/,
+		/golangci failed with 1 reported violation\(s\); no baseline allowance exists/,
 	);
 });
 
 test("a passing no-allowance target is measured, not classified unmeasured", () => {
 	const summary = summarizeBackendLintReport(report({ targets: baselineTargets() }));
-	const target = summary.targets.find((item) => item.name === "service-cycle-check");
+	const target = summary.targets.find((item) => item.name === "golangci");
 
 	assert.equal(summary.ok, true);
 	assert.equal(target.violationCount, 0);
 	assert.equal(target.policyStatus, "clean");
-	assert.match(renderBackendLintSummary(summary), /\| service-cycle-check \| `pass` \| 0 \| 0 \| \+0 \|/);
+	assert.match(renderBackendLintSummary(summary), /\| golangci \| `pass` \| 0 \| 0 \| \+0 \|/);
 });
 
 test("dropping a no-allowance target from the lint suite fails the policy", () => {
-	const targets = baselineTargets().filter((target) => target.name !== "service-cycle-check");
+	const targets = baselineTargets().filter((target) => target.name !== "golangci");
 	const summary = summarizeBackendLintReport(report({ targets }));
 
 	assert.equal(summary.ok, false);
 	assert.match(
 		summary.failures.join("\n"),
-		/service-cycle-check is gated with no allowance and must run in every lint report, but it was not observed/,
+		/golangci is gated with no allowance and must run in every lint report, but it was not observed/,
 	);
 	assert.match(renderBackendLintSummary(summary), /### No-allowance targets/);
 });

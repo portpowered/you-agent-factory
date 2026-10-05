@@ -47,6 +47,9 @@ func New(raw any) (register.LinterPlugin, error) {
 		if original == analyzers.CompilerOwners {
 			original = analyzers.CompilerOwnersForDirectory(".")
 		}
+		if original == analyzers.ServiceCycle {
+			original = analyzers.ServiceCycleForDirectory(".")
+		}
 		copy := *original
 		copy.Flags = *flag.NewFlagSet(original.Name, flag.ContinueOnError)
 		copy.Flags.Bool("check-stale", !deferred[original.Name], "reject stale exact debt entries")

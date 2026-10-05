@@ -1,4 +1,4 @@
-package main
+package analyzers
 
 import (
 	"slices"
@@ -116,7 +116,7 @@ func completeDigraph(count int) [][]int {
 	return weights
 }
 
-func TestMinimumFeedbackArcSetReturnsTrueOptimumWhereGreedyDoesNot(t *testing.T) {
+func TestServiceCycleMinimumFeedbackArcSetReturnsTrueOptimumWhereGreedyDoesNot(t *testing.T) {
 	t.Parallel()
 
 	weights := greedyTrapGraph()
@@ -139,7 +139,7 @@ func TestMinimumFeedbackArcSetReturnsTrueOptimumWhereGreedyDoesNot(t *testing.T)
 	}
 }
 
-func TestMinimumFeedbackArcSetMatchesBruteForceOptimum(t *testing.T) {
+func TestServiceCycleMinimumFeedbackArcSetMatchesBruteForceOptimum(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -206,7 +206,7 @@ func TestMinimumFeedbackArcSetMatchesBruteForceOptimum(t *testing.T) {
 	}
 }
 
-func TestMinimumFeedbackArcSetOnAcyclicGraphIsZero(t *testing.T) {
+func TestServiceCycleMinimumFeedbackArcSetOnAcyclicGraphIsZero(t *testing.T) {
 	t.Parallel()
 
 	weights := [][]int{
@@ -224,7 +224,7 @@ func TestMinimumFeedbackArcSetOnAcyclicGraphIsZero(t *testing.T) {
 	}
 }
 
-func TestMinimumFeedbackArcSetOnCompleteDigraphMatchesClosedForm(t *testing.T) {
+func TestServiceCycleMinimumFeedbackArcSetOnCompleteDigraphMatchesClosedForm(t *testing.T) {
 	t.Parallel()
 
 	for count := 2; count <= 7; count++ {
@@ -239,7 +239,7 @@ func TestMinimumFeedbackArcSetOnCompleteDigraphMatchesClosedForm(t *testing.T) {
 	}
 }
 
-func TestMinimumFeedbackArcSetIsDeterministic(t *testing.T) {
+func TestServiceCycleMinimumFeedbackArcSetIsDeterministic(t *testing.T) {
 	t.Parallel()
 
 	weights := completeDigraph(6)
@@ -256,7 +256,7 @@ func TestMinimumFeedbackArcSetIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestMinimumFeedbackArcSetRefusesGraphsAboveTheSafeBound(t *testing.T) {
+func TestServiceCycleMinimumFeedbackArcSetRefusesGraphsAboveTheSafeBound(t *testing.T) {
 	t.Parallel()
 
 	oversized := completeDigraph(maxSafeServiceCount + 1)
@@ -272,7 +272,7 @@ func TestMinimumFeedbackArcSetRefusesGraphsAboveTheSafeBound(t *testing.T) {
 	}
 }
 
-func TestMinimumFeedbackArcSetRejectsMalformedInput(t *testing.T) {
+func TestServiceCycleMinimumFeedbackArcSetRejectsMalformedInput(t *testing.T) {
 	t.Parallel()
 
 	if _, err := minimumFeedbackArcSet([][]int{{0, 1}, {1}}); err == nil {

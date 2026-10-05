@@ -87,7 +87,7 @@ func newActiveScopeAdapter(scope recordings.CanonicalEventScope) (*combinedServi
 // requests, including the terminal run-finished event it appends itself.
 //
 // The recorder no longer depends on Factory Runtime at all; that constraint is
-// enforced repo-wide by the cross-service cycle ratchet (cmd/servicecyclecheck)
+// enforced repo-wide by the cross-service cycle ratchet (shared service-cycle-weight analyzer)
 // rather than by an import-shape assertion here.
 func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing.T) {
 	t.Parallel()
