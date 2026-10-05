@@ -470,6 +470,10 @@ Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
 require secret redaction prevent safe recipe recovery, so interruption refuses
 before stopping; ordinary cancel and terminate remain available.
+The recipe also refuses inherited credentials embedded in replacement text,
+arguments, structured input, or the Provider Session reference. It uses the
+same sensitive environment names as captured command diagnostics, including
+authentication and access-key variables.
 An input write, input read, or intent persistence failure also refuses interruption
 before stopping the source. Repeating that request preserves the failure;
 use cancel or terminate to stop the still-running source.

@@ -127,6 +127,42 @@ func configureUnsafeInterruptRecipe(plan *interruptPlan, scenario string) {
 	}
 }
 
+func TestInterruptInheritedCredentialCannotEnterRecipeOrRequest(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"AWS_ACCESS_KEY_ID", "AUTHORIZATION", "DB_PASS", "custom_key", " OPENAI_CONFIG "} {
+		for _, field := range []string{"replacement", "request", "argument", "token-key", "reference"} {
+			t.Run(name+"/"+field, func(t *testing.T) {
+				t.Parallel()
+				r, plan, store := newDurableInterruptFixture(t)
+				secret := "private-inherited\ncredential\""
+				plan.execution.Execution.ProcessEnvironment = []string{name + "=" + secret}
+				switch field {
+				case "replacement":
+					plan.request.ReplacementMessage = secret
+				case "request":
+					plan.request.RequestID = secret
+				case "argument":
+					plan.execution.Execution.Args = []string{"prefix " + secret}
+				case "token-key":
+					plan.execution.Execution.InputTokens = []any{map[string]any{secret: "safe"}}
+				case "reference":
+					plan.reference.ID = secret
+				}
+				calls := 0
+				plan.supervision.installCancel(func() { calls++ })
+				result, err := r.runInterrupt(plan)
+				if !errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) || result.Phase != workersessions.InterruptPhaseValidation || result.Source.State != workersessions.StateRunning || calls != 0 {
+					t.Fatalf("credential refusal phase=%s effects=%d err=%v", result.Phase, calls, err)
+				}
+				if len(store.input) != 0 || len(store.records) != 0 || strings.Contains(err.Error(), secret) {
+					t.Fatal("credential reached durable input, intent, or diagnostics")
+				}
+				assertNoSuccessor(t, r, "successor")
+			})
+		}
+	}
+}
+
 func TestInterruptCapturedRecipeRejectsCorruptionAndRetainsLegacyReplay(t *testing.T) {
 	t.Parallel()
 	for _, scenario := range []string{"legacy", "version", "replacement", "attempt", "reference", "workstation", "env", "unknown", "trailing", "model-tamper", "duplicate-version", "duplicate-reference", "duplicate-token-key"} {

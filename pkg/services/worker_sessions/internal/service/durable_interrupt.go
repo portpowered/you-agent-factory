@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // The host owns input sync, intent sync, source join and the reserved successor.
@@ -148,13 +149,11 @@ func interruptInputSafe(plan interruptPlan) bool {
 }
 
 func interruptSensitiveEnvironmentName(name string) bool {
-	name = strings.ToUpper(name)
-	for _, marker := range []string{"TOKEN", "SECRET", "PASSWORD", "API_KEY", "PRIVATE_KEY", "CREDENTIAL"} {
-		if strings.Contains(name, marker) {
-			return true
-		}
-	}
-	return false
+	// Use the Workers-owned classification with an empty value, so this check
+	// cannot expose credentials or confuse a literal redaction marker with one
+	// produced by the classifier. Recipe privacy must match captured diagnostics.
+	projection := workers.ProjectCommandEnvForDiagnostics([]string{name + "="})
+	return projection.Values[name] == workers.RedactedCommandEnvValue
 }
 
 func interruptFieldsContain(fields []string, value string) bool {
