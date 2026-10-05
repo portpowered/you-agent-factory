@@ -4,6 +4,7 @@ import (
 	"io/fs"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
@@ -79,11 +80,17 @@ func NewRuntimeFactory(
 // Wire. It does not start a runtime or sidecar.
 func NewAssembly(
 	bundleOpening *BundleOpening,
-	metricsClock platformclock.TimerSource,
+	sidecars *SidecarOpening,
 	instanceHost InstanceHost,
 	preparation *RuntimePreparation,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(bundleOpening, metricsClock, instanceHost, preparation)
+	return factoryruntimeinternal.NewAssembly(bundleOpening, sidecars, instanceHost, preparation)
+}
+
+type SidecarOpening = factoryruntimeinternal.SidecarOpening
+
+func NewSidecarOpening(automation automations.Service, metricsClock platformclock.TimerSource) *SidecarOpening {
+	return factoryruntimeinternal.NewSidecarOpening(automation, metricsClock)
 }
 
 type BundleOpening = factoryruntimeinternal.BundleOpening

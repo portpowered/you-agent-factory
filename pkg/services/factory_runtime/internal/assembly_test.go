@@ -845,7 +845,8 @@ func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime
 
 func TestNewAssemblyRetainsSelectedBundleOpening(t *testing.T) {
 	opening := &BundleOpening{}
-	assembly, err := NewAssembly(opening, platformclock.Real{}, nil, nil)
+	sidecars := NewSidecarOpening(nil, platformclock.Real{})
+	assembly, err := NewAssembly(opening, sidecars, nil, nil)
 	if err != nil || assembly.bundleOpening != opening {
 		t.Fatalf("NewAssembly = %#v, %v; want selected opening", assembly, err)
 	}

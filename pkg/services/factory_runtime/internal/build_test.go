@@ -478,7 +478,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 		t.Fatal(err)
 	}
 	assembly, err := factoryinternal.NewAssembly(opening,
-		platformclock.Real{}, testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
+		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
 	if err != nil {
 		t.Fatal(err)
 	}

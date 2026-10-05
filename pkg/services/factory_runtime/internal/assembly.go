@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -25,7 +24,7 @@ import (
 // session-owned Factory Runtime.
 type Assembly struct {
 	bundleOpening *BundleOpening
-	metricsClock  platformclock.TimerSource
+	sidecars      *SidecarOpening
 	instanceHost  instancehost.Service
 	preparation   *runtimebuild.Service
 }
@@ -35,7 +34,7 @@ type Assembly struct {
 // builder remains until initial activation and replacement callers migrate.
 func NewAssembly(
 	bundleOpening *BundleOpening,
-	metricsClock platformclock.TimerSource,
+	sidecars *SidecarOpening,
 	instanceHost instancehost.Service,
 	preparation *runtimebuild.Service,
 ) (*Assembly, error) {
@@ -43,7 +42,7 @@ func NewAssembly(
 		return nil, fmt.Errorf("Factory Runtime bundle opening is required")
 	}
 	return &Assembly{
-		bundleOpening: bundleOpening, metricsClock: metricsClock, instanceHost: instanceHost,
+		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
 		preparation: preparation,
 	}, nil
 }
@@ -252,7 +251,7 @@ func (a *Assembly) Assemble(
 		instance,
 		spec,
 		lifecycle,
-		NewRuntimeSidecars(automationService, serviceMode, a.metricsClock),
+		a.sidecars.Scope(serviceMode),
 		nil
 }
 
