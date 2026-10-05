@@ -124,6 +124,8 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 // Watch starts watching for file events. It blocks until ctx is cancelled.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (fw *watcher) Watch(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	watcher, err := fw.newWatcher()
 	if err != nil {
 		return fmt.Errorf("create watcher: %w", err)
@@ -132,6 +134,7 @@ func (fw *watcher) Watch(ctx context.Context) error {
 
 	scheduler := newDebounceScheduler(fw.clock, fw.debounceWindow)
 	defer scheduler.cancelAll()
+	defer cancel()
 	if err := fw.discoverDirectory(ctx, watcher, scheduler, fw.dir); err != nil {
 		return err
 	}
@@ -142,7 +145,6 @@ func (fw *watcher) Watch(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			scheduler.cancelAll()
 			return ctx.Err()
 		case event, ok := <-watcher.Events():
 			if !ok {
@@ -460,7 +462,7 @@ func (fw *watcher) handleFile(ctx context.Context, path string) error {
 
 	// Wait briefly for the file to be fully written. On Windows, fsnotify
 	// fires CREATE before the writer has flushed all content.
-	content, err := fw.readFileWithRetry(path, 5, 50*time.Millisecond)
+	content, err := fw.readFileWithRetry(ctx, path, 5, 50*time.Millisecond)
 	if err != nil {
 		return fmt.Errorf("read file %s: %w", path, err)
 	}
@@ -605,10 +607,13 @@ func uniqueFileWorkName(name string, index int, used map[string]int) string {
 // readFileWithRetry reads a file, retrying if the content is empty.
 // This handles the race where fsnotify fires CREATE before the writer
 // has finished flushing the file content (common on Windows).
-func (fw *watcher) readFileWithRetry(path string, maxRetries int, delay time.Duration) ([]byte, error) {
+func (fw *watcher) readFileWithRetry(ctx context.Context, path string, maxRetries int, delay time.Duration) ([]byte, error) {
 	var content []byte
 	var err error
 	for i := range maxRetries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		content, err = fw.files.ReadFile(path)
 		if err != nil {
 			return nil, err
@@ -617,7 +622,14 @@ func (fw *watcher) readFileWithRetry(path string, maxRetries int, delay time.Dur
 			return content, nil
 		}
 		if i < maxRetries-1 {
-			fw.clock.Sleep(delay)
+			timer := fw.clock.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.Chan():
+				timer.Stop()
+			}
 		}
 	}
 	return content, nil

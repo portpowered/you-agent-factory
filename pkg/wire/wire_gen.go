@@ -574,7 +574,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v146 := &wire3.WorkPorts{
 		Service: workService,
 	}
-	v147 := provideAutomationsClock(clock)
+	v147 := provideAutomationsClock(clock, timerSource)
 	commandRunner, err := provideAutomationsCommandRunner(edges2)
 	if err != nil {
 		return nil, err

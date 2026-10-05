@@ -10,9 +10,11 @@ import (
 	"sync"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	"github.com/portpowered/infinite-you/pkg/services/automations/internal/clockview"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
@@ -41,6 +43,12 @@ type ScriptPollers = scriptpollers.Service
 type Cron = cron.Service
 type FilesystemWatchers = filesystemwatchers.Service
 type Clock = clockwork.Clock
+
+// NewClockView projects selected facts and scheduling for clockwork consumers.
+// Construction allocates no timers, goroutines or sources.
+func NewClockView(clock platformclock.Source, scheduler platformclock.TimerSource) Clock {
+	return clockview.New(clock, scheduler)
+}
 
 // NewSourceLifecycle constructs one independent owner from completed behaviors.
 // C08 includes the operator-authorized canonical cron execution-policy input.

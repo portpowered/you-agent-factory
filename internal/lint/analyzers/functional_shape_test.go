@@ -1,0 +1,132 @@
+package analyzers
+
+import (
+	"go/ast"
+	"go/types"
+	"strings"
+	"testing"
+)
+
+// These cases serialize because useFixtures replaces the shared baseline.
+func TestFunctionalShapeOwnership(t *testing.T) {
+	useFixtures(t)
+	for _, tc := range []struct{ unit, rule string }{
+		{"tests/functional/providers/inference", ""},
+		{"tests/functional/automations/scheduling", ""},
+		{"tests/functional/automations/scheduling_test", ""},
+		{"tests/functional/automations", "functional-test-missing-subsection"},
+		{"tests/functional/internal/support/fixture", ""},
+		{"tests/functional/providers", "functional-test-missing-subsection"},
+		{"tests/functional", "functional-test-missing-subsection"},
+		{"tests/functional/internal", "functional-test-missing-subsection"},
+		{"tests/functional/internal/restclient", "functional-test-unclassified-domain"},
+		{"tests/functional/catchall/deep", "functional-test-unclassified-domain"},
+		{"tests/functional/runtime_api", "deprecated-runtime-api-file"},
+		{"tests/functional/providers/inference_test", ""},
+	} {
+		pass, diagnostics := shapePass(t, tc.unit, map[string]string{"scenario_test.go": "package shape\nfunc TestScenario() {}\n"})
+		pass.Analyzer = FunctionalShape
+		FunctionalShape.Run(pass)
+		if tc.rule == "" {
+			if len(*diagnostics) != 0 {
+				t.Errorf("%s: %v", tc.unit, *diagnostics)
+			}
+		} else if len(*diagnostics) == 0 || !strings.Contains((*diagnostics)[0].Message, tc.rule+":") {
+			t.Errorf("%s: missing %s: %v", tc.unit, tc.rule, *diagnostics)
+		}
+	}
+}
+
+func TestFunctionalShapeRuntimeAPITestMain(t *testing.T) {
+	useFixtures(t)
+	for _, tc := range []struct {
+		pkg      string
+		variadic bool
+		want     int
+	}{
+		{"testing", false, 1}, {"impostor", false, 2}, {"testing", true, 2},
+	} {
+		pass, diagnostics := shapePass(t, "tests/functional/runtime_api", map[string]string{"scenario_test.go": "package shape\nfunc TestMain(m *M) {}\n"})
+		pass.Analyzer = FunctionalShape
+		fn := pass.Files[0].Decls[0].(*ast.FuncDecl)
+		pkg := types.NewPackage(tc.pkg, tc.pkg)
+		mainType := types.NewNamed(types.NewTypeName(0, pkg, "M", nil), types.NewStruct(nil, nil), nil)
+		var param types.Type = types.NewPointer(mainType)
+		if tc.variadic {
+			param = types.NewSlice(param)
+		}
+		sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(0, nil, "m", param)), nil, tc.variadic)
+		pass.TypesInfo = &types.Info{Defs: map[*ast.Ident]types.Object{fn.Name: types.NewFunc(fn.Pos(), pass.Pkg, "TestMain", sig)}}
+		FunctionalShape.Run(pass)
+		if len(*diagnostics) != tc.want {
+			t.Errorf("%+v: %v", tc, *diagnostics)
+		}
+	}
+}
+
+func TestFunctionalShapeExactDebt(t *testing.T) {
+	const unit = "tests/functional/providers"
+	const key = "functional-test-missing-subsection|" + unit + "|" + unit + "/scenario_test.go"
+	for _, tc := range []struct {
+		name    string
+		entries []string
+		sources map[string]string
+		ignored []string
+		want    int
+	}{
+		{"unchanged", []string{key}, map[string]string{"scenario_test.go": "package shape"}, nil, 0},
+		{"new file", []string{key}, map[string]string{"scenario_test.go": "package shape", "new_test.go": "package shape"}, nil, 1},
+		{"removed", []string{key}, map[string]string{"other_test.go": "package shape"}, nil, 2},
+		{"ordinary unit", []string{key}, map[string]string{"helper.go": "package shape"}, nil, 1},
+		{"tag excluded", []string{key}, map[string]string{"helper_test.go": "package shape"}, []string{"/fixture/scenario_test.go"}, 1},
+		{"pruned", nil, map[string]string{"scenario_test.go": "package shape"}, nil, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			useFixtures(t, tc.entries...)
+			pass, diagnostics := shapePass(t, unit, tc.sources)
+			pass.Analyzer = FunctionalShape
+			pass.IgnoredFiles = tc.ignored
+			FunctionalShape.Run(pass)
+			if len(*diagnostics) != tc.want {
+				t.Fatalf("want %d: %v", tc.want, *diagnostics)
+			}
+			if tc.name == "removed" && !strings.Contains((*diagnostics)[1].Message, "stale baseline entry") {
+				t.Fatal(*diagnostics)
+			}
+		})
+	}
+}
+
+func TestTestLaneCompilerMetadata(t *testing.T) {
+	useFixtures(t)
+	for _, tc := range []struct {
+		unit, file string
+		want       int
+	}{
+		{"pkg/services/a_test", "external_test.go", 0},
+		{"tests/functional/providers/scenarios", "scenario_test.go", 0},
+		{"tests/adhoc/optin", "manual_test.go", 0},
+		{"unowned", "helper.go", 0},
+		{"unowned", "scenario_test.go", 1},
+		{"unowned_test", "external_test.go", 1},
+	} {
+		pass, diagnostics := shapePass(t, tc.unit, map[string]string{tc.file: "package shape"})
+		pass.Analyzer = TestLane
+		TestLane.Run(pass)
+		if len(*diagnostics) != tc.want {
+			t.Errorf("%+v: %v", tc, *diagnostics)
+		}
+	}
+}
+
+// The genuine hook is covered above through the resolved signature boundary;
+// generated files retain file ownership without gaining scenario diagnostics.
+func TestFunctionalShapeGeneratedSource(t *testing.T) {
+	useFixtures(t)
+	pass, diagnostics := shapePass(t, "tests/functional/runtime_api", map[string]string{"generated.go": "// Code generated by fixture. DO NOT EDIT.\npackage shape\nfunc TestGenerated() {}"})
+	pass.Analyzer = FunctionalShape
+	FunctionalShape.Run(pass)
+	if len(*diagnostics) != 1 {
+		t.Fatal(*diagnostics)
+	}
+}

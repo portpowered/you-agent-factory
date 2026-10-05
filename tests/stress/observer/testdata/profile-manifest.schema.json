@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LifecycleProfileManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "identity",
+    "childPaths",
+    "fixtureSHA256",
+    "methodSHA256",
+    "instrumentation",
+    "profileCommand",
+    "capabilityCommand",
+    "preparation"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceCommit",
+        "sourceTree",
+        "sourceStatus",
+        "toolCommit",
+        "toolStatus",
+        "toolFiles",
+        "overlayPath",
+        "overlaySHA256",
+        "backingFiles",
+        "preparationManifestPath",
+        "preparationManifestSHA256",
+        "artifactPath",
+        "artifactSHA256",
+        "goVersion",
+        "buildInfo",
+        "buildCommand",
+        "mode",
+        "race"
+      ],
+      "properties": {
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceTree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceStatus": {
+          "const": ""
+        },
+        "toolCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "toolStatus": {
+          "const": ""
+        },
+        "toolFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "overlayPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "overlaySHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "backingFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "virtual",
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "virtual": {
+                "type": "string",
+                "minLength": 1
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "preparationManifestPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "preparationManifestSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "artifactPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "goVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "buildInfo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "buildCommand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "pin",
+            "candidate"
+          ]
+        },
+        "race": {
+          "type": "boolean"
+        }
+      }
+    },
+    "childPaths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "GOCACHE",
+        "GOPATH",
+        "GOMODCACHE",
+        "GOTMPDIR",
+        "TEMP",
+        "TMP"
+      ],
+      "properties": {
+        "HOME": {
+          "type": "string",
+          "minLength": 1
+        },
+        "USERPROFILE": {
+          "type": "string",
+          "minLength": 1
+        },
+        "HOMEDRIVE": {
+          "type": "string",
+          "minLength": 1
+        },
+        "HOMEPATH": {
+          "type": "string",
+          "minLength": 1
+        },
+        "APPDATA": {
+          "type": "string",
+          "minLength": 1
+        },
+        "LOCALAPPDATA": {
+          "type": "string",
+          "minLength": 1
+        },
+        "XDG_CONFIG_HOME": {
+          "type": "string",
+          "minLength": 1
+        },
+        "XDG_CACHE_HOME": {
+          "type": "string",
+          "minLength": 1
+        },
+        "GOCACHE": {
+          "type": "string",
+          "minLength": 1
+        },
+        "GOPATH": {
+          "type": "string",
+          "minLength": 1
+        },
+        "GOMODCACHE": {
+          "type": "string",
+          "minLength": 1
+        },
+        "GOTMPDIR": {
+          "type": "string",
+          "minLength": 1
+        },
+        "TEMP": {
+          "type": "string",
+          "minLength": 1
+        },
+        "TMP": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "fixtureSHA256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "methodSHA256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "instrumentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registration",
+        "retainedCallbacks",
+        "snapshotLocking",
+        "sortingAndAllocation",
+        "serialization",
+        "timer",
+        "median",
+        "p95"
+      ],
+      "properties": {
+        "registration": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retainedCallbacks": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshotLocking": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sortingAndAllocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "serialization": {
+          "const": "outside timed spans"
+        },
+        "timer": {
+          "const": "Go time.Now/time.Since monotonic duration in nanoseconds"
+        },
+        "median": {
+          "const": "sorted; even N midpoint arithmetic mean"
+        },
+        "p95": {
+          "const": "nearest-rank ceil(0.95*N), one-based"
+        }
+      }
+    },
+    "profileCommand": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capabilityCommand": {
+      "type": "string",
+      "minLength": 1
+    },
+    "preparation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "childPaths",
+        "goCommand",
+        "inputManifestPath",
+        "inputManifestSHA256",
+        "offline",
+        "cachePolicy"
+      ],
+      "properties": {
+        "childPaths": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "HOME",
+            "USERPROFILE",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "XDG_CONFIG_HOME",
+            "XDG_CACHE_HOME",
+            "GOCACHE",
+            "GOPATH",
+            "GOMODCACHE",
+            "GOTMPDIR",
+            "TEMP",
+            "TMP",
+            "GOROOT"
+          ],
+          "properties": {
+            "HOME": {
+              "type": "string",
+              "minLength": 1
+            },
+            "USERPROFILE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "HOMEDRIVE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "HOMEPATH": {
+              "type": "string",
+              "minLength": 1
+            },
+            "APPDATA": {
+              "type": "string",
+              "minLength": 1
+            },
+            "LOCALAPPDATA": {
+              "type": "string",
+              "minLength": 1
+            },
+            "XDG_CONFIG_HOME": {
+              "type": "string",
+              "minLength": 1
+            },
+            "XDG_CACHE_HOME": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOCACHE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOPATH": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOMODCACHE": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOTMPDIR": {
+              "type": "string",
+              "minLength": 1
+            },
+            "TEMP": {
+              "type": "string",
+              "minLength": 1
+            },
+            "TMP": {
+              "type": "string",
+              "minLength": 1
+            },
+            "GOROOT": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "goCommand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputManifestPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputManifestSHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "offline": {
+          "const": true
+        },
+        "cachePolicy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

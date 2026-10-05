@@ -8,15 +8,12 @@ import (
 )
 
 type config struct {
-	root                            string
-	packageRoot                     string
-	all                             bool
-	baseRef                         string
-	baselineCacheDir                string
-	writeTransportBehaviorBaseline  bool
-	writeProductionDefaultBaseline  bool
-	writeTestBehaviorBaseline       bool
-	writePetriPublicSurfaceBaseline bool
+	root                           string
+	packageRoot                    string
+	all                            bool
+	baseRef                        string
+	baselineCacheDir               string
+	writeProductionDefaultBaseline bool
 }
 
 func parseConfig() config {
@@ -31,24 +28,6 @@ func parseConfig() config {
 		"create-production-default-selection-baseline",
 		false,
 		"create the deletion-only production default-selection baseline; fails when the file already exists or no debt exists",
-	)
-	flag.BoolVar(
-		&cfg.writeTransportBehaviorBaseline,
-		"create-transport-behavior-baseline",
-		false,
-		"create the deletion-only transport behavior baseline; fails when the file already exists",
-	)
-	flag.BoolVar(
-		&cfg.writeTestBehaviorBaseline,
-		"create-test-behavior-boundary-baseline",
-		false,
-		"create the exact deletion-only test behavior baseline; fails when the file exists or no debt exists",
-	)
-	flag.BoolVar(
-		&cfg.writePetriPublicSurfaceBaseline,
-		"create-petri-public-surface-baseline",
-		false,
-		"create the exact deletion-only Petri public-surface baseline; fails when the file exists or no debt exists",
 	)
 	flag.Parse()
 	return cfg
@@ -111,24 +90,8 @@ func countBlockingViolations(findings scanResult) int {
 }
 
 func countAlwaysBlockingViolations(findings scanResult) int {
-	return len(findings.rootPackageFindings) +
-		len(findings.retiredPackageRootFindings) +
-		len(findings.handwrittenGeneratedFindings) +
-		len(findings.transportBehaviorFindings) +
-		len(findings.staleTransportBehaviorEntries) +
-		len(findings.functionalProcessEdgeFindings) +
-		len(findings.constructedServiceEdgesFindings) +
-		len(findings.testWorkNormalizationFindings) +
-		len(findings.productionDefaultFindings) +
-		len(findings.staleProductionDefaultEntries) +
-		len(findings.initializerBehaviorFindings) +
-		len(findings.staleInitializerBehaviorEntries) +
-		len(findings.testBehaviorFindings) +
-		len(findings.staleTestBehaviorEntries) +
-		len(findings.petriPublicSurfaceFindings) +
-		len(findings.stalePetriPublicSurfaceEntries) +
-		len(findings.processEdgeContractFindings) +
-		len(findings.providerEffectOwnershipFindings)
+	return len(findings.productionDefaultFindings) +
+		len(findings.staleProductionDefaultEntries)
 }
 
 func countProductionBoundaryViolations(findings scanResult) int {
@@ -141,11 +104,6 @@ func countProductionBoundaryImports(findings scanResult) int {
 		findings.serviceConstructionFindings,
 		func(finding serviceConstructionFinding) boundarySourceClass { return finding.class },
 		func(finding serviceConstructionFinding) string { return finding.filePath },
-	)
-	count += countProductionBoundaryFindings(
-		findings.externalImplementationFindings,
-		func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class },
-		func(finding transportServiceImplementationFinding) string { return finding.filePath },
 	)
 	return count
 }

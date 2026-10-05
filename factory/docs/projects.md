@@ -159,6 +159,26 @@ idea:init
   -> consume
 ```
 
+`ci-wait` classifies confirmed merged PRs as `merged` and sends the task
+straight to `task:to-complete`. The existing `consume` join completes the task
+and reports idea completion, releasing its dependents without another review
+visit. Other successful observations select `review` and retain the route
+above. Both loop breakers keep their existing limits for unmerged work.
+
+The Factory invokes `ci-wait.py` with `--classification`: stdout contains only
+`merged` or `review`; the JSON receipt goes to stderr. Direct invocations without
+that option retain JSON stdout and the existing exit status contract.
+
+To activate this route, the operator must refresh the materialized Factory
+configuration and script together, validate that materialized configuration
+with `you factory config validate <materialized-factory.json>`, and restart the
+daemon. A source merge alone does not update the running Factory Session.
+Observe the next naturally arriving merged lane for task and idea completion,
+dependent release, and absence of a breaker failure. To roll back, restore the
+previous materialized configuration and script together, validate, and restart;
+retain the session history.
+
+
 Validation is a first-class route:
 
 ```text

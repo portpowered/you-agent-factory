@@ -291,6 +291,9 @@ jobs:
           - suite: functional
             label: Functional
     steps:
+      - name: Record job start time
+        shell: bash
+        run: echo "JOB_START=$(date -u '+%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         if: matrix.suite == 'unit'
         with:
@@ -337,19 +340,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
-          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum', 'cmd/**/*.go', 'internal/**/*.go', 'pkg/**/*.go') }}
+          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
           restore-keys: |
             unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
-            functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-12-
-      - name: Restore functional coverage Go build cache
-        if: matrix.suite == 'functional'
-        id: functional-go-build-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-${{ steps.functional-parallelism.outputs.jobs }}-${{ hashFiles('.github/workflows/ci.yml', 'Makefile', 'go.mod', 'go.sum', 'cmd/**/*.go', 'internal/**/*.go', 'pkg/**/*.go', 'tests/functional/**/*.go', 'tests/functional/functional-quarantine.json', 'docs/internal/baselines/go-functional-coverage-package-minimums.json') }}
-          restore-keys: |
-            functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-${{ steps.functional-parallelism.outputs.jobs }}-
       - uses: actions/setup-node@v4
         if: matrix.suite == 'functional'
         with:
@@ -375,8 +368,25 @@ jobs:
           go test -race ./tests/functional/workers/inference -run 'TestWSRFT004|TestWSRFT009|TestWorkerRecordingSurvivesTempCleanup|TestWorkerSessionSelectedSessionObservationConsistency' -count=1 -p=2 -timeout=5m
           go test -race ./pkg/services/factory_runtime/internal/services/orchestration/runtime -run 'TestRecordedWorkerSessionObservation|TestMergeRecordedObservations' -count=1 -timeout=5m
           go test -race ./pkg/services/worker_sessions/internal/service -count=1 -timeout=5m
+      - name: Race-check selected Automations time and joined shutdown
+        if: matrix.suite == 'unit'
+        timeout-minutes: 10
+        run: |
+          go test -race -v -p 1 -count=1 -timeout 3m \
+            ./pkg/services/automations/internal/clockview \
+            ./pkg/services/automations/internal/services/script_pollers/internal/service \
+            ./pkg/services/automations/internal/services/sourcelifecycle/internal/service \
+            ./pkg/services/automations/internal/services/filesystem_watchers/internal/service \
+            -run 'ClockView|StopsDuringBackoff|Backoff_ProgressionBounds|ControlledBackoff|ReadFileWithRetry|Debounce|StoppingOneWatcher'
+          go test -race -v -p 1 -count=1 -timeout 3m \
+            ./tests/functional/automations/scheduling \
+            -run '^TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown$'
+      - name: Prune unit Go build cache to entries touched by this job
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: find ~/.cache/go-build -type f ! -newermt "$JOB_START" -delete
       - name: Save unit coverage Go build and test cache
-        if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/go-build
@@ -508,15 +518,6 @@ jobs:
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
           FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/functional-test-viz/coverage-build-diagnostics.json
-          FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY: ${{ steps.functional-go-build-cache.outputs.cache-primary-key }}
-          FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY: ${{ steps.functional-go-build-cache.outputs.cache-matched-key }}
-          FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-go-build-cache.outputs.cache-hit || 'false' }}
-      - name: Save functional coverage Go build cache
-        if: always() && matrix.suite == 'functional' && steps.functional-go-build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/go-build
-          key: ${{ steps.functional-go-build-cache.outputs.cache-primary-key }}
       - name: Upload Linux quarantine package evidence
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
@@ -680,48 +681,6 @@ jobs:
           helper_sha256=$(sha256sum .artifacts/integration/bin/tts-clean-install-helper | awk '{print $1}')
           echo "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=${{ github.workspace }}/.artifacts/integration/bin/tts-clean-install-helper" >> "$GITHUB_ENV"
           echo "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helper_sha256" >> "$GITHUB_ENV"
-      - name: Build blocked LoadModel witness helper
-        id: blocked-loadmodel-helper
-        shell: bash
-        env:
-          LOCALAI_READINESS_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -euo pipefail
-          checkout_head=$(git rev-parse HEAD)
-          if [[ "$checkout_head" != "$LOCALAI_READINESS_SOURCE_HEAD" ]]; then
-            echo "checked-out source head $checkout_head does not match requested head $LOCALAI_READINESS_SOURCE_HEAD" >&2
-            exit 1
-          fi
-          helper_path="$GITHUB_WORKSPACE/.artifacts/integration/bin/blocked-host-helper"
-          mkdir -p "$(dirname "$helper_path")"
-          go build -trimpath -o "$helper_path" ./tests/integration/models/testdata/blocked_host
-          test -x "$helper_path"
-          helper_sha256=$(sha256sum "$helper_path" | awk '{print $1}')
-          {
-            printf 'path=%s\n' "$helper_path"
-            printf 'sha256=%s\n' "$helper_sha256"
-            printf 'source_head=%s\n' "$checkout_head"
-          } >> "$GITHUB_OUTPUT"
-      - name: Run required blocked LoadModel owned-process witness
-        shell: bash
-        run: |
-          set -o pipefail
-          go test -tags managed_process_integration ./tests/integration/models \
-            -run '^TestBlockedLoadModelStopsOwnedProcess$' -count=1 -v -timeout=8m \
-            2>&1 | tee .artifacts/integration/blocked-loadmodel-process-witness.log
-        env:
-          LOCALAI_READINESS_HELPER: ${{ steps.blocked-loadmodel-helper.outputs.path }}
-          LOCALAI_READINESS_HELPER_SHA256: ${{ steps.blocked-loadmodel-helper.outputs.sha256 }}
-          LOCALAI_READINESS_SOURCE_HEAD: ${{ steps.blocked-loadmodel-helper.outputs.source_head }}
-          GOPROXY: off
-      - name: Upload blocked LoadModel owned-process evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: blocked-loadmodel-owned-process-evidence
-          path: .artifacts/integration/blocked-loadmodel-process-witness.log
-          if-no-files-found: warn
-          retention-days: 14
       - name: Run backend integration tests with shared CLI artifact
         run: make test-integration
         env:

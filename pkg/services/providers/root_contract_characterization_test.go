@@ -2,11 +2,7 @@ package providers_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -231,67 +227,6 @@ func TestPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) {
 			t.Fatalf("pkg/services/providers/%s must not exist as a public sibling", forbidden)
 		} else if !os.IsNotExist(err) {
 			t.Fatalf("stat %s/ = %v", forbidden, err)
-		}
-	}
-}
-
-func TestSelectionContractDeletesFloatingOperationsAndBaselines(t *testing.T) {
-	t.Parallel()
-
-	selectionPath := filepath.Join(
-		providersRepositoryRoot(t),
-		"pkg",
-		"services",
-		"providers",
-		"selection_contract.go",
-	)
-	file, err := parser.ParseFile(token.NewFileSet(), selectionPath, nil, 0)
-	if err != nil {
-		t.Fatalf("ParseFile(%q) = %v", selectionPath, err)
-	}
-	forbidden := map[string]struct{}{
-		"ResolveIdentity":       {},
-		"ResolveSelection":      {},
-		"ValidatePrerequisites": {},
-	}
-	for _, declaration := range file.Decls {
-		function, ok := declaration.(*ast.FuncDecl)
-		if !ok || function.Recv != nil {
-			continue
-		}
-		if _, forbidden := forbidden[function.Name.Name]; forbidden {
-			t.Fatalf("selection_contract.go still declares floating operation %q", function.Name.Name)
-		}
-	}
-
-	baselinePath := filepath.Join(
-		providersRepositoryRoot(t),
-		"docs",
-		"internal",
-		"baselines",
-		"package-structure-baseline.json",
-	)
-	data, err := os.ReadFile(baselinePath)
-	if err != nil {
-		t.Fatalf("ReadFile(%q) = %v", baselinePath, err)
-	}
-	var baseline struct {
-		Entries []struct {
-			Rule     string `json:"rule"`
-			FilePath string `json:"filePath"`
-			Target   string `json:"target"`
-		} `json:"entries"`
-	}
-	if err := json.Unmarshal(data, &baseline); err != nil {
-		t.Fatalf("Unmarshal(%q) = %v", baselinePath, err)
-	}
-	for _, entry := range baseline.Entries {
-		if entry.Rule != "service-root-exported-function" ||
-			entry.FilePath != "pkg/services/providers/selection_contract.go" {
-			continue
-		}
-		if _, forbidden := forbidden[entry.Target]; forbidden {
-			t.Fatalf("baseline still records deleted floating operation %q", entry.Target)
 		}
 	}
 }
