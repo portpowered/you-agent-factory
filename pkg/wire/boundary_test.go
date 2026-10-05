@@ -125,7 +125,7 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	}
 	state := factorysessionwire.NewSessionState(registry, responseRegistry, &wireTestClock{}, func() string { return "response-event-test-id" }, func() string { return "session-test-id" }, responses)
 	streams := factorysessionwire.NewStreamManager(state, factorysessionwire.NewStreamObserver(), responseRegistry, responses)
-	assembly, err := provideFactorySessionsAssembly(
+	assembly, err := factorysessionwire.NewRuntimeAssembly(
 		registry, state, streams,
 		func() factorysessionwire.InvocationService {
 			invoker, err := factorysessionwire.NewInvocationOwner(factorysessionwire.NewInvocationAuthority(state, platformclock.Real{}, nil), factorysessionwire.NewScopeControl(state, nil, zap.NewNop()), nil, nil, nil, nil, factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }), provideInvocationWorkPolicy())
@@ -136,6 +136,7 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 		}(),
 		factorysessionwire.NewScopeControl(state, func(factoryruntime.RuntimeRun, factoryruntime.Clock) error { return nil }, zap.NewNop()),
 		factorysessionwire.NewScopeActivation(state),
+		provideSessionCheckpointStoreFactory(),
 		factoryruntime.NewSessionResultProjectionOperation(),
 		func() string { return "response-event-test-id" },
 		func() string { return "session-test-id" },
@@ -149,7 +150,7 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 		factorysessionwire.NewLiveChangeCoordinator(),
 		nil,
 		streams,
-		nil,
+		factorysessionwire.NewSessionHost(state, factorysessionwire.NewScopeControl(state, nil, zap.NewNop()), identity, &wireTestClock{}, nil, provideSessionCheckpointStoreFactory(), zap.NewNop()),
 	)
 	if err != nil {
 		t.Fatalf("provide Factory Sessions assembly: %v", err)

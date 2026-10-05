@@ -36,13 +36,13 @@ type Service struct {
 }
 
 // New constructs a session gateway with explicit host and dataplane dependencies.
-func New(host LegacyHost, responseStreams *responsestream.Registry) *Service {
+func New(host legacyHost, responseStreams *responsestream.Registry) *Service {
 	return NewWithResponseStreams(host, responseStreams)
 }
 
 // NewWithResponseStreams constructs a session gateway around an explicitly
 // injected response-stream registry.
-func NewWithResponseStreams(host LegacyHost, responseStreams *responsestream.Registry) *Service {
+func NewWithResponseStreams(host legacyHost, responseStreams *responsestream.Registry) *Service {
 	return NewWithStreamDependencies(host, host, host, responseStreams)
 }
 

@@ -75,7 +75,7 @@ func (h keyedSessionHost) JavaScriptCheckpointStore(session *livesession.LiveSes
 	if h.state == nil {
 		return nil
 	}
-	return sessionCheckpointStore(session, h.sessionProjectionReader.checkpoints)
+	return sessionCheckpointStore(session, h.checkpoints)
 }
 
 var _ Host = keyedSessionHost{}
@@ -87,7 +87,7 @@ type legacyControlHost interface {
 	controlplane.DurableLifecycleHost
 }
 
-type LegacyHost interface {
+type legacyHost interface {
 	legacyControlHost
 	stream.Host
 }

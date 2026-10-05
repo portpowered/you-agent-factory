@@ -915,7 +915,7 @@ func (h *gatewayHistoryStub) ListSessions(_ context.Context, request factorysess
 }
 
 type gatewayHistoryHost struct {
-	LegacyHost
+	legacyHost
 	durable durableexecution.Service
 }
 

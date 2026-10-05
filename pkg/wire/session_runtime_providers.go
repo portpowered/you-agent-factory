@@ -582,31 +582,11 @@ func provideInvocationWorldStateProjector(projections recordings.ProjectionServi
 	return projections.ReconstructFactoryWorldState
 }
 
-func provideFactorySessionsAssembly(
-	registry factorysessionwire.SessionRegistry,
-	state *factorysessionwire.SessionState,
-	streams factorysessionwire.StreamManager,
-	invoker factorysessionwire.InvocationService,
-	control factorysessionwire.SessionScopeControl,
-	activation factorysessionwire.SessionScopeActivation,
-	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	eventIDs factorysessions.ResponseEventIDGenerator,
-	sessionIDs factorysessions.SessionIDGenerator,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	directories factorysessionwire.DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
-	initialWorkFiles factorysessionwire.InitialWorkReader,
-	identity factorysessionwire.Identity,
-	responseStreams factorysessionwire.ResponseStreams,
-	clock factoryruntime.Clock,
-	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-	recordedHistory factorysessionwire.RecordedHistory,
-	gatewayStreams *factorysessionwire.GatewayStreams,
-	projector factoryruntime.WorldStateProjector,
-) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, invoker, control, activation, func() factoryruntime.JavaScriptCheckpointStore {
+// provideSessionCheckpointStoreFactory supplies session-owned checkpoint state.
+func provideSessionCheckpointStoreFactory() factoryruntime.JavaScriptCheckpointStoreFactory {
+	return func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, eventIDs, sessionIDs, resolveHome, directories, namedPaths, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedHistory, gatewayStreams, projector)
+	}
 }
 
 func provideFactorySessionsService(
