@@ -481,6 +481,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository.yml").read_text(encoding="utf-8")
             root = fixtures.module("catalog-publication")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "pkg/transports/fixture/source.go", "package fixture\n")
             write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
             write(root, "internal/lint/analyzers/baseline.txt", "")
