@@ -142,6 +142,44 @@ func TestOwnerRecoveryUnknownOrAliveOwnersDoNotProduceLoss(t *testing.T) {
 	}
 }
 
+func TestOwnerRecoveryUnreadableJournalKeepsReadsRecoverableWithoutAuthority(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	root := t.TempDir()
+	prior := platformprocess.Incarnation{Host: "host", PID: 123, Start: "prior-start"}
+	original := ownerRecoveryWriter(t, local, root, "prior-runtime", &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: prior}})
+	if err := original.PersistWorkerRecord(t.Context(), journalRecord(t, "recording", "worker")); err != nil {
+		t.Fatal(err)
+	}
+	before, err := local.ReadFile(original.path("recording") + "l")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unavailable := errors.New("unavailable")
+	storage := &catalogReadProbe{Local: local, fault: unavailable}
+	probe := &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: platformprocess.Incarnation{Host: "host", PID: 456, Start: "new-start"}}, lookupErr: platformprocess.ErrProcessGone}
+	store, err := NewFileWriter(storage, local, local, &captureTimeProbe{}, root, "new-runtime", probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovered := store.(*FileWriter)
+	if err := recovered.RecoverWorkerOwners(t.Context()); err != nil || probe.lookups != 0 {
+		t.Fatalf("unavailable journal blocked activation or acquired authority: %v lookups=%d", err, probe.lookups)
+	}
+	if _, err := recovered.LoadWorkerRecording(t.Context(), "recording"); !errors.Is(err, unavailable) {
+		t.Fatalf("unavailable read = %v", err)
+	}
+	storage.fault = nil
+	snapshot, err := recovered.LoadWorkerRecording(t.Context(), "recording")
+	if err != nil || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].ExecutionTerminal != nil {
+		t.Fatalf("restored prefix = %+v, %v", snapshot, err)
+	}
+	after, err := local.ReadFile(original.path("recording") + "l")
+	if err != nil || !bytes.Equal(before, after) || probe.lookups != 0 {
+		t.Fatal("unavailable recovery or ordinary read manufactured a loss fact")
+	}
+}
+
 func TestOwnerRecoveryReconcilesUncertainSyncedLoss(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)

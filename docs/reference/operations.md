@@ -529,6 +529,9 @@ creation identity. Confirmed loss is persisted once: exact-ID observation report
 The recovered log prefix stays readable. Child liveness remains `UNKNOWN`;
 owner loss does not establish child termination. Remote owners, failed OS queries,
 and older recordings without incarnation metadata retain unknown ownership.
+An unreadable capture journal leaves its history unavailable without preventing
+the host from serving other work. Restoring storage makes its captured prefix
+readable again; ordinary reads do not establish ownership or persist loss facts.
 Cancel and terminate refuse with
 `WORKER_SESSION_CONTROL_FAILED` when the host cannot establish execution ownership.
 This refusal does not prove that the provider process stopped.

@@ -51,7 +51,10 @@ func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirE
 		}
 		data, err := writer.storage.ReadFile(filepath.Join(writer.root, file.Name()))
 		if err != nil {
-			return recordings.ErrWorkerRecordingReplay
+			// An unavailable journal grants no recovery authority. Keep hosting
+			// unrelated work; public reads retain their typed unavailable result
+			// and may recover when storage becomes readable again.
+			continue
 		}
 		id, err := writer.recordingFileIdentity(file.Name(), data)
 		if err != nil || seen[id] {
