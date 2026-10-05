@@ -718,16 +718,7 @@ func TestCatalogPathsSelectedLoggerPreservesOperationOutcomes(t *testing.T) {
 
 func checkCatalogOutcome(t *testing.T, operation string, outcome catalogOutcome) {
 	t.Helper()
-	ctx := t.Context()
-	if outcome.preCanceled {
-		var cancel context.CancelFunc
-		if outcome.cause == context.Canceled {
-			ctx, cancel = context.WithCancel(ctx)
-		} else {
-			ctx, cancel = context.WithDeadline(ctx, time.Time{})
-		}
-		cancel()
-	}
+	ctx := catalogOutcomeContext(t, outcome)
 	var wantErr error
 	if outcome.cause != nil {
 		wantErr = fmt.Errorf("private-name /private/path: %w", outcome.cause)
@@ -744,7 +735,10 @@ func checkCatalogOutcome(t *testing.T, operation string, outcome catalogOutcome)
 		if outcome.preCanceled && operation != "list_effective_factories" {
 			expectedErr = ctx.Err()
 		}
-		if err != expectedErr || !errors.Is(err, outcome.cause) {
+		if err != expectedErr { //nolint:errorlint // The operation must return the original error unchanged.
+			t.Fatalf("quiet=%v error=%v, want original %v", quiet, err, expectedErr)
+		}
+		if !errors.Is(err, outcome.cause) {
 			t.Fatalf("quiet=%v error=%v, want original %v", quiet, err, expectedErr)
 		}
 		expected := want
@@ -758,20 +752,40 @@ func checkCatalogOutcome(t *testing.T, operation string, outcome catalogOutcome)
 		if *called != shouldCall {
 			t.Fatalf("collaborator called=%v, want %v", *called, shouldCall)
 		}
-		expectedCalls := []capturedLogCall{}
-		if !quiet {
-			prefix := "factory_definitions.catalog_paths." + operation
-			expectedCalls = append(expectedCalls, capturedLogCall{level: "info", msg: prefix + ".started"})
-			terminal := capturedLogCall{level: "info", msg: prefix + ".finished", kv: fields}
-			if expectedErr != nil {
-				terminal = capturedLogCall{level: "warn", msg: prefix + ".failed", kv: []any{"reason", outcome.reason}}
-			}
-			expectedCalls = append(expectedCalls, terminal)
-		}
+		expectedCalls := expectedCatalogOutcomeRecords(operation, outcome, quiet, expectedErr, fields)
 		if !reflect.DeepEqual(*calls, expectedCalls) {
 			t.Fatalf("quiet=%v logs=%#v, want %#v", quiet, *calls, expectedCalls)
 		}
 	}
+}
+
+func catalogOutcomeContext(t *testing.T, outcome catalogOutcome) context.Context {
+	t.Helper()
+	ctx := t.Context()
+	if outcome.preCanceled {
+		var cancel context.CancelFunc
+		if errors.Is(outcome.cause, context.Canceled) {
+			ctx, cancel = context.WithCancel(ctx)
+		} else {
+			ctx, cancel = context.WithDeadline(ctx, time.Time{})
+		}
+		cancel()
+	}
+	return ctx
+}
+
+func expectedCatalogOutcomeRecords(operation string, outcome catalogOutcome, quiet bool, expectedErr error, fields []any) []capturedLogCall {
+	expectedCalls := []capturedLogCall{}
+	if !quiet {
+		prefix := "factory_definitions.catalog_paths." + operation
+		expectedCalls = append(expectedCalls, capturedLogCall{level: "info", msg: prefix + ".started"})
+		terminal := capturedLogCall{level: "info", msg: prefix + ".finished", kv: fields}
+		if expectedErr != nil {
+			terminal = capturedLogCall{level: "warn", msg: prefix + ".failed", kv: []any{"reason", outcome.reason}}
+		}
+		expectedCalls = append(expectedCalls, terminal)
+	}
+	return expectedCalls
 }
 
 func catalogOutcomeOperation(t *testing.T, operation string, empty bool, ctx context.Context, cause error, logger logging.Logger) (
@@ -779,7 +793,6 @@ func catalogOutcomeOperation(t *testing.T, operation string, empty bool, ctx con
 ) {
 	t.Helper()
 	called := false
-	listEffective, named, current := validCatalogPathsCollaborators()
 	listRequest := factorydefinitions.ListEffectiveFactoriesRequest{ProjectRoot: "/private/project", GlobalRoot: "/private/global"}
 	namedRequest := factorydefinitions.ResolveNamedFactoryRequest{ProjectRoot: "/private/project", GlobalRoot: "/private/global", Name: "private-name"}
 	listResult := factorydefinitions.ListEffectiveFactoriesResult{Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{Name: "private-name", Definition: &factorydefinitions.FactoryConfig{Project: "private-project"}}}}
@@ -788,21 +801,21 @@ func catalogOutcomeOperation(t *testing.T, operation string, empty bool, ctx con
 		listResult = factorydefinitions.ListEffectiveFactoriesResult{}
 	}
 	namedResult := factorydefinitions.ResolveNamedFactoryResult{Resolution: factorydefinitions.NamedFactoryResolution{Name: "private-name", FactoryDir: "/private/path", Source: factorydefinitions.NamedFactoryResolutionSourceProjectLocal}}
-	listEffective = func(gotCtx context.Context, request factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	listEffective := func(gotCtx context.Context, request factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
 		called = true
 		if gotCtx != ctx || request != listRequest {
 			t.Fatal("list request/context changed")
 		}
 		return listResult, cause
 	}
-	named = func(gotCtx context.Context, request factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error) {
+	named := func(gotCtx context.Context, request factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error) {
 		called = true
 		if gotCtx != ctx || request != namedRequest {
 			t.Fatal("named request/context changed")
 		}
 		return namedResult, cause
 	}
-	current = func(root string) (string, error) {
+	current := func(root string) (string, error) {
 		called = true
 		if root != "/private/root" {
 			t.Fatal("current root changed")

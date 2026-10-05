@@ -506,6 +506,23 @@ func checkCatalogProviderDiagnostics(t *testing.T, quiet bool, outcome string) {
 	if quiet {
 		logger = logging.NoopLogger{}
 	}
+	service, ctx, want, namedErr := catalogProviderFixture(t, outcome, logger)
+	if len(capture.records) != 0 {
+		t.Fatal("construction logged")
+	}
+	gotList, err := service.ListEffectiveFactories(ctx, factorydefinitions.ListEffectiveFactoriesRequest{})
+	if err != nil || !reflect.DeepEqual(gotList, factorydefinitions.ListEffectiveFactoriesResult{}) {
+		t.Fatalf("list=%+v, error=%v", gotList, err)
+	}
+	checkCatalogProviderResolutions(t, service, ctx, outcome, want, namedErr)
+	expected := expectedProviderRecords(quiet, outcome)
+	if !reflect.DeepEqual(capture.records, expected) {
+		t.Fatalf("records=%#v, want %#v", capture.records, expected)
+	}
+}
+
+func catalogProviderFixture(t *testing.T, outcome string, logger logging.Logger) (factorydefinitions.CatalogPathsService, context.Context, factorydefinitions.NamedFactoryResolution, error) {
+	t.Helper()
 	ctx := t.Context()
 	if outcome == "canceled" {
 		var cancel context.CancelFunc
@@ -535,13 +552,11 @@ func checkCatalogProviderDiagnostics(t *testing.T, quiet bool, outcome string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(capture.records) != 0 {
-		t.Fatal("construction logged")
-	}
-	gotList, err := service.ListEffectiveFactories(ctx, factorydefinitions.ListEffectiveFactoriesRequest{})
-	if err != nil || !reflect.DeepEqual(gotList, factorydefinitions.ListEffectiveFactoriesResult{}) {
-		t.Fatalf("list=%+v, error=%v", gotList, err)
-	}
+	return service, ctx, want, namedErr
+}
+
+func checkCatalogProviderResolutions(t *testing.T, service factorydefinitions.CatalogPathsService, ctx context.Context, outcome string, want factorydefinitions.NamedFactoryResolution, namedErr error) {
+	t.Helper()
 	gotNamed, err := service.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{ProjectRoot: "/project", GlobalRoot: "/global", Name: "private-name"})
 	expectedNamed := factorydefinitions.ResolveNamedFactoryResult{Resolution: want}
 	if outcome == "canceled" {
@@ -550,8 +565,11 @@ func checkCatalogProviderDiagnostics(t *testing.T, quiet bool, outcome string) {
 	if namedErr != nil {
 		expectedNamed = factorydefinitions.ResolveNamedFactoryResult{}
 	}
-	if err != namedErr || gotNamed != expectedNamed {
+	if !errors.Is(err, namedErr) || gotNamed != expectedNamed {
 		t.Fatalf("named=%+v, error=%v, want %+v/%v", gotNamed, err, expectedNamed, namedErr)
+	}
+	if err != namedErr { //nolint:errorlint // Named resolution must preserve the original collaborator or context error.
+		t.Fatalf("named error=%v, want original %v", err, namedErr)
 	}
 	gotCurrent, err := service.ResolveCurrentFactoryLocation(ctx, factorydefinitions.ResolveCurrentFactoryLocationRequest{})
 	expectedCurrent := factorydefinitions.ResolveCurrentFactoryLocationResult{FactoryDir: "/current"}
@@ -560,12 +578,11 @@ func checkCatalogProviderDiagnostics(t *testing.T, quiet bool, outcome string) {
 		expectedCurrent = factorydefinitions.ResolveCurrentFactoryLocationResult{}
 		currentErr = context.Canceled
 	}
-	if err != currentErr || gotCurrent != expectedCurrent {
+	if !errors.Is(err, currentErr) || gotCurrent != expectedCurrent {
 		t.Fatalf("current=%+v, error=%v", gotCurrent, err)
 	}
-	expected := expectedProviderRecords(quiet, outcome)
-	if !reflect.DeepEqual(capture.records, expected) {
-		t.Fatalf("records=%#v, want %#v", capture.records, expected)
+	if err != currentErr { //nolint:errorlint // Cancellation must return the original context error unchanged.
+		t.Fatalf("current error=%v, want original %v", err, currentErr)
 	}
 }
 
