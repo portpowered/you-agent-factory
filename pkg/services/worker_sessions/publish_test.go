@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -18,8 +15,7 @@ import (
 func TestPublishCapturedUsagePreservesNativeTokenClasses(t *testing.T) {
 	t.Parallel()
 	spy := &workerRecordSpy{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
-	publisher.Bind(spy)
+	publisher := newCapturedPublisher(spy, func(workers.ProgressFragment) {})
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "usage.updated",
 		Payload: `{"input_tokens":0,"cached_input_tokens":5,"output_tokens":7,"reasoning_output_tokens":3}`,
@@ -91,114 +87,6 @@ func TestPublishRecordRequest_Validate_RejectsInvalidDraft(t *testing.T) {
 	}
 }
 
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProgress(t *testing.T) {
-	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
-		forwarded = append(forwarded, workers.ProgressFragment{
-			DispatchID:   fragment.DispatchID,
-			Continuation: (fragment.Continuation).ClonePtr(),
-		})
-	})
-
-	// Plain output remains available even before the Worker Sessions service is
-	// bound because it does not claim a Provider Session association.
-	publisher.Publish(workers.ProgressFragment{DispatchID: "dispatch-plain"})
-	if len(forwarded) != 1 {
-		t.Fatalf("plain forwarded fragments = %#v, want one", forwarded)
-	}
-
-	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}
-	fragment := workers.ProgressFragment{
-		DispatchID:   "dispatch-1",
-		Continuation: continuationFor(reference),
-	}
-	// Reference-bearing output cannot leak before its Worker Session observer
-	// exists.
-	publisher.Publish(fragment)
-	if len(forwarded) != 1 {
-		t.Fatalf("unbound reference fragments = %#v, want no forward", forwarded)
-	}
-
-	first := &providerSessionObservationSpy{}
-	publisher.Bind(nil)
-	publisher.Bind(first)
-	publisher.Publish(fragment)
-	if len(first.requests) != 1 || first.requests[0].DispatchID != "dispatch-1" || first.requests[0].Reference != reference {
-		t.Fatalf("observed requests = %#v, want exact dispatch/reference", first.requests)
-	}
-	if len(forwarded) != 2 || forwarded[1].Continuation == nil || forwarded[1].Continuation.ProviderSessionID != reference.ID {
-		t.Fatalf("forwarded fragments = %#v, want exact continuation after observation", forwarded)
-	}
-
-	// The live reference hand-off commits the association but is internal
-	// bookkeeping, so it cannot add a response-stream observation ahead of
-	// provider-authored output.
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID:   "dispatch-1",
-		Kind:         workers.ProviderSessionObservedFragmentKind,
-		Continuation: continuationFor(reference),
-	})
-	if len(first.requests) != 2 || len(forwarded) != 2 {
-		t.Fatalf("live reference hand-off requests=%#v forwarded=%#v, want observed without forwarding", first.requests, forwarded)
-	}
-
-	fragment.Continuation.ProviderSessionID = "caller-mutated"
-	if first.requests[0].Reference.ID != reference.ID || forwarded[1].Continuation.ProviderSessionID != reference.ID {
-		t.Fatalf("association or forwarded continuation retained caller mutation: %#v %#v", first.requests[0], forwarded[1])
-	}
-
-	// A second Bind cannot reroute a live runtime to another Worker Sessions
-	// registry, and a mismatched opaque continuation is not forwarded.
-	second := &providerSessionObservationSpy{}
-	publisher.Bind(second)
-	first.err = workersessions.ErrProviderSessionAssociationAttemptMismatch
-	mismatch := workers.ProgressFragment{
-		DispatchID: "dispatch-1",
-		Continuation: continuationFor(providers.SessionRef{
-			Provider: reference.Provider, Kind: reference.Kind, ID: "different-session",
-		}),
-	}
-	publisher.Publish(mismatch)
-	if len(first.requests) != 3 || len(second.requests) != 0 || len(forwarded) != 2 {
-		t.Fatalf("mismatched fragment rerouted or forwarded: first=%#v second=%#v forwarded=%#v", first.requests, second.requests, forwarded)
-	}
-	first.err = nil
-
-	// An incomplete opaque continuation remains visible to the response stream,
-	// but cannot be reconstructed into a resumable association.
-	legacy := workers.ProgressFragment{
-		DispatchID:   "dispatch-legacy",
-		Continuation: &providers.ContinuationRef{Provider: reference.Provider.String(), Kind: reference.Kind},
-	}
-	publisher.Publish(legacy)
-	if len(first.requests) != 3 || len(forwarded) != 3 ||
-		forwarded[2].Continuation == nil ||
-		forwarded[2].Continuation.ProviderSessionID != "" {
-		t.Fatalf("incomplete continuation association or forwarding = requests:%#v forwarded:%#v", first.requests, forwarded)
-	}
-	noDownstream := workersessions.NewProviderSessionObservationPublisher(nil)
-	noDownstream.Bind(first)
-	noDownstream.Publish(legacy)
-	if len(first.requests) != 3 {
-		t.Fatalf("nil-downstream metadata-only output was observed: %#v", first.requests)
-	}
-	first.err = errors.New("association rejected")
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID:   "dispatch-1",
-		Continuation: (forwarded[1].Continuation).ClonePtr(),
-	})
-	if len(first.requests) != 4 || len(forwarded) != 3 {
-		t.Fatalf("rejected observation forwarded output: requests:%#v forwarded:%#v", first.requests, forwarded)
-	}
-
-	var nilPublisher *workersessions.ProviderSessionObservationPublisher
-	nilPublisher.Bind(first)
-	nilPublisher.Publish(fragment)
-}
-
 func TestProviderSessionObservationRequest_Validate(t *testing.T) {
 	valid := workersessions.ProviderSessionObservationRequest{
 		DispatchID: "dispatch-1",
@@ -221,7 +109,7 @@ func TestProviderSessionObservationRequest_Validate(t *testing.T) {
 	}
 }
 
-// workerRecordSpy captures what Publish commits to a Worker Session topic.
+// workerRecordSpy captures binding order and committed Worker records.
 type workerRecordSpy struct {
 	workersessions.Service
 	published []workersessions.PublishRecordRequest
@@ -237,6 +125,9 @@ func (s *workerRecordSpy) ObserveProviderSession(
 func (s *workerRecordSpy) PublishRecord(
 	_ context.Context, req workersessions.PublishRecordRequest,
 ) (workersessions.PublishRecordResult, error) {
+	if req.Draft.Provenance.Provider != "" && len(s.bindings) == 0 {
+		return workersessions.PublishRecordResult{}, errors.New("provider output arrived before binding")
+	}
 	s.published = append(s.published, req)
 	return workersessions.PublishRecordResult{}, nil
 }
@@ -262,31 +153,31 @@ func (s *workerRecordSpy) WorkerSessionIDForDispatch(
 }
 
 // TestPublish_CanonicalDraftBindsBeforeWorkerOutput proves canonical provider
-// drafts use the Worker Sessions-owned binding capability before the draft is
-// committed and still reach the downstream response publisher exactly once.
+// drafts bind the explicitly selected Worker before its record is committed.
 func TestPublish_CanonicalDraftBindsBeforeWorkerOutput(t *testing.T) {
+	t.Parallel()
 	spy := &workerRecordSpy{}
-	forwarded := 0
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
-		forwarded++
-	})
-	publisher.Bind(spy)
-	publisher.Publish(workers.CanonicalDraftFragment("worker-1", workers.Draft{
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	fragment := workers.CanonicalDraftFragment("attempt-1", workers.Draft{
 		Kind:       workers.KindMessage,
 		Phase:      workers.PhaseCompleted,
-		DispatchID: "worker-1",
+		DispatchID: "attempt-1",
 		Provenance: workers.Provenance{Provider: "codex", NativeEventType: "message.completed", Delivery: workers.DeliveryNativeFinal, Representation: workers.RepresentationSnapshot, Fidelity: workers.FidelityFinalOnly},
 		Payload:    []byte(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"done"}]}`),
-	}))
+	})
+	fragment.Correlation = workers.ExecutionCorrelation{DispatchID: "dispatch-1", AttemptID: "attempt-1"}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", fragment); err != nil {
+		t.Fatal(err)
+	}
 
-	if len(spy.bindings) != 1 || spy.bindings[0].Provider != "codex" || spy.bindings[0].DispatchID != "worker-1" {
+	if len(spy.bindings) != 1 || spy.bindings[0].Provider != "codex" || spy.bindings[0].DispatchID != "attempt-1" || spy.bindings[0].WorkerSessionID != "selected-worker" {
 		t.Fatalf("provider bindings = %#v, want one codex binding before output", spy.bindings)
 	}
 	if len(spy.published) != 1 || spy.published[0].Draft.Kind != workers.KindMessage || spy.published[0].Draft.Provenance.Provider != "codex" {
 		t.Fatalf("published canonical records = %#v, want one codex MESSAGE record", spy.published)
 	}
-	if forwarded != 1 {
-		t.Fatalf("forwarded canonical fragments = %d, want exactly one", forwarded)
+	if spy.published[0].SessionID != "selected-worker" || spy.published[0].Draft.DispatchID != "attempt-1" {
+		t.Fatalf("record = %#v, want selected Worker and physical attempt", spy.published[0])
 	}
 }
 
@@ -294,20 +185,20 @@ func TestPublish_CanonicalDraftBindsBeforeWorkerOutput(t *testing.T) {
 // proves provider identity is sufficient to attribute a raw provider output
 // even when the provider has no resumable native session reference to share.
 func TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance(t *testing.T) {
+	t.Parallel()
 	spy := &workerRecordSpy{}
-	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
-		forwarded = append(forwarded, fragment)
-	})
-	publisher.Bind(spy)
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID: "worker-1",
-		Kind:       workers.ProgressFragmentKind,
-		Type:       "message.completed",
-		Payload:    "final-only output",
-		Provider:   "antigravity",
-		Metadata:   map[string]string{"item_id": "message-1"},
-	})
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", workers.ProgressFragment{
+		DispatchID:  "dispatch-1",
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-1", AttemptID: "attempt-1"},
+		Kind:        workers.ProgressFragmentKind,
+		Type:        "message.completed",
+		Payload:     "final-only output",
+		Provider:    "antigravity",
+		Metadata:    map[string]string{"item_id": "message-1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(spy.bindings) != 1 || spy.bindings[0].Provider != "antigravity" {
 		t.Fatalf("provider bindings = %#v, want one antigravity binding", spy.bindings)
@@ -319,18 +210,13 @@ func TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance(t *t
 	if output.Provenance.Provider != "antigravity" || output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted {
 		t.Fatalf("output draft = %#v, want antigravity MESSAGE/COMPLETED provenance", output)
 	}
-	if len(forwarded) != 1 || forwarded[0].Provider != "antigravity" || forwarded[0].Continuation != nil {
-		t.Fatalf("forwarded output = %#v, want provider identity without a synthesized session", forwarded)
+	if spy.published[0].SessionID != "selected-worker" || output.DispatchID != "attempt-1" {
+		t.Fatalf("record = %#v, want selected Worker and physical attempt", spy.published[0])
 	}
 }
 
-// TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards pins both
-// halves of the routing.
-//
-// A Worker is a tool call, so its output is committed to that Worker's own
-// topic, where the Chat Session sequences it as content inside the call. It
-// also continues downstream, because the Factory Session response-event stream
-// is what the CLI, the dashboard, and the HTTP SSE feed read.
+// Worker output is committed to the selected Worker's topic. Runtime's bound
+// progress operation owns downstream forwarding, which its own tests protect.
 //
 // Every committed Draft must satisfy workers.ValidateDraft. That is the point:
 // an invalid Draft is rejected by PublishRecord and the observation is lost
@@ -415,19 +301,16 @@ func workerOutputCases() []workerOutputCase {
 	}
 }
 
-func TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards(t *testing.T) {
+func TestPublishWorkerSessionProgress_CommitsWorkerOutputAsValidRecords(t *testing.T) {
+	t.Parallel()
 	for _, tc := range workerOutputCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			spy := &workerRecordSpy{}
-			var forwarded []workers.ProgressFragment
-			publisher := workersessions.NewProviderSessionObservationPublisher(
-				func(fragment workers.ProgressFragment) { forwarded = append(forwarded, fragment) })
-			publisher.Bind(spy)
-			publisher.Publish(tc.fragment)
-
-			if len(forwarded) != 1 {
-				t.Fatalf("forwarded fragments = %d, want 1 -- the CLI, dashboard, and SSE feed read that stream",
-					len(forwarded))
+			publisher := &workersessions.ProviderSessionObservationPublisher{}
+			tc.fragment.Correlation = workers.ExecutionCorrelation{DispatchID: tc.fragment.DispatchID, AttemptID: "attempt-1"}
+			if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", tc.fragment); err != nil {
+				t.Fatal(err)
 			}
 			if tc.wantNone {
 				if len(spy.published) != 0 {
@@ -439,8 +322,8 @@ func TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards(t *testing.T)
 				t.Fatalf("published %d record(s), want exactly 1", len(spy.published))
 			}
 			req := spy.published[0]
-			if req.SessionID != "d1" {
-				t.Fatalf("SessionID = %q, want the dispatch id", req.SessionID)
+			if req.SessionID != "selected-worker" || req.Draft.DispatchID != "attempt-1" {
+				t.Fatalf("record = %#v, want selected Worker and physical attempt", req)
 			}
 			if req.Draft.Kind != tc.wantKind || req.Draft.Phase != tc.wantPhase {
 				t.Fatalf("draft = %q/%q, want %q/%q",
@@ -453,20 +336,21 @@ func TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards(t *testing.T)
 	}
 }
 
-// TestPublish_KeepsEachWorkerSessionSequenceIndependent proves two Workers do
-// not share a sequence counter. PublishRecord rejects a regressing
-// SourceSequence within one source, so a shared counter would silently drop
-// records from whichever Worker fell behind.
+// Equal dispatch and physical attempt IDs do not combine distinct Workers'
+// source sequences. The caller supplies the already-resolved Worker identity.
 func TestPublish_KeepsEachWorkerSessionSequenceIndependent(t *testing.T) {
+	t.Parallel()
 	spy := &workerRecordSpy{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
-	publisher.Bind(spy)
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
 
 	for _, dispatch := range []string{"d1", "d2", "d1", "d2", "d1"} {
-		publisher.Publish(workers.ProgressFragment{
-			DispatchID: dispatch, Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "chunk",
-			Metadata: map[string]string{"kind": "message", "item_id": "m1"},
-		})
+		if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, dispatch, workers.ProgressFragment{
+			DispatchID: "shared-dispatch", Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "chunk",
+			Correlation: workers.ExecutionCorrelation{DispatchID: "shared-dispatch", AttemptID: "shared-attempt"},
+			Metadata:    map[string]string{"kind": "message", "item_id": "m1"},
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	bySession := map[string][]uint64{}
@@ -482,6 +366,42 @@ func TestPublish_KeepsEachWorkerSessionSequenceIndependent(t *testing.T) {
 	}
 	if len(bySession["d1"]) != 3 || len(bySession["d2"]) != 2 {
 		t.Fatalf("records per session = %v, want d1:3 d2:2", bySession)
+	}
+}
+
+func TestPublishWorkerSessionProgress_RejectsCanonicalAttemptMismatchBeforeBinding(t *testing.T) {
+	t.Parallel()
+	spy := &workerRecordSpy{}
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	fragment := workers.CanonicalDraftFragment("logical-dispatch", workers.Draft{
+		Kind: workers.KindMessage, Phase: workers.PhaseCompleted,
+		DispatchID: "stale-attempt", Provenance: workers.Provenance{Provider: "codex"},
+		Payload: []byte(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"late"}]}`),
+	})
+	fragment.Correlation = workers.ExecutionCorrelation{DispatchID: "logical-dispatch", AttemptID: "current-attempt"}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", fragment); !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) {
+		t.Fatalf("publication error = %v, want physical attempt mismatch", err)
+	}
+	if len(spy.bindings) != 0 || len(spy.published) != 0 {
+		t.Fatalf("stale output mutated binding/records: %#v %#v", spy.bindings, spy.published)
+	}
+}
+
+func TestPublishWorkerSessionProgress_ReturnsRecordRejection(t *testing.T) {
+	t.Parallel()
+	for _, want := range []error{workersessions.ErrPublicationNotOpen, workersessions.ErrOutOfOrderPublication, workersessions.ErrSessionNotFound} {
+		t.Run(want.Error(), func(t *testing.T) {
+			t.Parallel()
+			publisher := &workersessions.ProviderSessionObservationPublisher{}
+			fragment := workers.ProgressFragment{
+				DispatchID: "logical-dispatch", Kind: workers.ProgressFragmentKind,
+				Type: "message.delta", Payload: "hello",
+				Correlation: workers.ExecutionCorrelation{DispatchID: "logical-dispatch", AttemptID: "physical-attempt"},
+			}
+			if err := publisher.PublishWorkerSessionProgress(context.Background(), &rejectingWorkerRecordSpy{err: want}, "selected-worker", fragment); !errors.Is(err, want) {
+				t.Fatalf("publication error = %v, want %v", err, want)
+			}
+		})
 	}
 }
 
@@ -511,92 +431,16 @@ func (s *rejectingWorkerRecordSpy) WorkerSessionIDForDispatch(
 	return dispatchID, nil
 }
 
-type recordingLogger struct {
-	logging.NoopLogger
-	messages []string
-}
-
-func (l *recordingLogger) Warn(msg string, args ...any) {
-	entry := msg
-	for index := 0; index+1 < len(args); index += 2 {
-		entry += " " + fmt.Sprint(args[index]) + "=" + fmt.Sprint(args[index+1])
-	}
-	l.messages = append(l.messages, entry)
-}
-
-// TestPublish_ReportsARejectedWorkerRecordWithoutFailingTheDispatch covers the
-// race this routing must survive: a Worker's terminal record can begin
-// committing while a final observation is still in flight, and PublishRecord
-// then refuses it. Losing that one record is acceptable; losing it silently is
-// not, because a Worker whose output stops early would be undiagnosable.
-func TestPublish_ReportsARejectedWorkerRecordWithoutFailingTheDispatch(t *testing.T) {
-	cases := []struct {
-		name        string
-		err         error
-		wantOutcome string
-	}{
-		{"closed window", workersessions.ErrPublicationNotOpen, "outcome=publication_not_open"},
-		{"out of order", workersessions.ErrOutOfOrderPublication, "outcome=out_of_order"},
-		{"unknown session", workersessions.ErrSessionNotFound, "outcome=session_not_found"},
-		{"anything else", errors.New("boom"), "outcome=rejected"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			logger := &recordingLogger{}
-			var forwarded int
-			publisher := workersessions.NewProviderSessionObservationPublisher(
-				func(workers.ProgressFragment) { forwarded++ }).WithLogger(logger)
-			publisher.Bind(&rejectingWorkerRecordSpy{err: tc.err})
-
-			publisher.Publish(workers.ProgressFragment{
-				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hello",
-				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
-			})
-
-			if len(logger.messages) != 1 {
-				t.Fatalf("warnings = %v, want exactly one -- a dropped observation must be diagnosable", logger.messages)
-			}
-			if !strings.Contains(logger.messages[0], tc.wantOutcome) {
-				t.Fatalf("warning = %q, want it to carry %q", logger.messages[0], tc.wantOutcome)
-			}
-			if strings.Contains(logger.messages[0], "hello") {
-				t.Fatalf("warning leaked payload content: %q", logger.messages[0])
-			}
-			// The dispatch continues regardless: Publish has a no-return
-			// signature precisely so one record cannot fail a Worker.
-			if forwarded != 1 {
-				t.Fatalf("forwarded = %d, want 1 even though publication was rejected", forwarded)
-			}
-		})
-	}
-}
-
-// TestPublish_IgnoresFragmentsThatNameNoWorkerSession covers the guards that
+// TestPublish_IgnoresUnrecognizedOrIncompleteFacts covers the guards that
 // keep a malformed or unroutable observation from reaching PublishRecord.
-func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
+func TestPublish_IgnoresUnrecognizedOrIncompleteFacts(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
-		bind     bool
 		fragment workers.ProgressFragment
 	}{
 		{
-			name: "no dispatch to address",
-			bind: true,
-			fragment: workers.ProgressFragment{
-				Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hi",
-				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
-			},
-		},
-		{
-			name: "no bound worker sessions service",
-			fragment: workers.ProgressFragment{
-				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hi",
-				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
-			},
-		},
-		{
 			name: "an unrecognized phase word",
-			bind: true,
 			fragment: workers.ProgressFragment{
 				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "sideways", Payload: "hi",
 				Metadata: map[string]string{"kind": "message", "item_id": "m1"},
@@ -604,14 +448,12 @@ func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
 		},
 		{
 			name: "a native type carrying no phase at all",
-			bind: true,
 			fragment: workers.ProgressFragment{
 				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "undotted", Payload: "hi",
 			},
 		},
 		{
 			name: "a file change with no path",
-			bind: true,
 			fragment: workers.ProgressFragment{
 				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated",
 				Metadata: map[string]string{"kind": "file_change", "item_id": "f1", "operation": "created"},
@@ -619,7 +461,6 @@ func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
 		},
 		{
 			name: "usage with no token count",
-			bind: true,
 			fragment: workers.ProgressFragment{
 				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated",
 				Metadata: map[string]string{"kind": "usage", "item_id": "usage"},
@@ -627,7 +468,6 @@ func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
 		},
 		{
 			name: "a tool fact with no tool call id",
-			bind: true,
 			fragment: workers.ProgressFragment{
 				DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "updated", Payload: "t",
 				Metadata: map[string]string{"kind": "tool", "status": "completed"},
@@ -635,7 +475,6 @@ func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
 		},
 		{
 			name: "generic progress with nothing to label it",
-			bind: true,
 			fragment: workers.ProgressFragment{
 				DispatchID: "d1", Kind: workers.ProgressFragmentKind,
 				Metadata: map[string]string{"kind": "mystery"},
@@ -646,11 +485,13 @@ func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
-			if tc.bind {
-				publisher.Bind(spy)
+			t.Parallel()
+			publisher := &workersessions.ProviderSessionObservationPublisher{}
+			fragment := tc.fragment
+			fragment.Correlation = workers.ExecutionCorrelation{DispatchID: "logical", AttemptID: "physical"}
+			if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", fragment); err != nil {
+				t.Fatal(err)
 			}
-			publisher.Publish(tc.fragment)
 			if len(spy.published) != 0 {
 				t.Fatalf("published %+v, want nothing committed", spy.published)
 			}
@@ -664,6 +505,7 @@ func TestPublish_IgnoresFragmentsThatNameNoWorkerSession(t *testing.T) {
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 // pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestPublish_CommitsRemainingWorkerVocabulary(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name      string
 		fragment  workers.ProgressFragment
@@ -793,10 +635,13 @@ func TestPublish_CommitsRemainingWorkerVocabulary(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
-			publisher.Bind(spy)
-			publisher.Publish(tc.fragment)
+			publisher := &workersessions.ProviderSessionObservationPublisher{}
+			tc.fragment.Correlation = workers.ExecutionCorrelation{DispatchID: tc.fragment.DispatchID, AttemptID: "attempt-1"}
+			if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", tc.fragment); err != nil {
+				t.Fatal(err)
+			}
 
 			if len(spy.published) != 1 {
 				t.Fatalf("published %d record(s), want exactly 1", len(spy.published))
@@ -816,24 +661,18 @@ func TestPublish_CommitsRemainingWorkerVocabulary(t *testing.T) {
 // TestPublish_ResponseFragmentsAlsoReachTheWorkerTopic covers the second
 // Worker-authored fragment kind: the runner's own terminal content.
 func TestPublish_ResponseFragmentsAlsoReachTheWorkerTopic(t *testing.T) {
+	t.Parallel()
 	spy := &workerRecordSpy{}
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
-	publisher.Bind(spy)
-	publisher.Publish(workers.ProgressFragment{
+	publisher := &workersessions.ProviderSessionObservationPublisher{}
+	if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", workers.ProgressFragment{
 		DispatchID: "d1", Kind: workers.ResponseFragmentKind, Type: "delta", Payload: "final",
-		Metadata: map[string]string{"kind": "message", "item_id": "m1"},
-	})
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-1", AttemptID: "attempt-1"},
+		Metadata:    map[string]string{"kind": "message", "item_id": "m1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if len(spy.published) != 1 {
 		t.Fatalf("published %d record(s), want the response fragment committed too", len(spy.published))
-	}
-}
-
-// TestWithLogger_IsSafeOnANilPublisher keeps the option usable in the same
-// nil-tolerant style as the rest of this type.
-func TestWithLogger_IsSafeOnANilPublisher(t *testing.T) {
-	var publisher *workersessions.ProviderSessionObservationPublisher
-	if got := publisher.WithLogger(&recordingLogger{}); got != nil {
-		t.Fatalf("WithLogger() on a nil publisher = %v, want nil", got)
 	}
 }
 
@@ -842,6 +681,7 @@ func TestWithLogger_IsSafeOnANilPublisher(t *testing.T) {
 // Dropping them here is what keeps PublishRecord from rejecting a record and
 // losing the observation with no explanation.
 func TestPublish_DropsFactsThatCannotBecomeALegalRecord(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
 		fragment workers.ProgressFragment
@@ -865,10 +705,13 @@ func TestPublish_DropsFactsThatCannotBecomeALegalRecord(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
-			publisher.Bind(spy)
-			publisher.Publish(tc.fragment)
+			publisher := &workersessions.ProviderSessionObservationPublisher{}
+			tc.fragment.Correlation = workers.ExecutionCorrelation{DispatchID: tc.fragment.DispatchID, AttemptID: "attempt-1"}
+			if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", tc.fragment); err != nil {
+				t.Fatal(err)
+			}
 			if len(spy.published) != 0 {
 				t.Fatalf("published %+v, want nothing committed", spy.published)
 			}
@@ -879,6 +722,7 @@ func TestPublish_DropsFactsThatCannotBecomeALegalRecord(t *testing.T) {
 // TestPublish_CoversTheRemainingPhaseVocabulary exercises the phase words and
 // tool statuses the other tables do not reach.
 func TestPublish_CoversTheRemainingPhaseVocabulary(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name      string
 		fragment  workers.ProgressFragment
@@ -924,10 +768,13 @@ func TestPublish_CoversTheRemainingPhaseVocabulary(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			spy := &workerRecordSpy{}
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
-			publisher.Bind(spy)
-			publisher.Publish(tc.fragment)
+			publisher := &workersessions.ProviderSessionObservationPublisher{}
+			tc.fragment.Correlation = workers.ExecutionCorrelation{DispatchID: tc.fragment.DispatchID, AttemptID: "attempt-1"}
+			if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", tc.fragment); err != nil {
+				t.Fatal(err)
+			}
 			if len(spy.published) != 1 {
 				t.Fatalf("published %d record(s), want exactly 1", len(spy.published))
 			}
@@ -939,22 +786,5 @@ func TestPublish_CoversTheRemainingPhaseVocabulary(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want nil", err)
 			}
 		})
-	}
-}
-
-// TestPublish_WithoutALoggerStaysSilentAndSafe proves reporting is optional:
-// a publisher constructed without a logger must still never fail a dispatch
-// when a record is refused.
-func TestPublish_WithoutALoggerStaysSilentAndSafe(t *testing.T) {
-	var forwarded int
-	publisher := workersessions.NewProviderSessionObservationPublisher(
-		func(workers.ProgressFragment) { forwarded++ })
-	publisher.Bind(&rejectingWorkerRecordSpy{err: workersessions.ErrPublicationNotOpen})
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "delta", Payload: "hello",
-		Metadata: map[string]string{"kind": "message", "item_id": "m1"},
-	})
-	if forwarded != 1 {
-		t.Fatalf("forwarded = %d, want 1", forwarded)
 	}
 }

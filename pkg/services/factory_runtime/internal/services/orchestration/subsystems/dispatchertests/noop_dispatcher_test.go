@@ -2,9 +2,11 @@ package subsystems_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
@@ -24,7 +26,7 @@ func newTestPipeline(n *state.Net) *testPipeline {
 	return &testPipeline{
 		transitioner: subsystems.NewTransitioner(
 			n,
-			nil, testTransitionerNow,
+			logging.NoopLogger{}, testTransitionerNow,
 
 			testTransitioner(
 				n),
@@ -325,5 +327,71 @@ func TestNoOpDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(
 	}
 	if dispatch.Execution.TraceID != "trace-1" {
 		t.Fatalf("execution trace ID = %q, want trace-1", dispatch.Execution.TraceID)
+	}
+}
+
+func TestNoOpDispatcher_ExplicitQuietAcceptance(t *testing.T) {
+	t.Parallel()
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) { t.Parallel(); checkExplicitQuietAcceptance(t, enabled) })
+	}
+}
+
+func checkExplicitQuietAcceptance(t *testing.T, enabled bool) {
+	t.Helper()
+	n := &state.Net{Places: map[string]*petri.Place{"input": {ID: "input"}}, Transitions: map[string]*petri.Transition{}}
+	sched := &mockScheduler{}
+	if enabled {
+		for _, id := range []string{"first", "second"} {
+			n.Transitions[id] = &petri.Transition{ID: id, InputArcs: []petri.Arc{{Name: "input", PlaceID: "input", Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}}}
+			sched.decisions = append(sched.decisions, interfaces.FiringDecision{TransitionID: id, ConsumeTokens: []string{id}, WorkerType: "script"})
+		}
+	}
+	results := buffers.NewTypedBuffer[workerexecution.WorkResult](2)
+	now := func() time.Time { return time.Unix(100, 0) }
+	next := 0
+	dispatcher := subsystems.NewNoOpDispatcher(n, sched, results, now, func() string { next++; return fmt.Sprintf("dispatch-%d", next) })
+	marking := makeDispatcherSnapshot(map[string]*factorytoken.Token{
+		"first":  {ID: "first", PlaceID: "input", Color: factorytoken.Color{WorkID: "work-first"}},
+		"second": {ID: "second", PlaceID: "input", Color: factorytoken.Color{WorkID: "work-second"}},
+	})
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, TickCount: 7}
+	tick, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !enabled {
+		if tick != nil || results.HasData() {
+			t.Fatal("empty dispatcher produced results")
+		}
+		return
+	}
+	assertQuietDispatchEffects(t, tick, results)
+	if len(snapshot.Marking.Tokens) != 2 {
+		t.Fatal("dispatcher mutated input snapshot")
+	}
+}
+
+func assertQuietDispatchEffects(t *testing.T, tick *interfaces.TickResult, results *buffers.TypedBuffer[workerexecution.WorkResult]) {
+	t.Helper()
+	if tick == nil || len(tick.Mutations) != 2 || len(tick.Dispatches) != 2 {
+		t.Fatalf("ordered effects = %+v", tick)
+	}
+	for i, id := range []string{"first", "second"} {
+		dispatchID := fmt.Sprintf("dispatch-%d", i+1)
+		if tick.Mutations[i].TokenID != id || tick.Mutations[i].Type != interfaces.MutationConsume {
+			t.Fatalf("mutation = %+v", tick.Mutations[i])
+		}
+		result, ok := results.Read()
+		if !ok || result.DispatchID != dispatchID || result.TransitionID != id || result.Outcome != workerexecution.OutcomeAccepted {
+			t.Fatalf("synchronous result = %+v, %v", result, ok)
+		}
+		inputs := workers.WorkDispatchInputTokens(tick.Dispatches[i].Dispatch)
+		if len(inputs) != 1 || inputs[0].ID != id || tick.Dispatches[i].Dispatch.DispatchID != dispatchID {
+			t.Fatalf("dispatch inputs = %+v", tick.Dispatches[i])
+		}
+	}
+	if results.HasData() {
+		t.Fatal("unexpected extra results")
 	}
 }

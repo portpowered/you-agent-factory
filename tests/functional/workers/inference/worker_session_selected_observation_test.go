@@ -182,16 +182,20 @@ func assertSelectedObservationParity(t *testing.T, group *inferenceProcessGroup,
 		t.Fatal(err)
 	}
 	for _, row := range []factoryapi.WorkerSessionObservation{matching[0], workRows[0], shown} {
-		assertSelectedObservationFacts(t, row, matching[0], sessionID, workerID, providerID, variant, state)
+		assertSelectedObservationFacts(t, row, matching[0], sessionID, workerID, providerID, state)
+	}
+	assertSelectedProviderEnrichment(t, matching[0], false)
+	for _, row := range []factoryapi.WorkerSessionObservation{workRows[0], shown} {
+		assertSelectedProviderEnrichment(t, row, variant == "available")
 	}
 }
 
-func assertSelectedObservationFacts(t *testing.T, row, fleet factoryapi.WorkerSessionObservation, sessionID, workerID, providerID, variant, state string) {
+func assertSelectedObservationFacts(t *testing.T, row, fleet factoryapi.WorkerSessionObservation, sessionID, workerID, providerID, state string) {
 	t.Helper()
 	if row.State != factoryapi.WorkerSessionObservationState(state) || row.FactorySessionId == nil || *row.FactorySessionId != sessionID || row.WorkerSessionId != workerID {
 		t.Fatalf("live facts = %#v; want %s in %s", row, state, sessionID)
 	}
-	assertSelectedProviderFacts(t, row, providerID, variant)
+	assertSelectedProviderFacts(t, row, providerID)
 	if state == "RUNNING" && row.ConfirmationState != factoryapi.UNCONFIRMED {
 		t.Fatalf("active confirmation = %s", row.ConfirmationState)
 	}
@@ -200,7 +204,7 @@ func assertSelectedObservationFacts(t *testing.T, row, fleet factoryapi.WorkerSe
 	}
 }
 
-func assertSelectedProviderFacts(t *testing.T, row factoryapi.WorkerSessionObservation, providerID, variant string) {
+func assertSelectedProviderFacts(t *testing.T, row factoryapi.WorkerSessionObservation, providerID string) {
 	t.Helper()
 	wantProvider := (*factoryapi.WorkerSessionProviderSessionRef)(nil)
 	if providerID != "" {
@@ -209,10 +213,6 @@ func assertSelectedProviderFacts(t *testing.T, row factoryapi.WorkerSessionObser
 	if row.ProviderSessionAvailable != (providerID != "") || !reflect.DeepEqual(row.ProviderSession, wantProvider) {
 		t.Fatalf("provider facts = %#v/%t, want controlled tuple %q", row.ProviderSession, row.ProviderSessionAvailable, providerID)
 	}
-	wantTranscript := factoryapi.WorkerSessionObservationTranscriptUNAVAILABLE
-	if variant == "available" {
-		wantTranscript = factoryapi.WorkerSessionObservationTranscriptAVAILABLE
-	}
 	wantHealth := factoryapi.WorkerSessionObservationRecordingHealthComplete
 	if row.State == factoryapi.WorkerSessionObservationStateRunning {
 		wantHealth = factoryapi.WorkerSessionObservationRecordingHealthIncomplete
@@ -220,8 +220,21 @@ func assertSelectedProviderFacts(t *testing.T, row factoryapi.WorkerSessionObser
 	if row.RecordingHealth == nil || *row.RecordingHealth != wantHealth || row.RecordingHealthReason != nil {
 		t.Fatalf("controlled recording health = %#v/%v, want %s without interruption", row.RecordingHealth, row.RecordingHealthReason, wantHealth)
 	}
-	if row.Transcript != wantTranscript || row.Failure != nil {
+	if row.Failure != nil {
 		t.Fatalf("optional facts = %#v", row)
+	}
+}
+
+func assertSelectedProviderEnrichment(t *testing.T, row factoryapi.WorkerSessionObservation, available bool) {
+	t.Helper()
+	wantTranscript := factoryapi.WorkerSessionObservationTranscriptUNAVAILABLE
+	wantEvents := 0
+	if available {
+		wantTranscript = factoryapi.WorkerSessionObservationTranscriptAVAILABLE
+		wantEvents = 2
+	}
+	if row.Transcript != wantTranscript || row.Parse.EventCount != wantEvents || row.Parse.MalformedLineCount != 0 || row.Parse.UnknownEventCount != 0 || len(row.Parse.Errors) != 0 || row.TurnUsage != nil {
+		t.Fatalf("provider enrichment = %#v, want transcript %s and %d native events without turn usage", row, wantTranscript, wantEvents)
 	}
 }
 

@@ -1,6 +1,7 @@
 package workersessions_test
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -10,6 +11,33 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// The fixture supplies the immutable observer and physical attempt selected
+// upstream. RuntimeProgressPublisher owns the safe downstream fan-out.
+type capturedPublisher struct {
+	observer workersessions.Service
+	next     workers.ProgressPublisher
+	progress workersessions.ProviderSessionObservationPublisher
+}
+
+func newCapturedPublisher(observer workersessions.Service, next workers.ProgressPublisher) *capturedPublisher {
+	return &capturedPublisher{observer: observer, next: next}
+}
+
+func (p *capturedPublisher) Publish(fragment workers.ProgressFragment) {
+	fragment.Correlation.DispatchID = fragment.DispatchID
+	fragment.Correlation.AttemptID = fragment.DispatchID
+	publish := workersessions.RuntimeProgressPublisher(func(ctx context.Context, _ workersessions.RuntimeAttemptKey, safe workers.ProgressFragment, next workers.ProgressPublisher) error {
+		if err := p.progress.PublishWorkerSessionProgress(ctx, p.observer, safe.DispatchID, safe); err != nil {
+			return err
+		}
+		if next != nil {
+			next(safe)
+		}
+		return nil
+	}).ForRuntime(context.Background(), "fixture-runtime", p.next)
+	publish(fragment)
+}
+
 func TestPublishDeclaredSecretsReachCaptureAndDownstreamRedacted(t *testing.T) {
 	t.Parallel()
 	for _, pointer := range []bool{false, true} {
@@ -17,10 +45,9 @@ func TestPublishDeclaredSecretsReachCaptureAndDownstreamRedacted(t *testing.T) {
 			t.Parallel()
 			spy := &workerRecordSpy{}
 			var forwarded []workers.ProgressFragment
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+			publisher := newCapturedPublisher(spy, func(fragment workers.ProgressFragment) {
 				forwarded = append(forwarded, fragment)
 			})
-			publisher.Bind(spy)
 			draft := workers.Draft{
 				Kind: workers.KindMessage, Phase: workers.PhaseCompleted,
 				Provenance:                 workers.Provenance{Provider: "codex", NativeEventType: "message.completed"},
@@ -64,8 +91,7 @@ func TestPublishInvalidSecretProvenanceReachesNeitherObserver(t *testing.T) {
 	t.Parallel()
 	spy := &workerRecordSpy{}
 	forwarded := 0
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) { forwarded++ })
-	publisher.Bind(spy)
+	publisher := newCapturedPublisher(spy, func(workers.ProgressFragment) { forwarded++ })
 	publisher.Publish(workers.CanonicalDraftFragment("worker-1", workers.Draft{
 		Kind: workers.KindProgress, Phase: workers.PhaseUpdated,
 		Payload:                    json.RawMessage(`{"label":"progress","message":"declared-token"}`),
@@ -102,10 +128,9 @@ func TestPublishDeclaredSecretWorkerPayloads(t *testing.T) {
 			t.Parallel()
 			spy := &workerRecordSpy{}
 			var forwarded []workers.ProgressFragment
-			publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+			publisher := newCapturedPublisher(spy, func(fragment workers.ProgressFragment) {
 				forwarded = append(forwarded, fragment)
 			})
-			publisher.Bind(spy)
 			draft := workers.Draft{Kind: test.kind, Phase: test.phase,
 				Provenance: workers.Provenance{Provider: "codex", NativeEventType: "classified"},
 				Payload:    json.RawMessage(test.payload), DeclaredSecretJSONPointers: test.pointers}

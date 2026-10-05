@@ -2,12 +2,16 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -15,7 +19,7 @@ import (
 // InvokeSession and its attempt loop live beside the controls they race with.
 
 var _ interface {
-	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
+	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, workers.Service, platformclock.Source, platformclock.TimerSource, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 } = (*registry)(nil)
 
 // transitionToStarting atomically moves id from StateReserved to
@@ -62,9 +66,11 @@ func cloneOptionalExecutionFact(value *string) *string {
 
 type runtimeAttempt struct {
 	registry       *registry
+	key            workersessions.RuntimeAttemptKey
 	workerID       string
 	dispatchID     string
 	attemptID      string
+	correlation    workers.ExecutionCorrelation
 	once           sync.Once
 	mu             sync.Mutex
 	cancel         func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
@@ -75,6 +81,90 @@ type runtimeAttempt struct {
 	controlHistory *controlHistoryReservation
 	completing     bool
 	completed      chan struct{}
+	progress       workersessions.ProviderSessionObservationPublisher
+}
+
+// PublishRuntimeProgress resolves only the explicit scoped owner before any
+// association, source-native append, or downstream publication. Sequence state
+// belongs to the immutable handle, so equal dispatches cannot share counters.
+func (r *registry) PublishRuntimeProgress(
+	ctx context.Context,
+	key workersessions.RuntimeAttemptKey,
+	fragment workers.ProgressFragment,
+	next workers.ProgressPublisher,
+) error {
+	safe, err := workersessions.RedactProgressFragment(fragment)
+	if err != nil {
+		return err
+	}
+	return r.publishRuntimeProgress(ctx, key, safe, next)
+}
+
+func (r *registry) publishRuntimeProgress(
+	ctx context.Context, key workersessions.RuntimeAttemptKey, fragment workers.ProgressFragment, next workers.ProgressPublisher,
+) error {
+	ctx = runtimeAttemptContext(ctx)
+	key.RuntimeID = strings.TrimSpace(key.RuntimeID)
+	key.DispatchID = strings.TrimSpace(key.DispatchID)
+	if key.RuntimeID == "" || key.DispatchID == "" ||
+		key.RuntimeID != strings.TrimSpace(fragment.Correlation.RuntimeID) ||
+		key.DispatchID != strings.TrimSpace(fragment.Correlation.DispatchID) {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	progress, ownerID, correlation, err := r.runtimeProgressOwner(key)
+	if err != nil {
+		return err
+	}
+	if !runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	attemptID := correlation.AttemptID
+	physicalID := strings.TrimSpace(fragment.Correlation.AttemptID)
+	if physicalID == "" {
+		physicalID = strings.TrimSpace(fragment.DispatchID)
+	}
+	if physicalID != attemptID {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	if dispatchID := strings.TrimSpace(fragment.DispatchID); dispatchID != "" && dispatchID != attemptID && dispatchID != key.DispatchID {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	// Preserve the original fragment for the downstream observer, including
+	// legacy blank physical IDs. Only the committed draft needs normalization.
+	committed := fragment
+	committed.Correlation.AttemptID = attemptID
+	if err := progress.PublishWorkerSessionProgress(ctx, r, publicWorkerID(ownerID), committed, workerAddressScope(ownerID)); err != nil {
+		r.logger.Warn("runtime Worker progress rejected", "workerSessionID", publicWorkerID(ownerID), "runtimeID", key.RuntimeID, "dispatchID", key.DispatchID, "outcome", "publication_rejected")
+		return err
+	}
+	if fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
+		next(fragment)
+	}
+	return nil
+}
+
+func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*workersessions.ProviderSessionObservationPublisher, string, workers.ExecutionCorrelation, error) {
+	r.mu.RLock()
+	ownerID := r.runtimeAttemptOwners[key]
+	attempt := r.runtimeAttemptControls[ownerID]
+	if attempt != nil {
+		r.mu.RUnlock()
+		return &attempt.progress, ownerID, attempt.correlation, nil
+	}
+	if supervision := r.supervisions[ownerID]; supervision != nil && supervision.runtimeKey == key {
+		supervision.mu.Lock()
+		request := cloneWorkstationDispatchRequest(supervision.execution)
+		supervision.mu.Unlock()
+		r.mu.RUnlock()
+		resolved, err := executeRequestFromSessionDispatch(request)
+		return &supervision.progress, ownerID, resolved.Correlation, err
+	}
+	_, supervisedRuntime := r.runtimeAdmissions[key.RuntimeID]
+	r.mu.RUnlock()
+	if !supervisedRuntime {
+		return nil, "", workers.ExecutionCorrelation{}, errors.Join(workersessions.ErrProviderSessionAssociationAttemptMismatch, workersessions.ErrRuntimeProgressUnsupervised)
+	}
+	return nil, "", workers.ExecutionCorrelation{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 }
 
 var errRuntimeAttemptControlUnavailable = errors.New("worker sessions: runtime attempt cancellation is unavailable")
@@ -84,52 +174,6 @@ func runtimeAttemptContext(ctx context.Context) context.Context {
 		return context.Background()
 	}
 	return ctx
-}
-
-func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
-	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
-	attemptID := strings.TrimSpace(req.AttemptID)
-	if attemptID == "" {
-		attemptID = logicalDispatchID
-	}
-	return logicalDispatchID, attemptID
-}
-
-func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attemptID string) bool {
-	r.mu.RLock()
-	ownerID, owned := r.dispatchOwners[logicalDispatchID]
-	r.mu.RUnlock()
-	return owned && ownerID != workerID && attemptID == logicalDispatchID
-}
-
-// BindRuntimeAttemptCancellation connects the Worker Session identity to the
-// exact Runtime dispatch cancellation boundary. Runtime calls this after
-// opening the observation and before invoking Workers; the root Service
-// contract remains unchanged.
-func (r *registry) BindRuntimeAttemptCancellation(
-	workerSessionID string,
-	dispatchID string,
-	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
-) error {
-	workerSessionID = strings.TrimSpace(workerSessionID)
-	dispatchID = strings.TrimSpace(dispatchID)
-	if workerSessionID == "" || dispatchID == "" || cancel == nil {
-		return errRuntimeAttemptControlUnavailable
-	}
-	r.mu.RLock()
-	attempt := r.runtimeAttemptControls[workerSessionID]
-	owner := r.dispatchOwners[dispatchID]
-	r.mu.RUnlock()
-	if attempt == nil || owner != workerSessionID || attempt.dispatchID != dispatchID {
-		return errRuntimeAttemptControlUnavailable
-	}
-	attempt.mu.Lock()
-	defer attempt.mu.Unlock()
-	if attempt.completing || attempt.completed == nil {
-		return errRuntimeAttemptControlUnavailable
-	}
-	attempt.cancel = cancel
-	return nil
 }
 
 func (r *registry) runtimeAttemptFor(id string) *runtimeAttempt {
@@ -232,88 +276,6 @@ func (a *runtimeAttempt) completionState() (workersessions.ControlAction, worker
 	return a.controlAction, a.controlOutcome, a.controlHistory
 }
 
-// BeginRuntimeAttempt opens the Worker Session observation and recording
-// window, then returns control to Factory Runtime. It intentionally stops
-// before registerInvocationSupervision or any Workers boundary call: Runtime
-// has already admitted the detached attempt and remains responsible for its
-// execution, cancellation, and terminal race.
-func (r *registry) BeginRuntimeAttempt(
-	ctx context.Context,
-	req workersessions.RuntimeAttemptRequest,
-) (workersessions.RuntimeAttempt, error) {
-	if r == nil {
-		return nil, workersessions.ErrStartAdmissionFailed
-	}
-	if err := (workersessions.InvokeSessionRequest{
-		ID:        req.ID,
-		Execution: req.Execution,
-	}).Validate(); err != nil {
-		return nil, err
-	}
-	ctx = runtimeAttemptContext(ctx)
-	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
-	if r.runtimeAttemptOwnedByOther(logicalDispatchID, req.ID, attemptID) {
-		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
-	}
-
-	execution := req.Execution
-	execution.Execution = workers.CloneWorkstationExecutionRequest(req.Execution.Execution)
-	execution.Execution.Dispatch.DispatchID = attemptID
-	prepared, err := r.prepareInvocation(
-		context.WithoutCancel(ctx),
-		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
-		invocationPreparationOptions{runtimeOwned: true},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if preparationErr := runtimeAttemptPreparationError(prepared); preparationErr != nil {
-		return nil, preparationErr
-	}
-	if !r.transitionToRunning(req.ID) {
-		return nil, workersessions.ErrStartAdmissionFailed
-	}
-	handle := &runtimeAttempt{
-		registry:   r,
-		workerID:   req.ID,
-		dispatchID: logicalDispatchID,
-		attemptID:  attemptID,
-		completed:  make(chan struct{}),
-	}
-	if !r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle) {
-		r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
-		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
-	}
-	return workersessions.RuntimeAttempt(handle.Complete), nil
-}
-
-func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handles ...*runtimeAttempt) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.runtimeAttempts == nil {
-		r.runtimeAttempts = make(map[string]struct{})
-	}
-	if r.dispatchOwners == nil {
-		r.dispatchOwners = make(map[string]string)
-	}
-	if r.latestRuntimeDispatchIDs == nil {
-		r.latestRuntimeDispatchIDs = make(map[string]string)
-	}
-	if ownerID, exists := r.dispatchOwners[logicalDispatchID]; exists && ownerID != workerID && attemptID == logicalDispatchID {
-		return false
-	}
-	r.dispatchOwners[logicalDispatchID] = workerID
-	r.runtimeAttempts[workerID] = struct{}{}
-	r.latestRuntimeDispatchIDs[workerID] = logicalDispatchID
-	if len(handles) > 0 && handles[0] != nil {
-		if r.runtimeAttemptControls == nil {
-			r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
-		}
-		r.runtimeAttemptControls[workerID] = handles[0]
-	}
-	return true
-}
-
 func (r *registry) cancelRuntimeAttemptControl(
 	ctx context.Context,
 	req workersessions.ControlRequest,
@@ -403,7 +365,7 @@ func (r *registry) finishRuntimeAttemptControl(
 		resultOutcome = workersessions.ControlOutcomeApplied
 	}
 	result := r.runtimeAttemptControlResult(current, action, resultOutcome, attempt)
-	r.logger.Info("worker session control", "sessionID", workerSessionID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(workerSessionID), "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result, nil
 }
 
@@ -421,7 +383,7 @@ func (r *registry) failRuntimeAttemptControl(
 	}
 	r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, attempt.dispatchID, current.State)
 	result := r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeFailed, attempt)
-	r.logger.Info("worker session control", "sessionID", workerSessionID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(workerSessionID), "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	if getErr != nil {
 		return result, errors.Join(controlErr, getErr)
 	}
@@ -429,7 +391,7 @@ func (r *registry) failRuntimeAttemptControl(
 }
 
 func controlFallbackRequestID(action workersessions.ControlAction, sessionID, dispatchID string) string {
-	return strings.Join([]string{string(action), sessionID, dispatchID}, "/")
+	return strings.Join([]string{string(action), publicWorkerID(sessionID), dispatchID}, "/")
 }
 
 func (r *registry) controlDispatchID(workerSessionID string, supervision *supervision) string {
@@ -467,11 +429,11 @@ func runtimeAttemptPreparationError(prepared invocationPreparation) error {
 func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.InvokeSessionResult{}, err
 	}
 
-	prepared, err := r.prepareInvocation(ctx, req, invocationPreparationOptions{})
+	prepared, err := r.prepareInvocation(ctx, req, invocationPreparationOptions{}, r.execution, r.clock, r.scheduler)
 	if err != nil {
 		return workersessions.InvokeSessionResult{}, err
 	}
@@ -486,6 +448,47 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		return workersessions.InvokeSessionResult{Session: prepared.session}, nil
 	}
 	return r.driveRegisteredInvocation(ctx, req, prepared.supervision)
+}
+
+// InvokeRuntimeSession shares the invocation driver while retaining a scoped
+// logical route independently of its physical retry attempts and direct routes.
+func (r *registry) InvokeRuntimeSession(
+	ctx context.Context,
+	req workersessions.RuntimeAttemptRequest,
+	retry workersessions.RetryPolicy,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+) (workersessions.InvokeSessionResult, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.InvokeSessionResult{}, err
+	}
+	if executor == nil {
+		return workersessions.InvokeSessionResult{}, ErrMissingExecution
+	}
+	if clock == nil {
+		return workersessions.InvokeSessionResult{}, ErrMissingClock
+	}
+	if scheduler == nil {
+		return workersessions.InvokeSessionResult{}, ErrMissingScheduler
+	}
+	req.ID = scopedWorkerAddress(req.ID, req.Execution.Execution.FactorySessionID)
+	ctx = runtimeAttemptContext(ctx)
+	logicalID, attemptID := runtimeAttemptIDs(req)
+	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalID}
+	if !r.beginRuntimeOpening(key.RuntimeID) {
+		return workersessions.InvokeSessionResult{}, workersessions.ErrStartAdmissionFailed
+	}
+	prepared, invoke, err := r.prepareRuntimeInvocation(ctx, req, retry, key, attemptID, executor, clock, scheduler)
+	r.finishRuntimeOpening(key.RuntimeID)
+	if err != nil {
+		return workersessions.InvokeSessionResult{}, err
+	}
+	defer r.releaseRuntimeAttemptKey(key, req.ID)
+	if prepared.terminal {
+		return workersessions.InvokeSessionResult{Session: prepared.session}, nil
+	}
+	return r.driveRegisteredInvocation(ctx, invoke, prepared.supervision)
 }
 
 // driveInvocation begins execution supervision only after the opening Worker
@@ -565,7 +568,7 @@ func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersess
 		handoff = next
 		r.logger.Info(
 			"worker session retry",
-			"sessionID", req.ID,
+			"sessionID", publicWorkerID(req.ID),
 			"attemptID", handoff.Execution.Dispatch.DispatchID,
 			"outcome", "retrying",
 			"attempt", supervision.attemptCount()+1,
@@ -596,7 +599,7 @@ func (r *registry) publishRegisteredAttempt(
 		return workersessions.InvokeSessionResult{Session: final}, false
 	}
 
-	r.logger.Info("worker session start", "sessionID", sessionID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
+	r.logger.Info("worker session start", "sessionID", publicWorkerID(sessionID), "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
 	attemptDone := supervision.beginAttempt()
 	publishErr := r.publishExecution(
 		context.WithoutCancel(ctx),
@@ -670,8 +673,10 @@ func (r *registry) prepareRetryAttempt(id string, supervision *supervision) (wor
 	next := cloneWorkstationDispatchRequest(supervision.execution)
 	next.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/attempt/%d", supervision.baseDispatchID(), supervision.attemptsMade+1)
 	supervision.dispatchID = next.Execution.Dispatch.DispatchID
-	delete(r.dispatchOwners, previousDispatchID)
-	r.dispatchOwners[supervision.dispatchID] = id
+	if supervision.runtimeKey.RuntimeID == "" {
+		delete(r.dispatchOwners, previousDispatchID)
+		r.dispatchOwners[supervision.dispatchID] = id
+	}
 	supervision.publishing = true
 	supervision.accepted = false
 	supervision.result = workers.WorkstationDispatchResult{}
@@ -728,39 +733,46 @@ func retryableDispatchResult(result workers.WorkstationDispatchResult) bool {
 }
 
 // observation is the registry-owned timing and Work correlation captured at
-// the Worker Sessions lifecycle boundary. Provider Session association remains
+// the Worker Sessions lifecycle boundary, including its selected fact clock.
+// Provider Session association remains
 // its own exact resumability fact; resolved provider identity is carried by
 // the lifecycle record's provenance instead.
 type observation struct {
-	workIDs          []string
-	turnID           string
-	attemptID        string
-	direct           bool
-	factorySessionID string
-	startedAt        time.Time
-	endedAt          *time.Time
-	tokenUsage       *workersessions.TokenUsage
-	usageModel       string
+	clock                  platformclock.Source
+	workIDs                []string
+	turnID                 string
+	attemptID              string
+	direct                 bool
+	factorySessionID       string
+	sourceFactorySessionID string
+	runtimeID              string
+	startedAt              time.Time
+	endedAt                *time.Time
+	tokenUsage             *workersessions.TokenUsage
+	usageModel             string
 }
 
 func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string, direct ...bool) time.Time {
 	directValue := len(direct) > 0 && direct[0]
-	return r.ensureObservationWithFactorySession(id, attemptID, turnID, workIDs, directValue, "")
+	return r.ensureObservationWithClock(id, attemptID, turnID, workIDs, directValue, "", r.clock)
 }
 
-func (r *registry) ensureObservationWithFactorySession(
+func (r *registry) ensureObservationWithClock(
 	id, attemptID, turnID string,
 	workIDs []string,
 	direct bool,
 	factorySessionID string,
+	clock platformclock.Source,
+	runtimeIDs ...string,
 ) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if current, exists := r.observations[id]; exists {
 		return current.startedAt
 	}
-	startedAt := r.clock.Now()
+	startedAt := clock.Now()
 	r.observations[id] = &observation{
+		clock:            clock,
 		workIDs:          append([]string(nil), workIDs...),
 		turnID:           turnID,
 		attemptID:        attemptID,
@@ -768,8 +780,51 @@ func (r *registry) ensureObservationWithFactorySession(
 		factorySessionID: strings.TrimSpace(factorySessionID),
 		startedAt:        startedAt,
 	}
+	if len(runtimeIDs) > 0 {
+		r.observations[id].runtimeID = strings.TrimSpace(runtimeIDs[0])
+	}
+	if len(runtimeIDs) > 1 {
+		r.observations[id].sourceFactorySessionID = strings.TrimSpace(runtimeIDs[1])
+	}
 	r.indexObservationBySessionWorkLocked(id, r.observations[id])
 	return startedAt
+}
+
+// publishBufferedWorkerOutput retains successful buffered provider output before
+// the Worker terminal record. Streaming Workers already own their message
+// records; their returned result must not introduce a second copy.
+func (r *registry) publishBufferedWorkerOutput(ctx context.Context, id, attemptID string, result workers.WorkResult) {
+	output := result.Output
+	if output == "" && result.StructuredResult != nil {
+		raw, err := json.Marshal(result.StructuredResult)
+		if err != nil {
+			return
+		}
+		output = string(raw)
+	}
+	if output == "" {
+		return
+	}
+	pub := r.publicationFor(id)
+	if pub == nil {
+		return
+	}
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+	if pub.hasMessage || !pub.open {
+		return
+	}
+	payload, _ := json.Marshal(workers.MessagePayload{Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: output}}})
+	draft := workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseCompleted, Payload: payload, DispatchID: attemptID, Provenance: lifecycleProvenance(pub.provider)}
+	identity := events.AppendIdentity{SourceType: workersessions.WorkerObservationSourceType, SourceID: events.SourceID(publicWorkerID(id) + "/result"), SourceSequence: 1, SourceEventID: "result"}
+	_, err := r.appendDraft(ctx, r.observationTopic(id), identity, workersessions.WorkerObservationSchemaID, draft)
+	if err == nil {
+		pub.hasMessage = true
+	}
+
+	if err != nil {
+		r.logger.Warn("buffered Worker output publication failed", "workerSessionID", publicWorkerID(id), "attemptID", attemptID, "outcome", "publication_rejected")
+	}
 }
 
 func openingSessionPayload(
@@ -783,7 +838,7 @@ func openingSessionPayload(
 	payload := workers.SessionPayload{
 		Status:           string(workersessions.StateStarting),
 		StartedAt:        timeValue(startedAt),
-		WorkerSessionID:  id,
+		WorkerSessionID:  publicWorkerID(id),
 		FactorySessionID: strings.TrimSpace(request.FactorySessionID),
 		RecordingID:      strings.TrimSpace(request.RecordingID),
 		ProjectID:        strings.TrimSpace(request.ProjectID),
@@ -981,4 +1036,22 @@ func (r *registry) observationCandidatesForWork(req workersessions.ListObservati
 		ids = append(ids, observationOrder{id: id, startedAt: metadata.startedAt, attemptID: metadata.attemptID})
 	}
 	return ids
+}
+
+func observationWorkerSessionIDFromTopic(topic events.Topic) string {
+	value := strings.TrimSpace(string(topic))
+	if strings.HasPrefix(value, "factory-worker-session/") {
+		parts := strings.Split(value, "/")
+		if len(parts) != 4 || parts[3] != "events" {
+			return ""
+		}
+		decoded, err := base64.RawURLEncoding.DecodeString(parts[2])
+		if err != nil {
+			return ""
+		}
+		return string(decoded)
+	}
+	value = strings.TrimPrefix(value, "worker-session/")
+	value = strings.TrimSuffix(value, "/events")
+	return value
 }

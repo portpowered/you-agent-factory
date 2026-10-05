@@ -3280,7 +3280,7 @@ components:
       properties:
         sessions:
           type: array
-          description: Deterministically ordered Worker Session observations correlated with the requested Work.
+          description: Deterministically ordered Worker Session observations. Work-scoped queries return observations correlated with the requested Work. Top-level fleet pages use captured metadata without reading native provider files. Fleet token usage appears only when captured during execution. Fleet rows omit native-only turn usage and return unavailable transcript status and empty parse diagnostics. Show and detail queries retain provider inspection when available.
           items:
             $ref: '#/components/schemas/WorkerSessionObservation'
         paginationContext:
@@ -7850,6 +7850,11 @@ components:
           items:
             $ref: '#/components/schemas/FactorySessionRecordedSummary'
           description: Read-only recorded Factory Session summaries when scope is HISTORY or ALL.
+        warnings:
+          type: array
+          description: Recording artifacts omitted from history because they could not be read or decoded.
+          items:
+            $ref: '#/components/schemas/FactorySessionRecordingWarning'
     FactorySessionListScope:
       type: string
       description: Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
@@ -15805,6 +15810,26 @@ components:
         spawnedBy:
           type: string
           description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    FactorySessionRecordingWarning:
+      type: object
+      additionalProperties: false
+      required:
+        - artifactReference
+        - code
+        - reason
+      properties:
+        artifactReference:
+          type: string
+          minLength: 1
+          description: Recording-root-relative artifact path. This value does not grant filesystem access.
+        code:
+          type: string
+          enum:
+            - UNREADABLE_RECORDING
+        reason:
+          type: string
+          minLength: 1
+          description: Safe explanation that excludes recording content and absolute host paths.
     DispatchCancellation:
       type: object
       additionalProperties: false

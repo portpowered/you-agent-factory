@@ -163,10 +163,12 @@ func assertCapturedPublishedDraftPrivacy(t *testing.T, config support.Functional
 		t.Fatal("recording fixture has no message position")
 	}
 	var published []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+	publisher := workersessions.RuntimeProgressPublisher(func(context.Context, workersessions.RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error {
+		return workersessions.ErrRuntimeProgressUnsupervised
+	}).ForRuntime(t.Context(), "privacy-runtime", func(fragment workers.ProgressFragment) {
 		published = append(published, fragment)
-	}).WithUnassociatedProgressFallback()
-	publisher.Publish(workers.CanonicalDraftFragment("privacy-dispatch", draft))
+	})
+	publisher(workers.CanonicalDraftFragment("privacy-dispatch", draft))
 	if len(published) != 1 {
 		t.Fatal("classified publication produced no safe recording fixture")
 	}

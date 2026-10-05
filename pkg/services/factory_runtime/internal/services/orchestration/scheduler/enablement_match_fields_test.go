@@ -5,13 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorResolves(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{"task:ready": {ID: "task:ready"}},
@@ -44,7 +45,7 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorRes
 }
 
 func TestEnablementEvaluator_MatchesFieldsGuardEnablesOnMatchingTwoInputValues(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := matchesFieldsPairNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
@@ -65,7 +66,7 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesOnMatchingTwoInputValues(t
 }
 
 func TestEnablementEvaluator_MatchesFieldsGuardBlocksMismatchedTwoInputValues(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := matchesFieldsPairNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
@@ -78,7 +79,7 @@ func TestEnablementEvaluator_MatchesFieldsGuardBlocksMismatchedTwoInputValues(t 
 }
 
 func TestEnablementEvaluator_MatchesFieldsGuardRequiresAllInputsToMatchSourceValue(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := matchesFieldsTripletNet()
 
 	matching := matchesFieldsTripletSnapshot("alpha", "alpha", map[string]string{"asset-alpha": "alpha", "asset-beta": "beta"})

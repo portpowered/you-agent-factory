@@ -213,43 +213,28 @@ PACKAGE_BOUNDARY_BASE_REF ?=
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-# "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
-# Entries are keyed by source content, never by checkout path, so a fresh worktree
-# reuses checkers another worktree compiled. Set a path to opt out.
-LINT_CHECKER_CACHE_DIR ?= auto
 # Memoizes the package-boundary base-tree scan per base commit and checker build.
 # Empty disables it.
 PACKAGE_BOUNDARY_BASELINE_CACHE_DIR ?= auto
-# Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
-LINT_CHECKER_FALLBACK ?= 0
-LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
-LINT_CHECKER_DRIVER ?=
-LINT_LANE_PACKAGE := ./cmd/lintlane
 # Optional CI outputs can be defined but blank. Use the canonical lane budget
-# for blank handoffs; lintlane still rejects invalid nonblank overrides.
+# for blank handoffs; report setup rejects invalid nonblank overrides.
 LINT_JOBS ?= $(GO_LANE_BUDGET)
 ifeq ($(strip $(LINT_JOBS)),)
 override LINT_JOBS := $(GO_LANE_BUDGET)
 endif
-# Keep the recursive command available to lintlane without spelling the
-# special $(MAKE) variable in this recipe; GNU Make executes such recipes
-# during -n so recursive builds can receive the dry-run flag.
+# Keep recursive Make behind an alias so make -n does not execute it.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
 # Local `make lint` runs LINT_TARGETS_BASE, adds the UI gates only when ui/
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
+LINT_TARGETS_BASE := vet pkg-boundary service-cycle-check packaged-factory-source-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
 LINT_UI_CHANGED = $(shell base=$$(git merge-base HEAD origin/main 2>/dev/null) && { git diff --quiet $$base -- ui && test -z "$$(git ls-files --others --exclude-standard ui)" || echo 1; } || echo 1)
 LINT_TARGETS ?= $(if $(or $(strip $(CI)),$(strip $(LINT_FULL)),$(strip $(LINT_UI_CHANGED))),$(LINT_TARGETS_UI) )$(LINT_TARGETS_BASE)$(if $(or $(strip $(CI)),$(strip $(LINT_FULL))), $(LINT_TARGETS_CI_ONLY))
-
-define run_lint_checker
-$(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
-endef
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -317,7 +302,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: lint-full pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
+.PHONY: lint-full pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-catalog-generate provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: readme-check deadcode dashboard-verify
 
@@ -335,7 +320,12 @@ endef
 # that recursive builds can receive the dry-run flag; on the measured Windows
 # Make implementation that still launched real work. These aggregators remain
 # serialized to preserve the old stop-on-failure behavior even with -j.
+# Before GNU Make 4.4, even a targeted .NOTPARALLEL serializes the whole
+# invocation. The lint scheduler is a separate recursive invocation and must
+# retain its explicit job budget on those versions too.
+ifeq (,$(filter lint-observe-selected,$(MAKECMDGOALS)))
 .NOTPARALLEL: default test
+endif
 # Bare `make` runs the complete generation, frontend, build, test, and lint
 # pipeline. Use `make build` when only the Go binary is needed.
 default: default-pipeline-banner generate-api ui-deps ui-build build test lint
@@ -442,7 +432,7 @@ api-package-pack-smoke:
 
 api-package-verify: api-package-pack-smoke
 
-packaged-factory-package-smoke: packaged-factory-catalog-check packaged-factory-package-script-test
+packaged-factory-package-smoke: repository-lint-run packaged-factory-package-script-test
 
 packaged-factory-package-verify: packaged-factory-package-smoke
 
@@ -450,11 +440,11 @@ packaged-factory-package-script-test:
 	node --test scripts/packaged-factories-package-pack.test.mjs scripts/packaged-factories-package-candidate.test.mjs scripts/packaged-factories-package-consumer.test.mjs scripts/packaged-factories-package-pr-dry-run.test.mjs scripts/packaged-factories-package-registry.test.mjs scripts/packaged-factories-package-publish.test.mjs scripts/packaged-factories-package-development-command.test.mjs
 	$(PYTHON) -B -m unittest discover -s packages/packaged-factories/factories/dub-video/scripts -p 'test_dub_*.py'
 
-packaged-factory-package-pack-check: packaged-factory-catalog-check
+packaged-factory-package-pack-check: repository-lint-run
 	node -e "require('node:fs').rmSync('.artifacts/packaged-factories-local-pack', { recursive: true, force: true })"
 	node scripts/packaged-factories-package-candidate.mjs --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-pack --run-id 1 --source-commit $(shell git rev-parse HEAD)
 
-packaged-factory-package-candidate-dry-run: packaged-factory-catalog-check
+packaged-factory-package-candidate-dry-run: repository-lint-run
 	node -e "require('node:fs').rmSync('.artifacts/packaged-factories-local-dry-run', { recursive: true, force: true })"
 	node scripts/packaged-factories-package-pr-dry-run.mjs --event-name pull_request --prerequisite-result success --ref refs/pull/local/head --repository portpowered/you-agent-factory --run-id 1 --source-commit $(shell git rev-parse HEAD) --pull-request-head-sha $(shell git rev-parse HEAD) --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-dry-run --workspace-directory .
 
@@ -972,8 +962,40 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "TestReplayEventStreamArtifactSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+# Only lint recipes use Git sh on Windows; global budget arithmetic retains
+# the caller's shell. Override LINT_SHELL for another installed POSIX shell.
+ifeq ($(OS),Windows_NT)
+ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL))))
+LINT_SHELL ?= $(SHELL)
+else
+# Windows Make requires a shell executable path without spaces.
+LINT_SHELL ?= $(subst \,/,$(shell for %%I in ("$(or $(ProgramW6432),$(ProgramFiles))\Git\bin\sh.exe") do @echo %%~sI))
+endif
 lint:
-	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
+	@"$(LINT_MAKE)" --no-print-directory lint-run SHELL="$(LINT_SHELL)" LINT_JOBS="$(LINT_JOBS)"
+else
+lint: lint-run
+endif
+
+.PHONY: lint-run
+lint-run:
+	@run_dir=$$("$(NODE)" scripts/ci/backend-lint-report.mjs --begin-run --jobs "$(LINT_JOBS)" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS)); \
+	test -n "$$run_dir" || exit 1; \
+	status=0; \
+	"$(LINT_MAKE)" --no-print-directory --keep-going --jobs="$(LINT_JOBS)" --output-sync=target lint-observe-selected LINT_RUN_DIR="$$run_dir" || status=$$?; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --collect-run "$$run_dir" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS) || status=1; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --remove-run "$$run_dir" || status=1; \
+	exit $$status
+
+.PHONY: lint-observe-selected $(addprefix lint-observe-,$(LINT_TARGETS))
+lint-observe-selected: $(addprefix lint-observe-,$(LINT_TARGETS))
+$(addprefix lint-observe-,$(LINT_TARGETS)): lint-observe-%:
+	@"$(NODE)" scripts/ci/backend-lint-report.mjs --start-target "$(LINT_RUN_DIR)" --name "$*" || exit 1; \
+	status=0; \
+	TEMP="$(LINT_RUN_DIR)/$*.tmp" TMP="$(LINT_RUN_DIR)/$*.tmp" TMPDIR="$(LINT_RUN_DIR)/$*.tmp" \
+	"$(LINT_MAKE)" --no-print-directory $(if $(filter Windows_NT,$(OS)),SHELL="$(LINT_SHELL)",) "$*" >"$(LINT_RUN_DIR)/$*.log" 2>&1 || status=$$?; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --record-target "$(LINT_RUN_DIR)" --name "$*" --exit-code "$$status" || exit 1; \
+	exit $$status
 
 lint-full:
 	$(MAKE) lint LINT_FULL=1
@@ -987,28 +1009,22 @@ architecture:
 	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
 
 pkg-boundary:
-	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
+	$(GO) run ./cmd/pkgboundarycheck -root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,)
 
 service-cycle-check:
-	$(call run_lint_checker,./cmd/servicecyclecheck,-root ".")
+	$(GO) run ./cmd/servicecyclecheck -root "."
 
 packaged-factory-source-check:
-	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
-
-packaged-factory-consumption-check:
-	$(call run_lint_checker,./cmd/packagedfactoryconsumptioncheck,-root ".")
+	$(GO) run ./cmd/packagedfactorysourcecheck -root "."
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
-
-packaged-factory-catalog-check:
-	$(call run_lint_checker,./cmd/packagedfactorycatalogcheck,-root ".")
 
 provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
 provider-catalog-check:
-	$(call run_lint_checker,./cmd/providercatalogcheck,-root ".")
+	$(GO) run ./cmd/providercatalogcheck -root "."
 
 model-provider-package-generate:
 	node scripts/model-provider-package.mjs generate
@@ -1062,7 +1078,7 @@ golangci-lint-run:
 	$(GOLANGCI_LINT) run ./...
 
 deadcode: golangci-build
-	$(call run_lint_checker,./cmd/deadcodecheck,-golangci-host-file "$(GOLANGCI_DIR)/host-path.txt")
+	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode

@@ -26,7 +26,7 @@ func (r *registry) capturedObservationUsage(ctx context.Context, id string) *wor
 	if err != nil || snapshot.RecordingID != recordingID {
 		return nil
 	}
-	return capturedSnapshotUsage(snapshot, id, ^uint64(0))
+	return capturedSnapshotUsage(snapshot, publicWorkerID(id), ^uint64(0))
 }
 
 func capturedSnapshotUsage(snapshot recordings.WorkerRecordingSnapshot, id string, head uint64) *workersessions.TokenUsage {

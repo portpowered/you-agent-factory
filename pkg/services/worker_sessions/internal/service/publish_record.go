@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -187,13 +188,16 @@ func (r *registry) waitForSupervisionDriver(ctx context.Context, id string) erro
 // readiness barrier and server-owned lifecycle admission around this same
 // preparation and supervision state machine.
 type invocationPreparationOptions struct {
-	serverOwned      bool
-	direct           bool
-	continuation     bool
-	runtimeOwned     bool
-	requestID        string
-	verifyTopicReady bool
-	lineage          *workers.SessionLineage
+	serverOwned                 bool
+	direct                      bool
+	continuation                bool
+	runtimeOwned                bool
+	runtimeKey                  workersessions.RuntimeAttemptKey
+	observationRuntimeID        string
+	observationFactorySessionID string
+	requestID                   string
+	verifyTopicReady            bool
+	lineage                     *workers.SessionLineage
 }
 
 type invocationPreparation struct {
@@ -212,15 +216,29 @@ type invocationPreparation struct {
 // two entry points cannot drift in event ordering or terminal classification;
 // callers choose only whether that deterministic failure is returned as an
 // InvokeSession result or as Start's not-accepted error.
+// Execution and timing effects are explicit inputs, retained before the
+// supervision is published so retries and controls keep the same selection.
 func (r *registry) prepareInvocation(
 	ctx context.Context,
 	req workersessions.InvokeSessionRequest,
 	options invocationPreparationOptions,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 ) (invocationPreparation, error) {
+	if executor == nil {
+		return invocationPreparation{}, ErrMissingExecution
+	}
+	if clock == nil {
+		return invocationPreparation{}, ErrMissingClock
+	}
+	if scheduler == nil {
+		return invocationPreparation{}, ErrMissingScheduler
+	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	r.reserveIfAbsent(req.ID)
 	acceptedFields := []any{
-		"sessionID", req.ID,
+		"sessionID", publicWorkerID(req.ID),
 		"attemptID", attemptID,
 		"outcome", "reserved",
 		"state", string(workersessions.StateReserved),
@@ -240,20 +258,23 @@ func (r *registry) prepareInvocation(
 				failure:      workersessions.ErrStartAdmissionFailed,
 			}, nil
 		}
-		fields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable"}
+		fields := []any{"sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "not_startable"}
 		if options.requestID != "" {
 			fields = append(fields, "requestID", options.requestID)
 		}
 		r.logger.Info("worker session start rejected", fields...)
 		return invocationPreparation{}, err
 	}
-	startedAt := r.ensureObservationWithFactorySession(
+	startedAt := r.ensureObservationWithClock(
 		req.ID,
 		attemptID,
 		req.Execution.Execution.Dispatch.Execution.RequestID,
 		req.Execution.Execution.Dispatch.Execution.WorkIDs,
 		options.direct,
 		req.Execution.Execution.FactorySessionID,
+		clock,
+		firstNonEmpty(options.observationRuntimeID, req.Execution.Execution.RuntimeID),
+		options.observationFactorySessionID,
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
@@ -287,7 +308,7 @@ func (r *registry) prepareInvocation(
 		return invocationPreparation{}, nil
 	}
 
-	return r.registerInvocationSupervision(ctx, req, options)
+	return r.registerInvocationSupervision(ctx, req, options, executor, clock, scheduler)
 }
 
 // rejectOpening logs the underlying opening failure at Warn (the runtime
@@ -297,7 +318,7 @@ func (r *registry) rejectOpening(
 ) invocationPreparation {
 	r.logger.Warn(
 		"worker session opening publication rejected",
-		"sessionID", id,
+		"sessionID", publicWorkerID(id),
 		"attemptID", attemptID,
 		"outcome", "failed",
 		"stage", stage,
@@ -310,56 +331,18 @@ func (r *registry) rejectOpening(
 	}
 }
 
-func (r *registry) registerInvocationSupervision(
-	ctx context.Context,
-	req workersessions.InvokeSessionRequest,
-	options invocationPreparationOptions,
-) (invocationPreparation, error) {
-	attemptID := req.Execution.Execution.Dispatch.DispatchID
-	if options.verifyTopicReady {
-		eventReadyFields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting)}
-		if options.requestID != "" {
-			eventReadyFields = append(eventReadyFields, "requestID", options.requestID)
+// startReservedWithEffects drives the server-owned admission barrier.
+func (r *registry) startReservedWithEffects(
+	req workersessions.StartRequest, executor workers.Service,
+	clock platformclock.Source, scheduler platformclock.TimerSource,
+) (workersessions.StartResult, error) {
+	runtimeID := strings.TrimSpace(req.Execution.Execution.RuntimeID)
+	if runtimeID != "" {
+		if !r.beginRuntimeOpening(runtimeID) {
+			return workersessions.StartResult{}, workersessions.ErrStartServerStopping
 		}
-		r.logger.Info("worker session start", eventReadyFields...)
+		defer r.finishRuntimeOpening(runtimeID)
 	}
-	supervision, canStart := r.registerSupervisionOwned(
-		options.serverOwned,
-		req.ID,
-		attemptID,
-		req.Execution.Execution.Dispatch.Execution.RequestID,
-		req.Execution,
-	)
-	if !canStart {
-		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		if options.serverOwned && r.isStopping() && !final.Terminal() {
-			final = r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
-			return invocationPreparation{
-				session:  final,
-				terminal: true,
-				failure:  workersessions.ErrStartServerStopping,
-			}, nil
-		}
-		if final.Terminal() {
-			r.publishTerminalSnapshot(ctx, req.ID, attemptID, final)
-			return invocationPreparation{
-				session:  final,
-				terminal: true,
-				failure:  workersessions.ErrStartAdmissionFailed,
-			}, nil
-		}
-		return invocationPreparation{}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
-	}
-	supervision.mu.Lock()
-	supervision.retryBudget = req.Retry.Attempts()
-	supervision.continuing = options.continuation
-	supervision.mu.Unlock()
-	return invocationPreparation{supervision: supervision}, nil
-}
-
-// startReserved runs the original Start state machine after reserveStart has
-// atomically installed the request replay and RESERVED session records.
-func (r *registry) startReserved(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
 	serverCtx := r.serverOwnedContext()
 	prepared, err := r.prepareInvocation(
 		serverCtx,
@@ -370,6 +353,9 @@ func (r *registry) startReserved(ctx context.Context, req workersessions.StartRe
 			requestID:        req.RequestID,
 			verifyTopicReady: true,
 		},
+		executor,
+		clock,
+		scheduler,
 	)
 	if err != nil {
 		return workersessions.StartResult{}, err
@@ -432,13 +418,13 @@ func (r *registry) ensureOpeningTopicReady(ctx context.Context, id string) error
 	if r.retainedReader == nil || r.eventReader == nil {
 		return workersessions.ErrEventTopicUnavailable
 	}
-	topic := workersessions.Topic(id)
+	topic := r.observationTopic(id)
 	readResult, err := r.retainedReader.Read(ctx, events.ReadRequest{
 		Topic: topic,
 		From:  events.Cursor{Topic: topic},
 		Limit: 1,
 	})
-	if err != nil || readResult.Validate() != nil || readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) == 0 || !openingRecordMatches(readResult.Records[0], id) {
+	if err != nil || readResult.Validate() != nil || readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) == 0 || !openingRecordMatches(readResult.Records[0], id, topic) {
 		return workersessions.ErrEventTopicUnavailable
 	}
 
@@ -454,16 +440,17 @@ func (r *registry) ensureOpeningTopicReady(ctx context.Context, id string) error
 	cleanupCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_ = subscription.Next(cleanupCtx)
-	if delivery.Validate() != nil || delivery.Kind != events.DeliveryRecord || !openingRecordMatches(delivery.Record, id) {
+	if delivery.Validate() != nil || delivery.Kind != events.DeliveryRecord || !openingRecordMatches(delivery.Record, id, topic) {
 		return workersessions.ErrEventTopicUnavailable
 	}
 	return nil
 }
 
-func openingRecordMatches(record events.Record, id string) bool {
-	return record.ID.Topic == workersessions.Topic(id) &&
+func openingRecordMatches(record events.Record, id string, topic events.Topic) bool {
+	id = publicWorkerID(id)
+	return record.ID.Topic == topic &&
 		record.SourceType == lifecycleSourceType &&
-		record.SourceID == events.SourceID(id) &&
+		record.SourceID == events.SourceID(publicWorkerID(id)) &&
 		record.SourceSequence == openingSourceSequence &&
 		record.SourceEventID == openingSourceEventID &&
 		record.SchemaID == workerDraftSchemaID
@@ -510,7 +497,8 @@ type publication struct {
 	// every call observed while open is false, whether that is because the
 	// session was only ever Reserved, its opening record has not yet
 	// committed, or its terminal record has already started committing.
-	open bool
+	open       bool
+	hasMessage bool
 	// lastSequence is the highest SourceSequence already accepted for each
 	// (SourceType, SourceID) this session has published, used to reject a
 	// record whose SourceSequence regresses behind one already committed.
@@ -550,7 +538,7 @@ func (r *registry) publicationFor(id string) *publication {
 }
 
 // PublishRecord validates req, then appends req.Draft, detached, as a
-// source-native Worker record onto workersessions.Topic(req.SessionID) using
+// source-native Worker record onto r.observationTopic(req.SessionID) using
 // req's complete Events idempotency identity, through the same appendDraft
 // helper publishOpeningRecord uses. PublishRecord requires an established
 // publication window: req.SessionID must have committed its opening record
@@ -567,13 +555,14 @@ func (r *registry) publicationFor(id string) *publication {
 // is committed.
 func (r *registry) PublishRecord(ctx context.Context, req workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "invalid")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "invalid")
 		return workersessions.PublishRecordResult{}, err
 	}
 
+	req.SessionID = r.workerAddress(req.SessionID, req.FactorySessionID)
 	pub := r.publicationFor(req.SessionID)
 	if pub == nil {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "not_found")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "not_found")
 		return workersessions.PublishRecordResult{}, workersessions.ErrSessionNotFound
 	}
 
@@ -581,7 +570,7 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	defer pub.mu.Unlock()
 
 	if !pub.open {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "publication_not_open")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "publication_not_open")
 		return workersessions.PublishRecordResult{}, workersessions.ErrPublicationNotOpen
 	}
 	if err := r.ensurePublishRecordProvider(ctx, req, pub); err != nil {
@@ -597,16 +586,19 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	}
 	_, alreadyAccepted := pub.accepted[identity]
 	if last := pub.lastSequence[key]; !alreadyAccepted && req.SourceSequence < last {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "out_of_order")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "out_of_order")
 		return workersessions.PublishRecordResult{}, workersessions.ErrOutOfOrderPublication
 	}
 
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(req.SessionID), identity, req.SchemaID, req.Draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(req.SessionID), identity, req.SchemaID, req.Draft)
 	if err != nil {
-		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "append_failed")
+		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "append_failed")
 		return workersessions.PublishRecordResult{}, err
 	}
 	r.updateUsageProjection(req.SessionID, req.Draft)
+	if req.Draft.Kind == workers.KindMessage {
+		pub.hasMessage = true
+	}
 	pub.accepted[identity] = struct{}{}
 	if req.SourceSequence > pub.lastSequence[key] {
 		pub.lastSequence[key] = req.SourceSequence
@@ -617,26 +609,15 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	}
 	r.logger.Info(
 		"worker session publish record",
-		"sessionID", req.SessionID,
+		"sessionID", publicWorkerID(req.SessionID),
 		"outcome", publishOutcomeLabel(outcome),
 		"aggregate_sequence", uint64(appendResult.Record.ID.Position),
 	)
 	return workersessions.PublishRecordResult{
-		SessionID:         req.SessionID,
+		SessionID:         publicWorkerID(req.SessionID),
 		AggregateSequence: appendResult.Record.ID.Position,
 		Outcome:           outcome,
 	}, nil
-}
-
-func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
-	switch outcome {
-	case workersessions.PublishOutcomeAccepted:
-		return "accepted"
-	case workersessions.PublishOutcomeDuplicate:
-		return "duplicate"
-	default:
-		return "unspecified"
-	}
 }
 
 func sameProviderIdentity(left, right string) bool {
@@ -644,6 +625,24 @@ func sameProviderIdentity(left, right string) bool {
 		providers.ID(left).CanonicalSessionProvider(),
 		providers.ID(right).CanonicalSessionProvider(),
 	)
+}
+
+// The caller holds r.mu. Explicit Worker identity resolves its scoped attempt;
+// a peer's equal logical dispatch cannot redirect a provider association.
+func (r *registry) providerAssociationOwnedLocked(req workersessions.ProviderSessionAssociationRequest) bool {
+	if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
+		return attempt.dispatchID == req.DispatchID && r.runtimeAttemptOwners[attempt.key] == req.WorkerSessionID
+	}
+	supervision := r.supervisions[req.WorkerSessionID]
+	if supervision == nil {
+		return false
+	}
+	if supervision.runtimeKey.RuntimeID == "" {
+		return r.dispatchOwners[req.DispatchID] == req.WorkerSessionID
+	}
+	supervision.mu.Lock()
+	defer supervision.mu.Unlock()
+	return (req.DispatchID == supervision.runtimeKey.DispatchID || req.DispatchID == supervision.dispatchID) && r.runtimeAttemptOwners[supervision.runtimeKey] == req.WorkerSessionID
 }
 
 func (r *registry) ensurePublishRecordProvider(
@@ -661,15 +660,22 @@ func (r *registry) ensurePublishRecordProvider(
 		}
 		return nil
 	}
-
 	dispatchID := strings.TrimSpace(req.Draft.DispatchID)
 	if dispatchID == "" {
 		return workersessions.ErrInvalidProviderBinding
 	}
 	r.mu.RLock()
-	ownerID, exists := r.dispatchOwners[dispatchID]
+	owned := r.dispatchOwners[dispatchID] == req.SessionID
+	if attempt := r.runtimeAttemptControls[req.SessionID]; attempt != nil {
+		owned = attempt.attemptID == dispatchID && r.runtimeAttemptOwners[attempt.key] == req.SessionID
+	}
+	if supervision := r.supervisions[req.SessionID]; supervision != nil && supervision.runtimeKey.RuntimeID != "" {
+		supervision.mu.Lock()
+		owned = supervision.dispatchID == dispatchID && r.runtimeAttemptOwners[supervision.runtimeKey] == req.SessionID
+		supervision.mu.Unlock()
+	}
 	r.mu.RUnlock()
-	if !exists || ownerID != req.SessionID {
+	if !owned {
 		return workersessions.ErrProviderBindingAttemptMismatch
 	}
 	_, err := r.publishProviderBindingLocked(ctx, req.SessionID, dispatchID, provider, pub)
@@ -690,9 +696,7 @@ func (r *registry) EnsureProviderBinding(
 		return workersessions.ProviderBindingResult{}, err
 	}
 
-	r.mu.RLock()
-	ownerID, exists := r.dispatchOwners[strings.TrimSpace(req.DispatchID)]
-	r.mu.RUnlock()
+	ownerID, exists := r.providerBindingOwner(req)
 	if !exists {
 		r.logger.Info("worker session provider binding rejected", "attemptID", req.DispatchID, "outcome", "unknown_dispatch")
 		return workersessions.ProviderBindingResult{}, workersessions.ErrProviderBindingAttemptMismatch
@@ -717,7 +721,7 @@ func (r *registry) publishProviderBindingLocked(
 ) (workersessions.ProviderBindingResult, error) {
 	provider = providers.ID(provider).CanonicalSessionProvider()
 	if !pub.open {
-		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "publication_not_open")
+		r.logger.Info("worker session provider binding rejected", "sessionID", publicWorkerID(ownerID), "attemptID", dispatchID, "outcome", "publication_not_open")
 		return workersessions.ProviderBindingResult{}, workersessions.ErrPublicationNotOpen
 	}
 	if pub.provider != "" {
@@ -725,7 +729,7 @@ func (r *registry) publishProviderBindingLocked(
 			return workersessions.ProviderBindingResult{}, workersessions.ErrProviderBindingConflict
 		}
 		return workersessions.ProviderBindingResult{
-			WorkerSessionID: ownerID,
+			WorkerSessionID: publicWorkerID(ownerID),
 			DispatchID:      dispatchID,
 			Provider:        pub.provider,
 			Outcome:         workersessions.ProviderBindingOutcomeDuplicate,
@@ -735,7 +739,7 @@ func (r *registry) publishProviderBindingLocked(
 	selection := workers.SessionProviderSelection{RunnerID: provider}
 	payload := workers.SessionPayload{
 		Status:            string(workersessions.StateStarting),
-		WorkerSessionID:   ownerID,
+		WorkerSessionID:   publicWorkerID(ownerID),
 		DispatchID:        dispatchID,
 		TurnID:            pub.turnID,
 		AttemptID:         dispatchID,
@@ -756,9 +760,9 @@ func (r *registry) publishProviderBindingLocked(
 		SourceSequence: providerBindingSourceSequence,
 		SourceEventID:  providerBindingSourceEventID,
 	}
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(ownerID), identity, workerDraftSchemaID, draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(ownerID), identity, workerDraftSchemaID, draft)
 	if err != nil {
-		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "append_failed")
+		r.logger.Info("worker session provider binding rejected", "sessionID", publicWorkerID(ownerID), "attemptID", dispatchID, "outcome", "append_failed")
 		return workersessions.ProviderBindingResult{}, err
 	}
 	pub.provider = provider
@@ -766,9 +770,9 @@ func (r *registry) publishProviderBindingLocked(
 	if appendResult.Outcome == events.AppendOutcomeDuplicate {
 		outcome = workersessions.ProviderBindingOutcomeDuplicate
 	}
-	r.logger.Info("worker session provider binding", "sessionID", ownerID, "attemptID", dispatchID, "provider", provider, "outcome", string(outcome))
+	r.logger.Info("worker session provider binding", "sessionID", publicWorkerID(ownerID), "attemptID", dispatchID, "provider", provider, "outcome", string(outcome))
 	return workersessions.ProviderBindingResult{
-		WorkerSessionID: ownerID,
+		WorkerSessionID: publicWorkerID(ownerID),
 		DispatchID:      dispatchID,
 		Provider:        provider,
 		Outcome:         outcome,
@@ -798,7 +802,7 @@ func (r *registry) StreamObservations(ctx context.Context, req workersessions.St
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSession(req.ProviderSession)
+	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSession(req.ProviderSession, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
@@ -814,7 +818,7 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID)
+	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
@@ -830,7 +834,7 @@ func (r *registry) streamObservationTopic(
 	replayOnly bool,
 	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, error) {
-	if err := validateObservationCursorWorkerSessionID(cursor, workerSessionID); err != nil {
+	if err := validateObservationCursorWorkerSessionID(cursor, publicWorkerID(workerSessionID)); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
 	if !replayOnly && r.eventReader == nil {
@@ -840,7 +844,7 @@ func (r *registry) streamObservationTopic(
 	if limit == 0 {
 		limit = workersessions.DefaultObservationStreamLimit
 	}
-	topic := workersessions.Topic(workerSessionID)
+	topic := r.observationTopic(workerSessionID)
 	if replayOnly {
 		return r.replayObservationStream(ctx, topic, workerSessionState, limit, cursor)
 	}
@@ -860,18 +864,21 @@ func validateObservationCursorWorkerSessionID(
 	return nil
 }
 
-func (r *registry) observationStreamSession(ref providers.SessionRef) (string, bool, workersessions.State, error) {
+func (r *registry) observationStreamSession(ref providers.SessionRef, factorySessionIDs ...string) (string, bool, workersessions.State, error) {
 	r.mu.RLock()
 	workerSessionID := ""
 	alreadyTerminal := false
 	workerSessionState := workersessions.StateReserved
 	for id, session := range r.sessions {
 		if session.ProviderSessionAssociation != nil &&
-			session.ProviderSessionAssociation.Reference == ref {
+			session.ProviderSessionAssociation.Reference == ref &&
+			observationFactoryScopeMatches(r.observations[id], factorySessionIDs...) {
+			if workerSessionID != "" && workerSessionID < id {
+				continue
+			}
 			workerSessionID = id
 			alreadyTerminal = session.Terminal()
 			workerSessionState = session.State
-			break
 		}
 	}
 	r.mu.RUnlock()
@@ -882,12 +889,14 @@ func (r *registry) observationStreamSession(ref providers.SessionRef) (string, b
 	return workerSessionID, alreadyTerminal, workerSessionState, nil
 }
 
-func (r *registry) observationStreamSessionByID(id string) (string, bool, workersessions.State, error) {
+func (r *registry) observationStreamSessionByID(id string, factorySessionIDs ...string) (string, bool, workersessions.State, error) {
 	r.mu.RLock()
+	id = r.workerAddressLocked(id, factorySessionIDs...)
 	session, exists := r.sessions[id]
+	scopeMatches := observationFactoryScopeMatches(r.observations[id], factorySessionIDs...)
 	r.mu.RUnlock()
-	if !exists {
-		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
+	if !exists || !scopeMatches {
+		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", publicWorkerID(id), "outcome", "not_found")
 		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
 	}
 	return id, session.Terminal(), session.State, nil
@@ -938,7 +947,7 @@ func (r *registry) logTerminal(id, attemptID string, session workersessions.Sess
 	if session.Result != nil {
 		cause = causeKindString(session.Result.Cause)
 	}
-	r.logger.Info("worker session start terminal", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
+	r.logger.Info("worker session start terminal", "sessionID", publicWorkerID(id), "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
 }
 
 func (r *registry) sessionState(id string) workersessions.State {

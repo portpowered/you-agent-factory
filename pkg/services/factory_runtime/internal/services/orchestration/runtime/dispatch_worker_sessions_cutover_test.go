@@ -53,55 +53,51 @@ func (l *blockingAssociationLedger) RecordDispatchWorkerSessionAssociation(
 	<-l.release
 }
 
-func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t *testing.T) {
-	workerService := newControlledWorkstationBoundary()
-	workerSessions := newRuntimeWorkerSessionsService(workerService)
+func TestInvokeWorkerRuntimeAttemptReservesBeforeAssociationAndMapsCanceledAdmission(t *testing.T) {
+	t.Parallel()
+	sessions := &associationWindowSessions{
+		reserved: make(chan workersessions.ReserveRequest, 1),
+		invoked:  make(chan workersessions.RuntimeAttemptRequest, 1),
+	}
 	ledger := newBlockingAssociationLedger()
-	request := workers.WorkstationDispatchRequest{
-		WorkstationName: "review",
-		Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
-			DispatchID: "dispatch-1", WorkstationName: "review", Execution: work.ExecutionMetadata{RequestID: "turn-1"},
-		}},
-	}
-	cfg := &runtimeConfig{workerSessions: workerSessions, clock: testRuntimeClock{}}
-	accepted := make(chan workers.WorkstationDispatchResult, 1)
-	acceptedErr := make(chan error, 1)
-	startErr := make(chan error, 1)
+	release := sync.OnceFunc(func() { close(ledger.release) })
+	t.Cleanup(release)
+	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: testRuntimeClock{}, runtimeID: "runtime-window"}, eventHistory: ledger}
+	results := make(chan struct {
+		result factory.InvokeWorkerResult
+		err    error
+	}, 1)
 	go func() {
-		startErr <- startThroughWorkerSessions(context.Background(), cfg, ledger, request, func(
-			_ context.Context,
-			_ workers.WorkstationDispatchRequest,
-			result workers.WorkstationDispatchResult,
-			err error,
-		) {
-			accepted <- result
-			acceptedErr <- err
-		})
+		result, err := f.InvokeWorker(context.Background(), factory.InvokeWorkerRequest{DispatchID: "dispatch-1", Prompt: "review"})
+		results <- struct {
+			result factory.InvokeWorkerResult
+			err    error
+		}{result, err}
 	}()
-	<-ledger.associated
-
-	reserved, err := workerSessions.Get(context.Background(), workersessions.GetRequest{ID: "dispatch-1"})
-	if err != nil || reserved.State != workersessions.StateReserved {
-		t.Fatalf("Worker Session at association publication = %#v, %v, want addressable RESERVED session", reserved, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	select {
+	case <-ledger.associated:
+	case <-ctx.Done():
+		t.Fatal("association was not published")
 	}
-	controlled, err := workerSessions.Cancel(context.Background(), workersessions.ControlRequest{ID: "dispatch-1"})
-	if err != nil || controlled.Outcome != workersessions.ControlOutcomeApplied || controlled.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Cancel() in association/Start window = %#v, %v, want applied CANCELED", controlled, err)
-	}
-
-	close(ledger.release)
-	if err := <-startErr; err != nil {
-		t.Fatalf("startThroughWorkerSessions() error = %v", err)
-	}
-	result := <-accepted
-	if err := <-acceptedErr; !errors.Is(err, workers.ErrWorkstationDispatchCanceled) ||
-		result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
-		t.Fatalf("accepted control-won result = %#v, %v, want canceled Workers result", result, err)
+	assertInvokeWorkerReservationWindow(t, sessions, ledger)
+	release()
+	select {
+	case got := <-results:
+		if got.err != nil || got.result.DispatchID != "dispatch-1" || got.result.WorkerSessionID != "dispatch-1" || got.result.Outcome != factory.InvokeWorkerOutcomeCanceled {
+			t.Fatalf("canceled admission = %#v, %v", got.result, got.err)
+		}
+	case <-ctx.Done():
+		t.Fatal("invocation did not return after association release")
 	}
 	select {
-	case dispatched := <-workerService.requests:
-		t.Fatalf("Workers dispatch started after pre-admission control: %#v", dispatched)
+	case invoked := <-sessions.invoked:
+		if invoked.ID != "dispatch-1" || invoked.AttemptID != "dispatch-1" || invoked.Key != (workersessions.RuntimeAttemptKey{RuntimeID: "runtime-window", DispatchID: "dispatch-1"}) {
+			t.Fatalf("invocation did not retain reserved identity and key: %#v", invoked)
+		}
 	default:
+		t.Fatal("canceled result returned without invoking keyed supervision")
 	}
 }
 

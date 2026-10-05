@@ -65,27 +65,34 @@ func (inventory *Service) ListRecordedSessions(
 	}
 
 	summaries := make([]recordings.RecordedSessionSummary, 0, len(paths))
-	skipped := 0
+	warnings := make([]recordings.RecordedSessionDiagnostic, 0)
 	for _, path := range paths {
 		summary, err := inventory.summaryForPath(root, path)
 		if err != nil {
 			// One unreadable or corrupt recording must never make the whole
 			// history unlistable; it is skipped and reported for diagnosis.
-			skipped++
+			reference, _ := filepath.Rel(root, path)
+			diagnostic := recordings.RecordedSessionDiagnostic{
+				ArtifactReference: filepath.ToSlash(reference),
+				Code:              "UNREADABLE_RECORDING",
+				Reason:            "Recording could not be read or decoded, or has no valid session identity.",
+			}
+			warnings = append(warnings, diagnostic)
 			inventory.logger.Warn(
 				"recordings session inventory skipped unreadable recording",
 				"operation", "list_recorded_sessions",
-				"error", err.Error(),
+				"artifact_reference", diagnostic.ArtifactReference,
+				"reason", diagnostic.Reason,
 			)
 			continue
 		}
 		summaries = append(summaries, summary)
 	}
-	if skipped > 0 {
+	if len(warnings) > 0 {
 		inventory.logger.Warn(
 			"recordings session inventory skipped recordings",
 			"operation", "list_recorded_sessions",
-			"skipped_recording_count", skipped,
+			"skipped_recording_count", len(warnings),
 		)
 	}
 	sort.Slice(summaries, func(left, right int) bool {
@@ -95,7 +102,7 @@ func (inventory *Service) ListRecordedSessions(
 		return summaries[left].ArtifactReference < summaries[right].ArtifactReference
 	})
 	inventory.logOutcome("success", len(summaries))
-	return recordings.RecordedSessionInventoryResult{Sessions: summaries}, nil
+	return recordings.RecordedSessionInventoryResult{Sessions: summaries, Warnings: warnings}, nil
 }
 
 func (inventory *Service) recordingPaths(root string) ([]string, error) {

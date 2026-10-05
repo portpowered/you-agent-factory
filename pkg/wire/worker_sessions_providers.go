@@ -62,21 +62,6 @@ func (capability workerRecordingReaderCapability) LoadWorkerRecording(
 	return append(json.RawMessage(nil), payload...), nil
 }
 
-// provideWorkerSessionsFactory constructs the one canonical per-session
-// Worker Sessions (W4 Runtime dispatch cutover) construction path over the
-// already-composed events.Service and logging.Logger singletons. Factory
-// Runtime consumes only the returned factoryruntime.WorkerSessionsFactory
-// function value, never worker_sessions/wire directly, so composition of the
-// peer worker_sessions service stays inside pkg/wire.
-func provideWorkerSessionsFactory(
-	eventsService events.Service,
-	providerSessions providersessions.Service,
-	logger logging.Logger,
-	recorder recordings.WorkerSessionRecordingService,
-) factoryruntime.WorkerSessionsFactory {
-	return provideWorkerSessionsFactoryWithRecorder(eventsService, providerSessions, logger, recorder)
-}
-
 func provideWorkerSessionRecorder(
 	eventsService events.Service,
 	writer recordings.WorkerRecordingWriter,
@@ -110,13 +95,23 @@ func provideWorkerRecordingWriter(
 	return writer, nil
 }
 
-func provideWorkerSessionsFactoryWithRecorder(
+// provideWorkerSessionsService constructs the canonical process supervisor.
+func provideWorkerSessionsService(
+	execution workers.Service,
 	eventsService events.Service,
 	providerSessions providersessions.Service,
 	logger logging.Logger,
+	clock factoryruntime.Clock,
+	scheduler platformclock.TimerSource,
 	recorder recordings.WorkerSessionRecordingService,
-) factoryruntime.WorkerSessionsFactory {
-	return func(execution workers.Service, clock platformclock.Source) (workersessions.Service, error) {
-		return workersessionswire.NewService(execution, eventsService, logger, clock, providerSessions, recorder)
+) (workersessions.Service, error) {
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder)
+}
+
+func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {
+	opener, ok := service.(factoryruntime.WorkerAttemptOpener)
+	if !ok {
+		return nil, fmt.Errorf("worker sessions runtime attempt capability is required")
 	}
+	return opener, nil
 }

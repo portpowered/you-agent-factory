@@ -4,6 +4,7 @@
 package worker_capture
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -449,7 +450,7 @@ func validateWorkerTopic(topic events.Topic, sessionID string) error {
 	if err := topic.Validate(); err != nil {
 		return fmt.Errorf("%w: topic: %w", ErrWorkerRecordingReplay, err)
 	}
-	if topic != canonicalWorkerTopic(sessionID) {
+	if topic != canonicalWorkerTopic(sessionID) && !scopedWorkerTopicMatches(topic, sessionID) {
 		return fmt.Errorf("%w: topic %q is not the canonical Worker Session topic", ErrWorkerRecordingOrder, topic)
 	}
 	return nil
@@ -610,7 +611,22 @@ func (WorkerRecordingCodec) AdvanceWorkerRecording(projection WorkerRecordingPro
 
 // FailWorkerRecording reconciles a capture-loss fact without visiting history.
 func (WorkerRecordingCodec) FailWorkerRecording(projection WorkerRecordingProjection, failure string, terminal *WorkerRecordingTerminal) (WorkerRecordingProjection, error) {
+	if err := validateWorkerTopic(projection.Topic, projection.WorkerSessionID); err != nil {
+		return WorkerRecordingProjection{}, err
+	}
 	projection.Records = nil
 	projection.Degradation = strings.TrimSpace(failure)
 	return reconcileWorkerRecording(projection, terminal)
+}
+
+// Scoped source topics retain the exact Worker ID while separating Factory
+// owners. Recordings validates addressing without selecting execution scope.
+func scopedWorkerTopicMatches(topic events.Topic, sessionID string) bool {
+	parts := strings.Split(string(topic), "/")
+	if len(parts) != 4 || parts[0] != "factory-worker-session" || parts[3] != "events" {
+		return false
+	}
+	scope, scopeErr := base64.RawURLEncoding.DecodeString(parts[1])
+	worker, workerErr := base64.RawURLEncoding.DecodeString(parts[2])
+	return scopeErr == nil && workerErr == nil && strings.TrimSpace(string(scope)) != "" && string(worker) == sessionID
 }

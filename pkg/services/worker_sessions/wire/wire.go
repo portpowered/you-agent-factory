@@ -35,11 +35,13 @@ type EventsAppender = internalservice.EventsAppender
 // operation-logging abstraction; callers with no operation logging pass
 // logging.NoopLogger{}. Provider Sessions remains a required direct
 // dependency even when its implementation reports unavailable storage.
+// clock supplies observation facts; scheduler supplies deadline timers.
 func NewService(
 	execution workers.Service,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
@@ -48,6 +50,7 @@ func NewService(
 		eventsAppender,
 		logger,
 		clock,
+		scheduler,
 		providerSessions,
 		recording,
 	)

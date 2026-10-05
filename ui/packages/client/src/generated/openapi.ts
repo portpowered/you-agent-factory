@@ -1544,7 +1544,7 @@ export interface components {
       total: number;
     };
     ListWorkerSessionsResponse: {
-      /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
+      /** @description Deterministically ordered Worker Session observations. Work-scoped queries return observations correlated with the requested Work. Top-level fleet pages use captured metadata without reading native provider files. Fleet token usage appears only when captured during execution. Fleet rows omit native-only turn usage and return unavailable transcript status and empty parse diagnostics. Show and detail queries retain provider inspection when available. */
       sessions: components["schemas"]["WorkerSessionObservation"][];
       /** @description Bounded pagination context for top-level Worker Session observation queries. */
       paginationContext?: components["schemas"]["PaginationContext"];
@@ -3688,6 +3688,8 @@ export interface components {
       durableSessions?: components["schemas"]["FactorySessionDurableSummary"][];
       /** @description Read-only recorded Factory Session summaries when scope is HISTORY or ALL. */
       recordedSessions?: components["schemas"]["FactorySessionRecordedSummary"][];
+      /** @description Recording artifacts omitted from history because they could not be read or decoded. */
+      warnings?: components["schemas"]["FactorySessionRecordingWarning"][];
     };
     /**
      * @description Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
@@ -7781,6 +7783,14 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
+    };
+    FactorySessionRecordingWarning: {
+      /** @description Recording-root-relative artifact path. This value does not grant filesystem access. */
+      artifactReference: string;
+      /** @enum {string} */
+      code: FactorySessionRecordingWarningCode;
+      /** @description Safe explanation that excludes recording content and absolute host paths. */
+      reason: string;
     };
     /** @description Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs. */
     DispatchCancellation: {
@@ -12387,6 +12397,11 @@ export const WorkstationGuardType = {
 } as const;
 export type WorkstationGuardType =
   (typeof WorkstationGuardType)[keyof typeof WorkstationGuardType];
+export const FactorySessionRecordingWarningCode = {
+  UNREADABLE_RECORDING: "UNREADABLE_RECORDING",
+} as const;
+export type FactorySessionRecordingWarningCode =
+  (typeof FactorySessionRecordingWarningCode)[keyof typeof FactorySessionRecordingWarningCode];
 export const DispatchCancellationReason = {
   CANCELED: "CANCELED",
   SUPERSEDED: "SUPERSEDED",

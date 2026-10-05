@@ -196,7 +196,8 @@ func (f selectedArtifactScenario) list(t *testing.T, ctx context.Context, args .
 
 func (f selectedArtifactScenario) assertParity(t *testing.T, ctx context.Context, workerID string, active bool) {
 	t.Helper()
-	args := []string{"--session", f.sessionID, "--max-results", "1000"}
+	// No Work or Factory Session selector: exercise the actual global fleet CLI.
+	args := []string{"--max-results", "1000"}
 	wantState := factoryapi.WorkerSessionObservationStateCompleted
 	if active {
 		args = append(args, "--state", "RUNNING", "--state", "STARTING")
@@ -220,15 +221,25 @@ func (f selectedArtifactScenario) assertParity(t *testing.T, ctx context.Context
 	if err := json.Unmarshal(output, &shown); err != nil {
 		t.Fatal(err)
 	}
-	for _, row := range []factoryapi.WorkerSessionObservation{matching[0], work.Sessions[0], shown} {
-		f.assertExpectedFacts(t, row, workerID, wantState)
+	for i, row := range []factoryapi.WorkerSessionObservation{matching[0], work.Sessions[0], shown} {
+		wantTranscript := factoryapi.WorkerSessionObservationTranscriptAVAILABLE
+		if i == 0 {
+			wantTranscript = factoryapi.WorkerSessionObservationTranscriptUNAVAILABLE
+		}
+		f.assertExpectedFacts(t, row, workerID, wantState, wantTranscript)
+		if i == 0 && (row.TurnUsage != nil || row.Parse.EventCount != 0 || len(row.Parse.Errors) != 0) {
+			t.Fatalf("fleet invented native enrichment: %#v", row)
+		}
+		if i != 0 && row.Parse.EventCount == 0 {
+			t.Fatalf("selected detail lost native parse: %#v", row)
+		}
 		if row.ConfirmationState != matching[0].ConfirmationState || !reflect.DeepEqual(row.RecordingHealth, matching[0].RecordingHealth) || !reflect.DeepEqual(row.RecordingHealthReason, matching[0].RecordingHealthReason) {
 			t.Fatalf("compiled observation health/confirmation disagree: fleet=%#v scoped=%#v", matching[0], row)
 		}
 	}
 }
 
-func (f selectedArtifactScenario) assertExpectedFacts(t *testing.T, row factoryapi.WorkerSessionObservation, workerID string, wantState factoryapi.WorkerSessionObservationState) {
+func (f selectedArtifactScenario) assertExpectedFacts(t *testing.T, row factoryapi.WorkerSessionObservation, workerID string, wantState factoryapi.WorkerSessionObservationState, wantTranscript factoryapi.WorkerSessionObservationTranscript) {
 	t.Helper()
 	if row.State != wantState || row.WorkerSessionId != workerID || row.FactorySessionId == nil || *row.FactorySessionId != f.sessionID || row.Failure != nil {
 		t.Fatalf("compiled live identity = %#v, want %s in %s", row, wantState, f.sessionID)
@@ -241,7 +252,7 @@ func (f selectedArtifactScenario) assertExpectedFacts(t *testing.T, row factorya
 		t.Fatalf("compiled recording health = %#v/%v, want %s without interruption", row.RecordingHealth, row.RecordingHealthReason, wantHealth)
 	}
 	wantProvider := &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: f.providerID}
-	if !row.ProviderSessionAvailable || !reflect.DeepEqual(row.ProviderSession, wantProvider) || row.Transcript != factoryapi.WorkerSessionObservationTranscriptAVAILABLE {
-		t.Fatalf("compiled provider facts = %#v, want controlled available transcript", row)
+	if !row.ProviderSessionAvailable || !reflect.DeepEqual(row.ProviderSession, wantProvider) || row.Transcript != wantTranscript {
+		t.Fatalf("compiled provider facts = %#v, want controlled transcript %s", row, wantTranscript)
 	}
 }

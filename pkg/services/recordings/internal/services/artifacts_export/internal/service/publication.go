@@ -92,7 +92,11 @@ func (publication *Publication) Publish(ctx context.Context, destination string,
 		_ = temporary.Close()
 		return err
 	}
-	if _, err := temporary.Write(payload); err != nil {
+	n, err := temporary.Write(payload)
+	if err == nil && n != len(payload) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
 		_ = temporary.Close()
 		return fmt.Errorf("write temporary portable artifact: %w", err)
 	}

@@ -109,7 +109,7 @@ func NewTransitioner(
 	}
 	tr := &TransitionerSubsystem{
 		netDefinition:     n,
-		logger:            logging.EnsureLogger(logger),
+		logger:            logger,
 		now:               now,
 		transformer:       transformer,
 		runtimeConfig:     runtimeConfig,

@@ -2,6 +2,14 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -42,10 +50,10 @@ func TestEnablementEvaluator_LogsEnabledTransition(t *testing.T) {
 		t.Fatalf("expected 1 enabled transition, got %d", len(enabled))
 	}
 
-	if entry := logger.findEntry("transition enabled"); entry == nil {
+	if entry := logger.findEntry("transition enabled"); entry == nil || entry.level != "info" || !reflect.DeepEqual(entry.args, []any{"transitionID", "t1", "transitionName", "do-work", "workerType", "agent", "bindingCount", 1}) {
 		t.Fatal("expected 'transition enabled' log entry")
 	}
-	if summary := logger.findEntry("evaluation complete"); summary == nil {
+	if summary := logger.findEntry("evaluation complete"); summary == nil || summary.level != "debug" || !reflect.DeepEqual(summary.args, []any{"totalTransitions", 1, "enabledCount", 1}) {
 		t.Fatal("expected 'evaluation complete' log entry")
 	}
 }
@@ -73,7 +81,7 @@ func TestEnablementEvaluator_LogsDisabledInsufficientTokens(t *testing.T) {
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
 		t.Fatalf("expected 0 enabled transitions, got %d", len(enabled))
 	}
-	if entry := logger.findEntry("transition disabled"); entry == nil {
+	if entry := logger.findEntry("transition disabled"); entry == nil || entry.level != "debug" || !strings.Contains(fmt.Sprint(entry.args), "t1") {
 		t.Fatal("expected 'transition disabled' log entry")
 	}
 }
@@ -115,13 +123,13 @@ func TestEnablementEvaluator_LogsDisabledGuardFailed(t *testing.T) {
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
 		t.Fatalf("expected 0 enabled transitions, got %d", len(enabled))
 	}
-	if entry := logger.findEntry("guard failed"); entry == nil {
+	if entry := logger.findEntry("guard failed"); entry == nil || entry.level != "debug" || !strings.Contains(fmt.Sprint(entry.args), "t1") {
 		t.Fatal("expected log entry containing 'guard failed'")
 	}
 }
 
 func TestEnablementEvaluator_BindsMultipleNamedGuardedInputs(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{
@@ -184,7 +192,7 @@ func TestEnablementEvaluator_BindsMultipleNamedGuardedInputs(t *testing.T) {
 }
 
 func TestEnablementEvaluator_BindsAllTokensForMatchingParentGuard(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{
@@ -232,7 +240,7 @@ func TestEnablementEvaluator_BindsAllTokensForMatchingParentGuard(t *testing.T) 
 }
 
 func TestEnablementEvaluator_AllChildrenCompleteWaitsForProcessingAndLateChild(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"parent:waiting":   {ID: "parent:waiting", TypeID: "parent", State: "waiting"},
@@ -290,7 +298,7 @@ func TestEnablementEvaluator_AllChildrenCompleteWaitsForProcessingAndLateChild(t
 }
 
 func TestEnablementEvaluator_AllChildrenCompleteAcceptsDistinctTerminalPlaces(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"parent:waiting": {ID: "parent:waiting", TypeID: "parent", State: "waiting"},
@@ -334,7 +342,7 @@ func TestEnablementEvaluator_AllChildrenCompleteAcceptsDistinctTerminalPlaces(t 
 }
 
 func TestEnablementEvaluator_SameNameGuardEnablesOnMatchingNames(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := sameNameGuardNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha"}},
@@ -355,7 +363,7 @@ func TestEnablementEvaluator_SameNameGuardEnablesOnMatchingNames(t *testing.T) {
 }
 
 func TestEnablementEvaluator_SameNameGuardBlocksNonMatchingNames(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	n := sameNameGuardNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha"}},
@@ -368,7 +376,7 @@ func TestEnablementEvaluator_SameNameGuardBlocksNonMatchingNames(t *testing.T) {
 }
 
 func TestEnablementEvaluator_SameNameGuardFindsLaterMatchingBinding(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{
@@ -412,7 +420,7 @@ func TestEnablementEvaluator_SameNameGuardFindsLaterMatchingBinding(t *testing.T
 }
 
 func TestEnablementEvaluator_SameNameGuardFactoryConsumeInputOrder(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{
@@ -456,7 +464,7 @@ func TestEnablementEvaluator_SameNameGuardFactoryConsumeInputOrder(t *testing.T)
 }
 
 func TestEnablementEvaluator_VisitCountGuardEnablesAtThreshold(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{
@@ -526,13 +534,13 @@ func TestEnablementEvaluator_LogsNoInputArcs(t *testing.T) {
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
 		t.Fatalf("expected 0 enabled transitions, got %d", len(enabled))
 	}
-	if entry := logger.findEntry("no input arcs"); entry == nil {
+	if entry := logger.findEntry("no input arcs"); entry == nil || entry.level != "debug" || !strings.Contains(fmt.Sprint(entry.args), "t1") {
 		t.Fatal("expected log entry containing 'no input arcs'")
 	}
 }
 
-func TestEnablementEvaluator_NilLoggerDoesNotPanic(t *testing.T) {
-	eval := NewEnablementEvaluator(nil, testNow, nil)
+func TestEnablementEvaluator_ExplicitNoopPreservesEnablement(t *testing.T) {
+	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{
@@ -634,7 +642,7 @@ func TestEnablementEvaluator_SameNameJoinGatesSecondaryDependency(t *testing.T) 
 		{name: "dependency input declared first", peerFirst: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			evaluator := NewEnablementEvaluator(nil, testNow, nil)
+			evaluator := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 			net := sameNameDependencyNet(tc.peerFirst)
 
 			blocked := sameNameDependencySnapshot("prerequisite:pending")
@@ -654,7 +662,7 @@ func TestEnablementEvaluator_SameNameJoinGatesSecondaryDependency(t *testing.T) 
 }
 
 func TestEnablementEvaluator_DependencyBindingPreflightHandlesNestedGuards(t *testing.T) {
-	evaluator := NewEnablementEvaluator(nil, testNow, nil)
+	evaluator := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
 	transition := &petri.Transition{
 		InputArcs: []petri.Arc{{
 			Guard: &petri.AllGuard{Guards: []petri.Guard{
@@ -774,4 +782,160 @@ func bindingTokens(bindings any, name string) any {
 	default:
 		return nil
 	}
+}
+
+func TestEnablementSelectedLoggerParity(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"enabled", "insufficient", "guard", "no-input", "empty", "nil-snapshot"} {
+		t.Run(name, func(t *testing.T) { t.Parallel(); checkEnablementLoggerParity(t, name) })
+	}
+}
+
+func selectedEnablementFixture(name string) (*state.Net, petri.MarkingSnapshot, string) {
+	n := sameNameGuardNet()
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", CreatedAt: testNow(), EnteredAt: testNow(), Color: factorytoken.Color{Name: "alpha"}},
+		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", CreatedAt: testNow(), EnteredAt: testNow(), Color: factorytoken.Color{Name: "alpha"}},
+	})
+	reason := ""
+	switch name {
+	case "enabled":
+		for _, tr := range n.Transitions {
+			second := *tr
+			second.ID = "zz-second"
+			second.Name = "second"
+			second.WorkerType = "script"
+			n.Transitions[second.ID] = &second
+			break
+		}
+	case "insufficient":
+		marking = makeTestSnapshot(nil)
+		reason = "insufficient tokens"
+	case "guard":
+		marking.Tokens["task-alpha"].Color.Name = "beta"
+		reason = "guard failed"
+	case "no-input":
+		for _, tr := range n.Transitions {
+			tr.InputArcs = nil
+		}
+		reason = "no input arcs"
+	case "empty":
+		n.Transitions = nil
+	}
+	return n, marking, reason
+}
+
+func checkEnablementLoggerParity(t *testing.T, name string) {
+	t.Helper()
+	n, marking, reason := selectedEnablementFixture(name)
+	before, err := json.Marshal(marking)
+	if err != nil {
+		t.Fatal(err)
+	}
+	core, logs := observer.New(zapcore.DebugLevel)
+	capture := logging.NewZapLogger(zap.New(core).With(zap.String("session_id", "enablement")), false)
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n}
+	if name == "nil-snapshot" {
+		snapshot = nil
+	}
+	got := NewEnablementEvaluator(capture, testNow, nil).FindEnabledTransitionsWithSnapshot(context.Background(), n, snapshot)
+	quiet := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil).FindEnabledTransitionsWithSnapshot(context.Background(), n, snapshot)
+	after, err := json.Marshal(marking)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, quiet) || string(after) != string(before) {
+		t.Fatalf("decision or marking changed: capture=%+v quiet=%+v", got, quiet)
+	}
+	if name == "enabled" {
+		assertSelectedEnabledDiagnostics(t, got, logs)
+	} else if len(got) != 0 {
+		t.Fatalf("unexpected enabled transitions: %+v", got)
+	}
+	if name == "nil-snapshot" {
+		if logs.Len() != 0 {
+			t.Fatal("nil snapshot emitted diagnostics")
+		}
+		return
+	}
+	assertSelectedEnablementSummary(t, logs, len(got), reason)
+	for _, entry := range logs.All() {
+		if entry.ContextMap()["session_id"] != "enablement" {
+			t.Fatalf("lost supplied scope: %+v", entry)
+		}
+	}
+}
+
+func assertSelectedEnabledDiagnostics(t *testing.T, got []interfaces.EnabledTransition, logs *observer.ObservedLogs) {
+	t.Helper()
+	if len(got) != 2 || got[0].TransitionID >= got[1].TransitionID {
+		t.Fatalf("sorted transitions = %+v", got)
+	}
+	entries := logs.FilterMessage("enablement: transition enabled").All()
+	if len(entries) != 2 {
+		t.Fatalf("enabled diagnostics = %+v", entries)
+	}
+	for i, entry := range entries {
+		fields := entry.ContextMap()
+		if entry.Level != zapcore.InfoLevel || fields["transitionID"] != got[i].TransitionID || fields["bindingCount"] != int64(2) {
+			t.Fatalf("enabled diagnostic = %+v", entry)
+		}
+		if len(got[i].ArcModes) != 2 || len(got[i].Bindings) != 2 || got[i].Bindings["plan"][0].ID != "plan-alpha" || got[i].Bindings["task"][0].ID != "task-alpha" {
+			t.Fatalf("bindings/modes = %+v", got[i])
+		}
+	}
+}
+
+func assertSelectedEnablementSummary(t *testing.T, logs *observer.ObservedLogs, enabled int, reason string) {
+	t.Helper()
+	summary := logs.FilterMessage("enablement: evaluation complete").All()
+	if len(summary) != 1 || summary[0].Level != zapcore.DebugLevel || summary[0].ContextMap()["enabledCount"] != int64(enabled) {
+		t.Fatalf("summary = %+v", summary)
+	}
+	if reason == "" {
+		return
+	}
+	disabled := logs.FilterMessage("enablement: transition disabled").All()
+	if len(disabled) == 0 {
+		t.Fatal("missing disabled diagnostic")
+	}
+	for _, entry := range disabled {
+		if entry.Level != zapcore.DebugLevel || !strings.Contains(fmt.Sprint(entry.ContextMap()["reason"]), reason) || entry.ContextMap()["transitionID"] == nil {
+			t.Fatalf("disabled diagnostic = %+v", entry)
+		}
+	}
+}
+
+func TestEnablementSelectedLoggerScopeIsolation(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zapcore.DebugLevel)
+	for _, scope := range []string{"first", "second", "quiet"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			logger := logging.NewZapLogger(zap.New(core).With(zap.String("session_id", scope), zap.String("folder_path", "/"+scope), zap.String("factory_dir", "/factory/"+scope)), false)
+			if scope == "quiet" {
+				logger = logging.NoopLogger{}
+			}
+			n, marking, _ := selectedEnablementFixture("enabled")
+			enabled := NewEnablementEvaluator(logger, testNow, nil).FindEnabledTransitions(context.Background(), n, &marking)
+			if len(enabled) != 2 {
+				t.Fatalf("scoped decision = %+v", enabled)
+			}
+		})
+	}
+	t.Cleanup(func() {
+		if logs.Len() != 6 {
+			t.Fatalf("scoped logs = %+v", logs.All())
+		}
+		for _, entry := range logs.All() {
+			fields := entry.ContextMap()
+			scope := fields["session_id"]
+			if scope != "first" && scope != "second" {
+				t.Fatalf("unexpected scope = %+v", fields)
+			}
+			if fields["folder_path"] != "/"+scope.(string) || fields["factory_dir"] != "/factory/"+scope.(string) {
+				t.Fatalf("crossed scope = %+v", fields)
+			}
+		}
+	})
 }

@@ -67,44 +67,29 @@ func parseCodexSessionDetailsForSession(ctx context.Context, reader io.Reader, s
 			return parser.details(), err
 		}
 		lineBytes, atEOF, observedLineBytes, readErr := readCodexJSONLLine(bufferedReader)
-		if readErr != nil {
-			switch {
-			case errors.Is(readErr, errCodexInspectionByteLimit):
-				limitErr := parser.stopAtLimit(
-					codexInspectionLimitBytes,
-					maxCodexJSONLBytesPerInspection,
-					parser.budget.bytesRead,
-					lineNumber+1,
-					diagnosticInspectionByteLimit,
-				)
-				return parser.details(), limitErr
-			case errors.Is(readErr, errCodexInspectionRecordLimit):
-				limitErr := parser.stopAtLimit(
-					codexInspectionLimitRecord,
-					maxCodexJSONLLineBytes,
-					observedLineBytes,
-					lineNumber+1,
-					diagnosticInspectionRecordLimit,
-				)
-				return parser.details(), limitErr
-			default:
-				return parser.details(), fmt.Errorf("%w: rollout read failed", providersessions.ErrSessionStorageUnavailable)
-			}
+		if errors.Is(readErr, errCodexInspectionByteLimit) {
+			parser.stopAtLimit(lineNumber+1, diagnosticInspectionByteLimit)
+			return parser.details(), nil
 		}
-		if atEOF && len(lineBytes) == 0 {
+		if readErr != nil && !errors.Is(readErr, errCodexInspectionRecordLimit) {
+			return parser.details(), safeCodexStorageError("read", readErr)
+		}
+		if atEOF && observedLineBytes == 0 {
 			break
 		}
 
 		lineNumber++
 		if !parser.budget.beginLine() {
-			limitErr := parser.stopAtLimit(
-				codexInspectionLimitLines,
-				int64(maxCodexJSONLLinesPerInspection),
-				int64(lineNumber),
-				lineNumber,
-				diagnosticInspectionLineLimit,
-			)
-			return parser.details(), limitErr
+			parser.stopAtLimit(lineNumber, diagnosticInspectionLineLimit)
+			return parser.details(), nil
+		}
+		if observedLineBytes > maxCodexJSONLLineBytes {
+			parser.summary.LineCount++
+			parser.recordMalformedLine(lineNumber, diagnosticInspectionRecordLimit)
+			if parser.budget.stopParsing || atEOF {
+				return parser.details(), nil
+			}
+			continue
 		}
 		line := bytes.TrimSpace(lineBytes)
 		if len(line) == 0 {
@@ -121,7 +106,7 @@ func parseCodexSessionDetailsForSession(ctx context.Context, reader io.Reader, s
 				message = diagnosticTruncatedJSONEvent
 			}
 			parser.recordMalformedLine(lineNumber, message)
-			if atEOF {
+			if atEOF || parser.budget.stopParsing {
 				break
 			}
 			continue
@@ -130,7 +115,7 @@ func parseCodexSessionDetailsForSession(ctx context.Context, reader io.Reader, s
 		parser.currentLine = lineNumber
 		parser.recordEvent(lineNumber, event)
 		if parser.budget.stopParsing {
-			return parser.details(), parser.limitError()
+			return parser.details(), nil
 		}
 		if atEOF {
 			break
@@ -142,13 +127,6 @@ func parseCodexSessionDetailsForSession(ctx context.Context, reader io.Reader, s
 var (
 	errCodexInspectionByteLimit   = errors.New("codex rollout byte inspection limit reached")
 	errCodexInspectionRecordLimit = errors.New("codex rollout record inspection limit reached")
-)
-
-const (
-	codexInspectionLimitBytes       = "byte"
-	codexInspectionLimitLines       = "line"
-	codexInspectionLimitRecord      = "record"
-	codexInspectionLimitDiagnostics = "diagnostic"
 )
 
 type codexInspectionReader struct {
@@ -187,59 +165,36 @@ func (r *codexInspectionReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// Drain an oversized record without retaining its fragments so the next
+// physical record can still be inspected. The inspection reader bounds draining.
 func readCodexJSONLLine(reader *bufio.Reader) ([]byte, bool, int64, error) {
 	var line []byte
 	var lineBytes int64
 	for {
 		fragment, err := reader.ReadSlice('\n')
 		lineBytes += int64(len(fragment))
-		if lineBytes > maxCodexJSONLLineBytes {
-			return nil, false, lineBytes, errCodexInspectionRecordLimit
-		}
-		line = append(line, fragment...)
-		switch {
-		case err == nil:
-			return line, false, lineBytes, nil
-		case errors.Is(err, bufio.ErrBufferFull):
-			continue
-		case errors.Is(err, io.EOF):
-			if len(line) == 0 {
-				return nil, true, lineBytes, nil
+		if lineBytes <= maxCodexJSONLLineBytes {
+			if len(line)+len(fragment) > cap(line) {
+				capacity := min(max(2*cap(line), len(line)+len(fragment)), int(maxCodexJSONLLineBytes))
+				grown := make([]byte, len(line), capacity)
+				copy(grown, line)
+				line = grown
 			}
-			return line, true, lineBytes, nil
-		case errors.Is(err, errCodexInspectionByteLimit):
-			return nil, false, lineBytes, err
-		default:
+			line = append(line, fragment...)
+		} else {
+			line = nil
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, false, lineBytes, err
 		}
+		if lineBytes > maxCodexJSONLLineBytes {
+			return nil, errors.Is(err, io.EOF), lineBytes, errCodexInspectionRecordLimit
+		}
+		return line, errors.Is(err, io.EOF), lineBytes, nil
 	}
-}
-
-type codexInspectionLimitError struct {
-	sessionID  string
-	category   string
-	configured int64
-	observed   int64
-	line       int
-}
-
-func (e *codexInspectionLimitError) Error() string {
-	session := strings.TrimSpace(e.sessionID)
-	if session == "" {
-		session = "unspecified"
-	}
-	return fmt.Sprintf(
-		"codex provider session %q rollout inspection %s limit reached (configured %d, observed %d, line %d)",
-		session,
-		e.category,
-		e.configured,
-		e.observed,
-		e.line,
-	)
-}
-
-func (e *codexInspectionLimitError) Unwrap() error {
-	return providersessions.ErrResourceLimitExceeded
 }
 
 type codexSessionParser struct {
@@ -258,32 +213,9 @@ func (p *codexSessionParser) details() ParsedDetails {
 	}
 }
 
-func (p *codexSessionParser) stopAtLimit(category string, configured, observed int64, line int, diagnostic string) error {
-	p.budget.setLimit(category, configured, observed, line)
+func (p *codexSessionParser) stopAtLimit(line int, diagnostic string) {
 	p.recordMalformedLine(line, diagnostic)
-	return p.limitError()
-}
-
-func (p *codexSessionParser) limitError() error {
-	category := p.budget.limitCategory
-	if category == "" {
-		category = codexInspectionLimitDiagnostics
-	}
-	configured := p.budget.limitConfigured
-	if configured == 0 {
-		configured = int64(maxCodexDiagnosticRecords)
-	}
-	observed := p.budget.limitObserved
-	if observed == 0 {
-		observed = int64(p.budget.diagnosticRecords + 1)
-	}
-	return &codexInspectionLimitError{
-		sessionID:  p.sessionID,
-		category:   category,
-		configured: configured,
-		observed:   observed,
-		line:       p.budget.limitLine,
-	}
+	p.budget.stopParsing = true
 }
 
 func (p *codexSessionParser) recordMalformedLine(lineNumber int, message string) {
@@ -316,15 +248,16 @@ func (p *codexSessionParser) recordRetainedTextLimit() {
 
 func (p *codexSessionParser) appendDiagnostic(lineNumber int, message string) {
 	if !p.budget.canRecordDiagnostic() {
-		if !p.budget.stopParsing {
-			p.budget.setLimit(
-				codexInspectionLimitDiagnostics,
-				int64(maxCodexDiagnosticRecords),
-				int64(p.budget.diagnosticRecords+1),
-				lineNumber,
-			)
+		// Replace the final retained diagnostic with an explicit terminal outcome
+		// while keeping parse errors and unknown events within their shared cap.
+		if len(p.summary.ParseErrors) > 0 {
+			p.summary.ParseErrors = p.summary.ParseErrors[:len(p.summary.ParseErrors)-1]
+		} else if len(p.summary.UnknownEvents) > 0 {
+			p.summary.UnknownEvents = p.summary.UnknownEvents[:len(p.summary.UnknownEvents)-1]
 		}
-		return
+		p.budget.stopParsing = true
+		message = diagnosticInspectionDiagnosticLimit
+		p.budget.diagnosticRecords--
 	}
 	p.summary.ParseErrors = append(p.summary.ParseErrors, providersessions.LineError{
 		LineNumber: lineNumber,

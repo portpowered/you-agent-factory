@@ -496,7 +496,7 @@ func validatePortableIdentity(identity WorkerPortableRecordingIdentity) error {
 	if err := validateWorkerOpaqueIdentity(identity.WorkerSessionID); err != nil {
 		return portableDiagnostic(WorkerPortableCodeInvalidIdentity, "identity.workerSessionId", "Worker Session identity is malformed", ErrWorkerPortableRecordingIdentity)
 	}
-	if err := identity.Topic.Validate(); err != nil || identity.Topic != canonicalWorkerTopic(identity.WorkerSessionID) {
+	if err := validateWorkerTopic(identity.Topic, identity.WorkerSessionID); err != nil {
 		return portableDiagnostic(WorkerPortableCodeInvalidIdentity, "identity.topic", "topic is not the canonical Worker Session topic", ErrWorkerPortableRecordingIdentity)
 	}
 	return nil

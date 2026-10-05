@@ -10,15 +10,68 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// RuntimeProgressPublisher is the already-bound keyed publication operation.
+type RuntimeProgressPublisher func(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error
+
+// ForRuntime captures the runtime and publication operation before Workers
+// execution is assembled. Only an explicit standalone bypass may forward output
+// without supervision; rejected or terminal attempts stay suppressed.
+func (publish RuntimeProgressPublisher) ForRuntime(ctx context.Context, runtimeID string, next workers.ProgressPublisher) workers.ProgressPublisher {
+	runtimeID = strings.TrimSpace(runtimeID)
+	return func(fragment workers.ProgressFragment) {
+		var err error
+		fragment, err = RedactProgressFragment(fragment)
+		if err != nil {
+			return
+		}
+		if !providerFragmentAgrees(fragment) {
+			return
+		}
+		key := RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: strings.TrimSpace(fragment.Correlation.DispatchID)}
+		err = publish(ctx, key, fragment, next)
+		if errors.Is(err, ErrRuntimeProgressUnsupervised) && fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
+			next(fragment)
+		}
+	}
+}
+
+// RuntimeAttemptKey identifies a logical dispatch within one runtime. It is
+// process-local and does not replace a Worker Session or physical attempt ID.
+type RuntimeAttemptKey struct {
+	RuntimeID  string
+	DispatchID string
+}
+
 // RuntimeAttemptRequest asks Worker Sessions to open the durable observation
 // window for an attempt whose admission and execution remain owned by
 // Factory Runtime. ID is the Worker Session identity; AttemptID is the
 // physical attempt identity written into lifecycle records. An empty
 // AttemptID uses the request dispatch ID.
 type RuntimeAttemptRequest struct {
-	ID        string
-	AttemptID string
-	Execution workers.WorkstationDispatchRequest
+	// ObservationRuntimeID identifies the runtime owning this attempt's fleet source.
+	// Routed child correlation may name a distinct execution runtime.
+	ObservationRuntimeID string
+	// ObservationFactorySessionID owns the source topic independently of routed execution correlation.
+	ObservationFactorySessionID string
+	Key                         RuntimeAttemptKey
+	ID                          string
+	AttemptID                   string
+	Execution                   workers.WorkstationDispatchRequest
+}
+
+// Validate rejects contradictory routing before opening a topic or capture.
+// Callers normalize legacy blank runtime correlation from the resolved runtime
+// before supplying it in both the key and execution request.
+func (r RuntimeAttemptRequest) Validate() error {
+	if err := (InvokeSessionRequest{ID: r.ID, Execution: r.Execution}).Validate(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(r.Key.RuntimeID) == "" || strings.TrimSpace(r.Key.DispatchID) == "" ||
+		strings.TrimSpace(r.Key.DispatchID) != strings.TrimSpace(r.Execution.Execution.Dispatch.DispatchID) ||
+		strings.TrimSpace(r.Key.RuntimeID) != strings.TrimSpace(r.Execution.Execution.RuntimeID) {
+		return ErrProviderSessionAssociationAttemptMismatch
+	}
+	return nil
 }
 
 // RuntimeAttempt is the durable lifecycle handle returned after the opening
@@ -259,12 +312,14 @@ func (req ReserveRequest) Validate() error {
 // GetRequest asks Service to inspect one Worker Session identity.
 type GetRequest struct {
 	ID string
+	// FactorySessionID optionally narrows the identity to its owning Factory Session.
+	FactorySessionID string
 }
 
 // Validate reports whether req carries a non-empty stable identity. Validate
 // is pure and does not mutate req.
 func (req GetRequest) Validate() error {
-	if !validSessionID(req.ID) {
+	if !validSessionID(req.ID) || (req.FactorySessionID != "" && strings.TrimSpace(req.FactorySessionID) == "") {
 		return ErrInvalidSessionID
 	}
 	return nil
@@ -572,14 +627,19 @@ func (association ProviderSessionAssociation) Clone() ProviderSessionAssociation
 // session and dispatch against its own supervision state before it records
 // the association.
 type ProviderSessionAssociationRequest struct {
-	WorkerSessionID string
-	DispatchID      string
-	Reference       providers.SessionRef
+	// FactorySessionID optionally selects the immutable owning Factory Session.
+	FactorySessionID string
+	WorkerSessionID  string
+	DispatchID       string
+	Reference        providers.SessionRef
 }
 
 // Validate checks only caller-owned request fields. Registry-owned attempt,
 // turn, and Worker Session correlation is checked by AssociateProviderSession.
 func (request ProviderSessionAssociationRequest) Validate() error {
+	if request.FactorySessionID != "" && strings.TrimSpace(request.FactorySessionID) == "" {
+		return ErrInvalidProviderSessionAssociation
+	}
 	if !validSessionID(request.WorkerSessionID) {
 		return ErrInvalidSessionID
 	}

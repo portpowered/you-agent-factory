@@ -1,6 +1,7 @@
 package worker_capture
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -43,7 +44,9 @@ func (request WorkerSessionRecordingRequest) Validate() error {
 		return fmt.Errorf("%w: topic: %w", ErrInvalidWorkerRecordingRequest, err)
 	}
 	expectedTopic := events.Topic("worker-session/" + strings.TrimSpace(request.WorkerSessionID) + "/events")
-	if request.Topic != expectedTopic {
+	scope := strings.TrimSpace(request.FactorySessionID)
+	scopedTopic := events.Topic("factory-worker-session/" + base64.RawURLEncoding.EncodeToString([]byte(scope)) + "/" + base64.RawURLEncoding.EncodeToString([]byte(strings.TrimSpace(request.WorkerSessionID))) + "/events")
+	if request.Topic != expectedTopic && (scope == "" || request.Topic != scopedTopic) {
 		return fmt.Errorf("%w: topic %q is not the canonical Worker Session topic %q", ErrInvalidWorkerRecordingRequest, request.Topic, expectedTopic)
 	}
 	return nil
