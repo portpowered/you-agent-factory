@@ -40,6 +40,16 @@ func (h *Handler) GetProviderSessionDetails(
 		h.writeProviderSessionError(w, params, err)
 		return
 	}
+	if count := len(response.Parse.ParseErrors) + len(response.Parse.UnknownEvents); count > 0 {
+		h.logger.Warn("provider session details degraded",
+			zap.String("provider", string(response.ProviderSession.Provider)),
+			zap.String("session_id", string(response.ProviderSession.Id)),
+			zap.Int("diagnostic_count", count),
+			zap.String("diagnostic_category", providerSessionDiagnosticCategory(response.Parse)),
+			zap.Int("parse_error_count", len(response.Parse.ParseErrors)),
+			zap.Int("unknown_event_count", len(response.Parse.UnknownEvents)),
+			zap.String("outcome", "bounded_partial"))
+	}
 	h.writeJSON(w, http.StatusOK, response)
 }
 
@@ -68,4 +78,17 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	default:
 		return factoryapi.ErrorFamilyInternalServerError
 	}
+}
+
+func providerSessionDiagnosticCategory(summary factoryapi.ProviderSessionParseSummary) string {
+	for _, diagnostic := range summary.ParseErrors {
+		switch diagnostic.Message {
+		case "inspection line limit reached", "inspection byte limit reached", "inspection record limit reached", "inspection transcript limit reached", "inspection retained-output limit reached", "inspection diagnostic limit reached":
+			return "inspection_limit"
+		}
+	}
+	if len(summary.ParseErrors) > 0 {
+		return "invalid_record"
+	}
+	return "unknown_event"
 }

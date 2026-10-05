@@ -397,6 +397,11 @@ jobs:
           go test -race ./tests/functional/workers/inference -run 'TestWSRFT004|TestWSRFT009|TestWorkerRecordingSurvivesTempCleanup|TestWorkerSessionSelectedSessionObservationConsistency' -count=1 -p=2 -timeout=5m
           go test -race ./pkg/services/factory_runtime/internal/services/orchestration/runtime -run 'TestRecordedWorkerSessionObservation|TestMergeRecordedObservations' -count=1 -timeout=5m
           go test -race ./pkg/services/worker_sessions/internal/service -count=1 -timeout=5m
+      - name: Race-check bounded Codex detail and shared HTTP fixture
+        if: matrix.suite == 'unit'
+        run: |
+          go test -race ./pkg/services/provider_sessions/internal/services/codex_reader/internal/service ./pkg/services/provider_sessions/transports/http -count=1 -p=1 -timeout=5m
+          go test -race ./tests/functional/providers/codex -run '^TestCodexSharedTrustedWorkAndHistory$' -count=1 -p=1 -timeout=5m
       - name: Race-check selected Automations time and joined shutdown
         if: matrix.suite == 'unit'
         timeout-minutes: 10
