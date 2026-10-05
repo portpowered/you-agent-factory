@@ -25,7 +25,7 @@ func TestInterruptCapturedRecipePreservesExecutionAndReference(t *testing.T) {
 	plan.execution.Execution.Model = "accepted-model"
 	plan.execution.Execution.Args = []string{"--accepted-option"}
 	// Identical member names in separate objects remain valid token content.
-	plan.execution.Execution.InputTokens = []any{map[string]any{"key": "first"}, []any{map[string]any{"key": "second"}}}
+	plan.execution.Execution.InputTokens = []any{map[string]any{"key": "first", "Model": "upper", "model": "lower"}, []any{map[string]any{"key": "second"}}}
 	plan.request.ReplacementMessage = "exact\nreplacement\" bytes"
 	operation, err := r.beginInterruptIntent(t.Context(), plan)
 	if err != nil {
@@ -165,7 +165,7 @@ func TestInterruptInheritedCredentialCannotEnterRecipeOrRequest(t *testing.T) {
 
 func TestInterruptCapturedRecipeRejectsCorruptionAndRetainsLegacyReplay(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"legacy", "version", "replacement", "attempt", "reference", "workstation", "env", "unknown", "trailing", "model-tamper", "duplicate-version", "duplicate-reference", "duplicate-token-key"} {
+	for _, scenario := range []string{"legacy", "version", "replacement", "attempt", "reference", "workstation", "env", "unknown", "trailing", "model-tamper", "duplicate-version", "duplicate-reference", "duplicate-token-key", "alias-version", "alias-replacement", "alias-reference", "alias-execution", "alias-model", "alias-env"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			r, plan, store := newDurableInterruptFixture(t)
@@ -197,24 +197,13 @@ func TestInterruptCapturedRecipeRejectsCorruptionAndRetainsLegacyReplay(t *testi
 }
 
 func mutateInterruptRecipe(store *interruptInputStore, plan interruptPlan, scenario string) {
+	if strings.HasPrefix(scenario, "alias-") {
+		store.input = injectInterruptRecipeAlias(store.input, scenario)
+		updateInterruptRecipeDigest(store)
+		return
+	}
 	if strings.HasPrefix(scenario, "duplicate-") {
-		switch scenario {
-		case "duplicate-version":
-			store.input = bytes.Replace(store.input, []byte(`"version":1`), []byte(`"version":2,"version":1`), 1)
-		case "duplicate-reference":
-			store.input = bytes.Replace(store.input, []byte(`"id":"exact-provider-session"`), []byte(`"id":"private-recipe-secret","id":"exact-provider-session"`), 1)
-		case "duplicate-token-key":
-			var document map[string]json.RawMessage
-			_ = json.Unmarshal(store.input, &document)
-			var execution map[string]json.RawMessage
-			_ = json.Unmarshal(document["execution"], &execution)
-			var request map[string]json.RawMessage
-			_ = json.Unmarshal(execution["Execution"], &request)
-			request["input_tokens"] = json.RawMessage(`[{"key":"private-recipe-secret","key":"safe"}]`)
-			execution["Execution"], _ = json.Marshal(request)
-			document["execution"], _ = json.Marshal(execution)
-			store.input, _ = json.Marshal(document)
-		}
+		store.input = injectDuplicateInterruptRecipeField(store.input, scenario)
 		updateInterruptRecipeDigest(store)
 		return
 	}
@@ -253,6 +242,45 @@ func mutateInterruptRecipe(store *interruptInputStore, plan interruptPlan, scena
 	}
 	store.input, _ = json.Marshal(input)
 	updateInterruptRecipeDigest(store)
+}
+
+func injectDuplicateInterruptRecipeField(payload json.RawMessage, scenario string) json.RawMessage {
+	switch scenario {
+	case "duplicate-version":
+		return bytes.Replace(payload, []byte(`"version":1`), []byte(`"version":2,"version":1`), 1)
+	case "duplicate-reference":
+		return bytes.Replace(payload, []byte(`"id":"exact-provider-session"`), []byte(`"id":"private-recipe-secret","id":"exact-provider-session"`), 1)
+	case "duplicate-token-key":
+		var document map[string]json.RawMessage
+		_ = json.Unmarshal(payload, &document)
+		var execution map[string]json.RawMessage
+		_ = json.Unmarshal(document["execution"], &execution)
+		var request map[string]json.RawMessage
+		_ = json.Unmarshal(execution["Execution"], &request)
+		request["input_tokens"] = json.RawMessage(`[{"key":"private-recipe-secret","key":"safe"}]`)
+		execution["Execution"], _ = json.Marshal(request)
+		document["execution"], _ = json.Marshal(execution)
+		payload, _ = json.Marshal(document)
+	}
+	return payload
+}
+
+func injectInterruptRecipeAlias(payload json.RawMessage, scenario string) json.RawMessage {
+	switch scenario {
+	case "alias-version":
+		return bytes.Replace(payload, []byte(`"version":1`), []byte(`"Version":2,"version":1`), 1)
+	case "alias-replacement":
+		return bytes.Replace(payload, []byte(`"replacementMessage":`), []byte(`"ReplacementMessage":"private-recipe-secret","replacementMessage":`), 1)
+	case "alias-reference":
+		return bytes.Replace(payload, []byte(`"id":"exact-provider-session"`), []byte(`"ID":"private-recipe-secret","id":"exact-provider-session"`), 1)
+	case "alias-execution":
+		return bytes.Replace(payload, []byte(`"Execution":`), []byte(`"execution":{"model":"private-recipe-secret"},"Execution":`), 1)
+	case "alias-model":
+		return bytes.Replace(payload, []byte(`"dispatch":`), []byte(`"MODEL":"private-recipe-secret","model":"","dispatch":`), 1)
+	case "alias-env":
+		return bytes.Replace(payload, []byte(`"dispatch":`), []byte(`"ENV_VARS":{"TOKEN":"private-recipe-secret"},"env_vars":{},"dispatch":`), 1)
+	}
+	return payload
 }
 
 func updateInterruptRecipeDigest(store *interruptInputStore) {

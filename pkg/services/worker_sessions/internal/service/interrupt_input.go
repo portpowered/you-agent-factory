@@ -121,6 +121,9 @@ func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersess
 	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF {
 		return recordings.ErrWorkerRecordingPersistence
 	}
+	if !canonicalInterruptRecipeFields(stored, input) {
+		return recordings.ErrWorkerRecordingPersistence
+	}
 	accepted := req
 	accepted.ReplacementMessage = input.ReplacementMessage
 	if !validInterruptInput(input, accepted, attemptID) {
@@ -130,4 +133,46 @@ func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersess
 		return workersessions.ErrInterruptRequestIDConflict
 	}
 	return nil
+}
+
+// Compare field names with the decoded contract's own encoding. Struct aliases
+// disappear on encoding, while case-sensitive customer map keys survive. This
+// prevents a later canonical field from concealing an earlier private alias.
+func canonicalInterruptRecipeFields(payload []byte, input durableInterruptInput) bool {
+	canonical, err := json.Marshal(input)
+	if err != nil {
+		return false
+	}
+	var supplied, contract any
+	if json.Unmarshal(payload, &supplied) != nil || json.Unmarshal(canonical, &contract) != nil {
+		return false
+	}
+	return interruptRecipeFieldsMatch(supplied, contract)
+}
+
+func interruptRecipeFieldsMatch(supplied, contract any) bool {
+	switch fields := supplied.(type) {
+	case map[string]any:
+		allowed, ok := contract.(map[string]any)
+		if !ok {
+			return false
+		}
+		for name, value := range fields {
+			canonical, exists := allowed[name]
+			if !exists || !interruptRecipeFieldsMatch(value, canonical) {
+				return false
+			}
+		}
+	case []any:
+		allowed, ok := contract.([]any)
+		if !ok || len(fields) != len(allowed) {
+			return false
+		}
+		for index, value := range fields {
+			if !interruptRecipeFieldsMatch(value, allowed[index]) {
+				return false
+			}
+		}
+	}
+	return true
 }

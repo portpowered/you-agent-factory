@@ -470,6 +470,8 @@ Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
 require secret redaction prevent safe recipe recovery, so interruption refuses
 before stopping; ordinary cancel and terminate remain available.
+Saved recipes reject field-name case aliases, including aliases in execution
+settings and provider references. Customer token-map keys remain case-sensitive.
 The recipe also refuses inherited credentials embedded in replacement text,
 arguments, structured input, or the Provider Session reference. It uses the
 same sensitive environment names as captured command diagnostics, including
