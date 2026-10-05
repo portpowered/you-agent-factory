@@ -1044,3 +1044,53 @@ gates, with 1,018 tests passed and two skipped, taking **258.10s overall** and
 237.974s for tests. It recorded 139 links consuming 234.122s CPU and only 3.828s
 compiler CPU. The spread from the preceding passing 191.29s run prevents treating
 focused model-case savings as a guaranteed full-lane reduction.
+
+The first private execution variant kept every original fixture's setup and
+cleanup, but registered all tests directly in the single package. It failed:
+931 passed, 74 failed and three skipped across all 1,008 customer functions.
+Its command took 364.32s and its test execution took 348.313s. It is explicitly
+excluded from passing latency evidence. Previously separate serial tests ran
+in one long serial phase; relative workflow-fixture paths, evidence registry
+references and self-executed test helper selectors also needed migration.
+
+A second private variant organizes the original suites as parallel cohorts,
+retains their declaration order, and preserves subprocess entrypoint selectors.
+It gives the shared binary 48 parallel test slots, corresponding to the previous
+12 packages times four slots per package on the four-CPU runner. Repository
+fixture lookups and evidence declarations are adapted to the experimental
+source paths, without suppressing their checks. After correcting fixture paths,
+the complete command took **187.51s**, including **173.374s test execution**.
+It consumed 538.82s user CPU and 103.62s system CPU. One linker consumed
+**1.394s CPU** and 1.413s wall; compilation consumed 27.999s CPU. It failed
+five suites, so this is not a passing latency or coverage checkpoint. Failures
+include fixture-only listener probes, response-event visibility, session startup
+and controlled ACP peer/version startup. Evidence is retained under
+`.artifacts/latency-audit/linux-cohort-path-execution/`.
+
+The platform ListenerStopObserver's synthetic socket/probe test and the HTTP
+advanced-save-version matrix's fixture-probe classification subtests are now
+removed from functional coverage. They test fixture/platform mechanics and add
+OS port-reuse and scheduling sensitivity without another customer journey.
+Platform component tests retain listener observation/cancellation/deadline
+coverage. HTTP server tests pass in 3.644s, platform HTTP tests in 1.749s, and
+the advanced-save-version REST matrix in 1.340s locally.
+
+The aggregate experiment also exposed a failure-propagation bug in the selected
+clock fixture: an activation callback using `t.Fatal` closed its completion
+channel while returning no value, then the caller dereferenced a nil session.
+The driver now distinguishes a returned result from an aborted callback and
+fails the owning test immediately. Three focused repetitions pass in 14.361s.
+No startup timeout is increased and the public HTTP failure remains visible.
+
+A follow-up private execution variant starts only the owning fixture when a
+subprocess helper selector is supplied, avoiding initialization of all 54
+unrelated fixture lifecycles in each fake protocol peer. Execution validation
+is pending. These experiments are private; the committed suite has not been
+replaced with generated `TestSuite` names.
+
+Hosted run `37296571427` at `f5b5dfcfc9` passed every required check, including
+lint, unit coverage, Models wire/race, integration, conformance and functional
+coverage. Functional tests took **376.528s** and the full supervisor took
+**457.177s (7m37s)**; all 1,020 tests were observed, with 1,018 passed and two
+skipped. The job including setup/reporting took 8m19s. No merge checkpoint is
+claimed from this successful but above-target hosted run.

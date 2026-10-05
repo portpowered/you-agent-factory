@@ -56,11 +56,19 @@ func selectedTimeActivate[T any](t *testing.T, scheduler *selectedTimeScheduler,
 	t.Helper()
 	done := make(chan struct{})
 	var result T
-	go func() { defer close(done); result = fn() }()
+	completed := false
+	go func() {
+		defer close(done)
+		result = fn()
+		completed = true
+	}()
 	ceiling := time.After(30 * time.Second)
 	for {
 		select {
 		case <-done:
+			if !completed {
+				t.Fatal("public activation aborted; see the preceding operation failure")
+			}
 			return result
 		case <-scheduler.readiness:
 			scheduler.advance(10 * time.Millisecond)
