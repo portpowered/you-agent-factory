@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
@@ -60,7 +61,7 @@ func TestDispatcher_SameNameWakeDispatchesEveryEligiblePairExceptActiveAndStaleB
 		n,
 		scheduler.NewWorkInQueueScheduler(50, nil),
 		nil,
-		nil,
+		logging.NoopLogger{},
 		nil,
 		time.Now,
 		testDispatchID,

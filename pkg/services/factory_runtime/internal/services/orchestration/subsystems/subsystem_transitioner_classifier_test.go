@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -198,7 +199,7 @@ func newClassifierTransitionerFixtureWithoutExplicitFailure(now time.Time) *Tran
 func newClassifierTransitionerFromNet(now time.Time, net *state.Net) *TransitionerSubsystem {
 	return NewTransitioner(
 		net,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return now }, testTokenTransformer(
 			net),
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
@@ -23,7 +24,7 @@ func newTestPipeline(n *state.Net, now func() time.Time) *testPipeline {
 		now = testSubsystemNow
 	}
 	return &testPipeline{
-		transitioner: NewTransitioner(n, nil, now, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy()),
+		transitioner: NewTransitioner(n, logging.NoopLogger{}, now, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy()),
 		results:      buffers.NewTypedBuffer[workerexecution.WorkResult](16),
 	}
 }
@@ -872,7 +873,7 @@ func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.Tic
 
 func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransitions(t *testing.T) {
 	n := buildPipelineNet()
-	transitioner := NewTransitioner(n, nil, testSubsystemNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(n, logging.NoopLogger{}, testSubsystemNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy())
 	now := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)
 	consumed := []factorytoken.Token{{
