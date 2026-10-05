@@ -1,6 +1,6 @@
 // Package analyzers holds the repository's custom go/analysis analyzers. They
-// are built into the single cmd/repolint multichecker and run per compilation
-// unit through `go vet -vettool`; none of them walks or greps source files.
+// run per compilation unit through the supported golangci module plugin;
+// none of them walks or greps source files.
 package analyzers
 
 import (

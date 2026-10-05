@@ -1,4 +1,4 @@
-# Exact violation list for the shared cmd/repolint analyzers.
+# Exact violation list for the shared golangci module-plugin analyzers.
 # Format: rule|importer|importee; Petri: petri-public|package|exported-object|leaked-type.
 # Paths are module-relative; leaked-type is its package plus "." plus type name.
 # Unlisted findings and stale entries fail. Absent merge-base rule IDs seed once.

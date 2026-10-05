@@ -301,7 +301,7 @@ class PkgFixtures(SizeFixtures):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
@@ -317,6 +317,35 @@ def main() -> None:
     print(f"Artifacts: {artifacts}\n{version.strip()}", flush=True)
     fixtures = SizeFixtures(tool, artifacts, (ROOT / ".golangci.yml").read_text(encoding="utf-8"))
     try:
+        if args.cohort in ("owners", "all"):
+            fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
+            root = fixtures.module("compiler-owners")
+            write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/transports/fixture/source.go", "package fixture\n")
+            write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
+            write(root, "internal/fixture/source.go", "package fixture\n")
+            key = "test-cross-owner-policy|internal/fixture|internal/fixture/source.go#Load::count=1\n"
+            write(root, "internal/lint/analyzers/baseline.txt", key)
+            checked(["git", "init", "-q"], root)
+            checked(["git", "config", "core.longpaths", "true"], root)
+            checked(["git", "add", "internal"], root)
+            fixtures.commit(root)
+            checked(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], root)
+            fixtures.lint(root, "owners-exact-source", [])
+            (root / "internal/fixture/source.go").rename(root / "internal/fixture/other.go")
+            fixtures.lint(root, "owners-deleted-source-cached", [("repolint", "vanished compiler owner/source")])
+            (root / "internal/fixture/other.go").unlink()
+            fixtures.lint(root, "owners-deleted-package", [("repolint", "compiler-ownership:")])
+            write(root, "internal/lint/analyzers/baseline.txt", "")
+            fixtures.lint(root, "owners-deleted-debt", [])
+            write(root, "internal/platform/source_windows_test.go", "package platform_test\n")
+            platform = "petri-reference|internal/platform_test|internal/platform/source_windows_test.go#Load::count=1\n"
+            write(root, "internal/lint/analyzers/baseline.txt", platform)
+            fixtures.lint(root, "owners-inactive-platform-external", [])
+            (root / "internal/platform/source_windows_test.go").unlink()
+            fixtures.lint(root, "owners-vanished-platform-external", [("repolint", "compiler-ownership:")])
+            write(root, "internal/lint/analyzers/baseline.txt", "testsleep-unknown|internal/fixture|source.go::Load::unknown::0\n")
+            fixtures.lint(root, "owners-malformed-debt", [("repolint", "malformed timing baseline key")])
         if args.cohort in ("baseline", "all"):
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("baseline-growth")

@@ -285,7 +285,7 @@ define run_timed_step
 endef
 
 
-.PHONY: golangci golangci-lint-run repolint lint-migration-smoke
+.PHONY: golangci golangci-lint-run lint-migration-smoke
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
@@ -575,7 +575,7 @@ test-acp-provider-prebuilt:
 	$(GO) test ./tests/integration/providers/acp -run '^TestPrebuiltACPDeliveredResultsSurvivePeerExit$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/lint-baseline-growth.test.mjs scripts/ci/lint-shape-baseline.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -1045,20 +1045,12 @@ endif
 repository-lint-run: golangci-build
 	@git merge-base HEAD origin/main
 	$(GOLANGCI_REPOSITORY) run --config .golangci-repository-default.yml ./...
-	$(GOLANGCI_REPOSITORY) run --config .golangci-repository.yml --build-tags="$(REPOLINT_TAGS)" ./...
-# Tag union under which the repolint analyzers see every Go file once.
-REPOLINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
-REPOLINT_DIR ?= .artifacts/repolint
-REPOLINT_BASELINE := internal/lint/analyzers/baseline.txt
-ifeq ($(OS),Windows_NT)
-REPOLINT_BIN := $(REPOLINT_DIR)/repolint.exe
-else
-REPOLINT_BIN := $(REPOLINT_DIR)/repolint
-endif
+	$(GOLANGCI_REPOSITORY) run --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
+# Compiler tag union shared with the compiler-owner analyzer.
+REPOSITORY_LINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 
-# golangci runs built-in and strict custom diagnostics. The temporary repolint
-# dependency retains compiler-owner checks during migration.
-golangci: golangci-lint-run repository-lint-run repolint
+# All shared diagnostics execute inside the supported golangci module plugin.
+golangci: golangci-lint-run repository-lint-run
 
 LINT_MIGRATION_COHORT ?= all
 
@@ -1068,18 +1060,6 @@ lint-migration-smoke: golangci-build
 golangci-lint-run:
 	@git merge-base HEAD origin/main
 	$(GOLANGCI_LINT) run ./...
-
-.PHONY: repolint-build
-repolint-build:
-	@mkdir -p $(REPOLINT_DIR)
-	$(GO) test ./internal/lint/analyzers
-	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
-
-repolint: repolint-build
-	$(GO) vet -vettool=$(abspath $(REPOLINT_BIN)) -layering.check-stale=false -behavior.check-stale=false -construction.check-stale=false -petripublic.check-stale=false -serviceshape.check-stale=false -functionalshape.check-stale=false ./...
-	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
-	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt" --collect-tags "$(REPOLINT_TAGS)" --go "$(GO)"
-
 
 deadcode:
 	$(call run_lint_checker,./cmd/deadcodecheck,)
