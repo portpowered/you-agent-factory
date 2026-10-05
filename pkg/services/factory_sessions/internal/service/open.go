@@ -381,54 +381,11 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 }
 
 func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
-	if r.factoryRuntimeAssembler == nil {
-		return fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
-	}
 	if err := r.restoreSessionOpeningHistory(ctx, opening); err != nil {
 		return err
 	}
 
-	initial, err :=
-		r.factoryRuntimeAssembler.Assemble(
-			ctx,
-			opening.configured.OperatorDefaults.WorkerModelProvider,
-			opening.configured.OperatorDefaults.WorkerModel,
-			opening.configured.Recordings.ReplayPath == "",
-			opening.configured.Recordings.RecordPath,
-			opening.configured.Recordings.WorkflowID,
-			opening.sessionID,
-			opening.metricsSessionID,
-			opening.configured.Workers.MockWorkers,
-			opening.configured.Runtime.Mode,
-			factoryruntime.Scheduler(nil),
-			false,
-			opening.configured.Runtime.LogDirectory,
-			opening.configured.Runtime.LogConfig,
-			factoryruntime.RuntimeFileLoggingPolicy(opening.configured.Runtime.FileLoggingPolicy),
-			factoryruntime.RuntimeMetricsPolicy(opening.configured.Runtime.MetricsPolicy),
-			opening.configured.Runtime.MetricsDirectory,
-			opening.configured.Runtime.MetricsConfig,
-			opening.configured.Recordings.FlushInterval,
-			opening.sessionSelection.BackendScopeID,
-			opening.configured.Workers.RunnerID,
-			opening.configured.Runtime.Verbose,
-			opening.configured.Workers.SkipBuiltInPrerequisiteValidation,
-			opening.configured.Workers.InvocationSkipPermissionsOverride,
-			opening.clock,
-			opening.logger,
-			true,
-			opening.observations,
-			opening.configured.Definition.Directory,
-			opening.root.FactoryRootDir,
-			opening.configured.Definition.ExecutionBaseDir,
-			opening.load.LoadedFactoryCfg,
-			opening.configured.Runtime.RuntimeInstanceID,
-			opening.load.ReplayArtifact,
-			opening.resumeInput,
-			opening.restoredWorldState,
-			opening.restoredEventHistory,
-			opening.configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
-		)
+	initial, err := r.openInitialSessionEngine(ctx, opening)
 	if initial != nil {
 		opening.runtimebuildService = initial.ReplacementBuilder
 		opening.startupRuntime = initial.Record
@@ -455,6 +412,41 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		opening.metricsSessionID != factorysessions.DefaultSessionID
 	opening.warnMissingBoardHistory()
 	return nil
+}
+
+func (r *Root) openInitialSessionEngine(ctx context.Context, opening *sessionRuntimeOpening) (*factoryruntime.RuntimeInitialOpening, error) {
+	// Replacement and replay retain their compatibility assembly until the
+	// owning T15/T17 proofs retire it. Explicit initial snapshots use the fixed
+	// request operation and the durable owner already opened for this session.
+	if opening.configured.DefinitionSnapshot == nil || opening.load.ReplayArtifact != nil || opening.resumeInput != nil || opening.restoredWorldState != nil {
+		if r.factoryRuntimeAssembler == nil {
+			return nil, fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
+		}
+		return r.openLegacySessionEngine(ctx, opening)
+	}
+	snapshot, err := opening.configured.DefinitionSnapshot.Clone()
+	if err != nil {
+		return nil, err
+	}
+	// Preserve provider normalization and worker selections made during the
+	// validated session preparation; carry only detached definition data.
+	config, err := factorydefinitions.CloneFactoryConfig(opening.load.LoadedFactoryCfg.FactoryConfig())
+	if err != nil {
+		return nil, err
+	}
+	snapshot.EffectiveFactory = *config
+	for index := range snapshot.Workers {
+		if worker, ok := opening.load.LoadedFactoryCfg.Worker(snapshot.Workers[index].Name); ok {
+			snapshot.Workers[index] = factorydefinitions.CloneWorkerConfig(*worker)
+		}
+	}
+	inputs := runtimeActivationInputs(opening.configured.Definition, opening.configured.Session,
+		opening.canonicalSessionIDGenerated, opening.configured.Workers, opening.configured.Recordings,
+		opening.configured.ModelCacheDirectory, opening.configured.OperatorDefaults, nil)
+	return r.initialActivation(ctx, factoryruntime.RuntimeActivationRequest{
+		RuntimeID: opening.configured.Runtime.RuntimeInstanceID, FactorySessionID: opening.sessionID,
+		Snapshot: snapshot, Runtime: opening.configured.Runtime, Inputs: inputs,
+	}, opening.observations)
 }
 
 func (opening *sessionRuntimeOpening) warnMissingBoardHistory() {
@@ -876,4 +868,47 @@ func setWorkerAttemptStarter(
 
 type historicalRecordingReader interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+}
+
+func (r *Root) openLegacySessionEngine(ctx context.Context, opening *sessionRuntimeOpening) (*factoryruntime.RuntimeInitialOpening, error) {
+	return r.factoryRuntimeAssembler.Assemble(
+		ctx,
+		opening.configured.OperatorDefaults.WorkerModelProvider,
+		opening.configured.OperatorDefaults.WorkerModel,
+		opening.configured.Recordings.ReplayPath == "",
+		opening.configured.Recordings.RecordPath,
+		opening.configured.Recordings.WorkflowID,
+		opening.sessionID,
+		opening.metricsSessionID,
+		opening.configured.Workers.MockWorkers,
+		opening.configured.Runtime.Mode,
+		factoryruntime.Scheduler(nil),
+		false,
+		opening.configured.Runtime.LogDirectory,
+		opening.configured.Runtime.LogConfig,
+		factoryruntime.RuntimeFileLoggingPolicy(opening.configured.Runtime.FileLoggingPolicy),
+		factoryruntime.RuntimeMetricsPolicy(opening.configured.Runtime.MetricsPolicy),
+		opening.configured.Runtime.MetricsDirectory,
+		opening.configured.Runtime.MetricsConfig,
+		opening.configured.Recordings.FlushInterval,
+		opening.sessionSelection.BackendScopeID,
+		opening.configured.Workers.RunnerID,
+		opening.configured.Runtime.Verbose,
+		opening.configured.Workers.SkipBuiltInPrerequisiteValidation,
+		opening.configured.Workers.InvocationSkipPermissionsOverride,
+		opening.clock,
+		opening.logger,
+		true,
+		opening.observations,
+		opening.configured.Definition.Directory,
+		opening.root.FactoryRootDir,
+		opening.configured.Definition.ExecutionBaseDir,
+		opening.load.LoadedFactoryCfg,
+		opening.configured.Runtime.RuntimeInstanceID,
+		opening.load.ReplayArtifact,
+		opening.resumeInput,
+		opening.restoredWorldState,
+		opening.restoredEventHistory,
+		opening.configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
+	)
 }

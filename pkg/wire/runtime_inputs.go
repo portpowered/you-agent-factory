@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -61,6 +62,13 @@ func provideFactoryRuntimeAssembly(
 		recordingsRuntime,
 		automationService,
 		streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory())
+}
+
+func provideInitialRuntimeActivation(assembly *factoryruntimewire.Assembly, clock factoryruntime.Clock,
+	logger *zap.Logger, loadedSource factorydefinitions.LoadedFactorySourceFactory,
+) factoryruntime.InitialRuntimeActivationOperation {
+	materializer := factorydefinitionswire.NewRuntimeSnapshotMaterializer(loadedSource)
+	return factoryruntimewire.NewInitialActivation(assembly, clock, logger, materializer.Materialize)
 }
 
 func provideWorkersMockWorkersConfigFileSystem(

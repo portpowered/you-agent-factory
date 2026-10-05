@@ -362,6 +362,7 @@ var servicesSet = wire.NewSet(
 	provideRuntimeRequestLogger,
 	factoryruntimewire.NewWorkstationRequestExecutor,
 	provideFactoryRuntimeAssembly,
+	provideInitialRuntimeActivation,
 	factoryruntimewire.NewSidecarOpening,
 	provideFactoryRuntimeRoot,
 	provideRuntimeOrchestration,

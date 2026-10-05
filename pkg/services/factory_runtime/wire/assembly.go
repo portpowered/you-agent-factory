@@ -43,6 +43,13 @@ func NewDefinitionMapper(newID factoryruntime.IDGenerator) (DefinitionMapper, er
 // session-owned Factory Runtime.
 type Assembly = factoryruntimeinternal.Assembly
 
+// NewInitialActivation binds initial behavior once; Open allocates scoped state.
+func NewInitialActivation(assembly *Assembly, clock factoryruntime.Clock, logger *zap.Logger,
+	materialize func(*factorydefinitions.RuntimeSnapshot, string) (factorydefinitions.MutableLoadedFactorySource, error),
+) factoryruntime.InitialRuntimeActivationOperation {
+	return factoryruntimeinternal.NewInitialActivation(assembly, clock, logger, materialize).Open
+}
+
 // InputFileSystem is the Factory Runtime construction seam for its selected
 // input tree. The service root does not publish this host-effect port.
 type InputFileSystem interface {

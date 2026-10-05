@@ -79,6 +79,9 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.Webhooks,
 		fixture.Workers,
 		fixture.OperatorSettings,
+		func(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
+			return nil, nil
+		},
 	)
 }
 

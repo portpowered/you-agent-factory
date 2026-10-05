@@ -123,6 +123,10 @@ type RuntimeInitialOpening struct {
 	Sidecars           RuntimeSidecars
 }
 
+// InitialRuntimeActivationOperation opens initial session state through fixed
+// process behavior. Observations belong exclusively to the opened session.
+type InitialRuntimeActivationOperation func(context.Context, RuntimeActivationRequest, SessionObservations) (*RuntimeInitialOpening, error)
+
 // RuntimeActivationResult reports the identity and state of a successful
 // activation.
 type RuntimeActivationResult struct {

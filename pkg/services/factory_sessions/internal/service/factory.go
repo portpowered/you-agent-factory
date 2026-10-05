@@ -171,6 +171,7 @@ type Root struct {
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
 	factoryRuntimeAssembler          FactoryRuntimeAssembler
+	initialActivation                factoryruntime.InitialRuntimeActivationOperation
 	workService                      work.Service
 	providerSessions                 providersessions.Service
 	factoryDefinitionValidator       factorydefinitions.Validator
@@ -214,6 +215,7 @@ func NewRoot(
 	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
+	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 ) (*Root, error) {
 	if err := validateOwnerPorts(
 		providerSessions,
@@ -230,8 +232,12 @@ func NewRoot(
 	); err != nil {
 		return nil, err
 	}
+	if initialActivation == nil {
+		return nil, fmt.Errorf("initial Runtime activation is required")
+	}
 
 	root := &Root{
+		initialActivation:                initialActivation,
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerService:                    workersPorts.Service,
 		modelService:                     modelsPorts.Service,

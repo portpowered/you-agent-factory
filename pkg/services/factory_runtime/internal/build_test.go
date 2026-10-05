@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -114,7 +116,7 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 // The resource boundary retains callbacks just as an opened engine does. Emit
 // after both admissions, so a reusable owner's latest-session substitution
 // would route the first session's observations into its peer.
-func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testing.T) {
+func TestInitialActivationKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
@@ -133,9 +135,20 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 		t.Fatal(err)
 	}
 	observations := [2]*openingSessionObservations{{}, {}}
+	clock := clockwork.NewFakeClock()
+	initial := factoryinternal.NewInitialActivation(assembly, clock, zap.NewNop(),
+		func(*interfaces.RuntimeSnapshot, string) (interfaces.MutableLoadedFactorySource, error) {
+			return loaded, nil
+		})
 	for index, sessionID := range []string{"candidate", "peer"} {
-		result, openErr := assembleTestInitialOpening(t.Context(), assembly, dir, loaded, clockwork.NewFakeClock(),
-			factory.RuntimeActivationRequest{FactorySessionID: sessionID, RuntimeID: "runtime-" + sessionID}, nil, observations[index])
+		result, openErr := initial.Open(t.Context(), factory.RuntimeActivationRequest{
+			FactorySessionID: sessionID, RuntimeID: "runtime-" + sessionID,
+			Snapshot: interfaces.RuntimeSnapshot{FactoryDir: dir},
+			Runtime: factory.RuntimeSelection{Mode: interfaces.RuntimeModeBatch,
+				FileLoggingPolicy: factory.RuntimeFileLoggingPolicyDisabled, MetricsPolicy: factory.RuntimeMetricsPolicyDisabled},
+			Inputs: factory.RuntimeActivationInputs{Definition: factory.RuntimeActivationDefinitionInputs{Directory: dir, ExecutionBaseDir: dir},
+				Recordings: factory.RuntimeActivationRecordingInputs{RecordPath: "recording.json"}},
+		}, observations[index])
 		assertUnpublishedOpeningFailure(t, result, openErr, resources.failure)
 	}
 	for index, sessionID := range []string{"candidate", "peer"} {
@@ -154,6 +167,17 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 	if !reflect.DeepEqual(sessions.runtimeIDs, []string{"runtime-candidate", "runtime-peer"}) {
 		t.Fatalf("progress supervision identities = %v; want each admitted runtime", sessions.runtimeIDs)
 	}
+	// Scoped callbacks may retain observations while their opening is owned.
+	// Once those callbacks are discarded, a live reusable owner must not keep
+	// the durable observation capability reachable.
+	first, second := weak.Make(observations[0]), weak.Make(observations[1])
+	observations = [2]*openingSessionObservations{}
+	resources.mutations, resources.progress = nil, nil
+	runtime.GC()
+	if first.Value() != nil || second.Value() != nil {
+		t.Fatal("reusable initial operation retained discarded session observations")
+	}
+	runtime.KeepAlive(initial)
 }
 
 func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t *testing.T) {
@@ -990,7 +1014,7 @@ func assertOpeningResourceReleaseCounts(t *testing.T, calls map[string]int, fail
 	}
 }
 
-func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(t *testing.T) {
+func TestBuild_InitialOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
@@ -1022,10 +1046,23 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	}
 	request := factory.RuntimeActivationRequest{RuntimeID: "candidate-runtime", FactorySessionID: "candidate",
 		Snapshot: interfaces.RuntimeSnapshot{FactoryDir: dir, RuntimeBaseDir: dir,
-			DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}, EffectiveFactory: *loaded.FactoryConfig()}}
+			DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}, EffectiveFactory: *loaded.FactoryConfig()},
+		Runtime: factory.RuntimeSelection{Mode: interfaces.RuntimeModeBatch,
+			FileLoggingPolicy: factory.RuntimeFileLoggingPolicyDisabled, MetricsPolicy: factory.RuntimeMetricsPolicyDisabled},
+		Inputs: factory.RuntimeActivationInputs{Definition: factory.RuntimeActivationDefinitionInputs{Directory: dir, ExecutionBaseDir: dir},
+			Recordings: factory.RuntimeActivationRecordingInputs{RecordPath: "recording.json"}},
+	}
+	initial := factoryinternal.NewInitialActivation(assembly, clock, zap.NewNop(),
+		func(*interfaces.RuntimeSnapshot, string) (interfaces.MutableLoadedFactorySource, error) {
+			return loaded, nil
+		})
 	start := func(ctx context.Context, request factory.RuntimeActivationRequest) (*factory.RuntimeActivation, error) {
 		attempts++
-		return assembleCleanupTestRuntime(ctx, assembly, dir, loaded, clock, request)
+		opening, err := initial.Open(ctx, request, nil)
+		if opening == nil {
+			return nil, err
+		}
+		return opening.Activation, err
 	}
 	result, err := root.Activate(t.Context(), request, start)
 	assertOpeningFailureWithoutPublication(t, result, err, openingErr, cleanupErr)
@@ -1056,21 +1093,6 @@ func assertOpeningFailureWithoutPublication(t *testing.T, result factory.Runtime
 	if !errors.Is(err, openingErr) || !errors.Is(err, cleanupErr) || !result.Binding.IsZero() {
 		t.Fatalf("failed activation = %#v, %v, want both causes and no publication", result, err)
 	}
-}
-
-// This component cell runs the real Runtime assembly/build/Root chain with
-// controlled Recordings effects. Sessions publication and public commands are
-// proved separately by the functional lane.
-func assembleCleanupTestRuntime(
-	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
-	loaded interfaces.MutableLoadedFactorySource,
-	clock factory.Clock, request factory.RuntimeActivationRequest,
-) (*factory.RuntimeActivation, error) {
-	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request, nil)
-	if opening == nil {
-		return nil, err
-	}
-	return opening.Activation, err
 }
 
 func assembleTestRuntimeRecord(
