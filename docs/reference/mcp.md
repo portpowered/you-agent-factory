@@ -31,9 +31,16 @@ you --server http://127.0.0.1:8080 server mcp
 
 Call `you.worker_session.list` with optional `scope`, `state`, `limit`, and
 `nextToken` filters. Call `you.worker_session.read` with `workerSessionId` and
-`view`: `summary` (default), `transcript`, or `events`. The events view returns
+`view`: `summary` (default), `transcript`, `events`, or `logs`. The events view returns
 retained frames only, with a default limit of 100 and a maximum of 1000.
 `truncated` is true when another retained frame exists.
+
+The logs view returns the captured log page in `result.logs`, alongside the
+observation in `result.session`. Use `limit` (1 to 1000, default 100) to bound
+each page. Pass the returned `nextToken` to the next logs request. Poll until
+the session is terminal and `committedPosition` stops advancing. Check `health`
+before treating the capture as complete. `nextToken` is accepted only with
+`view: logs`; `limit` is accepted with `events` and `logs`.
 
 Call `you.worker_session.control` with `workerSessionId` and `operation`:
 `CANCEL`, `TERMINATE`, or `INTERRUPT`. `INTERRUPT` also requires `requestId`,

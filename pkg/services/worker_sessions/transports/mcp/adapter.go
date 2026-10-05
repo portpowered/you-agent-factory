@@ -21,6 +21,7 @@ type HostClient interface {
 	ListWorkerSessions(context.Context, *client.ListWorkerSessionsParams, ...client.RequestEditorFn) (*http.Response, error)
 	GetWorkerSessionObservationByWorkerSessionId(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
 	ReadWorkerSessionTranscriptByWorkerSessionId(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
+	ReadWorkerSessionLogs(context.Context, client.WorkerSessionID, *client.ReadWorkerSessionLogsParams, ...client.RequestEditorFn) (*http.Response, error)
 	StreamWorkerSessionEventsByTopLevelWorkerSessionId(context.Context, client.WorkerSessionID, *client.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, ...client.RequestEditorFn) (*http.Response, error)
 	CancelWorkerSession(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
 	TerminateWorkerSession(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
@@ -108,6 +109,16 @@ func (a *Adapter) read(ctx context.Context, input readInput) (any, *toolError) {
 	}
 	result := map[string]any{"session": session}
 	switch input.View {
+	case "logs":
+		response, err := a.host.ReadWorkerSessionLogs(ctx, input.WorkerSessionID, &client.ReadWorkerSessionLogsParams{Limit: &input.Limit, NextToken: input.NextToken})
+		if response != nil && response.Body != nil {
+			defer func() { _ = response.Body.Close() }()
+		}
+		logs, failure := decodeResponse(response, err, input.WorkerSessionID)
+		if failure != nil {
+			return nil, failure
+		}
+		result["logs"] = logs
 	case "transcript":
 		response, err := a.host.ReadWorkerSessionTranscriptByWorkerSessionId(ctx, input.WorkerSessionID)
 		if response != nil && response.Body != nil {

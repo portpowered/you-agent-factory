@@ -4474,7 +4474,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Read one Worker Session: its observation plus an optional transcript or retained-event view. Maps to GET /worker-sessions/{worker_session_id} and, by view, GET /worker-sessions/{worker_session_id}/transcript or GET /worker-sessions/{worker_session_id}/events?replayOnly=true.",
+            "canonicalEnglish": "Read one Worker Session: its observation plus an optional transcript, retained-event view or captured logs page. Maps to GET /worker-sessions/{worker_session_id} and, by view, /transcript, /events?replayOnly=true or /logs. Poll logs with nextToken until the session is terminal and committedPosition stops advancing; inspect capture health before treating history as complete.",
             "id": "mcp.tool.you.worker_session.read.description"
           },
           "title": {
@@ -4486,6 +4486,11 @@
           {
             "view": "summary",
             "workerSessionId": "direct-worker-001"
+          },
+          {
+            "workerSessionId": "direct-worker-001",
+            "view": "logs",
+            "limit": 100
           }
         ],
         "formatVersion": "1.0.0",
@@ -4517,7 +4522,8 @@
               "enum": [
                 "summary",
                 "transcript",
-                "events"
+                "events",
+                "logs"
               ]
             },
             "default": "summary",
@@ -4532,6 +4538,14 @@
             "id": "mcp.arg.you.worker_session.read.worker_session_id",
             "name": "workerSessionId",
             "required": true
+          },
+          "mcp.arg.you.worker_session.read.next_token": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.worker_session.read.next_token",
+            "name": "nextToken",
+            "required": false
           }
         },
         "schema": {
@@ -4549,13 +4563,18 @@
               "enum": [
                 "summary",
                 "transcript",
-                "events"
+                "events",
+                "logs"
               ],
               "type": "string"
             },
             "workerSessionId": {
               "minLength": 1,
               "type": "string"
+            },
+            "nextToken": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
@@ -4577,6 +4596,15 @@
             "content": [
               {
                 "text": "{\"result\":{\"session\":{\"workerSessionId\":\"direct-worker-001\"}}}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "text": "{\"result\":{\"session\":{\"workerSessionId\":\"direct-worker-001\",\"direct\":true,\"providerSessionAvailable\":true,\"providerSession\":{\"id\":\"fixture-provider-session\",\"kind\":\"session\",\"provider\":\"controlled\"},\"workIds\":[],\"turnId\":null,\"attemptId\":\"attempt-host\",\"state\":\"COMPLETED\",\"confirmationState\":\"CONFIRMED\",\"startedAt\":null,\"endedAt\":null,\"durationMillis\":null,\"durationBasis\":\"UNAVAILABLE\",\"transcript\":\"AVAILABLE\",\"parse\":{\"errors\":[],\"eventCount\":0,\"malformedLineCount\":0,\"unknownEventCount\":0}},\"logs\":{\"workerSessionId\":\"direct-worker-001\",\"recordingGenerationId\":\"captured-generation\",\"committedPosition\":0,\"health\":\"INCOMPLETE\",\"events\":[],\"nextToken\":\"opaque-log-cursor\"}}}",
                 "type": "text"
               }
             ],

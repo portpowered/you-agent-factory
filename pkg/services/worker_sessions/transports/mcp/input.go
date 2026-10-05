@@ -17,9 +17,10 @@ type listInput struct {
 	NextToken *string   `json:"nextToken"`
 }
 type readInput struct {
-	WorkerSessionID string `json:"workerSessionId"`
-	View            string `json:"view"`
-	Limit           int    `json:"limit"`
+	WorkerSessionID string  `json:"workerSessionId"`
+	View            string  `json:"view"`
+	Limit           int     `json:"limit"`
+	NextToken       *string `json:"nextToken"`
 }
 type controlInput struct {
 	WorkerSessionID          string  `json:"workerSessionId"`
@@ -91,11 +92,14 @@ func decodeRead(raw json.RawMessage) (readInput, error) {
 	if strings.TrimSpace(input.WorkerSessionID) == "" {
 		return input, fmt.Errorf("workerSessionId is required")
 	}
-	if !slices.Contains([]string{"summary", "transcript", "events"}, input.View) {
-		return input, fmt.Errorf("view must be summary, transcript or events")
+	if !slices.Contains([]string{"summary", "transcript", "events", "logs"}, input.View) {
+		return input, fmt.Errorf("view must be summary, transcript, events or logs")
 	}
-	if _, supplied := fields["limit"]; supplied && input.View != "events" {
-		return input, fmt.Errorf("limit is accepted only with events")
+	if _, supplied := fields["limit"]; supplied && input.View != "events" && input.View != "logs" {
+		return input, fmt.Errorf("limit is accepted only with events or logs")
+	}
+	if input.NextToken != nil && (input.View != "logs" || strings.TrimSpace(*input.NextToken) == "") {
+		return input, fmt.Errorf("nextToken must be nonempty and is accepted only with logs")
 	}
 	if input.Limit < 1 || input.Limit > 1000 {
 		return input, fmt.Errorf("limit must be between 1 and 1000")

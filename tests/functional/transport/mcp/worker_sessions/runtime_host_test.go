@@ -514,6 +514,7 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	assertJSONEqual(t, selected, read["session"])
 	assertFactoryCLIParity(t, reopened, "lost-worker", selected)
 	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/lost-worker/logs"))
+	assertIncompleteLogsPolling(t, recoveredCtx, recoveredSession, reopened)
 	assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.control", map[string]any{"workerSessionId": "lost-worker", "operation": "CANCEL"}), "worker_session.not_found", false)
 	assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.read", map[string]any{"workerSessionId": "damaged-worker"}), "worker_session.internal_error", false)
 	assertHistoryReadFailure(t, reopened, "damaged-worker", http.StatusInternalServerError, "PROJECTION_UNAVAILABLE")
