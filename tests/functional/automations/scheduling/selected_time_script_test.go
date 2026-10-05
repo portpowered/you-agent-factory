@@ -75,11 +75,32 @@ func assertSelectedScriptTime(t *testing.T, url string, facts *platformclock.Det
 	if len(listed.Results) != 0 {
 		t.Fatal("empty cycle admitted Work after restart")
 	}
-	support.CloseFactorySessionAt(t, url, idA)
-	idA = ""
-	selectedTimeReceive(t, afterEmpty.canceled)
-	support.CloseFactorySessionAt(t, url, idB)
-	idB = ""
+	assertSelectedScriptShutdown(t, url, scheduler, &idA, &idB, afterEmpty, routeA, routeB)
+}
+
+func assertSelectedScriptShutdown(t *testing.T, url string, scheduler *selectedTimeScheduler,
+	idA, idB *string, pendingA scriptCycleCommand, routeA, routeB *scriptCycleRoute,
+) {
+	t.Helper()
+	// Reopening A advances the shared scheduler for activation polls. B's
+	// acknowledged 50ms restart may already be eligible; make it due in either
+	// case and consume that pre-close attempt while both commands remain held.
+	scheduler.advance(50 * time.Millisecond)
+	pendingB := awaitScriptCycleCommand(t, routeB)
+	assertScriptResumeEnvironment(t, pendingB.request, "peer-cursor", "peer-checkpoint")
+	support.CloseFactorySessionAt(t, url, *idA)
+	*idA = ""
+	selectedTimeReceive(t, pendingA.canceled)
+	support.CloseFactorySessionAt(t, url, *idB)
+	*idB = ""
+	selectedTimeReceive(t, pendingB.canceled)
+	// Close has joined both owned commands with time frozen. Deliver late
+	// results, then acknowledge advancement beyond every prior restart deadline.
+	pendingA.output <- nil
+	pendingB.output <- scriptCycleOutput(t, "late-cursor", "late-checkpoint")
+	barrier := scheduler.NewTimer(time.Hour)
+	scheduler.advance(time.Hour)
+	selectedTimeReceive(t, barrier.C())
 	selectedTimeAbsent(t, routeA.entered)
 	selectedTimeAbsent(t, routeB.entered)
 }
