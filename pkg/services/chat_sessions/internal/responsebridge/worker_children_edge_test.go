@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -262,5 +264,201 @@ func TestWorkerChildStartFinishAndSequencingFailuresAreExplicit(t *testing.T) {
 	}
 	if err := New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, workerEvents, logging.NoopLogger{}).sequenceWorkerLifecycleRecord(context.Background(), "chat", state, association, events.Record{Payload: json.RawMessage(`not-json`)}); !errors.Is(err, ErrMalformedWorkerChildRecord) {
 		t.Fatalf("malformed worker record error = %v, want %v", err, ErrMalformedWorkerChildRecord)
+	}
+}
+
+// Every fixture owns its cursor, sequencer and worker observations. The paired
+// logger selections must preserve the same results and committed observations.
+type bridgeRunObservation struct {
+	result    factorysessions.InvocationResult
+	err       error
+	sequences []chatsessions.SequenceRequest
+	advances  []chatsessions.AdvanceStreamHeadRequest
+	detached  bool
+}
+
+func observeBridgeRun(t *testing.T, failure string, invokeErr, collaboratorErr error, logger logging.Logger) bridgeRunObservation {
+	t.Helper()
+	observation := bridgeRunObservation{}
+	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+	ready := make(chan struct{})
+	cursor := &factorysessions.ResponseEventCursor{
+		NextEvents: func(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			close(ready)
+			if failure == "next" {
+				return nil, collaboratorErr
+			}
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		DrainEvents: func() ([]factorysessions.FactoryResponseEvent, error) {
+			if failure == "drain" {
+				return nil, collaboratorErr
+			}
+			return []factorysessions.FactoryResponseEvent{{
+				FactorySessionID: "factory-1", EventID: "private-event", Sequence: 1,
+				Kind: workers.KindMessage, Phase: workers.PhaseCompleted,
+				Payload: json.RawMessage(`{"prompt":"private-prompt","attachment":"private-attachment","transcript":"private-transcript"}`),
+			}}, nil
+		},
+		DetachCursor: func() { observation.detached = true },
+	}
+	target := bridgeTarget{cursor: cursor}
+	var workerEvents events.Service
+	waitForLive := true
+	switch failure {
+	case "subscribe":
+		target.err, waitForLive = collaboratorErr, false
+	case "cursor":
+		target.cursor, waitForLive = nil, false
+	case "worker subscribe":
+		workerEvents = &scriptedWorkerEvents{}
+		target.factoryEventsErr, waitForLive = collaboratorErr, false
+	case "worker finish":
+		workerEvents = &scriptedWorkerEvents{}
+		target.factoryEventStreams = []*factorydefinitions.FactoryEventStream{{}, nil}
+		target.factoryEventIndex = new(int)
+	case "worker gap", "response and worker":
+		workerEvents = &scriptedWorkerEvents{reads: []events.ReadResult{{Outcome: events.ReadOutcomeGap}}}
+		target.factoryEvents = workerAssociationStream(t, "dispatch", "worker")
+	case "sequence":
+		sequencer.sequenceErr = collaboratorErr
+	case "advance":
+		sequencer.advanceErr = collaboratorErr
+	}
+	if failure == "response and worker" {
+		sequencer.sequenceErr = collaboratorErr
+	}
+	observation.result, observation.err = New(sequencer, target, workerEvents, logger).Run(
+		context.Background(), "chat-1", 7, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			if waitForLive {
+				<-ready
+			}
+			status := factorysessions.InvocationTerminalStatusCompleted
+			if invokeErr != nil {
+				status = factorysessions.InvocationTerminalStatusFailed
+			}
+			return factorysessions.InvocationResult{RequestID: "turn", Status: status}, invokeErr
+		},
+	)
+	observation.sequences, observation.advances = sequencer.sequences, sequencer.advances
+	return observation
+}
+
+func TestServiceRunSelectedLoggerPreservesOutcomesAndNoopEffects(t *testing.T) {
+	t.Parallel()
+	collaboratorErr := errors.New("wrapped private-collaborator-error")
+	invocationErr := errors.New("wrapped private-invocation-error")
+	cases := []struct {
+		failure, class      string
+		cause               error
+		sequences, advances int
+		detached            bool
+	}{
+		{"success", "", nil, 1, 1, true},
+		{"subscribe", "response_event_subscription", collaboratorErr, 0, 0, false},
+		{"cursor", "response_event_subscription", nil, 0, 0, false},
+		{"worker subscribe", "worker_event_subscription", collaboratorErr, 0, 0, true},
+		{"next", "response_event_bridge", collaboratorErr, 0, 0, true},
+		{"drain", "response_event_bridge", collaboratorErr, 0, 0, true},
+		{"sequence", "response_event_bridge", collaboratorErr, 0, 0, true},
+		{"advance", "response_event_bridge", collaboratorErr, 1, 0, true},
+		{"worker finish", "worker_event_bridge", nil, 1, 1, true},
+		{"worker gap", "worker_event_bridge", ErrWorkerChildHistoryGap, 1, 1, true},
+		{"response and worker", "response_event_bridge", collaboratorErr, 0, 0, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.failure, func(t *testing.T) {
+			t.Parallel()
+			for _, invokeErr := range []error{nil, invocationErr} {
+				logger := &bridgeRecordingLogger{}
+				capture := observeBridgeRun(t, tc.failure, invokeErr, collaboratorErr, logger)
+				noop := observeBridgeRun(t, tc.failure, invokeErr, collaboratorErr, logging.NoopLogger{})
+				class, cause := tc.class, tc.cause
+				if invokeErr != nil {
+					class, cause = "factory_invocation", invokeErr
+				}
+				assertBridgeRunObservation(t, capture, class, cause, tc.sequences, tc.advances, tc.detached)
+				if !reflect.DeepEqual(capture.result, noop.result) || !reflect.DeepEqual(capture.sequences, noop.sequences) ||
+					!reflect.DeepEqual(capture.advances, noop.advances) || capture.detached != noop.detached ||
+					(cause != nil && !errors.Is(noop.err, cause)) || (capture.err == nil) != (noop.err == nil) {
+					t.Fatalf("capture/Noop effects differ: %+v / %+v", capture, noop)
+				}
+				calls := logger.snapshot()
+				if len(calls) != 2 || calls[0].level != "debug" || calls[1].level != "info" {
+					t.Fatalf("diagnostics = %+v, want start/outcome", calls)
+				}
+				for _, call := range calls {
+					assertBridgeLogValue(t, call, "op", responseBridgeOperation)
+					assertBridgeLogValue(t, call, "chat_session_id", "chat-1")
+					assertBridgeLogValue(t, call, "factory_session_id", "factory-1")
+				}
+				assertBridgeLogValue(t, calls[1], "error_class", class)
+				assertBridgeLogValue(t, calls[1], "terminal_status", string(capture.result.Status))
+				assertBridgeLogPrivacy(t, calls, "private-prompt", "private-attachment", "private-transcript", "private-collaborator-error", "private-invocation-error")
+			}
+		})
+	}
+}
+
+func assertBridgeRunObservation(t *testing.T, got bridgeRunObservation, class string, cause error, sequences, advances int, detached bool) {
+	t.Helper()
+	wantStatus := factorysessions.InvocationTerminalStatusCompleted
+	if class == "factory_invocation" {
+		wantStatus = factorysessions.InvocationTerminalStatusFailed
+	}
+	if got.result.RequestID != "turn" || got.result.Status != wantStatus || (got.err != nil) != (class != "") {
+		t.Fatalf("result/error = (%+v, %v), want status %s and class %q", got.result, got.err, wantStatus, class)
+	}
+	if cause != nil && !errors.Is(got.err, cause) {
+		t.Fatalf("error = %v, want cause %v", got.err, cause)
+	}
+	if len(got.sequences) != sequences || len(got.advances) != advances || got.detached != detached {
+		t.Fatalf("sequence/advance/detach = %d/%d/%t, want %d/%d/%t", len(got.sequences), len(got.advances), got.detached, sequences, advances, detached)
+	}
+	if advances > 0 && got.advances[0].ExpectedVersion != 7 {
+		t.Fatalf("head = %+v, want version 7", got.advances[0])
+	}
+}
+
+func TestWorkerChildMalformedDiagnosticsStayPrivateAndSiblingContinues(t *testing.T) {
+	t.Parallel()
+	for _, live := range []bool{false, true} {
+		t.Run(map[bool]string{false: "tail", true: "live"}[live], func(t *testing.T) {
+			t.Parallel()
+			association := testWorkerAssociation()
+			malformed := workerLifecycleRecord(t, association.WorkerSessionID, 1, workers.PhaseStarted, "STARTING")
+			malformed.Payload = json.RawMessage(`{"prompt":"private-prompt","attachment":"private-attachment","transcript":"private-transcript","phase":`)
+			valid := workerLifecycleRecord(t, association.WorkerSessionID, 2, workers.PhaseStarted, "STARTING")
+			workerEvents := &scriptedWorkerEvents{
+				reads:      []events.ReadResult{{Outcome: events.ReadOutcomeProgress, Records: []events.Record{malformed, valid}}},
+				deliveries: []events.Delivery{{Kind: events.DeliveryRecord, Record: malformed}, {Kind: events.DeliveryRecord, Record: valid}},
+			}
+			logger := &bridgeRecordingLogger{}
+			sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+			service := New(sequencer, bridgeTarget{}, workerEvents, logger)
+			state := newWorkerChildDrainState()
+			state.childrenByWorkerSessionID[association.WorkerSessionID] = &workerChild{association: association, sequencedSources: make(map[events.AppendIdentity]struct{})}
+			var err error
+			if live {
+				err = service.drainWorkerLifecycleLive(context.Background(), context.Background(), "chat", state, association, valid.ID.Topic)
+			} else {
+				err = service.drainWorkerLifecycleTail(context.Background(), "chat", state, association, valid.ID.Topic)
+			}
+			if err != nil || len(sequencer.sequences) != 1 || len(sequencer.advances) != 1 || sequencer.sequences[0].SourceEventID != valid.SourceEventID {
+				t.Fatalf("valid sibling not committed: %v / %+v / %+v", err, sequencer.sequences, sequencer.advances)
+			}
+			calls := logger.snapshot()
+			if len(calls) != 1 || calls[0].level != "warn" {
+				t.Fatalf("diagnostics = %+v, want one Warn", calls)
+			}
+			assertBridgeLogValue(t, calls[0], "op", responseBridgeOperation)
+			assertBridgeLogValue(t, calls[0], "dispatch_id", association.DispatchID)
+			assertBridgeLogValue(t, calls[0], "worker_session_id", association.WorkerSessionID)
+			assertBridgeLogValue(t, calls[0], "source_sequence", uint64(1))
+			assertBridgeLogValue(t, calls[0], "error_class", "malformed_record")
+			assertBridgeLogPrivacy(t, calls, "private-prompt", "private-attachment", "private-transcript", "unexpected end of JSON input")
+		})
 	}
 }
