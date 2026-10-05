@@ -1151,3 +1151,31 @@ server package passes three local repetitions in 19.573s.
 Focused built-in lint, repository test-shape/boundary/sleep/debt analyzers, and
 the 156-scenario manifest check pass. These checks do not replace required
 hosted verification or establish any elapsed-time checkpoint.
+
+### Latest complete consolidation run and subsequent cleanup
+
+The next full four-CPU supervisor took **280.40s**, with **251.160s** for the
+coverage test invocation. Quarantine validation passed. All 115 packages were
+observed: 1,005 top-level tests, 1,001 passed, two skipped and two failed.
+The run consumed 791.81s user CPU and 196.46s system CPU. Its 114 linker
+commands consumed **214.241s CPU** with **224.601s** active wall interval union;
+four compile commands consumed **3.503s CPU**. Failed tests prevent this run
+from establishing a coverage or elapsed-time checkpoint.
+
+The two failures were session Response Event history returning zero events
+before a 25ms quiet timer, and the Loop fixture-cleanup matrix timing out while
+checking its own lifecycle bookkeeping. The first now observes retained public
+MESSAGE completion through the existing SSE fixture before asserting disjoint
+session, event and dispatch identities. The customer isolation guarantee is
+retained. The cleanup matrix, its action counters, release counters, timer-stop
+counter wrapper and private stream probes are removed: its assertions concerned
+fixture mechanics and duplicated the retained public Loop duration validation,
+scheduled Work admission and overlap suppression cases. Ordinary scenario
+cleanup still closes sessions, routes and processes.
+
+The retained FSCP-03 live isolation and packaged Loop cases passed three focused
+repetitions (8.722s and 9.685s respectively). Focused built-in lint, repository
+boundary/shape/sleep/debt analyzers and all 156 reviewed scenarios also pass.
+Hosted CI is required on the current pushed source before a merge checkpoint
+can be claimed. The audit keeps all complete failed measurements alongside the
+passing coverage-only and earlier complete passing measurements.

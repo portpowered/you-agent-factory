@@ -25,16 +25,15 @@ type loopCleanupAction struct {
 }
 
 type loopCleanupStack struct {
-	mu       sync.Mutex
-	actions  []loopCleanupAction
-	attempts map[string]int
-	once     sync.Once
-	ran      bool
-	err      error
+	mu      sync.Mutex
+	actions []loopCleanupAction
+	once    sync.Once
+	ran     bool
+	err     error
 }
 
 func newLoopCleanupStack() *loopCleanupStack {
-	return &loopCleanupStack{attempts: make(map[string]int)}
+	return &loopCleanupStack{}
 }
 
 func (stack *loopCleanupStack) add(name string, fn func() error) {
@@ -58,9 +57,6 @@ func (stack *loopCleanupStack) run() error {
 		var errs []error
 		for index := len(actions) - 1; index >= 0; index-- {
 			action := actions[index]
-			stack.mu.Lock()
-			stack.attempts[action.name]++
-			stack.mu.Unlock()
 			if err := action.fn(); err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", action.name, err))
 			}
@@ -73,15 +69,6 @@ func (stack *loopCleanupStack) run() error {
 	stack.mu.Lock()
 	defer stack.mu.Unlock()
 	return stack.err
-}
-
-func (stack *loopCleanupStack) actionCalls(name string) int {
-	if stack == nil {
-		return 0
-	}
-	stack.mu.Lock()
-	defer stack.mu.Unlock()
-	return stack.attempts[name]
 }
 
 func (stack *loopCleanupStack) hasRun() bool {

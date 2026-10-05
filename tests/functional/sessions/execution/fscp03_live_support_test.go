@@ -261,38 +261,16 @@ func assertFSCP03LiveFactoryEvents(t *testing.T, baseURL, firstID, secondID stri
 
 func assertFSCP03LiveResponseEvents(t *testing.T, baseURL, firstID, secondID string) {
 	t.Helper()
-	first := support.GetFactoryResponseEventsAt(t, baseURL, firstID)
-	second := support.GetFactoryResponseEventsAt(t, baseURL, secondID)
-	if len(first) == 0 || len(second) == 0 {
-		t.Fatalf("live Response Events first=%d second=%d, want events for both sessions", len(first), len(second))
-	}
-	firstEventIDs := make(map[string]struct{}, len(first))
-	firstDispatchIDs := make(map[string]struct{}, len(first))
-	for _, event := range first {
-		if event.FactorySessionId != firstID || strings.TrimSpace(event.EventId) == "" {
-			t.Fatalf("first Response Event = %#v, want session-scoped identity", event)
-		}
-		firstEventIDs[event.EventId] = struct{}{}
-		if event.DispatchId != nil {
-			firstDispatchIDs[*event.DispatchId] = struct{}{}
-		}
-	}
-	if len(firstDispatchIDs) == 0 {
-		t.Fatalf("first Response Events = %#v, want dispatch identity", first)
-	}
-	for _, event := range second {
-		if event.FactorySessionId != secondID {
-			t.Fatalf("second Response Event = %#v, want session %q", event, secondID)
-		}
-		if _, shared := firstEventIDs[event.EventId]; shared {
-			t.Fatalf("Response Event identity %q crossed live sessions", event.EventId)
-		}
-		if event.DispatchId != nil {
-			if _, shared := firstDispatchIDs[*event.DispatchId]; shared {
-				t.Fatalf("dispatch identity %q crossed live sessions", *event.DispatchId)
-			}
-		}
-	}
+	// A quiet interval can elapse before an SSE reader is scheduled on a loaded
+	// runner. Observe each public MESSAGE completion instead of treating silence
+	// as evidence that its retained history has finished replaying.
+	firstStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, firstID))
+	defer firstStream.Close()
+	secondStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, secondID))
+	defer secondStream.Close()
+	first := collectFSCP03ResponseFrames(t, firstStream, firstID)
+	second := collectFSCP03ResponseFrames(t, secondStream, secondID)
+	assertFSCP03DisjointHTTPResponseFrames(t, first, second)
 }
 
 func collectFSCP03ResponseFrames(
@@ -316,6 +294,9 @@ func collectFSCP03ResponseFrames(
 		}
 		if frame.Event.FactorySessionId != sessionID {
 			t.Fatalf("response frame session = %q, want %q", frame.Event.FactorySessionId, sessionID)
+		}
+		if strings.TrimSpace(frame.Event.EventId) == "" {
+			t.Fatal("response frame has no public event identity")
 		}
 		frames = append(frames, frame)
 		if frame.Event.Kind == factoryapi.FactoryResponseEventKindMessage && frame.Event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {

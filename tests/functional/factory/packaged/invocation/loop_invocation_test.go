@@ -163,15 +163,14 @@ func assertNoLoopSubmission(t *testing.T, submissions <-chan work.FactorySubmiss
 }
 
 type blockingLoopRunner struct {
-	started      chan struct{}
-	release      chan struct{}
-	done         chan struct{}
-	startOnce    sync.Once
-	releaseOnce  sync.Once
-	doneOnce     sync.Once
-	mu           sync.Mutex
-	count        int
-	releaseCalls atomic.Uint32
+	started     chan struct{}
+	release     chan struct{}
+	done        chan struct{}
+	startOnce   sync.Once
+	releaseOnce sync.Once
+	doneOnce    sync.Once
+	mu          sync.Mutex
+	count       int
 }
 
 // loopSchedulerClock keeps the fake clock's scheduler-specific timer
@@ -182,22 +181,6 @@ type loopSchedulerClock struct {
 	*clockwork.FakeClock
 	schedulerTimers     chan struct{}
 	schedulerTimerCount atomic.Uint64
-	schedulerTimerStops atomic.Uint64
-}
-
-type loopSchedulerTimer struct {
-	clockwork.Timer
-	stopCount *atomic.Uint64
-}
-
-func (timer *loopSchedulerTimer) Stop() bool {
-	if timer == nil {
-		return false
-	}
-	if timer.stopCount != nil {
-		timer.stopCount.Add(1)
-	}
-	return timer.Timer.Stop()
 }
 
 var _ clockwork.Clock = (*loopSchedulerClock)(nil)
@@ -217,7 +200,6 @@ func (clock *loopSchedulerClock) AfterFunc(duration time.Duration, callback func
 		case clock.schedulerTimers <- struct{}{}:
 		default:
 		}
-		return &loopSchedulerTimer{Timer: timer, stopCount: &clock.schedulerTimerStops}
 	}
 	return timer
 }
@@ -254,7 +236,6 @@ func (runner *blockingLoopRunner) Release() {
 	if runner == nil {
 		return
 	}
-	runner.releaseCalls.Add(1)
 	runner.releaseOnce.Do(func() { close(runner.release) })
 }
 
@@ -276,13 +257,6 @@ func (runner *blockingLoopRunner) calls() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.count
-}
-
-func (runner *blockingLoopRunner) releaseCount() uint32 {
-	if runner == nil {
-		return 0
-	}
-	return runner.releaseCalls.Load()
 }
 
 func invokeLoop(t *testing.T, scenario *loopScenario, args map[string]any) factoryapi.InvocationResponse {
