@@ -191,12 +191,10 @@ type MetricsHandler struct {
 	logger  *zap.Logger
 }
 
+// NewMetricsHandler consumes the selected logger; callers select a no-op for silence.
 func NewMetricsHandler(adapter *MetricsAdapter, logger *zap.Logger) *MetricsHandler {
 	if adapter == nil {
 		return nil
-	}
-	if logger == nil {
-		logger = zap.NewNop()
 	}
 	return &MetricsHandler{adapter: adapter, logger: logger}
 }
@@ -260,7 +258,7 @@ func (handler *MetricsHandler) writeError(w http.ResponseWriter, status int, cod
 func (handler *MetricsHandler) writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(value); err != nil && handler != nil && handler.logger != nil {
+	if err := json.NewEncoder(w).Encode(value); err != nil && handler != nil {
 		handler.logger.Error("encode metrics response failed", zap.Error(err))
 	}
 }
