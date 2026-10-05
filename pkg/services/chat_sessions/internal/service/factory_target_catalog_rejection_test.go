@@ -467,12 +467,9 @@ func TestResolveFactoryTargetCatalogPreservesProfileDependencyContextCause(t *te
 				OperatorSettingsPath: "/operator.json",
 			})
 			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetProfileUnavailable, "")
-			var typed *chatsessions.FactoryTargetCatalogError
-			if !errors.As(err, &typed) || typed.Cause != testCase.cause {
-				t.Fatalf("safe context cause: %+v", typed)
-			}
+			assertFactoryTargetCatalogContextCause(t, err, testCase.cause)
 			reason := "context_canceled"
-			if testCase.cause == context.DeadlineExceeded {
+			if errors.Is(testCase.cause, context.DeadlineExceeded) {
 				reason = "context_deadline_exceeded"
 			}
 			spy.assertOperation(t, 0, reason)
@@ -521,12 +518,9 @@ func TestResolveFactoryTargetCatalogPreservesCatalogListingDependencyContextCaus
 				OperatorSettingsPath: "/operator.json",
 			})
 			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetCatalogUnavailable, "")
-			var typed *chatsessions.FactoryTargetCatalogError
-			if !errors.As(err, &typed) || typed.Cause != testCase.cause {
-				t.Fatalf("safe context cause: %+v", typed)
-			}
+			assertFactoryTargetCatalogContextCause(t, err, testCase.cause)
 			reason := "context_canceled"
-			if testCase.cause == context.DeadlineExceeded {
+			if errors.Is(testCase.cause, context.DeadlineExceeded) {
 				reason = "context_deadline_exceeded"
 			}
 			spy.assertOperation(t, 0, reason)
@@ -583,12 +577,9 @@ func TestResolveFactoryTargetCatalogPreservesCanonicalResolutionDependencyContex
 				ClientWorkingRoot:    "/repos/project-a",
 			})
 			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetCatalogUnavailable, "factory:@you/factory-builder")
-			var typed *chatsessions.FactoryTargetCatalogError
-			if !errors.As(err, &typed) || typed.Cause != testCase.cause {
-				t.Fatalf("safe context cause: %+v", typed)
-			}
+			assertFactoryTargetCatalogContextCause(t, err, testCase.cause)
 			reason := "context_canceled"
-			if testCase.cause == context.DeadlineExceeded {
+			if errors.Is(testCase.cause, context.DeadlineExceeded) {
 				reason = "context_deadline_exceeded"
 			}
 			spy.assertOperation(t, 0, reason)
@@ -918,6 +909,36 @@ func (s *spyLogger) assertOperation(t *testing.T, count int, reason string) {
 	}
 }
 
+// assertFactoryTargetCatalogContextCause checks classification and exact safe
+// sentinel identity: retaining a wrapper could expose collaborator error text.
+func assertFactoryTargetCatalogContextCause(t *testing.T, err, cause error) {
+	t.Helper()
+	var typed *chatsessions.FactoryTargetCatalogError
+	if !errors.As(err, &typed) || !errors.Is(typed.Cause, cause) {
+		t.Fatalf("safe context cause: %+v", typed)
+	}
+	if typed.Cause != cause { //nolint:errorlint // Safe causes must be the canonical sentinel itself, never a wrapper.
+		t.Fatalf("context cause = %v, want exact safe sentinel %v", typed.Cause, cause)
+	}
+}
+
+func assertSelectedLoggerCatalogOutcome(t *testing.T, got chatsessions.ResolveFactoryTargetCatalogResult, err error, reason, defaultTarget, hostile string) {
+	t.Helper()
+	if reason == "" {
+		if err != nil || got.CurrentTarget != defaultTarget || len(got.Choices) != 1 {
+			t.Fatalf("success: %+v %v", got, err)
+		}
+	} else {
+		var typed *chatsessions.FactoryTargetCatalogError
+		if !errors.As(err, &typed) || typed.Cause != nil || !reflect.DeepEqual(got, chatsessions.ResolveFactoryTargetCatalogResult{}) {
+			t.Fatalf("failure: %+v %v", got, err)
+		}
+		if strings.Contains(err.Error(), hostile) {
+			t.Fatalf("unsafe error: %v", err)
+		}
+	}
+}
+
 func TestResolveFactoryTargetCatalogSelectedLoggerParity(t *testing.T) {
 	t.Parallel()
 	for _, reason := range []string{"", "catalog_empty", "profile_unavailable", "catalog_unavailable", "reference_malformed", "target_not_installed", "target_not_allowed"} {
@@ -964,19 +985,7 @@ func TestResolveFactoryTargetCatalogSelectedLoggerParity(t *testing.T) {
 			if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(err, quietErr) {
 				t.Fatalf("logger changed outcome: %+v %v / %+v %v", got, err, want, quietErr)
 			}
-			if reason == "" {
-				if err != nil || got.CurrentTarget != profile.DefaultTarget || len(got.Choices) != 1 {
-					t.Fatalf("success: %+v %v", got, err)
-				}
-			} else {
-				var typed *chatsessions.FactoryTargetCatalogError
-				if !errors.As(err, &typed) || typed.Cause != nil || !reflect.DeepEqual(got, chatsessions.ResolveFactoryTargetCatalogResult{}) {
-					t.Fatalf("failure: %+v %v", got, err)
-				}
-				if strings.Contains(err.Error(), hostile) {
-					t.Fatalf("unsafe error: %v", err)
-				}
-			}
+			assertSelectedLoggerCatalogOutcome(t, got, err, reason, profile.DefaultTarget, hostile)
 			spy.assertOperation(t, len(got.Choices), reason)
 			spy.assertNoForbiddenValuesLogged(t, hostile, req.CurrentTarget, profile.DefaultTarget)
 		})
