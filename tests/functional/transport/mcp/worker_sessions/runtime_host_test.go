@@ -106,7 +106,9 @@ func runRealHostControls(t *testing.T, process support.Process) {
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := controlHostRunner{started: make(chan (<-chan struct{}), 4)}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: interruptRecordingDirectory(dir),
+		},
 	})
 	session, ctx := startMCP(t, process, host.URL())
 	sibling := admitControlWorker(t, ctx, host.URL(), "sibling", runner)
@@ -126,6 +128,7 @@ func runRealHostControls(t *testing.T, process support.Process) {
 		assertOwnedControl(t, retry.(map[string]any), id, operation, "NOOP")
 		assertJSONEqual(t, retry, requestHost(t, http.MethodPost, host.URL()+"/worker-sessions/"+id+"/"+strings.ToLower(operation)))
 		assertCLIControlParity(t, host, retry, id, strings.ToLower(operation))
+		assertStoppedObservationParity(t, ctx, session, host, id, operation)
 		read := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id, "view": "events", "limit": 1})["result"].(map[string]any)
 		assertJSONEqual(t, read["session"], getHost(t, host.URL()+"/worker-sessions/"+id))
 		page := read["events"].(map[string]any)
@@ -184,6 +187,32 @@ func assertFactoryWithoutReference(t *testing.T, ctx context.Context, session *m
 	assertCLIListParity(t, host, []string{"you", "worker-sessions", "list", "--server", host.URL(), "--json"}, getHost(t, host.URL()+"/worker-sessions"))
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": id, "operation": "TERMINATE"})
 	waitControlSignal(t, done)
+	assertStoppedObservationParity(t, ctx, session, host, id, "TERMINATE")
+}
+
+func assertStoppedObservationParity(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id, operation string) {
+	t.Helper()
+	state, cause := "CANCELED", "OPERATOR_CANCEL"
+	if operation == "TERMINATE" {
+		state, cause = "TERMINATED", "OPERATOR_TERMINATE"
+	}
+	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id)
+	observation := getHost(t, endpoint).(map[string]any)
+	if observation["workerSessionId"] != id || observation["state"] != state || observation["terminalCause"] != cause || observation["providerSessionAvailable"] != false {
+		t.Fatalf("joined no-reference stop lost terminal facts: %v, want %s/%s", observation, state, cause)
+	}
+	read := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)
+	assertJSONEqual(t, read["session"], observation)
+	assertFactoryCLIParity(t, host, id, observation)
+	for _, repeat := range []string{"CANCEL", "TERMINATE"} {
+		result := callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": id, "operation": repeat})["result"].(map[string]any)
+		if result["workerSessionId"] != id || result["action"] != repeat || result["outcome"] != "NOOP" || result["state"] != state {
+			t.Fatalf("terminal repeat changed stop facts: %v", result)
+		}
+		assertJSONEqual(t, result, requestHost(t, http.MethodPost, endpoint+"/"+strings.ToLower(repeat)))
+		assertCLIControlParity(t, host, result, id, strings.ToLower(repeat))
+		assertJSONEqual(t, observation, getHost(t, endpoint))
+	}
 }
 
 func assertFleetPages(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer) {
