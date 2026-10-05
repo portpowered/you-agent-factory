@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 )
@@ -78,6 +79,7 @@ func TestInstallPackagedFactory_OwnershipAcquisitionFailuresAreBounded(t *testin
 				fileSystem,
 				fileSystem.Mkdir,
 				probe,
+				logging.NoopLogger{},
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
 				Definition: factorydefinitions.PackagedDefinition{
@@ -156,6 +158,7 @@ func TestInstallPackagedFactory_PreExistingStagingReportsOwnerEvidence(t *testin
 				fileSystem,
 				fileSystem.Mkdir,
 				probe,
+				logging.NoopLogger{},
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
 				Definition: factorydefinitions.PackagedDefinition{
@@ -204,7 +207,7 @@ func TestInstallPackagedFactory_StagingInspectionErrorsAreReported(t *testing.T)
 			root := t.TempDir()
 			fileSystem := &failingPackagedInstallationFileSystem{}
 			test.configure(fileSystem, root)
-			_, err := New(packagedInstallationTestPersistence(), fileSystem, fileSystem.Mkdir).InstallPackagedFactory(
+			_, err := New(packagedInstallationTestPersistence(), fileSystem, fileSystem.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
 				t.Context(),
 				factorydefinitions.PackagedFactoryInstallParams{
 					NamedFactoriesRoot: root,
@@ -263,6 +266,7 @@ func TestInstallPackagedFactory_ReportsLeaseReleaseFailures(t *testing.T) {
 				fileSystem,
 				fileSystem.Mkdir,
 				probe,
+				logging.NoopLogger{},
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
 				Definition: factorydefinitions.PackagedDefinition{

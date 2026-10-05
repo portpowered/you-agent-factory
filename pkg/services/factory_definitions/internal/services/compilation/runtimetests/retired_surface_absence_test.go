@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
@@ -132,7 +133,7 @@ func TestRetiredEncodedPathResolution_MaterializeLeavesEncodedSiblingUntouched(t
 	encodedDir := seedLegacyEncodedGoalFactory(t, namedFactoriesRoot)
 	beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
 
-	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}, os.Mkdir).
+	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
 		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, "", publishedPackagedDefinitions(t))
 	if err != nil {
 		t.Fatalf("system initialization: %v", err)
@@ -252,7 +253,7 @@ func TestRetiredSurfaceResidue_ConfigInitLeavesLegacyEncodedSiblingUntouched(t *
 	encodedDir := seedLegacyEncodedGoalFactoryForResidueTest(t, namedFactoriesRoot)
 	beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
 
-	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}, os.Mkdir).
+	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
 		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, "", publishedPackagedDefinitions(t))
 	if err != nil {
 		t.Fatalf("system initialization: %v", err)

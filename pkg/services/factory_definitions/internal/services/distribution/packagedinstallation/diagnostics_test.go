@@ -1,17 +1,21 @@
 package packagedinstallation
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -259,12 +263,14 @@ func TestInstallPackagedFactory_ConcurrentOrphanReclaimPreservesWinnerLease(t *t
 		fileSystem,
 		os.Mkdir,
 		&scriptedOwnerProbe{record: ownerRecord{PID: 101}, liveness: ownerLivenessOrphaned},
+		logging.NoopLogger{},
 	)
 	second := newWithOwnerProbe(
 		persistence,
 		fileSystem,
 		os.Mkdir,
 		&scriptedOwnerProbe{record: ownerRecord{PID: 202}, liveness: ownerLivenessOrphaned},
+		logging.NoopLogger{},
 	)
 	done := make(chan error, 2)
 	go func() {
@@ -358,4 +364,241 @@ func (fileSystem *orphanReclaimRaceFileSystem) Rename(oldPath, newPath string) e
 		<-fileSystem.releaseSecond
 	}
 	return fileSystem.Local.Rename(oldPath, newPath)
+}
+
+// Exact field comparison also protects the diagnostic privacy contract: payloads,
+// raw preparation errors and owner metadata never become diagnostic fields.
+func assertInstallationDiagnostic(t *testing.T, entry packagedInstallationLogEntry, level, scope, name, resource, outcome string, liveness ownerLiveness, pid any, installOutcome, backup string) {
+	t.Helper()
+	fields := map[string]any{
+		"backend_scope_id": scope, "factory_name": name, "resource": resource,
+		"outcome": outcome, "owner_liveness": liveness, "owner_pid": pid,
+		"owner_identity": "unverified",
+	}
+	if installOutcome != "" {
+		fields["install_outcome"] = installOutcome
+	}
+	if backup != "" {
+		fields["backup_dir"] = backup
+	}
+	if entry.level != level || entry.message != "factory_definitions.packaged_installation" || !reflect.DeepEqual(entry.fields, fields) {
+		t.Fatalf("diagnostic = %#v, want %s operation with %#v", entry, level, fields)
+	}
+}
+
+func assertInstallationReleased(t *testing.T, root, name string) {
+	t.Helper()
+	if path, err := findPreExistingStaging(platformfilesystem.Local{}, root, name); err != nil || path != "" {
+		t.Fatalf("remaining staging = %q, %v, want released", path, err)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, managedScratchRoot))
+	if !errors.Is(err, fs.ErrNotExist) && (err != nil || len(entries) != 0) {
+		t.Fatalf("remaining managed scratch = %v, %v, want none", entries, err)
+	}
+}
+
+func assertInstallationPair(t *testing.T, logger *packagedInstallationLogger, root, scope string, result factorydefinitions.PackagedFactoryInstallResult) {
+	t.Helper()
+	entries := logger.snapshot()
+	if len(entries) < 2 {
+		t.Fatalf("diagnostics = %#v, want acquisition and terminal outcome", entries)
+	}
+	entries = entries[len(entries)-2:]
+	lease := stagingOwnershipPath(root, result.Name)
+	assertInstallationDiagnostic(t, entries[0], "info", scope, result.Name, lease, "acquired", ownerLivenessActive, os.Getpid(), "", "")
+	outcome, level := string(result.Outcome), "info"
+	switch result.Outcome {
+	case factorydefinitions.PackagedFactoryInstallCreated, factorydefinitions.PackagedFactoryInstallReplaced:
+		outcome = "success"
+	case factorydefinitions.PackagedFactoryInstallCustomerModified:
+		level = "warn"
+	case factorydefinitions.PackagedFactoryInstallFailed:
+		level = "error"
+	}
+	// Preparation/replacement errors log the lease outcome without a result field.
+	installOutcome, backup := string(result.Outcome), result.BackupDir
+	if result.Outcome == factorydefinitions.PackagedFactoryInstallFailed {
+		installOutcome, backup = "", ""
+	}
+	assertInstallationDiagnostic(t, entries[1], level, scope, result.Name, lease, outcome, ownerLivenessActive, os.Getpid(), installOutcome, backup)
+	assertInstallationReleased(t, root, result.Name)
+}
+
+func TestSelectedLoggerInstallCreateSkipReplace(t *testing.T) {
+	t.Parallel()
+	root, definition := t.TempDir(), installationDefinitionFixture()
+	logger := &packagedInstallationLogger{}
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
+	params := factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, BackendScopeID: "  selected-install  ", Definition: definition}
+	created, err := installer.InstallPackagedFactory(t.Context(), params)
+	if err != nil || created.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
+		t.Fatalf("create = %#v, %v", created, err)
+	}
+	assertInstallationPair(t, logger, root, "selected-install", created)
+	before := snapshotDirectoryContents(t, created.FactoryDir)
+	skipped, err := installer.InstallPackagedFactory(t.Context(), params)
+	if err != nil || skipped.Outcome != factorydefinitions.PackagedFactoryInstallSkipped {
+		t.Fatalf("skip = %#v, %v", skipped, err)
+	}
+	assertDirectorySnapshotUnchanged(t, created.FactoryDir, before)
+	if len(logger.snapshot()) != 2 {
+		t.Fatal("ordinary skip emitted diagnostics")
+	}
+	params.Replace = true
+	params.Definition.JSON = []byte("opaque replacement")
+	replaced, err := installer.InstallPackagedFactory(t.Context(), params)
+	if err != nil || replaced.Outcome != factorydefinitions.PackagedFactoryInstallReplaced {
+		t.Fatalf("replace = %#v, %v", replaced, err)
+	}
+	content, err := os.ReadFile(filepath.Join(replaced.FactoryDir, factorydefinitions.FactoryConfigFile))
+	if err != nil || string(content) != "opaque replacement" {
+		t.Fatalf("replacement content = %q, %v", content, err)
+	}
+	assertInstallationPair(t, logger, root, "selected-install", replaced)
+}
+
+func TestSelectedLoggerFailurePreservesContentAndOwnership(t *testing.T) {
+	for _, managed := range []bool{false, true} {
+		for _, mode := range []string{"malformed", "early-cancel", "acquired-cancel"} {
+			t.Run(fmt.Sprintf("managed=%t/%s", managed, mode), func(t *testing.T) {
+				t.Parallel()
+				root, definition := t.TempDir(), installationDefinitionFixture()
+				quiet := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+				prior, err := quiet.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition, ManagedRefresh: managed})
+				if err != nil {
+					t.Fatal(err)
+				}
+				before := snapshotDirectoryContents(t, prior.FactoryDir)
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				cause := errors.New("private malformed payload cause")
+				persistence := &installationPersistenceStub{prepareErr: cause}
+				if mode != "malformed" {
+					cause = context.Canceled
+					persistence.prepareErr = nil
+				}
+				if mode == "early-cancel" {
+					cancel()
+				}
+				if mode == "acquired-cancel" {
+					persistence.prepareCancel = cancel
+				}
+				definition.JSON = []byte("private malformed payload")
+				logger := &packagedInstallationLogger{}
+				installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logger)
+				var result factorydefinitions.PackagedFactoryInstallResult
+				if managed {
+					results, installErr := installer.EnsurePackagedFactories(ctx, root, "", []factorydefinitions.PackagedDefinition{definition})
+					err, result = installErr, results[0]
+				} else {
+					result, err = installer.InstallPackagedFactory(ctx, factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition, Replace: true})
+				}
+				if !errors.Is(err, cause) {
+					t.Fatalf("error = %v, want cause %v", err, cause)
+				}
+				wantOutcome := factorydefinitions.PackagedFactoryInstallOutcome("")
+				if managed {
+					wantOutcome = factorydefinitions.PackagedFactoryInstallFailed
+				}
+				if result.Outcome != wantOutcome {
+					t.Fatalf("outcome = %q, want %q", result.Outcome, wantOutcome)
+				}
+				assertDirectorySnapshotUnchanged(t, prior.FactoryDir, before)
+				assertInstallationReleased(t, root, definition.Name)
+				entries := logger.snapshot()
+				if mode == "early-cancel" {
+					if len(entries) != 1 {
+						t.Fatalf("early cancellation entries = %#v", entries)
+					}
+					assertInstallationDiagnostic(t, entries[0], "error", "unknown", definition.Name, "", "failed", ownerLivenessIndeterminate, "unavailable", "", "")
+				} else {
+					if len(entries) != 2 {
+						t.Fatalf("acquired failure entries = %#v", entries)
+					}
+					lease := stagingOwnershipPath(root, definition.Name)
+					assertInstallationDiagnostic(t, entries[0], "info", "unknown", definition.Name, lease, "acquired", ownerLivenessActive, os.Getpid(), "", "")
+					assertInstallationDiagnostic(t, entries[1], "error", "unknown", definition.Name, lease, "failed", ownerLivenessActive, os.Getpid(), "", "")
+				}
+			})
+		}
+	}
+}
+
+func TestSelectedLoggerIndeterminateContentionPreservesForeignLease(t *testing.T) {
+	for _, metadata := range []string{`{"pid":"private metadata"}`, `{"pid":404}`} {
+		t.Run(metadata, func(t *testing.T) {
+			t.Parallel()
+			root, definition := t.TempDir(), installationDefinitionFixture()
+			lease := stagingOwnershipPath(root, definition.Name)
+			if err := os.MkdirAll(lease, 0755); err != nil {
+				t.Fatal(err)
+			}
+			ownerPath := filepath.Join(lease, stagingOwnerMetadataName)
+			if err := os.WriteFile(ownerPath, []byte(metadata), 0600); err != nil {
+				t.Fatal(err)
+			}
+			logger := &packagedInstallationLogger{}
+			installer := newWithOwnerProbe(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir,
+				&scriptedOwnerProbe{record: ownerRecord{PID: 101}, liveness: ownerLivenessIndeterminate}, logger)
+			_, err := installer.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition})
+			if !errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
+				t.Fatalf("contention = %v", err)
+			}
+			entries := logger.snapshot()
+			if len(entries) != 1 {
+				t.Fatalf("entries = %#v", entries)
+			}
+			pid := any("unavailable")
+			if metadata == `{"pid":404}` {
+				pid = 404
+			}
+			assertInstallationDiagnostic(t, entries[0], "warn", "unknown", definition.Name, lease, "indeterminate-contention", ownerLivenessIndeterminate, pid, "", "")
+			content, err := os.ReadFile(ownerPath)
+			if err != nil || string(content) != metadata {
+				t.Fatalf("foreign metadata = %q, %v", content, err)
+			}
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(definition.Name))); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("target stat = %v", err)
+			}
+		})
+	}
+}
+
+func TestExplicitNoopInstallationResultsAndFailures(t *testing.T) {
+	for _, mode := range []string{"success", "malformed", "cancelled"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			root, definition := t.TempDir(), installationDefinitionFixture()
+			persistence := &installationPersistenceStub{}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var cause error
+			if mode == "malformed" {
+				cause = errors.New("private preparation error")
+				persistence.prepareErr = cause
+			}
+			if mode == "cancelled" {
+				cause = context.Canceled
+				cancel()
+			}
+			installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+			result, err := installer.InstallPackagedFactory(ctx, factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition})
+			if !errors.Is(err, cause) {
+				t.Fatalf("installation = %#v, %v, want %v", result, err, cause)
+			}
+			target := filepath.Join(root, filepath.FromSlash(definition.Name))
+			if cause == nil {
+				if result.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
+					t.Fatalf("outcome = %q", result.Outcome)
+				}
+				content, err := os.ReadFile(filepath.Join(target, factorydefinitions.FactoryConfigFile))
+				if err != nil || string(content) != string(definition.JSON) {
+					t.Fatalf("content = %q, %v", content, err)
+				}
+			} else if _, err := os.Stat(target); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("failed target stat = %v", err)
+			}
+			assertInstallationReleased(t, root, definition.Name)
+		})
+	}
 }

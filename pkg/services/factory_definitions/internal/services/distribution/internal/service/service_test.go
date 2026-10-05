@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"bytes"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -380,7 +381,7 @@ func TestDistributionInstallPackagedFactoryThroughInjectedPorts(t *testing.T) {
 	persistence := factorydefinitioncomposition.FactoryDefinitionPersistenceWithValidator(
 		factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON),
 	)
-	installer := distributionpackagedinstallation.New(persistence, fileSystem, os.Mkdir)
+	installer := distributionpackagedinstallation.New(persistence, fileSystem, os.Mkdir, logging.NoopLogger{})
 	svc := newDistributionService(t, catalog, factorydefinitions.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	})

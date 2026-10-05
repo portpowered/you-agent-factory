@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 )
@@ -27,7 +28,7 @@ func TestInstallPackagedFactory_PreExistingStagingReturnsBoundedContention(t *te
 		t.Fatalf("create retained staging resource: %v", err)
 	}
 
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).InstallPackagedFactory(
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
@@ -67,12 +68,15 @@ func TestInstallPackagedFactory_PreExistingStagingReturnsBoundedContention(t *te
 }
 
 func TestInstallPackagedFactory_LiveOwnerContentionPreservesLease(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	persistence := &blockingPackagedInstallationPersistence{
 		prepareStarted: make(chan struct{}),
 		allowPrepare:   make(chan struct{}),
 	}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir)
+	winnerLogger, loserLogger := &packagedInstallationLogger{}, &packagedInstallationLogger{}
+	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, winnerLogger)
+	contender := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, loserLogger)
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		BackendScopeID:     "local-live-scope",
@@ -91,7 +95,7 @@ func TestInstallPackagedFactory_LiveOwnerContentionPreservesLease(t *testing.T) 
 
 	secondDone := make(chan error, 1)
 	go func() {
-		_, err := installer.InstallPackagedFactory(t.Context(), params)
+		_, err := contender.InstallPackagedFactory(t.Context(), params)
 		secondDone <- err
 	}()
 	secondInstallErr := <-secondDone
@@ -112,6 +116,9 @@ func TestInstallPackagedFactory_LiveOwnerContentionPreservesLease(t *testing.T) 
 	if _, err := os.Stat(leasePath); err != nil {
 		t.Fatalf("live owner lease stat error = %v, want retained lease", err)
 	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(params.Definition.Name))); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("target while winner is preparing = %v, want absent", err)
+	}
 	close(persistence.allowPrepare)
 	if err := <-firstErr; err != nil {
 		t.Fatalf("live owner completed installation error = %v", err)
@@ -119,6 +126,12 @@ func TestInstallPackagedFactory_LiveOwnerContentionPreservesLease(t *testing.T) 
 	if _, err := os.Stat(leasePath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("released lease stat error = %v, want lease removed", err)
 	}
+	entries := loserLogger.snapshot()
+	if len(entries) != 1 {
+		t.Fatalf("loser diagnostics = %#v", entries)
+	}
+	assertInstallationDiagnostic(t, entries[0], "warn", "local-live-scope", params.Definition.Name, leasePath, "active-contention", ownerLivenessActive, os.Getpid(), "", "")
+	assertInstallationPair(t, winnerLogger, root, "local-live-scope", factorydefinitions.PackagedFactoryInstallResult{Name: params.Definition.Name, Outcome: factorydefinitions.PackagedFactoryInstallCreated})
 }
 
 func TestInstallPackagedFactory_MalformedOwnerMetadataFailsClosed(t *testing.T) {
@@ -132,7 +145,7 @@ func TestInstallPackagedFactory_MalformedOwnerMetadataFailsClosed(t *testing.T) 
 		t.Fatalf("write malformed owner metadata: %v", err)
 	}
 
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).InstallPackagedFactory(
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
@@ -171,7 +184,7 @@ func TestInstallPackagedFactory_AcquisitionRacePreservesWinnerLease(t *testing.T
 		prepareStarted: make(chan struct{}),
 		allowPrepare:   make(chan struct{}),
 	}
-	installer := New(persistence, fileSystem, fileSystem.Mkdir)
+	installer := New(persistence, fileSystem, fileSystem.Mkdir, logging.NoopLogger{})
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		Definition: factorydefinitions.PackagedDefinition{

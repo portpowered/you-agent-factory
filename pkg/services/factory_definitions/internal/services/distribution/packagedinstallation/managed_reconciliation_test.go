@@ -13,6 +13,7 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -21,7 +22,8 @@ func TestEnsurePackagedFactories_ManagedInstallIsCurrentAndAdoptsEquivalentLegac
 
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
+	logger := &packagedInstallationLogger{}
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
 	legacy, err := installer.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		Definition:         definition,
@@ -58,6 +60,7 @@ func TestEnsurePackagedFactories_ManagedInstallIsCurrentAndAdoptsEquivalentLegac
 		t.Fatalf("repeat ensure outcome = %q, want current", current[0].Outcome)
 	}
 	assertDirectorySnapshotUnchanged(t, legacy.FactoryDir, beforeCurrent)
+	assertInstallationPair(t, logger, root, "managed-test", current[0])
 }
 
 func TestEnsurePackagedFactories_ManagedInstallReplacesInvalidEvidenceWithoutReplacingContent(t *testing.T) {
@@ -65,7 +68,7 @@ func TestEnsurePackagedFactories_ManagedInstallReplacesInvalidEvidenceWithoutRep
 
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -105,7 +108,8 @@ func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *
 
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
+	logger := &packagedInstallationLogger{}
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -113,6 +117,7 @@ func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *
 	if created[0].Outcome != factorydefinitions.PackagedFactoryInstallCreated {
 		t.Fatalf("initial outcome = %q, want created", created[0].Outcome)
 	}
+	assertInstallationPair(t, logger, root, "managed-test", created[0])
 	oldFactory, err := os.ReadFile(filepath.Join(created[0].FactoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("read initial Factory: %v", err)
@@ -155,6 +160,7 @@ func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *
 	if _, err := os.Stat(refreshed[0].BackupDir); err != nil {
 		t.Fatalf("preserved backup stat: %v", err)
 	}
+	assertInstallationPair(t, logger, root, "managed-test", refreshed[0])
 }
 
 func TestEnsurePackagedFactories_ManagedCustomerModificationIsReportedAndPreserved(t *testing.T) {
@@ -162,11 +168,13 @@ func TestEnsurePackagedFactories_ManagedCustomerModificationIsReportedAndPreserv
 
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
+	logger := &packagedInstallationLogger{}
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
 	}
+	assertInstallationPair(t, logger, root, "managed-test", created[0])
 	marker := filepath.Join(created[0].FactoryDir, "customer-owned.txt")
 	if err := os.WriteFile(marker, []byte("keep this edit"), 0o600); err != nil {
 		t.Fatalf("write customer edit: %v", err)
@@ -189,6 +197,7 @@ func TestEnsurePackagedFactories_ManagedCustomerModificationIsReportedAndPreserv
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("active customer edit stat = %v, want removed from refreshed active directory", err)
 	}
+	assertInstallationPair(t, logger, root, "managed-test", refreshed[0])
 }
 
 func TestEnsurePackagedFactories_ManagedReplacementFailurePreservesActiveAndCleansBackup(t *testing.T) {
@@ -200,17 +209,19 @@ func TestEnsurePackagedFactories_ManagedReplacementFailurePreservesActiveAndClea
 		PackagedFactoryPersistence: packagedInstallationTestPersistence(),
 		replaceErr:                 errors.New("replacement unavailable"),
 	}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir)
+	logger := &packagedInstallationLogger{}
+	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
 	}
+	assertInstallationPair(t, logger, root, "managed-test", created[0])
 	before := snapshotDirectoryContents(t, created[0].FactoryDir)
 	updated := definition
 	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("Replacement failure content"), 1)
 
 	failed, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{updated})
-	if err == nil || !strings.Contains(err.Error(), "replacement unavailable") {
+	if !errors.Is(err, persistence.replaceErr) {
 		t.Fatalf("failed refresh error = %v, want replacement failure", err)
 	}
 	if len(failed) != 1 || failed[0].Outcome != factorydefinitions.PackagedFactoryInstallFailed {
@@ -222,6 +233,7 @@ func TestEnsurePackagedFactories_ManagedReplacementFailurePreservesActiveAndClea
 	if readErr == nil && len(entries) != 0 {
 		t.Fatalf("backup entries after failed replacement = %v, want none", entries)
 	}
+	assertInstallationPair(t, logger, root, "managed-test", failed[0])
 }
 
 func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBackup(t *testing.T) {
@@ -230,7 +242,7 @@ func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBa
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	basePersistence := packagedInstallationTestPersistence()
-	installer := New(basePersistence, platformfilesystem.Local{}, os.Mkdir)
+	installer := New(basePersistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -243,6 +255,7 @@ func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBa
 		&nilManagedReplacementPersistence{PackagedFactoryPersistence: basePersistence},
 		platformfilesystem.Local{},
 		os.Mkdir,
+		logging.NoopLogger{},
 	).EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{updated})
 	if err == nil || !strings.Contains(err.Error(), "replacement result is required") {
 		t.Fatalf("nil replacement error = %v, want required-result error", err)
@@ -263,11 +276,13 @@ func TestEnsurePackagedFactories_ManagedStampPublicationFailureReportsFailedOutc
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	fileSystem := &managedStampFailureFileSystem{Local: platformfilesystem.Local{}}
-	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir)
+	logger := &packagedInstallationLogger{}
+	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
 	}
+	assertInstallationPair(t, logger, root, "managed-test", created[0])
 	fileSystem.failStampRename = true
 	updated := definition
 	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("stamp publication failure content"), 1)
@@ -283,6 +298,15 @@ func TestEnsurePackagedFactories_ManagedStampPublicationFailureReportsFailedOutc
 	if readErr != nil || !bytes.Contains(active, []byte("stamp publication failure content")) {
 		t.Fatalf("active Factory after stamp failure = %q, %v, want current payload", active, readErr)
 	}
+	backup, backupErr := os.ReadFile(filepath.Join(failed[0].BackupDir, factorydefinitions.FactoryConfigFile))
+	if backupErr != nil || !bytes.Equal(backup, definition.JSON) {
+		t.Fatalf("stamp failure backup = %q, %v", backup, backupErr)
+	}
+	if _, err := os.Stat(filepath.Join(created[0].FactoryDir, managedStampTemp)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("temporary stamp = %v, want absent", err)
+	}
+
+	assertInstallationPair(t, logger, root, "managed-test", failed[0])
 }
 
 func TestWaitForManagedRetryHonorsCancellation(t *testing.T) {
@@ -303,7 +327,7 @@ func TestWriteManagedStampFailureCleansTemporaryEvidence(t *testing.T) {
 		Local:        platformfilesystem.Local{},
 		writeFileErr: errors.New("management evidence write unavailable"),
 	}
-	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir)
+	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	if err := service.writeManagedStamp(t.Context(), targetDir, "@you/goal", "published", "installed"); err == nil {
 		t.Fatal("writeManagedStamp() error = nil, want write failure")
 	}
@@ -321,7 +345,7 @@ func TestWriteManagedStampCancellationCleansTemporaryEvidence(t *testing.T) {
 		Local:  platformfilesystem.Local{},
 		cancel: cancel,
 	}
-	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir)
+	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	err := service.writeManagedStamp(ctx, targetDir, "@you/goal", "published", "installed")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("writeManagedStamp() error = %v, want context.Canceled", err)
@@ -341,7 +365,7 @@ func TestContentIdentityReportsFilesystemInspectionFailures(t *testing.T) {
 		statPath: root,
 		statErr:  statFailure,
 	}
-	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir)
+	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	if _, err := service.contentIdentity(root); !errors.Is(err, statFailure) {
 		t.Fatalf("contentIdentity() stat error = %v, want %v", err, statFailure)
 	}
@@ -353,7 +377,7 @@ func TestEnsurePackagedFactories_ManagedStampReadFailureIsActionable(t *testing.
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	fileSystem := &managedStampReadFailureFileSystem{Local: platformfilesystem.Local{}}
-	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir)
+	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	if _, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition}); err != nil {
 		t.Fatalf("initial ensure: %v", err)
 	}
@@ -373,6 +397,7 @@ func TestEnsurePackagedFactories_ManagedPreparationRequiresPreparedLayout(t *tes
 		&nilManagedPreparationPersistence{PackagedFactoryPersistence: packagedInstallationTestPersistence()},
 		platformfilesystem.Local{},
 		os.Mkdir,
+		logging.NoopLogger{},
 	)
 	_, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err == nil || !strings.Contains(err.Error(), "prepared Factory layout is required") {
@@ -391,7 +416,7 @@ func TestEnsurePackagedFactories_ManagedBackupReservationFailureIsActionable(t *
 		}
 		return os.Mkdir(path, mode)
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, directoryCreator)
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, directoryCreator, logging.NoopLogger{})
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -417,7 +442,7 @@ func TestEnsurePackagedFactories_ConcurrentManagedRefreshesConverge(t *testing.T
 		replacementStarted:         make(chan struct{}),
 		allowReplacement:           make(chan struct{}),
 	}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir)
+	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	if _, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition}); err != nil {
 		t.Fatalf("initial ensure: %v", err)
 	}
