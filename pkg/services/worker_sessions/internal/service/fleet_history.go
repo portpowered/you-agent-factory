@@ -23,11 +23,11 @@ type FleetHistory struct {
 	snapshots observationSnapshots
 }
 
-func NewFleetHistory(catalog func(context.Context) ([]workersessions.Service, error), captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger) *FleetHistory {
-	if catalog == nil || clock == nil {
+func NewFleetHistory(catalog func(context.Context) ([]workersessions.Service, error), captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget) *FleetHistory {
+	if catalog == nil || clock == nil || snapshots == nil {
 		return nil
 	}
-	query := &FleetHistory{catalog: catalog, clock: clock, logger: logging.EnsureLogger(logger)}
+	query := &FleetHistory{catalog: catalog, clock: clock, logger: logging.EnsureLogger(logger), snapshots: newObservationSnapshots(snapshots)}
 	// Older injected writers can lack captured-read support. Active queries
 	// remain available; durable queries explicitly report unavailable.
 	if captured != nil {

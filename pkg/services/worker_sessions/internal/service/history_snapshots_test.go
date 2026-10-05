@@ -21,7 +21,7 @@ func historySnapshotFixtures() []workersessions.Observation {
 
 func TestHistorySnapshotDetachedReplayAndSignedOffsets(t *testing.T) {
 	t.Parallel()
-	var cache observationSnapshots
+	cache := newObservationSnapshots(new(HistorySnapshotBudget))
 	now := time.Unix(0, 0)
 	observations := historySnapshotFixtures()
 	first, err := cache.first(observations, "filter", 1, now)
@@ -58,7 +58,7 @@ func TestHistorySnapshotDetachedReplayAndSignedOffsets(t *testing.T) {
 
 func TestHistorySnapshotIdleExpiryExtendsOnlyOnSuccessfulRead(t *testing.T) {
 	t.Parallel()
-	var cache observationSnapshots
+	cache := newObservationSnapshots(new(HistorySnapshotBudget))
 	now := time.Unix(0, 0)
 	first, err := cache.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {
@@ -80,7 +80,7 @@ func TestHistorySnapshotIdleExpiryExtendsOnlyOnSuccessfulRead(t *testing.T) {
 
 func TestHistorySnapshotCountEvictsLeastRecentlyUsed(t *testing.T) {
 	t.Parallel()
-	var cache observationSnapshots
+	cache := newObservationSnapshots(new(HistorySnapshotBudget))
 	now := time.Unix(0, 0)
 	tokens := make([]string, 0, historySnapshotCount)
 	for range historySnapshotCount {
@@ -109,7 +109,7 @@ func TestHistorySnapshotCountEvictsLeastRecentlyUsed(t *testing.T) {
 
 func TestHistorySnapshotConcurrentReplayHasDetachedPages(t *testing.T) {
 	t.Parallel()
-	var cache observationSnapshots
+	cache := newObservationSnapshots(new(HistorySnapshotBudget))
 	now := time.Unix(0, 0)
 	first, err := cache.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {
@@ -131,7 +131,7 @@ func TestHistorySnapshotConcurrentReplayHasDetachedPages(t *testing.T) {
 
 func TestHistorySnapshotBytePressureEvictsBeforeAdmittingNextPage(t *testing.T) {
 	t.Parallel()
-	var cache observationSnapshots
+	cache := newObservationSnapshots(new(HistorySnapshotBudget))
 	now := time.Unix(0, 0)
 	first, err := cache.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {
@@ -146,17 +146,85 @@ func TestHistorySnapshotBytePressureEvictsBeforeAdmittingNextPage(t *testing.T) 
 	entry := cache.entries[cursor.ID]
 	entry.bytes = historySnapshotBytes - entry.bytes + 1
 	cache.bytes = entry.bytes
-	second, err := cache.first(historySnapshotFixtures(), "filter", 1, now)
+	fleet := newObservationSnapshots(cache.HistorySnapshotBudget)
+	second, err := fleet.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cache.next(first.NextToken, "filter", 1, now); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("evicted byte-pressure cursor error = %v", err)
 	}
-	if _, err := cache.next(second.NextToken, "filter", 1, now); err != nil {
+	if _, err := fleet.next(second.NextToken, "filter", 1, now); err != nil {
 		t.Fatal(err)
 	}
 	if len(cache.entries) != 1 || cache.bytes > historySnapshotBytes {
 		t.Fatalf("cache count = %d, bytes = %d", len(cache.entries), cache.bytes)
+	}
+}
+
+func TestHistorySnapshotSharedBudgetEvictsAcrossViews(t *testing.T) {
+	t.Parallel()
+	budget := new(HistorySnapshotBudget)
+	registry, fleet := newObservationSnapshots(budget), newObservationSnapshots(budget)
+	now := time.Unix(0, 0)
+	first, err := registry.first(historySnapshotFixtures(), "filter", 1, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fleet.next(first.NextToken, "filter", 1, now); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("foreign view accepted registry cursor: %v", err)
+	}
+	var oldestFleetToken string
+	for range historySnapshotCount - 1 {
+		page, err := fleet.first(historySnapshotFixtures(), "filter", 1, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if oldestFleetToken == "" {
+			oldestFleetToken = page.NextToken
+		}
+	}
+	if _, err := registry.next(first.NextToken, "filter", 1, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fleet.first(historySnapshotFixtures(), "filter", 1, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.next(first.NextToken, "filter", 1, now); err != nil {
+		t.Fatalf("recent registry cursor evicted: %v", err)
+	}
+	if _, err := fleet.next(oldestFleetToken, "filter", 1, now); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("shared count budget failed to evict oldest fleet cursor: %v", err)
+	}
+
+}
+
+func TestHistorySnapshotSharedBudgetKeepsProfilesIsolated(t *testing.T) {
+	t.Parallel()
+	profile := new(HistorySnapshotBudget)
+	registry, fleet := newObservationSnapshots(profile), newObservationSnapshots(profile)
+	other := newObservationSnapshots(new(HistorySnapshotBudget))
+	now := time.Unix(0, 0)
+	page, err := registry.first(historySnapshotFixtures(), "filter", 1, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range historySnapshotCount + 1 {
+		if _, err := other.first(historySnapshotFixtures(), "filter", 1, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := other.next(page.NextToken, "filter", 1, now); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("foreign profile accepted cursor: %v", err)
+	}
+	if _, err := registry.next(page.NextToken, "filter", 1, now); err != nil {
+		t.Fatalf("other profile pressure evicted cursor: %v", err)
+	}
+	// Pruning through another view expires the shared idle page.
+	if _, err := fleet.first(historySnapshotFixtures(), "filter", 1, now.Add(historySnapshotIdle)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.next(page.NextToken, "filter", 1, now.Add(historySnapshotIdle)); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("shared idle page still available: %v", err)
 	}
 }

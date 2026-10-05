@@ -169,6 +169,7 @@ func New(
 	startsDone := make(chan struct{})
 	close(startsDone)
 	registry := &registry{
+		historySnapshots:            newObservationSnapshots(new(HistorySnapshotBudget)),
 		sessions:                    make(map[string]workersessions.Session),
 		publications:                make(map[string]*publication),
 		supervisions:                make(map[string]*supervision),

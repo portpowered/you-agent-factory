@@ -128,11 +128,16 @@ func NewWithCapturedActivity(
 	clock platformclock.Source, scheduler platformclock.TimerSource,
 	providerSessions providersessions.Service, recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
+	snapshots *HistorySnapshotBudget,
 ) (workersessions.Service, error) {
+	if snapshots == nil {
+		return nil, workersessions.ErrObservationProjectionUnavailable
+	}
 	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording)
 	if err != nil {
 		return nil, err
 	}
+	service.(*registry).historySnapshots.HistorySnapshotBudget = snapshots
 	if captured != nil {
 		reader, err := NewLogReader(captured, logger)
 		if err != nil {

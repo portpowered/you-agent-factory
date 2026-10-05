@@ -27,17 +27,28 @@ const (
 	historyCursorMaxBytes      = 4096
 )
 
-// Each registry belongs to one constructed profile. Tokens resolve only in that
-// registry's cache, and signatures prevent changing their acknowledged offset.
-// Serialized facts freeze sampled values and detach every returned page.
-type observationSnapshots struct {
+// HistorySnapshotBudget bounds retained history pages across every query view
+// in one constructed profile. Composition supplies the same budget to its
+// registry and fleet views; separate profiles never share one.
+type HistorySnapshotBudget struct {
 	mu      sync.Mutex
 	entries map[string]*observationSnapshot
 	bytes   int
 	access  uint64
 }
 
+// A view shares storage limits without accepting another view's cursors.
+type observationSnapshots struct {
+	*HistorySnapshotBudget
+	owner *byte
+}
+
+func newObservationSnapshots(budget *HistorySnapshotBudget) observationSnapshots {
+	return observationSnapshots{HistorySnapshotBudget: budget, owner: new(byte)}
+}
+
 type observationSnapshot struct {
+	owner   *byte
 	filter  string
 	rows    [][]byte
 	secret  [16]byte
@@ -83,7 +94,7 @@ func (s *observationSnapshots) first(observations []workersessions.Observation, 
 	if err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
-	entry := &observationSnapshot{filter: filter, rows: rows, bytes: size, touched: now}
+	entry := &observationSnapshot{owner: s.owner, filter: filter, rows: rows, bytes: size, touched: now}
 	result, err := entry.page(0, limit)
 	if err != nil || len(rows) <= limit {
 		return result, err
@@ -120,7 +131,7 @@ func (s *observationSnapshots) next(token, filter string, limit int, now time.Ti
 	defer s.mu.Unlock()
 	s.prune(now)
 	entry := s.entries[cursor.ID]
-	if entry == nil || entry.filter != filter || cursor.Offset < 1 || cursor.Offset >= len(entry.rows) || !entry.validCursor(cursor) {
+	if entry == nil || entry.owner != s.owner || entry.filter != filter || cursor.Offset < 1 || cursor.Offset >= len(entry.rows) || !entry.validCursor(cursor) {
 		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrInvalidObservationPagination
 	}
 	result, err := entry.page(cursor.Offset, limit)

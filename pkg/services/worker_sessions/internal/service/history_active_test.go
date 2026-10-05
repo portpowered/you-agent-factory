@@ -170,7 +170,7 @@ func TestFleetHistorySamplesAllOwnersBeforeSharedArchive(t *testing.T) {
 	query := NewFleetHistory(func(context.Context) ([]workersessions.Service, error) {
 		catalogCalls++
 		return []workersessions.Service{factory, direct, factory}, nil
-	}, fake, clock, logging.NoopLogger{})
+	}, fake, clock, logging.NoopLogger{}, new(HistorySnapshotBudget))
 	for _, tc := range []struct {
 		history workersessions.ObservationHistory
 		states  []workersessions.State
@@ -217,7 +217,7 @@ func TestFleetHistoryFreezesMembershipAndRejectsForeignCursors(t *testing.T) {
 		calls++
 		return []workersessions.Service{source}, nil
 	}
-	query := NewFleetHistory(catalog, &historyCatalogFake{}, source.clock, logging.NoopLogger{})
+	query := NewFleetHistory(catalog, &historyCatalogFake{}, source.clock, logging.NoopLogger{}, new(HistorySnapshotBudget))
 	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
 	first, err := query.ListWorkerSessionObservations(t.Context(), req)
 	if err != nil || first.NextToken == "" {
@@ -231,7 +231,7 @@ func TestFleetHistoryFreezesMembershipAndRejectsForeignCursors(t *testing.T) {
 	if err != nil || len(second.Observations) != 1 || second.Observations[0].WorkerSessionID != "b" || second.Observations[0].State != workersessions.StateRunning || second.Observations[0].WorkIDs[0] != "work-1" || second.NextToken != "" || calls != 1 {
 		t.Fatalf("frozen=%+v, %v calls=%d", second, err, calls)
 	}
-	foreign := NewFleetHistory(catalog, &historyCatalogFake{}, source.clock, logging.NoopLogger{})
+	foreign := NewFleetHistory(catalog, &historyCatalogFake{}, source.clock, logging.NoopLogger{}, new(HistorySnapshotBudget))
 	if _, err := foreign.ListWorkerSessionObservations(t.Context(), req); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("foreign token: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestFleetHistoryKeepsScopedIdentityAndPropagatesUnavailable(t *testing.T) {
 	second.observations["shared-id"].factorySessionID = "factory-2"
 	query := NewFleetHistory(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{first, second}, nil
-	}, nil, first.clock, logging.NoopLogger{})
+	}, nil, first.clock, logging.NoopLogger{}, new(HistorySnapshotBudget))
 	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
 	one, err := query.ListWorkerSessionObservations(t.Context(), req)
 	if err != nil || len(one.Observations) != 1 || one.NextToken == "" {
