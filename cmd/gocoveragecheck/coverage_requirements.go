@@ -1,16 +1,16 @@
 package main
 
 import (
-	"path"
 	"slices"
+	"strings"
 )
 
 // coverageRequirementApplies reports whether a package contributes to the
 // active lane's aggregate and package-local coverage requirements. Wire
-// packages are construction-only boundaries: unit tests may still execute
-// them, but the unit lane does not require statement coverage from them.
+// packages are composition boundaries with no unit tests or unit coverage
+// requirements, including private implementation descendants during migration.
 func coverageRequirementApplies(lane string, importPath string) bool {
-	return lane == functionalCoverageSuite || path.Base(importPath) != "wire"
+	return lane == functionalCoverageSuite || !slices.Contains(strings.Split(importPath, "/"), "wire")
 }
 
 func filterCoverageRequirementPackages(lane string, packages []string) []string {

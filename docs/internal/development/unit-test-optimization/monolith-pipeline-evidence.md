@@ -94,6 +94,10 @@ Those are legacy private behavior/composition witnesses pending owner
 migration; reclassification does not make them valid public functional tests
 or make Wire's remaining behavioral production code inert. New application
 functional tests use `root.BuildProcess`.
+Coverage tooling separates production measurement from unit-test selection:
+functional profiles still instrument Wire, while unit invocations and unit
+floor enforcement exclude its entire tree. The coverage-checker maintenance
+suite verifies that distinction and passes with the updated lane classifier.
 
 Native production coverage comparisons across ten changed fixture owners cover
 **11,481 statements** and lose **zero previously covered production blocks**:

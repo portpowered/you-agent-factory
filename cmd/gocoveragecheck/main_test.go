@@ -28,6 +28,9 @@ func TestIsBackendCoveragePackage(t *testing.T) {
 	}{
 		{name: "factory command", importPath: modulePath + "/cmd/factory", want: false},
 		{name: "backend package", importPath: modulePath + "/pkg/config", want: true},
+		{name: "application wiring measured through functional tests", importPath: modulePath + "/pkg/wire", want: true},
+		{name: "private legacy wiring measured through functional tests", importPath: modulePath + "/pkg/wire/internal/managedbackend", want: true},
+		{name: "service wiring measured through functional tests", importPath: modulePath + "/pkg/services/models/wire", want: true},
 		{name: "contract package", importPath: modulePath + "/pkg/transports/http/contracttests", want: false},
 		{name: "integration package", importPath: modulePath + "/pkg/transports/http/servertests/factorysessionsse", want: false},
 		{name: "maintenance package", importPath: modulePath + "/pkg/services/factory_runtime/internal/exhaustiontests", want: false},
@@ -48,6 +51,15 @@ func TestIsBackendCoveragePackage(t *testing.T) {
 				t.Fatalf("isBackendCoveragePackage(%q) = %t, want %t", tc.importPath, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWireCoverageDoesNotSelectWireUnitTestsOrFloors(t *testing.T) {
+	t.Parallel()
+	for _, pkg := range []string{modulePath + "/pkg/wire", modulePath + "/pkg/wire/internal/managedbackend", modulePath + "/pkg/services/models/wire"} {
+		if !isBackendCoveragePackage(pkg) || isBackendUnitTestPackage(pkg) || coverageRequirementApplies(unitCoverageSuite, pkg) || !coverageRequirementApplies(functionalCoverageSuite, pkg) {
+			t.Fatalf("wire coverage/test selection is inconsistent for %s", pkg)
+		}
 	}
 }
 
