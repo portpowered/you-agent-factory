@@ -15,7 +15,6 @@ cmd/gocoveragecheck/manifest.go: unreachable func: validateCoverageManifest
 cmd/gocoveragecheck/manifest.go: unreachable func: validateCoverageManifestAt
 cmd/gocoveragecheck/manifest.go: unreachable func: validateCoverageManifestAtWithTotals
 cmd/gocoveragecheck/manifest_default_floor.go: unreachable func: checkCoverageDefaultFloor
-cmd/pkgboundarycheck/petri_public_surface.go: unreachable func: petriPublicSurfaceFindingSummary
 cmd/prosecheck/cli_manifest.go: unreachable func: ExtractCLIManifestSpans
 cmd/prosecheck/markdown.go: unreachable func: AnalyzeMarkdown
 internal/builtcliacceptance/env.go: unreachable func: ProcessEnvForIsolatedHome
