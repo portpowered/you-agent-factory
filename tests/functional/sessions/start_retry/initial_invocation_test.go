@@ -72,7 +72,57 @@ func testInitialOpeningChildInvocation(t *testing.T, sessions factorysessions.Se
 	if err != nil || read.Status != factorysessions.LifecycleStatusSucceeded {
 		t.Fatalf("read durable child completion: %#v, %v", read, err)
 	}
+	assertInitialChildResponses(t, sessions, *response.SessionId)
 	assertInitialOpeningProviderSelection(t, effects, scenario.candidateDir)
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+}
+
+func assertInitialChildResponses(t *testing.T, sessions factorysessions.Service, sessionID string) {
+	t.Helper()
+	// The legacy response subscription selects only live sessions. This public
+	// cursor selects the completed durable child's retained progress instead.
+	subscription, err := sessions.SubscribeResponses(t.Context(), factorysessions.SessionResponseSubscriptionRequest{SessionID: sessionID})
+	if err != nil {
+		t.Fatalf("subscribe durable child responses: %v", err)
+	}
+	defer subscription.Cursor.Detach()
+	events, err := subscription.Cursor.Next(t.Context())
+	if err != nil {
+		t.Fatalf("read retained child responses: %v", err)
+	}
+	var messages, terminals int
+	var lastSequence int64
+	for _, event := range events {
+		if event.FactorySessionID != sessionID || event.Sequence <= lastSequence || event.DispatchID == "" {
+			t.Fatalf("child response lost identity or order: session=%s dispatch=%s sequence=%d after=%d", event.FactorySessionID, event.DispatchID, event.Sequence, lastSequence)
+		}
+		lastSequence = event.Sequence
+		if event.Provenance.NativeEventType == "STREAM_COMPLETED" && event.Phase == factorysessions.ResponseEventPhaseCompleted {
+			terminals++
+		}
+		if assertInitialChildNativeMessage(t, event) {
+			messages++
+		}
+	}
+	if messages != 1 || terminals != 1 {
+		t.Fatalf("retained child responses: native messages=%d terminal completions=%d, want one each", messages, terminals)
+	}
+}
+
+func assertInitialChildNativeMessage(t *testing.T, event factorysessions.FactoryResponseEvent) bool {
+	t.Helper()
+	// Compatibility deltas may repeat text from the provider's snapshot.
+	// Native provenance distinguishes callback delivery from result shaping.
+	if event.Kind != factorysessions.ResponseEventKindMessage || event.Phase != factorysessions.ResponseEventPhaseCompleted || event.Provenance.Delivery != factorysessions.ResponseEventDeliveryNativeStream {
+		return false
+	}
+	var message factorysessions.ResponseEventMessage
+	if err := json.Unmarshal(event.Payload, &message); err != nil {
+		t.Fatalf("decode provider message: %v", err)
+	}
+	if event.Provenance.Provider != "codex" || len(message.ContentBlocks) != 1 || message.ContentBlocks[0].Text != "initial opening COMPLETE" {
+		t.Fatalf("child provider message = %s provenance=%#v", event.Payload, event.Provenance)
+	}
+	return true
 }
