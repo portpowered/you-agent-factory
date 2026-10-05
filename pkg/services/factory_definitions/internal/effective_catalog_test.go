@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -293,8 +295,12 @@ func (l captureLogger) Info(msg string, kv ...any) {
 func (l captureLogger) Warn(msg string, kv ...any) {
 	*l.calls = append(*l.calls, capturedLogCall{level: "warn", msg: msg, kv: kv})
 }
-func (l captureLogger) Error(msg string, kv ...any)   {}
-func (l captureLogger) Verbose(msg string, kv ...any) {}
+func (l captureLogger) Error(msg string, kv ...any) {
+	*l.calls = append(*l.calls, capturedLogCall{level: "error", msg: msg, kv: kv})
+}
+func (l captureLogger) Verbose(msg string, kv ...any) {
+	*l.calls = append(*l.calls, capturedLogCall{level: "verbose", msg: msg, kv: kv})
+}
 
 func hasKV(kv []any, key string, value any) bool {
 	for i := 0; i+1 < len(kv); i += 2 {
@@ -344,17 +350,17 @@ func TestNewCatalogPathsServiceRejectsMissingCollaborators(t *testing.T) {
 	}
 }
 
-func TestNewCatalogPathsServiceAcceptsNilLogger(t *testing.T) {
+func TestNewCatalogPathsServiceAcceptsExplicitNoopLogger(t *testing.T) {
 	t.Parallel()
 
 	listEffective, resolveNamedFactory, resolveCurrentDir := validCatalogPathsCollaborators()
 
-	service, err := factoryinternal.NewCatalogPathsService(listEffective, resolveNamedFactory, resolveCurrentDir, nil)
+	service, err := factoryinternal.NewCatalogPathsService(listEffective, resolveNamedFactory, resolveCurrentDir, logging.NoopLogger{})
 	if err != nil {
-		t.Fatalf("NewCatalogPathsService with nil logger: unexpected error: %v", err)
+		t.Fatalf("NewCatalogPathsService with explicit Noop logger: unexpected error: %v", err)
 	}
 	if _, err := service.ListEffectiveFactories(context.Background(), factorydefinitions.ListEffectiveFactoriesRequest{}); err != nil {
-		t.Fatalf("ListEffectiveFactories with nil-logger-constructed service: unexpected error: %v", err)
+		t.Fatalf("ListEffectiveFactories with Noop-constructed service: unexpected error: %v", err)
 	}
 }
 
@@ -676,5 +682,158 @@ func TestCatalogPathsServiceResolveCurrentFactoryLocationPropagatesTypedError(t 
 	_, err = service.ResolveCurrentFactoryLocation(context.Background(), factorydefinitions.ResolveCurrentFactoryLocationRequest{RootDir: "/project"})
 	if !errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
 		t.Fatalf("ResolveCurrentFactoryLocation error = %v, want errors.Is ErrFactoryLayoutNotFound", err)
+	}
+}
+
+type catalogOutcome struct {
+	name        string
+	cause       error
+	reason      string
+	preCanceled bool
+	empty       bool
+}
+
+func TestCatalogPathsSelectedLoggerPreservesOperationOutcomes(t *testing.T) {
+	t.Parallel()
+	cases := []catalogOutcome{
+		{name: "success"}, {name: "empty", empty: true},
+		{name: "generic", cause: errors.New("private-name /private/path secret-error"), reason: "operation_failed"},
+		{name: "invalid", cause: factorydefinitions.ErrInvalidNamedFactoryName, reason: "invalid_name"},
+		{name: "missing", cause: factorydefinitions.ErrNamedFactoryNotFound, reason: "named_factory_not_found"},
+		{name: "layout", cause: factorydefinitions.ErrFactoryLayoutNotFound, reason: "factory_layout_not_found"},
+		{name: "canceled", cause: context.Canceled, reason: "context_canceled"},
+		{name: "deadline", cause: context.DeadlineExceeded, reason: "context_deadline_exceeded"},
+		{name: "pre-canceled", cause: context.Canceled, reason: "context_canceled", preCanceled: true},
+		{name: "pre-expired", cause: context.DeadlineExceeded, reason: "context_deadline_exceeded", preCanceled: true},
+	}
+	for _, operation := range []string{"list_effective_factories", "resolve_named_factory", "resolve_current_factory_location"} {
+		for _, outcome := range cases {
+			t.Run(operation+"/"+outcome.name, func(t *testing.T) {
+				t.Parallel()
+				checkCatalogOutcome(t, operation, outcome)
+			})
+		}
+	}
+}
+
+func checkCatalogOutcome(t *testing.T, operation string, outcome catalogOutcome) {
+	t.Helper()
+	ctx := catalogOutcomeContext(t, outcome)
+	var wantErr error
+	if outcome.cause != nil {
+		wantErr = fmt.Errorf("private-name /private/path: %w", outcome.cause)
+	}
+	for _, quiet := range []bool{false, true} {
+		capture, calls := newCaptureLogger()
+		var logger logging.Logger = capture
+		if quiet {
+			logger = logging.NoopLogger{}
+		}
+		invoke, want, zero, fields, called := catalogOutcomeOperation(t, operation, outcome.empty, ctx, wantErr, logger)
+		got, err := invoke(ctx)
+		expectedErr := wantErr
+		if outcome.preCanceled && operation != "list_effective_factories" {
+			expectedErr = ctx.Err()
+		}
+		if err != expectedErr { //nolint:errorlint // The operation must return the original error unchanged.
+			t.Fatalf("quiet=%v error=%v, want original %v", quiet, err, expectedErr)
+		}
+		if !errors.Is(err, outcome.cause) {
+			t.Fatalf("quiet=%v error=%v, want original %v", quiet, err, expectedErr)
+		}
+		expected := want
+		if expectedErr != nil {
+			expected = zero
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("quiet=%v result=%#v, want %#v", quiet, got, expected)
+		}
+		shouldCall := !outcome.preCanceled || operation == "list_effective_factories"
+		if *called != shouldCall {
+			t.Fatalf("collaborator called=%v, want %v", *called, shouldCall)
+		}
+		expectedCalls := expectedCatalogOutcomeRecords(operation, outcome, quiet, expectedErr, fields)
+		if !reflect.DeepEqual(*calls, expectedCalls) {
+			t.Fatalf("quiet=%v logs=%#v, want %#v", quiet, *calls, expectedCalls)
+		}
+	}
+}
+
+func catalogOutcomeContext(t *testing.T, outcome catalogOutcome) context.Context {
+	t.Helper()
+	ctx := t.Context()
+	if outcome.preCanceled {
+		var cancel context.CancelFunc
+		if errors.Is(outcome.cause, context.Canceled) {
+			ctx, cancel = context.WithCancel(ctx)
+		} else {
+			ctx, cancel = context.WithDeadline(ctx, time.Time{})
+		}
+		cancel()
+	}
+	return ctx
+}
+
+func expectedCatalogOutcomeRecords(operation string, outcome catalogOutcome, quiet bool, expectedErr error, fields []any) []capturedLogCall {
+	expectedCalls := []capturedLogCall{}
+	if !quiet {
+		prefix := "factory_definitions.catalog_paths." + operation
+		expectedCalls = append(expectedCalls, capturedLogCall{level: "info", msg: prefix + ".started"})
+		terminal := capturedLogCall{level: "info", msg: prefix + ".finished", kv: fields}
+		if expectedErr != nil {
+			terminal = capturedLogCall{level: "warn", msg: prefix + ".failed", kv: []any{"reason", outcome.reason}}
+		}
+		expectedCalls = append(expectedCalls, terminal)
+	}
+	return expectedCalls
+}
+
+func catalogOutcomeOperation(t *testing.T, operation string, empty bool, ctx context.Context, cause error, logger logging.Logger) (
+	func(context.Context) (any, error), any, any, []any, *bool,
+) {
+	t.Helper()
+	called := false
+	listRequest := factorydefinitions.ListEffectiveFactoriesRequest{ProjectRoot: "/private/project", GlobalRoot: "/private/global"}
+	namedRequest := factorydefinitions.ResolveNamedFactoryRequest{ProjectRoot: "/private/project", GlobalRoot: "/private/global", Name: "private-name"}
+	listResult := factorydefinitions.ListEffectiveFactoriesResult{Entries: []factorydefinitions.EffectiveFactoryCatalogEntry{{Name: "private-name", Definition: &factorydefinitions.FactoryConfig{Project: "private-project"}}}}
+	listResult.Diagnostics = []factorydefinitions.EffectiveFactoryCatalogDiagnostic{{Code: factorydefinitions.EffectiveFactoryCatalogDiagnosticMalformed, Source: factorydefinitions.EffectiveFactoryCatalogSourceGlobal, Name: "omitted", Message: "invalid definition"}}
+	if empty {
+		listResult = factorydefinitions.ListEffectiveFactoriesResult{}
+	}
+	namedResult := factorydefinitions.ResolveNamedFactoryResult{Resolution: factorydefinitions.NamedFactoryResolution{Name: "private-name", FactoryDir: "/private/path", Source: factorydefinitions.NamedFactoryResolutionSourceProjectLocal}}
+	listEffective := func(gotCtx context.Context, request factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+		called = true
+		if gotCtx != ctx || request != listRequest {
+			t.Fatal("list request/context changed")
+		}
+		return listResult, cause
+	}
+	named := func(gotCtx context.Context, request factorydefinitions.ResolveNamedFactoryRequest) (factorydefinitions.ResolveNamedFactoryResult, error) {
+		called = true
+		if gotCtx != ctx || request != namedRequest {
+			t.Fatal("named request/context changed")
+		}
+		return namedResult, cause
+	}
+	current := func(root string) (string, error) {
+		called = true
+		if root != "/private/root" {
+			t.Fatal("current root changed")
+		}
+		return "/private/path", cause
+	}
+	service, err := factoryinternal.NewCatalogPathsService(listEffective, named, current, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	switch operation {
+	case "list_effective_factories":
+		return func(ctx context.Context) (any, error) { return service.ListEffectiveFactories(ctx, listRequest) }, listResult, factorydefinitions.ListEffectiveFactoriesResult{}, []any{"entry_count", len(listResult.Entries)}, &called
+	case "resolve_named_factory":
+		return func(ctx context.Context) (any, error) { return service.ResolveNamedFactory(ctx, namedRequest) }, namedResult, factorydefinitions.ResolveNamedFactoryResult{}, []any{"source", string(namedResult.Resolution.Source)}, &called
+	default:
+		return func(ctx context.Context) (any, error) {
+			return service.ResolveCurrentFactoryLocation(ctx, factorydefinitions.ResolveCurrentFactoryLocationRequest{RootDir: "/private/root"})
+		}, factorydefinitions.ResolveCurrentFactoryLocationResult{FactoryDir: "/private/path"}, factorydefinitions.ResolveCurrentFactoryLocationResult{}, nil, &called
 	}
 }
