@@ -25,6 +25,7 @@ type modelsRuntimeBind struct {
 type runtimeOpeningCleanup struct {
 	mu      sync.Mutex
 	actions []func() error
+	models  []func() error
 	closeMu sync.Mutex
 }
 
@@ -60,7 +61,7 @@ func (cleanup *runtimeOpeningCleanup) OwnModelsScope(
 	// existing lifetime order: release this scope after every other owned
 	// resource, even when durable execution was registered before Models opened.
 	cleanup.mu.Lock()
-	cleanup.actions = append([]func() error{closeScope}, cleanup.actions...)
+	cleanup.models = append(cleanup.models, closeScope)
 	cleanup.mu.Unlock()
 }
 
@@ -93,8 +94,27 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	defer cleanup.closeMu.Unlock()
 	cleanup.mu.Lock()
 	actions := cleanup.actions
+	models := cleanup.models
 	cleanup.actions = nil
+	cleanup.models = nil
 	cleanup.mu.Unlock()
+	pending, closeErr := cleanup.releaseActions(actions)
+	cleanup.mu.Lock()
+	consumersAdded := len(cleanup.actions) != 0
+	cleanup.mu.Unlock()
+	// A failed consumer still owns its dependency. Release independent resources
+	// now, but keep Models available until every consumer has closed successfully.
+	if closeErr == nil && !consumersAdded {
+		models, closeErr = cleanup.releaseActions(models)
+	}
+	cleanup.mu.Lock()
+	cleanup.actions = append(pending, cleanup.actions...)
+	cleanup.models = append(models, cleanup.models...)
+	cleanup.mu.Unlock()
+	return closeErr
+}
+
+func (*runtimeOpeningCleanup) releaseActions(actions []func() error) ([]func() error, error) {
 	var closeErr error
 	for index := len(actions) - 1; index >= 0; index-- {
 		if err := actions[index](); err != nil {
@@ -109,10 +129,7 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 			pending = append(pending, action)
 		}
 	}
-	cleanup.mu.Lock()
-	cleanup.actions = append(pending, cleanup.actions...)
-	cleanup.mu.Unlock()
-	return closeErr
+	return pending, closeErr
 }
 
 func bindModelsRuntimeScope(
