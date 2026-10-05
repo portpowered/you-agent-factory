@@ -286,7 +286,8 @@ func (r *registry) cancelRuntimeAttemptControl(
 	if result, complete, err := r.awaitRuntimeAttemptControl(req.ID, action, attempt); complete {
 		return result, err
 	}
-	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
+	target := frozenControlTarget{runtime: attempt, dispatchID: attempt.dispatchID}
+	reservation, err := r.beginFrozenControlHistory(ctx, req.ID, action, req.RequestID, target)
 	if err != nil {
 		attempt.resolveControl(action, "", err)
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}, err
@@ -300,7 +301,7 @@ func (r *registry) cancelRuntimeAttemptControl(
 			cancelContext = context.WithoutCancel(cancelContext)
 		}
 	}
-	cancel, err := attempt.controlCancel(cancelContext)
+	cancel, err := r.frozenRuntimeCancel(req.ID, attempt)
 	if err == nil {
 		if cancelContext == nil {
 			cancelContext = context.Background()
@@ -324,7 +325,12 @@ func (r *registry) awaitRuntimeAttemptControl(
 	attempt *runtimeAttempt,
 ) (workersessions.ControlResult, bool, error) {
 	for {
-		claimed, wait, completed := attempt.claimControl()
+		claimed, wait, completed, claimErr := r.claimFrozenRuntimeControl(workerSessionID, attempt)
+		if claimErr != nil {
+			current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: workerSessionID})
+			r.logger.Warn("worker session control refused", "sessionID", publicWorkerID(workerSessionID), "attemptID", attempt.attemptID, "action", string(action), "outcome", string(workersessions.ControlOutcomeFailed))
+			return r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeFailed, attempt), true, claimErr
+		}
 		if completed != nil {
 			<-completed
 			current, err := r.Get(context.Background(), workersessions.GetRequest{ID: workerSessionID})

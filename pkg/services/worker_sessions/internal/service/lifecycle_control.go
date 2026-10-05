@@ -317,14 +317,14 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	req.ID = r.workerAddress(req.ID, req.FactorySessionID)
-	if attempt := r.runtimeAttemptFor(req.ID); attempt != nil {
-		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, attempt)
-	}
 	target, err := r.freezeControlTarget(req.ID)
 	if err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
-	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
+	if target.runtime != nil {
+		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, target.runtime)
+	}
+	reservation, err := r.beginFrozenControlHistory(ctx, req.ID, action, req.RequestID, target)
 	if err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}

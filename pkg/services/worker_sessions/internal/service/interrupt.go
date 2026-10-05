@@ -200,7 +200,21 @@ func (r *registry) beginControlHistory(
 	action workersessions.ControlAction,
 	requestID string,
 ) (*controlHistoryReservation, error) {
-	session, supervision, err := r.controlTarget(id)
+	target, err := r.freezeControlTarget(r.workerAddress(id))
+	if err != nil {
+		return nil, err
+	}
+	return r.beginFrozenControlHistory(ctx, id, action, requestID, target)
+}
+
+func (r *registry) beginFrozenControlHistory(
+	ctx context.Context,
+	id string,
+	action workersessions.ControlAction,
+	requestID string,
+	target frozenControlTarget,
+) (*controlHistoryReservation, error) {
+	session, _, err := r.controlTarget(id)
 	if err != nil {
 		return nil, err
 	}
@@ -214,19 +228,16 @@ func (r *registry) beginControlHistory(
 	if !pub.control.acquire() {
 		return nil, nil
 	}
-	runtimeAttempt := r.runtimeAttemptFor(id)
+	supervision, runtimeAttempt := target.supervision, target.runtime
 
 	pub.mu.Lock()
 	open := pub.open
-	dispatchID := ""
+	dispatchID := target.dispatchID
 	turnID := pub.turnID
 	if supervision != nil {
 		supervision.mu.Lock()
-		dispatchID = strings.TrimSpace(supervision.dispatchID)
 		turnID = strings.TrimSpace(supervision.turnID)
 		supervision.mu.Unlock()
-	} else if runtimeAttempt != nil {
-		dispatchID = strings.TrimSpace(runtimeAttempt.dispatchID)
 	}
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
