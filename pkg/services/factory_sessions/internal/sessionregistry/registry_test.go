@@ -19,3 +19,23 @@ func TestDefaultSessionUsesDeterministicIdentityOrdering(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveGenerationPreservesReplacementAndPeerSelection(t *testing.T) {
+	t.Parallel()
+	registry := New()
+	old := &livesession.LiveSession{ID: "a"}
+	replacement := &livesession.LiveSession{ID: "a"}
+	peer := &livesession.LiveSession{ID: "b"}
+	registry.Upsert(old, true)
+	registry.Upsert(peer, false)
+	registry.Upsert(replacement, true)
+	if registry.RemoveGeneration(old) || registry.Get("a") != replacement || registry.Current() != replacement {
+		t.Fatal("stale retirement removed or deselected the replacement")
+	}
+	if !registry.RemoveGeneration(replacement) || registry.Get("a") != nil || registry.Current() != peer {
+		t.Fatal("current retirement did not preserve peer selection")
+	}
+	if registry.RemoveGeneration(replacement) || registry.Get("b") != peer {
+		t.Fatal("repeated retirement removed the peer")
+	}
+}

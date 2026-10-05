@@ -70,32 +70,38 @@ type (
 	ReleaseSessionInvocationWaiter = func()
 )
 
+// InvocationAuthority supplies addressed queries, admission and a waiter whose
+// fallback uses the process-selected scheduler.
+type InvocationAuthority interface {
+	FactoryConfig(string) (*factorydefinitions.FactoryConfig, error)
+	SubmitWork(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	Observe(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
+	WaitSession(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
+}
+
+// SessionScopeControl is the exact lifecycle capability needed by invocation.
+type SessionScopeControl interface {
+	CancelLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+}
+
 // SessionOwner coordinates the complete session invocation lifecycle through
 // narrow, explicit collaborators.
 type SessionOwner struct {
-	factoryConfig   func(string) (*factorydefinitions.FactoryConfig, error)
-	submitWork      func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	observe         func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
-	waitNextFn      func(context.Context) error
-	waitSessionFn   func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
-	telemetry       SessionInvocationTelemetry
-	specialCase     SessionInvocationSpecialCase
-	interpolation   factorydefinitions.InvocationInterpolationService
-	workTypes       factorydefinitions.InvocationWorkTypeService
-	inputFiles      fileeffects.InvocationInputReader
-	workService     work.Service
-	cancelOnTimeout func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	authority     InvocationAuthority
+	controls      SessionScopeControl
+	telemetry     SessionInvocationTelemetry
+	specialCase   SessionInvocationSpecialCase
+	interpolation factorydefinitions.InvocationInterpolationService
+	workTypes     factorydefinitions.InvocationWorkTypeService
+	inputFiles    fileeffects.InvocationInputReader
+	workService   work.Service
 }
 
 // NewSessionOwner constructs the canonical Factory Session invocation owner.
-// waitSession, when present, opens one event-driven waiter per invocation wait
-// loop; waitNext remains the per-iteration fallback wait.
+// The authority owns event subscription and fallback scheduling.
 func NewSessionOwner(
-	factoryConfig func(string) (*factorydefinitions.FactoryConfig, error),
-	submitWork func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error),
-	observe func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error),
-	waitNext func(context.Context) error,
-	waitSession func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter),
+	authority InvocationAuthority,
+	controls SessionScopeControl,
 	telemetry SessionInvocationTelemetry,
 	specialCase SessionInvocationSpecialCase,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -104,23 +110,10 @@ func NewSessionOwner(
 	workService work.Service,
 ) *SessionOwner {
 	return &SessionOwner{
-		factoryConfig: factoryConfig, submitWork: submitWork, observe: observe,
-		waitNextFn: waitNext, waitSessionFn: waitSession,
+		authority: authority, controls: controls,
 		telemetry: telemetry, specialCase: specialCase,
 		interpolation: interpolation, workTypes: workTypes, inputFiles: inputFiles,
 		workService: workService,
-	}
-}
-
-// BindCancelOnTimeout supplies the live-session lifecycle operation used when
-// this owner reaches a configured invocation wait timeout. The callback is
-// optional so isolated owner tests and non-live compatibility owners retain
-// their existing construction contract.
-func (o *SessionOwner) BindCancelOnTimeout(
-	cancel func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error),
-) {
-	if o != nil {
-		o.cancelOnTimeout = cancel
 	}
 }
 
@@ -137,9 +130,6 @@ func (o *SessionOwner) Invoke(
 	sessionID string,
 	request InvocationRequest,
 ) (FactoryInvocationResult, error) {
-	if o == nil || o.factoryConfig == nil || o.submitWork == nil || o.observe == nil || o.workService == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
-	}
 	prepared, err := o.prepareInvocation(ctx, sessionID, request)
 	if err != nil {
 		return FactoryInvocationResult{}, err
@@ -172,7 +162,7 @@ func (o *SessionOwner) prepareInvocation(
 	sessionID string,
 	request InvocationRequest,
 ) (invocationPreparation, error) {
-	factoryCfg, err := o.factoryConfig(sessionID)
+	factoryCfg, err := o.authority.FactoryConfig(sessionID)
 	if err != nil {
 		return invocationPreparation{}, err
 	}
@@ -187,18 +177,9 @@ func (o *SessionOwner) prepareInvocation(
 		return invocationPreparation{}, qualifySessionInvocationError(factoryCfg, err)
 	}
 	o.normalizationSuccess(factoryCfg, resolved.Source)
-	if o.interpolation == nil {
-		return invocationPreparation{}, fmt.Errorf("Factory Definition invocation interpolation service is unavailable")
-	}
-	if o.inputFiles == nil {
-		return invocationPreparation{}, fmt.Errorf("Factory Session invocation input file reader is unavailable")
-	}
 	if err := o.interpolation.ValidateInvocationInterpolation(factoryCfg, work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), factorydefinitions.FileReader(o.inputFiles)); err != nil {
 		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
 		return invocationPreparation{}, qualifySessionInvocationError(factoryCfg, err)
-	}
-	if o.workTypes == nil {
-		return invocationPreparation{}, fmt.Errorf("Factory Definition invocation Work Type service is unavailable")
 	}
 	workTypeName, err := o.workTypes.DefaultWorkType(factoryCfg)
 	if err != nil {
@@ -222,7 +203,7 @@ func (o *SessionOwner) submitInvocation(
 	if submissionContextErr != nil {
 		return work.WorkRequestSubmitResult{}, nil, submissionContextErr
 	}
-	submitResult, err := o.submitWork(ctx, sessionID, work.SubmitRequest{
+	submitResult, err := o.authority.SubmitWork(ctx, sessionID, work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestID),
 		WorkTypeID:          prepared.workTypeName,
 		Content:             prepared.resolved.Content,
@@ -277,9 +258,6 @@ func (o *SessionOwner) ResolveInvocationInput(
 	cfg *factorydefinitions.FactoryConfig,
 	request factorysessions.InvocationRequest,
 ) (factorysessions.ResolvedInvocationInput, error) {
-	if o == nil || o.workService == nil {
-		return factorysessions.ResolvedInvocationInput{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
-	}
 	resolved, err := o.resolveSessionInvocationInput(context.Background(), cfg, request)
 	if err != nil {
 		return factorysessions.ResolvedInvocationInput{}, err

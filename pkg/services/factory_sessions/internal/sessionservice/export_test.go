@@ -603,7 +603,7 @@ func TestEventDrivenInvocationWaiterWakesOnRelevantEventBeforeFallback(t *testin
 	events <- interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeWorkStateChange}
 	close(events)
 
-	waiter := newEventDrivenInvocationWaiter(wake)
+	waiter := newEventDrivenInvocationWaiter(wake, platformclock.Real{})
 	start := time.Now()
 	if err := waiter(context.Background()); err != nil {
 		t.Fatalf("waiter: %v", err)
@@ -616,7 +616,7 @@ func TestEventDrivenInvocationWaiterWakesOnRelevantEventBeforeFallback(t *testin
 func TestEventDrivenInvocationWaiterHonorsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	waiter := newEventDrivenInvocationWaiter(make(chan struct{}))
+	waiter := newEventDrivenInvocationWaiter(make(chan struct{}), platformclock.Real{})
 	if err := waiter(ctx); err != context.Canceled {
 		t.Fatalf("waiter err = %v, want context.Canceled", err)
 	}

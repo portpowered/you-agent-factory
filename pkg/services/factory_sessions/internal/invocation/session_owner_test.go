@@ -3,6 +3,7 @@ package invocation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -213,22 +214,6 @@ func TestSessionOwner_PreparedCLICompatibilityInputRetainsSourceWithoutRenormali
 	}
 	if waitInput.InputSource != work.InputSourcePositionalText {
 		t.Fatalf("wait input source = %q, want preserved positional source", waitInput.InputSource)
-	}
-}
-
-func TestSessionOwnerRequiresInvocationInputReader(t *testing.T) {
-	t.Parallel()
-
-	owner := successfulSessionOwner(sessionOwnerFactoryConfig(), nil)
-	owner.inputFiles = nil
-	sourceKind := factoryapi.InvocationInputSourceKindText
-	content := sessionOwnerTextContent(t, "hello")
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
-		SourceKind: &sourceKind,
-		Content:    &content,
-	}))
-	if err == nil || !strings.Contains(err.Error(), "input file reader is unavailable") {
-		t.Fatalf("InvokeFactorySession missing input reader error = %v", err)
 	}
 }
 
@@ -816,7 +801,7 @@ func TestSessionOwnerWait_MatchesDispatchFailureOnlyWhenUnique(t *testing.T) {
 	}
 }
 
-func TestSessionOwnerWait_DefaultWaitNextPollsUntilCompletion(t *testing.T) {
+func TestSessionOwnerWait_AuthorityWaiterReobservesUntilCompletion(t *testing.T) {
 	observations := 0
 	owner := newTestSessionOwner(sessionOwnerFixture{Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 		observations++
@@ -995,5 +980,77 @@ func recordInvocationDispatchOutput(state *interfaces.FactoryWorldState, tick in
 	}
 	for i, item := range outputs {
 		state.PayloadLineage.RecordDispatchOutputSnapshot(tick, dispatchID, consumed, item, i)
+	}
+}
+
+// One owner is safe to reuse while an addressed timeout control overlaps a peer.
+// The controlled authority supplies terminal facts; no Runtime policy is faked
+// inside the owner under test.
+func TestSessionOwnerReusableScopedControlKeepsPeerUsable(t *testing.T) {
+	t.Parallel()
+	controlStarted, finishControl := make(chan struct{}), make(chan struct{})
+	defer close(finishControl)
+	owner := newTestSessionOwner(scopedPeerOwnerFixture(controlStarted, finishControl))
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	req := InvocationRequest{SourceKind: &sourceKind, ContentProvided: true, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "work"}}, CancelOnTimeout: true}
+	type outcome struct {
+		result FactoryInvocationResult
+		err    error
+	}
+	aDone := make(chan outcome, 1)
+	go func() { result, err := owner.Invoke(t.Context(), "a", req); aDone <- outcome{result, err} }()
+	select {
+	case <-controlStarted:
+	case got := <-aDone:
+		t.Fatalf("invocation returned before timeout control: %#v %v", got.result, got.err)
+	case <-t.Context().Done():
+		t.Fatal("timeout control did not start")
+	}
+	for i := 0; i < 2; i++ {
+		result, err := owner.Invoke(t.Context(), "b", req)
+		assertScopedPeerInvocation(t, i, result, err)
+	}
+	finishControl <- struct{}{}
+	select {
+	case got := <-aDone:
+		if got.err != nil || got.result.Status != interfaces.InvocationTerminalStatusTimedOut || got.result.RequestID != "a" || got.result.WorkID != "a" {
+			t.Fatalf("timeout: %#v %v", got.result, got.err)
+		}
+	case <-t.Context().Done():
+		t.Fatal("timeout invocation did not finish")
+	}
+}
+
+func scopedPeerOwnerFixture(controlStarted, finishControl chan struct{}) sessionOwnerFixture {
+	cfg := sessionOwnerFactoryConfig()
+	return sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
+		SubmitWork: func(_ context.Context, id string, _ work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+			return work.WorkRequestSubmitResult{RequestID: id, TraceID: id, WorkID: id}, nil
+		},
+		Observe: func(_ context.Context, id string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			if id == "a" {
+				return SessionInvocationObservation{}, context.DeadlineExceeded
+			}
+			return completedSessionInvocationObservation(input.RequestID, input.TraceID, "peer completed"), nil
+		},
+		CancelOnTimeout: func(ctx context.Context, id string, req factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+			if id != "a" || req.RequestID != "a" || req.Reason != "invocation wait timed out" {
+				return factorysessions.LifecycleControlResult{}, fmt.Errorf("unexpected scoped control: %s %#v", id, req)
+			}
+			if _, ok := ctx.Deadline(); !ok || ctx.Err() != nil {
+				return factorysessions.LifecycleControlResult{}, fmt.Errorf("control context lost detached deadline")
+			}
+			close(controlStarted)
+			<-finishControl
+			return factorysessions.LifecycleControlResult{}, nil
+		},
+	}
+}
+
+func assertScopedPeerInvocation(t *testing.T, index int, result FactoryInvocationResult, err error) {
+	t.Helper()
+	if err != nil || result.Status != interfaces.InvocationTerminalStatusCompleted || len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "peer completed" || result.RequestID != "b" {
+		t.Fatalf("peer invocation %d: %#v %v", index, result, err)
 	}
 }

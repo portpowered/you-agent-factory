@@ -5,6 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"reflect"
+	"regexp"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -12,15 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
-	"io"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -361,6 +363,87 @@ func assertConcurrentOutputConflict(t *testing.T, number int, flags []string) {
 	}
 }
 
+// The same public CLI output policy applies to selected terminal classifications.
+// Both invocations enter before either is released, sharing the package host
+// while retaining explicit sessions and scenario-owned provider routes.
+func TestInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
+	t.Parallel()
+	for round, tty := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tty=%t", tty), func(t *testing.T) {
+			quiet := newConcurrentOutputCall(t, 20+round*2, []string{"--quiet"})
+			normal := newConcurrentOutputCall(t, 21+round*2, nil)
+			for _, call := range []*concurrentOutputCall{quiet, normal} {
+				call.inputs.Input.StdoutIsTTY = &tty
+				call.inputs.Input.StderrIsTTY = &tty
+				call.start()
+			}
+			for _, call := range []*concurrentOutputCall{quiet, normal} {
+				select {
+				case <-call.runner.entered:
+				case <-call.done:
+					t.Fatalf("effect returned before entry: %v", call.err)
+				case <-call.ctx.Done():
+					t.Fatal(call.ctx.Err())
+				}
+			}
+			quiet.runner.release()
+			normal.runner.release()
+			quiet.join(t)
+			normal.join(t)
+			assertInjectedOutputDiagnostics(t, quiet)
+			assertInjectedOutputDiagnostics(t, normal)
+			assertConcurrentOutputSuccess(t, 0, quiet, []*concurrentOutputCall{quiet, normal})
+			if !tty {
+				assertConcurrentOutputSuccess(t, 3, normal, []*concurrentOutputCall{quiet, normal})
+			} else {
+				if normal.err != nil {
+					t.Fatal(normal.err)
+				}
+				stdout, stderr := normal.inputs.Stdout(), normal.inputs.Stderr()
+				if !strings.Contains(stdout, "\x1b[") || !strings.Contains(stderr, "\r\x1b[2K") || !strings.Contains(stderr, "execute-goal") {
+					t.Fatalf("TTY lifecycle/progress routing: stdout=%q stderr=%q", stdout, stderr)
+				}
+				if strings.Contains(stdout+stderr, quiet.marker) || strings.Contains(stderr, normal.marker) {
+					t.Fatal("TTY output leaked peer or routed result to progress")
+				}
+				plain := regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]").ReplaceAllString(stdout, "")
+				assertConcurrentOutputHuman(t, normal, plain)
+			}
+		})
+	}
+}
+
+func assertInjectedOutputDiagnostics(t *testing.T, call *concurrentOutputCall) {
+	t.Helper()
+	requestID, traceID := "", ""
+	submitted, completed := 0, 0
+	for _, entry := range call.fixture.diagnostics.All() {
+		fields := entry.ContextMap()
+		if fields["session_id"] != call.sessionID || !strings.HasPrefix(entry.Message, "factory session invocation ") {
+			continue
+		}
+		encoded, err := json.Marshal(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "owned input "+call.marker) {
+			t.Fatal("invocation diagnostic leaked caller input")
+		}
+		switch entry.Message {
+		case "factory session invocation submitted":
+			submitted++
+			requestID, _ = fields["request_id"].(string)
+			traceID, _ = fields["trace_id"].(string)
+		case "factory session invocation completed":
+			completed++
+			assertInjectedCompletedDiagnostic(t, fields, requestID, traceID)
+		}
+	}
+	if submitted != 1 || completed != 1 || requestID == "" || traceID == "" {
+		t.Fatalf("CLI session %s submitted/completed=%d/%d request=%s trace=%s", call.sessionID, submitted, completed, requestID, traceID)
+	}
+}
+
 type selectedRunWall struct{ nanos atomic.Int64 }
 
 func (source *selectedRunWall) Now() time.Time { return time.Unix(0, source.nanos.Load()).UTC() }
@@ -490,4 +573,11 @@ func TestSelectedTimeArtifactFailurePreservesCLIError(t *testing.T) {
 		t.Fatalf("artifact destination changed: %q, %v", preserved, readErr)
 	}
 	t.Logf("artifact error code=%s message=%s", coded.CLIErrorCode(), coded.CLIErrorMessage())
+}
+
+func assertInjectedCompletedDiagnostic(t *testing.T, fields map[string]any, requestID, traceID string) {
+	t.Helper()
+	if fields["request_id"] != requestID || fields["trace_id"] != traceID || fields["status"] != "COMPLETED" || fields["resolved_work_id"] == "" {
+		t.Fatalf("CLI invocation diagnostic correlation=%#v", fields)
+	}
 }

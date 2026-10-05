@@ -330,3 +330,37 @@ func TestSessionAuthorityPreservesOptionalCloseAndResponseRetirement(t *testing.
 		}
 	}
 }
+
+func TestSessionAuthorityRetirementPreservesReplacementResponseStreams(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.Real{}
+	registry := sessionregistry.New()
+	responses := responsestream.NewRegistry(newRuntimeTestResponseStream, clock)
+	var state *sessionruntime.Service
+	var replacement *livesession.LiveSession
+	state = sessionruntime.New(registry, responses, func(old *livesession.LiveSession) {
+		responses.Rotate(old.ID)
+		state.Register(sessionruntime.Registration{SessionID: old.ID, Handle: struct{}{}})
+		replacement = state.Resolve(old.ID)
+		responses.Streams(old.ID)
+	}, clock, func() string { return "event" }, func() string { return "session" })
+	state.Register(sessionruntime.Registration{SessionID: "a", Handle: struct{}{}})
+	old := state.Resolve("a")
+	oldStreams := responses.Streams("a")
+	if !state.UnregisterGeneration(old) {
+		t.Fatal("current generation did not retire")
+	}
+	if replacement == nil || state.Resolve("a") != replacement || replacement.ResponseEvents.Completed() {
+		t.Fatal("old cleanup removed or completed replacement response events")
+	}
+	if _, err := oldStreams.Subscribe("old", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("retired stream subscription = %v", err)
+	}
+	if _, err := responses.Streams("a").Subscribe("next", 0); err != nil {
+		t.Fatalf("replacement stream subscription = %v", err)
+	}
+	if state.UnregisterGeneration(old) || state.Resolve("a") != replacement {
+		t.Fatal("stale retirement removed the replacement")
+	}
+	state.CloseResponseStreams(replacement)
+}

@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -125,16 +127,21 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	streams := factorysessionwire.NewStreamManager(state, factorysessionwire.NewStreamObserver(), responseRegistry, responses)
 	assembly, err := provideFactorySessionsAssembly(
 		registry, state, streams,
+		func() factorysessionwire.InvocationService {
+			invoker, err := factorysessionwire.NewInvocationOwner(factorysessionwire.NewInvocationAuthority(state, platformclock.Real{}, nil), factorysessionwire.NewScopeControl(state, nil, zap.NewNop()), nil, nil, nil, nil, factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }), provideInvocationWorkPolicy())
+			if err != nil {
+				t.Fatal(err)
+			}
+			return invoker
+		}(),
+		factorysessionwire.NewScopeControl(state, func(factoryruntime.RuntimeRun, factoryruntime.Clock) error { return nil }, zap.NewNop()),
+		factorysessionwire.NewScopeActivation(state),
 		factoryruntime.NewSessionResultProjectionOperation(),
-		nil,
-		nil,
-		nil,
 		func() string { return "response-event-test-id" },
 		func() string { return "session-test-id" },
 		func() (string, error) { return t.TempDir(), nil },
 		platformfilesystem.Local{},
 		namedPathResolver,
-		factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		identity,
 		responses,

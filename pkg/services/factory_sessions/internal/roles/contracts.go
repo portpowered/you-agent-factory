@@ -241,3 +241,11 @@ type SessionGateway interface {
 	ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
 	RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
 }
+
+// InvocationService is the completed invocation capability forwarded through
+// the Factory Sessions assembly. Its engine lives in the invocation owner.
+type InvocationService interface {
+	SessionInvoker
+	CanonicalSessionInvoker
+	InvocationInputResolver
+}
