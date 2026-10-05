@@ -71,7 +71,7 @@ func TestL1CaptureBytePressure(t *testing.T) {
 	assertPressureCancel(t, ctx, endpoint, id, runner)
 	ended := waitPressureHealth(t, ctx, endpoint, id, factoryapi.DEGRADED, "BACKPRESSURE")
 	if !reflect.DeepEqual(ended.Events, page.Events) || ended.CommittedPosition != page.CommittedPosition {
-		t.Fatal("terminal loss changed acknowledged pressure prefix")
+		t.Fatalf("terminal loss changed acknowledged pressure prefix: before position=%d events=%d after position=%d events=%d", page.CommittedPosition, len(page.Events), ended.CommittedPosition, len(ended.Events))
 	}
 }
 
@@ -195,12 +195,14 @@ func waitPressureHealth(t *testing.T, ctx context.Context, endpoint, id string, 
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		page := readPressurePage(t, ctx, endpoint, id)
 		var observation factoryapi.WorkerSessionObservation
 		data := fleetProfileHTTP(t, ctx, http.MethodGet, endpoint+"/worker-sessions/"+id, nil)
 		if err := json.Unmarshal(data, &observation); err != nil {
 			t.Fatal(err)
 		}
+		// Observe failure before sampling its durable prefix: ordinary active
+		// pages can already be INCOMPLETE while admitted writes still drain.
+		page := readPressurePage(t, ctx, endpoint, id)
 		if page.Health == health && (reason == "" || observation.RecordingHealthReason != nil && *observation.RecordingHealthReason == reason) {
 			return page
 		}
