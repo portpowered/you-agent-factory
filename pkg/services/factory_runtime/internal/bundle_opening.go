@@ -35,8 +35,6 @@ type BundleOpeningOperation func(
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler scheduler.Scheduler,
 	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	backendScopeID string,
 	factoryRunnerID string,
 	verbose bool,
@@ -45,7 +43,6 @@ type BundleOpeningOperation func(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	providerSessionProgress workers.ProgressPublisher,
 	dispatchCompleted func(string),
-	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (factory.RuntimeRecord, error)
@@ -102,6 +99,9 @@ type BundleOpening struct {
 	workerSessions         workersessions.Service
 	workerAttempts         factory.WorkerAttemptOpener
 	requestResolver        *runtime.WorkstationRequestExecutor
+	submissionRecorder     recordings.SubmissionRecorder
+	dispatchRecorder       recordings.DispatchRecorder
+	worldStateProjector    factory.WorldStateProjector
 }
 
 func NewBundleOpening(
@@ -111,6 +111,9 @@ func NewBundleOpening(
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
 	requestResolver *runtime.WorkstationRequestExecutor,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	worldStateProjector factory.WorldStateProjector,
 ) (*BundleOpening, error) {
 	if runtimeBuild == nil {
 		return nil, fmt.Errorf("factory runtime resource opening is required")
@@ -122,7 +125,8 @@ func NewBundleOpening(
 		return nil, fmt.Errorf("workers service is required")
 	}
 	return &BundleOpening{runtimeBuild: runtimeBuild, workerAttemptScheduler: workerAttemptScheduler, workerService: workerService,
-		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver}, nil
+		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver,
+		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder, worldStateProjector: worldStateProjector}, nil
 }
 
 // Open applies fixed opening behavior to one runtime selection. The retained
@@ -141,8 +145,6 @@ func (opening *BundleOpening) Open(
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler scheduler.Scheduler,
 	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	backendScopeID string,
 	factoryRunnerID string,
 	verbose bool,
@@ -151,7 +153,6 @@ func (opening *BundleOpening) Open(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	providerSessionProgress workers.ProgressPublisher,
 	dispatchCompleted func(string),
-	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (factory.RuntimeRecord, error) {
@@ -181,8 +182,8 @@ func (opening *BundleOpening) Open(
 		verbose,
 		runtimeScheduler,
 		inlineDispatch,
-		submissionRecorder,
-		dispatchRecorder,
+		opening.submissionRecorder,
+		opening.dispatchRecorder,
 		runtimeLogDir,
 		runtimeLogConfig, runtimeFileLoggingPolicy,
 		runtimeMetricsPolicy,
@@ -199,7 +200,7 @@ func (opening *BundleOpening) Open(
 		spec.SubmissionHooks,
 		spec.CompletionPlanner,
 		spec.PetriMutationRecorder,
-		worldStateProjector,
+		opening.worldStateProjector,
 		runtimeScopeWithFlush{
 			RuntimeScopeService:   recordingsRuntime,
 			flushInterval:         recordFlushInterval,

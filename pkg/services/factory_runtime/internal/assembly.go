@@ -29,10 +29,7 @@ type Assembly struct {
 	preparation            *runtimebuild.Service
 	recordingsRuntime      recordings.RuntimeScopeService
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory
-	submissionRecorder     recordings.SubmissionRecorder
-	dispatchRecorder       recordings.DispatchRecorder
 	automationService      automations.Service
-	worldStateProjector    factoryruntime.WorldStateProjector
 	progressFactory        func(*zap.Logger) func(string) workers.ProgressPublisher
 	completionFactory      func(string) func(string)
 }
@@ -47,10 +44,7 @@ func NewAssembly(
 	preparation *runtimebuild.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
-	worldStateProjector factoryruntime.WorldStateProjector,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 ) (*Assembly, error) {
@@ -64,9 +58,8 @@ func NewAssembly(
 		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
 		preparation:       preparation,
 		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot,
-		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder,
-		automationService: automationService, worldStateProjector: worldStateProjector,
-		progressFactory: progressFactory, completionFactory: completionFactory,
+		automationService: automationService,
+		progressFactory:   progressFactory, completionFactory: completionFactory,
 	}, nil
 }
 
@@ -189,9 +182,9 @@ func (a *Assembly) Assemble(
 			ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
 			runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
 			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
-			a.submissionRecorder, a.dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
+			backendScopeID, factoryRunnerID, verbose,
 			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
-			progressPublisher, dispatchCompleted, a.worldStateProjector, a.recordingsRuntime, a.initialFactorySnapshot,
+			progressPublisher, dispatchCompleted, a.recordingsRuntime, a.initialFactorySnapshot,
 		)
 	}
 	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {

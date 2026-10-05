@@ -91,10 +91,7 @@ func NewAssembly(
 	preparation *RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
-	worldStateProjector factoryruntime.WorldStateProjector,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 ) (*Assembly, error) {
@@ -104,10 +101,8 @@ func NewAssembly(
 		preparation,
 		recordingsRuntime,
 		initialFactorySnapshot,
-		submissionRecorder,
-		dispatchRecorder,
 		automationService,
-		worldStateProjector, progressFactory, completionFactory)
+		progressFactory, completionFactory)
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening
@@ -126,11 +121,14 @@ func NewBundleOpening(
 	workerSessions workersessions.Service,
 	workerAttempts factoryruntime.WorkerAttemptOpener,
 	requestResolver *WorkstationRequestExecutor,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) (BundleOpening, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("factory runtime factory is required")
 	}
-	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver)
+	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver, submissionRecorder, dispatchRecorder, worldStateProjector)
 	if err != nil {
 		return nil, err
 	}
