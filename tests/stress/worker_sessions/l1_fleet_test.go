@@ -28,12 +28,13 @@ const (
 	l1ArchivePayloadBytes = 500 * 1024
 	l1DiskBudget          = 5 << 30
 	l1Window              = 10 * time.Second
+	l1SeedConcurrency     = 64
 )
 
 // L1 is a dedicated real-storage workload, including under -short. The normal
 // stress target excludes it; test-worker-sessions-l1 owns explicit execution.
 // One isolated canonical host owns 100 Direct scripts and 10,000 compatible
-// archived captures. Eight seed writers bound preparation concurrency; no
+// archived captures. Sixty-four seed writers bound preparation concurrency; no
 // filesystem substitute, provider files, executable builds or paid calls.
 func TestL1FleetDiscoveryAndCapture(t *testing.T) {
 	runL1Fleet(t, l1Archives, l1ArchivePayloadBytes)
@@ -105,14 +106,19 @@ func seedL1Archives(t *testing.T, ctx context.Context, store recordings.WorkerRe
 		t.Fatal(err)
 	}
 	jobs := make(chan int)
-	errors := make(chan error, 8)
+	errors := make(chan error, l1SeedConcurrency)
 	var group sync.WaitGroup
-	for range 8 {
+	for range l1SeedConcurrency {
 		group.Go(func() {
 			for index := range jobs {
 				id := fmt.Sprintf("l1-archive-%05d", index)
 				for position := uint64(1); position <= 3; position++ {
 					record := l1ArchivedRecord(id, position, message)
+					// A Factory recording contains many distinct Worker Sessions.
+					// Model that shape so simultaneous admissions use the production
+					// grouped sync path; each archive still has its own full payload,
+					// identity, terminal capture and publicly discoverable history.
+					record.RecordingID = fmt.Sprintf("l1-recording-%03d", index/l1SeedConcurrency)
 					if err := store.PersistWorkerRecord(ctx, record); err != nil {
 						errors <- err
 						return
