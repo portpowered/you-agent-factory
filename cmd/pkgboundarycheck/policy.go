@@ -106,26 +106,6 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/workquery", canonicalOwner: "pkg/services/work"},
 }, factoryRetiredPackageRoots...)
 
-// pkg/services/edges is the canonical process-edge aggregator. It may name
-// only contracts owned by the leaf packages that directly perform these
-// external effects. This is deliberately not a general service-subpackage
-// exception.
-//
-// Provider inference/process effects belong to the Providers Execution leaf
-// (pkg/services/providers/execution/inferencecontract). Workers may retain only its
-// request-scoped compatibility adapter and must not add a provider protocol,
-// catalog, adapter, session, or native execution owner.
-var approvedPeerServiceContractImports = map[string]struct{}{
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                 {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                    {},
-	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                        {},
-	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                       {},
-	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/wire": {},
-	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                            {},
-	"pkg/services/recordings/internal/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                         {},
-	"pkg/services/recordings/internal/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                            {},
-}
-
 const (
 	generatedCodeExceptionScopeRoot = "root"
 )

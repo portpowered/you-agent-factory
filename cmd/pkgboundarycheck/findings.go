@@ -7,7 +7,6 @@ type scanResult struct {
 	recordedServiceConstructionFindings []serviceConstructionFinding
 	staleServiceConstructionEntries     []serviceConstructionBaselineEntry
 	serviceConstructionBaselineCount    int
-	externalImplementationFindings      []transportServiceImplementationFinding
 	productionDefaultFindings           []productionDefaultFinding
 	recordedProductionDefaultFindings   []productionDefaultFinding
 	staleProductionDefaultEntries       []productionDefaultBaselineEntry
@@ -29,12 +28,6 @@ type retiredPackageRootFinding struct {
 
 type rootPackageFinding struct {
 	packagePath string
-}
-
-type transportServiceImplementationFinding struct {
-	importPath string
-	filePath   string
-	class      boundarySourceClass
 }
 
 type serviceConstructionFinding struct {

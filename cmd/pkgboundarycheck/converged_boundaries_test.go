@@ -73,27 +73,6 @@ func TestRunAllowsPeerServicesToImportExactProviderInferenceContract(t *testing.
 	}
 }
 
-func TestRunRejectsInitializerImportingWorkersPTYImplementation(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoImportFile(
-		t,
-		repoRoot,
-		"pkg/initializer/application/session_execution.go",
-		"application",
-		"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-	)
-
-	stderr := &bytes.Buffer{}
-	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
-		t.Fatal("run() error = nil, want Initializer-to-Workers implementation import rejected")
-	}
-	if !strings.Contains(stderr.String(), "prohibited external service subpackage import") {
-		t.Fatalf("run() stderr = %q, want service-implementation diagnostic", stderr.String())
-	}
-}
-
 func TestRunAllowsTestsToImportServiceOwnedTransportAdapters(t *testing.T) {
 	t.Parallel()
 

@@ -245,9 +245,6 @@ func filterRecordedServiceFindings(visible, recorded *scanResult, baseline recor
 	visible.serviceConstructionFindings, recorded.serviceConstructionFindings = splitRecordedFindings(visible.serviceConstructionFindings, func(finding serviceConstructionFinding) string {
 		return boundaryFindingFingerprint("service-construction", finding)
 	}, baseline)
-	visible.externalImplementationFindings, recorded.externalImplementationFindings = splitRecordedFindings(visible.externalImplementationFindings, func(finding transportServiceImplementationFinding) string {
-		return boundaryFindingFingerprint("external-implementation", finding)
-	}, baseline)
 }
 
 func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
@@ -305,7 +302,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	addBoundaryFindingFingerprints(fingerprints, "retired-package-root", result.retiredPackageRootFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.serviceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)
-	addBoundaryFindingFingerprints(fingerprints, "external-implementation", result.externalImplementationFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.productionDefaultFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.recordedProductionDefaultFindings)
 	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.petriPublicSurfaceFindings)

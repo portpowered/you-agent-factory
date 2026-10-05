@@ -116,11 +116,6 @@ func countProductionBoundaryImports(findings scanResult) int {
 		func(finding serviceConstructionFinding) boundarySourceClass { return finding.class },
 		func(finding serviceConstructionFinding) string { return finding.filePath },
 	)
-	count += countProductionBoundaryFindings(
-		findings.externalImplementationFindings,
-		func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class },
-		func(finding transportServiceImplementationFinding) string { return finding.filePath },
-	)
 	return count
 }
 

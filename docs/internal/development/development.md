@@ -284,6 +284,12 @@ has no debt allowance; its legacy source walker is retired.
 including generated and compiler-excluded Go inputs, cannot import the broad
 `pkg/services/edges` bag. The edges owner and its descendants, tests, and
 testdata fixtures retain their exemptions. Its legacy scanner is retired.
+`Layering` rejects ordinary consumers importing service implementation
+subpackages through `external-service-subpackage`, alongside its existing
+service, initializer and platform import rules. Wire composition, service owners
+and matching protocol adapters remain allowed; generated files and testdata
+fixtures retain their exemptions. Go enforces service-internal visibility.
+Compiler-excluded imports are checked too. The converged-import walker is retired.
 Other unmigrated boundary rules remain in `make pkg-boundary`.
 
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/baselines/frontend-deadcode-baseline.json`. The backend analyzer uses production entrypoints only, so production code referenced exclusively by tests remains a dead-code finding. It writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/baselines/deadcode-baseline.txt`. Review any drift before updating either baseline.

@@ -17,7 +17,6 @@ func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
 	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
-	writeExternalServiceImplementationFindings(writer, findings.externalImplementationFindings)
 	writeProductionDefaultFindings(writer, findings.productionDefaultFindings)
 	writeProductionDefaultFindings(writer, findings.recordedProductionDefaultFindings)
 	writeStaleProductionDefaultBaselineEntries(writer, findings.staleProductionDefaultEntries)
@@ -101,12 +100,4 @@ func writeServiceConstructionBaselineSummary(writer io.Writer, count int) {
 		count,
 	)
 	fmt.Fprintln(writer, "  deletion gate: inject each service role from pkg/wire or move the invariant to its owning service, then delete the exact baseline entry.")
-}
-
-func writeExternalServiceImplementationFindings(writer io.Writer, findings []transportServiceImplementationFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited external service subpackage import: %s (%s) [class=%s]\n", finding.importPath, finding.filePath, effectiveBoundarySourceClass(finding.class, finding.filePath))
-		fmt.Fprintln(writer, "  reason: service subpackages are owner-internal for ordinary consumers; pkg/wire is the unrestricted composition-root exception.")
-		fmt.Fprintln(writer, "  remediation: import the exact pkg/services/<service-name> root and use its published contract.")
-	}
 }

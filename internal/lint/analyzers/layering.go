@@ -51,6 +51,20 @@ var supportRoots = []string{"internal/configcontractsmoke", "internal/testutil",
 
 var layeringRules = []layeringRule{
 	{
+		name: "external-service-subpackage",
+		hint: "ordinary consumers must import the service root contract; select implementations in pkg/wire",
+		violates: func(e edge) bool {
+			_, rest, service := serviceSplit(e.importee)
+			_, _, owner := serviceSplit(e.importer)
+			// Existing service-subpackage, initializer-service and platform-services
+			// rules own their overlapping edges. Internal visibility belongs to Go.
+			return service && rest != "" && !containsSegment(rest, "internal") &&
+				under(e.importer, "pkg") && !owner && !under(e.importer, "pkg/wire") &&
+				!containsSegment(e.importer, "testdata") && !matchesProtocol(e.importer, e.importee) &&
+				!violatesServiceSubpackage(e) && !under(e.importer, "pkg/initializer") && !under(e.importer, "pkg/platform")
+		},
+	},
+	{
 		name:     "functional-provider-boundary",
 		hint:     "use tests/functional/internal/support.BuildProcess and exact public external-effect ports",
 		violates: violatesFunctionalProvider,
