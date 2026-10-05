@@ -1,0 +1,8 @@
+{
+  "default": false,
+  "rules": {
+    "final-blank-line": "error",
+    "unclosed-code-block": "error"
+  },
+  "output": "text"
+}
