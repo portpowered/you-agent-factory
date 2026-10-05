@@ -8,11 +8,6 @@ import (
 )
 
 func writeBoundaryFindings(writer io.Writer, findings scanResult) {
-	for _, finding := range findings.rootPackageFindings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] unapproved root package family: %s\n", finding.packagePath)
-		fmt.Fprintf(writer, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
-		fmt.Fprintln(writer, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
-	}
 	writeRetiredPackageRootFindings(writer, findings.retiredPackageRootFindings)
 	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)

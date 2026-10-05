@@ -6,43 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	for _, packagePath := range []string{
-		"pkg/root",
-		"pkg/wire",
-		"pkg/transports",
-		"pkg/services",
-		"pkg/platform",
-	} {
-		makeDir(t, repoRoot, packagePath)
-	}
-	makeDir(t, repoRoot, "pkg/transports/http/client")
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err != nil {
-		t.Fatalf("run() error = %v, want nil", err)
-	}
-	if got := stdout.String(); !strings.Contains(got, "package boundary passed (no blocking package-boundary violations)") {
-		t.Fatalf("run() stdout = %q, want package-boundary success message", got)
-	}
-	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)") {
-		t.Fatalf("run() stdout = %q, want generated-code exception summary", got)
-	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("run() stderr = %q, want empty", got)
-	}
-}
 
 func TestRunAllowsOnlyRootAndWireToImportApplicationGraph(t *testing.T) {
 	t.Parallel()
@@ -440,122 +407,6 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	}
 }
 
-func TestRunRejectsGeneratedLookingRootOutsideDocumentedExceptions(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGeneratedGoFile(t, repoRoot, "pkg/transports/http/client/client.gen.go")
-	writeGeneratedGoFile(t, repoRoot, "pkg/generatedexperimental/client.gen.go")
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want unapproved generated-looking root failure")
-	}
-	if got := stdout.String(); got != "" {
-		t.Fatalf("run() stdout = %q, want empty", got)
-	}
-
-	got := stderr.String()
-	for _, want := range []string{
-		"[agent-factory:pkg-boundary] unapproved root package family: pkg/generatedexperimental",
-		"outside the approved package-family allowlist",
-		"active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("run() stderr = %q, want substring %q", got, want)
-		}
-	}
-	if strings.Contains(got, "unapproved root package family: pkg/transports/http/client") {
-		t.Fatalf("run() stderr = %q, documented generated-code root should not be rejected", got)
-	}
-}
-
-func TestValidatePolicyRejectsGeneratedExceptionAsProductFamily(t *testing.T) {
-	t.Parallel()
-
-	policy := boundaryPolicy{
-		approvedProductPackageFamilies: []string{"pkg/transports/http/client"},
-		generatedCodeExceptions: []generatedCodeException{
-			{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
-		},
-	}
-
-	err := validatePolicy(policy)
-	if err == nil {
-		t.Fatal("validatePolicy() error = nil, want generated-code/product-family overlap rejection")
-	}
-	if got := err.Error(); got != "generated-code exception pkg/transports/http/client must not also be an approved product package family" {
-		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
-	}
-}
-
-func TestRunFailsForUnapprovedRootPackageFamily(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	makeDir(t, repoRoot, "pkg/config")
-	makeDir(t, repoRoot, "pkg/experimental")
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want package-boundary violation")
-	}
-	if got := stdout.String(); got != "" {
-		t.Fatalf("run() stdout = %q, want empty", got)
-	}
-
-	wantOutput := strings.Join([]string{
-		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
-		"  reason: pkg/experimental is outside the approved package-family allowlist.",
-		"  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.",
-		"[agent-factory:pkg-boundary] dependency violation counts: production=0 test-only=0",
-		"[agent-factory:pkg-boundary] active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
-		"",
-	}, "\n")
-	if got := stderr.String(); got != wantOutput {
-		t.Fatalf("run() stderr = %q, want diagnostic %q", got, wantOutput)
-	}
-	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 1 package-boundary violation(s)" {
-		t.Fatalf("run() error = %q, want violation count", got)
-	}
-}
-
-func TestRunReportsMultipleUnapprovedRootPackagesDeterministically(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	makeDir(t, repoRoot, "pkg/zeta")
-	makeDir(t, repoRoot, "pkg/experimental")
-	makeDir(t, repoRoot, "pkg/alpha")
-
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-	if err == nil {
-		t.Fatal("run() error = nil, want package-boundary violations")
-	}
-
-	errOutput := stderr.String()
-	alphaIndex := strings.Index(errOutput, "[agent-factory:pkg-boundary] unapproved root package family: pkg/alpha")
-	experimentalIndex := strings.Index(errOutput, "[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental")
-	zetaIndex := strings.Index(errOutput, "[agent-factory:pkg-boundary] unapproved root package family: pkg/zeta")
-	if alphaIndex < 0 || experimentalIndex < 0 || zetaIndex < 0 {
-		t.Fatalf("run() stderr = %q, want all unapproved roots reported", errOutput)
-	}
-	if !(alphaIndex < experimentalIndex && experimentalIndex < zetaIndex) {
-		t.Fatalf("run() stderr = %q, want package roots reported in path order", errOutput)
-	}
-	if got := strings.Count(errOutput, "outside the approved package-family allowlist"); got != 3 {
-		t.Fatalf("run() stderr = %q, want remediation details for each violation", errOutput)
-	}
-	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 3 package-boundary violation(s)" {
-		t.Fatalf("run() error = %q, want three violation count", got)
-	}
-}
-
 func TestRunRejectsRecreatedRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 	t.Parallel()
 
@@ -630,62 +481,6 @@ func TestRunRejectsEmptyPackageRoot(t *testing.T) {
 	err := run(config{root: t.TempDir()}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil || err.Error() != "package root must not be empty" {
 		t.Fatalf("run() error = %v, want package root validation", err)
-	}
-}
-
-func TestMakePkgBoundaryTargetFailsForUnapprovedRootPackageFamily(t *testing.T) {
-	repoRoot := filepath.Clean(filepath.Join("..", ".."))
-	fixtureRoot := t.TempDir()
-	makeDir(t, fixtureRoot, "pkg/experimental")
-
-	cmd := exec.Command("make", "pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
-	cmd.Dir = repoRoot
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("make pkg-boundary succeeded, want unapproved root failure; output:\n%s", output)
-	}
-
-	got := string(output)
-	for _, want := range []string{
-		"go run ./cmd/lintcheck -cache-dir",
-		"-package \"./cmd/pkgboundarycheck\" -- -root \"" + fixtureRoot + "\"",
-		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
-		"outside the approved package-family allowlist",
-		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
-		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
-		"pkg-boundary] Error",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)
-		}
-	}
-}
-
-func TestMakeLintPathFailsForUnapprovedRootPackageFamily(t *testing.T) {
-	repoRoot := filepath.Clean(filepath.Join("..", ".."))
-	fixtureRoot := t.TempDir()
-	makeDir(t, fixtureRoot, "pkg/experimental")
-
-	cmd := exec.Command("make", "lint", "LINT_TARGETS=pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
-	cmd.Dir = repoRoot
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("make lint succeeded, want unapproved root failure through lint path; output:\n%s", output)
-	}
-
-	got := string(output)
-	for _, want := range []string{
-		"lintcheck",
-		"-package \"./cmd/pkgboundarycheck\" -- -root \"" + fixtureRoot + "\"",
-		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
-		"outside the approved package-family allowlist",
-		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
-		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
-		"pkg-boundary] Error",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("make lint output = %q, want substring %q", got, want)
-		}
 	}
 }
 

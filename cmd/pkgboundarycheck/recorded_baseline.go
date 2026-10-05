@@ -231,9 +231,6 @@ func newRecordedScanResult(result scanResult) scanResult {
 }
 
 func filterRecordedPackageFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
-	visible.rootPackageFindings, recorded.rootPackageFindings = splitRecordedFindings(visible.rootPackageFindings, func(finding rootPackageFinding) string {
-		return boundaryFindingFingerprint("root-package", finding)
-	}, baseline)
 	visible.retiredPackageRootFindings, recorded.retiredPackageRootFindings = splitRecordedFindings(visible.retiredPackageRootFindings, func(finding retiredPackageRootFinding) string {
 		return boundaryFindingFingerprint("retired-package-root", finding)
 	}, baseline)
@@ -292,7 +289,6 @@ func boundaryFindingFingerprint(category string, finding any) string {
 
 func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	fingerprints := make(map[string]struct{})
-	addBoundaryFindingFingerprints(fingerprints, "root-package", result.rootPackageFindings)
 	addBoundaryFindingFingerprints(fingerprints, "retired-package-root", result.retiredPackageRootFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.serviceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)

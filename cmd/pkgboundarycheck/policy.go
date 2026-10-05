@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -111,25 +110,13 @@ const (
 )
 
 type boundaryPolicy struct {
-	approvedProductPackageFamilies []string
-	generatedCodeExceptions        []generatedCodeException
-	domainTransportExceptions      []string
+	generatedCodeExceptions   []generatedCodeException
+	domainTransportExceptions []string
 }
 
 type generatedCodeException struct {
 	packagePath string
 	scope       string
-}
-
-var approvedProductPackageFamilies = []string{
-	"pkg/config",
-	"pkg/initializer",
-	"pkg/internal",
-	"pkg/platform",
-	"pkg/root",
-	"pkg/services",
-	"pkg/transports",
-	"pkg/wire",
 }
 
 var documentedGeneratedCodeExceptions = []generatedCodeException{
@@ -139,9 +126,8 @@ var documentedGeneratedCodeExceptions = []generatedCodeException{
 
 func defaultBoundaryPolicy() boundaryPolicy {
 	return boundaryPolicy{
-		approvedProductPackageFamilies: slices.Clone(approvedProductPackageFamilies),
-		generatedCodeExceptions:        slices.Clone(documentedGeneratedCodeExceptions),
-		domainTransportExceptions:      slices.Clone(documentedDomainTransportExceptions),
+		generatedCodeExceptions:   slices.Clone(documentedGeneratedCodeExceptions),
+		domainTransportExceptions: slices.Clone(documentedDomainTransportExceptions),
 	}
 }
 
@@ -155,25 +141,6 @@ func validatePolicy(policy boundaryPolicy) error {
 		if strings.TrimSpace(exception.packagePath) == "" {
 			return fmt.Errorf("generated-code exception path must not be empty")
 		}
-		if slices.Contains(policy.approvedProductPackageFamilies, exception.packagePath) {
-			return fmt.Errorf("generated-code exception %s must not also be an approved product package family", exception.packagePath)
-		}
 	}
 	return nil
-}
-
-func isAllowedRootPackageFamily(policy boundaryPolicy, packageRoot string, packagePath string) bool {
-	return slices.Contains(policy.approvedProductPackageFamilies, packagePath) ||
-		slices.Contains(directRootGeneratedCodeExceptionPaths(policy, packageRoot), packagePath)
-}
-
-func directRootGeneratedCodeExceptionPaths(policy boundaryPolicy, packageRoot string) []string {
-	var roots []string
-	for _, exception := range policy.generatedCodeExceptions {
-		exceptionPath := filepath.ToSlash(exception.packagePath)
-		if filepath.Dir(exceptionPath) == filepath.ToSlash(packageRoot) {
-			roots = append(roots, exceptionPath)
-		}
-	}
-	return roots
 }

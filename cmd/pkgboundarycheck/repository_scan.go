@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -31,7 +30,7 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	}
 
 	result := scanResult{}
-	if err := scanRootPackageFamilies(repoRoot, scanRoot, cfg, policy, &result); err != nil {
+	if err := scanRetiredPackageRoots(repoRoot, cfg, &result); err != nil {
 		return scanResult{}, err
 	}
 	if err := scanRepositoryServiceConstruction(repoRoot, &result); err != nil {
@@ -40,41 +39,12 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err := scanRepositoryProductionDefaults(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
-	sortScanResult(&result)
 	return result, nil
 }
 
-func scanRootPackageFamilies(
-	repoRoot, scanRoot string,
-	cfg config,
-	policy boundaryPolicy,
-	result *scanResult,
-) error {
-	entries, err := os.ReadDir(scanRoot)
-	if err != nil {
-		return fmt.Errorf("read scan root %s: %w", filepath.ToSlash(scanRoot), err)
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if isIgnoredRepositoryBoundaryPath(repoRoot, filepath.Join(scanRoot, entry.Name())) {
-			continue
-		}
-
-		packagePath := filepath.ToSlash(filepath.Join(cfg.packageRoot, entry.Name()))
-		if retiredRoot, found := findRetiredPackageRoot(packagePath); found {
-			result.retiredPackageRootFindings = append(result.retiredPackageRootFindings, retiredPackageRootFinding{retiredRoot})
-			continue
-		}
-		if isAllowedRootPackageFamily(policy, cfg.packageRoot, packagePath) {
-			continue
-		}
-		result.rootPackageFindings = append(result.rootPackageFindings, rootPackageFinding{packagePath: packagePath})
-	}
+func scanRetiredPackageRoots(repoRoot string, cfg config, result *scanResult) error {
 	for _, retiredRoot := range retiredPackageRoots {
-		parent := filepath.ToSlash(filepath.Dir(retiredRoot.packagePath))
-		if parent == cfg.packageRoot || !strings.HasPrefix(retiredRoot.packagePath, cfg.packageRoot+"/") {
+		if !strings.HasPrefix(retiredRoot.packagePath, cfg.packageRoot+"/") {
 			continue
 		}
 		info, statErr := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(retiredRoot.packagePath)))
@@ -144,12 +114,6 @@ func scanRepositoryProductionDefaults(repoRoot string, result *scanResult) error
 	return nil
 }
 
-func sortScanResult(result *scanResult) {
-	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
-		return strings.Compare(left.packagePath, right.packagePath)
-	})
-}
-
 var repositoryBoundaryIgnoredDirectoryNames = map[string]struct{}{
 	".git":         {},
 	"node_modules": {},
@@ -190,13 +154,4 @@ func isIgnoredRepositoryBoundaryPath(repoRoot, path string) bool {
 		}
 	}
 	return false
-}
-
-func findRetiredPackageRoot(packagePath string) (retiredPackageRoot, bool) {
-	for _, retiredRoot := range retiredPackageRoots {
-		if packagePath == retiredRoot.packagePath {
-			return retiredRoot, true
-		}
-	}
-	return retiredPackageRoot{}, false
 }

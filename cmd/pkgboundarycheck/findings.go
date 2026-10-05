@@ -1,7 +1,6 @@
 package main
 
 type scanResult struct {
-	rootPackageFindings                 []rootPackageFinding
 	retiredPackageRootFindings          []retiredPackageRootFinding
 	serviceConstructionFindings         []serviceConstructionFinding
 	recordedServiceConstructionFindings []serviceConstructionFinding
@@ -20,10 +19,6 @@ type retiredPackageRoot struct {
 
 type retiredPackageRootFinding struct {
 	retiredPackageRoot
-}
-
-type rootPackageFinding struct {
-	packagePath string
 }
 
 type serviceConstructionFinding struct {
