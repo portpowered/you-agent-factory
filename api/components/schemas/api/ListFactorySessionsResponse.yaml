@@ -21,3 +21,8 @@ properties:
     items:
       $ref: './FactorySessionRecordedSummary.yaml'
     description: Read-only recorded Factory Session summaries when scope is HISTORY or ALL.
+  warnings:
+    type: array
+    description: Recording artifacts omitted from history because they could not be read or decoded.
+    items:
+      $ref: './FactorySessionRecordingWarning.yaml'

@@ -83,11 +83,11 @@ func TestParseDetailsEnforcesLineAndByteLimitsDeterministically(t *testing.T) {
 			`{"type":"event_msg","payload":{"type":"agent_message","message":"four"}}`,
 		}, "\n")
 		first, firstErr := ParseDetails(strings.NewReader(lines))
-		if !errors.Is(firstErr, providersessions.ErrResourceLimitExceeded) {
+		if firstErr != nil {
 			t.Fatalf("first ParseDetails error = %v, want resource-limit cause", firstErr)
 		}
 		second, secondErr := ParseDetails(strings.NewReader(lines))
-		if !errors.Is(secondErr, providersessions.ErrResourceLimitExceeded) {
+		if secondErr != nil {
 			t.Fatalf("second ParseDetails error = %v, want resource-limit cause", secondErr)
 		}
 		if !reflect.DeepEqual(first, second) {
@@ -107,7 +107,7 @@ func TestParseDetailsEnforcesLineAndByteLimitsDeterministically(t *testing.T) {
 
 		oversized := strings.Repeat("x", 80) + "\n"
 		limited, err := ParseDetails(strings.NewReader(oversized))
-		if !errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+		if err != nil {
 			t.Fatalf("byte-limited ParseDetails error = %v, want resource-limit cause", err)
 		}
 		if limited.Summary.ParseErrors[len(limited.Summary.ParseErrors)-1].Message != diagnosticInspectionByteLimit {
@@ -139,18 +139,11 @@ func TestParseDetailsHonorsInclusiveByteLimitBoundary(t *testing.T) {
 		t.Cleanup(restore)
 
 		parsed, err := parseCodexSessionDetailsForSession(context.Background(), strings.NewReader(content+"x"), sessionID)
-		if !errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+		if err != nil {
 			t.Fatalf("parseCodexSessionDetailsForSession error = %v, want resource-limit cause", err)
 		}
-		for _, want := range []string{
-			sessionID,
-			"byte",
-			fmt.Sprintf("configured %d", limit),
-			fmt.Sprintf("observed %d", limit+1),
-		} {
-			if !strings.Contains(err.Error(), want) {
-				t.Fatalf("error = %v, want %q", err, want)
-			}
+		if len(parsed.Summary.ParseErrors) != 1 || parsed.Summary.ParseErrors[0].Message != diagnosticInspectionByteLimit {
+			t.Fatalf("missing bounded byte diagnostic: %#v", parsed.Summary)
 		}
 		if parsed.Summary.EventCount != 1 {
 			t.Fatalf("parsed summary = %#v, want the valid record before cap+1 retained", parsed.Summary)
@@ -182,10 +175,10 @@ func TestParseDetailsEnforcesTranscriptAndDiagnosticLimits(t *testing.T) {
 		unknownLines = append(unknownLines, `{"type":"future_event_`+fmt.Sprint(i)+`"}`)
 	}
 	unknownParsed, err := ParseDetails(strings.NewReader(strings.Join(unknownLines, "\n")))
-	if !errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+	if err != nil {
 		t.Fatalf("unknown ParseDetails error = %v, want diagnostic-limit cause", err)
 	}
-	if len(unknownParsed.Summary.UnknownEvents) != 1 {
+	if len(unknownParsed.Summary.UnknownEvents) != 0 || len(unknownParsed.Summary.ParseErrors) != 1 || unknownParsed.Summary.ParseErrors[0].Message != diagnosticInspectionDiagnosticLimit {
 		t.Fatalf("unknown events = %#v, want one retained diagnostic", unknownParsed.Summary.UnknownEvents)
 	}
 	if unknownParsed.Summary.UnknownEventCount < 1 {
@@ -222,16 +215,10 @@ func TestParseDetailsRejectsOversizedPhysicalLineWithSafeCause(t *testing.T) {
 
 	content := strings.Repeat("rollout-secret-", 8) + "\n"
 	parsed, err := ParseDetails(strings.NewReader(content))
-	if !errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+	if err != nil {
 		t.Fatalf("ParseDetails error = %v, want record-limit cause", err)
 	}
-	if !strings.Contains(err.Error(), "record") || !strings.Contains(err.Error(), "configured 32") {
-		t.Fatalf("error = %v, want bounded record-limit context", err)
-	}
-	if strings.Contains(err.Error(), "rollout-secret") {
-		t.Fatalf("error leaked rollout content: %v", err)
-	}
-	if len(parsed.Summary.ParseErrors) > 1 {
+	if len(parsed.Summary.ParseErrors) != 1 || parsed.Summary.ParseErrors[0].Message != diagnosticInspectionRecordLimit {
 		t.Fatalf("parse errors = %#v, want bounded diagnostics", parsed.Summary.ParseErrors)
 	}
 }
@@ -275,18 +262,14 @@ func TestLoadDetailsLimitErrorIncludesSafeSessionContext(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	_, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, root, sessionID)
-	if !errors.Is(err, providersessions.ErrResourceLimitExceeded) {
+	detail, err := LoadDetails(testFiles, testWalkDirectory, testResolveSymlinks, root, sessionID)
+	if err != nil {
 		t.Fatalf("LoadDetails error = %v, want resource-limit cause", err)
 	}
-	for _, want := range []string{sessionID, "byte", "configured 64"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("LoadDetails error = %v, want %q", err, want)
-		}
+	if detail.ProviderSession.ID != sessionID || len(detail.Parse.ParseErrors) != 1 || detail.Parse.ParseErrors[0].Message != diagnosticInspectionByteLimit {
+		t.Fatalf("detail missing identity or bounded diagnostic: %#v", detail)
 	}
-	if strings.Contains(err.Error(), "rollout-secret") || strings.Contains(err.Error(), root) {
-		t.Fatalf("LoadDetails error leaked rollout content or host path: %v", err)
-	}
+
 }
 
 func TestParseCancellationDuringJSONLLoopReturnsContextError(t *testing.T) {
@@ -491,4 +474,144 @@ func overrideCodexRetainedTextLimit(limit int64) func() {
 	previous := maxCodexRetainedTextBytes
 	maxCodexRetainedTextBytes = limit
 	return func() { maxCodexRetainedTextBytes = previous }
+}
+
+func TestParseDetailsRecoversOversizedRecordAndPreservesOrder(t *testing.T) {
+	message := func(text string) string {
+		return `{"type":"event_msg","payload":{"type":"agent_message","message":"` + text + `"}}` + "\n"
+	}
+	large := strings.Repeat("v", 128<<10)
+	parsed, err := ParseDetails(strings.NewReader(message(large) + strings.Repeat("secret", 200000) + "\n" + message("after")))
+	if err != nil || len(parsed.Transcript) != 2 || stringValue(parsed.Transcript[0].Text) != large || stringValue(parsed.Transcript[1].Text) != "after" {
+		t.Fatalf("lost ordered valid neighbors: %v, %#v", err, parsed.Transcript)
+	}
+	if len(parsed.Summary.ParseErrors) != 1 || parsed.Summary.ParseErrors[0].LineNumber != 2 || parsed.Summary.ParseErrors[0].Message != diagnosticInspectionRecordLimit {
+		t.Fatalf("missing safe physical-line diagnostic: %#v", parsed.Summary)
+	}
+}
+
+func TestParseDetailsDiagnosticOverflowIsBoundedPartialSuccess(t *testing.T) {
+	restore := overrideCodexInspectionLimits(100, 1<<20, 10, 3)
+	t.Cleanup(restore)
+	for _, content := range []string{strings.Repeat("{bad\n", 10), strings.Repeat(`{"type":"future"}`+"\n", 10)} {
+		parsed, err := ParseDetails(strings.NewReader(content))
+		if err != nil || len(parsed.Summary.ParseErrors)+len(parsed.Summary.UnknownEvents) != 3 || len(parsed.Transcript) != 0 {
+			t.Fatalf("diagnostic-only response not bounded: %v, %#v", err, parsed)
+		}
+		last := parsed.Summary.ParseErrors[len(parsed.Summary.ParseErrors)-1]
+		if last.LineNumber != 4 || last.Message != diagnosticInspectionDiagnosticLimit {
+			t.Fatalf("missing terminal outcome: %#v", last)
+		}
+	}
+}
+
+func TestReaderDetailsSnapshotsGrowingFileAndRereadsCompletedTail(t *testing.T) {
+	prefix := `{"type":"event_msg","payload":{"type":"agent_message","message":"before"}}` + "\n"
+	tail := `{"type":"event_msg","payload":{"type":"agent_message","message":"after`
+	root, id := writeCodexJSONLFixture(t, prefix+tail)
+	files := &appendOnOpenFileSystem{FileSystem: testFiles, tail: `"}}` + "\n"}
+	first, err := LoadDetails(files, testWalkDirectory, testResolveSymlinks, root, id)
+	if err != nil || len(first.Transcript) != 1 || len(first.Parse.ParseErrors) != 1 || first.Parse.ParseErrors[0].Message != diagnosticTruncatedJSONEvent {
+		t.Fatalf("snapshot followed append: %v, %#v", err, first)
+	}
+	second, err := LoadDetails(files, testWalkDirectory, testResolveSymlinks, root, id)
+	if err != nil || len(second.Transcript) != 2 || stringValue(second.Transcript[1].Text) != "after" || len(second.Parse.ParseErrors) != 0 {
+		t.Fatalf("reread lost completed tail: %v, %#v", err, second)
+	}
+	if len(first.Transcript) != 1 || first.Source.SizeBytes != int64(len(prefix+tail)) {
+		t.Fatalf("first snapshot mutated: %#v", first)
+	}
+}
+
+type appendOnOpenFileSystem struct {
+	providersessionsinternal.FileSystem
+	tail string
+}
+
+func (f *appendOnOpenFileSystem) Open(path string) (io.ReadCloser, error) {
+	file, err := f.FileSystem.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return &appendBeforeReadStream{ReadCloser: file, owner: f, path: path}, nil
+}
+
+type appendBeforeReadStream struct {
+	io.ReadCloser
+	owner *appendOnOpenFileSystem
+	path  string
+}
+
+func (s *appendBeforeReadStream) Read(p []byte) (int, error) {
+	if s.owner.tail != "" {
+		writer, err := os.OpenFile(s.path, os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			return 0, err
+		}
+		_, err = writer.WriteString(s.owner.tail)
+		closeErr := writer.Close()
+		if err != nil {
+			return 0, err
+		}
+		if closeErr != nil {
+			return 0, closeErr
+		}
+		s.owner.tail = ""
+	}
+	return s.ReadCloser.Read(p)
+}
+
+func TestParseDetailsSafeUnderlyingStorageCause(t *testing.T) {
+	cause := fmt.Errorf("reading C:\\secret\\rollout: %w", fs.ErrPermission)
+	_, err := ParseDetails(errorReader{err: cause})
+	if !errors.Is(err, providersessions.ErrSessionStorageUnavailable) || !errors.Is(err, fs.ErrPermission) || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("unsafe or missing cause: %v", err)
+	}
+}
+
+func TestParseDetailsReadsAtMostByteBudgetAndOneProbe(t *testing.T) {
+	restore := overrideCodexInspectionLimits(100, 100, 10, 10)
+	t.Cleanup(restore)
+	reader := &countingCodexReader{Reader: strings.NewReader(strings.Repeat("x", 1000))}
+	parsed, err := ParseDetails(reader)
+	if err != nil || reader.read != 101 || len(parsed.Summary.ParseErrors) != 1 || parsed.Summary.ParseErrors[0].Message != diagnosticInspectionByteLimit {
+		t.Fatalf("unbounded inspection: read=%d err=%v summary=%#v", reader.read, err, parsed.Summary)
+	}
+}
+
+type countingCodexReader struct {
+	io.Reader
+	read int
+}
+
+func (r *countingCodexReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	r.read += n
+	return n, err
+}
+
+func TestParseDetailsRecordBoundariesAtNewlineAndEOF(t *testing.T) {
+	restore := overrideCodexJSONLLineLimit(128)
+	t.Cleanup(restore)
+	base := `{"type":"session_meta"}`
+	for _, ending := range []string{"", "\n"} {
+		exact := base + strings.Repeat(" ", 128-len(base)-len(ending)) + ending
+		parsed, err := ParseDetails(strings.NewReader(exact))
+		if err != nil || parsed.Summary.EventCount != 1 || len(parsed.Summary.ParseErrors) != 0 {
+			t.Fatalf("exact record boundary: %v %#v", err, parsed)
+		}
+		parsed, err = ParseDetails(strings.NewReader(base + strings.Repeat(" ", 129-len(base)-len(ending)) + ending))
+		if err != nil || len(parsed.Summary.ParseErrors) != 1 || parsed.Summary.ParseErrors[0].LineNumber != 1 || parsed.Summary.ParseErrors[0].Message != diagnosticInspectionRecordLimit {
+			t.Fatalf("oversized record boundary: %v %#v", err, parsed)
+		}
+	}
+}
+
+func TestParseDetailsExactLineBudgetPreservesFinalJSONWithoutNewline(t *testing.T) {
+	restore := overrideCodexInspectionLimits(2, 1<<20, 10, 10)
+	t.Cleanup(restore)
+	parsed, err := ParseDetails(strings.NewReader(`{"type":"session_meta"}` + "\n" + `{"type":"event_msg","payload":{"type":"agent_message","message":"final"}}`))
+	if err != nil || len(parsed.Summary.ParseErrors) != 0 || len(parsed.Transcript) != 1 || stringValue(parsed.Transcript[0].Text) != "final" {
+		t.Fatalf("exact line boundary: %v %#v", err, parsed)
+	}
 }

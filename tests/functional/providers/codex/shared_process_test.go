@@ -150,6 +150,7 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 	process := constructor.build(t, serviceedges.Edges{
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
+		ProviderSessionFileSystem:           codexHistoryFaultFiles{},
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
 	})
 	fixture := &codexSharedProcessFixture{
@@ -222,8 +223,16 @@ func prepareCodexSharedRolloutFixtures(
 		t,
 		codexSessionsRoot(homeDir),
 		codexFunctionalOversizedSessionID,
-		strings.Repeat("x", 1<<20+1)+"\n",
+		`{"type":"event_msg","payload":{"type":"agent_message","message":"before"}}`+"\n"+
+			strings.Repeat("x", 1<<20+1)+"\n"+
+			`{"type":"event_msg","payload":{"type":"agent_message","message":"after"}}`+"\n",
 	)
+	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), "session-empty", "")
+	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), "session-read-failure", `{"type":"session_meta"}`+"\n")
+	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), "session-diagnostic-budget",
+		`{"type":"event_msg","payload":{"type":"agent_message","message":"prefix"}}`+"\n"+
+			strings.Repeat(`{"type":"future"}`+"\n", 257)+
+			`{"type":"event_msg","payload":{"type":"agent_message","message":"uninspected"}}`+"\n")
 	for i := 0; i < 65; i++ {
 		writeCodexRolloutFixtureAt(
 			t,
@@ -440,23 +449,40 @@ func TestCodexSharedTrustedWorkAndHistory(t *testing.T) {
 	if t.Failed() {
 		return
 	}
-	t.Run("detached_repeated_history", func(t *testing.T) {
-		assertCodexSharedDetachedHistory(t, fixture)
-	})
-	t.Run("missing_history", func(t *testing.T) {
-		assertCodexSharedMissingHistory(t, fixture)
-	})
-	t.Run("malformed_history", func(t *testing.T) {
-		assertCodexSharedMalformedHistory(t, fixture)
-	})
-	t.Run("oversized_history", func(t *testing.T) {
-		assertCodexSharedOversizedHistory(t, fixture)
-	})
-	t.Run("bounded_history", func(t *testing.T) {
-		assertCodexSharedBoundedHistory(t, fixture)
-	})
-	t.Run("containment_history", func(t *testing.T) {
-		assertCodexSharedContainmentHistory(t, fixture)
+	// Immutable history reads and the scenario-owned append fixture can overlap
+	// on the same ready HTTP process without sharing a mutable session file.
+	t.Run("history", func(t *testing.T) {
+		t.Run("empty_history", func(t *testing.T) { t.Parallel(); assertCodexSharedEmptyHistory(t, fixture) })
+		t.Run("storage_failure_history", func(t *testing.T) { t.Parallel(); assertCodexSharedStorageFailureHistory(t, fixture) })
+		t.Run("diagnostic_budget_history", func(t *testing.T) { t.Parallel(); assertCodexSharedDiagnosticBudgetHistory(t, fixture) })
+		t.Run("detached_repeated_history", func(t *testing.T) {
+			t.Parallel()
+			assertCodexSharedDetachedHistory(t, fixture)
+		})
+		t.Run("missing_history", func(t *testing.T) {
+			t.Parallel()
+			assertCodexSharedMissingHistory(t, fixture)
+		})
+		t.Run("malformed_history", func(t *testing.T) {
+			t.Parallel()
+			assertCodexSharedMalformedHistory(t, fixture)
+		})
+		t.Run("append_tail_history", func(t *testing.T) {
+			t.Parallel()
+			assertCodexSharedAppendHistory(t, fixture)
+		})
+		t.Run("oversized_history", func(t *testing.T) {
+			t.Parallel()
+			assertCodexSharedOversizedHistory(t, fixture)
+		})
+		t.Run("bounded_history", func(t *testing.T) {
+			t.Parallel()
+			assertCodexSharedBoundedHistory(t, fixture)
+		})
+		t.Run("containment_history", func(t *testing.T) {
+			t.Parallel()
+			assertCodexSharedContainmentHistory(t, fixture)
+		})
 	})
 	if t.Failed() {
 		return

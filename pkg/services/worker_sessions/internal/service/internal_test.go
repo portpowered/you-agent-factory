@@ -74,10 +74,15 @@ type controlClaimLogger struct {
 	claimed chan struct{}
 	release chan struct{}
 	once    sync.Once
+	message string
 }
 
 func (l *controlClaimLogger) Info(message string, _ ...any) {
-	if message != "worker session control claimed" {
+	want := l.message
+	if want == "" {
+		want = "worker session control claimed"
+	}
+	if message != want {
 		return
 	}
 	l.once.Do(func() { close(l.claimed) })
@@ -89,7 +94,7 @@ func (l *controlClaimLogger) Info(message string, _ ...any) {
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -160,6 +165,7 @@ type perRuntimeAttemptFixture struct {
 	attempt workersessions.RuntimeAttempt
 	clock   time.Time
 	capture *perRuntimeRecordingCapture
+	control *perRuntimeCancellation
 }
 
 // These captures inspect detached collaborator requests, not durable replay.
@@ -231,11 +237,11 @@ func assertPerRuntimeObservation(t *testing.T, fixture *perRuntimeAttemptFixture
 		t.Fatalf("own observation attribution = %#v", observation)
 	}
 	if observation.StartedAt == nil || !observation.StartedAt.Equal(fixture.clock) {
-		t.Fatalf("StartedAt = %v, want constructor clock %v", observation.StartedAt, fixture.clock)
+		t.Fatalf("StartedAt = %v, want selected fact clock %v", observation.StartedAt, fixture.clock)
 	}
 	if state.Terminal() {
 		if observation.EndedAt == nil || !observation.EndedAt.Equal(fixture.clock) {
-			t.Fatalf("EndedAt = %v, want constructor clock %v", observation.EndedAt, fixture.clock)
+			t.Fatalf("EndedAt = %v, want selected fact clock %v", observation.EndedAt, fixture.clock)
 		}
 	} else if observation.EndedAt != nil {
 		t.Fatalf("running observation has EndedAt = %v", observation.EndedAt)
@@ -258,10 +264,15 @@ func assertPerRuntimeOpeningAttribution(t *testing.T, fixture *perRuntimeAttempt
 	execution := fixture.request.Execution.Execution
 	wantCapture := recordings.WorkerSessionRecordingRequest{
 		RecordingID: execution.RecordingID, FactorySessionID: execution.FactorySessionID,
-		WorkerSessionID: fixture.request.ID, Topic: workersessions.Topic(fixture.request.ID),
+		WorkerSessionID: fixture.request.ID, Topic: workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID),
 	}
 	fixture.capture.mu.Lock()
-	requests := append([]recordings.WorkerSessionRecordingRequest(nil), fixture.capture.requests...)
+	var requests []recordings.WorkerSessionRecordingRequest
+	for _, request := range fixture.capture.requests {
+		if request.WorkerSessionID == fixture.request.ID {
+			requests = append(requests, request)
+		}
+	}
 	fixture.capture.mu.Unlock()
 	if !reflect.DeepEqual(requests, []recordings.WorkerSessionRecordingRequest{wantCapture}) {
 		t.Fatalf("recording requests = %#v, want %#v", requests, wantCapture)
@@ -310,7 +321,7 @@ func publishPerRuntimeProgress(t *testing.T, fixture *perRuntimeAttemptFixture, 
 		t.Fatalf("PublishRecord(%s) = %#v, %v", fixture.request.ID, result, err)
 	}
 	after := sink.requestsFor("")
-	if len(after) != len(before)+1 || !reflect.DeepEqual(before, after[:len(before)]) || after[len(before)].Topic != workersessions.Topic(fixture.request.ID) {
+	if len(after) != len(before)+1 || !reflect.DeepEqual(before, after[:len(before)]) || after[len(before)].Topic != workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID) {
 		t.Fatalf("PublishRecord(%s) did not append exactly once to its own topic: %#v", fixture.request.ID, after)
 	}
 }
@@ -318,7 +329,7 @@ func publishPerRuntimeProgress(t *testing.T, fixture *perRuntimeAttemptFixture, 
 func assertPerRuntimeTerminalAppends(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, state workersessions.State) {
 	t.Helper()
 	var terminals, progress int
-	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID)) {
+	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)) {
 		draft := decodePerRuntimeDraft(t, request)
 		if request.SourceEventID == "progress" {
 			progress++
@@ -357,28 +368,28 @@ func assertPerRuntimeTerminalPayload(t *testing.T, fixture *perRuntimeAttemptFix
 
 func assertPerRuntimeFirstTerminal(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, state workersessions.State) {
 	t.Helper()
-	first := assertPerRuntimeAttemptState(t, fixture, state)
+	first := assertPerRuntimeAttemptState(t, t.Context(), fixture, state)
 	observation := assertPerRuntimeObservation(t, fixture, state)
-	before := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	before := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
 	if err := fixture.attempt.Complete(context.Background(), runtimeAttemptFailedDispatch(perRuntimeLogicalDispatchID), errors.New("late contradictory failure")); err != nil {
 		t.Fatalf("duplicate Complete(%s): %v", fixture.request.ID, err)
 	}
-	if retained := assertPerRuntimeAttemptState(t, fixture, state); !reflect.DeepEqual(first, retained) {
+	if retained := assertPerRuntimeAttemptState(t, t.Context(), fixture, state); !reflect.DeepEqual(first, retained) {
 		t.Fatalf("duplicate completion changed first terminal: %#v -> %#v", first, retained)
 	}
 	if retained := assertPerRuntimeObservation(t, fixture, state); !reflect.DeepEqual(observation, retained) {
 		t.Fatalf("duplicate completion changed observation: %#v -> %#v", observation, retained)
 	}
-	detached := assertPerRuntimeAttemptState(t, fixture, state)
+	detached := assertPerRuntimeAttemptState(t, t.Context(), fixture, state)
 	if detached.Result == nil {
 		t.Fatal("terminal Result is nil")
 	}
 	detached.Result.Outcome = workersessions.TerminalOutcomeFailed
 	detached.Result.Cause = &workersessions.FailureCause{Detail: "caller mutation"}
-	if retained := assertPerRuntimeAttemptState(t, fixture, state); !reflect.DeepEqual(first, retained) {
+	if retained := assertPerRuntimeAttemptState(t, t.Context(), fixture, state); !reflect.DeepEqual(first, retained) {
 		t.Fatalf("caller mutation changed retained terminal: %#v", retained)
 	}
-	if after := sink.requestsFor(workersessions.Topic(fixture.request.ID)); !reflect.DeepEqual(before, after) {
+	if after := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)); !reflect.DeepEqual(before, after) {
 		t.Fatalf("duplicate Complete appended again: %#v", after)
 	}
 	assertPerRuntimeTerminalAppends(t, fixture, sink, state)
@@ -388,11 +399,11 @@ func assertPerRuntimeFirstTerminal(t *testing.T, fixture *perRuntimeAttemptFixtu
 	}
 }
 
-func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
+func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender, peers ...*perRuntimeAttemptFixture) *perRuntimeAttemptFixture {
 	t.Helper()
-	fixture := preparePerRuntimeAttemptFixture(t, suffix, sink)
+	fixture := preparePerRuntimeAttemptFixture(t, suffix, sink, peers...)
 	var err error
-	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
 	if err != nil || fixture.attempt == nil {
 		t.Fatalf("BeginRuntimeAttempt(%s) = %v, %v", suffix, fixture.attempt, err)
 	}
@@ -405,35 +416,47 @@ func newPerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppende
 	return fixture
 }
 
-func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender) *perRuntimeAttemptFixture {
+func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsAppender, peers ...*perRuntimeAttemptFixture) *perRuntimeAttemptFixture {
 	t.Helper()
 	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
 	if suffix == "b" {
 		now = now.Add(time.Hour)
 	}
 	capture := &perRuntimeRecordingCapture{delegate: newInterruptRecordingService()}
-	service, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{},
-		coverageClock{now: now}, unavailableProviderSessions{}, capture)
-	if err != nil {
-		t.Fatalf("New(%s): %v", suffix, err)
+	var service workersessions.Service
+	if len(peers) > 0 {
+		service, capture = peers[0].service, peers[0].capture
+	} else {
+		var err error
+		service, err = New(unusedExecution{t: t}, sink, logging.NoopLogger{},
+			coverageClock{now: now}, platformclock.Real{}, unavailableProviderSessions{}, capture)
+		if err != nil {
+			t.Fatalf("New(%s): %v", suffix, err)
+		}
 	}
 	fixture := &perRuntimeAttemptFixture{
 		clock: now, capture: capture,
+		control: &perRuntimeCancellation{invoked: make(chan struct{}, 1)},
 		service: service.(*registry),
 		request: workersessions.RuntimeAttemptRequest{
-			ID: "worker-" + suffix, AttemptID: "physical-" + suffix,
-			Execution: dispatchHandoff(perRuntimeLogicalDispatchID),
+			Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: perRuntimeLogicalDispatchID},
+			ID:  "worker-" + suffix, AttemptID: "physical-" + suffix,
+			Execution: runtimeAttemptHandoff(perRuntimeLogicalDispatchID),
 		},
 	}
 	fixture.request.Execution.Execution.FactorySessionID = "factory-" + suffix
+	if len(peers) > 0 {
+		fixture.request.Key.RuntimeID = "runtime-" + suffix
+		fixture.request.Execution.Execution.RuntimeID = fixture.request.Key.RuntimeID
+	}
 	fixture.request.Execution.Execution.RecordingID = "recording-" + suffix
 	fixture.request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-" + suffix}
 	return fixture
 }
 
-func assertPerRuntimeAttemptState(t *testing.T, fixture *perRuntimeAttemptFixture, want workersessions.State) workersessions.Session {
+func assertPerRuntimeAttemptState(t *testing.T, ctx context.Context, fixture *perRuntimeAttemptFixture, want workersessions.State) workersessions.Session {
 	t.Helper()
-	session := getCharacterizationSession(t, fixture.service, fixture.request.ID)
+	session := getCharacterizationSession(t, ctx, fixture.service, fixture.request.ID)
 	if session.ID != fixture.request.ID || session.State != want {
 		t.Fatalf("Get(%s) = %#v, want %s", fixture.request.ID, session, want)
 	}
@@ -447,24 +470,28 @@ type perRuntimeCancellation struct {
 	err     error
 }
 
-func bindPerRuntimeCancellation(t *testing.T, fixture *perRuntimeAttemptFixture, cause error) *perRuntimeCancellation {
+func configurePerRuntimeCancellation(t *testing.T, fixture *perRuntimeAttemptFixture, cause error) *perRuntimeCancellation {
 	t.Helper()
-	control := &perRuntimeCancellation{invoked: make(chan struct{}, 1), err: cause}
-	if err := fixture.service.BindRuntimeAttemptCancellation(fixture.request.ID, perRuntimeLogicalDispatchID, control.cancel); err != nil {
-		t.Fatalf("BindRuntimeAttemptCancellation(%s): %v", fixture.request.ID, err)
-	}
-	return control
+	fixture.control.mu.Lock()
+	fixture.control.err = cause
+	fixture.control.mu.Unlock()
+	return fixture.control
+}
+
+func runtimeAttemptNoopCancellation(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+	return workers.WorkstationDispatchCancelOutcomeAlreadyTerminal, nil
 }
 
 func (control *perRuntimeCancellation) cancel(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
 	control.mu.Lock()
 	control.calls++
+	cause := control.err
 	control.mu.Unlock()
 	select {
 	case control.invoked <- struct{}{}:
 	default:
 	}
-	return workers.WorkstationDispatchCancelOutcomeCanceled, control.err
+	return workers.WorkstationDispatchCancelOutcomeCanceled, cause
 }
 
 func assertPerRuntimeCancellationCalls(t *testing.T, control *perRuntimeCancellation, want int) {
@@ -476,23 +503,278 @@ func assertPerRuntimeCancellationCalls(t *testing.T, control *perRuntimeCancella
 	}
 }
 
+func TestKeyedRuntimeCloseJoinsOwnedCaptureAndPreservesPeer(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	controlA := configurePerRuntimeCancellation(t, a, nil)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
+	publishPerRuntimeProgress(t, a, sink)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	closed := make(chan error, 1)
+	go func() { closed <- a.service.CloseRuntimeAttempts(ctx, "  "+a.request.Key.RuntimeID+"  ") }()
+	if err := waitControlledSignal(controlA.invoked, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-closed:
+		t.Fatalf("close returned before owned completion and capture finalization: %v", err)
+	default:
+	}
+	assertPerRuntimeCaptureNotAborted(t, b)
+	assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
+	publishPerRuntimeProgress(t, b, sink)
+	if err := a.attempt.Complete(ctx, runtimeAttemptCanceledDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("CloseRuntimeAttempts: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	assertPerRuntimeFirstTerminal(t, a, sink, workersessions.StateCanceled)
+	assertClosedRuntimeRejectsOpening(t, a, sink)
+	assertPerRuntimeCancellationCalls(t, controlA, 1)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	if err := a.service.CloseRuntimeAttempts(ctx, a.request.Key.RuntimeID); err != nil {
+		t.Fatalf("repeat close: %v", err)
+	}
+	result, err := a.service.Cancel(ctx, workersessions.ControlRequest{ID: a.request.ID})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.DispatchID != perRuntimeLogicalDispatchID {
+		t.Fatalf("retained terminal control identity = %#v, %v", result, err)
+	}
+	if err := b.attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	assertPerRuntimeFirstTerminal(t, b, sink, workersessions.StateCompleted)
+}
+
+func TestKeyedRuntimeCloseFailureAndInvalidScopePreserveLiveAttempts(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	cause := errors.New("owned close cancellation failure")
+	controlA := configurePerRuntimeCancellation(t, a, cause)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
+	if err := a.service.CloseRuntimeAttempts(context.Background(), " "); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("blank scope: %v", err)
+	}
+	if err := a.service.CloseRuntimeAttempts(context.Background(), "unknown-runtime"); err != nil {
+		t.Fatalf("unknown scope: %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := a.service.CloseRuntimeAttempts(canceled, a.request.Key.RuntimeID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled caller: %v", err)
+	}
+	assertPerRuntimeCancellationCalls(t, controlA, 0)
+	if err := a.service.CloseRuntimeAttempts(context.Background(), a.request.Key.RuntimeID); !errors.Is(err, cause) {
+		t.Fatalf("close failure = %v, want exact cause", err)
+	}
+	assertClosedRuntimeRejectsOpening(t, a, sink)
+	assertPerRuntimeCancellationCalls(t, controlA, 1)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	assertPerRuntimeAttemptState(t, t.Context(), a, workersessions.StateRunning)
+	assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
+	assertPerRuntimeCaptureNotAborted(t, a)
+	assertPerRuntimeCaptureNotAborted(t, b)
+	publishPerRuntimeProgress(t, a, sink)
+	publishPerRuntimeProgress(t, b, sink)
+}
+
+func assertClosedRuntimeRejectsOpening(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture) {
+	t.Helper()
+	request := fixture.request
+	request.ID += "-after-close"
+	request.Key.DispatchID = "new-dispatch"
+	request.Execution.Execution.Dispatch.DispatchID = request.Key.DispatchID
+	before := sink.requestsFor("")
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if attempt != nil || !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
+		t.Fatalf("closed runtime admission = %v, %v", attempt, err)
+	}
+	if _, err := fixture.service.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("closed runtime created Worker identity: %v", err)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("closed runtime appended opening records")
+	}
+}
+
+func TestKeyedRuntimeCloseDuringOpeningSealsOnlyOwnedScope(t *testing.T) {
+	t.Parallel()
+	for _, failOpening := range []bool{false, true} {
+		t.Run(fmt.Sprintf("opening-fails=%t", failOpening), func(t *testing.T) {
+			t.Parallel()
+			verifyRuntimeCloseDuringOpening(t, failOpening)
+		})
+	}
+}
+
+func verifyRuntimeCloseDuringOpening(t *testing.T, failOpening bool) {
+	t.Helper()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
+	a := preparePerRuntimeAttemptFixture(t, "a", sink, b)
+	boundary := EventsAppender(sink)
+	if failOpening {
+		boundary = &perRuntimeRejectOpeningAppender{EventsAppender: sink, topic: workersessions.Topic(a.request.ID, a.request.Execution.Execution.FactorySessionID), err: errors.New("owned opening failed")}
+	}
+	gate := &keyedOpeningGate{EventsAppender: boundary, topic: workersessions.Topic(a.request.ID, a.request.Execution.Execution.FactorySessionID), entered: make(chan struct{}), release: make(chan struct{})}
+	var release sync.Once
+	unblock := func() { release.Do(func() { close(gate.release) }) }
+	a.service.events = gate
+	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{}), message: "runtime Worker admission closed"}
+	close(logger.release)
+	a.service.logger = logger
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	opened := make(chan error, 1)
+	openingDone := make(chan struct{})
+	go func() {
+		defer close(openingDone)
+		attempt, err := a.service.BeginRuntimeAttempt(ctx, a.request, a.service.execution, coverageClock{now: a.clock}, a.service.scheduler, a.control.cancel)
+		if attempt != nil {
+			_ = attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+		}
+		opened <- err
+	}()
+	t.Cleanup(func() {
+		unblock()
+		if err := waitControlledSignal(openingDone, 30*time.Second); err != nil {
+			t.Errorf("opening cleanup join: %v", err)
+		}
+	})
+	if err := waitControlledSignal(gate.entered, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	closed := make(chan error, 1)
+	closingDone := make(chan struct{})
+	go func() {
+		defer close(closingDone)
+		closed <- a.service.CloseRuntimeAttempts(ctx, a.request.Key.RuntimeID)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		if err := waitControlledSignal(closingDone, 30*time.Second); err != nil {
+			t.Errorf("closing cleanup join: %v", err)
+		}
+	})
+	if err := waitControlledSignal(logger.claimed, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	assertClosedRuntimeRejectsOpening(t, a, sink)
+	select {
+	case err := <-closed:
+		t.Fatalf("close missed opening effects: %v", err)
+	default:
+	}
+	unblock()
+	assertRuntimeOpeningClosed(t, ctx, a, opened, closed, failOpening)
+	assertRuntimeClosedOpeningRecords(t, a, sink, failOpening)
+	assertClosedRuntimeRejectsOpening(t, a, sink)
+	assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
+	assertPerRuntimeCancellationCalls(t, controlB, 0)
+	assertPerRuntimeCaptureNotAborted(t, b)
+	publishPerRuntimeProgress(t, b, sink)
+	c := newPerRuntimeAttemptFixture(t, "new-peer", sink, b)
+	assertPerRuntimeAttemptState(t, t.Context(), c, workersessions.StateRunning)
+}
+
+func assertRuntimeClosedOpeningRecords(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, failed bool) {
+	t.Helper()
+	handle := fixture.capture.delegate.handleFor(t, fixture.request.ID)
+	if failed {
+		handle.mu.Lock()
+		defer handle.mu.Unlock()
+		if handle.abortCalls != 1 || handle.closeCalls != 0 || handle.terminalCalls != 0 {
+			t.Fatalf("failed opening cleanup = %d/%d/%d", handle.abortCalls, handle.closeCalls, handle.terminalCalls)
+		}
+		return
+	}
+	appends := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
+	if len(appends) != 2 || appends[0].SourceEventID != "started" || appends[1].SourceEventID != "terminal" {
+		t.Fatalf("close during opening records = %#v", appends)
+	}
+	assertPerRuntimeTerminalPayload(t, fixture, appends[1], decodePerRuntimeDraft(t, appends[1]), workersessions.StateCanceled)
+}
+
+func TestKeyedRuntimeCloseBeforeOpeningAndCanceledCaller(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	fixture := preparePerRuntimeAttemptFixture(t, "unopened", sink)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := fixture.service.CloseRuntimeAttempts(canceled, fixture.request.Key.RuntimeID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled caller = %v", err)
+	}
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if err != nil {
+		t.Fatalf("canceled close prevented admission: %v", err)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.service.CloseRuntimeAttempts(context.Background(), "not-yet-opened"); err != nil {
+		t.Fatal(err)
+	}
+	fixture.request.Key.RuntimeID = "not-yet-opened"
+	fixture.request.Execution.Execution.RuntimeID = fixture.request.Key.RuntimeID
+	assertClosedRuntimeRejectsOpening(t, fixture, sink)
+}
+
+func assertRuntimeOpeningClosed(t *testing.T, ctx context.Context, fixture *perRuntimeAttemptFixture, opened, closed <-chan error, failOpening bool) {
+	t.Helper()
+	want := workersessions.ErrStartAdmissionFailed
+	state := workersessions.StateCanceled
+	if failOpening {
+		want = workersessions.ErrStartOpeningPublication
+		state = workersessions.StateFailed
+	}
+	select {
+	case err := <-opened:
+		if !errors.Is(err, want) {
+			t.Fatalf("opening after close = %v, want %v", err, want)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("close after opening drain = %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	assertPerRuntimeAttemptState(t, ctx, fixture, state)
+	handle := fixture.capture.delegate.handleFor(t, fixture.request.ID)
+	if !failOpening {
+		if closes, terminals := handle.counts(); closes != 1 || terminals != 1 {
+			t.Fatalf("opening capture finalized %d/%d times, want 1/1", closes, terminals)
+		}
+	}
+}
+
 func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
 	t.Parallel()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
-	b := newPerRuntimeAttemptFixture(t, "b", sink)
-	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
-	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	assertPerRuntimeAttemptState(t, t.Context(), a, workersessions.StateRunning)
+	assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
 	assertPerRuntimeOpeningAttribution(t, a, sink)
 	assertPerRuntimeOpeningAttribution(t, b, sink)
 	publishPerRuntimeProgress(t, a, sink)
-	for _, pair := range [][2]*perRuntimeAttemptFixture{{a, b}, {b, a}} {
-		if _, err := pair[0].service.Get(context.Background(), workersessions.GetRequest{ID: pair[1].request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
-			t.Fatalf("peer Get error = %v, want ErrSessionNotFound", err)
-		}
-	}
-	controlA := bindPerRuntimeCancellation(t, a, nil)
-	controlB := bindPerRuntimeCancellation(t, b, nil)
+	controlA := configurePerRuntimeCancellation(t, a, nil)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	completed := make(chan error, 1)
@@ -522,14 +804,14 @@ func TestPerRuntimeAttempts_EqualDispatchCancellationIsolation(t *testing.T) {
 	}
 	assertPerRuntimeCancellationCalls(t, controlA, 1)
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
-	assertPerRuntimeAttemptState(t, a, workersessions.StateCanceled)
-	assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	assertPerRuntimeAttemptState(t, t.Context(), a, workersessions.StateCanceled)
+	assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
 	// B's publication window remains usable after A's terminal commits.
 	publishPerRuntimeProgress(t, b, sink)
 	if err := b.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
 		t.Fatalf("Complete(B): %v", err)
 	}
-	assertPerRuntimeAttemptState(t, b, workersessions.StateCompleted)
+	assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateCompleted)
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
 	assertPerRuntimeFirstTerminal(t, a, sink, workersessions.StateCanceled)
 	assertPerRuntimeFirstTerminal(t, b, sink, workersessions.StateCompleted)
@@ -539,12 +821,12 @@ func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
 	t.Parallel()
 	sink := newEventsAppender()
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
-	b := newPerRuntimeAttemptFixture(t, "b", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
 	cause := errors.New("injected A-only cancellation failure")
-	controlA := bindPerRuntimeCancellation(t, a, cause)
-	controlB := bindPerRuntimeCancellation(t, b, nil)
-	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
-	beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	controlA := configurePerRuntimeCancellation(t, a, cause)
+	controlB := configurePerRuntimeCancellation(t, b, nil)
+	assertPerRuntimeAttemptState(t, t.Context(), a, workersessions.StateRunning)
+	beforeB := assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
 	result, err := a.service.Cancel(context.Background(), workersessions.ControlRequest{ID: a.request.ID})
 	if !errors.Is(err, cause) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning || result.DispatchID != perRuntimeLogicalDispatchID {
 		t.Fatalf("Cancel(A) = %#v, %v, want FAILED/RUNNING with typed cause", result, err)
@@ -556,15 +838,15 @@ func TestPerRuntimeAttempts_ControlFailureLeavesPeerRunning(t *testing.T) {
 	}
 	assertPerRuntimeCancellationCalls(t, controlA, 1)
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
-	assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
-	if afterB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning); !reflect.DeepEqual(beforeB, afterB) {
+	assertPerRuntimeAttemptState(t, t.Context(), a, workersessions.StateRunning)
+	if afterB := assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning); !reflect.DeepEqual(beforeB, afterB) {
 		t.Fatalf("failed A control changed B: before=%#v after=%#v", beforeB, afterB)
 	}
 	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
 		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
 			t.Fatalf("Complete(%s): %v", fixture.request.ID, err)
 		}
-		assertPerRuntimeAttemptState(t, fixture, workersessions.StateCompleted)
+		assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateCompleted)
 	}
 	assertPerRuntimeCancellationCalls(t, controlB, 0)
 }
@@ -574,21 +856,21 @@ func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T
 	eventStore := newEventsAppender()
 	sink := &perRuntimeAppendCapture{EventsAppender: eventStore}
 	a := newPerRuntimeAttemptFixture(t, "a", sink)
-	b := newPerRuntimeAttemptFixture(t, "b", sink)
-	beforeA := assertPerRuntimeAttemptState(t, a, workersessions.StateRunning)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	beforeA := assertPerRuntimeAttemptState(t, t.Context(), a, workersessions.StateRunning)
 	observationA := assertPerRuntimeObservation(t, a, workersessions.StateRunning)
-	beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+	beforeB := assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
 	observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
 	before := sink.requestsFor("")
 	reads := make(map[events.Topic]events.ReadResult)
 	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
-		topic := workersessions.Topic(fixture.request.ID)
+		topic := workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)
 		reads[topic] = readPerRuntimeTopic(t, eventStore, topic)
 	}
 	if _, err := a.service.Reserve(context.Background(), workersessions.ReserveRequest{ID: a.request.ID}); !errors.Is(err, workersessions.ErrSessionAlreadyExists) {
 		t.Fatalf("Reserve(A duplicate) = %v, want ErrSessionAlreadyExists", err)
 	}
-	if after := assertPerRuntimeAttemptState(t, a, workersessions.StateRunning); !reflect.DeepEqual(beforeA, after) {
+	if after := assertPerRuntimeAttemptState(t, t.Context(), a, workersessions.StateRunning); !reflect.DeepEqual(beforeA, after) {
 		t.Fatalf("duplicate reservation changed A: %#v -> %#v", beforeA, after)
 	}
 	if after := assertPerRuntimeObservation(t, a, workersessions.StateRunning); !reflect.DeepEqual(observationA, after) {
@@ -611,7 +893,7 @@ func TestPerRuntimeAttempts_DuplicateReservationLeavesPairUnchanged(t *testing.T
 
 func assertPerRuntimePeerUnchanged(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, session workersessions.Session, observation workersessions.Observation, topic events.Topic, requests []events.AppendRequest) {
 	t.Helper()
-	if after := assertPerRuntimeAttemptState(t, fixture, workersessions.StateRunning); !reflect.DeepEqual(session, after) {
+	if after := assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateRunning); !reflect.DeepEqual(session, after) {
 		t.Fatalf("peer session changed: %#v -> %#v", session, after)
 	}
 	if after := assertPerRuntimeObservation(t, fixture, workersessions.StateRunning); !reflect.DeepEqual(observation, after) {
@@ -645,26 +927,26 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 			boundary := &perRuntimeRejectOpeningAppender{EventsAppender: eventStore}
 			sink := &perRuntimeAppendCapture{EventsAppender: boundary}
 			b := newPerRuntimeAttemptFixture(t, "b", sink)
-			controlB := bindPerRuntimeCancellation(t, b, nil)
-			beforeB := assertPerRuntimeAttemptState(t, b, workersessions.StateRunning)
+			controlB := configurePerRuntimeCancellation(t, b, nil)
+			beforeB := assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
 			observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
-			before := sink.requestsFor(workersessions.Topic(b.request.ID))
-			beforeRead := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID))
-			a := preparePerRuntimeAttemptFixture(t, "a", sink)
+			before := sink.requestsFor(workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID))
+			beforeRead := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID))
+			a := preparePerRuntimeAttemptFixture(t, "a", sink, b)
 			switch failure {
 			case "append":
-				boundary.topic, boundary.err = workersessions.Topic(a.request.ID), cause
+				boundary.topic, boundary.err = workersessions.Topic(a.request.ID, a.request.Execution.Execution.FactorySessionID), cause
 			case "capture-start":
 				a.capture.startErr = cause
 			case "capture-await":
 				a.capture.awaitErr = cause
 			}
 			assertPerRuntimeRejectedOpening(t, a, sink, failure)
-			if after := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID)); !reflect.DeepEqual(beforeRead, after) {
+			if after := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID)); !reflect.DeepEqual(beforeRead, after) {
 				t.Fatalf("A opening failure changed retained B topic: %#v", after)
 			}
 			assertPerRuntimeFailedOpeningHistory(t, a, eventStore, failure)
-			assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, workersessions.Topic(b.request.ID), before)
+			assertPerRuntimePeerUnchanged(t, b, sink, beforeB, observationB, workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID), before)
 			assertPerRuntimeCancellationCalls(t, controlB, 0)
 			assertPerRuntimeCaptureNotAborted(t, b)
 			publishPerRuntimeProgress(t, b, sink)
@@ -689,7 +971,7 @@ func readPerRuntimeTopic(t *testing.T, eventStore events.Service, topic events.T
 
 func assertPerRuntimeFailedOpeningHistory(t *testing.T, fixture *perRuntimeAttemptFixture, eventStore events.Service, failure string) {
 	t.Helper()
-	read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(fixture.request.ID))
+	read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
 	want := 0
 	if failure == "capture-await" {
 		want = 1
@@ -714,21 +996,18 @@ func assertPerRuntimeCaptureNotAborted(t *testing.T, fixture *perRuntimeAttemptF
 
 func assertPerRuntimeRejectedOpening(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, failure string) {
 	t.Helper()
-	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request)
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
 	if attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
 		t.Fatalf("BeginRuntimeAttempt(A) = %v, %v, want nil/ErrStartOpeningPublication", attempt, err)
 	}
-	assertPerRuntimeAttemptState(t, fixture, workersessions.StateFailed)
+	assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateFailed)
 	assertPerRuntimeObservation(t, fixture, workersessions.StateFailed)
-	controlA := &perRuntimeCancellation{invoked: make(chan struct{}, 1)}
-	if err := fixture.service.BindRuntimeAttemptCancellation(fixture.request.ID, perRuntimeLogicalDispatchID, controlA.cancel); err == nil {
-		t.Fatal("rejected opening accepted a cancellation binding")
-	}
+	controlA := fixture.control
 	if _, err := fixture.service.PublishRecord(context.Background(), perRuntimeProgressRequest(fixture)); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
 		t.Fatalf("PublishRecord(A) = %v, want ErrPublicationNotOpen", err)
 	}
 	assertPerRuntimeCancellationCalls(t, controlA, 0)
-	requests := sink.requestsFor(workersessions.Topic(fixture.request.ID))
+	requests := sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID))
 	if failure == "capture-start" {
 		if len(requests) != 0 {
 			t.Fatalf("capture start failure appended history: %#v", requests)
@@ -748,13 +1027,655 @@ func assertPerRuntimeRejectedOpening(t *testing.T, fixture *perRuntimeAttemptFix
 	}
 }
 
+func TestKeyedRuntime_RejectsContradictoryAdmissionBeforeOpening(t *testing.T) {
+	for _, key := range []workersessions.RuntimeAttemptKey{
+		{RuntimeID: "other-runtime", DispatchID: "candidate-dispatch"},
+		{RuntimeID: "candidate-runtime", DispatchID: "other-dispatch"},
+		{DispatchID: "candidate-dispatch"},
+		{},
+	} {
+		t.Run(fmt.Sprintf("runtime=%s/dispatch=%s", key.RuntimeID, key.DispatchID), func(t *testing.T) {
+			t.Parallel()
+			eventStore := newEventsAppender()
+			sink := &perRuntimeAppendCapture{EventsAppender: eventStore}
+			peer := newPerRuntimeAttemptFixture(t, "peer", sink)
+			before := assertPerRuntimeAttemptState(t, t.Context(), peer, workersessions.StateRunning)
+			observation := assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
+			appends := sink.requestsFor("")
+			request := workersessions.RuntimeAttemptRequest{
+				Key: key, ID: "candidate-worker", AttemptID: "candidate-physical",
+				Execution: dispatchHandoff("candidate-dispatch"),
+			}
+			request.Execution.Execution.RuntimeID = "candidate-runtime"
+			attempt, err := peer.service.BeginRuntimeAttempt(context.Background(), request, peer.service.execution, coverageClock{now: peer.clock}, peer.service.scheduler, peer.control.cancel)
+			if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+				t.Fatalf("BeginRuntimeAttempt = %v, %v; want nil/attempt mismatch", attempt, err)
+			}
+			if _, err := peer.service.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+				t.Fatalf("rejected admission reserved its identity: %v", err)
+			}
+			if after := sink.requestsFor(""); !reflect.DeepEqual(appends, after) {
+				t.Fatalf("rejected admission appended records: %#v", after)
+			}
+			assertPerRuntimePeerUnchanged(t, peer, sink, before, observation, "", appends)
+			read := readPerRuntimeTopic(t, eventStore, workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID))
+			if len(read.Records) != 0 {
+				t.Fatalf("rejected admission opened a retained topic: %#v", read.Records)
+			}
+			publishPerRuntimeProgress(t, peer, sink)
+			if err := peer.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeFirstTerminal(t, peer, sink, workersessions.StateCompleted)
+		})
+	}
+}
+
+// keyedOpeningGate holds the opening append so a competing admission can be
+// checked while the first key is reserved, without relying on scheduling.
+type keyedOpeningGate struct {
+	EventsAppender
+	topic   events.Topic
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (g *keyedOpeningGate) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	if req.Topic == g.topic {
+		g.once.Do(func() {
+			close(g.entered)
+			<-g.release
+		})
+	}
+	return g.EventsAppender.Append(ctx, req)
+}
+
+func assertKeyedRuntimeCollisionNoEffects(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture) workersessions.RuntimeAttemptRequest {
+	t.Helper()
+	before := sink.requestsFor("")
+	ownerBefore := getCharacterizationSession(t, t.Context(), fixture.service, fixture.request.ID)
+	request := fixture.request
+	request.ID = "competing-worker"
+	request.AttemptID = "different-physical-attempt"
+	request.Key.RuntimeID = " " + request.Key.RuntimeID + " "
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("collision Begin = %v, %v; want nil/attempt mismatch", attempt, err)
+	}
+	if _, err := fixture.service.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("collision reserved Worker: %v", err)
+	}
+	if after := sink.requestsFor(""); !reflect.DeepEqual(before, after) {
+		t.Fatal("collision appended records")
+	}
+	if after := getCharacterizationSession(t, t.Context(), fixture.service, fixture.request.ID); !reflect.DeepEqual(ownerBefore, after) {
+		t.Fatal("collision changed owner")
+	}
+	return request
+}
+
+func TestKeyedRuntime_RejectsKeyCollisionBeforeOpeningEffects(t *testing.T) {
+	t.Parallel()
+	for _, duringOpening := range []bool{false, true} {
+		t.Run(fmt.Sprintf("during-opening=%t", duringOpening), func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			fixture := preparePerRuntimeAttemptFixture(t, "owner", sink)
+			gate := &keyedOpeningGate{EventsAppender: sink, topic: workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID), entered: make(chan struct{}), release: make(chan struct{})}
+			var release sync.Once
+			unblock := func() { release.Do(func() { close(gate.release) }) }
+			t.Cleanup(unblock)
+			if !duringOpening {
+				unblock()
+			}
+			fixture.service.events = gate
+			done := make(chan struct{})
+			var openingErr error
+			go func() {
+				defer close(done)
+				fixture.attempt, openingErr = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+			}()
+			t.Cleanup(func() {
+				unblock()
+				if err := waitControlledSignal(done, 30*time.Second); err != nil {
+					t.Errorf("opening join: %v", err)
+					return
+				}
+				if fixture.attempt != nil {
+					_ = fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+				}
+			})
+			if err := waitControlledSignal(gate.entered, 30*time.Second); err != nil {
+				t.Fatal(err)
+			}
+			if !duringOpening {
+				if err := waitControlledSignal(done, 30*time.Second); err != nil {
+					t.Fatal(err)
+				}
+				if openingErr != nil {
+					t.Fatal(openingErr)
+				}
+			}
+			request := assertKeyedRuntimeCollisionNoEffects(t, fixture, sink)
+			unblock()
+			if err := waitControlledSignal(done, 30*time.Second); err != nil {
+				t.Fatal(err)
+			}
+			if openingErr != nil {
+				t.Fatal(openingErr)
+			}
+			publishPerRuntimeProgress(t, fixture, sink)
+			if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			// Terminal completion releases only this key; a later physical attempt
+			// can open a distinct stable Worker while the old topic remains retained.
+			next, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+			if err != nil {
+				t.Fatalf("Begin after completion: %v", err)
+			}
+			if err := next.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeFirstTerminal(t, fixture, sink, workersessions.StateCompleted)
+		})
+	}
+}
+
+func TestKeyedRuntime_OpeningFailureReleasesScopedReservation(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "failed-opening", newEventsAppender())
+	fixture.service.events = &runtimeAttemptBrokenAppender{err: errors.New("opening failed")}
+	if attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel); attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
+		t.Fatalf("failed Begin = %v, %v", attempt, err)
+	}
+	fixture.service.events = newEventsAppender()
+	request := fixture.request
+	request.ID = "replacement-worker"
+	request.AttemptID = "replacement-physical"
+	attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if err != nil {
+		t.Fatalf("Begin after opening failure: %v", err)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateFailed)
+}
+
+func keyedRuntimeProgressFragment(fixture *perRuntimeAttemptFixture) workers.ProgressFragment {
+	return workers.ProgressFragment{
+		Correlation: workers.ExecutionCorrelation{
+			RuntimeID: fixture.request.Key.RuntimeID, DispatchID: fixture.request.Key.DispatchID,
+			AttemptID: fixture.request.AttemptID,
+		},
+		DispatchID: fixture.request.Key.DispatchID, Kind: workers.ProgressFragmentKind,
+		Type: "message.delta", Payload: "output-" + fixture.request.ID, Provider: "codex",
+		Continuation: &providers.ContinuationRef{
+			Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "provider-" + fixture.request.ID,
+		},
+	}
+}
+
+func assertKeyedRuntimeProgressCommitted(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, count int) {
+	t.Helper()
+	appends := sink.requestsFor(fixture.service.observationTopic(fixture.request.ID))
+	if len(appends) != count+2 {
+		t.Fatalf("%s appends = %d, want opening, provider binding and %d records", fixture.request.ID, len(appends), count)
+	}
+	binding := decodePerRuntimeDraft(t, appends[1])
+	draft := decodePerRuntimeDraft(t, appends[len(appends)-1])
+	if binding.Kind != workers.KindSession || binding.Phase != workers.PhaseUpdated ||
+		draft.DispatchID != fixture.request.AttemptID || draft.Kind != workers.KindMessage ||
+		draft.Provenance.Provider != "codex" || !strings.Contains(string(draft.Payload), "output-"+fixture.request.ID) ||
+		appends[len(appends)-1].SourceSequence != events.SourceSequence(count) {
+		t.Fatalf("%s binding/progress = %#v / %#v / %#v", fixture.request.ID, binding, draft, appends[len(appends)-1])
+	}
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-" + fixture.request.ID}
+	session := getCharacterizationSession(t, t.Context(), fixture.service, fixture.request.ID)
+	want := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: fixture.request.ID, DispatchID: fixture.request.Key.DispatchID,
+		AttemptID: fixture.request.AttemptID, Reference: reference,
+	}
+	if !reflect.DeepEqual(session.ProviderSessionAssociation, &want) {
+		t.Fatalf("retained association = %#v, want %#v", session.ProviderSessionAssociation, want)
+	}
+}
+
+func TestKeyedRuntime_ProgressCommitsScopedAssociationBeforeForwarding(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	first := newPerRuntimeAttemptFixture(t, "a", sink)
+	peer := newPerRuntimeAttemptFixture(t, "b", sink, first)
+	counts := map[string]int{}
+	next := func(fragment workers.ProgressFragment) {
+		fixture := first
+		if fragment.Correlation.RuntimeID == peer.request.Key.RuntimeID {
+			fixture = peer
+		}
+		counts[fixture.request.ID]++
+		assertKeyedRuntimeProgressCommitted(t, fixture, sink, counts[fixture.request.ID])
+		if !reflect.DeepEqual(fragment, keyedRuntimeProgressFragment(fixture)) {
+			t.Fatal("downstream fragment changed")
+		}
+	}
+	publisher := workersessions.RuntimeProgressPublisher(first.service.PublishRuntimeProgress).ForRuntime(t.Context(), first.request.Key.RuntimeID, next)
+	peerPublisher := workersessions.RuntimeProgressPublisher(peer.service.PublishRuntimeProgress).ForRuntime(t.Context(), peer.request.Key.RuntimeID, next)
+	for _, fixture := range []*perRuntimeAttemptFixture{first, peer, first, peer} {
+		if fixture == first {
+			publisher(keyedRuntimeProgressFragment(fixture))
+		} else {
+			peerPublisher(keyedRuntimeProgressFragment(fixture))
+		}
+	}
+	if counts[first.request.ID] != 2 || counts[peer.request.ID] != 2 {
+		t.Fatalf("forwarded counts = %#v", counts)
+	}
+	handoff := keyedRuntimeProgressFragment(first)
+	handoff.Kind = workers.ProviderSessionObservedFragmentKind
+	before := sink.requestsFor("")
+	publisher(handoff)
+	if !reflect.DeepEqual(before, sink.requestsFor("")) || counts[first.request.ID] != 2 {
+		t.Fatal("internal provider handoff appended or forwarded")
+	}
+	if err := first.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	peerPublisher(keyedRuntimeProgressFragment(peer))
+	if counts[peer.request.ID] != 3 {
+		t.Fatal("peer progress stopped after target completion")
+	}
+}
+
+func TestKeyedRuntime_ProgressRejectsForeignIdentityBeforeEffects(t *testing.T) {
+	t.Parallel()
+	for _, mutation := range []string{"key", "physical", "missing-physical", "dispatch", "canonical", "provider", "factory", "generation", "request", "trace"} {
+		t.Run(mutation, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			first := newPerRuntimeAttemptFixture(t, "a", sink)
+			peer := newPerRuntimeAttemptFixture(t, "b", sink, first)
+			fragment := keyedRuntimeProgressFragment(first)
+			key := first.request.Key
+			mutateKeyedRuntimeProgress(mutation, &key, &fragment)
+			before := sink.requestsFor("")
+			forwarded := false
+			err := first.service.PublishRuntimeProgress(context.Background(), key, fragment, func(workers.ProgressFragment) { forwarded = true })
+			wantErr := workersessions.ErrProviderBindingAttemptMismatch
+			if mutation == "provider" {
+				wantErr = workersessions.ErrProviderBindingConflict
+			}
+			if !errors.Is(err, wantErr) || forwarded || !reflect.DeepEqual(before, sink.requestsFor("")) {
+				t.Fatalf("rejected progress = %v, forwarded=%t, appends changed=%t", err, forwarded, !reflect.DeepEqual(before, sink.requestsFor("")))
+			}
+			for _, fixture := range []*perRuntimeAttemptFixture{first, peer} {
+				if session := assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateRunning); session.ProviderSessionAssociation != nil {
+					t.Fatal("rejected progress changed provider association")
+				}
+			}
+			if err := first.service.PublishRuntimeProgress(context.Background(), peer.request.Key, keyedRuntimeProgressFragment(peer), nil); err != nil {
+				t.Fatalf("peer progress after rejection: %v", err)
+			}
+			assertKeyedRuntimeProgressCommitted(t, peer, sink, 1)
+		})
+	}
+}
+
+func TestKeyedRuntime_ProgressFallbackRejectsSupervisedScopes(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"completed", "failed", "canceled", "completed-closed", "unknown-dispatch", "closed-unopened"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			peer := newPerRuntimeAttemptFixture(t, "peer", sink)
+			var target *perRuntimeAttemptFixture
+			if scenario == "closed-unopened" {
+				target = preparePerRuntimeAttemptFixture(t, "target", sink, peer)
+				if err := peer.service.CloseRuntimeAttempts(context.Background(), target.request.Key.RuntimeID); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				target = newPerRuntimeAttemptFixture(t, "target", sink, peer)
+				completeProgressFallbackTarget(t, target, scenario)
+			}
+			fragment := keyedRuntimeProgressFragment(target)
+			if scenario == "unknown-dispatch" {
+				fragment.Correlation.DispatchID = "unadmitted-dispatch"
+			}
+			assertProgressFallbackIsolation(t, target, peer, sink, fragment)
+		})
+	}
+}
+
+func completeProgressFallbackTarget(t *testing.T, target *perRuntimeAttemptFixture, scenario string) {
+	t.Helper()
+	result := runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID)
+	switch scenario {
+	case "unknown-dispatch":
+		return
+	case "failed":
+		result = runtimeAttemptFailedDispatch(perRuntimeLogicalDispatchID)
+	case "canceled":
+		result = runtimeAttemptCanceledDispatch(perRuntimeLogicalDispatchID)
+	}
+	if err := target.attempt.Complete(context.Background(), result, nil); err != nil {
+		t.Fatal(err)
+	}
+	if scenario == "completed-closed" {
+		if err := target.service.CloseRuntimeAttempts(context.Background(), target.request.Key.RuntimeID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertProgressFallbackIsolation(t *testing.T, target, peer *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, fragment workers.ProgressFragment) {
+	t.Helper()
+	before := sink.requestsFor("")
+	retained, err := target.service.List(context.Background(), workersessions.ListRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var forwarded []workers.ProgressFragment
+	next := func(fragment workers.ProgressFragment) {
+		forwarded = append(forwarded, fragment)
+	}
+	publisher := workersessions.RuntimeProgressPublisher(target.service.PublishRuntimeProgress).ForRuntime(t.Context(), target.request.Key.RuntimeID, next)
+	publisher(fragment)
+	handoff := fragment
+	handoff.Kind = workers.ProviderSessionObservedFragmentKind
+	publisher(handoff)
+	after, err := target.service.List(context.Background(), workersessions.ListRequest{})
+	if err != nil || len(forwarded) != 0 || !reflect.DeepEqual(before, sink.requestsFor("")) || !reflect.DeepEqual(retained, after) {
+		t.Fatalf("rejected scoped progress: forwarded=%d, historyChanged=%t, sessionsChanged=%t, err=%v", len(forwarded), !reflect.DeepEqual(before, sink.requestsFor("")), !reflect.DeepEqual(retained, after), err)
+	}
+	workersessions.RuntimeProgressPublisher(peer.service.PublishRuntimeProgress).ForRuntime(t.Context(), peer.request.Key.RuntimeID, next)(keyedRuntimeProgressFragment(peer))
+	if len(forwarded) != 1 || forwarded[0].Correlation.RuntimeID != peer.request.Key.RuntimeID {
+		t.Fatalf("live peer progress = %#v", forwarded)
+	}
+	assertKeyedRuntimeProgressCommitted(t, peer, sink, 1)
+	// A standalone route that has never admitted keyed attempts keeps its
+	// actual bypass semantics, without inventing a Worker Session association.
+	bypass := fragment
+	bypass.Correlation.RuntimeID = "standalone-runtime"
+	before = sink.requestsFor("")
+	publisher = workersessions.RuntimeProgressPublisher(peer.service.PublishRuntimeProgress).ForRuntime(t.Context(), bypass.Correlation.RuntimeID, next)
+	publisher(bypass)
+	handoff.Correlation.RuntimeID = bypass.Correlation.RuntimeID
+	publisher(handoff)
+	if len(forwarded) != 2 || !reflect.DeepEqual(forwarded[1], bypass) || !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatalf("standalone bypass progress = %#v", forwarded)
+	}
+	assertKeyedRuntimeProgressCommitted(t, peer, sink, 1)
+}
+
+func mutateKeyedRuntimeProgress(mutation string, key *workersessions.RuntimeAttemptKey, fragment *workers.ProgressFragment) {
+	switch mutation {
+	case "key":
+		key.RuntimeID = "foreign-runtime"
+	case "physical":
+		fragment.Correlation.AttemptID = "physical-b"
+	case "missing-physical":
+		fragment.Correlation.AttemptID = ""
+	case "dispatch":
+		fragment.DispatchID = "foreign-dispatch"
+	case "canonical":
+		fragment.CanonicalDraft = workers.Draft{Kind: workers.KindMessage, DispatchID: "physical-b"}
+	case "provider":
+		fragment.Provider = "claude"
+	case "factory":
+		fragment.Correlation.FactorySessionID = "foreign-factory"
+	case "generation":
+		fragment.Correlation.GenerationID = "foreign-generation"
+	case "request":
+		fragment.Correlation.RequestID = "foreign-request"
+	case "trace":
+		fragment.Correlation.TraceID = "foreign-trace"
+	}
+}
+
+func TestKeyedRuntime_ProgressRetainsAdmittedMetadata(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	fixture := preparePerRuntimeAttemptFixture(t, "a", sink)
+	fixture.request.Execution.Execution.GenerationID = "admitted-generation"
+	fixture.request.Execution.Execution.Dispatch.Execution.TraceID = "admitted-trace"
+	var err error
+	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if err != nil || fixture.attempt == nil {
+		t.Fatalf("admitted attempt: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+			t.Error(err)
+		}
+	})
+	_, resolved, err := prepareRuntimeAttemptExecution(fixture.request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fragment := keyedRuntimeProgressFragment(fixture)
+	fragment.Correlation = resolved.Correlation
+	fragment.Correlation.DispatchID = fixture.request.Key.DispatchID
+	fragment.Correlation.AttemptID = fixture.request.AttemptID
+	// Caller-owned request replacement cannot change the admitted owner.
+	fixture.request.Execution.Execution.FactorySessionID = "replacement-factory"
+	fixture.request.Execution.Execution.GenerationID = "replacement-generation"
+	fixture.request.Execution.Execution.Dispatch.Execution.TraceID = "replacement-trace"
+	forwarded := 0
+	if err := fixture.service.PublishRuntimeProgress(context.Background(), fixture.request.Key, fragment, func(actual workers.ProgressFragment) {
+		forwarded++
+		if !reflect.DeepEqual(actual, fragment) {
+			t.Fatal("forwarded correlation changed")
+		}
+		assertKeyedRuntimeProgressCommitted(t, fixture, sink, 1)
+	}); err != nil || forwarded != 1 {
+		t.Fatalf("admitted metadata publication: %v, forwarded=%d", err, forwarded)
+	}
+}
+
+func TestKeyedRuntimeCompatibilityProgressRejectsForeignMetadataBeforeEffects(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	r := newRuntimeIdentityRegistry(t)
+	r.events = sink
+	execution := coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		fragment := workers.ProgressFragment{
+			Correlation: request.Correlation, DispatchID: request.Correlation.AttemptID,
+			Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "owned output", Provider: "codex",
+			Continuation: &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "owned-provider"},
+		}
+		key := workersessions.RuntimeAttemptKey{RuntimeID: request.Correlation.RuntimeID, DispatchID: request.Correlation.DispatchID}
+		for _, mutation := range []string{"factory", "generation", "request", "trace"} {
+			foreign := fragment
+			mutateKeyedRuntimeProgress(mutation, &key, &foreign)
+			before := sink.requestsFor("")
+			forwarded := false
+			err := r.PublishRuntimeProgress(ctx, key, foreign, func(workers.ProgressFragment) { forwarded = true })
+			if !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) || forwarded || !reflect.DeepEqual(before, sink.requestsFor("")) {
+				t.Fatalf("%s compatibility rejection: %v, forwarded=%t", mutation, err, forwarded)
+			}
+		}
+		if err := r.PublishRuntimeProgress(ctx, key, fragment, nil); err != nil {
+			t.Fatalf("valid compatibility progress after rejection: %v", err)
+		}
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	request := validStartRequest("metadata-worker", "metadata-dispatch")
+	request.Execution.Execution.RuntimeID = "metadata-runtime"
+	result, err := r.InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "metadata-runtime", DispatchID: "metadata-dispatch"},
+		ID:  request.ID, Execution: request.Execution,
+	}, request.Retry, execution, r.clock, r.scheduler)
+	if err != nil || result.Session.State != workersessions.StateCompleted || result.Session.ProviderSessionAssociation == nil {
+		t.Fatalf("retained compatibility result: %#v, %v", result, err)
+	}
+	if records := sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID)); len(records) != 4 {
+		t.Fatalf("retained opening/binding/output/terminal records: %d", len(records))
+	}
+}
+
+func TestKeyedRuntime_CompatibilityInvocationRetainsCorrelatedProgress(t *testing.T) {
+	t.Parallel()
+	for _, runtimeID := range []string{"", "compat-runtime"} {
+		t.Run(fmt.Sprintf("runtime=%q", runtimeID), func(t *testing.T) {
+			t.Parallel()
+			testKeyedRuntimeCompatibilityProgress(t, runtimeID)
+		})
+	}
+}
+
+func TestKeyedRuntime_CanonicalProgressPreservesDraftBeforeForwarding(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"", "codex"} {
+		t.Run(fmt.Sprintf("provenance=%q", provider), func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			first := newPerRuntimeAttemptFixture(t, "a", sink)
+			newPerRuntimeAttemptFixture(t, "b", sink, first)
+			payload, _ := json.Marshal(workers.MessagePayload{
+				Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "canonical output"}},
+			})
+			draft := workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseCompleted,
+				DispatchID: first.request.AttemptID, Payload: payload, Provenance: workers.Provenance{Provider: provider}}
+			fragment := keyedRuntimeProgressFragment(first)
+			fragment.CanonicalDraft = draft
+			forwarded := 0
+			publisher := workersessions.RuntimeProgressPublisher(first.service.PublishRuntimeProgress).ForRuntime(t.Context(), first.request.Key.RuntimeID, func(got workers.ProgressFragment) {
+				forwarded++
+				records := sink.requestsFor(workersessions.Topic(first.request.ID, first.request.Execution.Execution.FactorySessionID))
+				if len(records) != 3 || !reflect.DeepEqual(decodePerRuntimeDraft(t, records[2]), draft) || !reflect.DeepEqual(got, fragment) {
+					t.Fatalf("canonical publication changed draft/fragment or preceded binding: %#v", records)
+				}
+			})
+			publisher(fragment)
+			if forwarded != 1 {
+				t.Fatalf("canonical output forwarded=%d, want 1", forwarded)
+			}
+		})
+	}
+}
+
+func TestKeyedRuntime_AgentFinalDraftRetainsExactProvenanceAndRejectsForeignAttempts(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	first := newPerRuntimeAttemptFixture(t, "a", sink)
+	peer := newPerRuntimeAttemptFixture(t, "b", sink, first)
+	correlation := keyedRuntimeProgressFragment(first).Correlation
+	payload, err := json.Marshal(workers.MessagePayload{
+		Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "authoritative final answer"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := workers.Draft{
+		Kind: workers.KindMessage, Phase: workers.PhaseCompleted, DispatchID: correlation.AttemptID,
+		ItemID: correlation.AttemptID + "-final-message", Payload: payload,
+		Provenance: workers.Provenance{Provider: "agent-run", NativeEventType: "agent_final_response",
+			Delivery: workers.DeliveryNativeFinal, Fidelity: workers.FidelityFinalOnly, Representation: workers.RepresentationSnapshot},
+	}
+	// The harness final has only a physical DispatchID and canonical draft;
+	// its admitting Workers request supplies the logical/physical correlation.
+	fragment := workers.CanonicalDraftFragment(correlation.AttemptID, draft)
+	fragment.Correlation = correlation
+	forwarded := 0
+	next := func(got workers.ProgressFragment) {
+		forwarded++
+		records := sink.requestsFor(workersessions.Topic(first.request.ID, first.request.Execution.Execution.FactorySessionID))
+		if len(records) != 2 || !reflect.DeepEqual(decodePerRuntimeDraft(t, records[1]), draft) || !reflect.DeepEqual(got, fragment) {
+			t.Errorf("final draft/fragment changed or forwarded before commit: %#v, %#v", records, got)
+		}
+	}
+	for _, rejected := range []workers.ExecutionCorrelation{{}, keyedRuntimeProgressFragment(peer).Correlation, {
+		RuntimeID: correlation.RuntimeID, DispatchID: correlation.DispatchID, AttemptID: "stale-physical",
+	}} {
+		foreign := fragment
+		foreign.Correlation = rejected
+		before := sink.requestsFor("")
+		err := first.service.PublishRuntimeProgress(context.Background(), first.request.Key, foreign, next)
+		if !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) || forwarded != 0 || !reflect.DeepEqual(before, sink.requestsFor("")) {
+			t.Fatalf("foreign final publication: %v, forwarded=%d", err, forwarded)
+		}
+	}
+	workersessions.RuntimeProgressPublisher(first.service.PublishRuntimeProgress).ForRuntime(t.Context(), first.request.Key.RuntimeID, next)(fragment)
+	if forwarded != 1 || len(sink.requestsFor(workersessions.Topic(peer.request.ID, peer.request.Execution.Execution.FactorySessionID))) != 1 {
+		t.Fatalf("final forwards=%d or peer topic mutated", forwarded)
+	}
+}
+
+func TestKeyedRuntimeCompatibilityInvocationPublishesBeforeForwarding(t *testing.T) {
+	t.Parallel()
+	testKeyedRuntimeCompatibilityProgress(t, "keyed-compat-runtime", true)
+}
+
+func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string, keyed ...bool) {
+	t.Helper()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	forwarded := 0
+	next := func(workers.ProgressFragment) {
+		forwarded++
+		if records := sink.requestsFor(workersessions.Topic("compat-worker")); len(records) != 3 {
+			t.Fatalf("forwarding preceded opening/binding/output: %#v", records)
+		}
+	}
+	var publisher workers.ProgressPublisher
+
+	execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		publisher(workers.ProgressFragment{
+			Correlation: request.Correlation, DispatchID: request.Correlation.DispatchID,
+			Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "compatibility output", Provider: "codex",
+			Continuation: &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "compat-provider"},
+		})
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	progress := &workersessions.ProviderSessionObservationPublisher{}
+	publisher = func(fragment workers.ProgressFragment) {
+		if err := progress.PublishWorkerSessionProgress(context.Background(), service, "compat-worker", fragment); err != nil {
+			t.Errorf("publish compatibility: %v", err)
+			return
+		}
+		next(fragment)
+	}
+	request := validStartRequest("compat-worker", "compat-dispatch")
+	request.Execution.Execution.RuntimeID = runtimeID
+	var result workersessions.InvokeSessionResult
+	if len(keyed) > 0 {
+		result, err = service.(*registry).InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key: workersessions.RuntimeAttemptKey{RuntimeID: runtimeID, DispatchID: "compat-dispatch"},
+			ID:  request.ID, AttemptID: "compat-physical", Execution: request.Execution,
+		}, request.Retry, execution, coverageClock{}, platformclock.Real{})
+	} else {
+		result, err = service.InvokeSession(context.Background(), request)
+	}
+	if err != nil || result.Session.State != workersessions.StateCompleted || forwarded != 1 {
+		t.Fatalf("compatibility invocation = %#v, %v, forwarded=%d", result, err, forwarded)
+	}
+	session := getCharacterizationSession(t, t.Context(), service.(*registry), request.ID)
+	attemptID := "compat-dispatch"
+	if len(keyed) > 0 {
+		attemptID = "compat-physical"
+	}
+	if association := session.ProviderSessionAssociation; association == nil || association.WorkerSessionID != request.ID ||
+		association.DispatchID != "compat-dispatch" || association.AttemptID != attemptID || association.Reference.ID != "compat-provider" {
+		t.Fatalf("compatibility association = %#v", association)
+	}
+	if records := sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID)); len(records) != 4 {
+		t.Fatalf("compatibility retained records = %d, want opening/binding/output/terminal", len(records))
+	}
+}
+
 func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-1"},
 		ID:        "worker-1",
 		AttemptID: "attempt-1",
-		Execution: dispatchHandoff("dispatch-1"),
-	})
+		Execution: runtimeAttemptHandoff("dispatch-1"),
+	}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
@@ -762,13 +1683,6 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 		t.Fatal("BeginRuntimeAttempt() returned a nil handle")
 	}
 
-	r.mu.RLock()
-	_, runtimeOwned := r.runtimeAttempts["worker-1"]
-	ownerID := r.dispatchOwners["dispatch-1"]
-	r.mu.RUnlock()
-	if !runtimeOwned || ownerID != "worker-1" {
-		t.Fatalf("runtime ownership = %v, dispatch owner = %q, want true and worker-1", runtimeOwned, ownerID)
-	}
 	running, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
 	if err != nil {
 		t.Fatalf("Get() after BeginRuntimeAttempt error = %v, want nil", err)
@@ -777,7 +1691,8 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 		t.Fatalf("session state after BeginRuntimeAttempt = %q, want RUNNING", running.State)
 	}
 
-	if err := attempt.Complete(nil, runtimeAttemptCompletedDispatch("dispatch-1"), nil); err != nil {
+	// Deliberately verify the legacy nil-context completion contract.
+	if err := attempt.Complete(nil, runtimeAttemptCompletedDispatch("dispatch-1"), nil); err != nil { //nolint:staticcheck // SA1012: intentional nil-context compatibility witness.
 		t.Fatalf("Complete() error = %v, want nil", err)
 	}
 	if err := attempt.Complete(context.Background(), runtimeAttemptFailedDispatch("dispatch-1"), errors.New("late duplicate")); err != nil {
@@ -790,35 +1705,23 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	if completed.State != workersessions.StateCompleted || completed.Result == nil || completed.Result.Outcome != workersessions.TerminalOutcomeCompleted {
 		t.Fatalf("completed session = %#v, want absorbing COMPLETED result", completed)
 	}
-	r.mu.RLock()
-	_, runtimeOwned = r.runtimeAttempts["worker-1"]
-	r.mu.RUnlock()
-	if runtimeOwned {
-		t.Fatal("runtime attempt ownership remained after Complete")
-	}
 }
 
 func TestCancel_RuntimeAttemptBoundaryFailureDoesNotClaimApplied(t *testing.T) {
+	boundaryErr := errors.New("injected runtime cancellation failure")
+	cancelCalls := 0
 	registry := newTestRegistry(t)
 	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-cancel-failure"},
 		ID:        "worker-cancel-failure",
 		AttemptID: "attempt-cancel-failure",
-		Execution: dispatchHandoff("dispatch-cancel-failure"),
+		Execution: runtimeAttemptHandoff("dispatch-cancel-failure"),
+	}, registry.execution, platformclock.Real{}, registry.scheduler, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+		cancelCalls++
+		return workers.WorkstationDispatchCancelOutcomeCanceled, boundaryErr
 	})
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
-	}
-	boundaryErr := errors.New("injected runtime cancellation failure")
-	cancelCalls := 0
-	if err := registry.BindRuntimeAttemptCancellation(
-		"worker-cancel-failure",
-		"dispatch-cancel-failure",
-		func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
-			cancelCalls++
-			return workers.WorkstationDispatchCancelOutcomeCanceled, boundaryErr
-		},
-	); err != nil {
-		t.Fatalf("BindRuntimeAttemptCancellation() error = %v, want nil", err)
 	}
 
 	result, cancelErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-cancel-failure"})
@@ -836,25 +1739,25 @@ func TestCancel_RuntimeAttemptRepeatNoopRetainsAdmittedDispatchID(t *testing.T) 
 		workerID   = "worker-terminal-cancel"
 		dispatchID = "dispatch-terminal-cancel"
 	)
+	completeErr := make(chan error, 1)
+	var attempt workersessions.RuntimeAttempt
 	registry := newTestRegistry(t)
-	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+	opened, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: dispatchID},
 		ID:        workerID,
 		AttemptID: "attempt-terminal-cancel",
-		Execution: dispatchHandoff(dispatchID),
+		Execution: runtimeAttemptHandoff(dispatchID),
+	}, registry.execution, platformclock.Real{}, registry.scheduler, func(ctx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+		go func() {
+			completeErr <- attempt.Complete(context.WithoutCancel(ctx), runtimeAttemptCanceledDispatch(dispatchID), nil)
+		}()
+		return workers.WorkstationDispatchCancelOutcomeCanceled, nil
 	})
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
-	completeErr := make(chan error, 1)
-	if err := registry.BindRuntimeAttemptCancellation(workerID, dispatchID, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
-		go func() {
-			completeErr <- attempt.Complete(context.Background(), runtimeAttemptCanceledDispatch(dispatchID), nil)
-		}()
-		return workers.WorkstationDispatchCancelOutcomeCanceled, nil
-	}); err != nil {
-		t.Fatalf("BindRuntimeAttemptCancellation() error = %v, want nil", err)
-	}
 
+	attempt = opened
 	first, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: workerID})
 	if err != nil || first.Outcome != workersessions.ControlOutcomeApplied ||
 		first.Session.State != workersessions.StateCanceled || first.DispatchID != dispatchID {
@@ -871,6 +1774,461 @@ func TestCancel_RuntimeAttemptRepeatNoopRetainsAdmittedDispatchID(t *testing.T) 
 	}
 }
 
+func TestRuntimeAttempt_ProviderAssociationRetainsPhysicalIdentity(t *testing.T) {
+	for _, fromResult := range []bool{false, true} {
+		t.Run(fmt.Sprintf("from-result=%t", fromResult), func(t *testing.T) {
+			t.Parallel()
+			r := newRuntimeIdentityRegistry(t)
+			request := workersessions.RuntimeAttemptRequest{
+				Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "logical-dispatch"},
+				ID:  "worker-physical", AttemptID: "physical-retry-2",
+				Execution: runtimeAttemptHandoff("logical-dispatch"),
+			}
+			request.Execution.Execution.Dispatch.Execution.RequestID = "turn-physical"
+			attempt, err := r.BeginRuntimeAttempt(context.Background(), request, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch("logical-dispatch"), nil)
+			})
+			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-physical"}
+			result := runtimeAttemptCompletedDispatch("logical-dispatch")
+			if fromResult {
+				result.Result.Continuation = &providers.ContinuationRef{Provider: string(reference.Provider), Kind: reference.Kind, ProviderSessionID: reference.ID}
+			} else {
+				association, err := r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+					WorkerSessionID: request.ID, DispatchID: "logical-dispatch", Reference: reference,
+				})
+				if err != nil || association.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
+					t.Fatalf("AssociateProviderSession = %#v, %v", association, err)
+				}
+				assertRuntimePhysicalAssociation(t, r, request.ID, reference)
+			}
+			if err := attempt.Complete(context.Background(), result, nil); err != nil {
+				t.Fatal(err)
+			}
+			assertRuntimePhysicalAssociation(t, r, request.ID, reference)
+			observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+			if err != nil || observation.State != workersessions.StateCompleted || observation.AttemptID != request.AttemptID {
+				t.Fatalf("retained observation = %#v, %v", observation, err)
+			}
+		})
+	}
+}
+
+func TestKeyedRuntime_ExplicitProviderAssociationSurvivesEqualDispatchPeer(t *testing.T) {
+	for _, fromResult := range []bool{false, true} {
+		t.Run(fmt.Sprintf("from-result=%t", fromResult), func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			a := newPerRuntimeAttemptFixture(t, "a", sink)
+			b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+			for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+				reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-" + fixture.request.ID}
+				result := runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID)
+				if fromResult {
+					result.Result.Continuation = &providers.ContinuationRef{Provider: string(reference.Provider), Kind: reference.Kind, ProviderSessionID: reference.ID}
+				} else {
+					association, err := fixture.service.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+						WorkerSessionID: fixture.request.ID, DispatchID: perRuntimeLogicalDispatchID, Reference: reference,
+					})
+					if err != nil || association.Outcome != workersessions.ProviderSessionAssociationOutcomeAccepted {
+						t.Fatalf("AssociateProviderSession(%s) = %#v, %v", fixture.request.ID, association, err)
+					}
+				}
+				if err := fixture.attempt.Complete(context.Background(), result, nil); err != nil {
+					t.Fatal(err)
+				}
+				session := assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateCompleted)
+				want := workersessions.ProviderSessionAssociation{
+					WorkerSessionID: fixture.request.ID, TurnID: fixture.request.Execution.Execution.Dispatch.Execution.RequestID,
+					DispatchID: perRuntimeLogicalDispatchID, AttemptID: fixture.request.AttemptID, Reference: reference,
+				}
+				if !reflect.DeepEqual(session.ProviderSessionAssociation, &want) {
+					t.Fatalf("retained association = %#v, want %#v", session.ProviderSessionAssociation, want)
+				}
+				assertPerRuntimeObservation(t, fixture, workersessions.StateCompleted)
+			}
+		})
+	}
+}
+
+func TestKeyedRuntime_FirstProviderRecordUsesOwnedPhysicalAttempt(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := newPerRuntimeAttemptFixture(t, "a", sink)
+	b := newPerRuntimeAttemptFixture(t, "b", sink, a)
+	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+		request := perRuntimeProgressRequest(fixture)
+		request.Draft.Provenance.Provider = string(providers.IDCodex)
+		before := sink.requestsFor("")
+		foreign := request
+		foreign.Draft = workers.CloneDraft(request.Draft)
+		foreign.Draft.DispatchID = "foreign-physical"
+		if _, err := fixture.service.PublishRecord(context.Background(), foreign); !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) {
+			t.Fatalf("foreign physical PublishRecord = %v, want attempt mismatch", err)
+		}
+		if after := sink.requestsFor(""); !reflect.DeepEqual(before, after) {
+			t.Fatalf("rejected foreign physical record changed retained appends: %#v", after)
+		}
+		result, err := fixture.service.PublishRecord(context.Background(), request)
+		if err != nil || result.Outcome != workersessions.PublishOutcomeAccepted || result.SessionID != fixture.request.ID {
+			t.Fatalf("owned PublishRecord = %#v, %v", result, err)
+		}
+		after := sink.requestsFor("")
+		if len(after) != len(before)+2 || !reflect.DeepEqual(before, after[:len(before)]) {
+			t.Fatalf("owned record must append binding then output exactly once: %#v", after)
+		}
+		assertRuntimeProviderBindingBeforeOutput(t, fixture, request.Draft, after[len(before)], after[len(before)+1])
+	}
+}
+
+func assertRuntimeProviderBindingBeforeOutput(t *testing.T, fixture *perRuntimeAttemptFixture, want workers.Draft, binding, output events.AppendRequest) {
+	t.Helper()
+	if binding.Topic != workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID) || output.Topic != binding.Topic {
+		t.Fatalf("binding/output routed to foreign topic: %#v / %#v", binding, output)
+	}
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(decodePerRuntimeDraft(t, binding).Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.WorkerSessionID != fixture.request.ID || payload.AttemptID != fixture.request.AttemptID ||
+		payload.DispatchID != fixture.request.AttemptID || payload.ProviderSelection == nil || payload.ProviderSelection.RunnerID != string(providers.IDCodex) {
+		t.Fatalf("provider binding lost physical attribution: %#v", payload)
+	}
+	if draft := decodePerRuntimeDraft(t, output); !reflect.DeepEqual(draft, want) {
+		t.Fatalf("retained output = %#v, want %#v", draft, want)
+	}
+}
+
+func newRuntimeIdentityRegistry(t *testing.T) *registry {
+	t.Helper()
+	service, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{},
+		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service.(*registry)
+}
+
+func assertRuntimePhysicalAssociation(t *testing.T, r *registry, workerID string, reference providers.SessionRef) {
+	t.Helper()
+	session, err := r.Get(context.Background(), workersessions.GetRequest{ID: workerID})
+	want := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: workerID, TurnID: "turn-physical", DispatchID: "logical-dispatch",
+		AttemptID: "physical-retry-2", Reference: reference,
+	}
+	if err != nil || !reflect.DeepEqual(session.ProviderSessionAssociation, &want) {
+		t.Fatalf("Get provider association = %#v, %v, want %#v", session.ProviderSessionAssociation, err, want)
+	}
+}
+
+func TestKeyedRuntime_SelectedFactClocksRemainScopedThroughRetention(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	a := preparePerRuntimeAttemptFixture(t, "a", sink)
+	a.clock = a.clock.Add(24 * time.Hour)
+	b := preparePerRuntimeAttemptFixture(t, "b", sink, a)
+	clocks := make(map[*perRuntimeAttemptFixture]*platformclock.Deterministic)
+	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+		clock := platformclock.NewDeterministic(fixture.clock, time.Minute)
+		attempt, err := fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, clock, fixture.service.scheduler, fixture.control.cancel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+		})
+		fixture.attempt = attempt
+		clocks[fixture] = clock
+	}
+	for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+		clock, attempt := clocks[fixture], fixture.attempt
+		clock.SetTick(3)
+		assertSelectedRuntimeTiming(t, fixture, sink, fixture.clock, nil, 3*time.Minute)
+		if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+			t.Fatal(err)
+		}
+		ended := fixture.clock.Add(3 * time.Minute)
+		clock.SetTick(9)
+		assertSelectedRuntimeTiming(t, fixture, sink, fixture.clock, &ended, 3*time.Minute)
+		if err := attempt.Complete(context.Background(), runtimeAttemptFailedDispatch(perRuntimeLogicalDispatchID), errors.New("late result")); err != nil {
+			t.Fatal(err)
+		}
+		assertSelectedRuntimeTiming(t, fixture, sink, fixture.clock, &ended, 3*time.Minute)
+	}
+}
+
+func assertSelectedRuntimeTiming(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, started time.Time, ended *time.Time, duration time.Duration) {
+	t.Helper()
+	observation, err := fixture.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.request.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observation.StartedAt == nil || !observation.StartedAt.Equal(started) || !reflect.DeepEqual(observation.EndedAt, ended) || observation.Duration == nil || *observation.Duration != duration {
+		t.Fatalf("selected timing for %s = %#v; want %v/%v/%v", fixture.request.ID, observation, started, ended, duration)
+	}
+	openings := 0
+	for _, request := range sink.requestsFor(workersessions.Topic(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)) {
+		var payload workers.SessionPayload
+		draft := decodePerRuntimeDraft(t, request)
+		if request.SourceEventID != openingSourceEventID {
+			continue
+		}
+		openings++
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.StartedAt == nil || !payload.StartedAt.Equal(started) {
+			t.Fatalf("published start = %v, want %v", payload.StartedAt, started)
+		}
+	}
+	if openings != 1 {
+		t.Fatalf("published openings = %d, want one", openings)
+	}
+}
+
+func TestKeyedRuntime_OpeningFailureRetainsSelectedFactClock(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	peer := newPerRuntimeAttemptFixture(t, "b", sink)
+	target := preparePerRuntimeAttemptFixture(t, "a", sink, peer)
+	target.clock = target.clock.Add(24 * time.Hour)
+	target.capture.startErr = errors.New("selected opening failure")
+	attempt, err := target.service.BeginRuntimeAttempt(context.Background(), target.request, target.service.execution, coverageClock{now: target.clock}, target.service.scheduler, target.control.cancel)
+	if attempt != nil || !errors.Is(err, workersessions.ErrStartOpeningPublication) {
+		t.Fatalf("failed opening = %v, %v", attempt, err)
+	}
+	assertPerRuntimeObservation(t, target, workersessions.StateFailed)
+	assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
+}
+
+func TestKeyedRuntimeInvocationMissingEffectsRejectBeforeOpening(t *testing.T) {
+	for _, missing := range []string{"execution", "clock", "scheduler"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			peer := newPerRuntimeAttemptFixture(t, "b", sink)
+			r := peer.service
+			request := validStartRequest("selected-target", "selected-dispatch")
+			request.Execution.Execution.RecordingID = "selected-recording"
+			clock := platformclock.Source(coverageClock{now: peer.clock.Add(time.Hour)})
+			scheduler := platformclock.TimerSource(platformclock.NewDeterministic(time.Unix(0, 0), time.Second))
+			execution := workers.Service(coverageExecution{execute: func(_ context.Context, executed workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				return workers.ExecuteResult{Correlation: executed.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+			}})
+			selectedExecution, selectedClock, selectedScheduler := execution, clock, scheduler
+			wantErr := ErrMissingExecution
+			switch missing {
+			case "execution":
+				selectedExecution = nil
+			case "clock":
+				selectedClock, wantErr = nil, ErrMissingClock
+			case "scheduler":
+				selectedScheduler, wantErr = nil, ErrMissingScheduler
+			}
+			before := sink.requestsFor("")
+			prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, selectedExecution, selectedClock, selectedScheduler)
+			if !errors.Is(err, wantErr) || prepared.supervision != nil || prepared.terminal {
+				t.Fatalf("missing %s: %#v, %v, want %v", missing, prepared, err, wantErr)
+			}
+			assertSelectedEffectsRejectionIsInert(t, peer, request.ID, sink, before)
+			prepared, err = r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, clock, scheduler)
+			if err != nil || prepared.terminal {
+				t.Fatalf("valid retry: %#v, %v", prepared, err)
+			}
+			result, err := r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+			if err != nil || result.Session.State != workersessions.StateCompleted {
+				t.Fatalf("selected execution after rejection: %#v, %v", result, err)
+			}
+			assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
+			assertPerRuntimeCancellationCalls(t, peer.control, 0)
+			publishPerRuntimeProgress(t, peer, sink)
+		})
+	}
+}
+
+func assertSelectedEffectsRejectionIsInert(t *testing.T, peer *perRuntimeAttemptFixture, id string, sink *perRuntimeAppendCapture, before []events.AppendRequest) {
+	t.Helper()
+	if _, err := peer.service.Get(context.Background(), workersessions.GetRequest{ID: id}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("rejected identity: %v", err)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("missing effect appended observations")
+	}
+	peer.capture.mu.Lock()
+	captures := append([]recordings.WorkerSessionRecordingRequest(nil), peer.capture.requests...)
+	peer.capture.mu.Unlock()
+	if len(captures) != 1 || captures[0].WorkerSessionID != peer.request.ID {
+		t.Fatalf("missing effect started recording: %#v", captures)
+	}
+}
+
+func TestKeyedRuntime_OpeningRequiresSelectedExecutionAndScheduler(t *testing.T) {
+	for _, missing := range []string{"execution", "scheduler"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			peer := newPerRuntimeAttemptFixture(t, "b", sink)
+			target := preparePerRuntimeAttemptFixture(t, "a", sink, peer)
+			before := sink.requestsFor("")
+			var execution workers.Service = unusedExecution{t: t}
+			var scheduler platformclock.TimerSource = platformclock.Real{}
+			want := ErrMissingExecution
+			if missing == "execution" {
+				execution = nil
+			} else {
+				scheduler = nil
+				want = ErrMissingScheduler
+			}
+			attempt, err := target.service.BeginRuntimeAttempt(context.Background(), target.request,
+				execution, coverageClock{now: target.clock}, scheduler, target.control.cancel)
+			if attempt != nil || !errors.Is(err, want) {
+				t.Fatalf("missing %s = %v, %v; want %v", missing, attempt, err, want)
+			}
+			assertSelectedEffectsRejectionIsInert(t, peer, target.request.ID, sink, before)
+			assertPerRuntimeCancellationCalls(t, peer.control, 0)
+			publishPerRuntimeProgress(t, peer, sink)
+			// Opening is observation-only. Supplied effects suffice even when
+			// direct invocation defaults are absent; neither executor is called.
+			target.service.execution = nil
+			target.service.scheduler = nil
+			attempt, err = target.service.BeginRuntimeAttempt(context.Background(), target.request,
+				unusedExecution{t: t}, coverageClock{now: target.clock}, platformclock.Real{}, target.control.cancel)
+			if err != nil || attempt == nil {
+				t.Fatalf("selected opening after rejection = %v, %v", attempt, err)
+			}
+			t.Cleanup(func() {
+				_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+			})
+			assertPerRuntimeObservation(t, target, workersessions.StateRunning)
+			assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
+		})
+	}
+}
+
+func TestKeyedRuntime_MissingFactClockRejectsBeforeOpeningEffects(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	peer := newPerRuntimeAttemptFixture(t, "b", sink)
+	target := preparePerRuntimeAttemptFixture(t, "a", sink, peer)
+	before := sink.requestsFor("")
+	attempt, err := target.service.BeginRuntimeAttempt(context.Background(), target.request, target.service.execution, nil, target.service.scheduler, target.control.cancel)
+	if attempt != nil || !errors.Is(err, ErrMissingClock) {
+		t.Fatalf("missing clock = %v, %v", attempt, err)
+	}
+	if _, err := target.service.Get(context.Background(), workersessions.GetRequest{ID: target.request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("rejected identity = %v", err)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("missing clock appended observations")
+	}
+	peer.capture.mu.Lock()
+	requests := append([]recordings.WorkerSessionRecordingRequest(nil), peer.capture.requests...)
+	peer.capture.mu.Unlock()
+	if len(requests) != 1 || requests[0].WorkerSessionID != peer.request.ID {
+		t.Fatalf("rejected recording = %#v", requests)
+	}
+	attempt, err = target.service.BeginRuntimeAttempt(context.Background(), target.request, target.service.execution, coverageClock{now: target.clock}, target.service.scheduler, target.control.cancel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+	})
+	assertPerRuntimeObservation(t, target, workersessions.StateRunning)
+	assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
+}
+
+func TestKeyedRuntime_MissingCancellationRejectsBeforeOpeningEffects(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	peer := newPerRuntimeAttemptFixture(t, "b", sink)
+	target := preparePerRuntimeAttemptFixture(t, "a", sink, peer)
+	before := sink.requestsFor("")
+	attempt, err := target.service.BeginRuntimeAttempt(context.Background(), target.request, target.service.execution, coverageClock{now: target.clock}, target.service.scheduler, nil)
+	if attempt != nil || !errors.Is(err, errRuntimeAttemptControlUnavailable) {
+		t.Fatalf("missing cancellation = %v, %v, want rejected", attempt, err)
+	}
+	if _, err := target.service.Get(context.Background(), workersessions.GetRequest{ID: target.request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("rejected opening created a Worker Session: %v", err)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("rejected opening appended observations")
+	}
+	peer.capture.mu.Lock()
+	requests := append([]recordings.WorkerSessionRecordingRequest(nil), peer.capture.requests...)
+	peer.capture.mu.Unlock()
+	if len(requests) != 1 || requests[0].WorkerSessionID != peer.request.ID {
+		t.Fatalf("rejected opening created a recording: %#v", requests)
+	}
+	assertPerRuntimeAttemptState(t, t.Context(), peer, workersessions.StateRunning)
+	// The rejection must not reserve the scoped key or stable identity.
+	attempt, err = target.service.BeginRuntimeAttempt(context.Background(), target.request, target.service.execution, coverageClock{now: target.clock}, target.service.scheduler, target.control.cancel)
+	if err != nil || attempt == nil {
+		t.Fatalf("valid admission after rejection = %v, %v", attempt, err)
+	}
+	t.Cleanup(func() {
+		_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+	})
+	cause := errors.New("admitted cancellation resource")
+	configurePerRuntimeCancellation(t, target, cause)
+	result, err := target.service.Cancel(context.Background(), workersessions.ControlRequest{ID: target.request.ID})
+	if !errors.Is(err, cause) || result.Outcome != workersessions.ControlOutcomeFailed {
+		t.Fatalf("immediate control = %#v, %v, want supplied resource", result, err)
+	}
+	assertPerRuntimeCancellationCalls(t, target.control, 1)
+	assertPerRuntimeAttemptState(t, t.Context(), peer, workersessions.StateRunning)
+}
+
+func TestRuntimeAttempt_AdmissionCannotReplaceOwnedCancellationResource(t *testing.T) {
+	t.Parallel()
+	r := newRuntimeIdentityRegistry(t)
+	cause := errors.New("owned target cancellation failed")
+	ownedCalls, replacementCalls := 0, 0
+	for _, id := range []string{"target", "peer"} {
+		attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-" + id},
+			ID:  id, AttemptID: "physical-" + id, Execution: runtimeAttemptHandoff("dispatch-" + id),
+		}, r.execution, platformclock.Real{}, r.scheduler, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+			if id == "target" {
+				ownedCalls++
+				return "", cause
+			}
+			return workers.WorkstationDispatchCancelOutcomeAlreadyTerminal, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch("dispatch-"+id), nil)
+		})
+	}
+	beforePeer, err := r.Get(context.Background(), workersessions.GetRequest{ID: "peer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-target"},
+		ID:  "target", AttemptID: "physical-target", Execution: runtimeAttemptHandoff("dispatch-target"),
+	}, r.execution, platformclock.Real{}, r.scheduler, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+		replacementCalls++
+		return "", errors.New("replacement must not run")
+	}); replacement != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("replacement admission = %v, %v, want rejected", replacement, err)
+	}
+
+	result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "target"})
+	if !errors.Is(err, cause) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning || ownedCalls != 1 || replacementCalls != 0 {
+		t.Fatalf("Cancel = %#v, %v; calls = %d/%d", result, err, ownedCalls, replacementCalls)
+	}
+	afterPeer, err := r.Get(context.Background(), workersessions.GetRequest{ID: "peer"})
+	if err != nil || !reflect.DeepEqual(beforePeer, afterPeer) {
+		t.Fatalf("peer changed: %#v -> %#v, %v", beforePeer, afterPeer, err)
+	}
+}
+
 func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *testing.T) {
 	t.Run("opening failure terminalizes without claiming runtime ownership", func(t *testing.T) {
 		r := newTestRegistry(t)
@@ -879,9 +2237,10 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 		r.events = &runtimeAttemptBrokenAppender{err: errors.New("opening publication failed")}
 
 		_, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-opening-failure"},
 			ID:        "worker-opening-failure",
-			Execution: dispatchHandoff("dispatch-opening-failure"),
-		})
+			Execution: runtimeAttemptHandoff("dispatch-opening-failure"),
+		}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation)
 		if !errors.Is(err, workersessions.ErrStartOpeningPublication) {
 			t.Fatalf("BeginRuntimeAttempt() error = %v, want ErrStartOpeningPublication", err)
 		}
@@ -908,16 +2267,18 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 	t.Run("same logical dispatch cannot have two owners", func(t *testing.T) {
 		r := newTestRegistry(t)
 		first, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-shared"},
 			ID:        "worker-owner",
-			Execution: dispatchHandoff("dispatch-shared"),
-		})
+			Execution: runtimeAttemptHandoff("dispatch-shared"),
+		}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation)
 		if err != nil {
 			t.Fatalf("first BeginRuntimeAttempt() error = %v, want nil", err)
 		}
 		if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-shared"},
 			ID:        "worker-other",
-			Execution: dispatchHandoff("dispatch-shared"),
-		}); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+			Execution: runtimeAttemptHandoff("dispatch-shared"),
+		}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
 			t.Fatalf("conflicting BeginRuntimeAttempt() error = %v, want attempt mismatch", err)
 		}
 		if err := first.Complete(context.Background(), runtimeAttemptCompletedDispatch("dispatch-shared"), nil); err != nil {
@@ -931,10 +2292,11 @@ func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *tes
 	const dispatchID = "usage-without-observation-dispatch"
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: dispatchID},
 		ID:        sessionID,
 		AttemptID: dispatchID,
-		Execution: dispatchHandoff(dispatchID),
-	})
+		Execution: runtimeAttemptHandoff(dispatchID),
+	}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
@@ -966,7 +2328,7 @@ func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *tes
 
 func TestBeginRuntimeAttempt_NilRegistryAndHandleAreUnavailable(t *testing.T) {
 	var r *registry
-	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
+	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}, newTestRegistry(t).execution, platformclock.Real{}, platformclock.Real{}, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
 		t.Fatalf("nil registry BeginRuntimeAttempt() error = %v, want ErrStartAdmissionFailed", err)
 	}
 	var attempt *runtimeAttempt
@@ -987,30 +2349,29 @@ func TestBeginRuntimeAttempt_InitializesOwnershipMapsWithNilContext(t *testing.T
 	r.mu.Unlock()
 
 	attempt, err := r.BeginRuntimeAttempt(nil, workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-map-init"},
 		ID:        "worker-map-init",
 		AttemptID: "attempt-map-init",
-		Execution: dispatchHandoff("dispatch-map-init"),
-	})
+		Execution: runtimeAttemptHandoff("dispatch-map-init"),
+	}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
 	if err := attempt.Complete(nil, runtimeAttemptCompletedDispatch("dispatch-map-init"), nil); err != nil {
 		t.Fatalf("Complete() error = %v, want nil", err)
 	}
-	r.mu.RLock()
-	_, runtimeOwned := r.runtimeAttempts["worker-map-init"]
-	ownerID := r.dispatchOwners["dispatch-map-init"]
-	r.mu.RUnlock()
-	if runtimeOwned || ownerID != "worker-map-init" {
-		t.Fatalf("post-completion ownership = %v, dispatch owner = %q, want false and worker-map-init", runtimeOwned, ownerID)
+	session := getCharacterizationSession(t, t.Context(), r, "worker-map-init")
+	if session.State != workersessions.StateCompleted {
+		t.Fatalf("post-completion state = %s, want COMPLETED", session.State)
 	}
 }
 
 func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing.T) {
 	r := newTestRegistry(t)
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
-		Execution: dispatchHandoff("dispatch-invalid"),
-	}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-invalid"},
+		Execution: runtimeAttemptHandoff("dispatch-invalid"),
+	}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Fatalf("invalid BeginRuntimeAttempt() error = %v, want ErrInvalidSessionID", err)
 	}
 
@@ -1019,20 +2380,53 @@ func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing
 		t.Fatalf("transitionToStarting() error = %v, want nil", err)
 	}
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-already-starting"},
 		ID:        "worker-already-starting",
-		Execution: dispatchHandoff("dispatch-already-starting"),
-	}); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+		Execution: runtimeAttemptHandoff("dispatch-already-starting"),
+	}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrSessionNotStartable) {
 		t.Fatalf("already-starting BeginRuntimeAttempt() error = %v, want ErrSessionNotStartable", err)
 	}
 }
 
-func TestRuntimeAttemptClaim_RaceGuardRejectsConflictingOwner(t *testing.T) {
-	r := newTestRegistry(t)
-	r.mu.Lock()
-	r.dispatchOwners["dispatch-race"] = "worker-owner"
-	r.mu.Unlock()
-	if r.claimRuntimeAttempt("dispatch-race", "worker-other", "dispatch-race") {
-		t.Fatal("claimRuntimeAttempt() accepted a conflicting owner")
+func TestKeyedRuntime_EqualPhysicalDefaultsKeepOwnedTopicsAndCompletion(t *testing.T) {
+	t.Parallel()
+	for _, physicalID := range []string{"", perRuntimeLogicalDispatchID} {
+		t.Run("physical="+physicalID, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			a := preparePerRuntimeAttemptFixture(t, "a", sink)
+			b := preparePerRuntimeAttemptFixture(t, "b", sink, a)
+			for _, fixture := range []*perRuntimeAttemptFixture{a, b} {
+				fixture.request.AttemptID = physicalID
+				var err error
+				fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+				if err != nil || fixture.attempt == nil {
+					t.Fatalf("BeginRuntimeAttempt(%s): %v", fixture.request.ID, err)
+				}
+				t.Cleanup(func() {
+					if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+						t.Error(err)
+					}
+				})
+				// Observers expect the resolved physical identity, including the
+				// unchanged dispatch default when the input AttemptID was empty.
+				fixture.request.AttemptID = perRuntimeLogicalDispatchID
+				assertPerRuntimeOpeningAttribution(t, fixture, sink)
+			}
+			controlA := configurePerRuntimeCancellation(t, a, nil)
+			controlB := configurePerRuntimeCancellation(t, b, nil)
+			publishPerRuntimeProgress(t, a, sink)
+			cancelEqualPhysicalAttempt(t, a, controlA)
+			assertPerRuntimeCancellationCalls(t, controlA, 1)
+			assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
+			publishPerRuntimeProgress(t, b, sink)
+			if err := b.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+				t.Fatal(err)
+			}
+			assertPerRuntimeCancellationCalls(t, controlB, 0)
+			assertPerRuntimeFirstTerminal(t, a, sink, workersessions.StateCanceled)
+			assertPerRuntimeFirstTerminal(t, b, sink, workersessions.StateCompleted)
+		})
 	}
 }
 
@@ -1044,9 +2438,10 @@ func TestBeginRuntimeAttempt_FinalClaimRaceTerminalizesTheAttempt(t *testing.T) 
 		dispatchID: "dispatch-final-race",
 	}
 	_, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-final-race"},
 		ID:        "worker-final-race",
-		Execution: dispatchHandoff("dispatch-final-race"),
-	})
+		Execution: runtimeAttemptHandoff("dispatch-final-race"),
+	}, r.execution, platformclock.Real{}, r.scheduler, runtimeAttemptNoopCancellation)
 	if !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
 		t.Fatalf("final-claim race error = %v, want attempt mismatch", err)
 	}
@@ -1375,6 +2770,12 @@ func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(
 
 // dispatchHandoff builds the minimal well-formed dispatch request the
 // invocation driver needs to name one attempt.
+func runtimeAttemptHandoff(dispatchID string) workers.WorkstationDispatchRequest {
+	request := dispatchHandoff(dispatchID)
+	request.Execution.RuntimeID = "runtime-test"
+	return request
+}
+
 func dispatchHandoff(dispatchID string) workers.WorkstationDispatchRequest {
 	return workers.WorkstationDispatchRequest{
 		WorkstationName: "review",
@@ -1462,6 +2863,7 @@ func newAdmissionCancellationFixture(t *testing.T) admissionCancellationFixture 
 					r.acceptSupervision(fixture.sessionID, supervision)
 				}
 			},
+			nil,
 		)
 		r.finishSupervisionPublication(supervision)
 		fixture.executionDone <- admissionHandoffOutcome{result: result, err: err}
@@ -1551,7 +2953,7 @@ func assertAdmissionCancellation(t *testing.T, fixture *admissionCancellationFix
 		t.Fatal("Workers execution ran after cancellation won before admission")
 	default:
 	}
-	fixture.registry.completeSupervision(fixture.sessionID, fixture.supervision, handoff.result, handoff.err)
+	fixture.registry.completeSupervision(t.Context(), fixture.sessionID, fixture.supervision, handoff.result, handoff.err)
 	final, err := fixture.registry.Get(context.Background(), workersessions.GetRequest{ID: fixture.sessionID})
 	if err != nil || final.State != workersessions.StateCanceled {
 		t.Fatalf("late admission completion session = %+v, %v, want absorbing CANCELED", final, err)
@@ -1637,7 +3039,7 @@ func TestCancel_BeforePublicationUsesRegisteredSupervision(t *testing.T) {
 		t.Fatalf("Cancel() before publication returned unknown dispatch: %v", err)
 	}
 
-	r.completeSupervision(
+	r.completeSupervision(t.Context(),
 		"worker-before-publication",
 		supervision,
 		canceledBeforeAdmissionResult(dispatchHandoff("dispatch-before-publication")),
@@ -1680,7 +3082,7 @@ func TestTerminate_BeforePublicationUsesRegisteredSupervisionAndIsIdempotent(t *
 
 	// A late canceled publication belongs to the same supervision and cannot
 	// replace the absorbing terminal state or make a second boundary request.
-	r.completeSupervision(sessionID, supervision, canceledBeforeAdmissionResult(request), workers.ErrWorkstationDispatchCanceled)
+	r.completeSupervision(t.Context(), sessionID, supervision, canceledBeforeAdmissionResult(request), workers.ErrWorkstationDispatchCanceled)
 	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: sessionID})
 	if err != nil || final.State != workersessions.StateTerminated {
 		t.Fatalf("late pre-publication completion session = %+v, %v, want absorbing TERMINATED", final, err)
@@ -3296,13 +4698,6 @@ func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
 		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
 	}
 
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}, nil); !errors.Is(err, ErrMissingClock) {
-		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
-	}
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil, nil); !errors.Is(err, ErrMissingProviderSessions) {
-		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
-	}
-
 	if got := providerIdentityForExecution(workers.WorkstationExecutionRequest{
 		ExecutorProvider: workers.ExecutorProviderACP,
 		ModelProvider:    "cursor-acp",
@@ -3928,7 +5323,7 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 		t.Fatalf("transitionToStarting(stopping) = %v, want nil", err)
 	}
 	stopping.stopping = true
-	prepared, err := stopping.registerInvocationSupervision(ctx, coverageInvokeRequest("stopping"), invocationPreparationOptions{serverOwned: true})
+	prepared, err := stopping.registerInvocationSupervision(ctx, coverageInvokeRequest("stopping"), invocationPreparationOptions{serverOwned: true}, stopping.execution, stopping.clock, stopping.scheduler)
 	if err != nil || !prepared.terminal || !errors.Is(prepared.failure, workersessions.ErrStartServerStopping) {
 		t.Fatalf("stopping registration = %+v, %v, want terminal server-stopping result", prepared, err)
 	}
@@ -3939,21 +5334,21 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 		t.Fatalf("transitionToStarting(terminal) = %v, want nil", err)
 	}
 	terminal.commitTerminal("terminal", workersessions.StateCompleted, workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted})
-	prepared, err = terminal.registerInvocationSupervision(ctx, coverageInvokeRequest("terminal"), invocationPreparationOptions{})
+	prepared, err = terminal.registerInvocationSupervision(ctx, coverageInvokeRequest("terminal"), invocationPreparationOptions{}, terminal.execution, terminal.clock, terminal.scheduler)
 	if err != nil || !prepared.terminal || !errors.Is(prepared.failure, workersessions.ErrStartAdmissionFailed) {
 		t.Fatalf("terminal registration = %+v, %v, want terminal admission-failed result", prepared, err)
 	}
 
 	reserved := newTestRegistry(t)
 	reserved.reserveIfAbsent("reserved")
-	_, err = reserved.registerInvocationSupervision(ctx, coverageInvokeRequest("reserved"), invocationPreparationOptions{})
+	_, err = reserved.registerInvocationSupervision(ctx, coverageInvokeRequest("reserved"), invocationPreparationOptions{}, reserved.execution, reserved.clock, reserved.scheduler)
 	if !errors.Is(err, workersessions.ErrStartNotAccepted) {
 		t.Fatalf("reserved registration error = %v, want ErrStartNotAccepted", err)
 	}
 
 	running := newTestRegistry(t)
 	running.sessions["running"] = workersessions.Session{ID: "running", State: workersessions.StateRunning}
-	if _, err := running.startReserved(ctx, workersessions.StartRequest{RequestID: "running-request", ID: "running"}); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+	if _, err := running.startReservedWithEffects(workersessions.StartRequest{RequestID: "running-request", ID: "running"}, running.execution, running.clock, running.scheduler); !errors.Is(err, workersessions.ErrSessionNotStartable) {
 		t.Fatalf("startReserved(running) error = %v, want ErrSessionNotStartable", err)
 	}
 
@@ -4255,13 +5650,13 @@ func TestAwaitContinuationReplayAndObservationListIDsRemainDetachedAndDeterminis
 			"nil-meta":  nil,
 		},
 	}
-	if got := r.observationListIDs("", workersessions.ObservationScopeAll, nil); !reflect.DeepEqual(got, []string{"direct-a", "factory-a"}) {
+	if got := r.observationListIDs("", workersessions.ObservationScopeAll, nil, "", ""); !reflect.DeepEqual(got, []string{"direct-a", "factory-a"}) {
 		t.Fatalf("observationListIDs(all) = %#v, want deterministic IDs", got)
 	}
-	if got := r.observationListIDs("direct-a", workersessions.ObservationScopeDirect, nil); !reflect.DeepEqual(got, []string{}) {
+	if got := r.observationListIDs("direct-a", workersessions.ObservationScopeDirect, nil, "", ""); !reflect.DeepEqual(got, []string{}) {
 		t.Fatalf("observationListIDs(cursor) = %#v, want empty after direct-a", got)
 	}
-	if got := r.observationListIDs("", workersessions.ObservationScopeFactory, []workersessions.State{workersessions.StateRunning}); len(got) != 0 {
+	if got := r.observationListIDs("", workersessions.ObservationScopeFactory, []workersessions.State{workersessions.StateRunning}, "", ""); len(got) != 0 {
 		t.Fatalf("observationListIDs(state mismatch) = %#v, want empty", got)
 	}
 }
@@ -4969,6 +6364,9 @@ func TestContinue_ReturnsAtTheAdmissionBarrierBeforeCompletion(t *testing.T) {
 	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
 	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
 	r.execution = boundary
+	r.supervisions[request.SourceWorkerSessionID].executor = boundary
+	r.supervisions[request.SourceWorkerSessionID].clock = r.clock
+	r.supervisions[request.SourceWorkerSessionID].scheduler = r.scheduler
 
 	outcomes := make(chan struct {
 		result workersessions.ContinueResult
@@ -5334,30 +6732,624 @@ func TestStreamObservationsByWorkerSessionIDRejectsDurableCursorOnLiveFallback(t
 	}
 }
 
-type sourceOnlyClock struct{}
-
-func (sourceOnlyClock) Now() time.Time { return time.Now() }
-
-func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
-	clock := sourceOnlyClock{}
-	deadlineTimer := newSupervisionDeadlineTimer(clock, time.Hour)
-	if deadlineTimer.C() == nil {
-		t.Fatal("host deadline timer channel is nil")
+// These component tests protect selected effects in the invocation driver.
+// Keyed compatibility admission and public shared-process wiring have separate
+// U16-COMPAT/F16 obligations; this is not evidence for their final cutover.
+func TestKeyedRuntimeInvocationRetainsSelectedEffects(t *testing.T) {
+	for _, outcome := range []string{"success", "failure", "timeout", "cancel"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			defaults := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+			svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, defaults, defaults, unavailableProviderSessions{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := svc.(*registry)
+			t.Cleanup(func() { _ = r.Stop(context.Background()) })
+			target := startSelectedEffectsInvocation(t, r, "selected-"+outcome, outcome, 2035)
+			peer := startSelectedEffectsInvocation(t, r, "selected-peer", "success", 2040)
+			defaults.SetTick(1000)
+			target.facts.SetTick(10)
+			assertSelectedEffectsObservation(t, r, target, workersessions.StateRunning)
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			state := workersessions.StateCompleted
+			switch outcome {
+			case "success":
+				close(target.release)
+			case "failure":
+				state = workersessions.StateFailed
+				close(target.release)
+			case "timeout":
+				state = workersessions.StateFailed
+				target.scheduler.SetTick(5)
+			case "cancel":
+				state = workersessions.StateCanceled
+				control, controlErr := r.Cancel(context.Background(), workersessions.ControlRequest{ID: target.id})
+				if controlErr != nil || control.Outcome != workersessions.ControlOutcomeApplied {
+					t.Fatalf("target cancel: %#v, %v", control, controlErr)
+				}
+			}
+			result := awaitSelectedEffectsInvocation(t, target)
+			if result.Session.State != state {
+				t.Fatalf("selected %s: %#v, want %s", outcome, result, state)
+			}
+			assertSelectedEffectsResult(t, outcome, result)
+			assertSelectedEffectsObservation(t, r, target, state)
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			close(peer.release)
+			if result := awaitSelectedEffectsInvocation(t, peer); result.Session.State != workersessions.StateCompleted || result.Dispatch.Result.Output != peer.id {
+				t.Fatalf("peer selected execution: %#v", result)
+			}
+		})
 	}
-	if !deadlineTimer.Stop() {
-		t.Fatal("host deadline timer Stop() = false, want true")
-	}
+}
 
-	serviceRegistry := &registry{clock: clock}
+func TestKeyedRuntimeCompatibilityInvocationRetainsSelectedEffects(t *testing.T) {
+	for _, outcome := range []string{"success", "failure", "timeout", "cancel", "close"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			r := newRuntimeIdentityRegistry(t)
+			target := startSelectedEffectsInvocation(t, r, "compat-target", outcome, 2035, "runtime-target")
+			peer := startSelectedEffectsInvocation(t, r, "compat-peer", "success", 2040, "runtime-peer")
+			target.facts.SetTick(10)
+			assertSelectedEffectsObservation(t, r, target, workersessions.StateRunning)
+			state := workersessions.StateCompleted
+			switch outcome {
+			case "success", "failure":
+				close(target.release)
+				if outcome == "failure" {
+					state = workersessions.StateFailed
+				}
+			case "timeout":
+				state = workersessions.StateFailed
+				target.scheduler.SetTick(5)
+			case "cancel", "close":
+				state = workersessions.StateCanceled
+				if outcome == "close" {
+					if err := r.CloseRuntimeAttempts(context.Background(), "runtime-target"); err != nil {
+						t.Fatal(err)
+					}
+				} else if control, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: target.id}); err != nil || control.Outcome != workersessions.ControlOutcomeApplied {
+					t.Fatalf("compatibility cancel: %#v, %v", control, err)
+				}
+			}
+			result := awaitSelectedEffectsInvocation(t, target)
+			if result.Session.State != state {
+				t.Fatalf("compatibility %s: %#v, want %s", outcome, result, state)
+			}
+			assertSelectedEffectsResult(t, outcome, result)
+			assertSelectedEffectsObservation(t, r, target, state)
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			close(peer.release)
+			if result := awaitSelectedEffectsInvocation(t, peer); result.Session.State != workersessions.StateCompleted || result.Dispatch.Result.Output != peer.id {
+				t.Fatalf("compatibility peer: %#v", result)
+			}
+		})
+	}
+}
+
+func TestKeyedRuntimeCompatibilityRejectionPreservesLivePeer(t *testing.T) {
+	for _, invalid := range []string{"key", "identity", "correlation", "execution", "clock", "scheduler", "closed"} {
+		t.Run(invalid, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+			svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := svc.(*registry)
+			peer := startSelectedEffectsInvocation(t, r, "compat-peer", "success", 2040, "runtime-peer")
+			before := sink.requestsFor("")
+			request := workersessions.RuntimeAttemptRequest{
+				Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-rejected", DispatchID: perRuntimeLogicalDispatchID},
+				ID:  "compat-rejected", AttemptID: "rejected-physical", Execution: runtimeAttemptHandoff(perRuntimeLogicalDispatchID),
+			}
+			request.Execution.Execution.RuntimeID = request.Key.RuntimeID
+			var executor workers.Service = unusedExecution{t: t}
+			var clock platformclock.Source = facts
+			var scheduler platformclock.TimerSource = facts
+			want := workersessions.ErrProviderSessionAssociationAttemptMismatch
+			switch invalid {
+			case "key":
+				request.Key.RuntimeID, request.Execution.Execution.RuntimeID = "runtime-peer", "runtime-peer"
+			case "identity":
+				request.ID, want = peer.id, workersessions.ErrSessionNotStartable
+			case "correlation":
+				request.Execution.Execution.RuntimeID = "foreign-runtime"
+			case "execution":
+				executor, want = nil, ErrMissingExecution
+			case "clock":
+				clock, want = nil, ErrMissingClock
+			case "scheduler":
+				scheduler, want = nil, ErrMissingScheduler
+			case "closed":
+				if err := r.CloseRuntimeAttempts(context.Background(), request.Key.RuntimeID); err != nil {
+					t.Fatal(err)
+				}
+				want = workersessions.ErrStartAdmissionFailed
+			}
+			if _, err := r.InvokeRuntimeSession(context.Background(), request, workersessions.RetryPolicy{}, executor, clock, scheduler); !errors.Is(err, want) {
+				t.Fatalf("rejected %s: %v, want %v", invalid, err, want)
+			}
+			if after := sink.requestsFor(""); !reflect.DeepEqual(before, after) {
+				t.Fatalf("rejected invocation published: %#v", after)
+			}
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			close(peer.release)
+			if result := awaitSelectedEffectsInvocation(t, peer); result.Session.State != workersessions.StateCompleted {
+				t.Fatalf("peer completion: %#v", result)
+			}
+		})
+	}
+}
+
+type selectedEffectsInvocation struct {
+	id        string
+	facts     *platformclock.Deterministic
+	scheduler *platformclock.Deterministic
+	release   chan struct{}
+	results   chan workersessions.InvokeSessionResult
+}
+
+func startSelectedEffectsInvocation(t *testing.T, r *registry, id, outcome string, year int, runtimeIDs ...string) selectedEffectsInvocation {
+	t.Helper()
+	f := selectedEffectsInvocation{
+		id: id, facts: platformclock.NewDeterministic(time.Date(year, 1, 2, 3, 4, 5, 0, time.UTC), time.Second),
+		scheduler: platformclock.NewDeterministic(time.Unix(0, 0), time.Second),
+		release:   make(chan struct{}), results: make(chan workersessions.InvokeSessionResult, 1),
+	}
+	started := make(chan workers.ExecuteRequest, 1)
+	execution := coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		started <- request
+		select {
+		case <-ctx.Done():
+			return workers.ExecuteResult{Correlation: request.Correlation}, ctx.Err()
+		case <-f.release:
+			result := workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
+			result.Output.Primary = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: id}}
+			if outcome == "failure" {
+				result.Outcome = workers.ExecutionOutcomeFailed
+				result.Failure = &workers.ExecutionFailure{Type: workers.WorkFailureTypeAuthFailure, Family: workers.WorkFailureFamilyTerminal, Message: "selected execution denied"}
+			}
+			return result, nil
+		}
+	}}
+	request := validStartRequest(id, id+"-dispatch")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	request.Execution.Execution.Model = id + "-model"
+	dispatchID := id + "-dispatch"
+	invoke := func() (workersessions.InvokeSessionResult, error) {
+		prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, f.facts, f.scheduler)
+		if err != nil || prepared.terminal {
+			return workersessions.InvokeSessionResult{Session: prepared.session}, err
+		}
+		return r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+	}
+	if len(runtimeIDs) > 0 {
+		dispatchID = perRuntimeLogicalDispatchID
+		request.Execution.Execution.RuntimeID = runtimeIDs[0]
+		request.Execution.Execution.Dispatch.DispatchID = dispatchID
+		invoke = func() (workersessions.InvokeSessionResult, error) {
+			return r.InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+				Key: workersessions.RuntimeAttemptKey{RuntimeID: runtimeIDs[0], DispatchID: dispatchID},
+				ID:  id, AttemptID: id + "-dispatch", Execution: request.Execution,
+			}, request.Retry, execution, f.facts, f.scheduler)
+		}
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, _ = r.Cancel(ctx, workersessions.ControlRequest{ID: id})
+		if err := r.waitForSupervisionDriver(ctx, id); err != nil {
+			t.Errorf("join selected invocation: %v", err)
+		}
+	})
+	go func() {
+		result, invokeErr := invoke()
+		if invokeErr != nil {
+			t.Errorf("drive selected invocation: %v", invokeErr)
+		}
+		f.results <- result
+	}()
+	select {
+	case executed := <-started:
+		if executed.Correlation.DispatchID != dispatchID || executed.Correlation.AttemptID != id+"-dispatch" || executed.Target.Model.Name != id+"-model" {
+			t.Fatalf("selected execution received wrong request: %#v", executed)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected execution was not admitted")
+	}
+	return f
+}
+
+func awaitSelectedEffectsInvocation(t *testing.T, f selectedEffectsInvocation) workersessions.InvokeSessionResult {
+	t.Helper()
+	select {
+	case result := <-f.results:
+		return result
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected invocation did not terminalize")
+		return workersessions.InvokeSessionResult{}
+	}
+}
+
+func assertSelectedEffectsObservation(t *testing.T, r *registry, f selectedEffectsInvocation, state workersessions.State) {
+	t.Helper()
+	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: f.id})
+	startedAt := time.Date(f.facts.Now().Year(), 1, 2, 3, 4, 5, 0, time.UTC)
+	if err != nil || observation.State != state || observation.StartedAt == nil || !observation.StartedAt.Equal(startedAt) {
+		t.Fatalf("selected facts/state: %#v, %v, want %s at selected epoch", observation, err, state)
+	}
+	if observation.Duration == nil || *observation.Duration != f.facts.Now().Sub(startedAt) {
+		t.Fatalf("selected elapsed facts: %#v, want %s", observation, f.facts.Now().Sub(startedAt))
+	}
+	if state.Terminal() && (observation.EndedAt == nil || !observation.EndedAt.Equal(f.facts.Now())) {
+		t.Fatalf("selected terminal facts: %#v, want %s", observation, f.facts.Now())
+	}
+}
+
+func assertSelectedEffectsResult(t *testing.T, outcome string, result workersessions.InvokeSessionResult) {
+	t.Helper()
+	switch outcome {
+	case "success":
+		if result.Dispatch.Result.Output != result.Session.ID {
+			t.Fatalf("selected output lost: %#v", result)
+		}
+	case "failure", "timeout":
+		cause := workersessions.FailureCauseWorkersExecutionFailure
+		if outcome == "timeout" {
+			cause = workersessions.FailureCauseTimeout
+		}
+		if result.Session.Result == nil || result.Session.Result.Cause == nil || result.Session.Result.Cause.Kind != cause {
+			t.Fatalf("selected %s classification: %#v", outcome, result)
+		}
+	}
+}
+
+func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := svc.(*registry)
+	facts := platformclock.NewDeterministic(time.Date(2035, 1, 2, 3, 4, 5, 0, time.UTC), time.Second)
+	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	calls := 0
+	execution := coverageExecution{execute: func(_ context.Context, executed workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		calls++
+		attemptID := "selected-retry-physical"
+		if calls > 1 {
+			attemptID += "/attempt/2"
+		}
+		if executed.Target.Model.Name != "selected-retry-model" || executed.Correlation.RuntimeID != "selected-retry-runtime" || executed.Correlation.DispatchID != "selected-retry-dispatch" || executed.Correlation.AttemptID != attemptID {
+			t.Errorf("retry lost selected request: %#v", executed)
+		}
+		facts.SetTick(calls)
+		result := workers.ExecuteResult{Correlation: executed.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
+		if calls == 1 {
+			result.Outcome = workers.ExecutionOutcomeFailed
+			result.Failure = &workers.ExecutionFailure{Type: workers.WorkFailureTypeThrottled, Family: workers.WorkFailureFamilyRetryable, Message: "controlled retry"}
+		}
+		return result, nil
+	}}
+	request := validStartRequest("selected-retry", "selected-retry-dispatch")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	request.Execution.Execution.Timeout = 5 * time.Second
+	request.Execution.Execution.Model = "selected-retry-model"
+	request.Execution.Execution.RuntimeID = "selected-retry-runtime"
+	result, err := r.InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "selected-retry-runtime", DispatchID: "selected-retry-dispatch"},
+		ID:  request.ID, AttemptID: "selected-retry-physical", Execution: request.Execution,
+	}, request.Retry, execution, facts, scheduler)
+	if err != nil || result.Session.State != workersessions.StateCompleted || result.Attempts != 2 || calls != 2 {
+		t.Fatalf("selected retry: %#v, %v, calls=%d", result, err, calls)
+	}
+	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+	if err != nil || observation.EndedAt == nil || !observation.EndedAt.Equal(facts.Now()) {
+		t.Fatalf("selected retry terminal facts: %#v, %v", observation, err)
+	}
+	assertSelectedAttemptLineage(t, sink, request.ID, workers.AttemptReasonRetry, facts.Now().Add(-time.Second))
+}
+
+func TestKeyedRuntimeDirectExecutionPublishesThroughOwnedAttempt(t *testing.T) {
+	for _, mismatch := range []string{"dispatch", "logical", "physical", "runtime", "factory", "generation", "request", "trace", "legacy"} {
+		t.Run(mismatch, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			var publish workers.ProgressPublisher
+			var fragment workers.ProgressFragment
+			execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				publish = request.Input.ProgressPublisher
+				if publish == nil {
+					t.Error("direct execution has no attempt-owned progress publisher")
+					return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+				}
+				fragment = directProgressFragment(request)
+				assertDirectProgressRejectsForeignCorrelation(t, sink, publish, fragment, mismatch)
+				if mismatch != "legacy" {
+					publish(fragment)
+				}
+				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+			}}
+			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+			service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := validStartRequest("direct-progress-worker", "direct-progress-dispatch")
+			request.Execution.Execution.FactorySessionID = "direct-factory"
+			request.Execution.Execution.GenerationID = "direct-generation"
+			request.Execution.Execution.Dispatch.Execution.RequestID = "direct-request"
+			request.Execution.Execution.Dispatch.Execution.TraceID = "direct-trace"
+			result, err := service.InvokeSession(context.Background(), request)
+			if err != nil || result.Session.State != workersessions.StateCompleted {
+				t.Fatalf("direct invocation: %#v, %v", result, err)
+			}
+			association := result.Session.ProviderSessionAssociation
+			if association == nil || association.WorkerSessionID != request.ID || association.DispatchID != "direct-progress-dispatch" || association.AttemptID != "direct-progress-dispatch" || association.Reference.ID != "direct-progress-provider" {
+				t.Fatalf("direct association: %#v", association)
+			}
+			records := sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID))
+			if len(records) != 4 || decodePerRuntimeDraft(t, records[2]).DispatchID != "direct-progress-dispatch" {
+				t.Fatalf("direct retained opening/binding/output/terminal: %#v", records)
+			}
+			publish(fragment)
+			if !reflect.DeepEqual(records, sink.requestsFor(workersessions.Topic(request.ID, request.Execution.Execution.FactorySessionID))) {
+				t.Fatal("late direct progress mutated terminal retention")
+			}
+		})
+	}
+}
+
+func TestKeyedRuntimeDirectRetryRejectsEarlierAttemptProgress(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	var earlier workers.ProgressPublisher
+	var earlierFragment workers.ProgressFragment
+	calls := 0
+	execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		calls++
+		if request.Input.ProgressPublisher == nil {
+			t.Error("direct retry has no attempt-owned publisher")
+			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+		}
+		if calls == 1 {
+			earlier = request.Input.ProgressPublisher
+			earlierFragment = directProgressFragment(request)
+			result := coverageExecutionResult(request, workers.ExecutionOutcomeFailed)
+			result.Failure = &workers.ExecutionFailure{Type: workers.WorkFailureTypeThrottled, Family: workers.WorkFailureFamilyRetryable, Message: "controlled direct retry"}
+			return result, nil
+		}
+		before := sink.requestsFor("")
+		earlier(earlierFragment)
+		if !reflect.DeepEqual(before, sink.requestsFor("")) {
+			t.Error("earlier attempt progress mutated retry retention")
+		}
+		if request.Correlation.AttemptID != "direct-retry-dispatch/attempt/2" {
+			t.Errorf("retry physical identity: %#v", request.Correlation)
+		}
+		request.Input.ProgressPublisher(directProgressFragment(request))
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validStartRequest("direct-retry-worker", "direct-retry-dispatch")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	result, err := service.InvokeSession(context.Background(), request)
+	assertDirectRetryProgressRetained(t, sink, result, err, calls)
+}
+
+func assertDirectRetryProgressRetained(t *testing.T, sink *perRuntimeAppendCapture, result workersessions.InvokeSessionResult, err error, calls int) {
+	t.Helper()
+	if err != nil || result.Session.State != workersessions.StateCompleted || result.Attempts != 2 || calls != 2 {
+		t.Fatalf("direct retry: %#v, %v, calls=%d", result, err, calls)
+	}
+	association := result.Session.ProviderSessionAssociation
+	if association == nil || association.WorkerSessionID != "direct-retry-worker" || association.DispatchID != "direct-retry-dispatch/attempt/2" || association.AttemptID != "direct-retry-dispatch/attempt/2" || association.Reference.ID != "direct-progress-provider" {
+		t.Fatalf("direct retry association: %#v", association)
+	}
+	var output []workers.Draft
+	for _, record := range sink.requestsFor(workersessions.Topic("direct-retry-worker")) {
+		draft := decodePerRuntimeDraft(t, record)
+		if draft.Kind == workers.KindMessage {
+			output = append(output, draft)
+		}
+	}
+	if len(output) != 1 || output[0].DispatchID != "direct-retry-dispatch/attempt/2" {
+		t.Fatalf("retained direct retry output: %#v", output)
+	}
+}
+
+func directProgressFragment(request workers.ExecuteRequest) workers.ProgressFragment {
+	return workers.ProgressFragment{
+		Correlation: request.Correlation, DispatchID: request.Correlation.AttemptID,
+		Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "direct output", Provider: "codex",
+		Continuation: &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "direct-progress-provider"},
+	}
+}
+
+func assertDirectProgressRejectsForeignCorrelation(t *testing.T, sink *perRuntimeAppendCapture, publish workers.ProgressPublisher, fragment workers.ProgressFragment, mismatch string) {
+	t.Helper()
+	foreign := fragment
+	switch mismatch {
+	case "dispatch":
+		foreign.DispatchID = "peer-dispatch"
+	case "logical":
+		foreign.Correlation.DispatchID = "peer-dispatch"
+	case "physical":
+		foreign.Correlation.AttemptID = "peer-physical"
+	case "runtime":
+		foreign.Correlation.RuntimeID = "peer-runtime"
+	case "factory":
+		foreign.Correlation.FactorySessionID = "peer-factory"
+	case "generation":
+		foreign.Correlation.GenerationID = "peer-generation"
+	case "request":
+		foreign.Correlation.RequestID = "peer-request"
+	case "trace":
+		foreign.Correlation.TraceID = "peer-trace"
+	case "legacy":
+		// Legacy source fragments can omit correlation; their owned publisher
+		// supplies physical identity without a dispatch-index lookup.
+		foreign.Correlation = workers.ExecutionCorrelation{}
+		publish(foreign)
+		return
+	}
+	before := sink.requestsFor("")
+	publish(foreign)
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Error("foreign direct progress published before correlation rejection")
+	}
+}
+
+func TestKeyedRuntimeOpeningPreservesDirectProviderRoute(t *testing.T) {
+	t.Parallel()
+	r := newRuntimeIdentityRegistry(t)
+	direct := startSelectedEffectsInvocation(t, r, "direct-peer", "success", 2035)
+	dispatchID := direct.id + "-dispatch"
+	request := workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: dispatchID},
+		ID:  "runtime-peer", AttemptID: "runtime-physical", Execution: runtimeAttemptHandoff(dispatchID),
+	}
+	assertRuntimeDirectCollisionRejected(t, r, request, direct)
+	attempt, err := r.BeginRuntimeAttempt(context.Background(), request, r.execution, direct.facts, direct.scheduler, runtimeAttemptNoopCancellation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(dispatchID), nil) })
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "direct-provider"}
+	assertDirectProviderRoute(t, r, direct.id, dispatchID, reference, workersessions.ProviderSessionAssociationOutcomeAccepted)
+	if session := getCharacterizationSession(t, t.Context(), r, request.ID); session.ProviderSessionAssociation != nil || session.State != workersessions.StateRunning {
+		t.Fatalf("direct provider observation mutated runtime peer: %#v", session)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(dispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	assertDirectProviderRoute(t, r, direct.id, dispatchID, reference, workersessions.ProviderSessionAssociationOutcomeDuplicate)
+	assertSelectedEffectsObservation(t, r, direct, workersessions.StateRunning)
+	close(direct.release)
+	if result := awaitSelectedEffectsInvocation(t, direct); result.Session.State != workersessions.StateCompleted || result.Dispatch.Result.Output != direct.id || result.Session.ProviderSessionAssociation == nil || result.Session.ProviderSessionAssociation.Reference != reference {
+		t.Fatalf("direct execution lost output/provider after runtime completion: %#v", result)
+	}
+	if session := getCharacterizationSession(t, t.Context(), r, request.ID); session.State != workersessions.StateCompleted || session.ProviderSessionAssociation != nil {
+		t.Fatalf("runtime retained foreign provider association: %#v", session)
+	}
+}
+
+func assertRuntimeDirectCollisionRejected(t *testing.T, r *registry, request workersessions.RuntimeAttemptRequest, direct selectedEffectsInvocation) {
+	t.Helper()
+	request.AttemptID = ""
+	attempt, err := r.BeginRuntimeAttempt(context.Background(), request, r.execution, direct.facts, direct.scheduler, runtimeAttemptNoopCancellation)
+	if attempt != nil || !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("direct physical collision = %v, %v, want no handle/attempt mismatch", attempt, err)
+	}
+	if _, err := r.Get(context.Background(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("rejected collision reserved identity: %v", err)
+	}
+	assertSelectedEffectsObservation(t, r, direct, workersessions.StateRunning)
+}
+
+func assertDirectProviderRoute(t *testing.T, r *registry, id, dispatchID string, reference providers.SessionRef, outcome workersessions.ProviderSessionAssociationOutcome) {
+	t.Helper()
+	association, err := r.ObserveProviderSession(context.Background(), workersessions.ProviderSessionObservationRequest{
+		DispatchID: dispatchID, Reference: reference,
+	})
+	if err != nil || association.Outcome != outcome || association.Association.WorkerSessionID != id {
+		t.Fatalf("direct provider route = %#v, %v, want %s/%s", association, err, id, outcome)
+	}
+}
+
+func assertSelectedAttemptLineage(t *testing.T, sink *perRuntimeAppendCapture, id string, reason workers.AttemptReason, started time.Time) {
+	t.Helper()
+	var lineages []workers.SessionPayload
+	for _, appendRequest := range sink.requestsFor(workersessions.Topic(id)) {
+		if appendRequest.SourceType != attemptLineageSourceType {
+			continue
+		}
+		draft := decodePerRuntimeDraft(t, appendRequest)
+		var payload workers.SessionPayload
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		lineages = append(lineages, payload)
+	}
+	if len(lineages) != 1 {
+		t.Fatalf("attempt lineage count = %d, want one", len(lineages))
+	}
+	payload := lineages[0]
+	if payload.WorkerSessionID != id || payload.AttemptReason != reason || payload.StartedAt == nil || !payload.StartedAt.Equal(started) {
+		t.Fatalf("attempt lineage = %#v, want %s/%s at %s", payload, id, reason, started)
+	}
+}
+
+func TestKeyedRuntimeSupervisorUsesSuppliedDeadlineScheduler(t *testing.T) {
+	t.Parallel()
+	facts := platformclock.NewDeterministic(time.Date(2035, 3, 4, 5, 6, 7, 0, time.UTC), time.Second)
+	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	started := make(chan struct{})
+	execution := coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		close(started)
+		<-ctx.Done()
+		return workers.ExecuteResult{Correlation: request.Correlation}, ctx.Err()
+	}}
+	svc, err := New(execution, newInternalTestEventsService(), logging.NoopLogger{}, facts, scheduler, unavailableProviderSessions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := svc.(*registry)
+	t.Cleanup(func() { _ = r.Stop(context.Background()) })
+	request := validStartRequest("selected-timer-worker", "selected-timer-dispatch")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	results := make(chan workersessions.InvokeSessionResult, 1)
+	go func() {
+		result, invokeErr := svc.InvokeSession(context.Background(), request)
+		if invokeErr != nil {
+			t.Errorf("InvokeSession: %v", invokeErr)
+		}
+		results <- result
+	}()
+	if err := waitControlledSignal(started, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	facts.SetTick(100)
+	session, err := svc.Get(context.Background(), workersessions.GetRequest{ID: request.ID})
+	if err != nil || session.State != workersessions.StateRunning {
+		t.Fatalf("fact-clock advance: session=%#v err=%v, want RUNNING", session, err)
+	}
+	scheduler.SetTick(5)
+	select {
+	case result := <-results:
+		if result.Session.State != workersessions.StateFailed || result.Session.Result == nil || result.Session.Result.Cause == nil || result.Session.Result.Cause.Kind != workersessions.FailureCauseTimeout {
+			t.Fatalf("selected scheduler expiry: %#v, want FAILED/TIMEOUT", result)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected scheduler did not terminalize the attempt")
+	}
+	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+	if err != nil || observation.EndedAt == nil || !observation.EndedAt.Equal(facts.Now()) {
+		t.Fatalf("retained terminal facts=%#v err=%v, want supplied fact time", observation, err)
+	}
+}
+
+func TestDeadlineSupervisionCoversInactiveAndExpiredAttempts(t *testing.T) {
+	t.Parallel()
+	clock := coverageClock{now: time.Unix(1000, 0)}
+	serviceRegistry := &registry{clock: clock, scheduler: platformclock.NewDeterministic(time.Unix(0, 0), time.Second)}
 	noTimeout := newSupervision("session", "turn")
-	serviceRegistry.startDeadlineWatcher("session", noTimeout, time.Now())
+	serviceRegistry.startDeadlineWatcher("session", noTimeout, clock.Now())
 	inactive := newSupervision("session", "turn", workers.WorkstationDispatchRequest{
 		Execution: workers.WorkstationExecutionRequest{
 			WorkerType: "worker",
 			Timeout:    time.Second,
 		},
 	})
-	serviceRegistry.startDeadlineWatcher("session", inactive, time.Now())
+	serviceRegistry.startDeadlineWatcher("session", inactive, clock.Now())
 	acceptedWithoutAttempt := newSupervision("session", "turn", workers.WorkstationDispatchRequest{
 		Execution: workers.WorkstationExecutionRequest{
 			WorkerType: "worker",
@@ -5365,7 +7357,7 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 		},
 	})
 	acceptedWithoutAttempt.accepted = true
-	serviceRegistry.startDeadlineWatcher("session", acceptedWithoutAttempt, time.Now())
+	serviceRegistry.startDeadlineWatcher("session", acceptedWithoutAttempt, clock.Now())
 	expiredCancellation := make(chan struct{})
 	expired := newSupervision("expired", "turn", workers.WorkstationDispatchRequest{
 		Execution: workers.WorkstationExecutionRequest{
@@ -5373,13 +7365,15 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 			Timeout:    time.Second,
 		},
 	})
+	expired.clock = clock
+	expired.scheduler = serviceRegistry.scheduler
 	expired.accepted = true
 	expired.attemptDone = make(chan struct{})
 	expired.installCancel(func() {
 		close(expiredCancellation)
 	})
-	serviceRegistry.startDeadlineWatcher("session", expired, time.Now().Add(-time.Hour))
-	expiredWait := time.NewTimer(time.Second)
+	serviceRegistry.startDeadlineWatcher("session", expired, clock.Now().Add(-time.Hour))
+	expiredWait := time.NewTimer(30 * time.Second)
 	defer expiredWait.Stop()
 	select {
 	case <-expiredCancellation:
@@ -5416,10 +7410,10 @@ func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
 	} {
 		reconciliationSupervision.installCancelFailure(func() error { return cancelErr })
 		serviceRegistry.logger = logging.NoopLogger{}
-		serviceRegistry.reconcileOverdueAttempt("session", reconciliationSupervision, "dispatch", reconciliationAttemptDone, time.Now())
+		serviceRegistry.reconcileOverdueAttempt("session", reconciliationSupervision, "dispatch", reconciliationAttemptDone, clock.Now())
 	}
 	inactiveAttempt := newSupervision("inactive", "turn")
-	serviceRegistry.reconcileOverdueAttempt("session", inactiveAttempt, "inactive", make(chan struct{}), time.Now())
+	serviceRegistry.reconcileOverdueAttempt("session", inactiveAttempt, "inactive", make(chan struct{}), clock.Now())
 }
 
 func TestOpeningSessionContinuationPreservesExactResumeIdentity(t *testing.T) {
@@ -5545,7 +7539,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 	request := dispatchHandoff("handoff-dispatch")
 
 	t.Run("missing execution", func(t *testing.T) {
-		result, err := executeWithService(context.Background(), nil, request, newSupervision("handoff-dispatch", ""), func() {})
+		result, err := executeWithService(context.Background(), nil, request, newSupervision("handoff-dispatch", ""), func() {}, nil)
 		if !errors.Is(err, workers.ErrExecuteUnavailable) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
 			t.Fatalf("executeWithService(nil) = %#v, %v, want failed unavailable result", result, err)
 		}
@@ -5554,7 +7548,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 	t.Run("invalid dispatch", func(t *testing.T) {
 		invalid := request
 		invalid.Execution.Dispatch.DispatchID = "  "
-		result, err := executeWithService(context.Background(), coverageExecution{}, invalid, newSupervision("handoff-dispatch", ""), func() {})
+		result, err := executeWithService(context.Background(), coverageExecution{}, invalid, newSupervision("handoff-dispatch", ""), func() {}, nil)
 		if !errors.Is(err, workers.ErrInvalidExecuteRequest) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
 			t.Fatalf("executeWithService(invalid) = %#v, %v, want invalid failed result", result, err)
 		}
@@ -5564,7 +7558,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 		supervision := newSupervision("handoff-dispatch", "")
 		supervision.preAdmissionAction = workersessions.ControlActionPause
 		admitted := false
-		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() { admitted = true })
+		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() { admitted = true }, nil)
 		if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || admitted || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
 			t.Fatalf("executeWithService(pre-admission cancel) = %#v, %v, admitted=%t", result, err, admitted)
 		}
@@ -5572,7 +7566,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 
 	t.Run("admission callback declines", func(t *testing.T) {
 		supervision := newSupervision("handoff-dispatch", "")
-		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() {})
+		result, err := executeWithService(context.Background(), coverageExecution{}, request, supervision, func() {}, nil)
 		if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
 			t.Fatalf("executeWithService(unaccepted) = %#v, %v, want canceled result", result, err)
 		}
@@ -5585,7 +7579,7 @@ func testWorkerExecutionHandoffAdmissionFailures(t *testing.T) {
 			execute: func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
 				panic("test executor panic")
 			},
-		}, request, supervision, func() {})
+		}, request, supervision, func() {}, nil)
 		var panicErr *workers.WorkerExecutorPanicError
 		if !errors.As(err, &panicErr) {
 			t.Fatalf("executeWithService(panic) error = %v, want WorkerExecutorPanicError", err)
@@ -5604,7 +7598,7 @@ func testWorkerExecutionHandoffProcessLifecycle(t *testing.T) {
 				request.Input.ProcessLifecycleObserver.ProcessExited(platformprocess.ProcessInfo{PID: 7})
 				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 			},
-		}, request, supervision, func() {})
+		}, request, supervision, func() {}, nil)
 		if !errors.Is(err, workers.ErrWorkstationDispatchProcessGone) || result.ReconciliationReason != workers.WorkstationDispatchReconciliationReasonProcessGone || result.Result.Outcome != workers.OutcomeFailed {
 			t.Fatalf("executeWithService(process exit) = %#v, %v, want process-gone failure", result, err)
 		}
@@ -5637,7 +7631,7 @@ func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
 			}
 			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 		},
-	}, customRequest, supervision, func() {})
+	}, customRequest, supervision, func() {}, nil)
 	if err != nil || customObserver.started != 0 || customObserver.exited != 0 {
 		t.Fatalf("executeWithService(custom observer) = %v, observer=%#v, want success without replacement", err, customObserver)
 	}
@@ -5850,7 +7844,9 @@ func TestWorkerSessionContinuationAndReconciliation_CoversAdmissionFailurePaths(
 
 func TestWorkerSessionInvocationAndReplay_CoversDetachedFailurePaths(t *testing.T) {
 	r := newTestRegistry(t)
-	r.execution = nil
+	r.execution = coverageExecution{execute: func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}}
 	result, err := r.InvokeSession(context.Background(), workersessions.InvokeSessionRequest{ID: "invoke-no-execution", Execution: dispatchHandoff("invoke-dispatch")})
 	if err != nil || result.Session.State != workersessions.StateFailed {
 		t.Fatalf("InvokeSession(no execution) = %#v, %v, want failed terminal result", result, err)
@@ -6064,6 +8060,7 @@ func TestWorkerSessionCallerCancellation_DetachesStartAndContinueAfterReadinessB
 		ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "continue-cancel-provider"}
 		association := validAssociation("continue-cancel-source", "continue-cancel-dispatch", ref)
 		supervision := newSupervision("continue-cancel-dispatch", "", dispatchHandoff("continue-cancel-dispatch"))
+		supervision.executor, supervision.clock, supervision.scheduler = r.execution, r.clock, r.scheduler
 		setCoverageAccepted(supervision, true)
 		r.sessions["continue-cancel-source"] = workersessions.Session{ID: "continue-cancel-source", State: workersessions.StateCompleted, ProviderSessionAssociation: &association}
 		r.supervisions["continue-cancel-source"] = supervision
@@ -6141,13 +8138,16 @@ func TestWorkerSessionInterruptAndStartCompletion_CoversEarlyBranches(t *testing
 	}
 
 	r.execution = nil
-	result, err := r.startReserved(context.Background(), workersessions.StartRequest{
+	result, err := r.startReservedWithEffects(workersessions.StartRequest{
 		RequestID: "start-no-execution-request",
 		ID:        "start-no-execution-session",
 		Execution: dispatchHandoff("start-no-execution-dispatch"),
-	})
-	if err == nil || result.Session.State != workersessions.StateFailed {
-		t.Fatalf("startReserved(no execution) = %#v, %v, want failed admission result", result, err)
+	}, r.execution, r.clock, r.scheduler)
+	if !errors.Is(err, ErrMissingExecution) || result.Session.ID != "" {
+		t.Fatalf("startReserved(no execution) = %#v, %v, want missing execution before admission", result, err)
+	}
+	if _, err := r.Get(context.Background(), workersessions.GetRequest{ID: "start-no-execution-session"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("startReserved(no execution) reserved identity: %v", err)
 	}
 }
 
@@ -6418,10 +8418,11 @@ func TestStop_CollectsTerminationAndDriverWaitFailures(t *testing.T) {
 func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapterFailure(t *testing.T) {
 	registry := newTestRegistry(t)
 	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key:       workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "dispatch-adapter-error"},
 		ID:        "worker-adapter-error",
 		AttemptID: "attempt-adapter-error",
-		Execution: dispatchHandoff("dispatch-adapter-error"),
-	})
+		Execution: runtimeAttemptHandoff("dispatch-adapter-error"),
+	}, registry.execution, platformclock.Real{}, registry.scheduler, runtimeAttemptNoopCancellation)
 	if err != nil {
 		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
 	}
@@ -6449,7 +8450,8 @@ func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapt
 
 func newService(execution any, eventsAppender EventsAppender, logger logging.Logger) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	// Fixtures explicitly supply disabled logging when no observer is selected.
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -6467,7 +8469,7 @@ func newServiceWithRecording(
 	recording recordings.WorkerSessionRecordingService,
 ) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{}, recording)
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, recording)
 	if err != nil {
 		return nil, err
 	}
@@ -7390,7 +9392,7 @@ func newCleanupCharacterizationFixture(t *testing.T) *cleanupCharacterizationFix
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
 	fixture.siblingResult = startInterruptCharacterizationSession(t, registry, fixture.boundary, validStartRequest(fixture.siblingID, "cleanup-dispatch-sibling"))
-	fixture.siblingBefore = getCharacterizationSession(t, registry, fixture.siblingID)
+	fixture.siblingBefore = getCharacterizationSession(t, t.Context(), registry, fixture.siblingID)
 	fixture.request = workersessions.InterruptRequest{
 		RequestID:                "cleanup-interrupt",
 		SourceWorkerSessionID:    fixture.sourceID,
@@ -7400,9 +9402,9 @@ func newCleanupCharacterizationFixture(t *testing.T) *cleanupCharacterizationFix
 	return fixture
 }
 
-func getCharacterizationSession(t *testing.T, registry workersessions.Service, id string) workersessions.Session {
+func getCharacterizationSession(t *testing.T, ctx context.Context, registry workersessions.Service, id string) workersessions.Session {
 	t.Helper()
-	session, err := registry.Get(context.Background(), workersessions.GetRequest{ID: id})
+	session, err := registry.Get(ctx, workersessions.GetRequest{ID: id})
 	if err != nil {
 		t.Fatalf("Get(%q) error = %v", id, err)
 	}
@@ -7411,7 +9413,7 @@ func getCharacterizationSession(t *testing.T, registry workersessions.Service, i
 
 func assertCleanupSiblingAndEffects(t *testing.T, fixture *cleanupCharacterizationFixture) {
 	t.Helper()
-	siblingAfter := getCharacterizationSession(t, fixture.registry, fixture.siblingID)
+	siblingAfter := getCharacterizationSession(t, t.Context(), fixture.registry, fixture.siblingID)
 	if !reflect.DeepEqual(siblingAfter, fixture.siblingBefore) {
 		t.Fatalf("sibling changed during interrupt: before=%#v after=%#v", fixture.siblingBefore, siblingAfter)
 	}
@@ -7707,13 +9709,14 @@ func TestListObservationsUsesFactorySessionAndWorkAssociations(t *testing.T) {
 		session.ProviderSessionAssociation.DispatchID = attemptID
 		session.ProviderSessionAssociation.AttemptID = attemptID
 		registry.sessions[id] = session
-		registry.ensureObservationWithFactorySession(
+		registry.ensureObservationWithClock(
 			id,
 			attemptID,
 			"turn-"+id,
 			[]string{workID},
 			false,
 			factorySessionID,
+			registry.clock,
 		)
 		registry.observations[id].startedAt = startedAt
 	}

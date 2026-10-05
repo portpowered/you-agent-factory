@@ -139,6 +139,129 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkersRootBoundary(t *testing.T
 	}
 }
 
+func TestFactoryImpl_ResumedDispatchOutlivesControlRequest(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		control bool
+		cancel  bool
+	}{
+		{name: "resume request ends"},
+		{name: "control resume request ends", control: true},
+		{name: "runtime cancels", cancel: true},
+		{name: "runtime cancels after control resume", control: true, cancel: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			testResumedDispatchControlLifetime(t, test.control, test.cancel)
+		})
+	}
+}
+
+func testResumedDispatchControlLifetime(t *testing.T, control, cancelDispatch bool) {
+	t.Helper()
+	started := make(chan context.Context, 1)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	service := &requestWorkers{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		started <- ctx
+		<-release
+		outcome := workers.ExecutionOutcomeAccepted
+		if ctx.Err() != nil {
+			outcome = workers.ExecutionOutcomeCanceled
+		}
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: outcome}, ctx.Err()
+	}}
+	runtime, err := newTestFactory(withNet(buildSimpleNet()), withWorkerService(service), withLogger(logging.NoopLogger{}))
+	requireNoRootErr(t, err, "New")
+	impl := runtime.(*factoryImpl)
+	impl.state = interfaces.FactoryStateRunning
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(release) })
+		stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := impl.stopDispatchRuntime(stopCtx, dispatchplanning.RuntimeStopReasonTerminated); err != nil {
+			t.Errorf("stop dispatch runtime: %v", err)
+		}
+	})
+	for range 2 {
+		requireNoRootErr(t, impl.Pause(t.Context()), "Pause")
+	}
+	plan := factory.PlanDispatchRequest{
+		DispatchID: "resumed-dispatch", CorrelationID: "resumed-correlation",
+		WorkIDs: []string{"resumed-work"}, WorkstationName: "t-process", WorkerType: "mock",
+		ReplayKey: "t-process/resumed-trace/resumed-work",
+	}
+	planned, err := impl.PlanDispatch(t.Context(), plan)
+	requireNoRootErr(t, err, "PlanDispatch")
+	if planned.Outcome != factory.DispatchPlanOutcomeAccepted || service.calls.Load() != 0 {
+		t.Fatalf("paused admission = %#v, execution calls = %d; want accepted without execution", planned, service.calls.Load())
+	}
+	requestCtx, requestCancel := context.WithCancel(t.Context())
+	defer requestCancel()
+	for range 2 {
+		if control {
+			_, err = impl.ControlResume(requestCtx, factory.ResumeRequest{})
+		} else {
+			err = impl.Resume(requestCtx)
+		}
+		requireNoRootErr(t, err, "Resume")
+	}
+	requestCancel() // HTTP cancels its request context after returning the resume response.
+	assertResumedDispatchExecutionContext(t, impl, started, plan.DispatchID, cancelDispatch)
+	// Release execution before shutdown to distinguish request cancellation
+	// from the explicit Runtime cancellation edge.
+	releaseOnce.Do(func() { close(release) })
+	finished := make(chan struct{})
+	go func() {
+		impl.cfg.attempts.pending.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+		assertResumedDispatchTerminalResult(t, impl, plan.DispatchID, cancelDispatch)
+	case <-time.After(30 * time.Second):
+		t.Fatal("resumed execution did not finish")
+	}
+	if got := service.calls.Load(); got != 1 {
+		t.Errorf("resumed execution calls = %d, want 1", got)
+	}
+}
+
+func assertResumedDispatchTerminalResult(t *testing.T, impl *factoryImpl, dispatchID string, cancelDispatch bool) {
+	t.Helper()
+	result, ok := impl.resultBuffer.Read()
+	want := workers.OutcomeAccepted
+	if cancelDispatch {
+		want = workers.OutcomeCanceled
+	}
+	if !ok || result.Outcome != want || result.DispatchID != dispatchID {
+		t.Errorf("resumed terminal result = %#v (present=%t), want %s for %s", result, ok, want, dispatchID)
+	}
+	if extra, ok := impl.resultBuffer.Read(); ok {
+		t.Errorf("unexpected additional terminal result: %#v", extra)
+	}
+}
+
+func assertResumedDispatchExecutionContext(t *testing.T, impl *factoryImpl, started <-chan context.Context, dispatchID string, cancelDispatch bool) {
+	t.Helper()
+	select {
+	case executionCtx := <-started:
+		if executionCtx.Err() != nil {
+			t.Errorf("resumed execution canceled by completed control request: %v", executionCtx.Err())
+		}
+		if cancelDispatch {
+			canceled, err := cancelStatelessAttempt(t.Context(), impl.cfg, workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
+			requireNoRootErr(t, err, "Cancel")
+			if canceled.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled || !errors.Is(executionCtx.Err(), context.Canceled) {
+				t.Errorf("explicit Runtime cancel = %#v, execution context = %v", canceled, executionCtx.Err())
+			}
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("resumed dispatch never reached Workers")
+	}
+}
+
 // TestFactoryImpl_PlannedDispatchAcceptsWorkersResultThroughRuntimeRoot proves
 // a planned dispatch can be result-accepted across the Runtime/Workers boundary
 // using Runtime-root AcceptDispatchResult after Workers-root execution.

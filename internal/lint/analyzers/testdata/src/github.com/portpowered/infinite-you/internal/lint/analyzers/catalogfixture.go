@@ -1,0 +1,1 @@
+package analyzers // want "packaged-factory-catalog: missing: generated/factories/example/factory.yaml" "packaged-factory-catalog: stale: generated/manifest.json" "packaged-factory-catalog: unexpected: generated/unexpected file.json"

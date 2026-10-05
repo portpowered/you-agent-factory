@@ -243,12 +243,12 @@ func ToolByName(name string) (ToolDefinition, bool) {
 func listSessionsTool() ToolDefinition {
 	return ToolDefinition{
 		Name: ToolListSessions,
-		Description: "List Factory Sessions for one scope (live workspace, persisted durable execution, or all). " +
+		Description: "List Factory Sessions for one scope (live workspace, persisted durable execution, recorded history, or all). " +
 			"Uses GET /factory-sessions durable listing vocabulary.",
 		InputSchema: objectSchema(map[string]any{
 			"scope": enumStringProperty(
 				"Session list scope. Defaults to live when omitted.",
-				"live", "persisted", "all",
+				"live", "persisted", "history", "all",
 			),
 		}),
 		OutputSchema: toolResponseSchema(listFactorySessionsResponseSchema()),

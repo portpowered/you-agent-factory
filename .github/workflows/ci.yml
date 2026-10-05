@@ -397,6 +397,11 @@ jobs:
           go test -race ./tests/functional/workers/inference -run 'TestWSRFT004|TestWSRFT009|TestWorkerRecordingSurvivesTempCleanup|TestWorkerSessionSelectedSessionObservationConsistency' -count=1 -p=2 -timeout=5m
           go test -race ./pkg/services/factory_runtime/internal/services/orchestration/runtime -run 'TestRecordedWorkerSessionObservation|TestMergeRecordedObservations' -count=1 -timeout=5m
           go test -race ./pkg/services/worker_sessions/internal/service -count=1 -timeout=5m
+      - name: Race-check bounded Codex detail and shared HTTP fixture
+        if: matrix.suite == 'unit'
+        run: |
+          go test -race ./pkg/services/provider_sessions/internal/services/codex_reader/internal/service ./pkg/services/provider_sessions/transports/http -count=1 -p=1 -timeout=5m
+          go test -race ./tests/functional/providers/codex -run '^TestCodexSharedTrustedWorkAndHistory$' -count=1 -p=1 -timeout=5m
       - name: Race-check selected Automations time and joined shutdown
         if: matrix.suite == 'unit'
         timeout-minutes: 10
@@ -851,16 +856,15 @@ jobs:
         run: make fmt-check
       - name: Race-check shared lint components
         if: always()
-        run: go test -race ./internal/lint/analyzers ./tools/golangcilintplugin -run 'CompilerMetadata|WireSelection|Plugin' -count=1 -timeout 15m
+        run: go test -race ./internal/lint/analyzers ./tools/golangcilintplugin -run 'CompilerMetadata|WireSelection|Plugin|PackagedFactoryCatalog' -count=1 -timeout 15m
       - name: Build and smoke-test shared lint plugin
         run: |
           make golangci-build
           python3 scripts/lint-migration-smoke.py manifest --golangci "$PWD/.artifacts/golangci/golangci-repository"
-      - name: Verify generated-host deadcode boundary
+      - name: Verify direct upstream deadcode boundary
         run: |
-          go test ./cmd/deadcodecheck -count=1 -timeout 3m
-          go build -o .artifacts/golangci/deadcodecheck ./cmd/deadcodecheck
-          python3 scripts/deadcode-host-smoke.py --checker "$PWD/.artifacts/golangci/deadcodecheck"
+          python3 -m unittest discover -s scripts -p "deadcode_report_test.py"
+          python3 scripts/deadcode-host-smoke.py --reporter "$PWD/scripts/deadcode-report.py" -- go run golang.org/x/tools/cmd/deadcode@v0.25.1
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}

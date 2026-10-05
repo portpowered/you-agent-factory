@@ -1,0 +1,19 @@
+{
+  "formatVersion": "1",
+  "factorySchema": "urn:catalog-fixture",
+  "factories": [
+    {
+      "name": "@you/example",
+      "project": "example",
+      "slug": "example",
+      "json": {
+        "locator": "generated/factories/example/factory.json",
+        "sha256": "da2b7e60ecb5fbfd470351ea2cdd8125891788818f24a8d08cb049f37277f07b"
+      },
+      "yaml": {
+        "locator": "generated/factories/example/factory.yaml",
+        "sha256": "00b10427162464a3a1cd182d4037f59f41522ca78965ec67e1c29e6b74e3bdaa"
+      }
+    }
+  ]
+}
