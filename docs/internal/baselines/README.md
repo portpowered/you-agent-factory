@@ -150,7 +150,6 @@ literal matches for 28 rows and the source-aware witnesses above for two rows.
 | 14 | `docs/internal/baselines/ownership-inventory.json` | `docs/internal/baselines/ownership-inventory.json` |
 | 16 | `docs/internal/baselines/package-target-test-only-baseline.json` | `docs/internal/baselines/package-target-test-only-baseline.json` |
 | 18 | `docs/internal/baselines/service-construction-baseline.json` | `docs/internal/baselines/service-construction-baseline.json` |
-| 19 | `docs/internal/baselines/service-cycle-ceiling.json` | `docs/internal/baselines/service-cycle-ceiling.json` |
 | 22 | `docs/internal/baselines/unfinished-package-moves.json` | `docs/internal/baselines/unfinished-package-moves.json` |
 | 23 | `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` | `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` |
 | 24 | `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json` | `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json` |
@@ -183,7 +182,6 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `make lint` → `ui-lint` | `ui/scripts/check-hardcoded-ui-copy.ts`, `ui/package.json:check:localized-copy` | Dashboard localization gate | Source location and literal finding | `cd ui && bun run check:localized-copy` | R-07 | `sha256:bb6ee7e94bc96d013f164dc81004471112e457fa8a22d11ab17c1804982c609a` |
 | `docs/internal/baselines/package-target-test-only-baseline.json` | `make lint` → `package-target-manifest-check` | `cmd/packagetargetmanifestcheck/manifest.go` | Package-target migration gate | Open-move package path and test-only source identity | `make package-target-manifest-check` | R-09 | `sha256:64c98e7f5ee3b25d74bda79ee50a571b1b3a21e985946bc34688b330df5af40a` |
 | `docs/internal/baselines/service-construction-baseline.json` | `make lint` → `pkg-boundary` | `cmd/pkgboundarycheck/service_baselines.go` | Service construction boundary | Source file, import path, symbol, and class | `make pkg-boundary` | R-11 | `sha256:a6c401bb41481149a3576bb7b29aa42f4999de122c88b70520d3e848de259059` |
-| `docs/internal/baselines/service-cycle-ceiling.json` | `make lint` → `service-cycle-check` | `cmd/servicecyclecheck/report.go` | Service dependency graph | Minimum feedback-arc-set weight of the service graph | `make service-cycle-check` | R-12 | `sha256:410eebddbff280ff10c346699cf4585877f5a752dd184901d24ef1595d1f764d` |
 | `docs/internal/baselines/unfinished-package-moves.json` | `make lint` → `ownership-inventory-check`, `package-target-manifest-check` | `internal/ownershipinventory/moves.go`, `cmd/packagetargetmanifestcheck/manifest.go` | Packaged Service Structure migration | Live `pkg/` package path and successor move row | `make ownership-inventory-check`, `make package-target-manifest-check` | R-15 | `sha256:21bb2cfc079413494f5d10b093b6f775fefa019385e6b4ec1ef95366e938f26f` |
 | `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` | `make lint` → `functional-os-boundary-check` | `Makefile:569-570`, `cmd/functionalosboundarycheck/main.go`, `cmd/functionalosboundarycheck/scanner.go`, `cmd/functionalosboundarycheck/json.go`, `cmd/functionalosboundarycheck/model.go`, `cmd/functionalosboundarycheck/policy.go` | Functional-test OS-boundary gate | Exact `siteId`, package/source/enclosing/occurrence metadata, verdict, assertion evidence, and conversion obligation | `make functional-os-boundary-check` | R-19 | `sha256:d4a93d94eaa3231b5ed10a4ecb7f22172883f6a418a9860657f56229181839b2` |
 
@@ -225,7 +223,6 @@ content observations, not permission to rewrite a ratchet or snapshot.
 | R-07 | `hardcoded-ui-copy-baseline.txt` | 2 accepted literal findings |
 | R-09 | `package-target-test-only-baseline.json` | 31 test-only migration findings |
 | R-11 | `service-construction-baseline.json` | 4 construction findings |
-| R-12 | `service-cycle-ceiling.json` | Feedback-arc ceiling 13 |
 | R-15 | `unfinished-package-moves.json` | 37 open move rows |
 | S-03 | `ownership-inventory.json` | 6 named-owner confirmations and 0 misplaced guards |
 | S-04 | `ownership-path-lease-freeze.json` | 2 path-lease packets |
@@ -271,7 +268,6 @@ artifact generator must not be relabelled as a maintenance mechanism.
 | R-07 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | Dashboard localization gate — source location and literal finding | Run `cd ui && bun run check:localized-copy`. Move the copy to the catalog. Update the baseline only for a reviewed intentional exception. Never use the writer unattended. | Manual ratchet. `--write-baseline` would accept new user-facing hardcoded copy. |
 | R-09 | `docs/internal/baselines/package-target-test-only-baseline.json` | Package-target migration gate — open-move package path and test-only source identity | Run `make package-target-manifest-check`. Resolve the move or test-only edge, then remove its exact row. Do not add a new observation to make the migration check pass. | Manual deletion-only ratchet. `-create-test-only-baseline` refuses to overwrite an existing file. |
 | R-11 | `docs/internal/baselines/service-construction-baseline.json` | Service construction boundary — source file, import path, symbol, and class | Run `make pkg-boundary`. Complete the construction migration, then remove the resolved row in the same reviewed change. Do not repin it to accept new construction debt. | Manual deletion-only ratchet. No canonical generator exists for this file. |
-| R-12 | `docs/internal/baselines/service-cycle-ceiling.json` | Service dependency graph — minimum feedback-arc-set weight | Run `make service-cycle-check`. Change the ceiling only when the graph change is intentional and reviewed. An increase hides a regression. A decrease records an unclaimed improvement. | Manual bidirectional ratchet. The checker rejects both unreviewed increases and decreases. |
 | R-15 | `docs/internal/baselines/unfinished-package-moves.json` | Packaged Service Structure migration — live `pkg/` package path and successor move row | Run `make ownership-inventory-check` and `make package-target-manifest-check`. Landing a move deletes its row. When no moves remain, delete the empty ledger with its consumers. | Manual shrink-only ledger. No generator exists because package ownership is derived from the live tree. |
 | R-17 | `ui/src/styles/palette-contrast-baseline.ts` | Dashboard styles — palette, foreground token, fill token, and measured contrast ratio | Run `make ui-component-test`. Improve the measured contrast, then lower or remove the debt entry. Never raise the recorded debt to make a regression pass. | Manual ratchet. The component test has no baseline writer, and automatic recapture could record a regression. |
 | R-18 | `docs/internal/baselines/functional-os-spawn-baseline.json` | Functional-test OS-boundary maintainers — package count ceiling plus stable OS-spawn site identity | Run `make functional-os-boundary-check`. When a site is removed, lower the package ceiling and remove its site ID in the same reviewed change. When a site is intentionally added, review the source and paired `INTENTIONAL-OS` inventory admission before changing the baseline. Never raise a ceiling or admit a site automatically. | Manual ratchet. The checker has no baseline writer, and automatic recapture could accept a new OS-spawn site and weaken the boundary. |
@@ -343,7 +339,7 @@ the catalog audit SHA. The pre-existing consumer observations below retain
 their original historical pins where shown. Generated validation files were
 not retained. The following commands passed with exit 0: `make
 backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-boundary`,
-`make pkg-structure`, and `make service-cycle-check`.
+`make pkg-structure`, and `make golangci`.
 
 They included `make package-target-manifest-check`, `make ownership-inventory-check`,
 and `go test ./internal/ownershipinventory -count=1`.

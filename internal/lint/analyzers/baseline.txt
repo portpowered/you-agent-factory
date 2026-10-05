@@ -1,8 +1,10 @@
 # Exact violation list for the shared golangci module-plugin analyzers.
 # Format: rule|importer|importee; Petri: petri-public|package|exported-object|leaked-type.
 # Paths are module-relative; leaked-type is its package plus "." plus type name.
+# service-cycle-weight|internal/lint/analyzers|<nonnegative decimal ceiling> is a singleton numeric ratchet.
+# Its ceiling may only decrease and must equal the observed weighted minimum.
 # Unlisted findings and stale entries fail. Absent merge-base rule IDs seed once.
-# Established rule IDs admit no new keys; -test identifies test-file findings.
+# Established exact-debt rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/apitypes
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/generated
@@ -3198,6 +3200,9 @@ petri-reference|tests/stress_test|tests/stress/size_cleanup_helpers_test.go#pkg/
 petri-reference|tests/stress_test|tests/stress/throughput_test.go#pkg/services/factory_runtime.PetriMarkingSnapshot::count=2
 petri-reference|tests/stress_test|tests/stress/throughput_test.go#pkg/services/factory_runtime.RuntimeToken::count=1
 petri-reference|tests/stress_test|tests/stress/throughput_test.go#pkg/services/factory_runtime.RuntimeTokenColor::count=5
+
+# Singleton numeric ratchet: nonnegative ceiling may only decrease and must equal the exact weighted minimum.
+service-cycle-weight|internal/lint/analyzers|13
 
 # Construction count keys: source#ownership-rule#qualified-symbol::count=N.
 construction-recorded-site-test|pkg/services/factory_sessions/internal/invocation|pkg/services/factory_sessions/internal/invocation/owner_fixture_test.go#service-construction-test#pkg/services/work.NewInvocationPolicyService::count=1

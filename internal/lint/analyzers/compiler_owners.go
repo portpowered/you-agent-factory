@@ -95,6 +95,9 @@ func compilerOwnersSnapshot(head, metadata string, err error) *analysis.Analyzer
 }
 
 func compilerOwnedKeys(text string) ([]string, error) {
+	if _, _, err := serviceCycleCeiling(text); err != nil {
+		return nil, err
+	}
 	seen := map[string]bool{}
 	var keys []string
 	for _, line := range strings.Split(text, "\n") {

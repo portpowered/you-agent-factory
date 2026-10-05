@@ -238,6 +238,7 @@ class SizeFixtures:
 class BoundaryFixtures(SizeFixtures):
     """Seven grouped witnesses through the compiled plugin, including cache reuse."""
 
+    cycle_key = "service-cycle-weight|internal/lint/analyzers|0\n"
     effect_source = 'package effects\nimport "time"\nfunc Run() { _ = time.Now() }\n'
     # Exercise an existing embedded production key; fixture text cannot change
     # the delivered host's tolerance, and this lane never adds fixture debt.
@@ -253,7 +254,13 @@ class BoundaryFixtures(SizeFixtures):
         write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
         write(root, "pkg/wire/wire.go", "package wire\n")
         write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
-        write(root, "internal/lint/analyzers/baseline.txt", debt)
+        service = next((path.split("/")[2] for path in sources
+                        if path.startswith("pkg/services/")), None)
+        # These isolated service graphs are acyclic; preserve their numeric
+        # policy while independently mutating package-boundary debt.
+        write(root, "internal/lint/analyzers/baseline.txt", (self.cycle_key if service else "") + debt)
+        if service:
+            write(root, "pkg/services/lint_fixture/source.go", "package fixture\ntype Service interface {}\n")
         for name, source in sources.items():
             write(root, name, source)
         checked(["git", "init", "-q"], root)
@@ -313,7 +320,7 @@ class BoundaryFixtures(SizeFixtures):
         self.lint(root, "E-removed-use", [("repolint", "stale baseline entry")])
         (root / self.debt_path).unlink()
         self.lint(root, "E-vanished-owner", [("repolint", "compiler-ownership:")])
-        write(root, "internal/lint/analyzers/baseline.txt", "")
+        write(root, "internal/lint/analyzers/baseline.txt", self.cycle_key)
         self.lint(root, "E-deleted-resolved-key", [])
 
     def missing_inputs(self) -> None:
@@ -516,7 +523,7 @@ def consumption(fixtures: SizeFixtures) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "provider-catalog", "catalog", "consumption", "package-boundary", "packaged-source", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "service-cycle", "provider-catalog", "catalog", "consumption", "package-boundary", "packaged-source", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
@@ -650,6 +657,7 @@ def main() -> None:
                 fixtures.lint(root, "catalog-git-input-failure", [
                     ("repolint", "baseline-growth:"),
                     ("repolint", "compiler-ownership:"),
+                    ("repolint", "service-cycle-weight: service-cycle metadata git:"),
                     ("repolint", "input failure:")])
             finally:
                 git_directory.unlink()
@@ -703,6 +711,54 @@ def main() -> None:
             ])
             write(root, "pkg/wire/wire.go", "package wire\n")
             fixtures.lint(root, "wire-restored-compiler-source", [])
+        if args.cohort in ("service-cycle", "all"):
+            fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
+            root = fixtures.module("service-cycle")
+            write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/wire/wire.go", "package wire\n")
+            write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
+            baseline = "internal/lint/analyzers/baseline.txt"
+            prefix = "service-cycle-weight|internal/lint/analyzers|"
+            write(root, baseline, prefix + "1\n")
+            write(root, "pkg/services/a/internal/one/source.go", 'package one\nimport _ "github.com/portpowered/infinite-you/pkg/services/b"\n')
+            write(root, "pkg/services/a/source.go", "package two\ntype Service interface {}\n")
+            write(root, "pkg/services/b/source.go", "package one\ntype Service interface {}\n")
+            back = 'package two\nimport _ "github.com/portpowered/infinite-you/pkg/services/a"\n'
+            write(root, "pkg/services/b/internal/two/source.go", back)
+            checked(["git", "init", "-q"], root)
+            checked(["git", "config", "core.longpaths", "true"], root)
+            checked(["git", "add", "."], root)
+            fixtures.commit(root)
+            checked(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], root)
+            fixtures.lint(root, "cycle-equality", [])
+            write(root, "pkg/services/b/internal/two/generated.go", "// Code generated. DO NOT EDIT.\n" + back)
+            # Repeated incoming edges alone do not increase the optimal cut.
+            write(root, "pkg/services/a/internal/one/repeated.go", 'package one\nimport _ "github.com/portpowered/infinite-you/pkg/services/b"\n')
+            fixtures.lint(root, "cycle-regression-cached", [("repolint", "regression: measured 2, ceiling 1, drift +1")])
+            (root / "pkg/services/a/internal/one/repeated.go").unlink()
+            (root / "pkg/services/b/internal/two/generated.go").unlink()
+            (root / "pkg/services/b/internal/two/source.go").unlink()
+            fixtures.lint(root, "cycle-source-deletion-cached", [("repolint", "uncaptured improvement; lower the ceiling: measured 0")])
+            write(root, "pkg/services/b/internal/two/inactive.go", "//go:build custom_inactive\n\n" + back)
+            fixtures.lint(root, "cycle-wholly-inactive-package", [])
+            write(root, "pkg/services/a/internal/one/repeated.go", 'package one\nimport _ "github.com/portpowered/infinite-you/pkg/services/b"\n')
+            write(root, "pkg/services/b/internal/two/inactive_windows.go", "//go:build windows\n\n" + back)
+            fixtures.lint(root, "cycle-inactive-goos-cached", [("repolint", "regression: measured 2")])
+            (root / "pkg/services/a/internal/one/repeated.go").unlink()
+            (root / "pkg/services/b/internal/two/inactive_windows.go").unlink()
+            write(root, baseline, prefix + "0\n")
+            fixtures.lint(root, "cycle-ceiling-edit-cached", [("repolint", "regression: measured 1, ceiling 0")])
+            (root / "pkg/services/b/internal/two/inactive.go").unlink()
+            fixtures.lint(root, "cycle-captured-improvement", [])
+            write(root, baseline, prefix + "2\n")
+            fixtures.lint(root, "cycle-increased-history", [("repolint", "ceiling may only decrease"), ("repolint", "uncaptured improvement")])
+            write(root, baseline, "")
+            fixtures.lint(root, "cycle-missing-ceiling", [("repolint", "ceiling may only decrease"), ("repolint", "missing service-cycle-weight")])
+            write(root, baseline, prefix + "bad\n")
+            fixtures.lint(root, "cycle-corrupt-ceiling", [("repolint", "invalid service-cycle-weight ceiling")] * 3)
+            write(root, baseline, prefix + "0\n")
+            checked(["git", "update-ref", "-d", "refs/remotes/origin/main"], root)
+            fixtures.lint(root, "cycle-missing-history", [("repolint", "origin/main")])
         if args.cohort in ("baseline", "all"):
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("baseline-growth")
