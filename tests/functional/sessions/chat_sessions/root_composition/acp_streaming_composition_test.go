@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -212,7 +213,7 @@ func startServeACPProcess(
 			_ = stdinWrite.Close()
 			select {
 			case err := <-serveErr:
-				if err != nil && err != context.Canceled {
+				if err != nil && !errors.Is(err, context.Canceled) {
 					t.Errorf("you server acp Execute() error = %v, want context.Canceled or nil on shutdown", err)
 				}
 			case <-time.After(5 * time.Second):
