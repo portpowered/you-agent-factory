@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -13,7 +12,6 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -21,8 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type ProgressPublisherFactory func(string) workers.ProgressPublisher
-type DispatchCompletionFactory func(string) func(string)
 type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFactory
 
 // TODO: these command runner overrides adn what else, should not exist within the factory runtime
@@ -213,240 +209,6 @@ func (service runtimeWorkersServiceWithProgress) ResolveTemplateFields(
 	return resolver.ResolveTemplateFields(
 		workingDirectory, environment, tokens, workflowContext, worktree,
 	)
-}
-
-type runtimeScopeWithFlush struct {
-	recordings.RuntimeScopeService
-	flushInterval         time.Duration
-	resumeCanonicalEvents []factorydefinitions.FactoryEvent
-}
-
-func (opening runtimeScopeWithFlush) OpenRuntime(
-	ctx context.Context,
-	request recordings.RuntimeScopeRequest,
-) (recordings.RuntimeScopeResult, error) {
-	request.FlushInterval = opening.flushInterval
-	request.ReplayEvents = cloneFactoryEvents(opening.resumeCanonicalEvents)
-	return opening.RuntimeScopeService.OpenRuntime(ctx, request)
-}
-
-// newRuntimeBuild constructs the canonical runtime-build service from decomposed process
-// configuration and domain collaborators.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func NewRuntimeBuild(
-	defaultWorkerModelProvider string,
-	defaultWorkerModel string,
-	applyOperatorDefaults bool,
-	recordPath string,
-	workflowID string,
-	defaultSessionID string,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	runtimeMode factorydefinitions.RuntimeMode,
-	runtimeScheduler scheduler.Scheduler,
-	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	runtimeLogDir string,
-	runtimeLogConfig factory.RuntimeLogStorageConfig,
-	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
-	runtimeMetricsPolicy RuntimeMetricsPolicy,
-	runtimeMetricsDir string,
-	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
-	recordFlushInterval time.Duration,
-	backendScopeID string,
-	factoryRunnerID string,
-	verbose bool,
-	skipBuiltInPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	runtimeFactory *RuntimeFactory,
-	workerService workers.Service,
-	workerSessions workersessions.Service,
-	workerAttempts factory.WorkerAttemptOpener,
-	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
-	progressFactory ProgressPublisherFactory,
-	completionFactory DispatchCompletionFactory,
-	petriMutationRecorder factory.PetriMutationRecorder,
-	worldStateProjector factory.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeScopeService,
-	loadFactory factory.LoadedFactoryLoader,
-	initialFactorySnapshot InitialFactorySnapshotFactory,
-	preparation *runtimebuild.Service,
-	requestResolver *runtime.WorkstationRequestExecutor,
-) (*runtimebuild.CompatibilityBuild, error) {
-	if runtimeFactory == nil {
-		return nil, fmt.Errorf("Factory Runtime factory is required")
-	}
-	return runtimebuild.BindCompatibility(preparation, runtimebuild.BuildDefaults{
-		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
-		ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
-	},
-		providerOverride,
-		providerCommandRunner,
-		scriptCommandRunner,
-		mockWorkersConfig,
-		func(
-			config *workers.MockWorkersConfig,
-			runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
-			next platformprocess.CommandRunner,
-		) platformprocess.CommandRunner {
-			if mockCommandRunnerFactory == nil {
-				return next
-			}
-			return mockCommandRunnerFactory(config, runtimeConfig, next)
-		},
-		clock,
-		baseLogger,
-		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			var progressPublisher workers.ProgressPublisher
-			if progressFactory != nil {
-				progressPublisher = progressFactory(spec.SessionID)
-			}
-			// Progress callbacks outlive build admission; preserve its values without its cancellation.
-			providerSessionProgress := workersessions.RuntimeProgressPublisher(workerAttempts.PublishRuntimeProgress).ForRuntime(context.WithoutCancel(ctx), spec.RuntimeInstanceID, progressPublisher)
-			if workerService == nil {
-				return nil, fmt.Errorf("Workers service is required")
-			}
-			var dispatchCompleted func(string)
-			if completionFactory != nil {
-				dispatchCompleted = completionFactory(spec.SessionID)
-			}
-			return buildBundle(
-				ctx,
-				spec,
-				runtimeLogDir,
-				runtimeLogConfig,
-				runtimeFileLoggingPolicy,
-				runtimeMetricsPolicy,
-				runtimeMetricsDir,
-				runtimeMetricsConfig,
-				recordFlushInterval,
-				defaultSessionID,
-				runtimeMode,
-				runtimeScheduler,
-				inlineDispatch,
-				submissionRecorder,
-				dispatchRecorder,
-				backendScopeID,
-				factoryRunnerID,
-				verbose,
-				skipBuiltInPrerequisiteValidation,
-				invocationSkipPermissionsOverride,
-				workerService,
-				mockWorkersConfig,
-				workerSessions,
-				workerAttempts,
-				providerSessionProgress,
-				runtimeFactory,
-				dispatchCompleted,
-				worldStateProjector,
-				recordingsRuntime,
-				initialFactorySnapshot,
-				requestResolver,
-			)
-		},
-		petriMutationRecorder,
-	)
-}
-
-func buildBundle(
-	ctx context.Context,
-	spec runtimebuild.SessionBuildSpec,
-	runtimeLogDir string,
-	runtimeLogConfig factory.RuntimeLogStorageConfig,
-	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
-	runtimeMetricsPolicy RuntimeMetricsPolicy,
-	runtimeMetricsDir string,
-	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
-	recordFlushInterval time.Duration,
-	defaultSessionID string,
-	runtimeMode factorydefinitions.RuntimeMode,
-	runtimeScheduler scheduler.Scheduler,
-	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	backendScopeID string,
-	factoryRunnerID string,
-	verbose bool,
-	skipBuiltInPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	workerExecution workers.Service,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	workerSessions workersessions.Service,
-	workerAttempts factory.WorkerAttemptOpener,
-	providerSessionProgress workers.ProgressPublisher,
-	runtimeFactory *RuntimeFactory,
-	dispatchCompleted func(string),
-	worldStateProjector factory.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot InitialFactorySnapshotFactory,
-	requestResolver *runtime.WorkstationRequestExecutor,
-) (*factoryhost.Bundle, error) {
-	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
-		spec, defaultSessionID, recordingsRuntime, initialFactorySnapshot,
-	)
-	if err != nil {
-		return nil, err
-	}
-	metricsSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
-	workerServiceWithProgress := newRuntimeWorkersService(
-		workerExecution, providerSessionProgress, spec, sessionID,
-		skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride,
-		requestResolver, mockWorkersConfig,
-	)
-	bundle, err := runtimeFactory.Build(
-		ctx,
-		spec.Dir,
-		spec.FolderPath,
-		sessionID,
-		metricsSessionID,
-		factoryRunnerID,
-		runtimeMode,
-		verbose,
-		runtimeScheduler,
-		inlineDispatch,
-		submissionRecorder,
-		dispatchRecorder,
-		runtimeLogDir,
-		runtimeLogConfig, runtimeFileLoggingPolicy,
-		runtimeMetricsPolicy,
-		runtimeMetricsDir,
-		runtimeMetricsConfig,
-		loadedFactoryCfg,
-		spec.RuntimeInstanceID,
-		strings.TrimSpace(backendScopeID),
-		spec.Clock,
-		spec.RecordPath,
-		initialFactory,
-		spec.RestoredWorldState,
-		spec.SkipRestoredDispatchReconciliation,
-		spec.SubmissionHooks,
-		spec.CompletionPlanner,
-		spec.PetriMutationRecorder,
-		worldStateProjector,
-		runtimeScopeWithFlush{
-			RuntimeScopeService:   recordingsRuntime,
-			flushInterval:         recordFlushInterval,
-			resumeCanonicalEvents: cloneFactoryEvents(spec.ResumeCanonicalEvents),
-		},
-		workerServiceWithProgress,
-		runtimeWorkerSessionBoundary{Service: workerSessions, opener: workerAttempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: runtimeFactory.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
-		workerAttempts,
-		dispatchCompleted,
-		mockWorkersConfig,
-	)
-	if err != nil {
-		return nil, err
-	}
-	setReplayEvents(bundle.Factory, spec.ReplayEvents)
-	setBundleProgressPublisher(bundle, providerSessionProgress)
-	return bundle, nil
 }
 
 func newRuntimeWorkersService(

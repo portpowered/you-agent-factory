@@ -1,54 +1,31 @@
 package runtimebuild_test
 
 import (
-	"context"
-	"errors"
-	"strings"
-	"testing"
-
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"go.uber.org/zap"
+	"testing"
 )
 
-func TestConstructionRejectsMissingOwnedDependencies(t *testing.T) {
+// Preparation consumes explicit identities and candidates without requiring
+// unused loading or generation collaborators from the retired build bridge.
+func TestPrepareSpecExplicitSelectionsSkipUnusedCollaborators(t *testing.T) {
 	t.Parallel()
-
-	build := func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-		return &factoryhost.Bundle{}, nil
+	logger := zap.NewNop()
+	clock := &platformclock.Real{}
+	candidate := &runtimeBuildLoadedSource{config: &factorydefinitions.FactoryConfig{}}
+	owner := runtimebuild.New(nil, nil, nil, logger, nil, nil, nil, nil)
+	selections := runtimebuild.SessionBuildSpec{Clock: clock, BaseLogger: logger}
+	spec, err := owner.PrepareSpec(t.Context(), runtimebuild.BuildDefaults{},
+		runtimebuild.SessionBuildValues{SessionID: "session", RuntimeInstanceID: "runtime", LoadedFactoryCfg: candidate}, selections)
+	if err != nil {
+		t.Fatal(err)
 	}
-	tests := []struct {
-		name   string
-		clock  factoryruntime.Clock
-		logger *zap.Logger
-		build  runtimebuild.BundleBuilder
-		want   string
-	}{
-		{name: "clock", logger: zap.NewNop(), build: build, want: "clock is required"},
-		{name: "logger", clock: platformclock.Real{}, build: build, want: "logger is required"},
-		{name: "builder", clock: platformclock.Real{}, logger: zap.NewNop(), want: "runtime builder is required"},
+	if spec.Clock != clock || spec.BaseLogger != logger || spec.LoadedFactoryCfg != candidate || spec.RuntimeInstanceID != "runtime" || spec.SessionID != "session" {
+		t.Fatalf("selected candidate = %#v", spec)
 	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-				return nil, errors.New("unused test loader")
-			}, testRuntimeID, test.logger), runtimebuild.BuildDefaults{},
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				test.clock,
-				test.logger,
-				test.build,
-				nil)
-			if service != nil || err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("New() = (%v, %v), want nil service and error containing %q", service, err, test.want)
-			}
-		})
+	if selections.RuntimeInstanceID != "" || selections.LoadedFactoryCfg != nil {
+		t.Fatal("preparation mutated caller selections")
 	}
 }

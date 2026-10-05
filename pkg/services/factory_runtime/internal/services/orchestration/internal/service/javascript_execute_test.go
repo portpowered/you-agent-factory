@@ -39,7 +39,7 @@ return { ok: true };
 func TestRunJavaScriptPreservesPhaseAndCheckpointRecordOrdering(t *testing.T) {
 	t.Parallel()
 
-	service := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	service := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	policy := workflowpolicy.DefaultEffectivePolicy()
 	outcome, err := service.RunJavaScript(context.Background(), factoryruntime.JavaScriptRuntimeRequest{
 		Source:    progressPrimitivesWorkflowSource,
@@ -62,7 +62,7 @@ func TestRunJavaScriptPreservesPhaseAndCheckpointRecordOrdering(t *testing.T) {
 func TestRunJavaScriptDeniedPolicyReturnsStableRuntimeFacingDiagnostic(t *testing.T) {
 	t.Parallel()
 
-	service := internalservice.New(testIDGenerator(), testJavaScriptWorkflows(), testJavaScriptWorkflows())
+	service := internalservice.New(testDefinitionMapper(t), testJavaScriptWorkflows(), testJavaScriptWorkflows())
 	policy := workflowpolicy.DefaultEffectivePolicy()
 	policy.AllowedModels = []string{"gpt-allowed"}
 	outcome, err := service.RunJavaScript(context.Background(), factoryruntime.JavaScriptRuntimeRequest{

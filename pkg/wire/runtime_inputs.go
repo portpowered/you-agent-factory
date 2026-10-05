@@ -19,8 +19,10 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -41,6 +43,40 @@ import (
 	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	"go.uber.org/zap"
 )
+
+// provideFactoryRuntimeAssembly binds process execution effects once. The
+// named runner roles preserve Wire's provider/script effect distinction.
+func provideFactoryRuntimeAssembly(
+	runtimeFactory *factoryruntimewire.RuntimeFactory,
+	workerAttemptScheduler platformclock.TimerSource,
+	workerService workers.Service,
+	workerSessions workersessions.Service,
+	workerAttempts factoryruntime.WorkerAttemptOpener,
+	requestResolver *factoryruntimewire.WorkstationRequestExecutor,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
+	sidecars *factoryruntimewire.SidecarOpening,
+	instanceHost factoryruntimewire.InstanceHost,
+	preparation factoryruntimewire.RuntimePreparation,
+	recordingsRuntime recordings.RuntimeScopeService,
+	automationService automations.Service,
+	streams factorysessionwire.RuntimeAssembly,
+) (*factoryruntimewire.Assembly, error) {
+	return factoryruntimewire.NewAssembly(runtimeFactory, workerAttemptScheduler, workerService, workerSessions,
+		workerAttempts, requestResolver, initialFactorySnapshot,
+		sidecars,
+		instanceHost,
+		preparation,
+		recordingsRuntime,
+		automationService,
+		streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory())
+}
+
+func provideInitialRuntimeActivation(assembly *factoryruntimewire.Assembly, clock factoryruntime.Clock,
+	logger *zap.Logger, loadedSource factorydefinitions.LoadedFactorySourceFactory,
+) factoryruntime.InitialRuntimeActivationOperation {
+	materializer := factorydefinitionswire.NewRuntimeSnapshotMaterializer(loadedSource)
+	return factoryruntimewire.NewInitialActivation(assembly, clock, logger, materializer.Materialize)
+}
 
 func provideWorkersMockWorkersConfigFileSystem(
 	edges serviceedges.Edges,
@@ -99,7 +135,6 @@ func provideRuntimeMetricsRetentionFileSystem() platformmetrics.RuntimeMetricsRe
 }
 
 func provideRuntimeLogOwner(
-	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
@@ -108,22 +143,18 @@ func provideRuntimeLogOwner(
 	if err != nil {
 		return nil, err
 	}
-	if baseLogger == nil {
-		return nil, errors.New("runtime log owner base logger is required")
-	}
 	return runtimeLogOwner{
-		baseLogger: baseLogger, opener: opener, clock: clock, newID: newID,
+		opener: opener, clock: clock, newID: newID,
 	}, nil
 }
 
 type runtimeLogOwner struct {
-	baseLogger *zap.Logger
-	opener     *logging.RuntimeLogOpener
-	clock      runtimeArtifactClock
-	newID      runtimeArtifactIDGenerator
+	opener *logging.RuntimeLogOpener
+	clock  runtimeArtifactClock
+	newID  runtimeArtifactIDGenerator
 }
 
-func (owner runtimeLogOwner) Open(request factoryruntime.RuntimeLogScopeRequest) (factoryruntime.RuntimeLogSink, error) {
+func (owner runtimeLogOwner) Open(baseLogger *zap.Logger, request factoryruntime.RuntimeLogScopeRequest) (factoryruntime.RuntimeLogSink, error) {
 	if request.Policy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		return nil, nil
 	}
@@ -131,7 +162,7 @@ func (owner runtimeLogOwner) Open(request factoryruntime.RuntimeLogScopeRequest)
 		return nil, errors.New("runtime log owner is not configured")
 	}
 	opened, err := owner.opener.Open(logging.RuntimeLogOpeningRequest{
-		BaseLogger: owner.baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
+		BaseLogger: baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
 		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
 		Config: logging.RuntimeLogConfig{
 			MaxSize: request.Config.MaxSize, MaxBackups: request.Config.MaxBackups,
@@ -680,3 +711,15 @@ func provideRuntimeRequestLogger(baseLogger *zap.Logger, loggerFactory factoryru
 
 // Current Work reads use live sessions; historical reads keep their existing separate snapshot root.
 func provideWorkSnapshotReader() workwire.SnapshotReader { return nil }
+
+// provideRuntimePreparation selects fixed execution effects in canonical Wire.
+func provideRuntimePreparation(workstationLoader factorydefinitions.WorkstationLoader,
+	loadFactory factoryruntime.LoadedFactoryLoader, newID factoryruntime.IDGenerator, baseLogger *zap.Logger,
+	providerOverride factorysessionwire.ProviderOverrideService,
+	providerCommandRunner factorysessionwire.ProviderCommandRunner,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+) factoryruntimewire.RuntimePreparation {
+	return factoryruntimewire.NewRuntimePreparation(workstationLoader, loadFactory, newID, baseLogger,
+		providerOverride, providerCommandRunner, scriptCommandRunner, mockCommandRunnerFactory)
+}

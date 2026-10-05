@@ -979,3 +979,14 @@ func TestPreAdmissionOpeningPublicationFailureIsRetryable(t *testing.T) {
 		t.Fatalf("failure decision = %#v, want retryable without throttle pause", decision)
 	}
 }
+
+func TestDefaultRuntimeWorkspaceRetainsSelectedRootWithoutArtifactLookup(t *testing.T) {
+	t.Parallel()
+	selectedRoot := "/selected/runtime/root"
+	cfg := &runtimeConfig{requestRuntimeBaseDir: selectedRoot}
+	selection := runtimeExecutionSelection{factoryDirectory: "/authored/factory"}
+	finalizeRuntimeWorkspaceSelection(cfg, &selection, nil)
+	if selection.workingDirectory != selectedRoot || selection.workingDirectoryAuthored {
+		t.Fatalf("default workspace = %q, authored %v, want selected root %q", selection.workingDirectory, selection.workingDirectoryAuthored, selectedRoot)
+	}
+}

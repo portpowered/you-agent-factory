@@ -34,6 +34,7 @@ import (
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type canonicalStdioSessionsStub struct{ factorysessions.Service }
@@ -766,7 +767,7 @@ func newRuntimeObservabilityTestOwners(t *testing.T) runtimeObservabilityTestOwn
 	}
 	var logCollision atomic.Int32
 	owners.logOwner, err = provideRuntimeLogOwner(
-		zap.NewNop(), func() time.Time { return at },
+		func() time.Time { return at },
 		func() string { return "log-" + strconv.Itoa(int(logCollision.Add(1))) }, reserver,
 	)
 	if err != nil {
@@ -801,6 +802,50 @@ func assertRuntimeObservabilityConstructionIsInert(t *testing.T, owners runtimeO
 	}
 }
 
+func TestRuntimeLogOwnerPreservesSelectedScopedBackend(t *testing.T) {
+	t.Parallel()
+	owners := newRuntimeObservabilityTestOwners(t)
+	core, logs := observer.New(zap.InfoLevel)
+	base := zap.New(core).With(zap.String("backend", "selected"))
+	for _, sessionID := range []string{"candidate", "peer"} {
+		selected := base.With(zap.String("session_id", sessionID), zap.String("invocation_id", sessionID+"-invocation"))
+		sink, err := owners.logOwner.Open(selected, factoryruntime.RuntimeLogScopeRequest{
+			SessionID: sessionID, RuntimeInstanceID: sessionID + "-runtime", RootDirectory: owners.logRoot,
+			Policy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = sink.Close() })
+		sink.Logger().Info("scoped-file-log")
+		if err := sink.Close(); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(sink.Artifact().Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Zap With fields already belong to the original backend core. The new
+		// file core receives the runtime identity added by the platform opener;
+		// backend assertions below protect the selected invocation correlation.
+		for _, field := range []string{`"msg":"scoped-file-log"`, `"runtime_instance_id":"` + sessionID + `-runtime"`} {
+			if !strings.Contains(string(data), field) {
+				t.Fatalf("runtime file missing emitted record identity %s: %s", field, data)
+			}
+		}
+	}
+	entries := logs.FilterMessage("scoped-file-log").All()
+	if len(entries) != 2 {
+		t.Fatalf("selected backend records = %d, want one per opening", len(entries))
+	}
+	for index, sessionID := range []string{"candidate", "peer"} {
+		fields := entries[index].ContextMap()
+		if fields["backend"] != "selected" || fields["session_id"] != sessionID || fields["invocation_id"] != sessionID+"-invocation" {
+			t.Fatalf("backend log attribution = %#v, want %s", fields, sessionID)
+		}
+	}
+}
+
 func TestRuntimeLogOwnerKeepsPrivateScopesIsolated(t *testing.T) {
 	t.Parallel()
 	owners := newRuntimeObservabilityTestOwners(t)
@@ -824,7 +869,7 @@ func TestRuntimeLogOwnerKeepsPrivateScopesIsolated(t *testing.T) {
 
 func openRuntimeLogTestScope(t *testing.T, owner factoryruntime.RuntimeLogOwner, root, sessionID string) factoryruntime.RuntimeLogSink {
 	t.Helper()
-	sink, err := owner.Open(factoryruntime.RuntimeLogScopeRequest{
+	sink, err := owner.Open(zap.NewNop(), factoryruntime.RuntimeLogScopeRequest{
 		SessionID: sessionID, RuntimeInstanceID: "runtime-shared",
 		FolderPath: "/folder", FactoryDirectory: "/factory", RootDirectory: root,
 		Policy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
@@ -922,12 +967,12 @@ func TestRuntimeObservabilityOwnerRejectsUnwritableDestination(t *testing.T) {
 		t.Fatalf("provideRuntimeArtifactPathReserver(): %v", err)
 	}
 	owner, err := provideRuntimeLogOwner(
-		zap.NewNop(), time.Now, func() string { return "unwritable" }, reserver,
+		time.Now, func() string { return "unwritable" }, reserver,
 	)
 	if err != nil {
 		t.Fatalf("provideRuntimeLogOwner(): %v", err)
 	}
-	_, err = owner.Open(factoryruntime.RuntimeLogScopeRequest{
+	_, err = owner.Open(zap.NewNop(), factoryruntime.RuntimeLogScopeRequest{
 		RuntimeInstanceID: "runtime-unwritable", RootDirectory: unwritable,
 		Policy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
 	})

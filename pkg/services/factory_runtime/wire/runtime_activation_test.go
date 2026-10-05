@@ -297,21 +297,24 @@ func TestRuntimeRootFailedCleanupRemainsExplicitlyRetryable(t *testing.T) {
 
 	cleanupCalls := 0
 	cleanupFailure := true
+	openingErr := errors.New("runtime worker initialization failed")
+	cleanupErr := errors.New("runtime artifact is still open")
 	root := newRuntimeRoot(t, func(_ context.Context, _ factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
 		return &factoryruntime.RuntimeActivation{
 			Close: func(context.Context) error {
 				cleanupCalls++
 				if cleanupFailure {
-					return errors.New("runtime artifact is still open")
+					return cleanupErr
 				}
 				return nil
 			},
-		}, errors.New("runtime worker initialization failed")
+		}, openingErr
 	})
 	request := foldRuntimeActivationRequest()
 
-	if _, err := root.Activate(context.Background(), request); !errors.Is(err, factoryruntime.ErrRuntimeActivationFailed) {
-		t.Fatalf("Activate(failed cleanup) error = %v, want activation failure", err)
+	if _, err := root.Activate(context.Background(), request); !errors.Is(err, factoryruntime.ErrRuntimeActivationFailed) ||
+		!errors.Is(err, openingErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("Activate(failed cleanup) error = %v, want activation, opening and cleanup failures", err)
 	}
 	if _, err := root.Observe(context.Background(), factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus}); !errors.Is(err, factoryruntime.ErrNotRunning) {
 		t.Fatalf("Observe(failed cleanup) error = %v, want ErrNotRunning", err)
@@ -447,5 +450,9 @@ func newCompletedRuntimeRoot(newID factoryruntime.IDGenerator, workflows factory
 	if err != nil {
 		return nil, err
 	}
-	return factoryruntimewire.NewService(factoryruntimewire.NewOrchestration(newID, workflows, runtime), host, factoryruntimewire.NewDispatchPlanning(publisher, canceler))
+	mapper, err := factoryruntimewire.NewDefinitionMapper(newID)
+	if err != nil {
+		return nil, err
+	}
+	return factoryruntimewire.NewService(factoryruntimewire.NewOrchestration(mapper, workflows, runtime), host, factoryruntimewire.NewDispatchPlanning(publisher, canceler))
 }

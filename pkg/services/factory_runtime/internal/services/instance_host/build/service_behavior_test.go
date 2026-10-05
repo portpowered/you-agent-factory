@@ -11,43 +11,103 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	petri "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	runtimestate "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestService_BuildSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *testing.T) {
+func TestPrepareExecutionSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *testing.T) {
 	t.Parallel()
 
 	fixture := newSelectedBuildFixture(t)
-	spec, err := fixture.service.BuildSpec(
-		context.Background(),
-		"/factories/selected",
-		"/workspace/project",
-		"session-selected",
-		"/runtime/session-selected",
-		fixture.loaded,
-		"  ",
-		fixture.replayProvider,
-		fixture.replayRunner,
-		[]factory.SubmissionHook{fixture.hook},
-		fixture.planner,
-		true,
-	)
+	spec, err := fixture.service.PrepareExecutionSpec(t.Context(), fixture.defaults,
+		runtimebuild.SessionBuildValues{Dir: "/factories/selected", FolderPath: "/workspace/project", SessionID: "session-selected",
+			ExecutionBaseDir: "/runtime/session-selected", LoadedFactoryCfg: fixture.loaded, PreserveCompatibilityDefaultRecordPath: true},
+		runtimebuild.SessionBuildSpec{Clock: platformclock.Real{}, BaseLogger: zap.NewNop(), ProviderOverride: fixture.replayProvider,
+			ReplayCommandRunner: fixture.replayRunner, SubmissionHooks: []factory.SubmissionHook{fixture.hook}, CompletionPlanner: fixture.planner,
+			PetriMutationRecorder: func(string, []factorydefinitions.TokenMutationRecord) error { return nil }},
+		nil)
 	if err != nil {
-		t.Fatalf("BuildSpec: %v", err)
+		t.Fatalf("PrepareExecutionSpec: %v", err)
 	}
 	assertSelectedBuildSpec(t, spec, fixture)
 	assertSelectedWorkerDefaults(t, fixture.loaded)
 }
 
+func TestPrepareExecutionSpecKeepsOpeningEffectsIndependent(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"replay", "selected", "mock"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			candidate := &runtimeBuildLoadedSource{factoryDir: "/factory/" + name, config: &factorydefinitions.FactoryConfig{}}
+			replayProvider := &testutil.NativeProvider{}
+			replayRunner := platformprocess.CommandRunner(&behaviorCommandRunner{selection: name + "-replay"})
+			providerRunner := platformprocess.CommandRunner(&behaviorCommandRunner{selection: name + "-provider"})
+			var selectedProvider providers.Service
+			var scriptRunner platformprocess.CommandRunner
+			var mockConfig *workers.MockWorkersConfig
+			if name != "replay" {
+				selectedProvider = &testutil.NativeProvider{}
+				scriptRunner = &behaviorCommandRunner{selection: name + "-script"}
+			}
+			if name == "mock" {
+				mockConfig = &workers.MockWorkersConfig{}
+			}
+			var wrapped []platformprocess.CommandRunner
+			decorate := func(config *workers.MockWorkersConfig, definitions factorydefinitions.RuntimeDefinitionLookup, next platformprocess.CommandRunner) platformprocess.CommandRunner {
+				if config != mockConfig || definitions != candidate {
+					t.Fatal("mock opening changed selected config or candidate")
+				}
+				wrapped = append(wrapped, next)
+				return next
+			}
+			preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), selectedProvider, providerRunner, scriptRunner, decorate)
+			clock := &platformclock.Real{}
+			logger := zap.NewNop().With(zap.String("opening", name))
+			spec, err := preparation.PrepareExecutionSpec(context.Background(), runtimebuild.BuildDefaults{},
+				runtimebuild.SessionBuildValues{SessionID: name, RuntimeInstanceID: "runtime-" + name, LoadedFactoryCfg: candidate},
+				runtimebuild.SessionBuildSpec{Clock: clock, BaseLogger: logger, ProviderOverride: replayProvider, ReplayCommandRunner: replayRunner},
+				mockConfig)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertPreparedExecutionEffects(t, spec, clock, logger, replayProvider, selectedProvider, replayRunner, scriptRunner)
+			if name == "mock" {
+				if spec.ProviderCommandRunner != providerRunner || len(wrapped) != 2 || wrapped[0] != providerRunner || wrapped[1] != scriptRunner {
+					t.Fatalf("mock execution selections = %#v, wrappers = %#v", spec, wrapped)
+				}
+			} else if spec.ProviderCommandRunner != nil || len(wrapped) != 0 {
+				t.Fatal("ordinary opening acquired mock execution effects")
+			}
+		})
+	}
+}
+
+func assertPreparedExecutionEffects(t *testing.T, spec runtimebuild.SessionBuildSpec, clock factory.Clock, logger *zap.Logger,
+	replayProvider, selectedProvider providers.Service, replayRunner, scriptRunner platformprocess.CommandRunner,
+) {
+	t.Helper()
+	wantProvider, wantRunner := replayProvider, replayRunner
+	if selectedProvider != nil {
+		wantProvider = selectedProvider
+	}
+	if scriptRunner != nil {
+		wantRunner = scriptRunner
+	}
+	if spec.ProviderOverride != wantProvider || spec.CommandRunnerOverride != wantRunner || spec.ReplayCommandRunner != replayRunner ||
+		spec.Clock != clock || spec.BaseLogger != logger {
+		t.Fatalf("opening changed selected execution effects: %#v", spec)
+	}
+}
+
 type selectedBuildFixture struct {
-	service            *runtimebuild.CompatibilityBuild
+	service            *runtimebuild.Service
+	defaults           runtimebuild.BuildDefaults
 	loaded             *runtimeBuildLoadedSource
 	configuredProvider *testutil.NativeProvider
 	replayProvider     *testutil.NativeProvider
@@ -79,28 +139,12 @@ func newSelectedBuildFixture(t *testing.T) selectedBuildFixture {
 		hook:               buildSubmissionHook{name: "selected-factory-hook"},
 		planner:            &buildCompletionPlanner{},
 	}
-	providerRunner := platformprocess.CommandRunner(&behaviorCommandRunner{})
-	recorder := factory.PetriMutationRecorder(func(string, []factorydefinitions.TokenMutationRecord) error {
-		return nil
-	})
-	fixture.service = mustNewBehaviorService(
-		t,
-		" CODEX ",
-		" gpt-5 ",
-		true,
-		"/recordings/factory-__factory_session_id__.json",
-		"workflow-selected",
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, errors.New("loader should not be called when source is supplied")
-		},
-		fixture.configuredProvider,
-		providerRunner,
-		fixture.scriptRunner,
-		func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			return &factoryhost.Bundle{}, nil
-		},
-		recorder,
-	)
+	fixture.defaults = runtimebuild.BuildDefaults{WorkerModelProvider: " CODEX ", WorkerModel: " gpt-5 ", ApplyOperatorDefaults: true,
+		RecordPath: "/recordings/factory-__factory_session_id__.json", WorkflowID: "workflow-selected"}
+	fixture.service = runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		t.Fatal("supplied candidate unexpectedly loaded")
+		return nil, nil
+	}, testRuntimeID, zap.NewNop(), fixture.configuredProvider, nil, fixture.scriptRunner, nil)
 	return fixture
 }
 
@@ -174,303 +218,42 @@ func assertSelectedWorkerDefaults(t *testing.T, loaded *runtimeBuildLoadedSource
 	}
 }
 
-func TestService_BuildPropagatesBuilderOutcomeAndKeepsCallerSpecUnchanged(t *testing.T) {
+func TestPrepareExecutionSpecReportsFailuresWithoutOpeningEffects(t *testing.T) {
 	t.Parallel()
-
-	wantErr := errors.New("runtime construction failed")
-	var captured runtimebuild.SessionBuildSpec
-	buildCalls := 0
-	svc := mustNewBehaviorService(
-		t,
-		"",
-		"",
-		false,
-		"",
-		"",
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, errors.New("unused loader")
-		},
-		nil,
-		nil,
-		nil,
-		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			buildCalls++
-			captured = spec
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+	loadErr, mutationErr := errors.New("factory unavailable"), errors.New("defaults mutation failed")
+	for _, test := range []struct {
+		name, provider, wantText string
+		candidate                *runtimeBuildLoadedSource
+		wantErr                  error
+	}{
+		{name: "load", wantText: "load factory config", wantErr: loadErr},
+		{name: "unsupported defaults", provider: "unsupported provider", candidate: &runtimeBuildLoadedSource{config: &factorydefinitions.FactoryConfig{Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "model", Type: factorydefinitions.WorkerTypeModel}}}}, wantText: "unsupported worker model provider"},
+		{name: "mutation", provider: "CODEX", candidate: &runtimeBuildLoadedSource{config: &factorydefinitions.FactoryConfig{Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "model", Type: factorydefinitions.WorkerTypeModel}}}, mutateErr: mutationErr}, wantText: "apply operator defaults", wantErr: mutationErr},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				return nil, loadErr
+			}, testRuntimeID, zap.NewNop(), nil, nil, nil, func(*workers.MockWorkersConfig, factorydefinitions.RuntimeDefinitionLookup, platformprocess.CommandRunner) platformprocess.CommandRunner {
+				t.Fatal("execution effect opened after preparation failure")
+				return nil
+			})
+			var candidate factorydefinitions.MutableLoadedFactorySource
+			if test.candidate != nil {
+				candidate = test.candidate
 			}
-			return nil, wantErr
-		},
-		func(string, []factorydefinitions.TokenMutationRecord) error { return nil },
-	)
-
-	callerSpec := runtimebuild.SessionBuildSpec{SessionID: "caller-owned"}
-	_, err := svc.Build(context.Background(), callerSpec)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Build() error = %v, want %v", err, wantErr)
+			selections := runtimebuild.SessionBuildSpec{Clock: platformclock.Real{}, BaseLogger: zap.NewNop()}
+			spec, err := preparation.PrepareExecutionSpec(t.Context(), runtimebuild.BuildDefaults{WorkerModelProvider: test.provider, WorkerModel: "model", ApplyOperatorDefaults: true},
+				runtimebuild.SessionBuildValues{Dir: "/factory", SessionID: "session", LoadedFactoryCfg: candidate}, selections,
+				&workers.MockWorkersConfig{})
+			if err == nil || !strings.Contains(err.Error(), test.wantText) || (test.wantErr != nil && !errors.Is(err, test.wantErr)) {
+				t.Fatalf("preparation error = %v", err)
+			}
+			if spec.Clock != nil || spec.LoadedFactoryCfg != nil || selections.Clock == nil || selections.BaseLogger == nil {
+				t.Fatal("failed candidate published data or mutated caller selections")
+			}
+		})
 	}
-	if buildCalls != 1 || captured.SessionID != callerSpec.SessionID {
-		t.Fatalf("builder calls/spec = %d/%#v", buildCalls, captured)
-	}
-	if callerSpec.PetriMutationRecorder != nil {
-		t.Fatal("Build mutated caller-owned spec")
-	}
-
-	canceled, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err = svc.Build(canceled, runtimebuild.SessionBuildSpec{})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled Build() error = %v, want context.Canceled", err)
-	}
-	if buildCalls != 2 {
-		t.Fatalf("builder calls after cancellation = %d, want 2", buildCalls)
-	}
-}
-
-func TestService_BuildReplacementLoadsDefinitionAndScopesRecording(t *testing.T) {
-	t.Parallel()
-
-	loaded := &runtimeBuildLoadedSource{factoryDir: "/factories/loaded", config: &factorydefinitions.FactoryConfig{Name: "loaded"}}
-	var loadedDir string
-	var loadedLoader factorydefinitions.WorkstationLoader
-	var captured runtimebuild.SessionBuildSpec
-	wantBundle := &factoryhost.Bundle{}
-	svc := mustNewBehaviorService(
-		t,
-		"",
-		"",
-		false,
-		"/recordings/runtime.json",
-		"workflow-replacement",
-		func(dir string, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			loadedDir = dir
-			loadedLoader = loader
-			return loaded, nil
-		},
-		nil,
-		nil,
-		nil,
-		func(_ context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			captured = spec
-			return wantBundle, nil
-		},
-		nil,
-	)
-
-	got, err := svc.BuildReplacement(
-		context.Background(),
-		"/workspace/folder",
-		"/factories/loaded",
-		"session-replacement",
-		"/runtime/replacement",
-	)
-	if err != nil {
-		t.Fatalf("BuildReplacement: %v", err)
-	}
-	if got != wantBundle {
-		t.Fatalf("BuildReplacement result = %T, want builder bundle", got)
-	}
-	if loadedDir != "/factories/loaded" || loadedLoader != nil {
-		t.Fatalf("loader inputs = %q/%T, want factory path and nil workstation loader", loadedDir, loadedLoader)
-	}
-	if captured.Dir != "/factories/loaded" || captured.FolderPath != "/workspace/folder" || captured.SessionID != "session-replacement" {
-		t.Fatalf("replacement identity = %#v", captured)
-	}
-	if captured.ExecutionBaseDir != "/runtime/replacement" || captured.RuntimeInstanceID != testRuntimeID() {
-		t.Fatalf("replacement runtime inputs = %#v", captured)
-	}
-	if captured.RecordPath != "/recordings/runtime.session-replacement.json" {
-		t.Fatalf("session RecordPath = %q", captured.RecordPath)
-	}
-	if captured.WorkflowID != "workflow-replacement" || captured.LoadedFactoryCfg != loaded {
-		t.Fatalf("replacement collaborators = %#v", captured)
-	}
-	if loaded.runtimeBaseDir != "/runtime/replacement" {
-		t.Fatalf("loaded RuntimeBaseDir = %q", loaded.runtimeBaseDir)
-	}
-}
-
-func TestService_BuildSpecReportsLoaderFailure(t *testing.T) {
-	t.Parallel()
-
-	loadErr := errors.New("factory definition unavailable")
-	loader := func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-		return nil, loadErr
-	}
-	service := newBuildSpecFailureService(t, loader)
-	_, err := service.BuildReplacementSpec(context.Background(), "/folder", "/missing", "session", "/runtime")
-	if !errors.Is(err, loadErr) || !strings.Contains(err.Error(), "load factory config") {
-		t.Fatalf("loader error = %v, want wrapped %v", err, loadErr)
-	}
-}
-
-func TestService_BuildSpecRejectsUnsupportedOperatorDefault(t *testing.T) {
-	t.Parallel()
-
-	loaded := &runtimeBuildLoadedSource{config: &factorydefinitions.FactoryConfig{
-		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "model", Type: factorydefinitions.WorkerTypeModel}},
-	}}
-	service := newDefaultOperatorFailureService(t, "unsupported provider", "model")
-	_, err := service.BuildSpec(
-		context.Background(),
-		"/factory",
-		"/folder",
-		"session",
-		"/runtime",
-		loaded,
-		"id",
-		nil,
-		nil,
-		nil,
-		nil,
-		false,
-	)
-	if err == nil || !strings.Contains(err.Error(), "unsupported worker model provider") {
-		t.Fatalf("invalid default error = %v, want unsupported provider diagnostic", err)
-	}
-}
-
-func TestService_BuildSpecReportsOperatorDefaultMutationFailure(t *testing.T) {
-	t.Parallel()
-
-	mutationErr := errors.New("worker defaults cannot be applied")
-	loaded := &runtimeBuildLoadedSource{
-		config:    &factorydefinitions.FactoryConfig{Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "model", Type: factorydefinitions.WorkerTypeModel}}},
-		mutateErr: mutationErr,
-	}
-	service := mustNewBehaviorService(
-		t,
-		"CODEX",
-		"model",
-		true,
-		"",
-		"",
-		unusedFactoryLoader(),
-		nil,
-		nil,
-		nil,
-		failIfBuildCalled(t),
-		nil,
-	)
-	_, err := service.BuildSpec(
-		context.Background(),
-		"/factory",
-		"/folder",
-		"session",
-		"/runtime",
-		loaded,
-		"id",
-		nil,
-		nil,
-		nil,
-		nil,
-		false,
-	)
-	if !errors.Is(err, mutationErr) || !strings.Contains(err.Error(), "apply operator defaults") {
-		t.Fatalf("mutation error = %v, want wrapped %v", err, mutationErr)
-	}
-}
-
-func newBuildSpecFailureService(t *testing.T, loader factorydefinitions.LoadedFactoryLoader) *runtimebuild.CompatibilityBuild {
-	t.Helper()
-	return mustNewBehaviorService(
-		t,
-		"",
-		"",
-		false,
-		"",
-		"",
-		loader,
-		nil,
-		nil,
-		nil,
-		failIfBuildCalled(t),
-		nil,
-	)
-}
-
-func newDefaultOperatorFailureService(t *testing.T, provider string, model string) *runtimebuild.CompatibilityBuild {
-	t.Helper()
-	return mustNewBehaviorService(
-		t,
-		provider,
-		model,
-		true,
-		"",
-		"",
-		unusedFactoryLoader(),
-		nil,
-		nil,
-		nil,
-		failIfBuildCalled(t),
-		nil,
-	)
-}
-
-func unusedFactoryLoader() factorydefinitions.LoadedFactoryLoader {
-	return func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-		return nil, errors.New("unused loader")
-	}
-}
-
-func failIfBuildCalled(t *testing.T) runtimebuild.BundleBuilder {
-	t.Helper()
-	return func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-		t.Fatal("builder called after BuildSpec failure")
-		return nil, nil
-	}
-}
-
-func TestNewRejectsMissingFactoryLoader(t *testing.T) {
-	t.Parallel()
-
-	build := func(context.Context, runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-		return &factoryhost.Bundle{}, nil
-	}
-	service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), runtimebuild.BuildDefaults{},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		platformclock.Real{},
-		zap.NewNop(),
-		build,
-		nil)
-	if service != nil || err == nil || !strings.Contains(err.Error(), "Factory Definition loader is required") {
-		t.Fatalf("New() = (%v, %v), want missing-loader error", service, err)
-	}
-}
-
-func mustNewBehaviorService(
-	t *testing.T,
-	defaultProvider string,
-	defaultModel string,
-	applyDefaults bool,
-	recordPath string,
-	workflowID string,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	provider providers.Service,
-	providerRunner platformprocess.CommandRunner,
-	scriptRunner platformprocess.CommandRunner,
-	build runtimebuild.BundleBuilder,
-	recorder factory.PetriMutationRecorder,
-) *runtimebuild.CompatibilityBuild {
-	t.Helper()
-	service, err := runtimebuild.BindCompatibility(runtimebuild.New(nil, loadFactory, testRuntimeID, zap.NewNop()), runtimebuild.BuildDefaults{WorkerModelProvider: defaultProvider, WorkerModel: defaultModel, ApplyOperatorDefaults: applyDefaults, RecordPath: recordPath, WorkflowID: workflowID},
-		provider,
-		providerRunner,
-		scriptRunner,
-		nil,
-		nil,
-		platformclock.Real{},
-		zap.NewNop(),
-		build,
-		recorder)
-	if err != nil {
-		t.Fatalf("runtimebuild.New: %v", err)
-	}
-	return service
 }
 
 type runtimeBuildLoadedSource struct {
@@ -481,7 +264,7 @@ type runtimeBuildLoadedSource struct {
 	replacements   []factorydefinitions.PortableBundledFileReplacement
 }
 
-type behaviorCommandRunner struct{}
+type behaviorCommandRunner struct{ selection string }
 
 func (*behaviorCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return platformprocess.CommandResult{}, nil
@@ -584,7 +367,7 @@ func TestPrepareSuppliedCandidateKeepsPriorGenerationAndDetachedValues(t *testin
 	preparation := runtimebuild.New(nil, func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		t.Fatal("supplied candidate must skip loading")
 		return nil, nil
-	}, testRuntimeID, zap.NewNop())
+	}, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	defaults := runtimebuild.BuildDefaults{WorkerModelProvider: " CODEX ", WorkerModel: " gpt-5 ", ApplyOperatorDefaults: true,
 		RecordPath: "/recordings/factory-__factory_session_id__.json", WorkflowID: "workflow-selected"}
 	values := runtimebuild.SessionBuildValues{Dir: "/factories/selected", FolderPath: "/workspace/project", SessionID: "session-selected",
@@ -632,7 +415,7 @@ func TestPrepareLoadsSelectedCandidateAndSelectsIdentityAndRecordingPath(t *test
 					t.Fatalf("load selection = %q, %T", dir, loader)
 				}
 				return candidate, nil
-			}, func() string { ids++; return "generated" }, zap.NewNop())
+			}, func() string { ids++; return "generated" }, zap.NewNop(), nil, nil, nil, nil)
 			prepared, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{RecordPath: "/recording.json"},
 				runtimebuild.SessionBuildValues{Dir: "/selected", SessionID: test.sessionID, RuntimeInstanceID: test.runtimeID,
 					ExecutionBaseDir: "/runtime", PreserveCompatibilityDefaultRecordPath: test.compatibility})
@@ -681,7 +464,7 @@ func TestPreparePreservesFailureIdentityAndContext(t *testing.T) {
 					return nil, sentinel
 				}
 				return candidate, nil
-			}, testRuntimeID, zap.NewNop())
+			}, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 			result, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{ApplyOperatorDefaults: true, WorkerModelProvider: test.provider, WorkerModel: "model"}, runtimebuild.SessionBuildValues{})
 			if err == nil || !strings.Contains(err.Error(), test.context) {
 				t.Fatalf("Prepare error = %v", err)
@@ -699,7 +482,7 @@ func TestPreparePreservesFailureIdentityAndContext(t *testing.T) {
 func TestPrepareWarningsPreserveSessionFieldsAndTargetOrder(t *testing.T) {
 	t.Parallel()
 	core, observed := observer.New(zap.WarnLevel)
-	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(core))
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(core), nil, nil, nil, nil)
 	for _, id := range []string{"session-a", "session-b"} {
 		candidate := newSelectedBuildFixture(t).loaded
 		candidate.replacements = []factorydefinitions.PortableBundledFileReplacement{{TargetPath: "first"}, {TargetPath: "second"}}
@@ -723,5 +506,41 @@ func TestPrepareWarningsPreserveSessionFieldsAndTargetOrder(t *testing.T) {
 		if !ok || len(paths) != 2 || paths[0] != "first" || paths[1] != "second" {
 			t.Fatalf("ordered targets = %#v", paths)
 		}
+	}
+}
+
+func TestPrepareSpecWarningsUseSelectedOpeningLogger(t *testing.T) {
+	t.Parallel()
+	processCore, processLogs := observer.New(zap.WarnLevel)
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(processCore), nil, nil, nil, nil)
+	for _, id := range []string{"session-a", "session-b"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			core, logs := observer.New(zap.WarnLevel)
+			selectedLogger := zap.New(core).With(zap.String("invocation_id", "invocation-"+id))
+			clock := &platformclock.Real{}
+			candidate := newSelectedBuildFixture(t).loaded
+			candidate.replacements = []factorydefinitions.PortableBundledFileReplacement{{TargetPath: "selected-target"}}
+			spec, err := preparation.PrepareSpec(t.Context(), runtimebuild.BuildDefaults{}, runtimebuild.SessionBuildValues{
+				SessionID: id, FolderPath: "/folder/" + id, LoadedFactoryCfg: candidate,
+			}, runtimebuild.SessionBuildSpec{BaseLogger: selectedLogger, Clock: clock})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.BaseLogger != selectedLogger || spec.Clock != clock {
+				t.Fatal("preparation changed the opening logger or clock")
+			}
+			entries := logs.All()
+			if len(entries) != 1 {
+				t.Fatalf("selected opening warnings = %d, want 1", len(entries))
+			}
+			fields := entries[0].ContextMap()
+			if fields["session_id"] != id || fields["invocation_id"] != "invocation-"+id || fields["folder_path"] != "/folder/"+id {
+				t.Fatalf("warning lost opening attribution: %#v", fields)
+			}
+			if processLogs.Len() != 0 {
+				t.Fatalf("selected opening logged through the process constructor: %#v", processLogs.All())
+			}
+		})
 	}
 }

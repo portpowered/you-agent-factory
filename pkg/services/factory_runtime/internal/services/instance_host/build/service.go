@@ -10,15 +10,10 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
-
-// BundleBuilder constructs a runnable runtime bundle from an immutable session
-// build spec.
-type BundleBuilder func(ctx context.Context, spec SessionBuildSpec) (*factoryhost.Bundle, error)
 
 // BuildDefaults contains detached preparation configuration.
 type BuildDefaults struct {
@@ -54,10 +49,14 @@ type PreparedSessionValues struct {
 
 // Service prepares session-owned candidates using fixed process collaborators.
 type Service struct {
-	workstationLoader factorydefinitions.WorkstationLoader
-	loadFactory       factory.LoadedFactoryLoader
-	newID             factory.IDGenerator
-	baseLogger        *zap.Logger
+	workstationLoader     factorydefinitions.WorkstationLoader
+	loadFactory           factory.LoadedFactoryLoader
+	newID                 factory.IDGenerator
+	baseLogger            *zap.Logger
+	providerOverride      providers.Service
+	providerCommandRunner platformprocess.CommandRunner
+	scriptCommandRunner   platformprocess.CommandRunner
+	newMockCommandRunner  MockCommandRunnerFactory
 }
 
 // New constructs inert preparation with explicitly selected collaborators.
@@ -66,13 +65,23 @@ func New(
 	loadFactory factory.LoadedFactoryLoader,
 	newID factory.IDGenerator,
 	baseLogger *zap.Logger,
+	providerOverride providers.Service,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
+	newMockCommandRunner MockCommandRunnerFactory,
 ) *Service {
-	return &Service{workstationLoader: workstationLoader, loadFactory: loadFactory, newID: newID, baseLogger: baseLogger}
+	return &Service{workstationLoader: workstationLoader, loadFactory: loadFactory, newID: newID, baseLogger: baseLogger,
+		providerOverride: providerOverride, providerCommandRunner: providerCommandRunner,
+		scriptCommandRunner: scriptCommandRunner, newMockCommandRunner: newMockCommandRunner}
 }
 
 // Prepare preserves candidate identity; callers discard a failed candidate.
 // It starts no resources and retains the existing downstream cancellation policy.
 func (s *Service) Prepare(ctx context.Context, defaults BuildDefaults, values SessionBuildValues) (PreparedSessionValues, error) {
+	return s.prepare(ctx, defaults, values, s.baseLogger)
+}
+
+func (s *Service) prepare(ctx context.Context, defaults BuildDefaults, values SessionBuildValues, baseLogger *zap.Logger) (PreparedSessionValues, error) {
 	loaded := values.LoadedFactoryCfg
 	if loaded == nil {
 		var err error
@@ -81,7 +90,7 @@ func (s *Service) Prepare(ctx context.Context, defaults BuildDefaults, values Se
 			return PreparedSessionValues{}, fmt.Errorf("load factory config: %w", err)
 		}
 	}
-	logger := NewSessionLogger(s.baseLogger, values.SessionID, values.FolderPath, loaded.FactoryDir())
+	logger := NewSessionLogger(baseLogger, values.SessionID, values.FolderPath, loaded.FactoryDir())
 	WarnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loaded.PortableBundledFileReplacements())
 	loaded.SetRuntimeBaseDir(values.ExecutionBaseDir)
 	if defaults.ApplyOperatorDefaults {
@@ -104,140 +113,102 @@ func (s *Service) Prepare(ctx context.Context, defaults BuildDefaults, values Se
 	}, nil
 }
 
-// CompatibilityBuild retains T15 activation and effect selection until its caller migration.
-type CompatibilityBuild struct {
-	preparation           *Service
-	defaults              BuildDefaults
-	providerOverride      providers.Service
-	providerCommandRunner platformprocess.CommandRunner
-	scriptCommandRunner   platformprocess.CommandRunner
-	mockWorkersConfig     *workers.MockWorkersConfig
-	newMockCommandRunner  MockCommandRunnerFactory
-	clock                 factory.Clock
-	baseLogger            *zap.Logger
-	build                 BundleBuilder
-	petriMutationRecorder factory.PetriMutationRecorder
-}
-
-// BindCompatibility binds the T15 activation bridge without exposing its effect
-// types through the fixed preparation service exported by owner Wire.
-func BindCompatibility(
-	s *Service,
-	defaults BuildDefaults,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	newMockCommandRunner MockCommandRunnerFactory,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	build BundleBuilder,
-	petriMutationRecorder factory.PetriMutationRecorder,
-) (*CompatibilityBuild, error) {
-	switch {
-	case clock == nil:
-		return nil, fmt.Errorf("construct runtime build service: clock is required")
-	case s == nil || s.newID == nil:
-		return nil, fmt.Errorf("construct runtime build service: ID generator is required")
-	case baseLogger == nil || s.baseLogger == nil:
-		return nil, fmt.Errorf("construct runtime build service: logger is required")
-	case build == nil:
-		return nil, fmt.Errorf("construct runtime build service: runtime builder is required")
-	case s.loadFactory == nil:
-		return nil, fmt.Errorf("construct runtime build service: Factory Definition loader is required")
-	}
-	return &CompatibilityBuild{preparation: s, defaults: defaults,
-		providerOverride: providerOverride, providerCommandRunner: providerCommandRunner,
-		scriptCommandRunner: scriptCommandRunner, mockWorkersConfig: mockWorkersConfig,
-		newMockCommandRunner: newMockCommandRunner, clock: clock, baseLogger: baseLogger,
-		build: build, petriMutationRecorder: petriMutationRecorder}, nil
-}
-
-// Build builds a runtime bundle from an immutable session build spec.
-func (s *CompatibilityBuild) Build(ctx context.Context, spec SessionBuildSpec) (*factoryhost.Bundle, error) {
-	if s == nil || s.build == nil {
-		return nil, fmt.Errorf("runtime build service is required")
-	}
-	spec.PetriMutationRecorder = s.petriMutationRecorder
-	return s.build(ctx, spec)
-}
-
-// BuildSpec derives an immutable session build spec for startup, session open,
-// named activation, and post-save activation.
-func (s *CompatibilityBuild) BuildSpec(
+// PrepareSpec derives scoped build data directly through the fixed preparation
+// owner. Selections already belong to this opening; preparation neither binds
+// another service nor substitutes its clock, logger, or execution effects.
+func (s *Service) PrepareSpec(
 	ctx context.Context,
-	dir string,
-	folderPath string,
-	sessionID string,
-	executionBaseDir string,
-	loadedFactoryCfg factorydefinitions.MutableLoadedFactorySource,
-	runtimeInstanceID string,
-	replayProvider providers.Service,
-	replayCommandRunner platformprocess.CommandRunner,
-	submissionHooks []factory.SubmissionHook,
-	completionPlanner factory.CompletionDeliveryPlanner,
-	preserveCompatibilityDefaultRecordPath bool,
+	defaults BuildDefaults,
+	values SessionBuildValues,
+	selections SessionBuildSpec,
 ) (SessionBuildSpec, error) {
-	if s == nil || s.build == nil {
-		return SessionBuildSpec{}, fmt.Errorf("runtime build service is required")
-	}
-	prepared, err := s.preparation.Prepare(ctx, s.defaults, SessionBuildValues{
-		Dir: dir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
-		LoadedFactoryCfg: loadedFactoryCfg, RuntimeInstanceID: runtimeInstanceID,
-		PreserveCompatibilityDefaultRecordPath: preserveCompatibilityDefaultRecordPath,
-	})
+	prepared, err := s.prepare(ctx, defaults, values, selections.BaseLogger)
 	if err != nil {
 		return SessionBuildSpec{}, err
 	}
-	return SessionBuildSpec{
-		Dir:                   dir,
-		FolderPath:            folderPath,
-		SessionID:             sessionID,
-		ExecutionBaseDir:      executionBaseDir,
-		LoadedFactoryCfg:      prepared.LoadedFactoryCfg,
-		BaseLogger:            s.baseLogger,
-		RuntimeInstanceID:     prepared.RuntimeInstanceID,
-		Clock:                 s.clock,
-		RecordPath:            prepared.RecordPath,
-		WorkflowID:            prepared.WorkflowID,
-		ProviderOverride:      providerOverrideForMode(s.providerOverride, replayProvider),
-		ProviderCommandRunner: providerCommandRunnerForMode(s.mockWorkersConfig, s.providerCommandRunner, prepared.LoadedFactoryCfg, s.newMockCommandRunner),
-		CommandRunnerOverride: commandRunnerOverrideForMode(s.mockWorkersConfig, s.scriptCommandRunner, prepared.LoadedFactoryCfg, replayCommandRunner, s.newMockCommandRunner),
-		ReplayCommandRunner:   replayCommandRunner,
-		SubmissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
-		CompletionPlanner:     completionPlanner,
-		PetriMutationRecorder: s.petriMutationRecorder,
+	selections.Dir = prepared.Dir
+	selections.FolderPath = prepared.FolderPath
+	selections.SessionID = prepared.SessionID
+	selections.ExecutionBaseDir = prepared.ExecutionBaseDir
+	selections.RuntimeInstanceID = prepared.RuntimeInstanceID
+	selections.LoadedFactoryCfg = prepared.LoadedFactoryCfg
+	selections.RecordPath = prepared.RecordPath
+	selections.WorkflowID = prepared.WorkflowID
+	selections.SubmissionHooks = append([]factory.SubmissionHook(nil), selections.SubmissionHooks...)
+	return selections, nil
+}
+
+// PrepareExecutionSpec applies opening-specific execution precedence after
+// preparing a detached candidate. Replay and mock effects stay scoped to the
+// request; no compatibility builder is needed to select them.
+func (s *Service) PrepareExecutionSpec(
+	ctx context.Context,
+	defaults BuildDefaults,
+	values SessionBuildValues,
+	selections SessionBuildSpec,
+	mockWorkersConfig *workers.MockWorkersConfig,
+) (SessionBuildSpec, error) {
+	selections.ProviderOverride = providerOverrideForMode(s.providerOverride, selections.ProviderOverride)
+	spec, err := s.PrepareSpec(ctx, defaults, values, selections)
+	if err != nil {
+		return SessionBuildSpec{}, err
+	}
+	spec.ProviderCommandRunner = providerCommandRunnerForMode(mockWorkersConfig, s.providerCommandRunner, spec.LoadedFactoryCfg, s.newMockCommandRunner)
+	spec.CommandRunnerOverride = commandRunnerOverrideForMode(mockWorkersConfig, s.scriptCommandRunner, spec.LoadedFactoryCfg, spec.ReplayCommandRunner, s.newMockCommandRunner)
+	return spec, nil
+}
+
+// ExecutionPreparation is the fixed behavior Assembly actually consumes. It
+// accepts candidate values and execution selections without engine hooks.
+type ExecutionPreparation interface {
+	PrepareExecutionValues(context.Context, BuildDefaults, SessionBuildValues, *zap.Logger,
+		providers.Service, platformprocess.CommandRunner, *workers.MockWorkersConfig) (PreparedExecutionValues, error)
+}
+
+// PreparedExecutionValues contains prepared candidate facts and selected edges.
+type PreparedExecutionValues struct {
+	PreparedSessionValues
+	ProviderOverride      providers.Service
+	ProviderCommandRunner platformprocess.CommandRunner
+	CommandRunnerOverride platformprocess.CommandRunner
+}
+
+func (s *Service) PrepareExecutionValues(ctx context.Context, defaults BuildDefaults, values SessionBuildValues,
+	logger *zap.Logger, replayProvider providers.Service, replayRunner platformprocess.CommandRunner,
+	mockWorkersConfig *workers.MockWorkersConfig,
+) (PreparedExecutionValues, error) {
+	spec, err := s.PrepareExecutionSpec(ctx, defaults, values, SessionBuildSpec{
+		BaseLogger: logger, ProviderOverride: replayProvider, ReplayCommandRunner: replayRunner,
+	}, mockWorkersConfig)
+	if err != nil {
+		return PreparedExecutionValues{}, err
+	}
+	return PreparedExecutionValues{
+		PreparedSessionValues: PreparedSessionValues{Dir: spec.Dir, FolderPath: spec.FolderPath,
+			SessionID: spec.SessionID, ExecutionBaseDir: spec.ExecutionBaseDir, RuntimeInstanceID: spec.RuntimeInstanceID,
+			LoadedFactoryCfg: spec.LoadedFactoryCfg, RecordPath: spec.RecordPath, WorkflowID: spec.WorkflowID},
+		ProviderOverride:      spec.ProviderOverride,
+		ProviderCommandRunner: spec.ProviderCommandRunner,
+		CommandRunnerOverride: spec.CommandRunnerOverride,
 	}, nil
 }
 
-// BuildReplacementSpec loads runtime config from factoryDir and derives a build
-// spec for session open, named activation, and post-save activation.
-func (s *CompatibilityBuild) BuildReplacementSpec(
-	ctx context.Context,
-	folderPath string,
-	factoryDir string,
-	sessionID string,
-	executionBaseDir string,
-) (SessionBuildSpec, error) {
-	return s.BuildSpec(
-		ctx, factoryDir, folderPath, sessionID, executionBaseDir,
-		nil, "", nil, nil, nil, nil, false,
-	)
-}
-
-// BuildReplacement derives a build spec and constructs the replacement bundle.
-func (s *CompatibilityBuild) BuildReplacement(
-	ctx context.Context,
-	folderPath string,
-	factoryDir string,
-	sessionID string,
-	executionBaseDir string,
-) (factory.RuntimeRecord, error) {
-	spec, err := s.BuildReplacementSpec(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
-	if err != nil {
-		return nil, err
-	}
-	return s.Build(ctx, spec)
+// PreparedOpeningSpec combines prepared facts with Runtime-owned hooks. It
+// performs no effects and detaches the caller's hook slice.
+func PreparedOpeningSpec(prepared PreparedExecutionValues, selections SessionBuildSpec) SessionBuildSpec {
+	selections.Dir = prepared.Dir
+	selections.FolderPath = prepared.FolderPath
+	selections.SessionID = prepared.SessionID
+	selections.ExecutionBaseDir = prepared.ExecutionBaseDir
+	selections.RuntimeInstanceID = prepared.RuntimeInstanceID
+	selections.LoadedFactoryCfg = prepared.LoadedFactoryCfg
+	selections.RecordPath = prepared.RecordPath
+	selections.WorkflowID = prepared.WorkflowID
+	selections.ProviderOverride = prepared.ProviderOverride
+	selections.ProviderCommandRunner = prepared.ProviderCommandRunner
+	selections.CommandRunnerOverride = prepared.CommandRunnerOverride
+	selections.SubmissionHooks = append([]factory.SubmissionHook(nil), selections.SubmissionHooks...)
+	return selections
 }
 
 // SessionScopedRecordPath preserves the selected default path and scopes

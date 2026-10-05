@@ -18,9 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// RuntimeSidecars owns runtime-scoped metrics, input listeners, and
-// automation. Initializer decides when to start it; Factory Runtime owns what
-// starting it means.
+// RuntimeSidecars supplies metrics, input-listener and automation behavior.
+// Runtime handles own scoped state; Initializer decides when to start it.
 type RuntimeSidecars struct {
 	automation   automations.Service
 	enabled      bool
@@ -78,14 +77,28 @@ func PreseedRuntimeInputs(ctx context.Context, automation automations.Service, b
 	return nil
 }
 
-func NewRuntimeSidecars(
+// SidecarOpening retains process-selected behavior. Runtime handles own all
+// cancellation and goroutine state, so independent sessions can share it.
+type SidecarOpening struct {
+	foreground RuntimeSidecars
+	service    RuntimeSidecars
+}
+
+func NewSidecarOpening(
 	automation automations.Service,
-	enabled bool,
 	metricsClock platformclock.TimerSource,
-) *RuntimeSidecars {
-	return &RuntimeSidecars{
-		automation: automation, enabled: enabled, metricsClock: metricsClock,
+) *SidecarOpening {
+	return &SidecarOpening{
+		foreground: RuntimeSidecars{automation: automation, metricsClock: metricsClock},
+		service:    RuntimeSidecars{automation: automation, enabled: true, metricsClock: metricsClock},
 	}
+}
+
+func (s *SidecarOpening) Scope(serviceMode bool) factory.RuntimeSidecars {
+	if serviceMode {
+		return &s.service
+	}
+	return &s.foreground
 }
 
 func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.RuntimeRecord) error {

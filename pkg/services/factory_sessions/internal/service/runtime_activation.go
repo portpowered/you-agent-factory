@@ -55,10 +55,7 @@ func (r *Root) activateRuntime(
 		openingContext = context.WithoutCancel(ctx)
 	}
 	products, err := r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
-	if err != nil {
-		return runtimeProducts{}, err
-	}
-	return products, nil
+	return products, err
 }
 
 // newRuntimeActivation publishes the opened engine as the Runtime activation.
@@ -67,26 +64,32 @@ func (r *Root) activateRuntime(
 // value so no later Work submission or event subscription has to recover a
 // legacy owner from the published service.
 func newRuntimeActivation(products runtimeProducts) (*factoryruntime.RuntimeActivation, error) {
-	service := runtimeEngineService(products)
-	if service == nil {
-		return nil, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
-	}
-	ingress, ok := service.(factoryruntime.APIFactory)
-	if !ok {
-		return nil, fmt.Errorf(
-			"activate Factory Runtime: opened runtime Work submission and event subscription are required until Recordings migration",
-		)
-	}
-	return &factoryruntime.RuntimeActivation{
-		Service:             service,
-		WorkAndEventIngress: ingress,
-		Close: func(closeCtx context.Context) error {
+	activation := &factoryruntime.RuntimeActivation{
+		Close: func(context.Context) error {
 			if products.closeArtifacts == nil {
 				return nil
 			}
 			return products.closeArtifacts()
 		},
-	}, nil
+	}
+	if products.activation != nil {
+		activation.Service = products.activation.Service
+		activation.WorkAndEventIngress = products.activation.WorkAndEventIngress
+		return activation, nil
+	}
+	service := runtimeEngineService(products)
+	if service == nil {
+		return activation, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
+	}
+	ingress, ok := service.(factoryruntime.APIFactory)
+	if !ok {
+		return activation, fmt.Errorf(
+			"activate Factory Runtime: opened runtime Work submission and event subscription are required until Recordings migration",
+		)
+	}
+	activation.Service = service
+	activation.WorkAndEventIngress = ingress
+	return activation, nil
 }
 
 // runtimeEngineService returns the live engine the opening resolved from the
@@ -286,13 +289,11 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
 		opened, openErr := r.activateRuntime(activationCtx, activation)
 		if openErr != nil {
-			return nil, openErr
+			partial, _ := newRuntimeActivation(opened)
+			return partial, openErr
 		}
 		products = opened
 		published, activationErr := newRuntimeActivation(opened)
-		if activationErr != nil && opened.closeArtifacts != nil {
-			activationErr = errors.Join(activationErr, opened.closeArtifacts())
-		}
 		return published, activationErr
 	})
 	if err != nil {

@@ -2,23 +2,20 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -26,42 +23,41 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	runtimeFactory  *RuntimeFactory
-	workerSessions  workersessions.Service
-	workerAttempts  factoryruntime.WorkerAttemptOpener
-	workerService   workers.Service
-	metricsClock    platformclock.TimerSource
-	instanceHost    instancehost.Service
-	preparation     *runtimebuild.Service
-	requestResolver *runtime.WorkstationRequestExecutor
+	bundleOpening     BundleOpeningOperation
+	sidecars          *SidecarOpening
+	instanceHost      instancehost.Service
+	preparation       runtimebuild.ExecutionPreparation
+	recordingsRuntime recordings.RuntimeScopeService
+	automationService automations.Service
+	progressFactory   func(*zap.Logger) func(string) workers.ProgressPublisher
+	completionFactory func(string) func(string)
 }
 
-// NewAssembly constructs the inert Factory Runtime assembly service selected
-// by Wire. It retains the canonical supervisor and its keyed operations without
-// constructing another service during runtime opening.
+// NewAssembly constructs the inert compatibility assembly selected by Wire.
+// Opening and replacement consume fixed process behavior. Only invocation
+// selections and scoped resources are allocated when a session opens.
 func NewAssembly(
-	runtimeFactory *RuntimeFactory,
-	workerSessions workersessions.Service,
-	workerAttempts factoryruntime.WorkerAttemptOpener,
-	workerService workers.Service,
-	metricsClock platformclock.TimerSource,
+	bundleOpening BundleOpeningOperation,
+	sidecars *SidecarOpening,
 	instanceHost instancehost.Service,
-	preparation *runtimebuild.Service,
-	requestResolver *runtime.WorkstationRequestExecutor,
+	preparation runtimebuild.ExecutionPreparation,
+	recordingsRuntime recordings.RuntimeScopeService,
+	automationService automations.Service,
+	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
+	completionFactory func(string) func(string),
 ) (*Assembly, error) {
-	if runtimeFactory == nil {
-		return nil, fmt.Errorf("Factory Runtime factory is required")
+	if bundleOpening == nil {
+		return nil, fmt.Errorf("factory runtime bundle opening is required")
 	}
-	if workerSessions == nil {
-		return nil, fmt.Errorf("worker sessions service is required")
-	}
-	if workerService == nil {
-		return nil, fmt.Errorf("Workers service is required")
+	if recordingsRuntime == nil {
+		return nil, fmt.Errorf("recordings runtime opening is required")
 	}
 	return &Assembly{
-		runtimeFactory: runtimeFactory, workerSessions: workerSessions, workerAttempts: workerAttempts,
-		workerService: workerService, metricsClock: metricsClock, instanceHost: instanceHost,
-		preparation: preparation, requestResolver: requestResolver,
+		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
+		preparation:       preparation,
+		recordingsRuntime: recordingsRuntime,
+		automationService: automationService,
+		progressFactory:   progressFactory, completionFactory: completionFactory,
 	}, nil
 }
 
@@ -78,17 +74,10 @@ func (a *Assembly) Assemble(
 	workflowID string,
 	defaultSessionID string,
 	metricsSessionID string,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	loadFactory factoryruntime.LoadedFactoryLoader,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler factoryruntime.Scheduler,
 	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	runtimeLogDir string,
 	runtimeLogConfig factoryruntime.RuntimeLogStorageConfig,
 	runtimeFileLoggingPolicy factoryruntime.RuntimeFileLoggingPolicy,
@@ -103,13 +92,8 @@ func (a *Assembly) Assemble(
 	invocationSkipPermissionsOverride *bool,
 	clock factoryruntime.Clock,
 	baseLogger *zap.Logger,
-	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	progressFactory func(string) workers.ProgressPublisher,
-	completionFactory func(string) func(string),
-	petriMutationRecorder factoryruntime.PetriMutationRecorder,
-	worldStateProjector factoryruntime.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
+	publishRuntimeStreams bool,
+	observations factoryruntime.SessionObservations,
 	dir string,
 	factoryRootDir string,
 	executionBaseDir string,
@@ -119,77 +103,15 @@ func (a *Assembly) Assemble(
 	resumeInput *recordings.LoadResumeInputResult,
 	restoredWorldState *factorydefinitions.FactoryWorldState,
 	restoredEventHistory []factorydefinitions.FactoryEvent,
-	automationService automations.Service,
 	serviceMode bool,
-) (
-	factoryruntime.RuntimeReplacementBuilder,
-	factoryruntime.RuntimeRecord,
-	factoryruntime.SessionBuildSpec,
-	factoryruntime.RuntimeLifecycle,
-	factoryruntime.RuntimeSidecars,
-	error,
-) {
-	if a == nil || a.runtimeFactory == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
+) (*factoryruntime.RuntimeInitialOpening, error) {
+	if a == nil || a.bundleOpening == nil {
+		return nil,
 			fmt.Errorf("Factory Runtime assembly service is required")
 	}
-	if a.workerService == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
-			fmt.Errorf("Workers service is required")
-	}
-	builder, err := NewRuntimeBuild(
-		defaultWorkerModelProvider,
-		defaultWorkerModel,
-		applyOperatorDefaults,
-		recordPath,
-		workflowID,
-		defaultSessionID,
-		workstationLoader,
-		providerOverride,
-		providerCommandRunner,
-		scriptCommandRunner,
-		mockWorkersConfig,
-		runtimeMode,
-		runtimeScheduler,
-		inlineDispatch,
-		submissionRecorder,
-		dispatchRecorder,
-		runtimeLogDir,
-		runtimeLogConfig,
-		runtimeFileLoggingPolicy,
-		runtimeMetricsPolicy,
-		runtimeMetricsDir,
-		runtimeMetricsConfig,
-		recordFlushInterval,
-		backendScopeID,
-		factoryRunnerID,
-		verbose,
-		skipBuiltInPrerequisiteValidation,
-		invocationSkipPermissionsOverride,
-		clock,
-		baseLogger,
-		a.runtimeFactory,
-		a.workerService,
-		a.workerSessions,
-		a.workerAttempts,
-		mockCommandRunnerFactory,
-		progressFactory,
-		completionFactory,
-		petriMutationRecorder,
-		worldStateProjector,
-		recordingsRuntime,
-		loadFactory,
-		initialFactorySnapshot,
-		a.preparation,
-		a.requestResolver,
-	)
-	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
-	}
-	if recordingsRuntime == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, fmt.Errorf(
-			"Recordings runtime opening is required",
-		)
+	var petriMutationRecorder factoryruntime.PetriMutationRecorder
+	if observations != nil {
+		petriMutationRecorder = observations.RecordPetriTokenMutations
 	}
 	// Replay hooks consume the same detached event history as world-state
 	// reconstruction. A successor recording can legitimately reset its local
@@ -197,32 +119,34 @@ func (a *Assembly) Assemble(
 	// monotonic generation order. Keep spec.ReplayEvents raw below so the
 	// read-only canonical ledger remains byte-equivalent to the source.
 	replayExecutionArtifact := normalizedReplayArtifactForExecution(replayArtifact)
-	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
+	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := a.recordingsRuntime.ReplayExecution(
 		replayExecutionArtifact,
 	)
 	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		return nil, err
 	}
 	// Recordings owns replay as a platform process effect. Factory Runtime keeps
 	// that low-level effect at the composition boundary and Workers adapts it
 	// privately when Execute receives the runtime-scoped override.
 	replayCommandRunner := replayProcessRunner
-	spec, err := builder.BuildSpec(
-		ctx,
-		dir,
-		factoryRootDir,
-		defaultSessionID,
-		executionBaseDir,
-		loadedFactory,
-		runtimeInstanceID,
-		replayProvider,
-		replayCommandRunner,
-		replayhooks.Adapt(replayHooks),
-		completionPlanner,
-		true,
-	)
+	spec, err := a.prepareOpeningSpec(ctx,
+		runtimebuild.BuildDefaults{
+			WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+			ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+		},
+		runtimebuild.SessionBuildValues{
+			Dir: dir, FolderPath: factoryRootDir, SessionID: defaultSessionID,
+			ExecutionBaseDir: executionBaseDir, LoadedFactoryCfg: loadedFactory,
+			RuntimeInstanceID: runtimeInstanceID, PreserveCompatibilityDefaultRecordPath: true,
+		},
+		factoryruntime.SessionBuildSpec{
+			BaseLogger: baseLogger, Clock: clock, ProviderOverride: replayProvider,
+			ReplayCommandRunner: replayCommandRunner, SubmissionHooks: replayhooks.Adapt(replayHooks),
+			CompletionPlanner: completionPlanner, PetriMutationRecorder: petriMutationRecorder,
+		},
+		mockWorkersConfig)
 	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		return nil, err
 	}
 	spec.MetricsSessionID = firstNonEmptySessionID(metricsSessionID, defaultSessionID)
 	if resumeInput != nil {
@@ -240,27 +164,87 @@ func (a *Assembly) Assemble(
 		resumeInput,
 		restoredWorldState,
 		restoredEventHistory,
-		recordingsRuntime,
+		a.recordingsRuntime,
 	); err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		return nil, err
 	}
-	instance, err := builder.Build(ctx, spec)
-	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
-	}
-	if instance == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, fmt.Errorf(
-			"default runtime instance is required",
+	// The callback retains this session's selections, not a secondary service
+	// graph. Both initial and replacement resources use the fixed opening owner.
+	open := func(ctx context.Context, spec factoryruntime.SessionBuildSpec) (factoryruntime.RuntimeRecord, error) {
+		progressPublisher := a.sessionProgressPublisher(spec.SessionID, baseLogger, publishRuntimeStreams, observations)
+		var dispatchCompleted func(string)
+		if publishRuntimeStreams && a.completionFactory != nil {
+			dispatchCompleted = a.completionFactory(spec.SessionID)
+		}
+		return a.bundleOpening(
+			ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
+			runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
+			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
+			backendScopeID, factoryRunnerID, verbose,
+			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
+			progressPublisher, dispatchCompleted,
 		)
 	}
-	attachInvocationScheduleFactory(ctx, automationService, instance)
-	lifecycle := a.instanceHost.Scope(clock)
-	return builder,
-		instance,
-		spec,
-		lifecycle,
-		NewRuntimeSidecars(automationService, serviceMode, a.metricsClock),
-		nil
+	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
+		replacementSpec, err := a.prepareOpeningSpec(ctx,
+			runtimebuild.BuildDefaults{
+				WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+				ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+			},
+			runtimebuild.SessionBuildValues{
+				Dir: factoryDir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
+			},
+			factoryruntime.SessionBuildSpec{
+				Clock: clock, BaseLogger: baseLogger, PetriMutationRecorder: petriMutationRecorder,
+			},
+			mockWorkersConfig)
+		if err != nil {
+			return nil, err
+		}
+		return open(ctx, replacementSpec)
+	})
+	instance, err := open(ctx, spec)
+	result, err := initialRuntimeOpening(instance, spec, builder, clock, err)
+	if err != nil {
+		return result, err
+	}
+	attachInvocationScheduleFactory(ctx, a.automationService, instance)
+	result.Lifecycle = a.instanceHost.Scope(clock)
+	result.Sidecars = a.sidecars.Scope(serviceMode)
+	return result, nil
+}
+
+// sessionProgressPublisher retains only the addressed opening's observations.
+// Runtime publication precedes durable observation, preserving event ordering.
+func (a *Assembly) sessionProgressPublisher(
+	sessionID string,
+	logger *zap.Logger,
+	publishRuntimeStreams bool,
+	observations factoryruntime.SessionObservations,
+) workers.ProgressPublisher {
+	var next workers.ProgressPublisher
+	if publishRuntimeStreams && a.progressFactory != nil {
+		if publishers := a.progressFactory(logger); publishers != nil {
+			next = publishers(sessionID)
+		}
+	}
+	if observations == nil {
+		return next
+	}
+	return func(fragment workers.ProgressFragment) {
+		if next != nil {
+			next(fragment)
+		}
+		observations.PublishWorkerProgress(fragment)
+	}
+}
+
+// runtimeReplacementOperation is one session's addressed replacement capability.
+// The captured invocation selections have the same lifetime as that session.
+type runtimeReplacementOperation func(context.Context, string, string, string, string) (factoryruntime.RuntimeRecord, error)
+
+func (operation runtimeReplacementOperation) BuildReplacement(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
+	return operation(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
 }
 
 func (a *Assembly) configureRestoredWorldState(
@@ -472,4 +456,76 @@ func isDaemonRestartInterruption(event factorydefinitions.FactoryEvent) bool {
 
 func isRestoredLogicalClockBoundary(event factorydefinitions.FactoryEvent) bool {
 	return isDaemonRestartInterruption(event) || event.Type == factorydefinitions.FactoryEventTypeSessionResumed
+}
+
+// initialRuntimeOpening declares publication and retains partial ownership
+// before inspecting the opening error. No failed candidate exposes a service.
+func initialRuntimeOpening(record factoryruntime.RuntimeRecord, spec factoryruntime.SessionBuildSpec,
+	builder factoryruntime.RuntimeReplacementBuilder, clock factoryruntime.Clock, openingErr error,
+) (*factoryruntime.RuntimeInitialOpening, error) {
+	result := &factoryruntime.RuntimeInitialOpening{
+		Record: record, Completion: factoryruntime.RuntimeInitialCompletion{
+			SessionID: spec.SessionID, MetricsSessionID: spec.MetricsSessionID,
+			CanonicalSessionIDGenerated:    spec.CanonicalSessionIDGenerated,
+			ResumeSourceCanonicalSessionID: spec.ResumeSourceCanonicalSessionID,
+		}, ReplacementBuilder: builder,
+		Activation: &factoryruntime.RuntimeActivation{},
+	}
+	result.Activation.Close = initialRuntimeCloser(record, clock)
+	if openingErr != nil {
+		return result, openingErr
+	}
+	if record == nil {
+		return result, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
+	}
+	service := record.RuntimeService()
+	if service == nil {
+		return result, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
+	}
+	ingress, ok := service.(factoryruntime.APIFactory)
+	if !ok {
+		return result, fmt.Errorf("activate Factory Runtime: opened runtime Work submission and event subscription are required until Recordings migration")
+	}
+	result.Activation.Service = service
+	result.Activation.WorkAndEventIngress = ingress
+	return result, nil
+}
+
+// initialRuntimeCloser serializes cleanup, remembers successful releases and
+// retains failed releases for the addressed activation's next cleanup attempt.
+func initialRuntimeCloser(record factoryruntime.RuntimeRecord, clock factoryruntime.Clock) func(context.Context) error {
+	var mu sync.Mutex
+	finalized, artifactsClosed := false, false
+	return func(context.Context) error {
+		mu.Lock()
+		defer mu.Unlock()
+		if record == nil {
+			return nil
+		}
+		var finalizationErr, artifactsErr error
+		if !finalized {
+			if finalizer, ok := record.(interface{ FinalizeRecording(time.Time) error }); ok {
+				finalizationErr = finalizer.FinalizeRecording(clock.Now().UTC())
+			}
+			finalized = finalizationErr == nil
+		}
+		if !artifactsClosed {
+			artifactsErr = record.CloseArtifacts()
+			artifactsClosed = artifactsErr == nil
+		}
+		return errors.Join(finalizationErr, artifactsErr)
+	}
+}
+
+// prepareOpeningSpec sends only candidate facts to fixed preparation; legacy
+// engine hooks remain owned by this opening, never by its Wire role.
+func (a *Assembly) prepareOpeningSpec(ctx context.Context, defaults runtimebuild.BuildDefaults,
+	values runtimebuild.SessionBuildValues, selections factoryruntime.SessionBuildSpec, mockWorkersConfig *workers.MockWorkersConfig,
+) (factoryruntime.SessionBuildSpec, error) {
+	prepared, err := a.preparation.PrepareExecutionValues(ctx, defaults, values, selections.BaseLogger,
+		selections.ProviderOverride, selections.ReplayCommandRunner, mockWorkersConfig)
+	if err != nil {
+		return factoryruntime.SessionBuildSpec{}, err
+	}
+	return runtimebuild.PreparedOpeningSpec(prepared, selections), nil
 }

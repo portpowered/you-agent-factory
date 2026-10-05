@@ -463,15 +463,12 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID st
 			}
 			executor.publish = binding.publish
 			if progressPublisher != nil {
-				executor.publish = func(workerDispatchID string, fragment workers.ProgressFragment) {
-					if strings.TrimSpace(fragment.DispatchID) == "" {
-						fragment.DispatchID = workerDispatchID
-					}
-					if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
-						fragment.Correlation.DispatchID = workerDispatchID
-					}
-					progressPublisher(fragment)
-				}
+				// Publish directly to this child's owner. The selected runtime
+				// bridge may belong to another durable owner, so it cannot route
+				// this dispatch on our behalf. Do not register the dispatch here:
+				// a bridge back to this service would otherwise publish it twice.
+				executor.observe = nil
+				executor.publish = s.childProgressPublisher(childSessionID, progressPublisher)
 			}
 			return executor
 		}
@@ -505,6 +502,21 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID st
 		return executor
 	}
 	return hooks
+}
+
+func (s *JavaScriptRuntimeService) childProgressPublisher(sessionID string, selected workers.ProgressPublisher) childWorkerProgressPublisher {
+	return func(workerDispatchID string, fragment workers.ProgressFragment) {
+		if strings.TrimSpace(fragment.DispatchID) == "" {
+			fragment.DispatchID = workerDispatchID
+		}
+		if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+			fragment.Correlation.DispatchID = workerDispatchID
+		}
+		if state := s.liveSessionState(sessionID); state != nil {
+			s.sessionProgressPublisher(sessionID, state)(fragment)
+		}
+		selected(fragment)
+	}
 }
 
 // childWorkerProgressBridge keeps provider-owned terminal fragments from

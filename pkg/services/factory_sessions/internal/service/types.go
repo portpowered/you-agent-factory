@@ -70,6 +70,7 @@ type runtimeProducts struct {
 	resumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 	bindRuntime            func(factoryruntime.RuntimeBinding) error
 	engine                 factoryruntime.Service
+	activation             *factoryruntime.RuntimeActivation
 }
 
 type workerSessionsObservationProvider interface {
