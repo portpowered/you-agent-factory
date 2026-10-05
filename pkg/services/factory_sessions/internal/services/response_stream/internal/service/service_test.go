@@ -306,7 +306,7 @@ func diagnosticService(t *testing.T, authority events.Service, logger logging.Lo
 func TestService_PublishDiagnosticsPreserveNoopResults(t *testing.T) {
 	t.Parallel()
 	var baseline []responseevents.FactoryResponseEvent
-	for _, captureEnabled := range []bool{false} {
+	for _, captureEnabled := range []bool{false, true} {
 		capture := &publicationCapture{}
 		var logger logging.Logger = logging.NoopLogger{}
 		if captureEnabled {
@@ -393,7 +393,7 @@ func TestService_PublishRejectedDiagnosticsPreserveStateAndPrivacy(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var baselineError string
-			for _, enabled := range []bool{false} {
+			for _, enabled := range []bool{false, true} {
 				capture := &publicationCapture{}
 				var logger logging.Logger = logging.NoopLogger{}
 				if enabled {
