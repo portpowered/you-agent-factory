@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
@@ -75,6 +77,7 @@ func TestAppend_AcceptedLogsIntentAndOutcomeWithoutPayload(t *testing.T) {
 	st := New(logger)
 
 	req := validAppendRequest()
+	req.Payload = json.RawMessage(`{"content":"private-events-payload-marker"}`)
 	result, err := st.Append(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Append() error = %v", err)
@@ -100,7 +103,7 @@ func TestAppend_AcceptedLogsIntentAndOutcomeWithoutPayload(t *testing.T) {
 	for _, call := range *calls {
 		for i := 0; i+1 < len(call.kv); i += 2 {
 			rendered := fmt.Sprintf("%v", call.kv[i+1])
-			if rendered == string(req.Payload) {
+			if strings.Contains(rendered, "private-events-payload-marker") {
 				t.Fatalf("log call %+v carries raw payload content", call)
 			}
 		}
@@ -201,10 +204,23 @@ func TestAppend_RejectedAfterCloseLogsClosedClassificationWithoutIntentLog(t *te
 	}
 }
 
-func TestNew_DefaultsToNoopLoggerWhenOmitted(t *testing.T) {
-	st := New()
+func TestNew_ExplicitNoopLoggerPreservesAppend(t *testing.T) {
+	st := New(logging.NoopLogger{})
 	if _, err := st.Append(context.Background(), validAppendRequest()); err != nil {
-		t.Fatalf("Append() with default logger error = %v", err)
+		t.Fatalf("Append() with explicit no-op logger error = %v", err)
+	}
+}
+
+func TestNew_NonPositiveRetentionPreservesDefault(t *testing.T) {
+	t.Parallel()
+	for _, limit := range []int{0, -1} {
+		st := NewWithRetention(limit, logging.NoopLogger{})
+		if st.maxRetainedPerTopic != defaultMaxRetainedPerTopic {
+			t.Fatalf("retention for %d = %d, want %d", limit, st.maxRetainedPerTopic, defaultMaxRetainedPerTopic)
+		}
+		if _, err := st.Append(t.Context(), validAppendRequest()); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

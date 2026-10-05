@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
@@ -43,7 +44,7 @@ func readAll(st *Store, ctx context.Context, t *testing.T, topic events.Topic) [
 }
 
 func TestAttachSource_RetainedThenLiveForwardsBacklogThenLiveCommits(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/abc/response-events")
 	destination := events.Topic("chat-session/abc/events")
@@ -88,7 +89,7 @@ func TestAttachSource_RetainedThenLiveForwardsBacklogThenLiveCommits(t *testing.
 }
 
 func TestAttachSource_RetainedThenLiveFromMidpointSkipsEarlierRecords(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/mid/response-events")
 	destination := events.Topic("chat-session/mid/events")
@@ -120,7 +121,7 @@ func TestAttachSource_RetainedThenLiveFromMidpointSkipsEarlierRecords(t *testing
 }
 
 func TestAttachSource_LiveOnlyForwardsNoRetainedHistory(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/live/response-events")
 	destination := events.Topic("chat-session/live/events")
@@ -157,7 +158,7 @@ func TestAttachSource_LiveOnlyForwardsNoRetainedHistory(t *testing.T) {
 }
 
 func TestAttachSource_IdempotentAttachmentDoesNotForwardTwice(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/idem/response-events")
 	destination := events.Topic("chat-session/idem/events")
@@ -200,7 +201,7 @@ func TestAttachSource_IdempotentAttachmentDoesNotForwardTwice(t *testing.T) {
 }
 
 func TestAttachSource_ValidationBeforeEffects(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	source := events.Topic("factory-session/val/response-events")
 	destination := events.Topic("chat-session/val/events")
 	appendFixture(st, context.Background(), t, source, 1, "evt-1")
@@ -268,7 +269,7 @@ func TestAttachSource_ValidationBeforeEffects(t *testing.T) {
 }
 
 func TestAttachSource_CanceledContextRejectsBeforeEffects(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	source := events.Topic("factory-session/cancel/response-events")
 	destination := events.Topic("chat-session/cancel/events")
 
@@ -296,7 +297,7 @@ func TestAttachSource_CanceledContextRejectsBeforeEffects(t *testing.T) {
 }
 
 func TestAttachSource_StartAtBeyondHeadIsRejected(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/stale/response-events")
 	destination := events.Topic("chat-session/stale/events")
@@ -317,7 +318,7 @@ func TestAttachSource_StartAtBeyondHeadIsRejected(t *testing.T) {
 }
 
 func TestAttachSource_EvictedStartAtIsRejectedWithoutPartialForwarding(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/gap/response-events")
 	destination := events.Topic("chat-session/gap/events")
@@ -363,7 +364,7 @@ func TestAttachSource_EvictedStartAtIsRejectedWithoutPartialForwarding(t *testin
 // EarliestRetained-1 must be accepted and that record forwarded, not
 // rejected as evicted (PR #1753 review finding 1, 2026-08-03T18:37:32Z).
 func TestAttachSource_StartAtExactlyBeforeEarliestRetainedIsAcceptedAndForwarded(t *testing.T) {
-	st := NewWithRetention(2)
+	st := NewWithRetention(2, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/boundary/response-events")
 	destination := events.Topic("chat-session/boundary/events")
@@ -396,7 +397,7 @@ func TestAttachSource_StartAtExactlyBeforeEarliestRetainedIsAcceptedAndForwarded
 }
 
 func TestAttachSource_IndirectCycleIsRejectedWithoutDeadlock(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	a := events.Topic("factory-session/cycle-a/response-events")
 	b := events.Topic("factory-session/cycle-b/response-events")
@@ -444,7 +445,7 @@ func TestAttachSource_IndirectCycleIsRejectedWithoutDeadlock(t *testing.T) {
 }
 
 func TestAttachSource_ClosedSourceTopicIsRejected(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/closed/response-events")
 	destination := events.Topic("chat-session/closed/events")
@@ -476,7 +477,7 @@ func TestAttachSource_ClosedSourceTopicIsRejected(t *testing.T) {
 }
 
 func TestAttachSource_CloseTearsDownActiveForwarding(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/teardown/response-events")
 	destination := events.Topic("chat-session/teardown/events")

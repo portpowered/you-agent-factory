@@ -102,29 +102,22 @@ func (ts *topicState) earliestLocked() events.AggregateSequence {
 }
 
 // New constructs an empty Store using the default bounded-retention policy
-// (defaultMaxRetainedPerTopic records per topic). logger is optional and
-// defaults to a no-op logger when omitted, matching the repository's
-// optional-logger construction convention.
-func New(logger ...logging.Logger) *Store {
-	return NewWithRetention(defaultMaxRetainedPerTopic, logger...)
+// (defaultMaxRetainedPerTopic records per topic). The owner supplies the selected logger.
+func New(logger logging.Logger) *Store {
+	return NewWithRetention(defaultMaxRetainedPerTopic, logger)
 }
 
 // NewWithRetention constructs an empty Store bounded to at most
 // maxRetainedPerTopic records per topic; a non-positive value falls back to
-// defaultMaxRetainedPerTopic. logger is optional and defaults to a no-op
-// logger when omitted.
-func NewWithRetention(maxRetainedPerTopic int, logger ...logging.Logger) *Store {
+// defaultMaxRetainedPerTopic. The owner supplies the selected logger.
+func NewWithRetention(maxRetainedPerTopic int, logger logging.Logger) *Store {
 	if maxRetainedPerTopic <= 0 {
 		maxRetainedPerTopic = defaultMaxRetainedPerTopic
-	}
-	var provided logging.Logger
-	if len(logger) > 0 {
-		provided = logger[0]
 	}
 	return &Store{
 		topics:              make(map[events.Topic]*topicState),
 		maxRetainedPerTopic: maxRetainedPerTopic,
-		logger:              logging.EnsureLogger(provided),
+		logger:              logger,
 	}
 }
 
