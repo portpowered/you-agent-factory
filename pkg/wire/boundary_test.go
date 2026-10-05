@@ -148,6 +148,7 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 		&wireTestClock{},
 		factorysessionwire.NewLiveChangeCoordinator(),
 		nil,
+		streams,
 	)
 	if err != nil {
 		t.Fatalf("provide Factory Sessions assembly: %v", err)

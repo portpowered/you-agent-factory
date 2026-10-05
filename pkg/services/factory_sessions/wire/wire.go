@@ -231,6 +231,7 @@ func NewRuntimeAssembly(
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory RecordedHistory,
+	gatewayStreams *GatewayStreams,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
 		registry, state, streams, invoker, control, activation,
@@ -247,6 +248,7 @@ func NewRuntimeAssembly(
 		clock,
 		liveChangeCoordinator,
 		recordedHistory,
+		gatewayStreams,
 	)
 	if err != nil {
 		return nil, err

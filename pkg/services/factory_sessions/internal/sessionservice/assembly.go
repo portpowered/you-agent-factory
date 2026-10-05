@@ -22,6 +22,7 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -36,6 +37,7 @@ type Assembly struct {
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
+	gatewayStreams               *stream.Manager
 	invoker                      roles.InvocationService
 	scopeControl                 SessionScopeControl
 	scopeActivation              SessionScopeActivation
@@ -87,12 +89,14 @@ func NewAssembly(
 	responseStreamService responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory RecordedHistory,
+	gatewayStreams *stream.Manager,
 ) roles.RuntimeAssembly {
 	return &Assembly{
 		SessionGateway:               &Service{},
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
+		gatewayStreams:               gatewayStreams,
 		invoker:                      invoker,
 		scopeControl:                 control,
 		scopeActivation:              activation,
@@ -467,9 +471,7 @@ func (a *Assembly) Complete(
 			runtime.identity, runtime.clock, runtime.worldStateProjector,
 			runtime.newJavaScriptCheckpointStore, runtime.logger,
 		),
-		a.state,
-		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
-		a.state.ResponseStreams(),
+		a.gatewayStreams,
 		runtime.ReconnectCursorValidator(),
 		a.sessionResultProjection,
 		a.responseStreams,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"reflect"
 	"strconv"
 	"strings"
@@ -922,7 +923,7 @@ func (h gatewayHistoryHost) DurableExecution() durableexecution.Service { return
 
 func newGatewayHistoryFixture(history RecordedHistory, durable durableexecution.Service) *Service {
 	host := gatewayHistoryHost{durable: durable}
-	return NewWithLiveChangeCoordinator(host, host, host, &responsestream.Registry{}, nil, nil, nil, nil, history, durable)
+	return NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(host, host, &responsestream.Registry{}), nil, nil, nil, nil, history, durable)
 }
 
 func TestServiceListSessionsUsesInjectedRecordedHistoryForHistoryScope(t *testing.T) {

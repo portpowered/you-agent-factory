@@ -7,6 +7,8 @@ import (
 	"fmt"
 	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 	"path/filepath"
@@ -333,7 +335,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}
@@ -429,5 +431,59 @@ func assertStopLogSinkLifetime(t *testing.T, closeBefore bool, failure error) {
 	}
 	if diagnostics.FilterMessage("stopping live Factory Session runtime").Len() != 1 {
 		t.Fatal("missing stop intent")
+	}
+}
+
+func TestGatewayInjectedStreamsPreserveRetainedOutputCompletionAndPeers(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	for _, id := range []string{"selected", "peer"} {
+		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: struct{}{}}, id == "selected")
+	}
+	// The supplied stream owner has its own registry. Reads must use that owner,
+	// including output already retained before gateway construction.
+	registry := newWorkResolverSessionState().ResponseStreams()
+	streams := stream.NewManagerWithDependencies(state, sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle), registry)
+	fragment := func(payload string) factorysessions.ProgressFragment {
+		return factorysessions.ProgressFragment{DispatchID: "dispatch", Kind: factorysessions.ResponseFragmentKind, Type: "TEXT_DELTA", Payload: payload}
+	}
+	streams.InferenceProgressPublisherFactory(nil)("selected")(fragment("retained"))
+	host := SessionServiceHost(state, nil, nil, nil, "", nil, nil, nil, nil, nil)
+	gateway := NewWithLiveChangeCoordinator(host, streams, nil, nil, nil, nil, nil, nil)
+	gateway.InferenceProgressPublisherFactory(nil)("selected")(fragment("selected-output"))
+	gateway.InferenceProgressPublisherFactory(nil)("peer")(fragment("peer-output"))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	selected, err := gateway.SubscribeSessionResponseStream("selected", "dispatch", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer selected.Detach()
+	assertGatewayStreamOutput(t, ctx, selected, 1, []string{"retained", "selected-output"})
+	gateway.DispatchCompletionObserverFactory()("selected")("dispatch")
+	if _, err := selected.Next(ctx); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("completed selected stream = %v", err)
+	}
+	peer, err := gateway.SubscribeSessionResponseStream("peer", "dispatch", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Detach()
+	assertGatewayStreamOutput(t, ctx, peer, 1, []string{"peer-output"})
+	gateway.InferenceProgressPublisherFactory(nil)("peer")(fragment("peer-after-completion"))
+	assertGatewayStreamOutput(t, ctx, peer, 2, []string{"peer-after-completion"})
+	gateway.DispatchCompletionObserverFactory()("peer")("dispatch")
+}
+
+func assertGatewayStreamOutput(t *testing.T, ctx context.Context, subscription *responsestream.Subscription, firstSequence int64, payloads []string) {
+	t.Helper()
+	read, err := subscription.Next(ctx)
+	if err != nil || len(read.Events) != len(payloads) {
+		t.Fatalf("retained output = %#v, %v", read, err)
+	}
+	for i, payload := range payloads {
+		if event := read.Events[i]; event.Payload != payload || event.Sequence != firstSequence+int64(i) {
+			t.Fatalf("retained event %d = %#v, want sequence %d payload %q", i, event, firstSequence+int64(i), payload)
+		}
 	}
 }

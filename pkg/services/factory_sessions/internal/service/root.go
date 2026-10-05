@@ -13,6 +13,7 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 )
 
@@ -44,6 +45,7 @@ func NewAssembly(
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory legacyservice.RecordedHistory,
+	gatewayStreams *stream.Manager,
 ) (roles.RuntimeAssembly, error) {
 	if activation == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
@@ -85,6 +87,7 @@ func NewAssembly(
 		responseStreams,
 		liveChangeCoordinator,
 		recordedHistory,
+		gatewayStreams,
 	)
 	assembly, ok := assemblyRole.(*legacyservice.Assembly)
 	if !ok || assembly == nil {

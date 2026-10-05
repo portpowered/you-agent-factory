@@ -302,6 +302,7 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		in.clock,
 		in.liveChangeCoordinator,
 		legacyservice.NewRecordedHistory(in.resolveHome, in.recordedSessionInventory),
+		streams,
 	)
 }
 

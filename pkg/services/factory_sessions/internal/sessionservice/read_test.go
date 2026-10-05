@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"testing"
 
 	events "github.com/portpowered/infinite-you/pkg/services/events"
@@ -31,7 +32,7 @@ func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factoryses
 	if err != nil {
 		t.Fatalf("construct response-stream registry: %v", err)
 	}
-	return factorysessionservice.NewWithLiveChangeCoordinator(host, host, host, registry, nil, nil, responseService, nil, nil, host.DurableExecution())
+	return factorysessionservice.NewWithLiveChangeCoordinator(host, stream.NewManagerWithResponseService(host, host, registry, responseService), nil, nil, responseService, nil, nil, host.DurableExecution())
 }
 
 func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testing.T) {

@@ -601,10 +601,11 @@ func provideFactorySessionsAssembly(
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedHistory factorysessionwire.RecordedHistory,
+	gatewayStreams *factorysessionwire.GatewayStreams,
 ) (factorysessionwire.RuntimeAssembly, error) {
 	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, invoker, control, activation, func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, eventIDs, sessionIDs, resolveHome, directories, namedPaths, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedHistory)
+	}, sessionResultProjection, eventIDs, sessionIDs, resolveHome, directories, namedPaths, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedHistory, gatewayStreams)
 }
 
 func provideFactorySessionsService(

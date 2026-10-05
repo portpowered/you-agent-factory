@@ -62,20 +62,20 @@ func NewWithReconnectValidation(
 	reconnects factorysessions.ReconnectCursorValidator,
 	results factoryruntime.SessionResultProjectionOperation,
 ) *Service {
-	if host == nil {
+	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
 		return nil
 	}
-	return NewWithLiveChangeCoordinator(host, sessions, observer, responseStreams, reconnects, results, nil, nil, nil, host.DurableExecution())
+	streams := stream.NewManagerWithResponseService(sessions, observer, responseStreams, nil)
+	return NewWithLiveChangeCoordinator(host, streams, reconnects, results, nil, nil, nil, host.DurableExecution())
 }
 
 // NewWithLiveChangeCoordinator constructs the session gateway with the
-// process-scoped coordinator and durable capability supplied directly by its caller. Runtime state,
-// event history, application, clock, and logger remain operation inputs.
+// completed streams, process-scoped coordinator and durable capability supplied
+// directly by its caller. Runtime state, event history, application, clock, and
+// logger remain operation inputs.
 func NewWithLiveChangeCoordinator(
 	host Host,
-	sessions stream.SessionResolver,
-	observer stream.Observer,
-	responseStreams *responsestream.Registry,
+	streams *stream.Manager,
 	reconnects factorysessions.ReconnectCursorValidator,
 	results factoryruntime.SessionResultProjectionOperation,
 	responseEvents responsestreamservice.Service,
@@ -83,13 +83,13 @@ func NewWithLiveChangeCoordinator(
 	history RecordedHistory,
 	durable durableexecution.Service,
 ) *Service {
-	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
+	if host == nil || streams == nil {
 		return nil
 	}
 	return &Service{
 		host:            host,
 		liveChange:      liveChange,
-		streams:         stream.NewManagerWithResponseService(sessions, observer, responseStreams, responseEvents),
+		streams:         streams,
 		reconnects:      reconnects,
 		results:         results,
 		responseEvents:  responseEvents,
