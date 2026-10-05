@@ -20,6 +20,44 @@ import (
 // its home/store and joins the previous server before reusing those files.
 func assertCapturedPublishedPrivacy(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage) {
 	t.Helper()
+	for _, test := range []struct {
+		name     string
+		kind     workers.Kind
+		phase    workers.Phase
+		payload  string
+		pointers []string
+	}{
+		{"tool", workers.KindTool, workers.PhaseCompleted,
+			`{"toolCallId":"visible-call","toolName":"visible-tool","argumentsSummary":{"environment":"classified-environment-token"},"resultSummary":{"secret":"classified-tool-token","neighbor":"visible-result"}}`,
+			[]string{"/argumentsSummary/environment", "/resultSummary/secret"}},
+		{"oversized_tool", workers.KindTool, workers.PhaseCompleted,
+			`{"toolCallId":"visible-call","toolName":"visible-tool","argumentsSummary":{"environment":"classified-environment-token"},"resultSummary":{"secret":"classified-tool-token","neighbor":"visible-result ` + strings.Repeat("x", 3<<20) + `"}}`,
+			[]string{"/argumentsSummary/environment", "/resultSummary/secret"}},
+		{"tool_delta", workers.KindTool, workers.PhaseDelta,
+			`{"toolCallId":"visible-tool visible-result","outputDelta":"classified-tool-token"}`,
+			[]string{"/outputDelta"}},
+		{"progress", workers.KindProgress, workers.PhaseUpdated,
+			`{"label":"visible-tool visible-result","message":"classified-tool-token"}`,
+			[]string{"/message"}},
+		{"error", workers.KindError, workers.PhaseFailed,
+			`{"code":"visible-tool visible-result","message":"classified-tool-token","retryable":true}`,
+			[]string{"/message"}},
+	} {
+		t.Run("recovered_privacy_"+test.name, func(t *testing.T) {
+			t.Parallel()
+			assertCapturedPublishedDraftPrivacy(t, config, current, workers.Draft{
+				Kind: test.kind, Phase: test.phase,
+				Provenance: workers.Provenance{Provider: "codex", NativeEventType: "classified"},
+				Payload:    json.RawMessage(test.payload), DeclaredSecretJSONPointers: test.pointers,
+			})
+		})
+	}
+}
+
+func assertCapturedPublishedDraftPrivacy(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage, draft workers.Draft) {
+	t.Helper()
+	home := t.TempDir()
+	config.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
 	page := current
 	page.Events = append([]factoryapi.WorkerSessionEvent(nil), current.Events...)
 	position := -1
@@ -31,12 +69,6 @@ func assertCapturedPublishedPrivacy(t *testing.T, config support.FunctionalAPISe
 	}
 	if position < 0 {
 		t.Fatal("recording fixture has no message position")
-	}
-	draft := workers.Draft{
-		Kind: workers.KindTool, Phase: workers.PhaseCompleted,
-		Provenance:                 workers.Provenance{Provider: "codex", NativeEventType: "tool.completed"},
-		Payload:                    json.RawMessage(`{"toolCallId":"visible-call","toolName":"visible-tool","argumentsSummary":{"environment":"classified-environment-token"},"resultSummary":{"secret":"classified-tool-token","neighbor":"visible-result"}}`),
-		DeclaredSecretJSONPointers: []string{"/argumentsSummary/environment", "/resultSummary/secret"},
 	}
 	var published []workers.ProgressFragment
 	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
@@ -58,6 +90,13 @@ func assertCapturedPublishedPrivacy(t *testing.T, config support.FunctionalAPISe
 	if err := json.Unmarshal(data, &page.Events[position].Event.Payload); err != nil {
 		t.Fatal(err)
 	}
+	// The recording fixture stores the public map representation, whose JSON
+	// field order differs from Draft's struct encoding. Compare retrieval to
+	// those exact stored bytes rather than re-encoding the producer struct.
+	data, err = json.Marshal(page.Events[position].Event.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
 	root := t.TempDir()
 	writeLegacyCapturedFixture(t, root, page)
 	config.Edges.FactorySessionsWorkingDirectory = capturedRecordingDirectory(root)
@@ -68,7 +107,14 @@ func assertCapturedPublishedPrivacy(t *testing.T, config support.FunctionalAPISe
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertCapturedPublicPrivacy(t, string(encoded))
+		assertCapturedSecretsAbsent(t, string(encoded))
+		if logs.Events[position].Event.Truncated != nil && *logs.Events[position].Event.Truncated {
+			ref := assertCapturedPayloadMetadata(t, logs.Events[position].Event, data)
+			assertCapturedPayloadRoundTrip(t, server, page.WorkerSessionId, ref, data)
+			assertCapturedPublicPrivacy(t, string(data))
+		} else {
+			assertCapturedPublicPrivacy(t, string(encoded))
+		}
 		assertCapturedPrivateCursorError(t, server, page.WorkerSessionId)
 		server.Close(t)
 	}
@@ -76,14 +122,19 @@ func assertCapturedPublishedPrivacy(t *testing.T, config support.FunctionalAPISe
 
 func assertCapturedPublicPrivacy(t *testing.T, output string) {
 	t.Helper()
-	for _, secret := range []string{"classified-environment-token", "classified-tool-token", "DeclaredSecretJSONPointers"} {
-		if strings.Contains(output, secret) {
-			t.Fatal("public captured read exposed classified content")
-		}
-	}
+	assertCapturedSecretsAbsent(t, output)
 	for _, visible := range []string{"visible-tool", "visible-result", "redacted"} {
 		if !strings.Contains(output, visible) {
 			t.Fatalf("public captured read lost %s", visible)
+		}
+	}
+}
+
+func assertCapturedSecretsAbsent(t *testing.T, output string) {
+	t.Helper()
+	for _, secret := range []string{"classified-environment-token", "classified-tool-token", "DeclaredSecretJSONPointers"} {
+		if strings.Contains(output, secret) {
+			t.Fatal("public captured read exposed classified content")
 		}
 	}
 }
