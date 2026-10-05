@@ -610,6 +610,11 @@ const (
 	FactorySessionRecordedSourceHistory FactorySessionRecordedSource = "recorded-history"
 )
 
+// Defines values for FactorySessionRecordingWarningCode.
+const (
+	UNREADABLERECORDING FactorySessionRecordingWarningCode = "UNREADABLE_RECORDING"
+)
+
 // Defines values for FactorySessionResourceCapacityOutcome.
 const (
 	FactorySessionResourceCapacityOutcomeAPPLIED  FactorySessionResourceCapacityOutcome = "APPLIED"
@@ -4561,6 +4566,19 @@ type FactorySessionRecordedSummary struct {
 	Source FactorySessionRecordedSource `json:"source"`
 }
 
+// FactorySessionRecordingWarning defines model for FactorySessionRecordingWarning.
+type FactorySessionRecordingWarning struct {
+	// ArtifactReference Recording-root-relative artifact path. This value does not grant filesystem access.
+	ArtifactReference string                             `json:"artifactReference"`
+	Code              FactorySessionRecordingWarningCode `json:"code"`
+
+	// Reason Safe explanation that excludes recording content and absolute host paths.
+	Reason string `json:"reason"`
+}
+
+// FactorySessionRecordingWarningCode defines model for FactorySessionRecordingWarning.Code.
+type FactorySessionRecordingWarningCode string
+
 // FactorySessionRequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
 type FactorySessionRequestedPolicy struct {
 	// PolicyHash Optional stable hash of the requested policy object when the caller already computed one for idempotency comparisons.
@@ -5985,6 +6003,9 @@ type ListFactorySessionsResponse struct {
 
 	// Sessions Live workspace session summaries when scope is LIVE or ALL.
 	Sessions []FactorySessionSummary `json:"sessions"`
+
+	// Warnings Recording artifacts omitted from history because they could not be read or decoded.
+	Warnings *[]FactorySessionRecordingWarning `json:"warnings,omitempty"`
 }
 
 // ListHumanApprovalsResponse defines model for ListHumanApprovalsResponse.

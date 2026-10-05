@@ -1,4 +1,4 @@
-package root_composition_test
+package keyed_supervision_test
 
 import (
 	"context"
@@ -561,7 +561,7 @@ func TestFactorySessionsEqualFirstDispatchDefaultWorkerIdentityCharacterization(
 		t.Fatal("A completed before its provider gate was released")
 	}
 	w4AssertDispatch(t, entryB, "trace-identity-B", "identity-B COMPLETE")
-	t.Logf("overlap A=%s B=%s dispatchA=%s dispatchB=%s workerA=%s workerB=%s topicA=%s topicB=%s", a, b, entryA.dispatchID, entryB.dispatchID, entryA.sessionID, entryB.sessionID, workersessions.Topic(entryA.sessionID), workersessions.Topic(entryB.sessionID))
+	t.Logf("overlap A=%s B=%s dispatchA=%s dispatchB=%s workerA=%s workerB=%s topicA=%s topicB=%s", a, b, entryA.dispatchID, entryB.dispatchID, entryA.sessionID, entryB.sessionID, workersessions.Topic(entryA.sessionID, a), workersessions.Topic(entryB.sessionID, b))
 	runner.unblock()
 	identityAwaitResponse(t, streamA)
 	entryA = identityOnlyDispatch(t, observeW4Dispatches(t, identityLedger(t, server, a)))
@@ -590,11 +590,32 @@ func TestFactorySessionsEqualFirstDispatchDefaultWorkerIdentityCharacterization(
 	}
 }
 
+func keyedSupervisionFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "keyed-supervision",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name": "process", "worker": "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
 func identityServer(t *testing.T) (*identityFixture, *identityCharacterizationRunner, *identityRecordingWriter) {
 	t.Helper()
 	runner := &identityCharacterizationRunner{admitted: make(chan struct{}), release: make(chan struct{})}
 	capture := &identityRecordingWriter{root: t.TempDir(), storage: platformreplay.NewLocal(runtime.GOOS)}
-	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
+	dir := support.ScaffoldFactory(t, keyedSupervisionFactoryConfig())
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE=", "HOMEPATH="+home)
 	server := &identityFixture{env: env, dir: dir}
@@ -627,7 +648,7 @@ func identityCLI(t *testing.T, server *identityFixture, args ...string) string {
 
 func identityOpenSession(t *testing.T, server *identityFixture, marker string) string {
 	t.Helper()
-	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
+	dir := support.ScaffoldFactory(t, keyedSupervisionFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", "---\nmodel: test-model\nstopToken: COMPLETE\ntype: MODEL_WORKER\n---\nPerform the owned "+marker+" witness.\n")
 	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nPerform "+marker+".\n")
 	var opened factoryapi.OpenFactorySessionResponse
@@ -771,18 +792,29 @@ func (w *identityRecordingWriter) LoadWorkerRecording(ctx context.Context, id st
 	if len(owned) == 0 {
 		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("empty owned recording %q", id)
 	}
-	history := recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: owned[0].WorkerSessionID}
+	histories := make(map[string]recordings.WorkerRecordingHistory)
+	var workerIDs []string
 	for _, record := range owned {
+		history, exists := histories[record.WorkerSessionID]
+		if !exists {
+			history = recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: record.WorkerSessionID, Topic: record.Record.ID.Topic}
+			workerIDs = append(workerIDs, record.WorkerSessionID)
+		}
 		history.Records = append(history.Records, record.Record)
+		histories[record.WorkerSessionID] = history
 	}
-	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(history)
-	if err != nil {
-		return recordings.WorkerRecordingSnapshot{}, err
+	snapshot := recordings.WorkerRecordingSnapshot{RecordingID: id}
+	for _, workerID := range workerIDs {
+		projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(histories[workerID])
+		if err != nil {
+			return recordings.WorkerRecordingSnapshot{}, err
+		}
+		snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
+			WorkerSessionID: projection.WorkerSessionID, Topic: projection.Topic, Status: projection.Status,
+			LastPosition: projection.LastPosition, ExecutionTerminal: projection.ExecutionTerminal, Records: projection.Records,
+		})
 	}
-	return recordings.WorkerRecordingSnapshot{RecordingID: id, Sessions: []recordings.WorkerSessionRecordingSnapshot{{
-		WorkerSessionID: projection.WorkerSessionID, Topic: projection.Topic, Status: projection.Status,
-		LastPosition: projection.LastPosition, ExecutionTerminal: projection.ExecutionTerminal, Records: projection.Records,
-	}}}, nil
+	return snapshot, nil
 }
 func identityInspectRecording(t *testing.T, server *identityFixture, writer *identityRecordingWriter, factoryID, workerID, ownMarker, peerMarker string) string {
 	t.Helper()
@@ -813,14 +845,14 @@ func identityInspectRecording(t *testing.T, server *identityFixture, writer *ide
 	}
 	encoded, _ := json.Marshal(snapshot)
 	t.Logf("Factory=%s Worker=%s Recording=%s snapshot=%s", factoryID, workerID, recordingID, encoded)
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].WorkerSessionID != workerID || snapshot.Sessions[0].Topic != workersessions.Topic(workerID) || len(snapshot.Sessions[0].Records) != count || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete {
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].WorkerSessionID != workerID || snapshot.Sessions[0].Topic != workersessions.Topic(workerID, factoryID) || len(snapshot.Sessions[0].Records) != count || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete {
 		t.Fatalf("recording read does not preserve source association: %+v", snapshot)
 	}
 	if !strings.Contains(string(encoded), ownMarker+" COMPLETE") || strings.Contains(string(encoded), peerMarker) {
 		t.Fatalf("recording output attribution incorrect: %s", encoded)
 	}
 	for _, record := range snapshot.Sessions[0].Records {
-		if record.ID.Topic != workersessions.Topic(workerID) || (string(record.SourceID) != workerID && string(record.SourceID) != workerID+"/provider-binding") {
+		if record.ID.Topic != workersessions.Topic(workerID, factoryID) || (string(record.SourceID) != workerID && string(record.SourceID) != workerID+"/provider-binding") {
 			t.Fatalf("source record escaped Worker topic: %+v", record)
 		}
 	}

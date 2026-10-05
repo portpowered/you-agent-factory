@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
@@ -72,6 +73,7 @@ type workerChildren struct {
 // identifier, and is therefore stable across retained and live consumption.
 type workerChild struct {
 	association    chatsessions.WorkerSessionAssociation
+	sourceTopic    events.Topic
 	openingItemID  string
 	openingSource  events.AppendIdentity
 	terminalSource events.AppendIdentity
@@ -163,7 +165,7 @@ func (c *workerChildren) finish(ctx context.Context) error {
 		return err
 	}
 	for _, child := range c.children() {
-		if err := c.service.drainWorkerLifecycleTail(ctx, c.chatSessionID, c.state, child.association); err != nil {
+		if err := c.service.drainWorkerLifecycleTail(ctx, c.chatSessionID, c.state, child.association, child.sourceTopic); err != nil {
 			return err
 		}
 	}
@@ -179,7 +181,7 @@ func (c *workerChildren) presentFactoryEvents(eventsToPresent []factorydefinitio
 		if !associated {
 			continue
 		}
-		child, added, err := c.registerAssociation(association)
+		child, added, err := c.registerAssociation(association, event.Context.SessionID)
 		if err != nil || !added || !startLive {
 			if err != nil {
 				return err
@@ -189,7 +191,7 @@ func (c *workerChildren) presentFactoryEvents(eventsToPresent []factorydefinitio
 		c.workerDone.Add(1)
 		go func() {
 			defer c.workerDone.Done()
-			if err := c.service.drainWorkerLifecycleLive(c.liveCtx, c.deliveryCtx, c.chatSessionID, c.state, child.association); err != nil {
+			if err := c.service.drainWorkerLifecycleLive(c.liveCtx, c.deliveryCtx, c.chatSessionID, c.state, child.association, child.sourceTopic); err != nil {
 				c.setError(err)
 			}
 		}()
@@ -217,11 +219,16 @@ func workerAssociationFromFactoryEvent(event factorydefinitions.FactoryEvent) (c
 	return association, true, nil
 }
 
-func (c *workerChildren) registerAssociation(association chatsessions.WorkerSessionAssociation) (*workerChild, bool, error) {
+func (c *workerChildren) registerAssociation(association chatsessions.WorkerSessionAssociation, sourceSessionID *string) (*workerChild, bool, error) {
+	sourceScope := c.factorySessionID
+	if sourceSessionID != nil && strings.TrimSpace(*sourceSessionID) != "" {
+		sourceScope = strings.TrimSpace(*sourceSessionID)
+	}
+	topic := workersessions.Topic(association.WorkerSessionID, sourceScope)
 	c.state.mu.Lock()
 	defer c.state.mu.Unlock()
 	if existing := c.state.childrenByWorkerSessionID[association.WorkerSessionID]; existing != nil {
-		if existing.association == association {
+		if existing.association == association && existing.sourceTopic == topic {
 			return existing, false, nil
 		}
 		return nil, false, ErrConflictingWorkerAssociation
@@ -229,7 +236,7 @@ func (c *workerChildren) registerAssociation(association chatsessions.WorkerSess
 	if workerID := c.state.workerSessionIDByDispatch[association.DispatchID]; workerID != "" && workerID != association.WorkerSessionID {
 		return nil, false, ErrConflictingWorkerAssociation
 	}
-	child := &workerChild{association: association, sequencedSources: make(map[events.AppendIdentity]struct{})}
+	child := &workerChild{association: association, sourceTopic: topic, sequencedSources: make(map[events.AppendIdentity]struct{})}
 	c.state.childrenByWorkerSessionID[association.WorkerSessionID] = child
 	c.state.workerSessionIDByDispatch[association.DispatchID] = association.WorkerSessionID
 	return child, true, nil
@@ -270,8 +277,8 @@ func (s *Service) drainWorkerLifecycleLive(
 	chatSessionID string,
 	state *drainState,
 	association chatsessions.WorkerSessionAssociation,
+	topic events.Topic,
 ) error {
-	topic := workersessions.Topic(association.WorkerSessionID)
 	subscription, err := s.workerEvents.Subscribe(liveCtx, events.SubscribeRequest{
 		Topic: topic, From: events.Cursor{Topic: topic}, Limit: workerReadBatchLimit,
 	})
@@ -302,8 +309,8 @@ func (s *Service) drainWorkerLifecycleTail(
 	chatSessionID string,
 	state *drainState,
 	association chatsessions.WorkerSessionAssociation,
+	topic events.Topic,
 ) error {
-	topic := workersessions.Topic(association.WorkerSessionID)
 	cursor := events.Cursor{Topic: topic}
 	for {
 		read, err := s.workerEvents.Read(ctx, events.ReadRequest{Topic: topic, From: cursor, Limit: workerReadBatchLimit})

@@ -13,6 +13,7 @@ import (
 func publishAgentFinalMessage(
 	publisher workerexecution.ProgressPublisher,
 	dispatchID string,
+	correlation workerexecution.ExecutionCorrelation,
 	content string,
 ) {
 	if publisher == nil || strings.TrimSpace(content) == "" {
@@ -42,5 +43,7 @@ func publishAgentFinalMessage(
 		},
 		Payload: payload,
 	}
-	publisher(workerexecution.CanonicalDraftFragment(dispatchID, draft))
+	fragment := workerexecution.CanonicalDraftFragment(dispatchID, draft)
+	fragment.Correlation = correlation
+	publisher(fragment)
 }

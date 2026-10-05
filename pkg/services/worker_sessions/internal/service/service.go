@@ -23,21 +23,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// ErrMissingExecution reports that New was constructed without the one
-// required directly injected request-scoped workers.Service.
+// ErrMissingExecution reports a missing selected per-attempt executor.
 var ErrMissingExecution = errors.New("worker sessions: execution service is required")
 
-// ErrMissingEventsAppender reports that New was constructed without the one
-// required directly injected EventsAppender.
-var ErrMissingEventsAppender = errors.New("worker sessions: events appender is required")
-
-// ErrMissingClock reports that New was constructed without the required
-// runtime time source used for observation timing.
+// ErrMissingClock reports a missing selected per-attempt fact clock.
 var ErrMissingClock = errors.New("worker sessions: clock is required")
 
-// ErrMissingProviderSessions reports that New was constructed without the
-// Provider Sessions read-side contract used to enrich worker observations.
-var ErrMissingProviderSessions = errors.New("worker sessions: provider sessions service is required")
+// ErrMissingScheduler reports that deadline supervision has no supplied timer source.
+var ErrMissingScheduler = errors.New("worker sessions: scheduler is required")
 
 // EventsAppender is the narrow Events dependency Start's before-handoff
 // publication barrier needs: commit one source-native record into a topic's
@@ -77,16 +70,21 @@ type registry struct {
 	continuationSources         map[string]string
 	interruptReplays            map[string]*interruptReplay
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
-	// currently supervised Workers dispatch to its stable session identity.
-	// Provider progress names dispatches, never Worker Sessions, so this map is
-	// the only accepted route from a provider observation to its owner.
+	// directly supervised Workers dispatch to its stable session identity.
+	// Runtime attempts use runtimeAttemptOwners and explicit Worker identities;
+	// they must never replace a direct provider observation's route.
 	dispatchOwners map[string]string
 	// runtimeAttempts marks sessions opened by Factory Runtime's detached
-	// execution path. Those attempts share the provider-observation lookup but
+	// execution path. Those attempts use scoped provider-observation lookup and
 	// deliberately do not install Worker Sessions-owned supervision: Runtime
 	// remains the sole admission, cancellation, and execution owner.
 	runtimeAttempts        map[string]struct{}
 	runtimeAttemptControls map[string]*runtimeAttempt
+	// runtimeAttemptOwners reserves a scoped key before any opening effects.
+	runtimeAttemptOwners map[workersessions.RuntimeAttemptKey]string
+	// runtimeAdmissions fences opening effects against scoped runtime close.
+	// Closed scopes remain sealed while their observations remain retained.
+	runtimeAdmissions map[string]*runtimeAdmission
 	// latestRuntimeDispatchIDs retains the last exact dispatch identity per
 	// Runtime-owned Worker Session after its live cancellation handle completes,
 	// so terminal NOOP controls can still return the admitted identity.
@@ -98,6 +96,7 @@ type registry struct {
 	providerSessions         providersessions.Service
 	recording                recordings.WorkerSessionRecordingService
 	clock                    platformclock.Source
+	scheduler                platformclock.TimerSource
 	logger                   logging.Logger
 
 	// lifecycleCtx is owned by the process composition boundary. Request
@@ -120,31 +119,49 @@ type registry struct {
 // broader API.
 var _ workersessions.Service = (*registry)(nil)
 
+func runtimeProgressMetadataAgrees(actual, expected workers.ExecutionCorrelation) bool {
+	// Legacy fragments may omit metadata, but supplied values must belong to
+	// the admitted execution before association or downstream publication.
+	for _, pair := range [][2]string{
+		{actual.FactorySessionID, expected.FactorySessionID},
+		{actual.GenerationID, expected.GenerationID},
+		{actual.RequestID, expected.RequestID},
+		{actual.TraceID, expected.TraceID},
+	} {
+		if value := strings.TrimSpace(pair[0]); value != "" && value != strings.TrimSpace(pair[1]) {
+			return false
+		}
+	}
+	return true
+}
+
+func prepareRuntimeAttemptExecution(req workersessions.RuntimeAttemptRequest) (workers.WorkstationDispatchRequest, workers.ExecuteRequest, error) {
+	if err := req.Validate(); err != nil {
+		return workers.WorkstationDispatchRequest{}, workers.ExecuteRequest{}, err
+	}
+	_, attemptID := runtimeAttemptIDs(req)
+	execution := cloneWorkstationDispatchRequest(req.Execution)
+	execution.Execution.Dispatch.DispatchID = attemptID
+	resolved, err := executeRequestFromSessionDispatch(execution)
+	return execution, resolved, err
+}
+
 // New constructs the process-local Worker Session registry from its required
-// lifecycle, time, and Provider Sessions collaborators. A nil logger falls
-// back to logging.NoopLogger. A nil execution, Events appender, clock, or
-// Provider Sessions service is rejected: the registry cannot truthfully
-// supervise, time, or enrich an observation without each of them.
+// lifecycle, time, and Provider Sessions collaborators. The supplied logger
+// is retained directly; callers disabling logging supply logging.NoopLogger{}.
+// Composition supplies normalized collaborators, including explicit disabled
+// implementations where supported. The supplied scheduler owns safety
+// deadlines independently of the fact clock. Selected per-attempt effects are
+// validated at admission, before reservation or publication.
 func New(
 	execution workers.Service,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
-	if execution == nil {
-		return nil, ErrMissingExecution
-	}
-	if eventsAppender == nil {
-		return nil, ErrMissingEventsAppender
-	}
-	if clock == nil {
-		return nil, ErrMissingClock
-	}
-	if providerSessions == nil {
-		return nil, ErrMissingProviderSessions
-	}
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	startsDone := make(chan struct{})
 	close(startsDone)
@@ -165,9 +182,10 @@ func New(
 		execution:                   execution,
 		events:                      eventsAppender,
 		clock:                       clock,
+		scheduler:                   scheduler,
 		providerSessions:            providerSessions,
 		recording:                   recording,
-		logger:                      logging.EnsureLogger(logger),
+		logger:                      logger,
 		lifecycleCtx:                lifecycleCtx,
 		lifecycleCancel:             lifecycleCancel,
 		startsDone:                  startsDone,
@@ -180,28 +198,6 @@ func New(
 		registry.retainedReader = reader
 	}
 	return registry, nil
-}
-
-// LoadWorkerRecording forwards the optional Recordings-owned durable reader
-// through the same per-Factory-Session Worker Sessions instance used for
-// observation. It is intentionally not part of the broad Worker Sessions
-// service contract; runtime projections discover this read capability only
-// when the composed capture service provides it.
-func (r *registry) LoadWorkerRecording(
-	ctx context.Context,
-	recordingID string,
-) (recordings.WorkerRecordingSnapshot, error) {
-	if r == nil || r.recording == nil {
-		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	reader, ok := r.recording.(recordings.WorkerRecordingReader)
-	if !ok || reader == nil {
-		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
-	}
-	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
 func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {
@@ -223,9 +219,13 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 	if r.recording == nil || recordingID == "" {
 		return nil, nil
 	}
+	factorySessionID := req.Execution.Execution.FactorySessionID
+	if _, metadata, ok := r.loadObservationState(req.ID); ok && !metadata.direct {
+		factorySessionID = firstNonEmpty(metadata.sourceFactorySessionID, factorySessionID)
+	}
 	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
-		RecordingID: recordingID, FactorySessionID: req.Execution.Execution.FactorySessionID,
-		WorkerSessionID: req.ID, Topic: workersessions.Topic(req.ID),
+		RecordingID: recordingID, FactorySessionID: factorySessionID,
+		WorkerSessionID: publicWorkerID(req.ID), Topic: r.observationTopic(req.ID),
 	})
 }
 
@@ -235,19 +235,37 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 // owner drives the state machine once; concurrent and later replays wait for
 // and return the owner's stored acceptance or pre-admission failure.
 func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	return r.AdmitRuntimeAttemptAsync(ctx, req, r.execution, r.clock, r.scheduler)
+}
+
+// AdmitRuntimeAttemptAsync preserves direct Start routing and replay while
+// capturing the selected execution and timing effects before admission.
+func (r *registry) AdmitRuntimeAttemptAsync(
+	ctx context.Context, req workersessions.StartRequest,
+	executor workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource,
+) (workersessions.StartResult, error) {
 	callerCtx := ctx
 	if callerCtx == nil {
 		callerCtx = context.Background()
 	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.StartResult{}, err
+	}
+	if executor == nil {
+		return workersessions.StartResult{}, ErrMissingExecution
+	}
+	if clock == nil {
+		return workersessions.StartResult{}, ErrMissingClock
+	}
+	if scheduler == nil {
+		return workersessions.StartResult{}, ErrMissingScheduler
 	}
 	req = normalizeStartRequest(req)
 	replay, owner, err := r.reserveStart(req)
 	if err != nil {
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))
+		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))
 		return workersessions.StartResult{}, err
 	}
 	if !owner {
@@ -258,7 +276,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 
 	outcomes := make(chan asyncStartCompletion, 1)
 	go func() {
-		result, startErr := r.startReserved(callerCtx, req)
+		result, startErr := r.startReservedWithEffects(req, executor, clock, scheduler)
 		r.finishStartReplay(replay, result, startErr)
 		r.finishStart()
 		outcomes <- asyncStartCompletion{result: result, err: startErr}
@@ -272,7 +290,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 			return outcome.result, outcome.err
 		default:
 		}
-		r.logger.Info("worker session start wait canceled", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "caller_canceled")
+		r.logger.Info("worker session start wait canceled", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "requestID", req.RequestID, "outcome", "caller_canceled")
 		return workersessions.StartResult{}, callerCtx.Err()
 	}
 }
@@ -317,44 +335,46 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.publications[req.ID] = &publication{}
 	r.startReplays[req.RequestID] = replay
-	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
+	r.logger.Info("worker session start", "sessionID", publicWorkerID(req.ID), "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
 	return replay, true, nil
 }
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session reserve rejected", "sessionID", req.ID, "outcome", "invalid")
+		r.logger.Info("worker session reserve rejected", "sessionID", publicWorkerID(req.ID), "outcome", "invalid")
 		return workersessions.Session{}, err
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.sessions[req.ID]; exists {
-		r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "duplicate")
+	if r.workerIdentityExistsLocked(req.ID) {
+		r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "duplicate")
 		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
 	}
 	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.sessions[req.ID] = session
 	r.publications[req.ID] = &publication{}
-	r.logger.Info("worker session reserve", "sessionID", req.ID, "outcome", "reserved")
+	r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "reserved")
 	return session, nil
 }
 
 func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (workersessions.Session, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session get rejected", "sessionID", req.ID, "outcome", "invalid")
+		r.logger.Info("worker session get rejected", "sessionID", publicWorkerID(req.ID), "outcome", "invalid")
 		return workersessions.Session{}, err
 	}
 
 	r.mu.RLock()
-	session, exists := r.sessions[req.ID]
+	id := r.workerAddressLocked(req.ID, req.FactorySessionID)
+	session, exists := r.sessions[id]
+	scopeMatches := observationFactoryScopeMatches(r.observations[id], req.FactorySessionID)
 	r.mu.RUnlock()
 
-	if !exists {
-		r.logger.Info("worker session get", "sessionID", req.ID, "outcome", "not_found")
+	if !exists || !scopeMatches {
+		r.logger.Info("worker session get", "sessionID", publicWorkerID(req.ID), "outcome", "not_found")
 		return workersessions.Session{}, workersessions.ErrSessionNotFound
 	}
-	r.logger.Info("worker session get", "sessionID", req.ID, "outcome", "found", "state", string(session.State))
+	r.logger.Info("worker session get", "sessionID", publicWorkerID(req.ID), "outcome", "found", "state", string(session.State))
 	return cloneSession(session), nil
 }
 
@@ -385,13 +405,9 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 	return slices.Contains(filter.States, session.State)
 }
 
-// reserveIfAbsent stores id as a new StateReserved session when it is not
-// already registered, in its own locked critical section distinct from
-// transitionToStarting. This makes a brand-new identity's RESERVED state a
-// genuine, observable map write (visible to a concurrent Get/List) before
-// Start ever transitions it to StateStarting or calls Workers. An identity
-// already registered, in any state, is left untouched here; conflicts are
-// reported by the following transitionToStarting call.
+// reserveIfAbsent exposes a newly reserved identity before the separate
+// STARTING transition. Existing identities remain unchanged; the transition
+// reports conflicts before any Workers call.
 func (r *registry) reserveIfAbsent(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -399,7 +415,7 @@ func (r *registry) reserveIfAbsent(id string) {
 	if _, exists := r.sessions[id]; exists {
 		return
 	}
-	r.sessions[id] = workersessions.Session{ID: id, State: workersessions.StateReserved}
+	r.sessions[id] = workersessions.Session{ID: publicWorkerID(id), State: workersessions.StateReserved}
 	r.publications[id] = &publication{}
 }
 
@@ -431,8 +447,18 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 	session.State = state
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
-	r.finishObservationLocked(id, r.clock.Now())
+	r.finishObservationLocked(id, r.observationClockLocked(id).Now())
 	return cloneSession(session), true
+}
+
+// observationClockLocked retains an admitted attempt's fact source after its
+// live control handle is released. Legacy identities without timing metadata
+// use the directly supplied process clock. Caller holds r.mu.
+func (r *registry) observationClockLocked(id string) platformclock.Source {
+	if metadata := r.observations[id]; metadata != nil && metadata.clock != nil {
+		return metadata.clock
+	}
+	return r.clock
 }
 
 // commitControlTerminal terminalizes an unstarted or explicitly canceled
@@ -453,7 +479,7 @@ func (r *registry) commitControlTerminal(id string, state workersessions.State) 
 	existing.State = state
 	existing.Result = nil
 	r.sessions[id] = existing
-	r.finishObservationLocked(id, r.clock.Now())
+	r.finishObservationLocked(id, r.observationClockLocked(id).Now())
 	return cloneSession(existing), true
 }
 
@@ -465,16 +491,16 @@ func (r *registry) AssociateProviderSession(
 	req workersessions.ProviderSessionAssociationRequest,
 ) (workersessions.ProviderSessionAssociationResult, error) {
 	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session provider session association rejected", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", "invalid")
+		r.logger.Info("worker session provider session association rejected", "sessionID", publicWorkerID(req.WorkerSessionID), "attemptID", req.DispatchID, "outcome", "invalid")
 		return workersessions.ProviderSessionAssociationResult{}, err
 	}
 
 	result, err := r.associateProviderSession(req)
 	if err != nil {
-		r.logger.Info("worker session provider session association rejected", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session association rejected", "sessionID", publicWorkerID(req.WorkerSessionID), "attemptID", req.DispatchID, "outcome", "rejected")
 		return workersessions.ProviderSessionAssociationResult{}, err
 	}
-	r.logger.Info("worker session provider session association", "sessionID", req.WorkerSessionID, "attemptID", req.DispatchID, "outcome", string(result.Outcome))
+	r.logger.Info("worker session provider session association", "sessionID", publicWorkerID(req.WorkerSessionID), "attemptID", req.DispatchID, "outcome", string(result.Outcome))
 	return result, nil
 }
 
@@ -499,72 +525,17 @@ func (r *registry) ObserveProviderSession(
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 	result, err := r.associateProviderSessionLocked(workersessions.ProviderSessionAssociationRequest{
-		WorkerSessionID: ownerID,
+		WorkerSessionID: publicWorkerID(ownerID),
 		DispatchID:      req.DispatchID,
 		Reference:       req.Reference.Clone(),
 	})
 	r.mu.Unlock()
 	if err != nil {
-		r.logger.Info("worker session provider session observation rejected", "sessionID", ownerID, "attemptID", req.DispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session observation rejected", "sessionID", publicWorkerID(ownerID), "attemptID", req.DispatchID, "outcome", "rejected")
 		return workersessions.ProviderSessionAssociationResult{}, err
 	}
-	r.logger.Info("worker session provider session observation", "sessionID", ownerID, "attemptID", req.DispatchID, "outcome", string(result.Outcome))
+	r.logger.Info("worker session provider session observation", "sessionID", publicWorkerID(ownerID), "attemptID", req.DispatchID, "outcome", string(result.Outcome))
 	return result, nil
-}
-
-func (r *registry) associateProviderSession(
-	req workersessions.ProviderSessionAssociationRequest,
-) (workersessions.ProviderSessionAssociationResult, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.associateProviderSessionLocked(req)
-}
-
-func (r *registry) associateProviderSessionLocked(
-	req workersessions.ProviderSessionAssociationRequest,
-) (workersessions.ProviderSessionAssociationResult, error) {
-	session, exists := r.sessions[req.WorkerSessionID]
-	if !exists {
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
-	}
-	supervision := r.supervisions[req.WorkerSessionID]
-	_, runtimeOwned := r.runtimeAttempts[req.WorkerSessionID]
-	if (supervision == nil && !runtimeOwned) || r.dispatchOwners[req.DispatchID] != req.WorkerSessionID {
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
-	}
-
-	turnID := ""
-	dispatchID := req.DispatchID
-	if supervision != nil {
-		turnID = supervision.turnID
-		dispatchID = supervision.dispatchID
-	}
-	association := workersessions.ProviderSessionAssociation{
-		WorkerSessionID: req.WorkerSessionID,
-		TurnID:          turnID,
-		DispatchID:      dispatchID,
-		AttemptID:       dispatchID,
-		Reference:       req.Reference.Clone(),
-	}
-	if existing := session.ProviderSessionAssociation; existing != nil {
-		if existing.Reference == association.Reference {
-			return workersessions.ProviderSessionAssociationResult{
-				Association: existing.Clone(),
-				Outcome:     workersessions.ProviderSessionAssociationOutcomeDuplicate,
-			}, nil
-		}
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationConflict
-	}
-	if session.Terminal() {
-		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationNotAvailable
-	}
-
-	session.ProviderSessionAssociation = &association
-	r.sessions[req.WorkerSessionID] = session
-	return workersessions.ProviderSessionAssociationResult{
-		Association: association.Clone(),
-		Outcome:     workersessions.ProviderSessionAssociationOutcomeAccepted,
-	}, nil
 }
 
 // replayObservationSubscription drains one retained Events snapshot. It never
@@ -925,13 +896,6 @@ func cloneTranscriptTime(value *time.Time) *time.Time {
 	return &clone
 }
 
-func newSupervisionDeadlineTimer(clock platformclock.Source, timeout time.Duration) platformclock.Timer {
-	if timerSource, ok := clock.(platformclock.TimerSource); ok {
-		return timerSource.NewTimer(timeout)
-	}
-	return hostSupervisionDeadlineTimer{timer: time.NewTimer(timeout)}
-}
-
 func (r *registry) startDeadlineWatcher(id string, supervision *supervision, acceptedAt time.Time) {
 	timeout := resolvedHardExecutionTimeout(supervision.execution.Execution)
 	if timeout <= 0 {
@@ -948,11 +912,11 @@ func (r *registry) startDeadlineWatcher(id string, supervision *supervision, acc
 	supervision.deadlineAt = deadlineAt
 	supervision.mu.Unlock()
 
-	remaining := deadlineAt.Sub(r.clock.Now())
+	remaining := deadlineAt.Sub(supervision.clock.Now())
 	if remaining < 0 {
 		remaining = 0
 	}
-	timer := newSupervisionDeadlineTimer(r.clock, remaining)
+	timer := supervision.scheduler.NewTimer(remaining)
 	go func() {
 		defer timer.Stop()
 		select {
@@ -992,4 +956,124 @@ func resolvedHardExecutionTimeout(execution workers.WorkstationExecutionRequest)
 		return workers.DefaultWorkstationExecutionTimeout
 	}
 	return 0
+}
+
+// runtimeAdmissionLocked returns scope-owned admission state under r.mu.
+func (r *registry) runtimeAdmissionLocked(runtimeID string) *runtimeAdmission {
+	if r.runtimeAdmissions == nil {
+		r.runtimeAdmissions = make(map[string]*runtimeAdmission)
+	}
+	admission := r.runtimeAdmissions[runtimeID]
+	if admission == nil {
+		admission = &runtimeAdmission{drained: make(chan struct{})}
+		close(admission.drained)
+		r.runtimeAdmissions[runtimeID] = admission
+	}
+	return admission
+}
+
+func (r *registry) beginRuntimeOpening(runtimeID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	admission := r.runtimeAdmissionLocked(runtimeID)
+	if admission.closed {
+		return false
+	}
+	if admission.openings == 0 {
+		admission.drained = make(chan struct{})
+	}
+	admission.openings++
+	return true
+}
+
+func (r *registry) finishRuntimeOpening(runtimeID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	admission := r.runtimeAdmissions[runtimeID]
+	admission.openings--
+	if admission.openings == 0 {
+		close(admission.drained)
+	}
+}
+
+func (r *registry) runtimeAdmissionClosed(runtimeID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	admission := r.runtimeAdmissions[strings.TrimSpace(runtimeID)]
+	return admission != nil && admission.closed
+}
+
+// scopedWorkerAddress is a private registry address, never a Worker identity.
+// Factory Session scope and the supplied Worker ID are retained separately in
+// observations and Session. All runtime-owned maps use this address together.
+func scopedWorkerAddress(id, factorySessionID string) string {
+	if factorySessionID = strings.TrimSpace(factorySessionID); factorySessionID != "" {
+		return "\x00" + factorySessionID + "\x00" + id
+	}
+	return id
+}
+
+func publicWorkerID(address string) string {
+	if strings.HasPrefix(address, "\x00") {
+		if _, id, ok := strings.Cut(address[1:], "\x00"); ok {
+			return id
+		}
+	}
+	return address
+}
+
+func (r *registry) workerAddress(id string, scopes ...string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.workerAddressLocked(id, scopes...)
+}
+
+// workerAddressLocked rejects ambiguous public IDs. Internal operations already
+// carry the captured address and never rediscover an owner during a retry.
+func (r *registry) workerAddressLocked(id string, scopes ...string) string {
+	scope := ""
+	if len(scopes) > 0 {
+		scope = strings.TrimSpace(scopes[0])
+	}
+	if strings.HasPrefix(id, "\x00") {
+		return id
+	}
+	if scope != "" {
+		address := scopedWorkerAddress(id, scope)
+		if _, exists := r.sessions[address]; exists {
+			return address
+		}
+		if observationFactoryScopeMatches(r.observations[id], scope) {
+			return id
+		}
+		return address
+	}
+	address := ""
+	for candidate, session := range r.sessions {
+		if session.ID != id {
+			continue
+		}
+		if address != "" {
+			return ""
+		}
+		address = candidate
+	}
+	return address
+}
+
+func workerAddressScope(address string) string {
+	if strings.HasPrefix(address, "\x00") {
+		scope, _, _ := strings.Cut(address[1:], "\x00")
+		return scope
+	}
+	return ""
+}
+
+func (r *registry) workerIdentityExistsLocked(id string) bool {
+	for _, session := range r.sessions {
+		if session.ID == id {
+			return true
+		}
+	}
+	return false
 }

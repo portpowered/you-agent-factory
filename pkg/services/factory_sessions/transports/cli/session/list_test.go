@@ -929,3 +929,31 @@ func serverPort(t *testing.T, srv *httptest.Server) int {
 	}
 	return port
 }
+
+func TestListHistoryWarningsSurviveJSONAndHumanOutput(t *testing.T) {
+	t.Parallel()
+	warnings := []factoryapi.FactorySessionRecordingWarning{{ArtifactReference: "2026/10/03/empty.json", Code: "UNREADABLE_RECORDING", Reason: "Recording could not be decoded."}}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		scope := factoryapi.FactorySessionListScopeHistory
+		_ = json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{Scope: &scope, Sessions: []factoryapi.FactorySessionSummary{}, Warnings: &warnings})
+	}))
+	defer srv.Close()
+	for _, jsonOutput := range []bool{true, false} {
+		var output bytes.Buffer
+		err := NewList(testHTTPProtocol(t), recordedListRequestPreparation{})(ListConfig{Context: t.Context(), Server: srv.URL, HistoryOnly: true, JSON: jsonOutput, Output: &output})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if jsonOutput {
+			var result factoryapi.ListFactorySessionsResponse
+			if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Warnings == nil || len(*result.Warnings) != 1 || (*result.Warnings)[0] != warnings[0] {
+				t.Fatalf("warnings = %#v", result.Warnings)
+			}
+		} else if !strings.Contains(output.String(), warnings[0].ArtifactReference) || strings.Contains(output.String(), "No recorded") {
+			t.Fatalf("degraded human output = %s", output.String())
+		}
+	}
+}

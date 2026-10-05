@@ -52,7 +52,7 @@ Use these focused commands from the repository root:
 
 ```bash
 make packaged-factory-catalog-generate
-make packaged-factory-catalog-check
+make repository-lint-run
 make packaged-factory-package-script-test
 make packaged-factory-package-pack-check
 make packaged-factory-package-candidate-dry-run

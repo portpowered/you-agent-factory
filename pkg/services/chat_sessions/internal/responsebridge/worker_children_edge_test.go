@@ -10,6 +10,7 @@ import (
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -99,22 +100,22 @@ func TestWorkerChildAssociationValidationAndRegistration(t *testing.T) {
 
 	state := newWorkerChildDrainState()
 	children := testWorkerChild(t, New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, nil, logging.NoopLogger{}), state)
-	first, added, err := children.registerAssociation(testWorkerAssociation())
+	first, added, err := children.registerAssociation(testWorkerAssociation(), nil)
 	if err != nil || !added || first == nil {
 		t.Fatalf("register first = (%#v, %t, %v), want child", first, added, err)
 	}
-	if same, added, err := children.registerAssociation(testWorkerAssociation()); err != nil || added || same != first {
+	if same, added, err := children.registerAssociation(testWorkerAssociation(), nil); err != nil || added || same != first {
 		t.Fatalf("register duplicate = (%#v, %t, %v), want original child without add", same, added, err)
 	}
 	state.childrenByWorkerSessionID["worker-b"] = &workerChild{association: chatsessions.WorkerSessionAssociation{DispatchID: "dispatch-b", WorkerSessionID: "worker-b"}}
 	if got := children.children(); len(got) != 2 || got[0].association.WorkerSessionID != "worker" || got[1].association.WorkerSessionID != "worker-b" {
 		t.Fatalf("children() = %#v, want stable worker-session ordering", got)
 	}
-	if _, _, err := children.registerAssociation(chatsessions.WorkerSessionAssociation{DispatchID: "dispatch", WorkerSessionID: "worker-other"}); !errors.Is(err, ErrConflictingWorkerAssociation) {
+	if _, _, err := children.registerAssociation(chatsessions.WorkerSessionAssociation{DispatchID: "dispatch", WorkerSessionID: "worker-other"}, nil); !errors.Is(err, ErrConflictingWorkerAssociation) {
 		t.Fatalf("conflicting dispatch error = %v, want %v", err, ErrConflictingWorkerAssociation)
 	}
 	state.childrenByWorkerSessionID["worker"] = &workerChild{association: chatsessions.WorkerSessionAssociation{DispatchID: "other-dispatch", WorkerSessionID: "worker"}}
-	if _, _, err := children.registerAssociation(testWorkerAssociation()); !errors.Is(err, ErrConflictingWorkerAssociation) {
+	if _, _, err := children.registerAssociation(testWorkerAssociation(), nil); !errors.Is(err, ErrConflictingWorkerAssociation) {
 		t.Fatalf("conflicting worker error = %v, want %v", err, ErrConflictingWorkerAssociation)
 	}
 
@@ -169,17 +170,17 @@ func TestWorkerChildLifecycleConsumersFailClosedAndIsolateMalformedRecords(t *te
 	for _, outcome := range []events.ReadOutcome{events.ReadOutcomeGap, events.ReadOutcomeInvalidCursor} {
 		eventsService := &scriptedWorkerEvents{reads: []events.ReadResult{{Outcome: outcome}}}
 		service := New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, eventsService, logging.NoopLogger{})
-		if err := service.drainWorkerLifecycleTail(context.Background(), "chat", newWorkerChildDrainState(), association); !errors.Is(err, ErrWorkerChildHistoryGap) {
+		if err := service.drainWorkerLifecycleTail(context.Background(), "chat", newWorkerChildDrainState(), association, workersessions.Topic(association.WorkerSessionID)); !errors.Is(err, ErrWorkerChildHistoryGap) {
 			t.Fatalf("tail outcome %d error = %v, want %v", outcome, err, ErrWorkerChildHistoryGap)
 		}
 	}
 	readErr := errors.New("read failed")
 	service := New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, &scriptedWorkerEvents{readErr: readErr}, logging.NoopLogger{})
-	if err := service.drainWorkerLifecycleTail(context.Background(), "chat", newWorkerChildDrainState(), association); !errors.Is(err, readErr) {
+	if err := service.drainWorkerLifecycleTail(context.Background(), "chat", newWorkerChildDrainState(), association, workersessions.Topic(association.WorkerSessionID)); !errors.Is(err, readErr) {
 		t.Fatalf("tail read error = %v, want %v", err, readErr)
 	}
 	service = New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, &scriptedWorkerEvents{reads: []events.ReadResult{{Outcome: events.ReadOutcomeUnspecified}}}, logging.NoopLogger{})
-	if err := service.drainWorkerLifecycleTail(context.Background(), "chat", newWorkerChildDrainState(), association); err == nil {
+	if err := service.drainWorkerLifecycleTail(context.Background(), "chat", newWorkerChildDrainState(), association, workersessions.Topic(association.WorkerSessionID)); err == nil {
 		t.Fatal("tail unexpected outcome error = nil, want failure")
 	}
 
@@ -187,23 +188,23 @@ func TestWorkerChildLifecycleConsumersFailClosedAndIsolateMalformedRecords(t *te
 	state.childrenByWorkerSessionID[association.WorkerSessionID] = &workerChild{association: association, sequencedSources: make(map[events.AppendIdentity]struct{})}
 	eventsService := &scriptedWorkerEvents{reads: []events.ReadResult{{Outcome: events.ReadOutcomeProgress, Records: []events.Record{malformed}, Next: events.Cursor{}}, {Outcome: events.ReadOutcomeAtHead}}}
 	service = New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, eventsService, logging.NoopLogger{})
-	if err := service.drainWorkerLifecycleTail(context.Background(), "chat", state, association); err != nil {
+	if err := service.drainWorkerLifecycleTail(context.Background(), "chat", state, association, workersessions.Topic(association.WorkerSessionID)); err != nil {
 		t.Fatalf("tail malformed child error = %v, want sibling-isolated skip", err)
 	}
 
 	subscribeErr := errors.New("subscribe failed")
 	service = New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, &scriptedWorkerEvents{subscribeErr: subscribeErr}, logging.NoopLogger{})
-	if err := service.drainWorkerLifecycleLive(context.Background(), context.Background(), "chat", newWorkerChildDrainState(), association); !errors.Is(err, subscribeErr) {
+	if err := service.drainWorkerLifecycleLive(context.Background(), context.Background(), "chat", newWorkerChildDrainState(), association, workersessions.Topic(association.WorkerSessionID)); !errors.Is(err, subscribeErr) {
 		t.Fatalf("live subscribe error = %v, want %v", err, subscribeErr)
 	}
 	service = New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, &scriptedWorkerEvents{deliveries: []events.Delivery{{Kind: events.DeliveryGap}}}, logging.NoopLogger{})
-	if err := service.drainWorkerLifecycleLive(context.Background(), context.Background(), "chat", newWorkerChildDrainState(), association); !errors.Is(err, ErrWorkerChildHistoryGap) {
+	if err := service.drainWorkerLifecycleLive(context.Background(), context.Background(), "chat", newWorkerChildDrainState(), association, workersessions.Topic(association.WorkerSessionID)); !errors.Is(err, ErrWorkerChildHistoryGap) {
 		t.Fatalf("live gap error = %v, want %v", err, ErrWorkerChildHistoryGap)
 	}
 	state = newWorkerChildDrainState()
 	state.childrenByWorkerSessionID[association.WorkerSessionID] = &workerChild{association: association, sequencedSources: make(map[events.AppendIdentity]struct{})}
 	service = New(&bridgeSequencer{didFirst: make(chan struct{})}, bridgeTarget{}, &scriptedWorkerEvents{deliveries: []events.Delivery{{Kind: events.DeliveryRecord, Record: malformed}, {Kind: events.DeliveryClosed}}}, logging.NoopLogger{})
-	if err := service.drainWorkerLifecycleLive(context.Background(), context.Background(), "chat", state, association); err != nil {
+	if err := service.drainWorkerLifecycleLive(context.Background(), context.Background(), "chat", state, association, workersessions.Topic(association.WorkerSessionID)); err != nil {
 		t.Fatalf("live malformed child error = %v, want sibling-isolated skip", err)
 	}
 }

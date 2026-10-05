@@ -55,6 +55,7 @@ func (f *factoryImpl) controlAssociatedWorkerSessions(
 	}
 
 	captured := selectAssociatedWorkerSessionTargets(f.canonicalWorkerSessionControlEvents(), turnID)
+	captured.factorySessionID = canonicalSessionIDFromFactoryConfig(f.cfg)
 	result := fanOutWorkerSessionControl(ctx, f.cfg.workerSessions, captured, action, controlID)
 	f.workerSessionControlResults[key] = cloneWorkerSessionControlResult(result)
 	f.logWorkerSessionControlFanout(result)
@@ -106,7 +107,7 @@ func fanOutWorkerSessionControl(
 			continue
 		}
 		controlResult, err := callWorkerSessionControl(
-			controlCtx, service, action, workersessions.ControlRequest{ID: workerSessionID, RequestID: controlID},
+			controlCtx, service, action, workersessions.ControlRequest{ID: workerSessionID, RequestID: controlID, FactorySessionID: captured.factorySessionID},
 		)
 		child.DispatchID = controlResult.DispatchID
 		child.Outcome = workerSessionControlChildOutcome(controlResult.Outcome, err)
@@ -219,6 +220,11 @@ func (s *recordedWorkerSessionObservation) StreamObservations(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
+	scope, err := s.observationReadScope(req.FactorySessionID)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	req.FactorySessionID = scope
 	if subscription, handled, err := s.streamRecorded(ctx, req); handled {
 		return subscription, err
 	}
@@ -242,6 +248,11 @@ func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
 	if err := req.Validate(); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
+	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	req.FactorySessionID = scope
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
@@ -253,6 +264,22 @@ func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	return s.Service.StreamObservationsByWorkerSessionID(ctx, req)
+}
+
+func (s *recordedWorkerSessionObservation) observationReadScope(requested string) (string, error) {
+	requested = strings.TrimSpace(requested)
+	if s == nil || strings.TrimSpace(s.factorySessionID) == "" {
+		return requested, nil
+	}
+	owner := strings.TrimSpace(s.factorySessionID)
+	executionOwner := strings.TrimSpace(s.executionFactorySessionID)
+	if executionOwner == "" {
+		executionOwner = owner
+	}
+	if requested != "" && requested != owner && requested != executionOwner {
+		return "", workersessions.ErrObservationSessionNotFound
+	}
+	return executionOwner, nil
 }
 
 func (s *recordedWorkerSessionObservation) streamRecorded(

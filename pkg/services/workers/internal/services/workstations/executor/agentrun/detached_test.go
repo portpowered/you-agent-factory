@@ -115,6 +115,36 @@ func detachedAttempt() workerexecution.RunnerExecutionRequest {
 	}
 }
 
+func TestExecuteDetachedFinalMessageRetainsAdmittedCorrelation(t *testing.T) {
+	t.Parallel()
+	correlation := workerexecution.ExecutionCorrelation{
+		FactorySessionID: "factory", RuntimeID: "runtime", RequestID: "request", TraceID: "trace",
+		GenerationID: "generation", DispatchID: "logical", AttemptID: "physical",
+	}
+	attempt := detachedAttempt()
+	attempt.Dispatch.DispatchID = correlation.AttemptID
+	var fragments []workerexecution.ProgressFragment
+	request := DetachedRequest{
+		Correlation: correlation, Attempt: attempt,
+		ProgressPublisher: func(fragment workerexecution.ProgressFragment) {
+			fragments = append(fragments, fragment)
+		},
+	}
+	_, err := ExecuteDetached(context.Background(), &inferencingHarnessStub{
+		result: HarnessResult{FinalText: "non-authoritative harness text"},
+	}, &detachedRunnerStub{results: []workerexecution.RunnerExecutionResult{{Content: "final answer"}}}, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fragments) != 1 || fragments[0].Correlation != correlation || fragments[0].DispatchID != correlation.AttemptID {
+		t.Fatalf("final fragments = %#v, want one admitted physical observation", fragments)
+	}
+	draft, ok := fragments[0].CanonicalDraft.(workerexecution.Draft)
+	if !ok || !strings.Contains(string(draft.Payload), "final answer") || strings.Contains(string(draft.Payload), "non-authoritative") {
+		t.Fatalf("final draft = %#v, want last provider turn", fragments[0].CanonicalDraft)
+	}
+}
+
 func TestExecuteDetachedRequiresHarness(t *testing.T) {
 	t.Parallel()
 

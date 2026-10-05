@@ -14,9 +14,14 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 )
@@ -299,4 +304,42 @@ func TestSessionListPrepareUsesCanonicalDurableInventory(t *testing.T) {
 	if len(listed.DurableSessions) != 1 || listed.DurableSessions[0].Phase != "COMPLETE" || listed.DurableSessions[0].ArtifactCount != 3 {
 		t.Fatalf("durable rows = %#v, want rich canonical row", listed.DurableSessions)
 	}
+}
+
+func TestProvideLocalWorkerSessionsBoundaryRetainsSelectedFactClockOnOpeningFailure(t *testing.T) {
+	t.Parallel()
+	factTime := time.Date(2035, 5, 6, 7, 8, 9, 0, time.UTC)
+	facts := platformclock.NewDeterministic(factTime, time.Second)
+	deadlines := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	service, err := provideWorkerSessionsService(localBoundaryWorkersService{}, localBoundaryRejectedEvents{},
+		localBoundaryProviderSessions{}, logging.NoopLogger{}, facts, deadlines, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundary, err := provideLocalWorkerSessionsBoundary(service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = boundary.Start(context.Background(), workersessions.StartRequest{
+		ID: "local-clock-session", RequestID: "local-clock-request",
+		Execution: workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "local-clock-dispatch"},
+		}},
+	})
+	if !errors.Is(err, workersessions.ErrStartNotAccepted) {
+		t.Fatalf("Start = %v, want opening admission failure", err)
+	}
+	observation, err := boundary.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "local-clock-session"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observation.State != workersessions.StateFailed || observation.StartedAt == nil || observation.EndedAt == nil || !observation.StartedAt.Equal(factTime) || !observation.EndedAt.Equal(factTime) {
+		t.Fatalf("failed opening timing = %#v, want selected fact time %v", observation, factTime)
+	}
+}
+
+type localBoundaryRejectedEvents struct{ events.Service }
+
+func (localBoundaryRejectedEvents) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return events.AppendResult{}, errors.New("selected opening append rejected")
 }

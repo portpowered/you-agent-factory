@@ -890,3 +890,20 @@ func TestReplayInputLoaderMetadataModeReadsBoundedBytesOfLargeRecordings(t *test
 		})
 	}
 }
+
+func TestReplayInputMetadataRejectsEmptyAndTruncatedReservations(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{"", `{"schemaVersion":"replay.v1","events":[`, `{"schemaVersion":"replay.v1","events":[]} trailing`} {
+		t.Run(fmt.Sprintf("bytes-%d", len(payload)), func(t *testing.T) {
+			t.Parallel()
+			loader := recordingswire.NewReplayInputLoader(os.ReadFile, func(string) (*recordings.ReplayArtifact, error) {
+				t.Fatal("metadata must not load replay")
+				return nil, nil
+			}, logging.NoopLogger{}, func(string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(payload)), nil })
+			result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json", MetadataOnly: true})
+			if err == nil || result.Metadata != nil {
+				t.Fatalf("damaged metadata = %#v, %v", result, err)
+			}
+		})
+	}
+}

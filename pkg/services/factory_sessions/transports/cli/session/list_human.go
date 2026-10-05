@@ -9,6 +9,16 @@ import (
 )
 
 func renderListResult(output io.Writer, result factoryapi.ListFactorySessionsResponse) error {
+	if result.Warnings != nil {
+		for _, warning := range *result.Warnings {
+			if _, err := fmt.Fprintf(output, "Warning [%s] %s: %s\n", warning.Code, warning.ArtifactReference, warning.Reason); err != nil {
+				return err
+			}
+		}
+		if !hasListRows(result) && len(*result.Warnings) > 0 {
+			return nil
+		}
+	}
 	if !hasListRows(result) {
 		return renderListEmptyState(output, result.Scope)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -572,4 +573,44 @@ func ptrInt(value int) *int {
 
 func ptrString(value string) *string {
 	return &value
+}
+
+func TestHandlerLogsDegradedDiagnosticCountsWithoutPayload(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	fake := &rootServiceFake{detail: providersessions.Detail{
+		ProviderSession: providersessions.Ref{Provider: providersessions.ProviderCodex, Kind: providersessions.SessionIDKind, ID: "session-safe"},
+		Parse:           providersessions.ParseSummary{ParseErrors: []providersessions.LineError{{LineNumber: 2, Message: "inspection record limit reached"}}},
+		Transcript:      []providersessions.TranscriptEntry{{Text: ptrString("secret-payload")}},
+	}}
+	handler := NewHandler(NewAdapter(fake), zap.New(core))
+	recorder := httptest.NewRecorder()
+	handler.GetProviderSessionDetails(recorder, httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil), factoryapi.GetProviderSessionDetailsParams{Provider: factoryapi.Codex, Kind: factoryapi.LoadableProviderSessionKindSessionID, Id: "session-safe"})
+	entries := logs.All()
+	if recorder.Code != 200 || len(entries) != 1 {
+		t.Fatalf("status/logs = %d/%#v", recorder.Code, entries)
+	}
+	fields := entries[0].ContextMap()
+	if fields["provider"] != "codex" || fields["session_id"] != "session-safe" || fields["diagnostic_count"] != int64(1) || fields["outcome"] != "bounded_partial" {
+		t.Fatalf("missing degraded outcome fields: %#v", fields)
+	}
+	encoded, _ := json.Marshal(fields)
+	if strings.Contains(string(encoded), "secret-payload") {
+		t.Fatal("payload leaked to logs")
+	}
+}
+
+func TestHandlerLogsSafeStorageCauseWithoutHostPath(t *testing.T) {
+	core, logs := observer.New(zap.ErrorLevel)
+	fake := &rootServiceFake{detailErr: errors.Join(providersessions.ErrSessionStorageUnavailable, &fs.PathError{Op: "read", Path: "C:/secret/rollout.jsonl", Err: fs.ErrPermission})}
+	handler := NewHandler(NewAdapter(fake), zap.New(core))
+	recorder := httptest.NewRecorder()
+	handler.GetProviderSessionDetails(recorder, httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil), factoryapi.GetProviderSessionDetailsParams{Provider: factoryapi.Codex, Kind: factoryapi.LoadableProviderSessionKindSessionID, Id: "session-safe"})
+	entries := logs.All()
+	if recorder.Code != 500 || len(entries) != 1 || entries[0].ContextMap()["cause"] != "permission_denied" {
+		t.Fatalf("status/logs = %d/%#v", recorder.Code, entries)
+	}
+	encoded, _ := json.Marshal(entries[0].ContextMap())
+	if strings.Contains(string(encoded), "secret") || strings.Contains(recorder.Body.String(), "secret") {
+		t.Fatal("storage cause leaked host path")
+	}
 }

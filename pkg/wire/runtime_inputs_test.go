@@ -621,9 +621,6 @@ func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 		ProviderCommandRunner:     providerRunner,
 		ScriptCommandRunner:       scriptRunner,
 	}
-	if got := provideFactoryRuntimeClock(edges); got != clock {
-		t.Fatalf("clock = %v, want exact edge", got)
-	}
 	if got := provideFactorySessionInvocationMetricsRecorder(edges); got != metrics {
 		t.Fatalf("metrics recorder = %v, want exact edge", got)
 	}
@@ -680,9 +677,8 @@ func TestFactoryRuntimeMetricsClockSelectsNormalizedScheduler(t *testing.T) {
 func assertSelectedTimeProjections(t *testing.T, edges serviceedges.Edges) {
 	t.Helper()
 	for name, got := range map[string]platformclock.Source{
-		"runtime":              provideFactoryRuntimeClock(edges),
 		"provider observation": effectiveProviderCommandClock(edges),
-		"resolver":             provideFactoryRuntimeClockResolver(provideFactoryRuntimeClock(edges))(nil),
+		"resolver":             provideFactoryRuntimeClockResolver(edges.Clock)(nil),
 	} {
 		if got != edges.Clock {
 			t.Fatalf("%s clock = %v, want selected source %v", name, got, edges.Clock)

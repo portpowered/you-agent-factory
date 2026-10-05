@@ -1011,7 +1011,7 @@ func newRecordedWorkerSessionObservationWithRestoredState(
 	restoredWorldState *interfaces.FactoryWorldState,
 	restoredEventPrefix []interfaces.FactoryEvent,
 	factorySessionIDs ...string,
-) workersessions.Service {
+) *recordedWorkerSessionObservation {
 	factorySessionID := ""
 	if len(factorySessionIDs) > 0 {
 		factorySessionID = strings.TrimSpace(factorySessionIDs[0])

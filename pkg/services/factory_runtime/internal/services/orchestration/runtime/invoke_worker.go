@@ -597,8 +597,7 @@ func cloneRuntimeContinuation(reference *workers.ProviderContinuationRef) *worke
 // invocation also receives the durable opening/observation window without
 // transferring execution or cancellation ownership away from Runtime.
 //
-// The body is deliberately the same three steps as startThroughWorkerSessions:
-// reserve the Worker Session, commit the dispatch/Worker Session association to
+// Reserve the Worker Session, commit the dispatch/Worker Session association to
 // this runtime's canonical Factory Events, then invoke. Committing the
 // association here -- on the runtime that owns the ledger -- is the whole
 // reason this is an operation rather than a collaborator handed to callers: the
@@ -619,9 +618,10 @@ func (f *factoryImpl) InvokeWorker(
 	if f != nil && f.cfg != nil && f.cfg.attempts != nil {
 		return f.invokeStatelessWorker(ctx, req)
 	}
-	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
+	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.cfg.workerAttempts == nil || f.eventHistory == nil {
 		return factory.InvokeWorkerResult{}, factory.ErrNotRunning
 	}
+	opener := f.cfg.workerAttempts
 
 	dispatchID := strings.TrimSpace(req.DispatchID)
 	sessionID, err := f.reserveWorkerSession(ctx, dispatchID)
@@ -635,7 +635,7 @@ func (f *factoryImpl) InvokeWorker(
 	// executor. The Worker Session identity is the one already minted uniquely
 	// per attempt, and for every Worker but a resumed one it is that same
 	// caller ID.
-	execution := providerInvocationExecutionRequest(f, req, sessionID)
+	execution := providerInvocationExecutionRequest(f, req, dispatchID)
 	recordDispatchWorkerSessionAssociation(
 		f.eventHistory,
 		f.currentTick(),
@@ -657,13 +657,20 @@ func (f *factoryImpl) InvokeWorker(
 	stopWatching := f.cancelSessionWhenCallerStops(ctx, sessionID)
 	defer stopWatching()
 
-	result, err := f.cfg.workerSessions.InvokeSession(
+	result, err := opener.InvokeRuntimeSession(
 		context.WithoutCancel(ctx),
-		workersessions.InvokeSessionRequest{
-			ID:        sessionID,
-			Execution: execution,
-			Retry:     workersessions.RetryPolicy{MaxAttempts: req.MaxAttempts},
+		workersessions.RuntimeAttemptRequest{
+			Key:                         workersessions.RuntimeAttemptKey{RuntimeID: execution.Execution.RuntimeID, DispatchID: dispatchID},
+			ObservationRuntimeID:        f.cfg.runtimeID,
+			ObservationFactorySessionID: sessionIDFromFactoryConfig(f.cfg),
+			ID:                          sessionID,
+			AttemptID:                   sessionID,
+			Execution:                   execution,
 		},
+		workersessions.RetryPolicy{MaxAttempts: req.MaxAttempts},
+		f.cfg.workerExecution,
+		f.cfg.clock,
+		f.cfg.workerAttemptScheduler,
 	)
 	if err != nil {
 		return factory.InvokeWorkerResult{}, err
