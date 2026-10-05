@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -18,6 +19,17 @@ type interruptInputStore struct {
 	writeErr error
 	readErr  error
 	corrupt  bool
+}
+
+func (s *interruptInputStore) LoadWorkerControlOperation(_ context.Context, key recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	if len(s.records) == 0 {
+		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
+	}
+	record := s.records[len(s.records)-1]
+	if interruptOperationKey(record) != key {
+		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
+	}
+	return record.Detached(), nil
 }
 
 func (s *interruptInputStore) PersistWorkerControlInput(_ context.Context, _ recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
@@ -152,6 +164,29 @@ func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
 		t.Fatalf("retry=%#v err=%v", replayed, err)
 	}
 	assertBoundaryEffects(t, fixture.boundary, 2, 1, "durable replay")
+	r.mu.Lock()
+	r.interruptReplays = nil
+	r.mu.Unlock()
+	replayed, err = fixture.registry.Interrupt(t.Context(), req)
+	if err != nil || !replayed.Accepted || replayed.Source.State != outcome.result.Source.State || replayed.Successor.ID != fixture.successorID {
+		t.Fatalf("journal replay=%#v err=%v", replayed, err)
+	}
+	assertBoundaryEffects(t, fixture.boundary, 2, 1, "journal replay without memory")
+	// Catalog lookup is the read-only boundary after live handles are gone.
+	r.mu.Lock()
+	delete(r.publications, fixture.sourceID)
+	delete(r.sessions, fixture.sourceID)
+	delete(r.supervisions, fixture.sourceID)
+	r.mu.Unlock()
+	r.logs = &LogReader{reader: &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
+		RecordingID: capture.RecordingID, WorkerSessionID: capture.WorkerSessionID,
+		RecordingGenerationID: capture.RecordingGenerationID, OwnerEpoch: capture.OwnerEpoch,
+	}}}
+	replayed, err = fixture.registry.Interrupt(t.Context(), req)
+	if err != nil || !replayed.Accepted || replayed.Source.State != workersessions.StateCanceled {
+		t.Fatalf("catalog journal replay=%#v err=%v", replayed, err)
+	}
+	assertBoundaryEffects(t, fixture.boundary, 2, 1, "catalog replay without live handles")
 }
 
 func TestInterruptDurablePhasesPreserveReservedIdentityAndSafeFailure(t *testing.T) {
@@ -186,4 +221,69 @@ func TestInterruptDurablePhasesPreserveReservedIdentityAndSafeFailure(t *testing
 	if !reflect.DeepEqual(phases, []string{"INTENT", "SOURCE_STOPPED", "FAILED"}) || operation.FailureCode != string(result.Phase) {
 		t.Fatalf("phases=%v operation=%#v", phases, operation)
 	}
+}
+
+func TestInterruptJournalReplayPreservesFailureAndRefusesUnsafeStages(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"admission-failure", "pending", "changed-message", "changed-successor", "generation", "owner", "malformed", "wrong-result", "wrong-code"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.advanceInterruptPhase(t.Context(), operation, "SOURCE_STOPPED"); err != nil {
+				t.Fatal(err)
+			}
+			result := interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+			result.Source = workersessions.Session{ID: "worker", State: workersessions.StateCanceled}
+			if err := r.commitInterruptResult(t.Context(), operation, result, workersessions.ErrInterruptSuccessorAdmissionFailed); err != nil {
+				t.Fatal(err)
+			}
+			want := mutateInterruptReplayFixture(scenario, &plan.request, &store.records[len(store.records)-1])
+			calls := 0
+			plan.supervision.installCancel(func() { calls++ })
+			replayed, found, err := r.replayDurableInterrupt(t.Context(), plan.request)
+			if !found || !errors.Is(err, want) || calls != 0 {
+				t.Fatalf("found=%v replay=%#v err=%v effects=%d", found, replayed, err, calls)
+			}
+			if scenario == "admission-failure" && !reflect.DeepEqual(replayed, result) {
+				t.Fatalf("partial snapshot changed: %#v", replayed)
+			}
+			assertNoSuccessor(t, r, "successor")
+		})
+	}
+}
+
+func mutateInterruptReplayFixture(scenario string, req *workersessions.InterruptRequest, record *recordings.WorkerControlOperationRecord) error {
+	switch scenario {
+	case "admission-failure":
+		return workersessions.ErrInterruptSuccessorAdmissionFailed
+	case "pending":
+		record.Operation.Phase = "SOURCE_STOPPED"
+		return workersessions.ErrInterruptExecutionUnavailable
+	case "changed-message":
+		req.ReplacementMessage += " changed"
+		return workersessions.ErrInterruptRequestIDConflict
+	case "changed-successor":
+		req.SuccessorWorkerSessionID = "different-successor"
+		return workersessions.ErrInterruptRequestIDConflict
+	case "generation":
+		record.Target.RecordingGenerationID = "different-generation"
+		return workersessions.ErrInterruptSourceConflict
+	case "owner":
+		record.Target.OwnerEpoch = "different-owner"
+		return workersessions.ErrInterruptSourceConflict
+	case "malformed":
+		record.Result = json.RawMessage(`{`)
+	case "wrong-result":
+		var result workersessions.InterruptResult
+		_ = json.Unmarshal(record.Result, &result)
+		result.SuccessorWorkerSessionID = "other"
+		record.Result, _ = json.Marshal(result)
+	case "wrong-code":
+		record.FailureCode = "untrusted-private-diagnostic"
+	}
+	return recordings.ErrWorkerRecordingPersistence
 }

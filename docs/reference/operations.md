@@ -460,6 +460,14 @@ Interrupt failures include a stable phase: `VALIDATION`,
 default. `--remote` sends the complete request only to the configured
 `--server`; it never falls back to local state.
 
+Retry an interrupt with the same request ID, source, successor, and replacement
+message. A committed result preserves its phase and source/successor identity
+and state without stopping or admitting another execution. A recovered
+admission failure leaves the source stopped. Use session inspection for richer
+session metadata. An incomplete durable operation reports execution unavailable
+until its prior ownership and admission can be reconciled safely; submitting
+the same request does not blindly repeat its effects.
+
 Use the direct Worker Session controls when the same admitted session should
 be paused, resumed, canceled, or terminated. Each command accepts one stable
 Worker Session identity and returns a JSON or human-readable control result;

@@ -60,6 +60,9 @@ func (r *registry) Interrupt(
 		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, err)
 	}
 	req = req.Normalize()
+	if result, found, err := r.replayDurableInterrupt(callerCtx, req); found {
+		return result, err
+	}
 	reservation, historyErr := r.beginControlHistory(
 		callerCtx,
 		req.SourceWorkerSessionID,
