@@ -7,7 +7,6 @@
 package wire
 
 import (
-	"context"
 	"fmt"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
@@ -18,7 +17,6 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -43,7 +41,6 @@ import (
 	sessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -321,49 +318,50 @@ func NewDurableExecution(
 	)
 }
 
-// NewProcessDurableExecution constructs the process durable owner before Assembly.
-// The legacy execution factory remains an opening compatibility bridge until T17.
+// NewProcessDurableExecution constructs the complete process durable owner.
+// Legacy runtime-backed opening remains a separate T17 compatibility path.
 func NewProcessDurableExecution(
 	resolveHome factorysessions.HomeDirectoryResolver,
-	factory FactorySessionExecutionFactory,
-	providerOverride ProviderOverrideService,
+	childExecutorMode string,
+	stores RuntimePersistenceStoreFactory,
 	clock factoryruntime.Clock,
+	syncWaits factorysessionexecution.SyncWaitScheduler,
+	summaries factoryruntime.JavaScriptCheckpointSummaries,
+	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
+	writer recordings.PortableRecordingWriter,
+	sessionIDs factorysessions.SessionIDGenerator,
+	responseIDs factorysessions.ResponseEventIDGenerator,
+	responses ResponseStreams,
+	liveChange factorysessioncontracts.LiveChangeCoordinator,
 	scope ProcessDurableScope,
 	workerService workers.Service,
+	providerOverride ProviderOverrideService,
+	logger *zap.Logger,
 ) (durableexecution.Service, error) {
 	home, err := resolveHome()
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Sessions durable owner: resolve home: %w", err)
 	}
-	processDurable, err := factory(
-		home,
-		factorysessions.PersistencePolicyEnabled,
-		providerOverride,
-		clock,
-		nil,
-		factoryruntime.JavaScriptWorkerSettings{},
-		nil,
-		nil,
+	var storeForRoot func(string) (runtimepersist.Store, error)
+	if stores != nil {
+		storeForRoot = func(root string) (runtimepersist.Store, error) { return stores(root) }
+	}
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
+		factorysessions.PersistencePolicyEnabled, home, storeForRoot,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
 	}
-	if router, ok := processDurable.(interface {
-		SetPersistenceRouting(func(string) (runtimepersist.Store, error), func() string)
-	}); ok {
-		router.SetPersistenceRouting(nil, scope.CurrentProjectRoot)
+	execution, err := factorysessionexecution.NewProcessDurableExecutionService(
+		home, childExecutorMode, nil, persistence, clock, syncWaits,
+		summaries, workflows, orchestration, workflows,
+		nil, factoryruntime.JavaScriptWorkerSettings{}, writer, sessionIDs, responseIDs,
+		responses, liveChange, storeForRoot, scope.CurrentProjectRoot, scope.ResumeRuntimeScope,
+		workerService, providerOverride, logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
 	}
-	if router, ok := processDurable.(interface {
-		SetResumeRuntimeScopeResolver(func(string) (factorysessionexecution.ResumeRuntimeScope, error))
-	}); ok {
-		router.SetResumeRuntimeScopeResolver(scope.ResumeRuntimeScope)
-	}
-	if binder, ok := processDurable.(interface {
-		SetWorkerExecution(interface {
-			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-		}, factoryruntime.ResourceCapacityLeaseAdmission, string, string, providers.Service, *workers.MockWorkersConfig, platformprocess.CommandRunner)
-	}); ok {
-		binder.SetWorkerExecution(workerService, nil, "", "", providerOverride, nil, nil)
-	}
-	return processDurable, nil
+	return execution, nil
 }

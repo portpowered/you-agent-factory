@@ -3,7 +3,10 @@ package factorysessionexecution
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"strings"
@@ -125,8 +128,7 @@ func TestLiveChildWithoutWorkersExecutionFailsWithChildSessionID(t *testing.T) {
 }
 
 func TestDurableChildMockWorkersAreSelectedPerRequest(t *testing.T) {
-	service := &JavaScriptRuntimeService{projectRoot: "/project", childValues: childTestValues{}}
-	service.SetWorkerExecution(&recordingWorkerExecution{}, nil, "", "", nil, nil, nil)
+	service := newProcessChildRuntime(&recordingWorkerExecution{})
 	mocked := workers.NewEmptyMockWorkersConfig()
 	mockedChild := service.childExecutorHooksForRequest(ChildExecutorModeLive, "mocked", mocked).
 		NewChildExecutor("mocked-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
@@ -142,8 +144,7 @@ func TestDurableChildMockWorkersAreSelectedPerRequest(t *testing.T) {
 }
 
 func TestDurableChildAttemptStarterIsSelectedPerRequest(t *testing.T) {
-	service := &JavaScriptRuntimeService{projectRoot: "/project", childValues: childTestValues{}}
-	service.SetWorkerExecution(&recordingWorkerExecution{}, nil, "", "", nil, nil, nil)
+	service := newProcessChildRuntime(&recordingWorkerExecution{})
 	starter := factorysessions.WorkerAttemptStarter(func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
 		return nil, nil
 	})
@@ -157,8 +158,7 @@ func TestDurableChildAttemptStarterIsSelectedPerRequest(t *testing.T) {
 }
 
 func TestDurableChildProgressPublisherIsSelectedPerRequest(t *testing.T) {
-	service := &JavaScriptRuntimeService{projectRoot: "/project", childValues: childTestValues{}}
-	service.SetWorkerExecution(&recordingWorkerExecution{}, nil, "", "", nil, nil, nil)
+	service := newProcessChildRuntime(&recordingWorkerExecution{})
 	var selectedFragments []workers.ProgressFragment
 	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, nil, nil, func(fragment workers.ProgressFragment) {
 		selectedFragments = append(selectedFragments, fragment)
@@ -255,4 +255,90 @@ func (childTestValues) CloneOutputMap(m map[string]any) map[string]any {
 		clone[key] = value
 	}
 	return clone
+}
+
+// newProcessChildRuntime exercises the complete production constructor rather
+// than attaching the execution capability after publication.
+func newProcessChildRuntime(worker childExecuteService) *JavaScriptRuntimeService {
+	return NewProcessDurableRuntime("/project", ChildExecutorModeLive, nil, nil,
+		durableFixedClock{}, testSyncWaitScheduler{}, nil, nil, nil, childTestValues{},
+		nil, factory.JavaScriptWorkerSettings{}, nil, testSessionIDGenerator,
+		nil, nil, nil, nil, nil, nil, worker, nil, nil)
+}
+
+func TestProcessDurableRuntimeInjectedWorkerPreservesOutcomeAndCause(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []error{nil, errors.New("selected worker failed")} {
+		worker := &recordingWorkerExecution{err: failure, result: workers.ExecuteResult{
+			Outcome: workers.ExecutionOutcomeAccepted, Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "selected output"}}},
+		}}
+		service := newProcessChildRuntime(worker)
+		result, err := service.childExecutorHooks(ChildExecutorModeLive, "parent").NewChildExecutor("selected-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "run", Preset: "worker-a"})
+		if failure != nil {
+			if err == nil || err.Error() != failure.Error() || result.Status != factory.JavaScriptChildDispatchStatusFailed {
+				t.Fatalf("worker diagnostic = %#v, %v", result, err)
+			}
+			continue
+		}
+		if err != nil || result.Status != factory.JavaScriptChildDispatchStatusCompleted || worker.request.Target.WorkerName != "worker-a" || worker.request.Correlation.FactorySessionID != "selected-child" {
+			t.Fatalf("child result=%#v request=%#v error=%v", result, worker.request, err)
+		}
+	}
+}
+
+type selectedProcessProvider struct{ providers.Service }
+
+func (selectedProcessProvider) ResolveIdentity(context.Context, providers.ResolveIdentityRequest) (providers.ResolveIdentityResult, error) {
+	return providers.ResolveIdentityResult{ID: "selected-provider"}, nil
+}
+
+func TestProcessDurableRuntimeForwardsSelectedProviderToWorker(t *testing.T) {
+	t.Parallel()
+	worker := &recordingWorkerExecution{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}}
+	worker.onExecute = func(request workers.ExecuteRequest) {
+		if request.Input.ProviderOverride == nil {
+			t.Fatal("selected provider missing")
+		}
+		identity, err := request.Input.ProviderOverride.ResolveIdentity(t.Context(), providers.ResolveIdentityRequest{Identity: "selected"})
+		if err != nil || identity.ID != "selected-provider" {
+			t.Fatalf("provider outcome=%#v error=%v", identity, err)
+		}
+	}
+	service := NewProcessDurableRuntime("/project", ChildExecutorModeLive, nil, nil,
+		durableFixedClock{}, testSyncWaitScheduler{}, nil, nil, nil, childTestValues{},
+		nil, factory.JavaScriptWorkerSettings{}, nil, testSessionIDGenerator,
+		nil, nil, nil, nil, nil, nil, worker, selectedProcessProvider{}, nil)
+	_, err := service.childExecutorHooks(ChildExecutorModeLive, "parent").NewChildExecutor("selected-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-0123456789abcdef0123456789abcdef"
+	failure := errors.New("selected resume scope failed")
+	store := &runtimeRecordingStore{}
+	state := interruptedSessionForAdmissionTest(sessionID)
+	state.projectRoot = "/project"
+	persistResumeCoverageSnapshot(t, store, sessionID, state)
+	workflows := factoryruntimefixtures.ScriptedJavaScriptWorkflows{}
+	summaries := checkpointfixtures.CheckpointSummariesFixture{LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult()}
+	service := NewProcessDurableRuntime("/project", ChildExecutorModeFake, nil, store,
+		durableFixedClock{}, testSyncWaitScheduler{}, summaries, workflows, workflows, workflows,
+		nil, factory.JavaScriptWorkerSettings{}, nil, testSessionIDGenerator,
+		nil, nil, nil, nil, nil, func(project string) (ResumeRuntimeScope, error) {
+			if project != "/project" {
+				t.Fatalf("resume project = %q", project)
+			}
+			return ResumeRuntimeScope{}, failure
+		}, nil, nil, nil)
+	_, err := service.ResumeInterruptedSession(t.Context(), sessionID, ResumeSessionRequest{RequestID: "selected-resume"})
+	if !errors.Is(err, failure) {
+		t.Fatalf("resume cause=%v", err)
+	}
+	read, err := service.GetSession(t.Context(), sessionID)
+	if err != nil || read.Status != LifecycleStatusInterrupted {
+		t.Fatalf("failed resume state=%#v error=%v", read, err)
+	}
 }

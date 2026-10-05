@@ -5,22 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"io/fs"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -555,31 +556,6 @@ func TestNewInvocationOwnerRequiresInputReader(t *testing.T) {
 	}
 }
 
-// processDurableFixture observes requests after the owner provider has supplied
-// the selected collaborators; no process graph or external effects are built.
-type processDurableFixture struct {
-	durableexecution.Service
-	projectRoot func() string
-	resumeScope func(string) (execution.ResumeRuntimeScope, error)
-	worker      interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	}
-	provider providers.Service
-}
-
-func (f *processDurableFixture) SetPersistenceRouting(_ func(string) (runtimepersist.Store, error), projectRoot func() string) {
-	f.projectRoot = projectRoot
-}
-func (f *processDurableFixture) SetResumeRuntimeScopeResolver(resolve func(string) (execution.ResumeRuntimeScope, error)) {
-	f.resumeScope = resolve
-}
-func (f *processDurableFixture) SetWorkerExecution(worker interface {
-	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-}, _ factoryruntime.ResourceCapacityLeaseAdmission, _, _ string, provider providers.Service, _ *workers.MockWorkersConfig, _ platformprocess.CommandRunner) {
-	f.worker = worker
-	f.provider = provider
-}
-
 type processDurableScopeFixture struct {
 	project string
 	err     error
@@ -593,82 +569,79 @@ func (f *processDurableScopeFixture) ResumeRuntimeScope(project string) (executi
 	return execution.ResumeRuntimeScope{}, f.err
 }
 
-type processDurableWorkerFixture struct {
-	workers.Service
-	err error
-}
+type processDurableStore struct{ runtimepersist.Store }
 
-func (f processDurableWorkerFixture) Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
-	return workers.ExecuteResult{}, f.err
-}
+func (processDurableStore) Save(string, []byte) error   { return nil }
+func (processDurableStore) Load(string) ([]byte, error) { return nil, fs.ErrNotExist }
 
-type processDurableProviderFixture struct{ providers.Service }
+type processDurableWriter struct {
+	recordings.PortableRecordingWriter
+}
 
 func TestProcessDurableOwnerPreservesSelectedFactsAndErrors(t *testing.T) {
 	t.Parallel()
-	failure := errors.New("selected worker failure")
-	resumeFailure := errors.New("selected resume failure")
-	scope := &processDurableScopeFixture{project: "project-first", err: resumeFailure}
-	clock := &recordingClock{}
-	provider := &processDurableProviderFixture{}
-	owner := &processDurableFixture{}
-	factory := func(home string, policy factorysessions.PersistencePolicy, selected providers.Service, selectedClock factoryruntime.Clock, presets map[string]struct{}, settings factoryruntime.JavaScriptWorkerSettings, mocks *workers.MockWorkersConfig, integrations []operatorsettings.ACPIntegration) (durableexecution.Service, error) {
-		if home != "selected-home" || policy != factorysessions.PersistencePolicyEnabled || selected != provider || presets != nil || mocks != nil || integrations != nil {
-			t.Fatal("process construction changed selected inputs")
+	failure := errors.New("selected project store failed")
+	scope := &processDurableScopeFixture{project: "project-first"}
+	roots := []string{}
+	stores := func(root string) (roles.RuntimePersistenceStore, error) {
+		roots = append(roots, root)
+		if root == "project-second" {
+			return nil, failure
 		}
-		selectedClock.Now()
-		return owner, nil
+		return processDurableStore{}, nil
 	}
-	_, err := NewProcessDurableExecution(func() (string, error) { return "selected-home", nil }, factory, provider, clock, scope, processDurableWorkerFixture{err: failure})
+	now := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
+	owner, err := newProcessDurableFixture(func() (string, error) { return "selected-home", nil }, stores, scope, selectedResponseClock{now})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clock.calls != 1 {
-		t.Fatalf("construction did not exercise selected clock: calls=%d error=%v", clock.calls, err)
+	started, err := owner.StartSync(t.Context(), factorysessions.DurableStartRequest{
+		RequestID: "selected-start", ProjectRoot: "project-first",
+		Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,
+			InlineWorkflow: &factorysessions.InlineWorkflowSource{Dialect: "you-workflow-v1", InlineSource: "return {ok:true};"}},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if root := owner.projectRoot(); root != "project-first" {
-		t.Fatalf("project = %q", root)
+	read, err := owner.GetSession(t.Context(), started.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Lifecycle == nil || read.Lifecycle.StartedAt == nil || !read.Lifecycle.StartedAt.Equal(now) || read.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("selected lifecycle = %#v", read)
 	}
 	scope.project = "project-second"
-	if root := owner.projectRoot(); root != "project-second" {
-		t.Fatalf("project resolver captured stale facts: %q", root)
+	probe := owner.(interface {
+		HasDurableState(context.Context, string) (bool, error)
+	})
+	if _, err := probe.HasDurableState(t.Context(), "dur-sess-unopened"); !errors.Is(err, failure) {
+		t.Fatalf("read route failure = %v", err)
 	}
-	if _, err := owner.resumeScope("project-second"); !errors.Is(err, resumeFailure) {
-		t.Fatalf("resume cause = %v", err)
+	if len(roots) < 3 || roots[0] != "selected-home" || roots[len(roots)-1] != "project-second" {
+		t.Fatalf("selected store roots = %v", roots)
 	}
-	if _, err := owner.resumeScope("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		t.Fatalf("missing project = %v", err)
-	}
-	if _, err := owner.worker.Execute(context.Background(), workers.ExecuteRequest{}); !errors.Is(err, failure) {
-		t.Fatalf("worker cause = %v", err)
-	}
-	if owner.provider != provider {
-		t.Fatal("worker request lost selected provider")
-	}
+}
+
+func newProcessDurableFixture(resolve factorysessions.HomeDirectoryResolver, stores RuntimePersistenceStoreFactory, scope ProcessDurableScope, clock factoryruntime.Clock) (durableexecution.Service, error) {
+	workflows := factoryruntimefixtures.ScriptedJavaScriptWorkflows{RunFunc: func(context.Context, factoryruntime.JavaScriptRuntimeRequest, factoryruntime.JavaScriptRuntimeHooks) (factoryruntime.JavaScriptRuntimeOutcome, error) {
+		return factoryruntime.JavaScriptRuntimeOutcome{OK: true}, nil
+	}}
+	return NewProcessDurableExecution(resolve, factorysessions.ChildExecutorModeFake, stores, clock,
+		platformclock.Real{}, checkpointfixtures.CheckpointSummariesFixture{}, workflows, workflows,
+		processDurableWriter{}, func() string { return "selected-id" }, nil, nil, nil,
+		scope, nil, nil, zap.NewNop())
 }
 
 func TestProcessDurableOwnerPreservesConstructionFailureCauses(t *testing.T) {
 	t.Parallel()
-	for _, stage := range []string{"home", "factory"} {
-		t.Run(stage, func(t *testing.T) {
-			t.Parallel()
-			injected := errors.New(stage + " failure")
-			resolve := func() (string, error) {
-				if stage == "home" {
-					return "", injected
-				}
-				return "home", nil
-			}
-			failFactory := func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock, map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig, []operatorsettings.ACPIntegration) (durableexecution.Service, error) {
-				if stage == "home" {
-					t.Fatal("construction continued after home failure")
-				}
-				return nil, injected
-			}
-			result, err := NewProcessDurableExecution(resolve, failFactory, nil, platformclock.Real{}, nil, nil)
-			if result != nil || !errors.Is(err, injected) {
-				t.Fatalf("%s result = %v, error = %v", stage, result, err)
-			}
-		})
+	failure := errors.New("selected home failure")
+	result, err := newProcessDurableFixture(func() (string, error) { return "", failure }, nil, nil, platformclock.Real{})
+	if result != nil || !errors.Is(err, failure) {
+		t.Fatalf("home result=%v error=%v", result, err)
+	}
+	result, err = newProcessDurableFixture(func() (string, error) { return "home", nil }, func(string) (roles.RuntimePersistenceStore, error) { return nil, failure }, nil, platformclock.Real{})
+	var validation *execution.ValidationError
+	if result != nil || !errors.As(err, &validation) || validation.Field != "persistence" || !strings.Contains(err.Error(), failure.Error()) {
+		t.Fatalf("persistence construction result=%v error=%v", result, err)
 	}
 }

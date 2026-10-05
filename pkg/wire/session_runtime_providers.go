@@ -44,6 +44,7 @@ import (
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
+	"go.uber.org/zap"
 )
 
 // providerOverrideService keeps an optional edge replacement distinct from
@@ -752,6 +753,39 @@ func provideFactorySessionExecutionFactory(
 			liveChangeCoordinator,
 		)
 	}
+}
+
+// provideProcessDurableExecution selects the established process child mode
+// from reachable provider effects, then forwards complete owner collaborators.
+func provideProcessDurableExecution(
+	resolveHome factorysessions.HomeDirectoryResolver,
+	stores factorysessionwire.RuntimePersistenceStoreFactory,
+	clock factoryruntime.Clock,
+	syncWaits factorysessionwire.SyncWaitScheduler,
+	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
+	writer recordings.PortableRecordingWriter,
+	sessionIDs factorysessions.SessionIDGenerator,
+	responseIDs factorysessions.ResponseEventIDGenerator,
+	responses factorysessionwire.ResponseStreams,
+	liveChange factorysessionwire.LiveChangeCoordinator,
+	scope factorysessionwire.ProcessDurableScope,
+	workerService workers.Service,
+	providerOverride providerOverrideService,
+	allocator providerswire.PTYAllocator,
+	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
+	logger *zap.Logger,
+) (factorysessionwire.DurableExecutionService, error) {
+	mode := factorysessions.ChildExecutorModeFake
+	if providerOverride != nil || (adaptRunner != nil && allocator != nil) {
+		mode = factorysessions.ChildExecutorModeLive
+	}
+	return factorysessionwire.NewProcessDurableExecution(
+		resolveHome, mode, stores, clock, syncWaits,
+		factoryruntimewire.NewJavaScriptCheckpointSummaries(), workflows, orchestration,
+		writer, sessionIDs, responseIDs, responses, liveChange, scope, workerService,
+		providerOverride, logger,
+	)
 }
 
 func provideFactorySessionSyncWaitScheduler() factorysessionwire.SyncWaitScheduler {
