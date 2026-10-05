@@ -246,7 +246,9 @@ func (a *Assembly) Assemble(
 	}
 	instance, err := builder.Build(ctx, spec)
 	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		// Preserve partial resource ownership for Sessions even though no
+		// lifecycle or runnable generation can be published.
+		return builder, instance, spec, nil, nil, err
 	}
 	if instance == nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, fmt.Errorf(

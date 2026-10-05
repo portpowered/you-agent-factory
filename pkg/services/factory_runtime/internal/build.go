@@ -147,7 +147,7 @@ func (f *RuntimeFactory) Build(
 	workerAttempts factory.WorkerAttemptOpener,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
-) (_ *factoryhost.Bundle, buildErr error) {
+) (result *factoryhost.Bundle, buildErr error) {
 	if f == nil || f.newID == nil {
 		return nil, fmt.Errorf("Factory Runtime ID generator is required")
 	}
@@ -178,10 +178,25 @@ func (f *RuntimeFactory) Build(
 	bundleBuilt := false
 	defer func() {
 		if !bundleBuilt {
+			var recordingErr error
 			if runtimeScopeRecorder != nil {
-				buildErr = errors.Join(buildErr, runtimeScopeRecorder.Finalize(clock.Now().UTC()))
+				recordingErr = runtimeScopeRecorder.Finalize(clock.Now().UTC())
+				if recordingErr == nil {
+					runtimeScopeRecorder = nil
+				}
 			}
-			buildErr = errors.Join(buildErr, factoryhost.CloseBundleSinks(logSink, metricsSink))
+			sinksErr := factoryhost.CloseBundleSinks(logSink, metricsSink)
+			buildErr = errors.Join(buildErr, recordingErr, sinksErr)
+			if recordingErr != nil || sinksErr != nil {
+				// A failed build has no runnable service, but its unreleased
+				// resources must reach the opening owner's retryable cleanup.
+				// Sink wrappers suppress releases that already succeeded.
+				result = &factoryhost.Bundle{
+					Dir: dir, FolderPath: folderPath, FactorySessionID: sessionID,
+					RuntimeInstanceID: runtimeInstanceID, BackendScopeID: backendScopeID,
+					Recording: runtimeScopeRecorder, LogSink: logSink, MetricsSink: metricsSink,
+				}
+			}
 		}
 	}()
 	logSink, runtimeInstanceID, err := openRuntimeLogScope(
@@ -645,13 +660,16 @@ func openRuntimeLogScope(
 		FolderPath: folderPath, FactoryDirectory: factoryDir,
 		RootDirectory: runtimeLogDir, Policy: policy, Config: runtimeLogConfig,
 	})
+	if logSink != nil {
+		logSink = &closeOnceRuntimeLogSink{RuntimeLogSink: logSink}
+	}
 	if err != nil {
 		return logSink, runtimeInstanceID, fmt.Errorf("open runtime log scope: %w", err)
 	}
 	if logSink == nil {
 		return nil, runtimeInstanceID, fmt.Errorf("runtime log owner returned nil scope")
 	}
-	return &closeOnceRuntimeLogSink{RuntimeLogSink: logSink}, runtimeInstanceID, nil
+	return logSink, runtimeInstanceID, nil
 }
 
 func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
@@ -711,13 +729,16 @@ func openRuntimeMetricsScope(
 		Policy:        policy,
 		Config:        runtimeMetricsConfig,
 	})
+	if metricsSink != nil {
+		metricsSink = &closeOnceRuntimeMetricsSink{RuntimeMetricsSink: metricsSink}
+	}
 	if err != nil {
 		return metricsSink, fmt.Errorf("open runtime metrics scope: %w", err)
 	}
 	if metricsSink == nil {
 		return nil, fmt.Errorf("runtime metrics owner returned nil scope")
 	}
-	return &closeOnceRuntimeMetricsSink{RuntimeMetricsSink: metricsSink}, nil
+	return metricsSink, nil
 }
 
 type closeOnceRuntimeLogSink struct {

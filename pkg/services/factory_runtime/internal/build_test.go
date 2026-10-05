@@ -20,6 +20,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
+	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -292,8 +294,8 @@ func TestBuild_PreservesOpeningAndCleanupFailures(t *testing.T) {
 				"recording.json", nil, nil, false, nil, nil, nil, nil, scopes,
 				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
 			)
-			if bundle != nil || err == nil {
-				t.Fatalf("Build = (%v, %v), want no bundle and failure", bundle, err)
+			if bundle == nil || bundle.RuntimeService() != nil || err == nil {
+				t.Fatalf("Build = (%v, %v), want partial ownership without a live service", bundle, err)
 			}
 			for _, cause := range wantErrors {
 				if !errors.Is(err, cause) {
@@ -306,6 +308,163 @@ func TestBuild_PreservesOpeningAndCleanupFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestBuild_FailedOpeningRetainsRetryableCleanupWithoutRepeatingReleasedResources(t *testing.T) {
+	t.Parallel()
+	for _, failed := range []string{"none", "recording", "log", "metrics"} {
+		t.Run(failed, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+			loaded, err := loadedFactoryFixture(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			openingErr, releaseErr := errors.New("recording opening failed"), errors.New("release failed")
+			calls := map[string]int{}
+			logSink := &testRuntimeLogSink{logger: zap.NewNop(), onClose: func() { calls["log"]++ }}
+			metricsSink := &testRuntimeMetricsSink{onClose: func() { calls["metrics"]++ }}
+			recorder := &runtimeRecordingsRecorderStub{onFinalize: func() { calls["recording"]++ }}
+			switch failed {
+			case "recording":
+				recorder.finalizeErr = releaseErr
+			case "log":
+				logSink.closeErr = releaseErr
+			case "metrics":
+				metricsSink.closeErr = releaseErr
+			}
+			owner := testRuntimeFactoryWithOwners(
+				testRuntimeLogOwnerFunc(func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) { return logSink, nil }),
+				testRuntimeMetricsOwnerFunc(func(factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) { return metricsSink, nil }),
+			)
+			bundle, err := owner.Build(
+				context.Background(), dir, dir, "candidate", "", "", interfaces.RuntimeModeBatch,
+				false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{}, "", "", dir,
+				factory.RuntimeMetricsStorageConfig{}, loaded, "candidate-runtime", "", clockwork.NewFakeClock(),
+				"recording.json", nil, nil, false, nil, nil, nil, nil,
+				&testRuntimeScopeServiceStub{recorder: recorder, openErr: openingErr},
+				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
+			)
+			if !errors.Is(err, openingErr) || errors.Is(err, releaseErr) != (failed != "none") {
+				t.Fatalf("Build error = %v, lost opening or release cause", err)
+			}
+			if failed == "none" {
+				if bundle != nil {
+					t.Fatal("successful unwind retained resources")
+				}
+				return
+			}
+			if bundle == nil || bundle.RuntimeService() != nil || bundle.RuntimeInstanceID != "candidate-runtime" {
+				t.Fatalf("partial ownership = %#v, want addressed cleanup without a service", bundle)
+			}
+			if err := errors.Join(bundle.FinalizeRecording(time.Time{}), bundle.CloseArtifacts()); !errors.Is(err, releaseErr) {
+				t.Fatalf("failed cleanup retry = %v, want retained release failure", err)
+			}
+			recorder.finalizeErr, logSink.closeErr, metricsSink.closeErr = nil, nil, nil
+			if err := errors.Join(bundle.FinalizeRecording(time.Time{}), bundle.CloseArtifacts(), bundle.CloseArtifacts()); err != nil {
+				t.Fatalf("successful cleanup retry: %v", err)
+			}
+			for _, resource := range []string{"recording", "log", "metrics"} {
+				want := 1
+				if resource == failed {
+					want = 3
+				}
+				if calls[resource] != want {
+					t.Errorf("%s releases = %d, want %d", resource, calls[resource], want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := clockwork.NewFakeClock()
+	openingErr, cleanupErr := errors.New("opening failed"), errors.New("finalization failed")
+	finalizations, attempts := 0, 0
+	recorder := &runtimeRecordingsRecorderStub{finalizeErr: cleanupErr, onFinalize: func() { finalizations++ }}
+	scopes := &testRuntimeScopeServiceStub{recorder: recorder, openErr: openingErr,
+		ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "candidate-runtime"}}
+	sessions := &stubWorkerSessionsService{}
+	loader := func(string, interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
+		return loaded, nil
+	}
+	assembly, err := factoryinternal.NewAssembly(testRuntimeFactory(), sessions, sessions, testRuntimeWorkers{},
+		platformclock.Real{}, testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := factoryinternal.NewRoot(nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := factory.RuntimeActivationRequest{RuntimeID: "candidate-runtime", FactorySessionID: "candidate",
+		Snapshot: interfaces.RuntimeSnapshot{FactoryDir: dir, RuntimeBaseDir: dir,
+			DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}, EffectiveFactory: *loaded.FactoryConfig()}}
+	start := func(ctx context.Context, request factory.RuntimeActivationRequest) (*factory.RuntimeActivation, error) {
+		attempts++
+		return assembleCleanupTestRuntime(ctx, assembly, dir, loaded, scopes, clock, request)
+	}
+	result, err := root.Activate(t.Context(), request, start)
+	if !errors.Is(err, openingErr) || !errors.Is(err, cleanupErr) || !result.Binding.IsZero() {
+		t.Fatalf("failed activation = %#v, %v, want both causes and no publication", result, err)
+	}
+	if _, err := root.Activate(t.Context(), request, start); !errors.Is(err, factory.ErrRuntimeActivationConflict) || attempts != 1 {
+		t.Fatalf("pending cleanup activation = %v, attempts %d, want conflict without another opening", err, attempts)
+	}
+	if _, err := root.Deactivate(t.Context(), factory.RuntimeDeactivationRequest{RuntimeID: request.RuntimeID}); !errors.Is(err, cleanupErr) {
+		t.Fatalf("failed explicit cleanup = %v, want retained cause", err)
+	}
+	if finalizations != 3 {
+		t.Fatalf("failed finalizations = %d, want build unwind, Root unwind, and explicit retry", finalizations)
+	}
+	recorder.finalizeErr, scopes.openErr = nil, nil
+	if _, err := root.Deactivate(t.Context(), factory.RuntimeDeactivationRequest{RuntimeID: request.RuntimeID}); err != nil {
+		t.Fatalf("successful explicit cleanup: %v", err)
+	}
+	result, err = root.Activate(t.Context(), request, start)
+	if err != nil || result.Binding.IsZero() || result.State != factory.RuntimeLifecycleStateActive || attempts != 2 {
+		t.Fatalf("same-identity retry = %#v, %v, attempts %d", result, err, attempts)
+	}
+	if _, err := root.Deactivate(t.Context(), factory.RuntimeDeactivationRequest{Binding: result.Binding}); err != nil {
+		t.Fatalf("close retried generation: %v", err)
+	}
+}
+
+// This component cell runs the real Runtime assembly/build/Root chain with
+// controlled Recordings effects. Sessions publication and public commands are
+// proved separately by the functional lane.
+func assembleCleanupTestRuntime(
+	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
+	loaded interfaces.MutableLoadedFactorySource, scopes recordings.RuntimeScopeService,
+	clock factory.Clock, request factory.RuntimeActivationRequest,
+) (*factory.RuntimeActivation, error) {
+	_, record, _, _, _, err := assembly.Assemble(
+		ctx, "", "", false, "recording.json", "", request.FactorySessionID, request.FactorySessionID,
+		nil, nil, nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
+		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
+		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0,
+		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, nil, nil, scopes, nil,
+		dir, dir, dir, loaded, request.RuntimeID, nil, nil, nil, nil, nil, false,
+	)
+	if record == nil {
+		return nil, err
+	}
+	return &factory.RuntimeActivation{Service: record.RuntimeService(), Close: func(context.Context) error {
+		finalizer := record.(interface{ FinalizeRecording(time.Time) error })
+		return errors.Join(finalizer.FinalizeRecording(clock.Now()), record.CloseArtifacts())
+	}}, err
+}
+
+type testCleanupAssemblyHost struct{ instancehost.Service }
+
+func (host testCleanupAssemblyHost) Scope(factory.Clock) instancehost.Service { return host }
 
 func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *testing.T) {
 	sessions := &stubWorkerSessionsService{}
@@ -667,6 +826,12 @@ type testRuntimeLogOwner struct {
 	closeErr error
 }
 
+type testRuntimeLogOwnerFunc func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error)
+
+func (owner testRuntimeLogOwnerFunc) Open(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	return owner(request)
+}
+
 func (owner testRuntimeLogOwner) Open(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
 	return &testRuntimeLogSink{logger: zap.NewNop(), onClose: owner.onClose, closeErr: owner.closeErr, artifact: factory.RuntimeLogArtifact{
 		Path: filepath.Join(owner.root, request.RuntimeInstanceID+".runtime.log"), RootDir: owner.root,
@@ -705,6 +870,12 @@ type testRuntimeMetricsOwner struct {
 	onClose  func()
 	openErr  error
 	closeErr error
+}
+
+type testRuntimeMetricsOwnerFunc func(factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error)
+
+func (owner testRuntimeMetricsOwnerFunc) Open(request factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) {
+	return owner(request)
 }
 
 func (owner testRuntimeMetricsOwner) Open(request factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) {

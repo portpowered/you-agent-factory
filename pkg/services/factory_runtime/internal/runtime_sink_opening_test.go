@@ -113,6 +113,43 @@ func TestRuntimeObservabilityOpeningRetriesFailedClose(t *testing.T) {
 	}
 }
 
+func TestRuntimeObservabilityOpeningRetainsPartialScopesWithRetryableClose(t *testing.T) {
+	t.Parallel()
+	openingErr, releaseErr := errors.New("partial opening"), errors.New("release failed")
+	logScope := &runtimeSinkStub{closeErr: releaseErr}
+	metricsScope := &runtimeMetricsSinkStub{closeErr: releaseErr}
+	logOwner := runtimeLogOwnerFunc(func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+		return logScope, openingErr
+	})
+	metricsOwner := runtimeMetricsOwnerFunc(func(factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) {
+		return metricsScope, openingErr
+	})
+	logSink, runtimeID, err := openRuntimeLogScope(logOwner, RuntimeFileLoggingPolicyEnabled,
+		"/logs", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", "runtime")
+	if logSink == nil || runtimeID != "runtime" || !errors.Is(err, openingErr) {
+		t.Fatalf("partial log opening = (%v, %q, %v)", logSink, runtimeID, err)
+	}
+	metricsSink, err := openRuntimeMetricsScope(metricsOwner, RuntimeMetricsPolicyEnabled,
+		"/metrics", factory.RuntimeMetricsStorageConfig{}, "session", "runtime", "/folder", "/factory")
+	if metricsSink == nil || !errors.Is(err, openingErr) {
+		t.Fatalf("partial metrics opening = (%v, %v)", metricsSink, err)
+	}
+	for _, sink := range []interface{ Close() error }{logSink, metricsSink} {
+		if err := sink.Close(); !errors.Is(err, releaseErr) {
+			t.Fatalf("failed release = %v", err)
+		}
+	}
+	logScope.closeErr, metricsScope.closeErr = nil, nil
+	for _, sink := range []interface{ Close() error }{logSink, metricsSink} {
+		if err := errors.Join(sink.Close(), sink.Close()); err != nil {
+			t.Fatalf("release retry = %v", err)
+		}
+	}
+	if logScope.closeCalls != 2 || metricsScope.closeCalls != 2 {
+		t.Fatalf("release calls = %d/%d, want failure then one success each", logScope.closeCalls, metricsScope.closeCalls)
+	}
+}
+
 type runtimeScopeOpeningFixture struct {
 	logOwner       runtimeLogOwnerFunc
 	metricsOwner   runtimeMetricsOwnerFunc

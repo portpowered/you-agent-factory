@@ -442,7 +442,7 @@ func buildBundle(
 		mockWorkersConfig,
 	)
 	if err != nil {
-		return nil, err
+		return bundle, err
 	}
 	setReplayEvents(bundle.Factory, spec.ReplayEvents)
 	setBundleProgressPublisher(bundle, providerSessionProgress)
