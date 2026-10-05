@@ -219,7 +219,9 @@ The package layout is guarded mechanically:
 - `make golangci-lint-run` checks file length, function length, and complexity
   with pinned built-in rules and changed-line filtering. The former fixed
   per-package file-count gate and its ledger have been retired.
-- `make pkg-boundary` checks dependency and ownership boundaries.
+- `make golangci` checks dependency and ownership boundaries through shared
+  compiler analyzers. Construction, ambient effects, and adapter selections
+  use exact debt records and canonical Wire selection evidence.
 - `make pkg-structure` checks repository-specific package and functional-test
   shape.
 - The finished migration inventories (`ownership-inventory-check` and

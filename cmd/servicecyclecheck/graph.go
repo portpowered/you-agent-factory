@@ -11,10 +11,7 @@ import (
 	"strings"
 )
 
-// repositoryImportPrefix matches the module path declared in go.mod. The
-// walking and parsing conventions in this file follow cmd/pkgboundarycheck:
-// filepath.WalkDir over the repository tree, parser.ImportsOnly parsing, and
-// the shared ignored-directory rules.
+// repositoryImportPrefix matches the module path declared in go.mod.
 const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
 
 // servicesRelativeRoot is the tree whose immediate subdirectories define the
@@ -22,8 +19,8 @@ const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
 // checker never carries a hardcoded roster of service names.
 var servicesRelativeRoot = filepath.Join("pkg", "services")
 
-// ignoredWalkDirectoryNames mirrors cmd/pkgboundarycheck's ignored directory
-// names so generated, vendored, and fixture trees never contribute edges.
+// ignoredWalkDirectoryNames excludes generated, vendored, and fixture trees
+// from contributing edges.
 var ignoredWalkDirectoryNames = map[string]struct{}{
 	".git":         {},
 	"node_modules": {},
