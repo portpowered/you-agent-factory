@@ -370,12 +370,10 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 
 func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	var err error
-	mutationOwner, ok := opening.durableExecution.Service.(interface {
-		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
-	})
+	observations, ok := opening.durableExecution.Service.(factoryruntime.SessionObservations)
 	if !ok {
 		return fmt.Errorf(
-			"compose runtime: durable execution owner does not record Petri mutations",
+			"compose runtime: durable execution owner must record mutations and publish worker progress",
 		)
 	}
 	if r.factoryRuntimeAssembler == nil {
@@ -423,10 +421,10 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			r.workersMockCommandRunnerFactory,
 			fanOutWorkerProgress(
 				r.factorySessionsRuntimeAssembly.InferenceProgressPublisherFactory(opening.logger),
-				opening.durableExecution.Service,
+				observations.PublishWorkerProgress,
 			),
 			r.factorySessionsRuntimeAssembly.DispatchCompletionObserverFactory(),
-			mutationOwner.RecordPetriTokenMutations,
+			observations.RecordPetriTokenMutations,
 			opening.recordingProjections.ReconstructFactoryWorldState,
 			r.recordingsRuntime,
 			r.initialFactorySnapshotFactory,
@@ -727,13 +725,6 @@ func lastCanonicalCursor(
 	return nil
 }
 
-// workerProgressObserver is the narrow capability a durable execution service
-// exposes when the Workers its orchestrator starts produce output that session
-// must record.
-type workerProgressObserver interface {
-	PublishWorkerProgress(workers.ProgressFragment)
-}
-
 // fanOutWorkerProgress adds the durable execution service to one runtime's
 // Worker progress publication.
 //
@@ -747,10 +738,9 @@ type workerProgressObserver interface {
 // before.
 func fanOutWorkerProgress(
 	publishers func(string) workers.ProgressPublisher,
-	execution any,
+	observe workers.ProgressPublisher,
 ) func(string) workers.ProgressPublisher {
-	observer, ok := execution.(workerProgressObserver)
-	if !ok {
+	if observe == nil {
 		return publishers
 	}
 	return func(sessionID string) workers.ProgressPublisher {
@@ -762,7 +752,7 @@ func fanOutWorkerProgress(
 			if next != nil {
 				next(fragment)
 			}
-			observer.PublishWorkerProgress(fragment)
+			observe(fragment)
 		}
 	}
 }

@@ -18,10 +18,78 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestSessionObservationProgressPreservesScopedOwnerAndPublicationOrder(t *testing.T) {
+	t.Parallel()
+	for _, withoutRuntimePublisher := range []bool{false, true} {
+		t.Run(map[bool]string{false: "runtime and durable", true: "durable only"}[withoutRuntimePublisher], func(t *testing.T) {
+			t.Parallel()
+			var order []string
+			first := &openingObservationStub{progress: func(fragment workers.ProgressFragment) {
+				order = append(order, "first:"+fragment.Payload)
+			}}
+			second := &openingObservationStub{progress: func(fragment workers.ProgressFragment) {
+				order = append(order, "second:"+fragment.Payload)
+			}}
+			var factory func(string) workers.ProgressPublisher
+			if !withoutRuntimePublisher {
+				factory = func(sessionID string) workers.ProgressPublisher {
+					return func(fragment workers.ProgressFragment) {
+						order = append(order, sessionID+":"+fragment.Payload)
+					}
+				}
+			}
+			firstPublisher := fanOutWorkerProgress(factory, first.PublishWorkerProgress)("first-runtime")
+			secondPublisher := fanOutWorkerProgress(factory, second.PublishWorkerProgress)("second-runtime")
+			fragment := workers.ProgressFragment{DispatchID: "dispatch", Payload: "output"}
+			// Creating a peer publisher must not retarget an already-opened session.
+			firstPublisher(fragment)
+			secondPublisher(fragment)
+			want := []string{"first:output", "second:output"}
+			if !withoutRuntimePublisher {
+				want = []string{"first-runtime:output", "first:output", "second-runtime:output", "second:output"}
+			}
+			if !reflect.DeepEqual(order, want) {
+				t.Fatalf("progress publication = %v, want %v", order, want)
+			}
+		})
+	}
+}
+
+func TestSessionObservationRequiresDurableProgressBeforeEngineOpening(t *testing.T) {
+	t.Parallel()
+	root := &Root{}
+	opening := &sessionRuntimeOpening{durableExecution: DurableExecution{Service: &mutationOnlyOpeningOwner{}}}
+	err := root.openSessionEngine(t.Context(), opening, &runtimeOpeningCleanup{})
+	if err == nil || !strings.Contains(err.Error(), "must record mutations and publish worker progress") {
+		t.Fatalf("opening without durable progress error = %v", err)
+	}
+}
+
+type mutationOnlyOpeningOwner struct {
+	durableexecution.Service
+}
+
+func (*mutationOnlyOpeningOwner) RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error {
+	return nil
+}
+
+type openingObservationStub struct {
+	progress func(workers.ProgressFragment)
+}
+
+func (*openingObservationStub) RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error {
+	return nil
+}
+
+func (observations *openingObservationStub) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	observations.progress(fragment)
+}
 
 func restoreCurrentBoardState(
 	service historicalRecordingReader,

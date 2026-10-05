@@ -393,7 +393,14 @@ func assemblePortableReplayRuntime(
 	if !ok {
 		return nil, fmt.Errorf("construct portable replay runtime: durable execution owner does not record Petri mutations")
 	}
-	progressFactory := fanOutWorkerProgress(nil, durableOwner)
+	// Preserve the replay compatibility path's optional progress observation.
+	var observe workers.ProgressPublisher
+	if owner, ok := durableOwner.(interface {
+		PublishWorkerProgress(workers.ProgressFragment)
+	}); ok {
+		observe = owner.PublishWorkerProgress
+	}
+	progressFactory := fanOutWorkerProgress(nil, observe)
 	_, runtime, _, _, _, err := factoryRuntimeAssembler.Assemble(
 		ctx,
 		configured.OperatorDefaults.WorkerModelProvider,

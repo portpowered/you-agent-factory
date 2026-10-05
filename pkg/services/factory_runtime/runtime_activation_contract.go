@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // WorkRestoreReason identifies a structural failure while restoring a Work
@@ -101,6 +102,16 @@ type RuntimeActivationRequest struct {
 	Snapshot         factorydefinitions.RuntimeSnapshot
 	Runtime          RuntimeSelection
 	Inputs           RuntimeActivationInputs
+}
+
+// SessionObservations is the already-opened session's durable observation
+// capability. It is scoped to that session, separate from the value-only
+// activation request and from fixed process collaborators. Runtime opening
+// owners must not retain it on their reusable implementation; only the opened
+// session's mutation and progress callbacks retain this capability.
+type SessionObservations interface {
+	RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
+	PublishWorkerProgress(workers.ProgressFragment)
 }
 
 // RuntimeActivationResult reports the identity and state of a successful
