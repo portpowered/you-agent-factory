@@ -62,6 +62,10 @@ func runExecuteCancellationRecording(t *testing.T, failFinal bool) {
 	writeErr := errors.New("canceled recording final storage unavailable")
 	id := recordings.RecordingID("019a07c0-0000-7000-8000-000000000031")
 	runner := &cancellationRecordingRunner{started: make(chan struct{}), canceled: make(chan error, 1)}
+	writeStarted, writeCompleted, releaseWrite := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var startOnce, completeOnce, releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseWrite) }) }
+	defer release()
 	var service recordings.Service
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		Clock: cancellationRecordingClock{at: at}, ProviderCommandRunner: runner,
@@ -76,8 +80,14 @@ func runExecuteCancellationRecording(t *testing.T, failFinal bool) {
 		},
 		RecordingReadFile: os.ReadFile,
 		RecordingWriteFile: func(destination string, data []byte) error {
-			if failFinal && recordingWriteHasTerminalEvent(data) {
-				return writeErr
+			terminal := destination == path && recordingWriteHasTerminalEvent(data)
+			if terminal {
+				startOnce.Do(func() { close(writeStarted) })
+				<-releaseWrite
+				defer completeOnce.Do(func() { close(writeCompleted) })
+				if failFinal {
+					return writeErr
+				}
 			}
 			return os.WriteFile(destination, data, 0o600)
 		},
@@ -95,7 +105,7 @@ func runExecuteCancellationRecording(t *testing.T, failFinal bool) {
 	inputs := cancellationRecordingInputs(t, path)
 	ctx, cancel := context.WithCancel(inputs.Context)
 	inputs.Context = ctx
-	done := executeGatedRecordingCommand(t, process, inputs, cancel)
+	done := executeGatedRecordingCommand(t, process, inputs, func() { release(); cancel() })
 	select {
 	case <-runner.started:
 	case err := <-done:
@@ -107,12 +117,21 @@ func runExecuteCancellationRecording(t *testing.T, failFinal bool) {
 	if err != nil || prefix.Status.FlushedThrough == nil {
 		t.Fatalf("flush admitted prefix = (%#v, %v)", prefix, err)
 	}
+	peer := bindPublicRecording(t, service, "cancel-flush-peer", "019a07c0-0000-7000-8000-000000000032",
+		filepath.Join(t.TempDir(), "peer.json"))
+	peerFirst := recordPublicRecordingFact(t, service, peer, "peer-before-cancel", 0, at.Add(-time.Second))
 	cancel()
+	assertCanceledExecuteWaitsForTerminalWrite(t, writeStarted, done, release)
 	select {
 	case err := <-done:
 		assertCanceledExecuteDiagnostic(t, err, writeErr)
 	case <-time.After(30 * time.Second):
 		t.Fatal("canceled Execute did not join")
+	}
+	select {
+	case <-writeCompleted:
+	default:
+		t.Fatal("canceled Execute returned before terminal write completed")
 	}
 	select {
 	case err := <-runner.canceled:
@@ -124,6 +143,42 @@ func runExecuteCancellationRecording(t *testing.T, failFinal bool) {
 	}
 	assertCanceledRecordingStatus(t, service, id, at, prefix.Status, failFinal, writeErr)
 	assertCanceledRecordingHistory(t, service, id, path, failFinal)
+	assertPeerFinalizesAfterCanceledWrite(t, service, peer, peerFirst, at)
+}
+
+func assertPeerFinalizesAfterCanceledWrite(t *testing.T, service recordings.Service, peer recordings.RecordingStatusFacts, first recordings.CanonicalEvent, at time.Time) {
+	t.Helper()
+	second := recordPublicRecordingFact(t, service, peer, "peer-after-canceled-flush", 1, at)
+	finished, err := service.FinishRecording(recordings.FinishRecordingRequest{RecordingID: peer.RecordingID, FinishedAt: at})
+	if err != nil || finished.Status.State != recordings.RecordingFinalized ||
+		finished.Status.FlushedThrough == nil || *finished.Status.FlushedThrough != second.Cursor {
+		t.Fatalf("peer finalization after canceled write = (%#v, %v)", finished, err)
+	}
+	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: peer.RecordingID, Artifact: peer.Artifact, Scope: peer.Scope},
+	})
+	if err != nil || len(history.Events) != 2 {
+		t.Fatalf("peer history after canceled write = (%#v, %v)", history, err)
+	}
+	assertPublicHistoricalFact(t, history.Events[0], first)
+	assertPublicHistoricalFact(t, history.Events[1], second)
+}
+
+func assertCanceledExecuteWaitsForTerminalWrite(t *testing.T, started <-chan struct{}, done <-chan error, release func()) {
+	t.Helper()
+	select {
+	case <-started:
+	case err := <-done:
+		t.Fatalf("canceled Execute returned before terminal write: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("canceled terminal writer did not start")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("canceled Execute returned with terminal write blocked: %v", err)
+	default:
+	}
+	release()
 }
 
 func assertCanceledExecuteDiagnostic(t *testing.T, err, writeErr error) {
