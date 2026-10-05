@@ -63,7 +63,7 @@ test("functional coverage separates module and source-sensitive build caches", (
 	assert.doesNotMatch(buildCache, /~\/go\/pkg\/mod/);
 	assert.match(
 		buildCache,
-		/key: functional-coverage-build-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-jobs-\$\{\{ steps\.functional-parallelism\.outputs\.jobs \}\}-\$\{\{ hashFiles\('\.github\/workflows\/ci\.yml', 'Makefile', 'go\.mod', 'go\.sum', 'cmd\/\*\*\/\*\.go', 'internal\/\*\*\/\*\.go', 'pkg\/\*\*\/\*\.go', 'tests\/functional\/\*\*\/\*\.go', 'tests\/functional\/functional-quarantine\.json', 'docs\/internal\/baselines\/go-functional-coverage-package-minimums\.json'\) \}\}/,
+		/key: functional-coverage-build-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-jobs-\$\{\{ steps\.functional-parallelism\.outputs\.jobs \}\}-\$\{\{ hashFiles\('go\.mod', 'go\.sum'\) \}\}\r?\n/,
 	);
 	assert.ok(
 		buildCache.includes(
@@ -109,7 +109,7 @@ test("functional coverage forwards restore identity and saves only non-exact bui
 		"a cache miss must reach diagnostics as an explicit false exact-hit value",
 	);
 
-	assert.match(save, /if: always\(\) && matrix\.suite == 'functional' && steps\.functional-go-build-cache\.outputs\.cache-hit != 'true'/);
+	assert.match(save, /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' && matrix\.suite == 'functional' && steps\.functional-go-build-cache\.outputs\.cache-hit != 'true'/);
 	assert.match(save, /uses: actions\/cache\/save@v4/);
 	assert.match(save, /path: ~\/\.cache\/go-build/);
 	assert.match(save, /key: \$\{\{ steps\.functional-go-build-cache\.outputs\.cache-primary-key \}\}/);
