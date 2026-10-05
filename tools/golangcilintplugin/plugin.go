@@ -53,6 +53,9 @@ func New(raw any) (register.LinterPlugin, error) {
 		if original == analyzers.ServiceCycle {
 			original = analyzers.ServiceCycleForDirectory(".")
 		}
+		if original == analyzers.ProviderCatalog {
+			original = analyzers.ProviderCatalogForDirectory(".")
+		}
 		if original == analyzers.PackagedFactoryCatalog {
 			original = analyzers.PackagedFactoryCatalogForDirectory(".")
 		}
