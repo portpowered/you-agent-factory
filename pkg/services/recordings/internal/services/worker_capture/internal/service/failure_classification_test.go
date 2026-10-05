@@ -234,14 +234,14 @@ func TestFileWriterRetainsScopedTopicAcrossReload(t *testing.T) {
 	const topic events.Topic = "factory-worker-session/ZmFjdG9yeS1zZXNzaW9u/cmVjb3JkZWQtd29ya2Vy/events"
 	root := t.TempDir()
 	storage := platformreplay.NewLocal(runtime.GOOS)
-	writer, err := NewFileWriter(storage, storage, storage, &captureTimeProbe{}, root, "scoped-owner")
+	writer, err := NewFileWriter(storage, storage, storage, &captureTimeProbe{}, root, "scoped-owner", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	opening := mustRecord(t, openingAppend(topic, workerID), 1)
 	terminal := mustRecord(t, terminalAppend(topic, workerID), 2)
 	persistWorkerRecoveryPrefix(t, writer, recordingID, workerID, opening, terminal)
-	reloaded, err := NewFileWriter(storage, storage, storage, &captureTimeProbe{}, root, "reloaded-owner")
+	reloaded, err := NewFileWriter(storage, storage, storage, &captureTimeProbe{}, root, "reloaded-owner", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

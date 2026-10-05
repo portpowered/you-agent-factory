@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -24,14 +25,18 @@ import (
 // FileWriter persists synced deltas; its map lock never covers disk I/O.
 // Each process owns one writer. Multiple processes must not share this store.
 type FileWriter struct {
-	storage            platformreplay.Storage
-	appender           platformreplay.Appender
-	directory          platformreplay.DirectoryScanner
-	root               string
-	mu                 sync.Mutex
-	entries            map[string]*recordingEntry
-	clock              recordings.WorkerCaptureClock
-	ownerEpoch         string
+	storage    platformreplay.Storage
+	appender   platformreplay.Appender
+	directory  platformreplay.DirectoryScanner
+	root       string
+	mu         sync.Mutex
+	entries    map[string]*recordingEntry
+	clock      recordings.WorkerCaptureClock
+	ownerEpoch string
+	ownerProbe interface {
+		CurrentProcess() (platformprocess.Incarnation, error)
+	}
+	ownerStamped       bool
 	catalogMu          sync.Mutex
 	catalog            map[string]recordings.WorkerSessionCatalogEntry
 	unavailable        map[string]struct{}
@@ -81,7 +86,9 @@ var _ recordings.WorkerRecordingReader = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*FileWriter)(nil)
 
 // NewFileWriter requires the existing append-and-sync storage capability.
-func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, directory platformreplay.DirectoryScanner, clock recordings.WorkerCaptureClock, root, ownerEpoch string) (recordings.WorkerRecordingStore, error) {
+func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, directory platformreplay.DirectoryScanner, clock recordings.WorkerCaptureClock, root, ownerEpoch string, ownerProbe interface {
+	CurrentProcess() (platformprocess.Incarnation, error)
+}) (recordings.WorkerRecordingStore, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("Worker recording file writer: storage is required")
 	}
@@ -97,7 +104,7 @@ func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appen
 	if clock == nil || strings.TrimSpace(ownerEpoch) == "" {
 		return nil, fmt.Errorf("worker recording file writer: clock and owner epoch are required")
 	}
-	return &FileWriter{storage: storage, appender: appender, directory: directory, clock: clock, ownerEpoch: ownerEpoch, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry), unavailable: make(map[string]struct{})}, nil
+	return &FileWriter{storage: storage, appender: appender, directory: directory, clock: clock, ownerEpoch: ownerEpoch, ownerProbe: ownerProbe, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry), unavailable: make(map[string]struct{})}, nil
 }
 func (writer *FileWriter) entry(id string) *recordingEntry {
 	writer.mu.Lock()
@@ -157,12 +164,13 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	}
 	delta := workerJournalEntry{Version: 1, Kind: "record", RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Record: &record.Record}
 	if len(session.records) == 0 {
+		ownerEpoch := writer.captureOwnerEpoch()
 		// The injected epoch fences host lifetimes. Opening identity fences
 		// distinct captures within that lifetime, without a hidden ID effect.
-		identity, _ := json.Marshal([]string{writer.ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
+		identity, _ := json.Marshal([]string{ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
 		generation := sha256.Sum256(identity)
 		delta.RecordingGenerationID = hex.EncodeToString(generation[:])
-		delta.OwnerEpoch = writer.ownerEpoch
+		delta.OwnerEpoch = ownerEpoch
 	}
 	capturedAt := writer.clock.Now().UTC()
 	delta.CapturedAt = &capturedAt
