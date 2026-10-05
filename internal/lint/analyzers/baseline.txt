@@ -2338,7 +2338,6 @@ testsleep-deadline-test|tests/release_test|tests/release/root_process_smoke_test
 testsleep-deadline-test|tests/release_test|tests/release/root_process_smoke_test.go::waitForCompiledServiceReadiness::deadline::1
 testsleep-deadline-test|tests/stress_test|tests/stress/process_harness_test.go::stressProcessHarness.Stop::deadline::1
 testsleep-deadline-test|tests/stress_test|tests/stress/provider_sessions_large_rollout_test.go::largeStressEventStream.Close::deadline::1
-testsleep-deadline|tests/functional/internal/support|tests/functional/internal/support/api_server.go::GetFactoryResponseEventsAt::deadline::1
 testsleep-deadline|tests/functional/internal/support|tests/functional/internal/support/factory_event_stream.go::FactoryEventStream.Close::deadline::1
 testsleep-deadline|tests/functional/internal/support|tests/functional/internal/support/factory_response_event_stream.go::FactoryResponseEventStream.Close::deadline::1
 testsleep-elapsed-test|pkg/services/providers/internal/services/acp/internal/service|pkg/services/providers/internal/services/acp/internal/service/pi_preflight_test.go::TestPiPreflightCancelsRunningVersionProbe::elapsed::1

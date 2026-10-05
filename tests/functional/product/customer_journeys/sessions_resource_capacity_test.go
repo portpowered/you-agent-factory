@@ -17,7 +17,7 @@ func TestRESTResourceCapacityChangesPreserveRevisionAndIdempotency(t *testing.T)
 	config := liveRuntimePipelineConfig()
 	config["resources"] = []map[string]any{{"id": "reviewers", "name": "Reviewers", "capacity": 1}}
 	dir := support.ScaffoldFactory(t, config)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir, UseMockWorkers: true})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir})
 	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
 	sessionID := opened.Session.Id
 	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })

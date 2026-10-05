@@ -24,7 +24,7 @@ func TestBaselineGrowthFollowsDetectedTestFileRename(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, changed := range []string{
-		strings.Replace(head, "awaitOutput", "awaitDifferentOutput", 1),
+		head + "\n" + strings.Replace(head, "awaitOutput", "awaitDifferentOutput", 1),
 		head + "\n" + strings.Replace(head, "sleep::1", "sleep::2", 1),
 	} {
 		if _, err := CompareBaselineGrowth(relocated, changed); err == nil {

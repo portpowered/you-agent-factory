@@ -24,9 +24,11 @@ customer-use-case packages: Factory execution, packaged Factory invocation,
 and Work admission. This preserves ordinary and `functionallong` cases and
 their session-owned fixtures. Independent parent tests overlap through Go's
 test scheduler. Sixteen composition-oriented test names now describe customer
-CLI, REST, Work, session control, recording and replay behavior. Coverage floors
-and all 156 reviewed scenario decisions are preserved. Six further CLI packages
-now share one customer-command package, removing five additional test binaries.
+CLI, REST, Work, session control, recording and replay behavior. Coverage floors are unchanged. The rebased manifest preserves all 159 reviewed
+scenario decisions, including three added on main. Six further CLI packages
+share one customer-command package. Four workflow fixture suites share one
+package, and 28 compatible suites now share Product customer journeys, removing
+27 more binaries while retaining their explicit sessions and public observers.
 
 Detailed measurements below include failed runs and their causes. Remaining
 work is to consolidate fixture-heavy packages with their own lifecycles, reduce
@@ -1342,3 +1344,81 @@ ACP test's temporary directory receiving writes during cleanup. Neither is an
 elapsed-time checkpoint, and coverage floors were not evaluated. Live main has
 since changed process/session lifecycle code; rebase and current-source
 verification precede further fixes rather than patching the superseded lifecycle.
+
+## Rebase, full measurement, and public replay synchronization
+
+The working branch was rebased onto main `c038071b04` after an actual merge
+conflict prevented PR CI from starting. Main's new cancellation and gateway
+customer tests were retained at their relocated package paths. Wire output was
+regenerated from the merged construction source. The complete functional source
+inventory compiles, and the scenario projection validates 159 reviewed surfaces.
+
+Hosted run [37317442555](https://github.com/portpowered/you-agent-factory/actions/runs/37317442555)
+at `849480ac49` has 88 selected packages, 946 top-level tests, 944 passes,
+two skips and zero test failures. Its test invocation took **344.020s**;
+the full supervisor took **419.113s** (13:35:30.551–13:42:29.664 UTC).
+The subsequent coverage gate failed: Live Change covered 198/349 statements,
+56.7335%, below its unchanged 57.77% floor. This is **not a passing checkpoint**.
+A historical cleanup error appears in the separate flake evidence even though
+the current timing inventory records zero test failures; it remains a cleanup
+ownership concern rather than evidence that the complete verification passed.
+
+The four-CPU local measurements on this base were:
+
+| Sample | Full supervisor | Test invocation | Links | Link CPU | Active link intervals | Compile CPU | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Rebased source, changed coverage graph | 276.26s | 209.354s | 82 | 116.168s | 156.748s | 288.360s | Two Response Event replay tests failed |
+| First retained-count helper, warm graph with changed tests | 206.93s | 194.221s | 80 | 117.860s | 148.960s | 48.577s | Three customer tests failed |
+
+The first helper implementation incorrectly excluded STREAM_GAP from the
+advertised count. The advertised catch-up prefix includes that marker; it now
+consumes every advertised frame. The complete Response Event package passes
+three repetitions in 34.327s. The failed full sample above remains recorded;
+its other failures were the selected-process-time journey and the selected
+Work watch reconnect/cancellation journey. They are retained customer behaviors.
+
+The underlying original helper ended history collection after 25ms of silence.
+CPU contention can insert a longer gap between retained SSE frames, yielding
+an empty or partial history. The replacement observes the public
+`X-Factory-Session-Retained-Response-Event-Count` header and reads exactly that
+prefix. It removes the idle timer, separate scanner goroutine, and their timer
+baseline allowance. It does not lengthen the quiet period or weaken replay
+assertions.
+
+Hosted CI also found the docs-smoke Make target still pointing to the retired
+Docs package. It now selects the documentation subtest in the consolidated CLI
+parent and passes locally. Main intentionally changed baseline policy to permit
+count-neutral replacements; the relocation unit now tests actual added debt
+while retaining the exact file/function relocation check. Focused baseline units
+pass. A TTY output assertion was extracted to reduce the migrated CLI helper's
+cyclomatic complexity; focused built-in lint reports zero issues.
+
+A source/reference audit found Live Change's old `New`, `Apply`, and `Recover`
+adapters have no production callers. They existed only to construct the
+component in unit tests and in the removed internal functional characterization.
+Those compatibility adapters are removed; the canonical wire coordinator and
+its `ApplyLiveChange`/`RecoverLiveChange` operations remain. Component tests now
+construct their own state and exercise the private policy implementation;
+they pass. The REST resource-capacity journey no longer requests MockWorkers.
+Coverage floors have not been lowered. A new complete run is required to assess
+this source and all gates together.
+
+The corrected retained-count follow-up took **196.82s for the full local
+supervisor** and **179.743s for the test invocation**. It executed 946 top-level
+cases in 88 packages: 943 passed, two skipped, and one failed. The remaining
+failure is `TestProcessTimeJourneys/TestSpecializedSourceTimeJourney`: public
+session close can race the background CLI's final activation binding, producing
+“activated session ... is unavailable” during daemon cleanup. Response Event
+replay and selected Work watch passed in this sample. All 80 link commands
+consumed **110.065 CPU-seconds** across **137.614s of active linker intervals**;
+121 compile commands consumed **62.865 CPU-seconds**. Whole-run user/system
+CPU was 579.51s/117.47s. This source-changed warm-build sample remains failed;
+coverage floors were not evaluated after the test failure. It proves neither
+a three-minute complete lane nor a hosted checkpoint.
+
+The next consolidation candidates are the fixture-owning packages whose
+`TestMain` can become a named parallel parent with cleanup after its children.
+The existing fixture variables must reset between repetitions, and assets and
+subprocess cases require separate handling. The private one-binary experiment's
+99% link-CPU reduction remains strong evidence for this direction, but passing
+customer execution and complete hosted gates remain the release criteria.

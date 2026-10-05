@@ -412,21 +412,26 @@ func testOutputInjectedInvocationSelectedEffectsAndOutputPolicy(t *testing.T) {
 			if !tty {
 				assertConcurrentOutputSuccess(t, 3, normal, []*concurrentOutputCall{quiet, normal})
 			} else {
-				if normal.err != nil {
-					t.Fatal(normal.err)
-				}
-				stdout, stderr := normal.inputs.Stdout(), normal.inputs.Stderr()
-				if !strings.Contains(stdout, "\x1b[") || !strings.Contains(stderr, "\r\x1b[2K") || !strings.Contains(stderr, "execute-goal") {
-					t.Fatalf("TTY lifecycle/progress routing: stdout=%q stderr=%q", stdout, stderr)
-				}
-				if strings.Contains(stdout+stderr, quiet.marker) || strings.Contains(stderr, normal.marker) {
-					t.Fatal("TTY output leaked peer or routed result to progress")
-				}
-				plain := regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]").ReplaceAllString(stdout, "")
-				assertConcurrentOutputHuman(t, normal, plain)
+				assertConcurrentTTYOutput(t, quiet, normal)
 			}
 		})
 	}
+}
+
+func assertConcurrentTTYOutput(t *testing.T, quiet, normal *concurrentOutputCall) {
+	t.Helper()
+	if normal.err != nil {
+		t.Fatal(normal.err)
+	}
+	stdout, stderr := normal.inputs.Stdout(), normal.inputs.Stderr()
+	if !strings.Contains(stdout, "\x1b[") || !strings.Contains(stderr, "\r\x1b[2K") || !strings.Contains(stderr, "execute-goal") {
+		t.Fatalf("TTY lifecycle/progress routing: stdout=%q stderr=%q", stdout, stderr)
+	}
+	if strings.Contains(stdout+stderr, quiet.marker) || strings.Contains(stderr, normal.marker) {
+		t.Fatal("TTY output leaked peer or routed result to progress")
+	}
+	plain := regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]").ReplaceAllString(stdout, "")
+	assertConcurrentOutputHuman(t, normal, plain)
 }
 
 func assertInjectedOutputDiagnostics(t *testing.T, call *concurrentOutputCall) {

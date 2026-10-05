@@ -662,77 +662,19 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 	return collected
 }
 
-// GetFactoryResponseEventsAt reads retained public Factory response events
-// until the active stream becomes quiet.
-func GetFactoryResponseEventsAt(
-	t testing.TB,
-	baseURL string,
-	sessionID string,
-) []factoryapi.FactoryResponseEvent {
+// GetFactoryResponseEventsAt reads the retained public Response Event snapshot.
+// The server's retained-count header marks the catch-up boundary; scheduling
+// delays between frames must not be mistaken for the end of retained history.
+func GetFactoryResponseEventsAt(t testing.TB, baseURL, sessionID string) []factoryapi.FactoryResponseEvent {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), ScaledTimeout(functionalServerReadyTimeout))
-	defer cancel()
-	endpoint := strings.TrimSuffix(baseURL, "/") +
-		"/factory-sessions/" + sessionID + "/response-events"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		t.Fatalf("build factory response events request: %v", err)
+	stream := OpenFactoryResponseEventStreamAt(t, SessionResponseEventsURL(baseURL, sessionID))
+	defer stream.Close()
+	if !stream.HasRetainedFrameCount {
+		t.Fatal("Response Event stream omitted its retained-count header")
 	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET factory response events: %v", err)
+	collected := make([]factoryapi.FactoryResponseEvent, 0, stream.RetainedFrameCount)
+	for range stream.RetainedFrameCount {
+		collected = append(collected, stream.NextFrame(functionalServerReadyTimeout).Event)
 	}
-	if response.StatusCode != http.StatusOK {
-		defer response.Body.Close()
-		t.Fatalf("GET factory response events status = %d", response.StatusCode)
-	}
-
-	events := make(chan factoryapi.FactoryResponseEvent, 32)
-	errs := make(chan error, 1)
-	go func() {
-		defer response.Body.Close()
-		scanner := bufio.NewScanner(response.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			var event factoryapi.FactoryResponseEvent
-			if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
-				errs <- fmt.Errorf("decode factory response event: %w", err)
-				return
-			}
-			events <- event
-		}
-		if err := scanner.Err(); err != nil && !errors.Is(err, context.Canceled) {
-			errs <- err
-		}
-	}()
-
-	var collected []factoryapi.FactoryResponseEvent
-	deadline := time.NewTimer(ScaledTimeout(functionalServerReadyTimeout))
-	defer deadline.Stop()
-	quiet := time.NewTimer(25 * time.Millisecond)
-	defer quiet.Stop()
-	quietC := quiet.C
-	for {
-		select {
-		case event := <-events:
-			collected = append(collected, event)
-			if !quiet.Stop() {
-				select {
-				case <-quiet.C:
-				default:
-				}
-			}
-			quiet.Reset(25 * time.Millisecond)
-			quietC = quiet.C
-		case err := <-errs:
-			t.Fatalf("read factory response events: %v", err)
-		case <-quietC:
-			return collected
-		case <-deadline.C:
-			t.Fatalf("timed out reading factory response-event history")
-		}
-	}
+	return collected
 }
