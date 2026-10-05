@@ -8,7 +8,6 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
@@ -16,6 +15,37 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// BundleOpeningOperation is the scoped resource-opening capability consumed by
+// assembly. Concrete host state remains private to Runtime.
+type BundleOpeningOperation func(
+	ctx context.Context,
+	spec runtimebuild.SessionBuildSpec,
+	runtimeLogDir string,
+	runtimeLogConfig factory.RuntimeLogStorageConfig,
+	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
+	runtimeMetricsPolicy RuntimeMetricsPolicy,
+	runtimeMetricsDir string,
+	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
+	recordFlushInterval time.Duration,
+	defaultSessionID string,
+	runtimeMode factorydefinitions.RuntimeMode,
+	runtimeScheduler scheduler.Scheduler,
+	inlineDispatch bool,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	backendScopeID string,
+	factoryRunnerID string,
+	verbose bool,
+	skipBuiltInPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	providerSessionProgress workers.ProgressPublisher,
+	dispatchCompleted func(string),
+	worldStateProjector factory.WorldStateProjector,
+	recordingsRuntime recordings.RuntimeScopeService,
+	initialFactorySnapshot InitialFactorySnapshotFactory,
+) (factory.RuntimeRecord, error)
 
 // BundleOpening retains reusable worker and resource-opening behavior. Each
 // operation owns its selected progress, worker boundary, recording and engine;
@@ -77,7 +107,7 @@ func (opening *BundleOpening) Open(
 	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
-) (*factoryhost.Bundle, error) {
+) (factory.RuntimeRecord, error) {
 	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
 		spec, defaultSessionID, recordingsRuntime, initialFactorySnapshot,
 	)
@@ -135,6 +165,9 @@ func (opening *BundleOpening) Open(
 		mockWorkersConfig,
 	)
 	if err != nil {
+		if bundle == nil {
+			return nil, err
+		}
 		return bundle, err
 	}
 	setReplayEvents(bundle.Factory, spec.ReplayEvents)

@@ -55,7 +55,7 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	peerSpec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, SessionID: "peer", MetricsSessionID: "peer-canonical",
 		RuntimeInstanceID: "peer-runtime", LoadedFactoryCfg: loaded, Clock: peerClock, BaseLogger: selectedLogger.With(zap.String("opening_selection", "peer"))}
 	peerScopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "peer-runtime"}}
-	peer, err := openTestBundle(t.Context(), opening, peerSpec, peerScopes)
+	peer, err := openTestBundle(t.Context(), opening.Open, peerSpec, peerScopes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,12 +70,13 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	var captured recordings.RuntimeScopeRequest
 	scopes := &testRuntimeScopeServiceStub{openErr: openingErr, recorder: recorder, capturedRequest: &captured,
 		ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "candidate-runtime"}}
-	failed, err := openTestBundle(t.Context(), opening, spec, scopes)
+	failed, err := openTestBundle(t.Context(), opening.Open, spec, scopes)
 	if !errors.Is(err, openingErr) || failed != nil || finalized != 1 {
 		t.Fatalf("failed opening = %#v, %v, finalizations %d; want owned unwind without a runnable record", failed, err, finalized)
 	}
+	assertOpeningRetainsPendingCleanup(t, opening.Open, spec, scopes, recorder, openingErr)
 	scopes.openErr = nil
-	candidate, err := openTestBundle(t.Context(), opening, spec, scopes)
+	candidate, err := openTestBundle(t.Context(), opening.Open, spec, scopes)
 	if err != nil {
 		t.Fatalf("same-owner, same-identity retry: %v", err)
 	}
@@ -87,6 +88,26 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	}
 	if snapshot, err := peer.Factory.GetEngineStateSnapshot(t.Context()); err != nil || snapshot == nil {
 		t.Fatalf("candidate close changed peer observation: %#v, %v", snapshot, err)
+	}
+}
+
+func assertOpeningRetainsPendingCleanup(t *testing.T, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService, recorder *runtimeRecordingsRecorderStub, openingErr error) {
+	t.Helper()
+	releaseErr := errors.New("candidate recording release failed")
+	recorder.finalizeErr = releaseErr
+	partial, err := openTestBundle(t.Context(), opening, spec, scopes)
+	if !errors.Is(err, openingErr) || !errors.Is(err, releaseErr) || partial == nil {
+		t.Fatalf("partial opening = %#v, %v; want both failures and retained cleanup", partial, err)
+	}
+	if partial.RuntimeService() != nil {
+		t.Fatal("failed opening returned a runnable service")
+	}
+	if err := errors.Join(partial.FinalizeRecording(spec.Clock.Now()), partial.CloseArtifacts()); !errors.Is(err, releaseErr) {
+		t.Fatalf("pending cleanup = %v, want release failure", err)
+	}
+	recorder.finalizeErr = nil
+	if err := errors.Join(partial.FinalizeRecording(spec.Clock.Now()), partial.CloseArtifacts()); err != nil {
+		t.Fatalf("explicit cleanup retry = %v", err)
 	}
 }
 
@@ -121,10 +142,14 @@ func assertBundleOpeningLogAttribution(t *testing.T, candidate, peer *factoryhos
 	}
 }
 
-func openTestBundle(ctx context.Context, opening *factoryinternal.BundleOpening, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService) (*factoryhost.Bundle, error) {
-	return opening.Open(ctx, spec, "", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
+func openTestBundle(ctx context.Context, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService) (*factoryhost.Bundle, error) {
+	record, err := opening(ctx, spec, "", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
 		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0, spec.SessionID,
 		interfaces.RuntimeModeBatch, nil, false, nil, nil, "", "", false, false, nil, nil, nil, nil, nil, scopes, nil)
+	if record == nil {
+		return nil, err
+	}
+	return record.(*factoryhost.Bundle), err
 }
 
 // Ports the retired compatibility builder's error/cancellation and caller-value
@@ -159,7 +184,7 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 			scopes.openErr = openingErr
 			wantErr = openingErr
 		}
-		record, err := openTestBundle(ctx, opening, spec, scopes)
+		record, err := openTestBundle(ctx, opening.Open, spec, scopes)
 		cancel()
 		if !errors.Is(err, wantErr) || record != nil {
 			t.Fatalf("canceled=%t opening = (%v, %v), want %v", canceled, record, err, wantErr)
@@ -546,7 +571,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening,
+	assembly, err := factoryinternal.NewAssembly(opening.Open,
 		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
 	if err != nil {
 		t.Fatal(err)
@@ -649,7 +674,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening,
+	assembly, err := factoryinternal.NewAssembly(opening.Open,
 		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{},
 		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
 	if err != nil {

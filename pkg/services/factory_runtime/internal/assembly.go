@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
@@ -24,7 +23,7 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	bundleOpening *BundleOpening
+	bundleOpening BundleOpeningOperation
 	sidecars      *SidecarOpening
 	instanceHost  instancehost.Service
 	preparation   *runtimebuild.Service
@@ -34,7 +33,7 @@ type Assembly struct {
 // Opening and replacement consume fixed process behavior. Only invocation
 // selections and scoped resources are allocated when a session opens.
 func NewAssembly(
-	bundleOpening *BundleOpening,
+	bundleOpening BundleOpeningOperation,
 	sidecars *SidecarOpening,
 	instanceHost instancehost.Service,
 	preparation *runtimebuild.Service,
@@ -175,7 +174,7 @@ func (a *Assembly) Assemble(
 	}
 	// The callback retains this session's selections, not a secondary service
 	// graph. Both initial and replacement resources use the fixed opening owner.
-	open := func(ctx context.Context, spec factoryruntime.SessionBuildSpec) (*factoryhost.Bundle, error) {
+	open := func(ctx context.Context, spec factoryruntime.SessionBuildSpec) (factoryruntime.RuntimeRecord, error) {
 		var progressPublisher workers.ProgressPublisher
 		if progressFactory != nil {
 			progressPublisher = progressFactory(spec.SessionID)
@@ -184,7 +183,7 @@ func (a *Assembly) Assemble(
 		if completionFactory != nil {
 			dispatchCompleted = completionFactory(spec.SessionID)
 		}
-		return a.bundleOpening.Open(
+		return a.bundleOpening(
 			ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
 			runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
 			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
