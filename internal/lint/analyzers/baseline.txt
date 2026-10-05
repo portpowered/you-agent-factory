@@ -2286,7 +2286,6 @@ testsleep-deadline-test|tests/functional/providers/codex|tests/functional/provid
 testsleep-deadline-test|tests/functional/recordings/process_test|tests/functional/recordings/process/built_cli_test.go::runRecordingProcessCLI::deadline::1
 testsleep-deadline-test|tests/functional/recordings/process_test|tests/functional/recordings/process/recording_flush_before_shutdown_test.go::waitForStandaloneRecordingEventCount::deadline::1
 testsleep-deadline-test|tests/functional/replay_contracts|tests/functional/replay_contracts/replay_live_helpers_test.go::factoryEventHTTPStream.close::deadline::1
-testsleep-deadline-test|tests/functional/runtime_api/factory_transformation|tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go::assertSharedFactoryTransformationListenerProbe::deadline::1
 testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_api/api_service_mode_observability_smoke_test.go::assertServiceModeServerStillRunning::deadline::1
 testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_api/api_service_mode_observability_smoke_test.go::assertServiceModeServerStops::deadline::1
 testsleep-deadline-test|tests/functional/runtime_api|tests/functional/runtime_api/dashboard_engine_state_test.go::functionalWorldViewProvider.nextDispatch::deadline::1

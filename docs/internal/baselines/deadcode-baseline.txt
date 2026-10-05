@@ -2183,6 +2183,9 @@ tests/functional/internal/support/conformance/matrix.go: unreachable func: valid
 tests/functional/internal/support/costs_settings_files.go: unreachable func: CostsSettingsFiles.ReadFile
 tests/functional/internal/support/costs_settings_files.go: unreachable func: CostsSettingsFiles.SetReadFailure
 tests/functional/internal/support/costs_settings_files.go: unreachable func: NewCostsSettingsFiles
+tests/functional/internal/support/deadline_context.go: unreachable func: ControlledDeadlineContext
+tests/functional/internal/support/deadline_context.go: unreachable func: controlledDeadlineContext.Err
+tests/functional/internal/support/deadline_context.go: unreachable func: controlledDeadlineContext.Value
 tests/functional/internal/support/dispatch_observation.go: unreachable func: DispatchObservationIncludesWork
 tests/functional/internal/support/dispatch_observation.go: unreachable func: ObserveDispatchEvents
 tests/functional/internal/support/events.go: unreachable func: AssertSingleWorkRequestEvent

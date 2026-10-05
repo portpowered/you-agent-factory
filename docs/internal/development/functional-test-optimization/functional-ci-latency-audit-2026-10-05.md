@@ -1215,6 +1215,27 @@ surviving cleanup: the owned output, help and process fixtures now reset those
 references before each journey setup. Those failed attempts are retained as
 validation findings rather than counted as passing measurements. The ordinary
 and functionallong source variants compile, focused lint and repository custom
-analyzers pass, and all 156 reviewed scenario records validate. A new complete
-four-CPU coverage supervisor measurement is running; no hosted checkpoint is
-claimed from these focused results.
+analyzers pass, and all 156 reviewed scenario records validate. The complete four-CPU coverage supervisor subsequently passed in **316.66s**,
+including **297.001s** for the test invocation: 111 packages, 966 top-level tests,
+964 passed, two skipped and no failures. Moving former top-level CLI scenarios
+under six journey parents lowers the top-level count without deleting those
+scenarios. All coverage gates and quarantine validation passed. Compilation
+consumed 183.423s CPU across 781 commands; linking consumed 225.519s CPU across
+109 commands, with 248.486s active linker wall. Whole supervisor CPU was 937.12s
+user and 230.50s system. This dependency-cache-populating run exceeds five minutes;
+a warm rerun is recorded separately. Raw evidence is in linux-cli-cohorts-verified.
+
+The preceding hosted commit 032f9aa889 completed functional coverage successfully
+in **448.588s supervisor wall** and **366.218s test invocation wall**, with 115
+packages, 1,002 top-level passes, two skips and no failures. Backend Lint failed:
+nine existing timer/sleep allowances moved with consolidated source and were
+rejected by the deletion-only baseline growth rule; a removed listener-probe
+allowance was stale; three new test-only controlled-deadline helper entries were
+absent from the deadcode inventory. The stale allowance and helper inventory are
+corrected. The relocation gate still needs resolution before required checks
+can pass. No elapsed-time or merge checkpoint is established.
+
+A fresh-checkout measurement before the passing local run stopped before coverage
+because the audit repository had no Git HEAD, which the diagnostic collector
+requires. Its 102.34s invocation is retained under linux-cli-cohorts-full and is
+excluded from test-runtime comparisons.
