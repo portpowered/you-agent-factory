@@ -179,8 +179,6 @@ func NewEngineOpening(
 }
 
 // Open initializes one exclusively owned engine from runtime-scoped values.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func (opening *EngineOpening) Open(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
@@ -259,8 +257,14 @@ func (opening *EngineOpening) Open(
 		expectedArtifactFileSystem:         opening.expectedArtifactFileSystem,
 		decisionEnvelopes:                  opening.decisionEnvelopes,
 	}
-	if restoredWorldState != nil && eventHistory != nil {
-		cfg.restoredEventPrefix = cloneFactoryEventsInOrder(eventHistory.CanonicalEvents())
+	return opening.openConfiguredRuntime(cfg)
+}
+
+// openConfiguredRuntime allocates the runtime-owned state after selection has
+// been captured. The config belongs exclusively to this opening and its engine.
+func (opening *EngineOpening) openConfiguredRuntime(cfg *runtimeConfig) (factoryhost.Engine, error) {
+	if cfg.restoredWorldState != nil && cfg.eventHistory != nil {
+		cfg.restoredEventPrefix = cloneFactoryEventsInOrder(cfg.eventHistory.CanonicalEvents())
 	}
 	if cfg.executeService != nil {
 		cfg.attempts = newAttemptLifecycle(cfg.executeService, cfg.newID, cfg.attemptCapacity)
