@@ -10,7 +10,7 @@ belong outside this lane. CI tooling checks live under `tests/tooling/verificati
 Packages name the customer behavior: `models/local_inference`, `models/cli`,
 `sessions/isolation_and_recovery`, `sessions/chat_sessions/acp`,
 `operator_settings/configuration`, `recordings/lifecycle`, `work/admission`, and
-`factory_runtime/execution`. Independent packaged invocation journeys share
+`factory/execution`. Independent packaged invocation journeys share
 `factory/packaged/invocation` and run in parallel to avoid serializing them.
 
 ## Commands

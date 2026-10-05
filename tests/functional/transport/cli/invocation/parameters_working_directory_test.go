@@ -1,4 +1,4 @@
-package parameters_test
+package invocation_test
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 // invocation working directory, reporting the resolved Factory directory through
 // customer-visible startup output.
 func TestCLIRelativeFactoryPathResolvesFromInvocationDirectory(t *testing.T) {
+	t.Parallel()
 	invocationDirectory := t.TempDir()
 	factoryDirectory := filepath.Join(invocationDirectory, "factory")
 	if err := os.MkdirAll(factoryDirectory, 0o755); err != nil {

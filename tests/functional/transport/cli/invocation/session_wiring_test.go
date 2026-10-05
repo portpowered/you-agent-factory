@@ -1,4 +1,4 @@
-package commands_test
+package invocation_test
 
 import (
 	"context"
@@ -588,6 +588,7 @@ func waitForWorkStateViaCLI(
 		select {
 		case <-ctx.Done():
 			t.Fatalf("wait for work %q state %q: %v", workID, wantState, ctx.Err())
+		//nolint:testsleep // Poll the customer CLI work state until the requested state appears; cancellation bounds failure.
 		case <-time.After(200 * time.Millisecond):
 		}
 	}

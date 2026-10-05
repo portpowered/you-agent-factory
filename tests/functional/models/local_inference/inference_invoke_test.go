@@ -78,7 +78,6 @@ func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 		},
 		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:    modelServer.Client(),
-		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
 	support.CleanupProcess(t, process)
 
@@ -443,8 +442,8 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 		ModelHostCompatibilityChecker:  compatibility,
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
-		ModelInvocationProtocolClient:  genericCLIProtocolClient{},
+
+		ModelInvocationProtocolClient: genericCLIProtocolClient{},
 	})
 	environment := functionalHomeEnvironment(home)
 
@@ -590,7 +589,6 @@ func genericHTTPInvocationEdges(
 		ModelHostProtocolNegotiator:    protocol,
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
 	}
 	if compatibility != nil {
 		edges.ModelHostCompatibilityChecker = compatibility
@@ -678,7 +676,6 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 		ModelHostCompatibilityChecker:  compatibility,
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "freebsd", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
 
 	outputPath := filepath.Join(functionalTempDir(t), "must-fail.wav")

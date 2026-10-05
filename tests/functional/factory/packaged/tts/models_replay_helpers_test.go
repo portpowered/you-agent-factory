@@ -68,8 +68,8 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 		ModelHostProtocolNegotiator:   packagedTTSHostProtocolNegotiator{},
 		ModelHostCompatibilityChecker: packagedTTSHostCompatibilityChecker{},
 		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
-		ModelInvocationBackend:        backend.Invoke,
+
+		ModelInvocationBackend: backend.Invoke,
 	}
 	process := support.BuildProcess(t, edges)
 
@@ -235,8 +235,8 @@ func managedTTSModelEdges(
 		ModelHostProtocolNegotiator:   packagedTTSHostProtocolNegotiator{},
 		ModelHostCompatibilityChecker: packagedTTSHostCompatibilityChecker{},
 		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
-		ModelInvocationBackend:        backend.Invoke,
+
+		ModelInvocationBackend: backend.Invoke,
 	}
 	return edges, modelServer.Close
 }

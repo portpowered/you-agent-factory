@@ -1,6 +1,6 @@
 //go:build functionallong
 
-package parameters_test
+package invocation_test
 
 import (
 	"os"
@@ -21,6 +21,7 @@ import (
 // the Factory runtime root when dispatching through root.BuildProcess and
 // ProviderCommandRunner edge capture.
 func TestCLIProviderExecResolvesWorkdirAgainstFactoryRuntimeRoot(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow relative-working-directory runtime-root sweep")
 
 	factoryDir := filepath.Join(t.TempDir(), "factory")

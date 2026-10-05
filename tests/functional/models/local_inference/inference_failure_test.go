@@ -297,8 +297,8 @@ func buildGenericCLIProcess(
 		ModelHostCompatibilityChecker:  compatibility,
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
-		ModelInvocationProtocolClient:  genericCLIProtocolClient{},
+
+		ModelInvocationProtocolClient: genericCLIProtocolClient{},
 	}
 	if clock != nil {
 		edges.ModelHostClock = clock

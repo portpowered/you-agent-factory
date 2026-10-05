@@ -110,8 +110,8 @@ func newZeroConfigFirstUseScenario(t *testing.T, failureAtCall int) zeroConfigFi
 			}
 			return selection, nil
 		},
-		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
+		ModelHostHTTPClient: modelServer.Client(),
+
 		ModelInvocationProtocolClient: protocol,
 	})
 	return zeroConfigFirstUseScenario{

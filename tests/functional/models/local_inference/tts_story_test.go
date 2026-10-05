@@ -127,10 +127,10 @@ func setupTTSStory(t *testing.T) ttsStory {
 			}
 			return selection, nil
 		},
-		ModelInvocationBackend:     generic.Invoke,
-		ModelInvocationGRPCDialer:  protocol,
-		ModelHostHTTPClient:        modelServer.Client(),
-		ModelRuntimeHTTPClient:     modelServer.Client(),
+		ModelInvocationBackend:    generic.Invoke,
+		ModelInvocationGRPCDialer: protocol,
+		ModelHostHTTPClient:       modelServer.Client(),
+
 		ModelRuntimeTempDirectory:  func() string { return temp.directory },
 		ModelRuntimeCreateTempFile: temp.CreateTemp,
 		ModelRuntimeInspectFile:    os.Stat,
@@ -413,6 +413,7 @@ func runTTSCancellation(t *testing.T, story ttsStory) {
 	select {
 	case <-story.protocol.CancellationStarted():
 		cancel()
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for the raw TTS edge to observe cancellation readiness")
 	}
@@ -422,6 +423,7 @@ func runTTSCancellation(t *testing.T, story ttsStory) {
 	}
 	select {
 	case <-story.protocol.CancellationObserved():
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for raw TTS edge cancellation observation")
 	}
@@ -797,6 +799,7 @@ func (launcher *ttsHostLauncher) Snapshot() (starts, stops, waits, active int) {
 
 func waitForTTSHostLifecycle(t testing.TB, launcher *ttsHostLauncher, label string) {
 	t.Helper()
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := launcher.WaitForAll(ctx); err != nil {

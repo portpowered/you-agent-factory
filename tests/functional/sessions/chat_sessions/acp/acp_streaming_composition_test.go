@@ -216,6 +216,7 @@ func startServeACPProcess(
 				if err != nil && !errors.Is(err, context.Canceled) {
 					t.Errorf("you server acp Execute() error = %v, want context.Canceled or nil on shutdown", err)
 				}
+			//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 			case <-time.After(5 * time.Second):
 				t.Error("you server acp did not shut down after stdin closed")
 			}

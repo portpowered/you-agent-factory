@@ -166,6 +166,7 @@ func TestModelsPublicOptInRemoveRefusesActiveASRAndSucceedsAfterRelease(t *testi
 	go func() { invocationDone <- witness.server.Execute(t, invocation.Input) }()
 	select {
 	case <-witness.backendStarted:
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		select {
 		case invokeErr := <-invocationDone:
@@ -186,6 +187,7 @@ func TestModelsPublicOptInRemoveRefusesActiveASRAndSucceedsAfterRelease(t *testi
 	select {
 	case invokeErr := <-invocationDone:
 		assertActiveASRInvocationFinished(t, witness, invokeErr, invocation.Stdout())
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(30 * time.Second):
 		t.Fatal("controlled ASR invocation did not finish after backend release")
 	}
@@ -302,9 +304,8 @@ func activeASRRemovalEdges(
 			}
 			return selection, nil
 		},
-		ModelASRBackend:        backend,
-		ModelHostHTTPClient:    hostHTTP,
-		ModelRuntimeHTTPClient: hostHTTP,
+		ModelASRBackend:     backend,
+		ModelHostHTTPClient: hostHTTP,
 	}
 }
 
@@ -499,6 +500,7 @@ func TestModelsPublicOptInRemoveSerializesAgainstReferencePublication(t *testing
 	go func() { removeDone <- process.Execute(inputs.Input) }()
 	select {
 	case <-observing.attempted:
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		t.Fatal("opt-in removal did not attempt reference coordination")
 	}
@@ -511,6 +513,7 @@ func TestModelsPublicOptInRemoveSerializesAgainstReferencePublication(t *testing
 		if err != nil {
 			t.Fatalf("Process.Execute(coordinated remove) error = %v\nstdout=%s\nstderr=%s", err, inputs.Stdout(), inputs.Stderr())
 		}
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(30 * time.Second):
 		t.Fatal("coordinated remove did not finish")
 	}

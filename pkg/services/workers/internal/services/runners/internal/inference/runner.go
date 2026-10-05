@@ -198,13 +198,6 @@ func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecu
 	return request
 }
 
-func effectiveWorkingDirectory(request workers.RunnerExecutionRequest) string {
-	if request.WorkingDirectory != "" {
-		return request.WorkingDirectory
-	}
-	return request.Worktree
-}
-
 func validateRequest(request workers.RunnerExecutionRequest) error {
 	if request.RunnerID != Identity {
 		return badRequest(fmt.Sprintf("inference runner identity must be %q", Identity), nil)

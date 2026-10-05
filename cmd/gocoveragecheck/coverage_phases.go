@@ -80,6 +80,12 @@ func prepareCoverageRunWithFunctionalMetadata(
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
 		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS, logicalCPUs)),
 	}
+	if cfg.suite == functionalCoverageSuite {
+		// Required Backend Lint runs vet across the repository. Repeating it
+		// on the instrumented functional graph adds static-analysis work to
+		// the customer-behavior lane without exercising another behavior.
+		coverageTestArgs = append(coverageTestArgs, "-vet=off")
+	}
 	if cfg.short {
 		coverageTestArgs = append(coverageTestArgs, "-short")
 	}

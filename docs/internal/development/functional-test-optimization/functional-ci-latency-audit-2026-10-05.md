@@ -670,3 +670,109 @@ including `after-summary.json`, build traces and tool records, full-run JSON
 events, focused validation logs, and tagged compile results. The raw full run
 is explicitly an intermediate snapshot; focused final validation logs supersede
 its model and submit results.
+
+## Hosted checkpoint and Linux follow-up
+
+PR [#2867](https://github.com/portpowered/you-agent-factory/pull/2867), based on
+main `9ca420195a1d2f3135334b293193fa92df29cf31`, first measured cleanup commit
+`8a09e574de32b5ebd3792869e227d4e28cbbddc9` in hosted
+[CI run 37283549677](https://github.com/portpowered/you-agent-factory/actions/runs/37283549677).
+All **1,022 selected tests passed or intentionally skipped**: 1,020 passed,
+two skipped, zero failed. The coverage test invocation took **385.076s**.
+The supervised coverage child took **468.477s**, with concurrent quarantine
+verification taking **59.263s**. The 83.401s difference between the coverage
+child and test invocation remains material overhead. These measurements sit
+inside the earlier observed 344.601–421.149s test-invocation range; they do not
+establish a controlled improvement or a five-minute checkpoint.
+
+Hosted coverage failed its package floor for `models/transports/http`:
+440/798 statements (55.1378%) against 58.27%. Backend Lint also found stale
+compiler-owner baseline entries after moves and seven newly unreachable
+production functions left behind by the executor removal. Models wiring and
+race verification passed. The five-, three-, and two-minute merge checkpoints
+remain unachieved; this PR has not been merged.
+
+For additional diagnostics, the same tracked source was archived into an
+isolated Linux filesystem snapshot under WSL, running Go 1.25 with four-CPU
+affinity, `GOMAXPROCS=4`, and the canonical 12-package budget. The populated
+Linux module/build caches were retained; this is not a clean hosted runner.
+The first instrumented run took **436.49s overall**, including **368.666s**
+inside its coverage test invocation. Two top-level tests failed: a LocalAI
+fixture asserted internal CPU-only platform facts on this CUDA-capable host,
+and a packaged loop scenario failed but passed its focused rerun. Partial
+coverage from a failed run is diagnostic only.
+
+| Linux tool measurement | Invocations | User CPU | System CPU | Sum of child wall time | Union of active wall intervals |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Compiler | 1,637 | 240.364s | 37.980s | 918.352s | 200.731s |
+| Linker | 147 | 266.927s | 40.231s | 1,084.364s | 314.304s |
+| Vet | 1,247 | 49.254s | 13.853s | 249.964s | 88.565s |
+| Coverage instrumentation | 658 | 2.604s | 1.808s | 22.850s | 16.201s |
+
+These tool totals include discovery/helper compilation and overlap both one
+another and execution. They cannot be summed to estimate elapsed time. The
+whole command consumed 1,275.33s user CPU and 332.40s system CPU. The residual
+includes customer commands, Go orchestration, profile processing, and reporting;
+it must not all be attributed to tests without process-level profiling.
+
+The highest package durations were `runtime_api` 73.083s,
+`models/local_inference` 58.977s, `factory/review_failure_routing` 52.148s,
+`transport/mcp/stdio` 48.697s, `factory/visualization/runtime_metrics` 43.190s,
+`providers/acp` 41.383s, and `sessions/chat_sessions/acp` 40.036s. Linker child
+wall times reached 15.376s for `transport/run_scoped_server`, 14.997s for
+`transport/submit`, and 14.458s for `workers/transports/http`, while consuming
+about 3.3–3.7 CPU seconds each. Much of that wall time is competition for the
+four CPUs rather than unique package code size.
+
+A follow-up snapshot, with warmer compilation caches, fresh test execution
+(`-count=1`), one further CLI-package merge, cache isolation, and functional
+vet disabled, took **253.92s overall / 231.050s test invocation**. It still
+failed three top-level tests, so it is not a passing latency result. Its 145
+linker invocations consumed 215.223s CPU; 304 compiler invocations consumed
+55.729s CPU. Nine vet invocations consumed 0.138s CPU, showing that the
+instrumented functional graph no longer repeated repository vet. The warmer
+cache and several simultaneous changes prevent attributing the full elapsed
+difference to any single optimization.
+
+### Further changes being validated
+
+- Removed the unused legacy runtime HTTP edge, six legacy catalog-host
+  functions and their compatibility unit tests, and the retired worker
+  working-directory helper. Renamed dead-code baseline paths without adding
+  findings; removed vanished compiler-owner allowances.
+- Combined CLI command and parameter journeys under `transport/cli/invocation`.
+  Independent top-level tests overlap, and parameter runs use unique explicit
+  sessions. Negative parameter cases assert their own public errors instead
+  of counting another concurrent invocation's provider calls. The merged
+  package passed Windows (5.952s), Linux (3.868s), and three fresh Windows
+  repetitions (25.297s total).
+- Moved Factory execution under `factory/execution` and visualization journeys
+  under `factory/visualization/presentation`, matching the durable customer
+  ownership required by the functional lane.
+- Extended owned home/model-cache environments to shared review routing and
+  common packaged-Factory/daemon helpers. Seeded assets retain the normal
+  fixture-owned `.agent-factory/models` layout.
+- Removed the functional PID-parser self-test and two packaged-loop fixture
+  self-tests. Removed legacy cache-migration and provider-backed OmniVoice
+  smoke cases; current LocalAI CLI, REST, recorded-event, and audio/file
+  journeys remain. Added one shared-server table for actionable errors on
+  malformed current model REST requests; its nine customer cases pass in
+  1.592s locally.
+- Removed internal model configuration assertions from the Factory inference
+  scenario while retaining public results, errors, and canonical recordings.
+  It passes on the CUDA-capable Linux host.
+- Made recording cleanup use the selected process fact clock when an owned
+  session supplies no clock. Linux session deletion had exposed a nil-clock
+  panic; the existing fact-clock lifecycle test now checks this missing-clock
+  case. The unit test passes.
+- Corrected the unified event-log smoke's assumption that a continuous server
+  must publish a completed live Factory state before closing. It retains the
+  completed terminal run result, completed Work, canonical ordering, and
+  identical live/recorded event payloads.
+
+Required Backend Lint continues to own repository-wide vet. Bounded event and
+cleanup waits have inline reasons; they are not replaced with shorter sleeps.
+Full hosted verification of this follow-up, restored Models HTTP coverage, and
+a passing supervised latency measurement are still required before merging.
+Raw local evidence is under `.artifacts/latency-audit/linux-8a09/`,
+`linux-next/`, `ci-functional/`, and the focused validation logs.

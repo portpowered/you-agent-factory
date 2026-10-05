@@ -76,8 +76,8 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 		ModelHostProtocolNegotiator:   packagedTTSHostProtocolNegotiator{},
 		ModelHostCompatibilityChecker: packagedTTSHostCompatibilityChecker{},
 		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
-		ModelInvocationBackend:        backend.Invoke,
+
+		ModelInvocationBackend: backend.Invoke,
 	})
 	t.Cleanup(func() {
 		if launcher.StartCount() != 1 || launcher.StopCount() != 1 {

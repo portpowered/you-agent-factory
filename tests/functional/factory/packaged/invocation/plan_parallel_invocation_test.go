@@ -512,6 +512,7 @@ func (runner *planParallelRunner) Run(ctx context.Context, request platformproce
 
 		select {
 		case <-runner.readyExecutors:
+		//nolint:testsleep // The provider edge waits for overlapping dispatches; the ceiling releases a broken fixture.
 		case <-time.After(2 * time.Second):
 		case <-ctx.Done():
 			return platformprocess.CommandResult{}, ctx.Err()

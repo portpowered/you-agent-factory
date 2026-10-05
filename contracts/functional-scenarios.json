@@ -291,7 +291,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath",
+          "test": "tests/functional/transport/cli/invocation/run_wiring_test.go::TestCLIRunFactoryByPath",
           "boundary": "cli"
         }
       ]
@@ -476,7 +476,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
+          "test": "tests/functional/transport/cli/invocation/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         },
         {
@@ -515,7 +515,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
+          "test": "tests/functional/transport/cli/invocation/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         }
       ]
@@ -530,7 +530,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
+          "test": "tests/functional/transport/cli/invocation/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         }
       ]
@@ -555,7 +555,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
+          "test": "tests/functional/transport/cli/invocation/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         }
       ]

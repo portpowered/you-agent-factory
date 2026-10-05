@@ -28,6 +28,7 @@ func TestMain(m *testing.M) {
 	}
 	modelListProcess = process
 	exitCode := m.Run()
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	closeContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := process.Close(closeContext); err != nil {

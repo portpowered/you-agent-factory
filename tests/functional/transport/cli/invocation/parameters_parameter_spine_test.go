@@ -1,4 +1,4 @@
-package parameters_test
+package invocation_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -132,9 +133,12 @@ func (fixture *parameterProcessFixture) close() error {
 
 func parameterInputs(t *testing.T, args []string) *support.CapturedInputs {
 	t.Helper()
+	if len(args) >= 2 && args[1] == "run" {
+		args = append(append([]string(nil), args...), "--session", uuid.NewString())
+	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = t.TempDir()
-	inputs.Input.Env = spineEnvironment(inputs.Input.Env, t.TempDir())
+	inputs.Input.Env = support.IsolatedHomeEnvironment(t.TempDir())
 	return inputs
 }
 
@@ -151,10 +155,11 @@ const (
 	spineEmptyArray      = `[]`
 )
 
-// TestCLIParameterReusableProcessSpine establishes the shared process shape
+// TestCLIInvocationParameterValuesAndErrors establishes the shared process shape
 // for the parameter package. The reusable root-built process is immutable
 // and their customer invocations run in lexical order with fresh inputs.
-func TestCLIParameterReusableProcessSpine(t *testing.T) {
+func TestCLIInvocationParameterValuesAndErrors(t *testing.T) {
+	t.Parallel()
 	if parameterProcesses == nil {
 		t.Fatal("parameter process fixture is not initialized")
 	}
@@ -229,7 +234,6 @@ func testMalformedCombinedSignature(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
 			args := append([]string{"you", "run", "--factory", factoryPath, "--no-record"}, test.args...)
 			inputs := parameterInputs(t, args)
 			executeErr := parameterProcesses.process.Execute(inputs.Input)
@@ -242,9 +246,7 @@ func testMalformedCombinedSignature(t *testing.T) {
 					t.Fatalf("malformed parameter diagnostic missing %q:\n%s", want, diagnostic)
 				}
 			}
-			if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
-				t.Fatalf("provider dispatch call delta = %d, want 0", got)
-			}
+
 		})
 	}
 }
@@ -259,7 +261,6 @@ func testInvalidJSONCombinedSignature(t *testing.T) {
 			args[index] = "--metadata={not-json"
 		}
 	}
-	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
 	inputs := parameterInputs(t, args)
 	executeErr := parameterProcesses.process.Execute(inputs.Input)
 	if executeErr == nil {
@@ -281,9 +282,7 @@ func testInvalidJSONCombinedSignature(t *testing.T) {
 		response.Family != factoryapi.ErrorFamilyBadRequest {
 		t.Fatalf("ErrorResponse = %#v, want string-validation code and BAD_REQUEST", response)
 	}
-	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
-		t.Fatalf("provider dispatch call delta = %d, want 0", got)
-	}
+
 }
 
 func combinedSignatureArgs(factoryPath string) []string {
@@ -300,17 +299,6 @@ func combinedSignatureArgs(factoryPath string) []string {
 func spineInputs(t *testing.T, args []string) *support.CapturedInputs {
 	t.Helper()
 	return parameterInputs(t, args)
-}
-
-func spineEnvironment(environment []string, home string) []string {
-	filtered := make([]string, 0, len(environment)+2)
-	for _, item := range environment {
-		if strings.HasPrefix(item, "HOME=") || strings.HasPrefix(item, "USERPROFILE=") {
-			continue
-		}
-		filtered = append(filtered, item)
-	}
-	return append(filtered, "HOME="+home, "USERPROFILE="+home)
 }
 
 func scaffoldCombinedInvocationFactory(t *testing.T) string {

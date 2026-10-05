@@ -68,7 +68,6 @@ func localAIConformanceEdges(
 		ModelHostHTTPClient:            fixtureHostHTTPClient{},
 		ModelHostGRPCDialer:            fixture.GRPCDialer(),
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelRuntimeHTTPClient:         fixtureHostHTTPClient{},
 		ModelResolveBackendArtifact:    conformanceBackendArtifactResolver,
 		ModelInvocationBackend:         serviceedges.ModelInvocationBackend(fixture.InvocationBackend),
 		ModelInvocationProtocolClient:  localAIInvocationProtocolClient{fixture: fixture},

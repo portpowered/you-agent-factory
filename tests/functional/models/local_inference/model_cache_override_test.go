@@ -242,9 +242,9 @@ func cacheSelectionEdges(
 		ModelHostCompatibilityChecker:  &joinedCompatibilityChecker{},
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
-		ModelRuntimeInspectFile:        files.Stat,
-		ModelInvocationProtocolClient:  protocol,
+
+		ModelRuntimeInspectFile:       files.Stat,
+		ModelInvocationProtocolClient: protocol,
 	}
 }
 

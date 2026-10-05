@@ -271,6 +271,7 @@ func admitResumedGeneratedWork(t testing.TB, journey *resumedResponseScopeJourne
 func observeResumedGeneratedWork(t testing.TB, journey *resumedResponseScopeJourney, workID string, providerCallsBefore int) string {
 	t.Helper()
 	journey.providerRunner.Release()
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	waitContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if err := journey.providerRunner.WaitForReturnCount(waitContext, providerCallsBefore+1); err != nil {

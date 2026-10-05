@@ -80,7 +80,6 @@ func newStory003PullWorkflow(t *testing.T) *story003PullWorkflow {
 			},
 			ModelHostProcessLauncher: hostLauncher,
 			ModelHostHTTPClient:      modelServer.Client(),
-			ModelRuntimeHTTPClient:   modelServer.Client(),
 		},
 	})
 	inspectProcess := functionalBuildProcess(t, serviceedges.Edges{})

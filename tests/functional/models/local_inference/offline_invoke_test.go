@@ -256,8 +256,8 @@ func newOfflineLLMStory(t *testing.T, withCache bool) offlineLLMStory {
 		) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
-		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
+		ModelHostHTTPClient: modelServer.Client(),
+
 		ModelInvocationProtocolClient: fixture,
 	})
 	return offlineLLMStory{

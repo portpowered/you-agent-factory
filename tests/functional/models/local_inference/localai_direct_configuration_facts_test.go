@@ -14,6 +14,7 @@ import (
 
 func assertLocalAIDirectHostReleased(t *testing.T, launcher *localAIHostLauncher) {
 	t.Helper()
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	waitContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if err := launcher.awaitWait(waitContext); err != nil {

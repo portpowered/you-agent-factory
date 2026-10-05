@@ -737,6 +737,7 @@ func assertLocalAIOMNIServerReleased(
 	t.Helper()
 	select {
 	case <-server.Done():
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		t.Fatal("configured server process did not close")
 	}

@@ -192,8 +192,8 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
-		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelHostHTTPClient:    modelServer.Client(), ModelRuntimeHTTPClient: modelServer.Client(),
+		ModelAssetHostPlatform:        models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:           modelServer.Client(),
 		ModelInvocationProtocolClient: fixture.protocol,
 		ModelRuntimeCommandRunner:     &omniVideoDecoder{silent: true},
 	})

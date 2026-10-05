@@ -1,4 +1,4 @@
-package factory_visualization_test
+package presentation_test
 
 import (
 	"sync/atomic"

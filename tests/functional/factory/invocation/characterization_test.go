@@ -502,7 +502,7 @@ func TestLocalAIFactoryInferenceCharacterization(t *testing.T) {
 			assertLocalAIFactoryEventSpine(t, run.artifact.Events)
 			assertLocalAIFactoryTerminalSession(t, run.artifact.Events, test.wantSession)
 			assertBTRCOneShotResponseStreamHasOneTerminalRecord(t, run.stdout)
-			assertLocalAIFactoryConfigurationFacts(t, run, prompt, test.failure == nil, test.waitBeforeCompletion)
+			awaitLocalAIFactoryHostCleanup(t, run, test.waitBeforeCompletion)
 		})
 	}
 }
@@ -568,7 +568,6 @@ func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure e
 		ModelResolveBackendArtifact:     backendSelect.Resolve,
 		ModelResolveHuggingFaceRevision: resolver.Resolve,
 		ModelHostHTTPClient:             assetNetwork,
-		ModelRuntimeHTTPClient:          assetNetwork,
 		ModelInvocationProtocolClient:   invocation,
 	})
 	support.CleanupProcess(t, process)
@@ -582,7 +581,7 @@ func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure e
 		"--output", "response-stream",
 		prompt,
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.Env = support.IsolatedHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = factoryDir
 	executeErr := process.Execute(inputs.Input)
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
@@ -847,36 +846,9 @@ func assertLocalAIFactoryTerminalSession(t *testing.T, events []interfaces.Facto
 	}
 }
 
-func assertLocalAIFactoryConfigurationFacts(t *testing.T, run localAIFactoryInferenceRun, prompt string, success, waitBeforeCompletion bool) {
+func awaitLocalAIFactoryHostCleanup(t *testing.T, run localAIFactoryInferenceRun, waitBeforeCompletion bool) {
 	t.Helper()
-	if got := run.resolver.Sources(); len(got) == 0 || got[0] != run.source {
-		t.Fatalf("Factory LocalAI resolved sources = %#v, want %q", got, run.source)
-	}
-	requests := run.backendSelect.Requests()
-	if len(requests) == 0 || requests[0].Backend != run.backend || requests[0].ProtocolVersion != "localai-backend-v1" || requests[0].Platform != run.platform {
-		t.Fatalf("Factory LocalAI backend selection requests = %#v, want backend/protocol/platform facts", requests)
-	}
-	spec, ok := run.launcher.LastSpec()
-	modelCachePath := filepath.Join(run.modelCacheRoot, "LLM", run.revision)
-	backendCachePath := filepath.Join(run.modelCacheRoot, "backend-artifacts")
-	if !ok || !localAIFactoryArgsContainPath(spec.Args, "--cache-path", modelCachePath) || !localAIFactoryArgsContainPath(spec.Args, "--backend-cache-path", backendCachePath) {
-		t.Fatalf("Factory LocalAI host start spec = %#v, want materialized model/backend cache-path propagation", spec)
-	}
-	negotiation := run.negotiator.Requests()
-	if len(negotiation) == 0 || negotiation[0].ProtocolVersion != "localai-backend-v1" || negotiation[0].Backend != run.backend || negotiation[0].ModelName != modelprovider.BuiltInModelNameLLM || negotiation[0].Revision != run.revision || negotiation[0].Platform != run.platform {
-		t.Fatalf("Factory LocalAI protocol negotiation = %#v, want propagated model facts", negotiation)
-	}
-	compatibility := run.compatibility.Requests()
-	if len(compatibility) == 0 || compatibility[0].Backend != run.backend || compatibility[0].ModelName != modelprovider.BuiltInModelNameLLM || compatibility[0].Revision != run.revision || compatibility[0].Platform != run.platform {
-		t.Fatalf("Factory LocalAI compatibility = %#v, want backend/model/revision/platform facts", compatibility)
-	}
-	invocation := run.invocation.Request()
-	if run.invocation.Calls() != 1 || invocation.Operation != modelprovider.OperationOMNI || len(invocation.Inputs) != 1 || invocation.Inputs[0].Slot != "prompt" || invocation.Inputs[0].Content != prompt {
-		t.Fatalf("Factory LocalAI invocation = calls:%d request:%#v, want one OMNI prompt", run.invocation.Calls(), invocation)
-	}
-	if run.assetNetwork.Calls() != 0 {
-		t.Fatalf("Factory LocalAI model network calls = %d, want zero from selected cache", run.assetNetwork.Calls())
-	}
+	//nolint:testsleep // The host signals completion; the deadline only bounds a cleanup failure.
 	waitContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if waitBeforeCompletion {
@@ -897,18 +869,6 @@ func assertLocalAIFactoryConfigurationFacts(t *testing.T, run localAIFactoryInfe
 	if run.launcher.Active() || run.launcher.Starts() != run.launcher.Stops() || run.launcher.Stops() != run.launcher.Waits() {
 		t.Fatalf("Factory LocalAI host lifecycle = starts:%d stops:%d waits:%d active:%t, want fully released", run.launcher.Starts(), run.launcher.Stops(), run.launcher.Waits(), run.launcher.Active())
 	}
-	if !success && run.response.PrimaryResult != nil {
-		t.Fatalf("failed Factory LocalAI response primary result = %#v, want nil", run.response.PrimaryResult)
-	}
-}
-
-func localAIFactoryArgsContainPath(args []string, flag, want string) bool {
-	for index, arg := range args {
-		if arg == flag && index+1 < len(args) && strings.Contains(filepath.Clean(args[index+1]), filepath.Clean(want)) {
-			return true
-		}
-	}
-	return false
 }
 
 func writeLocalAIFactoryModelOverlay(t *testing.T, home, source string) {

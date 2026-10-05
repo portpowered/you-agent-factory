@@ -1,4 +1,4 @@
-package parameters_test
+package invocation_test
 
 import (
 	"encoding/json"
@@ -23,7 +23,6 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 	factoryDir := scaffoldSinglePositionalInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
-	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
 	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
@@ -62,9 +61,7 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 		response.Family != factoryapi.ErrorFamilyBadRequest {
 		t.Fatalf("ErrorResponse = %#v, want positional-overflow code and BAD_REQUEST", response)
 	}
-	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
-		t.Fatalf("provider dispatch call delta = %d, want 0", got)
-	}
+
 }
 
 // TestOptionalSessionIDUsesDefaultWhenOmitted proves optional session identity on

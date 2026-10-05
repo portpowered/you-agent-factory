@@ -1,4 +1,4 @@
-package commands_test
+package invocation_test
 
 import (
 	"context"
@@ -30,6 +30,7 @@ type sharedRemoteCLI struct {
 // one production service-mode host. Every scenario selects invocation-owned or
 // explicit-session state and overlaps on one concurrent root process.
 func TestCLISharedRemoteScenarios(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow shared remote CLI wiring")
 	}

@@ -153,7 +153,7 @@ func TestLifecycleService_ReadinessUsesSchedulerAndStopUsesReplayFactClock(t *te
 	awaitReadiness(t, result, context.Canceled)
 	deadline.assertStopped(t)
 	poll.assertStopped(t)
-	if err := lifecycle.Stop(handle); err != nil {
+	if err := lifecycle.StopWithClock(handle, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !handle.Completed() {

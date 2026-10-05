@@ -241,9 +241,9 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 		) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
-		ModelAssetHostPlatform:        models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
+		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:    modelServer.Client(),
+
 		ModelInvocationProtocolClient: fixture,
 	})
 

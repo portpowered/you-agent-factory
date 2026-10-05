@@ -179,6 +179,7 @@ func waitForP3P7SessionWork(t *testing.T, running *p3p7CanonicalProcess) factory
 		if len(listed.Results) > 0 || !time.Now().Before(deadline) {
 			return listed
 		}
+		//nolint:testsleep // Poll the customer REST projection until its recorded outcome appears; stop at the failure ceiling.
 		time.Sleep(25 * time.Millisecond)
 	}
 }
@@ -211,6 +212,7 @@ func waitForP3P7RetainedTerminalDispatch(
 				p3p7CorpusTerminalLimit,
 			)
 		}
+		//nolint:testsleep // Poll the customer REST projection until its recorded outcome appears; stop at the failure ceiling.
 		time.Sleep(25 * time.Millisecond)
 	}
 }

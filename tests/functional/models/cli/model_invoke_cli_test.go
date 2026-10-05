@@ -325,7 +325,6 @@ func newProcessTTSBoundaries(
 			},
 			ModelInvocationBackend: backend,
 			ModelHostHTTPClient:    hostHTTP,
-			ModelRuntimeHTTPClient: hostHTTP,
 		},
 	}
 }

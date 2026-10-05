@@ -31,7 +31,6 @@ import (
 var (
 	_ modelswire.AssetHTTPDoer                = serviceedges.Edges{}.ModelAssetHTTPClient
 	_ modelswire.HostHTTPDoer                 = serviceedges.Edges{}.ModelHostHTTPClient
-	_ modelswire.RuntimeHTTPDoer              = serviceedges.Edges{}.ModelRuntimeHTTPClient
 	_ modelswire.InvocationArtifactFileSystem = serviceedges.Edges{}.ModelInvocationArtifactFileSystem
 	_ modelswire.HostProcessLauncher          = modelHostProcessLauncherAdapter{}
 	_ modelswire.HostClock                    = modelHostClockAdapter{}

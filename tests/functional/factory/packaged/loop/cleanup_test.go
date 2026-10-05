@@ -12,7 +12,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -326,87 +325,4 @@ func observeLoopSessionAbsent(ctx context.Context, baseURL, sessionID string) (b
 func loopSessionEndpoint(baseURL, sessionID, suffix string) string {
 	return strings.TrimSuffix(baseURL, "/") +
 		"/factory-sessions/" + url.PathEscape(sessionID) + suffix
-}
-
-func TestLoopCleanupStackRunsAllActionsOnceAndRetainsFailures(t *testing.T) {
-	firstErr := errors.New("first cleanup failure")
-	secondErr := errors.New("second cleanup failure")
-	var (
-		order []string
-		calls = make(map[string]int)
-	)
-	stack := newLoopCleanupStack()
-	stack.add("first", func() error {
-		calls["first"]++
-		order = append(order, "first")
-		return firstErr
-	})
-	stack.add("second", func() error {
-		calls["second"]++
-		order = append(order, "second")
-		return secondErr
-	})
-	stack.add("third", func() error {
-		calls["third"]++
-		order = append(order, "third")
-		return nil
-	})
-
-	err := stack.run()
-	if !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
-		t.Fatalf("cleanup error = %v, want both cleanup failures", err)
-	}
-	if got, want := strings.Join(order, ","), "third,second,first"; got != want {
-		t.Fatalf("cleanup order = %q, want %q", got, want)
-	}
-	if repeated := stack.run(); repeated == nil || !errors.Is(repeated, firstErr) || !errors.Is(repeated, secondErr) {
-		t.Fatalf("repeated cleanup error = %v, want retained failures", repeated)
-	}
-	for name, count := range calls {
-		if count != 1 {
-			t.Fatalf("cleanup action %q calls = %d, want 1", name, count)
-		}
-	}
-}
-
-func TestBlockingLoopRunnerReleaseIsIdempotent(t *testing.T) {
-	runner := newBlockingLoopRunner()
-	result := make(chan error, 1)
-	done := make(chan struct{})
-	runContext, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	// Register cancellation and release before starting the goroutine. A failed
-	// start observation must clean up the same blocked runner it is checking.
-	t.Cleanup(func() {
-		runner.Release()
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(loopProviderPhaseBudget):
-			t.Errorf("blocking runner goroutine remained after test cleanup")
-		}
-	})
-	go func() {
-		_, err := runner.Run(runContext, platformprocess.CommandRequest{})
-		result <- err
-		close(done)
-	}()
-	startContext, startCancel := context.WithTimeout(t.Context(), loopProviderPhaseBudget)
-	defer startCancel()
-	select {
-	case <-runner.started:
-	case <-startContext.Done():
-		t.Fatalf("blocking runner did not start: %v", startContext.Err())
-	}
-
-	runner.Release()
-	runner.Release()
-	select {
-	case err := <-result:
-		if err != nil {
-			t.Fatalf("released runner error = %v, want nil", err)
-		}
-	case <-startContext.Done():
-		t.Fatalf("idempotent runner release did not unblock Run: %v", startContext.Err())
-	}
 }

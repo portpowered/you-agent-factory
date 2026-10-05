@@ -233,8 +233,8 @@ func buildInvalidGenericCLIProcess(t *testing.T) invalidGenericCLIProcess {
 		) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
-		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
+		ModelHostHTTPClient: modelServer.Client(),
+
 		ModelInvocationProtocolClient: genericCLIProtocolClient{},
 		ModelCLIOutputCreateTempFile:  output.CreateTemp,
 		ModelCLIOutputInspectPath:     output.Inspect,

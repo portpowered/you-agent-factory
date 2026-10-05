@@ -79,6 +79,7 @@ func TestACPPromptDelegationCancelRestartsCapturedFactorySession(t *testing.T) {
 	case <-started:
 	case err := <-firstDone:
 		t.Fatalf("first prompt stopped before provider started: %v", err)
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for provider work")
 	}
@@ -97,6 +98,7 @@ func TestACPPromptDelegationCancelRestartsCapturedFactorySession(t *testing.T) {
 		if err != nil {
 			t.Fatalf("canceled prompt transport: %v", err)
 		}
+	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for canceled prompt")
 	}

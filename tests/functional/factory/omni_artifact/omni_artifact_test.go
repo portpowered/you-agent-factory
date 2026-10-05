@@ -346,7 +346,7 @@ func newOmniFactoryProcessGroup() (*omniFactoryProcessGroup, error) {
 		ModelHostProtocolNegotiator:   modelHostProtocolNegotiator{},
 		ModelHostCompatibilityChecker: modelHostCompatibilityChecker{},
 		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
+
 		ModelInvocationProtocolClient: group.protocol,
 	}
 	group.process, err = support.BuildProcessWithContext(context.Background(), edges)

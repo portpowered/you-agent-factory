@@ -389,7 +389,6 @@ func story004EmbedEdges(
 		ModelHostHTTPClient:            hostHTTP,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelRuntimeHTTPClient:         hostHTTP,
 		ModelResolveBackendArtifact: func(
 			_ context.Context,
 			request serviceedges.ModelBackendArtifactSelectionRequest,

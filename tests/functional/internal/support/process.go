@@ -180,7 +180,7 @@ func InstallPackagedFactory(t testing.TB, homeDir, name string) string {
 	t.Helper()
 
 	workingDirectory := t.TempDir()
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	env := IsolatedHomeEnvironment(homeDir)
 	namedFactoriesRoot := initializeCustomerHome(t, env, workingDirectory)
 	factoryDir := filepath.Join(namedFactoriesRoot, filepath.FromSlash(name))
 	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
@@ -285,11 +285,7 @@ func CreateNamedFactoryWithProcess(
 	factoryConfigPath string,
 ) string {
 	t.Helper()
-	env := append(
-		os.Environ(),
-		"HOME="+homeDir,
-		"USERPROFILE="+homeDir,
-	)
+	env := IsolatedHomeEnvironment(homeDir)
 	namedFactoriesRoot := InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
 	return createNamedFactoryAtRootWithProcess(
 		t,

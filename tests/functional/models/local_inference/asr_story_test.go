@@ -188,9 +188,8 @@ func setupASRStory(t *testing.T) asrStory {
 			backendSelections = append(backendSelections, request)
 			return selection, nil
 		},
-		ModelASRBackend:        asrBackend,
-		ModelHostHTTPClient:    modelServer.Client(),
-		ModelRuntimeHTTPClient: modelServer.Client(),
+		ModelASRBackend:     asrBackend,
+		ModelHostHTTPClient: modelServer.Client(),
 	})
 	t.Cleanup(func() { closeRootProcess(t, process, "close ASR root process") })
 	return asrStory{
