@@ -75,6 +75,7 @@ func assertNoDetachMutation(t *testing.T, chat *fakeChatSessionsService, factory
 }
 
 func TestDetachAttachmentsReleasesEveryCachedAttachmentWithoutTouchingTheTurn(t *testing.T) {
+	t.Parallel()
 	logger := &recordingLogger{}
 	server, chat, factory, owned, peer := detachTestServer(t, logger)
 	server.detachAttachments(context.Background(), owned)
@@ -85,6 +86,7 @@ func TestDetachAttachmentsReleasesEveryCachedAttachmentWithoutTouchingTheTurn(t 
 }
 
 func TestDetachAttachmentsCompletesAfterContextCancellation(t *testing.T) {
+	t.Parallel()
 	server, chat, factory, owned, peer := detachTestServer(t, logging.NoopLogger{})
 	type contextKey struct{}
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), contextKey{}, "cleanup-value"))
@@ -109,6 +111,7 @@ func TestDetachAttachmentsCompletesAfterContextCancellation(t *testing.T) {
 }
 
 func TestDetachAttachmentsContinuesAfterOneDetachFailure(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name    string
 		err     error
@@ -119,6 +122,7 @@ func TestDetachAttachmentsContinuesAfterOneDetachFailure(t *testing.T) {
 		{"deadline", fmt.Errorf("payload-secret: %w", context.DeadlineExceeded), "cancelled"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			logger := &recordingLogger{}
 			server, chat, factory, owned, peer := detachTestServer(t, logger)
 			chat.detachErrs = []error{test.err}
@@ -140,6 +144,7 @@ func TestDetachAttachmentsContinuesAfterOneDetachFailure(t *testing.T) {
 }
 
 func TestDetachAttachmentsNoopLoggerPreservesCleanupAndProtocol(t *testing.T) {
+	t.Parallel()
 	capture := &recordingLogger{}
 	var calls [][]chatsessions.DetachRequest
 	var outputs []string
