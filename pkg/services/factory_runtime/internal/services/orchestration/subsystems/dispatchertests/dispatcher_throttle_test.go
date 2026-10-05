@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -48,7 +49,7 @@ func TestDispatcher_ExecuteExposesActiveThrottlePausesFromLoweredInferenceThrott
 		n,
 		&mockScheduler{},
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -95,7 +96,7 @@ func TestDispatcher_ExecuteOmitsThrottlePauseObservabilityWithoutAuthoredInferen
 			},
 		},
 	}
-	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{}, nil, nil, nil, func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{}, nil, logging.NoopLogger{}, nil, func() time.Time { return now }, testDispatchID)
 
 	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -136,7 +137,7 @@ func TestDispatcher_ExecuteLeavesLaneRunnableWhenAuthoredThrottleRuntimeLookupIs
 		n,
 		sched,
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(), func() time.Time { return now }, testDispatchID)
 
@@ -208,7 +209,7 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 		n,
 		sched,
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -285,7 +286,7 @@ func TestDispatcher_ThrottleHistoryWithoutAuthoredGuardDoesNotFilterEnabledTrans
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil, nil, func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, func() time.Time { return now }, testDispatchID)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -359,7 +360,7 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 		n,
 		sched,
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -433,7 +434,7 @@ func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testin
 		n,
 		&mockScheduler{},
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -504,7 +505,7 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 		n,
 		sched,
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -566,7 +567,7 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 		n,
 		&mockScheduler{},
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -616,7 +617,7 @@ func TestDispatcher_ThrottlePauseSkipsSchedulerWhenAllEnabledLanesPaused(t *test
 		n,
 		sched,
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -671,7 +672,7 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		n,
 		&mockScheduler{},
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -758,7 +759,7 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 		n,
 		sched,
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
@@ -829,7 +830,7 @@ func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnap
 		n,
 		sched,
 		nil,
-		nil,
+		logging.NoopLogger{},
 
 		dispatcherRuntimeConfig(
 			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},

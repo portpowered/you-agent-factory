@@ -81,7 +81,6 @@ func newDispatcher(
 	replayIDs factoryruntime.ReplayDispatchIDResolver,
 	seededRestoredWorkIDs map[string]struct{},
 ) *DispatcherSubsystem {
-	l := logging.EnsureLogger(logger)
 	if now == nil {
 		panic("Factory Runtime dispatcher clock is required")
 	}
@@ -92,7 +91,7 @@ func newDispatcher(
 		state:               n,
 		sched:               sched,
 		wfCtx:               wfCtx,
-		logger:              l,
+		logger:              logger,
 		runtimeConfig:       runtimeConfig,
 		now:                 now,
 		newID:               newID,
@@ -100,7 +99,7 @@ func newDispatcher(
 		seededReplayWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
 	}
 	dispatcher.evaluator = scheduler.NewEnablementEvaluator(
-		l,
+		logger,
 		dispatcher.now,
 		dispatcher.runtimeConfig)
 

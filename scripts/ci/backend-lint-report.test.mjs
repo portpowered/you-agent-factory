@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { createServer } from "node:net";
+import { once } from "node:events";
+import { execPath, platform } from "node:process";
+import { fileURLToPath } from "node:url";
 
 import { BACKEND_LINT_ALLOWANCES, BACKEND_LINT_REQUIRED_TARGETS } from "./backend-lint-policy.mjs";
 import {
+	beginLintRun, startLintTarget, recordLintTarget, collectLintRun, removeLintRun,
 	BACKEND_LINT_COMMENT_MARKER,
 	countViolations,
 	extractAddedFindings,
@@ -309,7 +314,7 @@ test("a successful checker always reports zero violations", () => {
 test("a failed checker without a machine-readable count fails closed", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets({
-			"packaged-factory-consumption-check": {
+			"golangci": {
 				status: "fail",
 				output: "Report{MissingPackages:[]string{\"pkg/a\", \"pkg/b\"}}",
 			},
@@ -317,43 +322,45 @@ test("a failed checker without a machine-readable count fails closed", () => {
 	}));
 
 	assert.equal(summary.ok, false);
-	assert.equal(summary.targets.find((target) => target.name === "packaged-factory-consumption-check").violationCount, null);
+	assert.equal(summary.targets.find((target) => target.name === "golangci").violationCount, null);
 	assert.match(summary.failures.join("\n"), /without a reliable machine-readable violation count/);
-	assert.match(renderBackendLintVerdict(summary), /packaged-factory-consumption-check: baseline 1 -> current unknown \(delta unknown; unmeasured\)/);
+	assert.match(renderBackendLintVerdict(summary), /golangci: baseline 0 -> current unknown \(delta unknown; unmeasured\)/);
 });
 
-test("a missing allowed target is an explicit failed ratchet condition", () => {
+test("a missing required target is an explicit failed ratchet condition", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets(),
 	}));
 	const incomplete = summarizeBackendLintReport(report({
 		targets: summary.targets
-			.filter((target) => target.name !== "packaged-factory-consumption-check")
+			.filter((target) => target.name !== "golangci")
 			.map(({ policyStatus, baselineViolationCount, allowance, ...target }) => target),
 	}));
 
 	assert.equal(incomplete.ok, false);
 	assert.match(
 		renderBackendLintVerdict(incomplete),
-		/packaged-factory-consumption-check: baseline 1 -> current unknown \(delta unknown; not observed\)/,
+		/golangci .*must run.*not observed/,
 	);
 });
 
-test("structured finding growth exceeds an allowance even on one diagnostic line", () => {
+test("structured golangci findings fail without allowance even on one diagnostic line", () => {
 	const structuredTarget = (count) => ({
 		status: "fail",
 		output: `inventory report: Report{MissingPackages:[]string{${Array.from({ length: count }, (_, index) => `\"finding-${index}\"`).join(", ")}}}\nLINT_VIOLATION_COUNT: ${count}`,
 	});
 	const baseline = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "packaged-factory-consumption-check": structuredTarget(1) }),
+		targets: baselineTargets({ "golangci": structuredTarget(1) }),
 	}));
 	const grown = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "packaged-factory-consumption-check": structuredTarget(2) }),
+		targets: baselineTargets({ "golangci": structuredTarget(2) }),
 	}));
 
-	assert.equal(baseline.ok, true);
+	assert.equal(baseline.ok, false);
 	assert.equal(grown.ok, false);
-	assert.match(grown.failures.join("\n"), /packaged-factory-consumption-check reported 2 violation\(s\), exceeding its baseline allowance of 1/);
+	assert.equal(baseline.targets.find((target) => target.name === "golangci").violationCount, 1);
+	assert.equal(grown.targets.find((target) => target.name === "golangci").violationCount, 2);
+	assert.match(grown.failures.join("\n"), /golangci failed with 2 reported violation\(s\); no baseline allowance exists/);
 });
 
 test("repository-fixture-check has no allowance left to absorb a regression", () => {
@@ -397,7 +404,7 @@ test("missing or malformed hosted reports are explicit bounded harness failures"
 	assert.doesNotMatch(markdown, /tail-only/);
 
 	const malformed = summarizeBackendLintReport({ version: 1, targets: [null] }, {
-		log: "lintlane wrote an invalid checker entry",
+		log: "lint report producer wrote an invalid checker entry",
 	});
 	assert.equal(malformed.harnessFailure, true);
 	assert.match(malformed.error, /malformed checker entries/);
@@ -408,7 +415,7 @@ test("incomplete or invalid checker records are harness failures", () => {
 	const incomplete = summarizeBackendLintReport(report({
 		targets: baselineTargets().map(({ name, status }) => ({ name, status })),
 	}), {
-		log: "lintlane emitted checker records without producer fields",
+		log: "lint report producer emitted checker records without producer fields",
 	});
 
 	assert.equal(incomplete.ok, false);
@@ -534,4 +541,179 @@ test("shared golangci diagnostics must be observed and have no allowance", () =>
 	}));
 	assert.equal(failed.ok, false);
 	assert.match(failed.failures.join("\n"), /golangci failed.*no baseline allowance exists/);
+});
+
+// Component-isolated bookkeeping cells: explicit records, no child tools.
+test("collector retains ordered outcomes, exact counts and owned cleanup", (t) => {
+	const directory = beginLintRun("2", ["first", "middle", "last"]);
+	t.after(() => { if (existsSync(directory)) removeLintRun(directory); });
+	for (const [name, exit, output] of [["last", "2", "LINT_VIOLATION_COUNT: 3"], ["middle", "0", "ok"], ["first", "1", "LINT_VIOLATION_COUNT: 2"]]) {
+		startLintTarget(directory, name);
+		writeFileSync(join(directory, `${name}.log`), output);
+		recordLintTarget(directory, name, exit);
+	}
+	const observed = collectLintRun(directory, ["first", "middle", "last"]);
+	assert.deepEqual(observed.targets.map(({ name, status, violationCount }) => [name, status, violationCount]), [["first", "fail", 2], ["middle", "pass", 0], ["last", "fail", 3]]);
+	assert.throws(() => startLintTarget(directory, "../outside"), /unselected/);
+	removeLintRun(directory);
+	assert.equal(existsSync(directory), false);
+});
+
+test("setup and incomplete or malformed records fail closed", (t) => {
+	for (const jobs of ["0", "-1", "many", "", "1.5"]) assert.throws(() => beginLintRun(jobs, ["first"]), /LINT_JOBS/);
+	assert.throws(() => beginLintRun("2", []), /selection/);
+	assert.throws(() => beginLintRun("2", ["../outside"]), /selection/);
+	const root = mkdtempSync(join(tmpdir(), "you-report-errors-"));
+	t.after(() => rmSync(root, { recursive: true, force: true }));
+	const reportPath = join(root, "report.json");
+	writeFileSync(reportPath, JSON.stringify(report()));
+	const directory = beginLintRun("2", ["first"], reportPath);
+	t.after(() => removeLintRun(directory));
+	assert.equal(JSON.parse(readFileSync(reportPath)), null);
+	assert.throws(() => collectLintRun(directory, ["first"], reportPath), /ENOENT/);
+	writeFileSync(join(directory, "first.result.json"), "{}");
+	assert.throws(() => collectLintRun(directory, ["first"], reportPath), /malformed/);
+	assert.equal(JSON.parse(readFileSync(reportPath)), null);
+	rmSync(join(directory, "first.result.json"));
+	startLintTarget(directory, "first");
+	writeFileSync(join(directory, "first.log"), "ok");
+	recordLintTarget(directory, "first", "0");
+	mkdirSync(join(root, "unwritable"));
+	assert.throws(() => collectLintRun(directory, ["first"], join(root, "unwritable")), /EISDIR|EPERM|EACCES/);
+	assert.throws(() => removeLintRun(root), /owned/);
+});
+
+test("malformed or duplicate count markers never invent a measurement", () => {
+	for (const output of ["", "LINT_VIOLATION_COUNT: -1", "LINT_VIOLATION_COUNT: nope", "LINT_VIOLATION_COUNT: 2\nLINT_VIOLATION_COUNT: bad", "LINT_VIOLATION_COUNT: 2\nLINT_VIOLATION_COUNT: 2"]) {
+		assert.deepEqual(countViolations({ status: "fail", output }), { count: null, source: "unavailable" });
+	}
+});
+
+// Maintenance-tool integration: real installed Make/Node, controlled target
+// effects. TCP start/release signals prove overlap without timing assertions.
+test("Make drains mixed failures with bounded overlap and isolated simultaneous runs", { timeout: 120000 }, async (t) => {
+	const make = platform === "win32" ? "make.exe" : "make";
+	assert.equal(spawnSync(make, ["--version"]).status, 0);
+	const root = mkdtempSync(join(tmpdir(), "you-make-lint-"));
+	const repository = fileURLToPath(new URL("../../", import.meta.url));
+	const fixture = join(root, "targets.mk").replaceAll("\\", "/");
+	const script = join(root, "target.mjs").replaceAll("\\", "/");
+	writeFileSync(script, `import { connect } from "node:net";
+const [name] = process.argv.slice(2);
+const socket = connect(Number(process.env.LINT_TEST_PORT), "127.0.0.1", () => socket.write(JSON.stringify({run:process.env.LINT_TEST_RUN, name, temp:process.env.TMPDIR}) + "\\n"));
+socket.on("data", () => { console.log(name + " diagnostic temp=" + process.env.TMPDIR); console.log("LINT_VIOLATION_COUNT: 2"); socket.end(); });
+socket.on("close", () => process.exit(name === "middle" ? 0 : 7));
+`);
+	writeFileSync(fixture, `.PHONY: first middle last\nfirst middle last:\n\t@"${execPath.replaceAll("\\", "/")}" "${script}" $@\n`);
+	const groups = new Map();
+	const signals = [];
+	const releases = [];
+	const diagnostics = new Map();
+	const active = new Map();
+	const peaks = new Map();
+	const children = [];
+	const sockets = new Set();
+	const release = (socket, signal) => {
+		releases.push({ run: signal.run, name: signal.name });
+		socket.write("release");
+	};
+	const server = createServer((socket) => {
+		sockets.add(socket);
+		socket.on("close", () => sockets.delete(socket));
+		let input = "";
+		socket.on("data", (data) => {
+			input += data;
+			if (!input.includes("\n")) return;
+			const signal = JSON.parse(input.trim());
+			socket.signal = signal;
+			signals.push(signal);
+			const count = (active.get(signal.run) || 0) + 1;
+			active.set(signal.run, count);
+			peaks.set(signal.run, Math.max(peaks.get(signal.run) || 0, count));
+			socket.on("close", () => active.set(signal.run, active.get(signal.run) - 1));
+			if (signal.run === "success") { release(socket, signal); return; }
+			const group = groups.get(signal.run) || [];
+			group.push(socket);
+			groups.set(signal.run, group);
+			// The first pair must both start before either is released. The
+			// third can only start once Make has joined a released target.
+			if (group.length === 2) { for (const peer of group) release(peer, peer.signal); }
+			if (group.length === 3) release(socket, signal);
+		});
+	});
+	t.after(async () => {
+		// Kill the owned process group on POSIX: killing only Make leaves its
+		// gated descendants holding output pipes open, so close never arrives.
+		for (const child of children) if (child.exitCode === null && child.signalCode === null) {
+			if (platform === "win32") child.kill();
+			else process.kill(-child.pid, "SIGKILL");
+		}
+		for (const socket of sockets) socket.destroy();
+		server.close();
+		await Promise.all(children.map((child) => !child.closed ? once(child, "close") : Promise.resolve()));
+		for (const directory of new Set(signals.map((signal) => join(signal.temp, "..")))) {
+			if (existsSync(directory)) removeLintRun(directory);
+		}
+		rmSync(root, { recursive: true, force: true });
+	});
+	server.listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const launch = (run, extra = []) => {
+		const reportPath = join(root, `${run}.json`);
+		const child = spawn(make, ["--no-print-directory", "lint", "LINT_TARGETS=first middle last", "LINT_JOBS=2", `LINT_REPORT_FILE=${reportPath.replaceAll("\\", "/")}`, `NODE=${execPath.replaceAll("\\", "/")}`, ...extra], {
+			detached: platform !== "win32",
+			cwd: repository, env: { ...process.env, MAKEFILES: fixture, LINT_TEST_PORT: String(server.address().port), LINT_TEST_RUN: run },
+		});
+		children.push(child);
+		child.once("close", () => { child.closed = true; });
+		const state = { output: "" };
+		diagnostics.set(run, state);
+		child.stdout.on("data", (data) => { state.output += data; });
+		child.stderr.on("data", (data) => { state.output += data; });
+		// A failure ceiling, not synchronization: all progress uses IPC signals.
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				const logs = signals.map((signal) => {
+					const path = join(signal.temp, "..", `${signal.name}.log`);
+					return { run: signal.run, name: signal.name, output: existsSync(path) ? readFileSync(path, "utf8") : "not observed" };
+				});
+				reject(new Error(`Make phase ${run} stalled\nstarts=${JSON.stringify(signals)}\nreleases=${JSON.stringify(releases)}\nchildren=${JSON.stringify([...diagnostics])}\ntargetLogs=${JSON.stringify(logs)}`));
+			}, 45000);
+			child.once("error", (error) => { clearTimeout(timer); reject(error); });
+			child.once("close", (code) => { clearTimeout(timer); resolve({ code, output: state.output, reportPath }); });
+		});
+	};
+	const results = await Promise.all([launch("one"), launch("two")]);
+	for (const result of results) {
+		assert.notEqual(result.code, 0, result.output);
+		assert.ok(existsSync(result.reportPath), result.output);
+		const report = JSON.parse(readFileSync(result.reportPath, "utf8"));
+		assert.deepEqual(report.targets.map(({ name, status }) => [name, status]), [["first", "fail"], ["middle", "pass"], ["last", "fail"]]);
+		assert.match(result.output, /LINT FAILED: 2 target/);
+		assert.match(result.output, /rerun: make first/);
+		assert.match(result.output, /rerun: make last/);
+		for (const target of report.targets) assert.match(target.output, new RegExp(`${target.name} diagnostic`));
+	}
+	assert.equal(peaks.get("one"), 2);
+	assert.equal(peaks.get("two"), 2);
+	assert.equal(signals.length, 6);
+	assert.equal(new Set(signals.map((signal) => signal.temp)).size, 6);
+	for (const signal of signals) assert.equal(existsSync(signal.temp), false, "joined run temp must be removed");
+	const shellArgs = platform === "win32"
+		? [`SHELL=${spawnSync(make, ["-n", "lint"], { cwd: repository, encoding: "utf8" }).stdout.match(/SHELL="([^"]+)"/)[1]}`]
+		: [];
+	const success = await launch("success", ["LINT_TARGETS=middle", ...shellArgs]);
+	assert.equal(success.code, 0, success.output);
+	assert.match(success.output, /LINT PASSED: 1 target/);
+	assert.deepEqual(JSON.parse(readFileSync(success.reportPath)).targets.map(({ name, status, violationCount }) => [name, status, violationCount]), [["middle", "pass", 0]]);
+	const dry = await launch("dry", ["-n"]);
+	assert.equal(dry.code, 0, dry.output);
+	assert.equal(existsSync(dry.reportPath), false);
+	assert.equal(signals.length, 7);
+	for (const invalid of ["0", "-1", "many"]) {
+		const rejected = await launch(`invalid-${invalid}`, [`LINT_JOBS=${invalid}`]);
+		assert.notEqual(rejected.code, 0);
+		assert.match(rejected.output, /LINT_JOBS must be a positive integer/);
+		assert.equal(signals.length, 7);
+	}
 });

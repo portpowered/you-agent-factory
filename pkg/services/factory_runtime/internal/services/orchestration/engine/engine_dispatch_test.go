@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -30,7 +31,7 @@ func TestEngine_SameWorkObserveAndConsumeDispatchesInOneTick(t *testing.T) {
 	dispatcher := subsystems.NewDispatcher(
 		net,
 		scheduler.NewWorkInQueueScheduler(2, nil),
-		nil, nil, nil, func() time.Time { return now }, nextTestDispatchID(),
+		nil, logging.NoopLogger{}, nil, func() time.Time { return now }, nextTestDispatchID(),
 	)
 	var forwarded []work.WorkDispatch
 	var records []interfaces.FactoryDispatchRecord
@@ -91,11 +92,11 @@ func TestEngine_SameTickCancellationResultRestoresResources(t *testing.T) {
 	dispatcher := subsystems.NewDispatcher(
 		net,
 		scheduler.NewWorkInQueueScheduler(2, nil),
-		nil, nil, nil, func() time.Time { return now }, nextTestDispatchID(),
+		nil, logging.NoopLogger{}, nil, func() time.Time { return now }, nextTestDispatchID(),
 	)
 	transitioner := subsystems.NewTransitioner(
 		net,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return now },
 		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
 		nil, nil, nil,

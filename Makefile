@@ -224,23 +224,20 @@ PACKAGE_BOUNDARY_BASELINE_CACHE_DIR ?= auto
 LINT_CHECKER_FALLBACK ?= 0
 LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
 LINT_CHECKER_DRIVER ?=
-LINT_LANE_PACKAGE := ./cmd/lintlane
 # Optional CI outputs can be defined but blank. Use the canonical lane budget
-# for blank handoffs; lintlane still rejects invalid nonblank overrides.
+# for blank handoffs; report setup rejects invalid nonblank overrides.
 LINT_JOBS ?= $(GO_LANE_BUDGET)
 ifeq ($(strip $(LINT_JOBS)),)
 override LINT_JOBS := $(GO_LANE_BUDGET)
 endif
-# Keep the recursive command available to lintlane without spelling the
-# special $(MAKE) variable in this recipe; GNU Make executes such recipes
-# during -n so recursive builds can receive the dry-run flag.
+# Keep recursive Make behind an alias so make -n does not execute it.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
 # Local `make lint` runs LINT_TARGETS_BASE, adds the UI gates only when ui/
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet pkg-boundary packaged-factory-source-check packaged-factory-consumption-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
+LINT_TARGETS_BASE := vet pkg-boundary packaged-factory-source-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -317,7 +314,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: lint-full pkg-boundary packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
+.PHONY: lint-full pkg-boundary packaged-factory-source-check packaged-factory-catalog-generate provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: readme-check deadcode dashboard-verify
 
@@ -335,7 +332,12 @@ endef
 # that recursive builds can receive the dry-run flag; on the measured Windows
 # Make implementation that still launched real work. These aggregators remain
 # serialized to preserve the old stop-on-failure behavior even with -j.
+# Before GNU Make 4.4, even a targeted .NOTPARALLEL serializes the whole
+# invocation. The lint scheduler is a separate recursive invocation and must
+# retain its explicit job budget on those versions too.
+ifeq (,$(filter lint-observe-selected,$(MAKECMDGOALS)))
 .NOTPARALLEL: default test
+endif
 # Bare `make` runs the complete generation, frontend, build, test, and lint
 # pipeline. Use `make build` when only the Go binary is needed.
 default: default-pipeline-banner generate-api ui-deps ui-build build test lint
@@ -972,8 +974,40 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "TestReplayEventStreamArtifactSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+# Only lint recipes use Git sh on Windows; global budget arithmetic retains
+# the caller's shell. Override LINT_SHELL for another installed POSIX shell.
+ifeq ($(OS),Windows_NT)
+ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL))))
+LINT_SHELL ?= $(SHELL)
+else
+# Windows Make requires a shell executable path without spaces.
+LINT_SHELL ?= $(subst \,/,$(shell for %%I in ("$(or $(ProgramW6432),$(ProgramFiles))\Git\bin\sh.exe") do @echo %%~sI))
+endif
 lint:
-	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
+	@"$(LINT_MAKE)" --no-print-directory lint-run SHELL="$(LINT_SHELL)" LINT_JOBS="$(LINT_JOBS)"
+else
+lint: lint-run
+endif
+
+.PHONY: lint-run
+lint-run:
+	@run_dir=$$("$(NODE)" scripts/ci/backend-lint-report.mjs --begin-run --jobs "$(LINT_JOBS)" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS)); \
+	test -n "$$run_dir" || exit 1; \
+	status=0; \
+	"$(LINT_MAKE)" --no-print-directory --keep-going --jobs="$(LINT_JOBS)" --output-sync=target lint-observe-selected LINT_RUN_DIR="$$run_dir" || status=$$?; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --collect-run "$$run_dir" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS) || status=1; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --remove-run "$$run_dir" || status=1; \
+	exit $$status
+
+.PHONY: lint-observe-selected $(addprefix lint-observe-,$(LINT_TARGETS))
+lint-observe-selected: $(addprefix lint-observe-,$(LINT_TARGETS))
+$(addprefix lint-observe-,$(LINT_TARGETS)): lint-observe-%:
+	@"$(NODE)" scripts/ci/backend-lint-report.mjs --start-target "$(LINT_RUN_DIR)" --name "$*" || exit 1; \
+	status=0; \
+	TEMP="$(LINT_RUN_DIR)/$*.tmp" TMP="$(LINT_RUN_DIR)/$*.tmp" TMPDIR="$(LINT_RUN_DIR)/$*.tmp" \
+	"$(LINT_MAKE)" --no-print-directory $(if $(filter Windows_NT,$(OS)),SHELL="$(LINT_SHELL)",) "$*" >"$(LINT_RUN_DIR)/$*.log" 2>&1 || status=$$?; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --record-target "$(LINT_RUN_DIR)" --name "$*" --exit-code "$$status" || exit 1; \
+	exit $$status
 
 lint-full:
 	$(MAKE) lint LINT_FULL=1
@@ -991,9 +1025,6 @@ pkg-boundary:
 
 packaged-factory-source-check:
 	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
-
-packaged-factory-consumption-check:
-	$(call run_lint_checker,./cmd/packagedfactoryconsumptioncheck,-root ".")
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .

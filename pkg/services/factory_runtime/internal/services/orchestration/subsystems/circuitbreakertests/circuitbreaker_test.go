@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -59,7 +60,7 @@ func makeToken(id, placeID string, createdAt time.Time) *factorytoken.Token {
 
 func TestCircuitBreaker_TickGroup(t *testing.T) {
 	n := buildTestNet()
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, nil)
 	if cb.TickGroup() != subsystems.CircuitBreaker {
 		t.Errorf("expected TickGroup %d, got %d", subsystems.CircuitBreaker, cb.TickGroup())
 	}
@@ -70,7 +71,7 @@ func TestCircuitBreaker_MaxTokenAge(t *testing.T) {
 	n.Limits.MaxTokenAge = 1 * time.Hour
 
 	now := time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
-	cb := subsystems.NewCircuitBreakerWithClock(n, func() time.Time { return now }, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, func() time.Time { return now }, logging.NoopLogger{}, nil)
 
 	// Token created 2 hours ago — should exceed MaxTokenAge.
 	marking := petri.NewMarking("test-wf")
@@ -103,7 +104,7 @@ func TestCircuitBreaker_MaxTotalVisits(t *testing.T) {
 	n := buildTestNet()
 	n.Limits.MaxTotalVisits = 5
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, nil)
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:processing", time.Now())
@@ -141,7 +142,7 @@ func TestCircuitBreaker_MaxRetries(t *testing.T) {
 		},
 	}
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, runtimeConfig)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, runtimeConfig)
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:init", time.Now())
@@ -178,7 +179,7 @@ func TestCircuitBreaker_MaxRetries_DoesNotUseTransitionIDFallback(t *testing.T) 
 		},
 	}
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, runtimeConfig)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, runtimeConfig)
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:init", time.Now())
@@ -212,7 +213,7 @@ func TestCircuitBreaker_MissingRuntimeRetryLimitUsesDefaultPerWorkstationExhaust
 		},
 	}
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, runtimeConfig)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, runtimeConfig)
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:init", time.Now())
@@ -255,7 +256,7 @@ func TestCircuitBreaker_TokenWithinLimits(t *testing.T) {
 	cb := subsystems.NewCircuitBreakerWithClock(
 		n,
 		func() time.Time { return now },
-		nil,
+		logging.NoopLogger{},
 		runtimeConfig)
 
 	marking := petri.NewMarking("test-wf")
@@ -279,7 +280,7 @@ func TestCircuitBreaker_SkipsTerminalTokens(t *testing.T) {
 	n := buildTestNet()
 	n.Limits.MaxTotalVisits = 1
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, nil)
 
 	marking := petri.NewMarking("test-wf")
 	// Token already in terminal place — should be skipped even if it exceeds limits.
@@ -325,7 +326,7 @@ func TestCircuitBreaker_ExhaustionTransition(t *testing.T) {
 		},
 	}
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, nil)
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:init", time.Now())
@@ -383,7 +384,7 @@ func TestCircuitBreaker_LogicalRoundTripReportsRawBackstopReason(t *testing.T) {
 
 	markingSnap := marking.Snapshot()
 	snap := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, nil)
 	result, err := cb.Execute(context.Background(), &snap)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -535,7 +536,7 @@ func assertCircuitBreakerVisitCountReplay(t *testing.T, test struct {
 
 func executeCircuitBreakerSnapshot(t *testing.T, net *state.Net, marking petri.MarkingSnapshot) *interfaces.TickResult {
 	t.Helper()
-	cb := subsystems.NewCircuitBreakerWithClock(net, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(net, time.Now, logging.NoopLogger{}, nil)
 	result, err := cb.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking})
 	if err != nil {
 		t.Fatalf("CircuitBreaker.Execute() error = %v", err)
@@ -572,7 +573,7 @@ func TestCircuitBreaker_ExhaustionNotTriggered(t *testing.T) {
 		},
 	}
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, nil)
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:init", time.Now())
@@ -593,7 +594,7 @@ func TestCircuitBreaker_ExhaustionNotTriggered(t *testing.T) {
 func TestCircuitBreaker_DefaultTimeExpiryTransitionConsumesExpiredTimeWork(t *testing.T) {
 	now := time.Date(2026, 4, 18, 14, 0, 0, 0, time.UTC)
 	n := buildTimeExpiryNet()
-	cb := subsystems.NewCircuitBreakerWithClock(n, func() time.Time { return now }, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, func() time.Time { return now }, logging.NoopLogger{}, nil)
 
 	marking := petri.NewMarking("test-wf")
 	expired := makeCronTimeToken("time-expired", "daily-refresh", now.Add(-10*time.Minute), now.Add(-time.Minute))
@@ -626,7 +627,7 @@ func TestCircuitBreaker_DefaultTimeExpiryTransitionConsumesExpiredTimeWork(t *te
 func TestCircuitBreaker_DefaultTimeExpiryTransitionIgnoresPendingTimeWork(t *testing.T) {
 	now := time.Date(2026, 4, 18, 14, 0, 0, 0, time.UTC)
 	n := buildTimeExpiryNet()
-	cb := subsystems.NewCircuitBreakerWithClock(n, func() time.Time { return now }, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, func() time.Time { return now }, logging.NoopLogger{}, nil)
 
 	marking := petri.NewMarking("test-wf")
 	marking.AddToken(makeCronTimeToken("time-pending", "daily-refresh", now.Add(-time.Minute), now.Add(time.Minute)))
@@ -670,7 +671,7 @@ func TestCircuitBreaker_Phase1PreemptsPhase2(t *testing.T) {
 		},
 	}
 
-	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, logging.NoopLogger{}, nil)
 
 	marking := petri.NewMarking("test-wf")
 	tok := makeToken("tok-1", "task:init", time.Now())
