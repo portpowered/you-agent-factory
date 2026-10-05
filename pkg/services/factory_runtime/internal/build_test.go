@@ -501,7 +501,7 @@ func TestBuild_FailedOpeningRetainsRetryableCleanupWithoutRepeatingReleasedResou
 				metricsSink.closeErr = releaseErr
 			}
 			owner := testRuntimeFactoryWithOwners(
-				testRuntimeLogOwnerFunc(func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) { return logSink, nil }),
+				testRuntimeLogOwnerFunc(func(*zap.Logger, factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) { return logSink, nil }),
 				testRuntimeMetricsOwnerFunc(func(factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) { return metricsSink, nil }),
 			)
 			bundle, err := owner.Build(
@@ -737,6 +737,48 @@ func assertReplacementSelections(t *testing.T, initial, replacement factory.Runt
 type testCleanupAssemblyHost struct{ instancehost.Service }
 
 func (host testCleanupAssemblyHost) Scope(factory.Clock) instancehost.Service { return host }
+
+func TestBuild_FileLoggingRetainsSelectedLogger(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	core, logs := observer.New(zap.InfoLevel)
+	selected := zap.New(core).With(zap.String("invocation_id", "selected-invocation"))
+	var received *zap.Logger
+	owner := testRuntimeLogOwnerFunc(func(logger *zap.Logger, _ factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+		received = logger
+		return &testRuntimeLogSink{logger: logger}, nil
+	})
+	sessions := &stubWorkerSessionsService{}
+	bundle, err := testRuntimeFactoryWithOwners(owner, nil).Build(
+		t.Context(), selected, dir, dir, "selected-session", "", "", interfaces.RuntimeModeBatch,
+		false, nil, false, nil, nil, dir, factory.RuntimeLogStorageConfig{},
+		factory.RuntimeFileLoggingPolicyEnabled, factory.RuntimeMetricsPolicyDisabled,
+		"", factory.RuntimeMetricsStorageConfig{}, loaded, "selected-runtime", "", clockwork.NewFakeClock(),
+		"", nil, nil, false, nil, nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
+		testRuntimeWorkers{}, sessions, sessions, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = bundle.CloseArtifacts() })
+	if received != selected {
+		t.Fatal("runtime log owner did not receive the selected scoped logger")
+	}
+	bundle.Logger.Info("file-logging-selection")
+	entries := logs.FilterMessage("file-logging-selection").All()
+	if len(entries) != 1 {
+		t.Fatalf("selected backend records = %d, want one", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["invocation_id"] != "selected-invocation" || fields["session_id"] != "selected-session" {
+		t.Fatalf("file-backed runtime log attribution = %#v", fields)
+	}
+}
 
 func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *testing.T) {
 	sessions := &stubWorkerSessionsService{}
@@ -1106,14 +1148,14 @@ type testRuntimeLogOwner struct {
 	closeErr error
 }
 
-type testRuntimeLogOwnerFunc func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error)
+type testRuntimeLogOwnerFunc func(*zap.Logger, factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error)
 
-func (owner testRuntimeLogOwnerFunc) Open(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
-	return owner(request)
+func (owner testRuntimeLogOwnerFunc) Open(logger *zap.Logger, request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	return owner(logger, request)
 }
 
-func (owner testRuntimeLogOwner) Open(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
-	return &testRuntimeLogSink{logger: zap.NewNop(), onClose: owner.onClose, closeErr: owner.closeErr, artifact: factory.RuntimeLogArtifact{
+func (owner testRuntimeLogOwner) Open(logger *zap.Logger, request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	return &testRuntimeLogSink{logger: logger, onClose: owner.onClose, closeErr: owner.closeErr, artifact: factory.RuntimeLogArtifact{
 		Path: filepath.Join(owner.root, request.RuntimeInstanceID+".runtime.log"), RootDir: owner.root,
 		StartTimeUTC: time.Now().UTC(), Config: request.Config,
 	}}, owner.openErr

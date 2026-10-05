@@ -63,7 +63,7 @@ func (sink *runtimeLoggerSinkStub) Logger() *zap.Logger { return sink.logger }
 
 func TestRuntimeSinkOpeningFailsClosedWithoutInjectedOwners(t *testing.T) {
 	t.Parallel()
-	if _, _, err := openRuntimeLogScope(nil, RuntimeFileLoggingPolicyEnabled, "/logs", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", "runtime-1"); err == nil || !strings.Contains(err.Error(), "owner is required") {
+	if _, _, err := openRuntimeLogScope(nil, zap.NewNop(), RuntimeFileLoggingPolicyEnabled, "/logs", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", "runtime-1"); err == nil || !strings.Contains(err.Error(), "owner is required") {
 		t.Fatalf("log opening error = %v, want required owner", err)
 	}
 	if _, err := openRuntimeMetricsScope(nil, RuntimeMetricsPolicyEnabled, "/metrics", factory.RuntimeMetricsStorageConfig{}, "session", "runtime-1", "/folder", "/factory"); err == nil || !strings.Contains(err.Error(), "owner is required") {
@@ -73,7 +73,7 @@ func TestRuntimeSinkOpeningFailsClosedWithoutInjectedOwners(t *testing.T) {
 
 func TestRuntimeSinkOpeningDisabledPolicyNeedsNoOwner(t *testing.T) {
 	t.Parallel()
-	logSink, runtimeID, err := openRuntimeLogScope(nil, RuntimeFileLoggingPolicyDisabled, "", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", "runtime-1")
+	logSink, runtimeID, err := openRuntimeLogScope(nil, zap.NewNop(), RuntimeFileLoggingPolicyDisabled, "", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", "runtime-1")
 	if err != nil || logSink != nil || runtimeID != "runtime-1" {
 		t.Fatalf("disabled log opening = (%v, %q, %v)", logSink, runtimeID, err)
 	}
@@ -85,10 +85,10 @@ func TestRuntimeSinkOpeningDisabledPolicyNeedsNoOwner(t *testing.T) {
 
 func TestRuntimeLogOpeningRejectsAmbientIdentityFallbacks(t *testing.T) {
 	t.Parallel()
-	owner := runtimeLogOwnerFunc(func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	owner := runtimeLogOwnerFunc(func(*zap.Logger, factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
 		return &runtimeSinkStub{}, nil
 	})
-	if _, _, err := openRuntimeLogScope(owner, RuntimeFileLoggingPolicyEnabled, "/logs", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", ""); err == nil || !strings.Contains(err.Error(), "runtime instance ID is required") {
+	if _, _, err := openRuntimeLogScope(owner, zap.NewNop(), RuntimeFileLoggingPolicyEnabled, "/logs", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", ""); err == nil || !strings.Contains(err.Error(), "runtime instance ID is required") {
 		t.Fatalf("empty runtime ID error = %v", err)
 	}
 }
@@ -168,13 +168,13 @@ func TestRuntimeObservabilityOpeningRetainsPartialScopesWithRetryableClose(t *te
 	openingErr, releaseErr := errors.New("partial opening"), errors.New("release failed")
 	logScope := &runtimeSinkStub{closeErr: releaseErr}
 	metricsScope := &runtimeMetricsSinkStub{closeErr: releaseErr}
-	logOwner := runtimeLogOwnerFunc(func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	logOwner := runtimeLogOwnerFunc(func(*zap.Logger, factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
 		return logScope, openingErr
 	})
 	metricsOwner := runtimeMetricsOwnerFunc(func(factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) {
 		return metricsScope, openingErr
 	})
-	logSink, runtimeID, err := openRuntimeLogScope(logOwner, RuntimeFileLoggingPolicyEnabled,
+	logSink, runtimeID, err := openRuntimeLogScope(logOwner, zap.NewNop(), RuntimeFileLoggingPolicyEnabled,
 		"/logs", factory.RuntimeLogStorageConfig{}, "session", "/folder", "/factory", "runtime")
 	if logSink == nil || runtimeID != "runtime" || !errors.Is(err, openingErr) {
 		t.Fatalf("partial log opening = (%v, %q, %v)", logSink, runtimeID, err)
@@ -216,7 +216,7 @@ func newRuntimeScopeOpeningFixture() runtimeScopeOpeningFixture {
 		logScope:       &runtimeSinkStub{},
 		metricsScope:   &runtimeMetricsSinkStub{},
 	}
-	fixture.logOwner = func(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	fixture.logOwner = func(_ *zap.Logger, request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
 		*fixture.logRequest = request
 		return fixture.logScope, nil
 	}
@@ -230,7 +230,7 @@ func newRuntimeScopeOpeningFixture() runtimeScopeOpeningFixture {
 func openRuntimeScopeFixture(t *testing.T, fixture runtimeScopeOpeningFixture) (factory.RuntimeLogSink, factory.RuntimeMetricsSink) {
 	t.Helper()
 	logSink, _, err := openRuntimeLogScope(
-		fixture.logOwner, RuntimeFileLoggingPolicyEnabled, "/logs", factory.RuntimeLogStorageConfig{MaxSize: 7},
+		fixture.logOwner, zap.NewNop(), RuntimeFileLoggingPolicyEnabled, "/logs", factory.RuntimeLogStorageConfig{MaxSize: 7},
 		"session-1", "/folder", "/factory", "runtime-1",
 	)
 	if err != nil {
@@ -246,10 +246,10 @@ func openRuntimeScopeFixture(t *testing.T, fixture runtimeScopeOpeningFixture) (
 	return logSink, metricsSink
 }
 
-type runtimeLogOwnerFunc func(factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error)
+type runtimeLogOwnerFunc func(*zap.Logger, factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error)
 
-func (owner runtimeLogOwnerFunc) Open(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
-	return owner(request)
+func (owner runtimeLogOwnerFunc) Open(logger *zap.Logger, request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	return owner(logger, request)
 }
 
 type runtimeMetricsOwnerFunc func(factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error)

@@ -184,6 +184,7 @@ func (f *RuntimeFactory) Build(
 	}()
 	logSink, runtimeInstanceID, err := openRuntimeLogScope(
 		f.runtimeLogs,
+		baseLogger,
 		runtimeFileLoggingPolicy,
 		runtimeLogDir,
 		runtimeLogConfig,
@@ -602,6 +603,7 @@ func dirExists(path string, files factory.RuntimeDirectoryFileSystem) bool {
 
 func openRuntimeLogScope(
 	owner factory.RuntimeLogOwner,
+	baseLogger *zap.Logger,
 	policy RuntimeFileLoggingPolicy,
 	runtimeLogDir string,
 	runtimeLogConfig factory.RuntimeLogStorageConfig,
@@ -619,7 +621,7 @@ func openRuntimeLogScope(
 	if owner == nil {
 		return nil, runtimeInstanceID, fmt.Errorf("runtime log owner is required")
 	}
-	logSink, err := owner.Open(factory.RuntimeLogScopeRequest{
+	logSink, err := owner.Open(baseLogger, factory.RuntimeLogScopeRequest{
 		SessionID: sessionID, RuntimeInstanceID: runtimeInstanceID,
 		FolderPath: folderPath, FactoryDirectory: factoryDir,
 		RootDirectory: runtimeLogDir, Policy: policy, Config: runtimeLogConfig,

@@ -99,7 +99,6 @@ func provideRuntimeMetricsRetentionFileSystem() platformmetrics.RuntimeMetricsRe
 }
 
 func provideRuntimeLogOwner(
-	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
@@ -108,22 +107,18 @@ func provideRuntimeLogOwner(
 	if err != nil {
 		return nil, err
 	}
-	if baseLogger == nil {
-		return nil, errors.New("runtime log owner base logger is required")
-	}
 	return runtimeLogOwner{
-		baseLogger: baseLogger, opener: opener, clock: clock, newID: newID,
+		opener: opener, clock: clock, newID: newID,
 	}, nil
 }
 
 type runtimeLogOwner struct {
-	baseLogger *zap.Logger
-	opener     *logging.RuntimeLogOpener
-	clock      runtimeArtifactClock
-	newID      runtimeArtifactIDGenerator
+	opener *logging.RuntimeLogOpener
+	clock  runtimeArtifactClock
+	newID  runtimeArtifactIDGenerator
 }
 
-func (owner runtimeLogOwner) Open(request factoryruntime.RuntimeLogScopeRequest) (factoryruntime.RuntimeLogSink, error) {
+func (owner runtimeLogOwner) Open(baseLogger *zap.Logger, request factoryruntime.RuntimeLogScopeRequest) (factoryruntime.RuntimeLogSink, error) {
 	if request.Policy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		return nil, nil
 	}
@@ -131,7 +126,7 @@ func (owner runtimeLogOwner) Open(request factoryruntime.RuntimeLogScopeRequest)
 		return nil, errors.New("runtime log owner is not configured")
 	}
 	opened, err := owner.opener.Open(logging.RuntimeLogOpeningRequest{
-		BaseLogger: owner.baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
+		BaseLogger: baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
 		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
 		Config: logging.RuntimeLogConfig{
 			MaxSize: request.Config.MaxSize, MaxBackups: request.Config.MaxBackups,
