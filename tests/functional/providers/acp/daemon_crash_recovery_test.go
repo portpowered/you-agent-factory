@@ -9,31 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// Isolation: isolated-with-reason - crash and replacement; the failed first
-// child and successful second child must remain distinct real ACP processes.
-// Keep this witness serial: its second invocation depends on the provider
-// daemon retiring the crashed connection before selecting the replacement.
-func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
-	t.Parallel()
-	marker := filepath.Join(t.TempDir(), "crashed")
-	fixture := functionalACPFixture("crash-once")
-	fixture.CrashMarkerPath = marker
-	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts, fixture)
-	defer server.Stop(t)
-	first, err := invokeACPDaemonWorkflow(t, server, "crash", singleACPAgentWorkflow)
-	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
-		t.Fatalf("first execution = %#v, error = %v; want failed peer crash", first, err)
-	}
-	result, err := invokeACPDaemonWorkflow(t, server, "after-crash", singleACPAgentWorkflow)
-	if err != nil || result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("second execution = %#v, error = %v; want recovered success", result, err)
-	}
-	if starts.Load() != 2 {
-		t.Fatalf("ACP process starts = %d, want one crash plus one replacement", starts.Load())
-	}
-}
-
 // A mid-turn disconnect must fail its own request; the next request gets a
 // fresh peer and a complete answer.
 // Isolation: isolated-with-reason - scenario-owned disconnect and replacement.

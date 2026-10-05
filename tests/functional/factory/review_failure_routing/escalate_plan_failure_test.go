@@ -3,7 +3,6 @@ package review_failure_routing
 import (
 	"context"
 	"testing"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 )
@@ -32,7 +31,7 @@ func TestEscalatePlanFailure_ConsumesFailedPlanSoRestoredIdeaIsNotReescalated(t 
 
 	// Operator restoration: the idea re-plans and reaches to-complete again.
 	scenario.submit(t, scenario.marker+"-restored-idea", reviewFailureSeed{Name: name, WorkID: restoredIdea, WorkType: "idea", State: "to-complete", TraceID: traceID, Payload: "idea"})
-	time.Sleep(3 * time.Second)
+	awaitReviewFailureQuiescence(t, scenario)
 
 	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{restoredIdea: "to-complete"})
 	if reports := dispatchesWithTransition(reviewFailureDispatches(t, scenario), "report-idea-failure"); len(reports) != 1 {
