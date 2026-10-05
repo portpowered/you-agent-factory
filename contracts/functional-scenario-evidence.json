@@ -101,21 +101,21 @@
       ]
     },
     {
-      "test": "tests/functional/work/recovery/manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
+      "test": "tests/functional/work/admission/batch_contract_batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
+      "stableIds": [
+        "cli/you.submit.batch"
+      ]
+    },
+    {
+      "test": "tests/functional/work/admission/recovery_manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
       "stableIds": [
         "rest/moveWorkBySessionId"
       ]
     },
     {
-      "test": "tests/functional/work/submission/http_test.go::TestAPIBatchUpsertAcceptsWorksContent",
+      "test": "tests/functional/work/admission/submission_http_test.go::TestAPIBatchUpsertAcceptsWorksContent",
       "stableIds": [
         "rest/upsertWorkRequestBySessionId"
-      ]
-    },
-    {
-      "test": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
-      "stableIds": [
-        "cli/you.submit.batch"
       ]
     },
     {

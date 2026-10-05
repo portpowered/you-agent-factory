@@ -36,13 +36,13 @@ const (
 	parentChildActivationWorkType  = "task"
 )
 
-// TestWorkRoutingActivatesThroughRootBuildProcessAfterLifecycle proves logical-move
+// TestWorkRoutesThroughClassifier proves logical-move
 // routing advances Work to an observable public outcome after runtime lifecycle on a
 // process constructed only through root.BuildProcess with edges.Edges effect
 // replacement. Detailed classifier and logical-move coverage remains under
 // tests/functional/work/routing; this test closes the explicit public-process
 // activation gap.
-func TestWorkRoutingActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
+func TestWorkRoutesThroughClassifier(t *testing.T) {
 	t.Parallel()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_dir"))
@@ -101,155 +101,19 @@ func TestWorkRoutingActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T)
 	}
 }
 
-// TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle proves
+// TestWorkDependenciesDelayDependentDispatch proves
 // DEPENDS_ON and PARENT_CHILD relationship outcomes are observable through public
 // Work surfaces after runtime lifecycle on processes built only via root.BuildProcess
 // and edges.Edges. Detailed relationship coverage remains under
 // tests/functional/work/relationships; this test closes the explicit public-process
 // activation gap.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
+func TestWorkDependenciesDelayDependentDispatch(t *testing.T) {
 	t.Parallel()
 
-	t.Run("depends_on", func(t *testing.T) {
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
+	t.Run("depends_on", testSubmittedWorkDependencyOrdering)
 
-		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-			WorkTypeID: "task",
-			WorkID:     relationshipActivationPrerequisiteID,
-			Payload:    []byte("fun-work prerequisite"),
-		})
-		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-			WorkTypeID: "task",
-			WorkID:     relationshipActivationDependentID,
-			Payload:    []byte("fun-work dependent"),
-			Relations: []work.Relation{
-				{
-					Type:          work.RelationDependsOn,
-					TargetWorkID:  relationshipActivationPrerequisiteID,
-					RequiredState: relationshipActivationRequiredState,
-				},
-			},
-		})
-
-		runner := testutil.NewProviderCommandRunner(
-			relationshipActivationProviderSuccess(),
-			relationshipActivationProviderSuccess(),
-			relationshipActivationProviderSuccess(),
-			relationshipActivationProviderSuccess(),
-		)
-
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-			t,
-			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
-			15*time.Second,
-		)
-
-		completeLocation := support.WorkCustomerLocation("task", relationshipActivationRequiredState)
-		if !support.HasWorkAtCustomerState(listed, relationshipActivationPrerequisiteID, completeLocation) {
-			t.Fatalf(
-				"prerequisite %q not at %q in public listing: %#v",
-				relationshipActivationPrerequisiteID,
-				relationshipActivationRequiredState,
-				listed,
-			)
-		}
-		if !support.HasWorkAtCustomerState(listed, relationshipActivationDependentID, completeLocation) {
-			t.Fatalf(
-				"dependent %q not at %q in public listing: %#v",
-				relationshipActivationDependentID,
-				relationshipActivationRequiredState,
-				listed,
-			)
-		}
-		if runner.CallCount() != 4 {
-			t.Fatalf(
-				"provider command runner calls = %d, want 4 starter and finisher invocations",
-				runner.CallCount(),
-			)
-		}
-
-		prerequisiteCompleteSequence, dependentStartSequence := relationshipActivationDependsOnDispatchOrdering(
-			t,
-			events,
-			relationshipActivationPrerequisiteID,
-			relationshipActivationDependentID,
-		)
-		if dependentStartSequence <= prerequisiteCompleteSequence {
-			t.Fatalf(
-				"dependent %q dispatch sequence = %d, want after prerequisite %q complete sequence %d",
-				relationshipActivationDependentID,
-				dependentStartSequence,
-				relationshipActivationPrerequisiteID,
-				prerequisiteCompleteSequence,
-			)
-		}
-
-		if session.Runtime.Progress.Categories.Terminal != 2 || session.Runtime.Progress.Categories.Failed != 0 {
-			t.Fatalf(
-				"session progress categories = %+v, want two terminal and zero failed",
-				session.Runtime.Progress.Categories,
-			)
-		}
-	})
-
-	t.Run("parent_child", func(t *testing.T) {
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
-
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "COMPLETE"},
-			workerexecution.InferenceResponse{Content: "COMPLETE"},
-			workerexecution.InferenceResponse{Content: "COMPLETE"},
-			workerexecution.InferenceResponse{Content: "COMPLETE"},
-		)
-		edges := serviceedges.Edges{ProviderOverride: provider}
-
-		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                dir,
-			WaitForServiceModeRuntime: true,
-			Edges:                     edges,
-		})
-		t.Cleanup(func() { server.Stop(t) })
-
-		baseURL := server.URL()
-		process := support.BuildProcess(t, edges)
-
-		batchOutput := executeRelationshipActivationBatchSubmitCLI(
-			t,
-			process,
-			baseURL,
-			relationshipActivationParentChildBatchJSON(),
-		)
-		decodeRelationshipActivationBatchSubmitJSON(t, batchOutput, parentChildActivationRequestID)
-
-		support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
-
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		assertRelationshipActivationParentChildInListing(
-			t,
-			listed,
-			parentChildActivationChildID,
-			parentChildActivationParentID,
-		)
-
-		events := server.GetFactoryEvents(t)
-		assertRelationshipActivationParentChildInFactoryEvents(
-			t,
-			events,
-			parentChildActivationRequestID,
-			parentChildActivationChild,
-			parentChildActivationParent,
-			parentChildActivationParentID,
-		)
-
-		assertRelationshipActivationParentChildOnChildDispatch(
-			t,
-			provider,
-			parentChildActivationChildID,
-			parentChildActivationParentID,
-		)
-	})
+	t.Run("parent_child", testSubmittedWorkParentChildRelationships)
 }
 
 func configureRoutingActivationLogicalMoveWorkstation(t *testing.T, dir, workstationName string) {
@@ -668,4 +532,143 @@ func relationshipActivationFirstDispatchToken(rawTokens any) workerexecution.Tok
 	default:
 		return workerexecution.Token{}
 	}
+}
+func testSubmittedWorkDependencyOrdering(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     relationshipActivationPrerequisiteID,
+		Payload:    []byte("fun-work prerequisite"),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     relationshipActivationDependentID,
+		Payload:    []byte("fun-work dependent"),
+		Relations: []work.Relation{
+			{
+				Type:          work.RelationDependsOn,
+				TargetWorkID:  relationshipActivationPrerequisiteID,
+				RequiredState: relationshipActivationRequiredState,
+			},
+		},
+	})
+
+	runner := testutil.NewProviderCommandRunner(
+		relationshipActivationProviderSuccess(),
+		relationshipActivationProviderSuccess(),
+		relationshipActivationProviderSuccess(),
+		relationshipActivationProviderSuccess(),
+	)
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		15*time.Second,
+	)
+
+	completeLocation := support.WorkCustomerLocation("task", relationshipActivationRequiredState)
+	if !support.HasWorkAtCustomerState(listed, relationshipActivationPrerequisiteID, completeLocation) {
+		t.Fatalf(
+			"prerequisite %q not at %q in public listing: %#v",
+			relationshipActivationPrerequisiteID,
+			relationshipActivationRequiredState,
+			listed,
+		)
+	}
+	if !support.HasWorkAtCustomerState(listed, relationshipActivationDependentID, completeLocation) {
+		t.Fatalf(
+			"dependent %q not at %q in public listing: %#v",
+			relationshipActivationDependentID,
+			relationshipActivationRequiredState,
+			listed,
+		)
+	}
+	if runner.CallCount() != 4 {
+		t.Fatalf(
+			"provider command runner calls = %d, want 4 starter and finisher invocations",
+			runner.CallCount(),
+		)
+	}
+
+	prerequisiteCompleteSequence, dependentStartSequence := relationshipActivationDependsOnDispatchOrdering(
+		t,
+		events,
+		relationshipActivationPrerequisiteID,
+		relationshipActivationDependentID,
+	)
+	if dependentStartSequence <= prerequisiteCompleteSequence {
+		t.Fatalf(
+			"dependent %q dispatch sequence = %d, want after prerequisite %q complete sequence %d",
+			relationshipActivationDependentID,
+			dependentStartSequence,
+			relationshipActivationPrerequisiteID,
+			prerequisiteCompleteSequence,
+		)
+	}
+
+	if session.Runtime.Progress.Categories.Terminal != 2 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf(
+			"session progress categories = %+v, want two terminal and zero failed",
+			session.Runtime.Progress.Categories,
+		)
+	}
+}
+
+func testSubmittedWorkParentChildRelationships(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+	)
+	edges := serviceedges.Edges{ProviderOverride: provider}
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	baseURL := server.URL()
+	process := support.BuildProcess(t, edges)
+
+	batchOutput := executeRelationshipActivationBatchSubmitCLI(
+		t,
+		process,
+		baseURL,
+		relationshipActivationParentChildBatchJSON(),
+	)
+	decodeRelationshipActivationBatchSubmitJSON(t, batchOutput, parentChildActivationRequestID)
+
+	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	assertRelationshipActivationParentChildInListing(
+		t,
+		listed,
+		parentChildActivationChildID,
+		parentChildActivationParentID,
+	)
+
+	events := server.GetFactoryEvents(t)
+	assertRelationshipActivationParentChildInFactoryEvents(
+		t,
+		events,
+		parentChildActivationRequestID,
+		parentChildActivationChild,
+		parentChildActivationParent,
+		parentChildActivationParentID,
+	)
+
+	assertRelationshipActivationParentChildOnChildDispatch(
+		t,
+		provider,
+		parentChildActivationChildID,
+		parentChildActivationParentID,
+	)
 }

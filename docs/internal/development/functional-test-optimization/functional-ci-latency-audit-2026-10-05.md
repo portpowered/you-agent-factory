@@ -5,33 +5,32 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest complete local Linux run passes all selected tests, quarantine and
-coverage gates: **3m11.29s overall / 2m56.714s test invocation**, at pushed
-revision `630fb269c5`. This is a warm-cache measurement with four-CPU affinity,
-not a hosted CI result. Hosted verification is pending in
-[PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867); no merge
-checkpoint has been claimed. The complete three-minute target remains unmet.
+The latest successful hosted verification, at `f5b5dfcfc9`, took **7m37s for
+the full functional supervisor**, including **6m16.528s for tests**. All required
+checks passed, but the five-, three- and two-minute merge checkpoints remain
+unmet. [PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867)
+contains the ongoing changes. Passing local warm-cache supervisors have ranged
+from **3m11.29s to 4m18.10s**; they do not establish hosted latency.
 
-The passing run contains 141 packages and 1,022 top-level tests (1,020 passed,
-two skipped). Recorded linker processes consumed 171.525s CPU; compilation
-consumed 8.931s CPU. These overlap execution and cannot be added to wall time.
-Two further test-binary removals are committed locally for follow-up validation.
+Consolidation has a measured benefit. A controlled build-only comparison reduced
+**136 linker invocations to one**, **160.292s linker CPU to 1.807s**, and warm
+build wall time from **44.29s to 3.95s**. CPU time is summed across processes;
+it is not elapsed time that can be subtracted directly from a CI duration.
+The complete single-binary execution experiment still fails customer scenarios
+under contention and is not shipped as a passing test layout.
 
-| Highest package execution latencies in the passing run | Seconds, rounded |
-| --- | ---: |
-| Models inference | 48.36 |
-| Factory review failure routing | 30.84 |
-| Chat Session ACP | 30.73 |
-| Providers ACP | 30.00 |
-| Provider Session details | 24.87 |
-| Packaged Factory invocation | 24.29 |
-| Session execution | 23.37 |
-| Factory runtime metrics | 22.86 |
+The current source layout converges another **21 packages** into three existing
+customer-use-case packages: Factory execution, packaged Factory invocation,
+and Work admission. This preserves ordinary and `functionallong` cases and
+their session-owned fixtures. Independent parent tests overlap through Go's
+test scheduler. Sixteen composition-oriented test names now describe customer
+CLI, REST, Work, session control, recording and replay behavior. Coverage floors
+and all 156 reviewed scenario decisions are preserved.
 
-Package times include contention while other packages execute; measure a
-specific journey in isolation before attributing that whole duration to it.
-Detailed build/link measurements, baseline CI results and validation history
-follow below.
+Detailed measurements below include failed runs and their causes. Remaining
+work is to consolidate fixture-heavy packages with their own lifecycles, reduce
+scenario startup and execution costs, and verify the complete hosted lane at
+each requested checkpoint.
 
 ## Initial finding
 
@@ -1094,3 +1093,61 @@ coverage. Functional tests took **376.528s** and the full supervisor took
 **457.177s (7m37s)**; all 1,020 tests were observed, with 1,018 passed and two
 skipped. The job including setup/reporting took 8m19s. No merge checkpoint is
 claimed from this successful but above-target hosted run.
+
+## Further consolidation and contention findings
+
+The private child-fixture monolith variant took **222.21s** command wall time,
+with **527.94s user CPU**, **125.56s system CPU**, and approximately **5.98 GiB**
+peak resident memory. It failed five customer cohorts. The failures included
+deadlines expiring before HTTP/CLI attachment, recovery startup, runtime
+configuration execution and ACP startup. This result demonstrates that removing
+linkers alone does not establish the customer execution target.
+
+The committed layout migration moves 76 source files without combining them
+into oversized files or introducing generated numeric suite names. Related
+packages share a binary while each scenario retains owned inputs and effects.
+Typed identifier rewriting changes only colliding helper names. Build-tagged
+cases remain available, reviewed scenario evidence points at the new files,
+and exact lint debt entries move with their original code rather than expanding
+the allowed debt.
+
+Two deadline fixtures now expire their caller context after observing an
+outstanding request or attached Work watch stream. This proves handling of
+DeadlineExceeded without racing startup against 100ms/250ms wall clocks.
+Standard-library expired-deadline cases remain available separately. Three
+focused repetitions pass for both the generated HTTP client and Work watch.
+
+Internal effect-count assertions are removed from session-control and Work
+submission journeys. The tests retain public pause/resume results, submitted
+Work identities, REST listings and completed dispatch events. The dead TTS
+`/invoke` protocol fixture and the named-Factory no-signature compatibility
+matrix are removed; current signatures, positional/file/stdin inputs and
+LocalAI audio/recording/replay scenarios retain behavioral coverage.
+
+| Four-CPU consolidation measurement | First source-layout run | Follow-up run |
+| --- | ---: | ---: |
+| Supervisor wall | 277.48s | 259.21s |
+| Link commands | 115 | 114 |
+| Link CPU | 173.957s | 212.998s |
+| Link active wall interval union | 192.849s | 222.519s |
+| Compile commands | 1,586 | 6 |
+| Compile CPU | 208.498s | 7.512s |
+| User CPU, whole supervisor | 846.58s | 749.85s |
+| System CPU, whole supervisor | 171.30s | 180.28s |
+| Outcome | Coverage passed; quarantine invocation failed | One test failed; quarantine passed |
+
+The first run supplied incorrectly named quarantine environment variables,
+so its supervisor failure is an audit invocation error and its elapsed time
+is coverage-only evidence. The corrected follow-up observed 115 packages and
+1,006 top-level tests: 1,003 passed, two skipped and one failed. Its test command
+took **233.532s**. The failure was an OS port-rebind probe in
+`TestRunScopedServerUsesExactListenAddress`: another concurrent owner can bind
+a released port before the probe. The test now retains the public CLI address
+and completion checks through a controlled server edge and an owned completion
+signal. Real socket policy remains platform/integration behavior. The legacy
+ascending fallback compatibility scenario is removed. The complete run-scoped
+server package passes three local repetitions in 19.573s.
+
+Focused built-in lint, repository test-shape/boundary/sleep/debt analyzers, and
+the 156-scenario manifest check pass. These checks do not replace required
+hosted verification or establish any elapsed-time checkpoint.

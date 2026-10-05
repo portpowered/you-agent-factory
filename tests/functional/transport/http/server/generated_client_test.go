@@ -23,8 +23,6 @@ import (
 
 const generatedClientTestTimeout = 10 * time.Second
 
-const generatedClientDeadline = 100 * time.Millisecond
-
 // TestGeneratedClientStatusAndSessionRoundTrip proves status and Factory Session
 // round-trips through the published generated HTTP client succeed with typed success
 // decoding against the live functional server, use a caller-owned HTTP dependency for
@@ -106,11 +104,12 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 	})
 
 	t.Run("deadline", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), generatedClientDeadline)
-		defer cancel()
+		ctx, expire := support.ControlledDeadlineContext(t.Context())
+		defer expire()
 		started, result := startOutstandingGeneratedClientCall(t, server, sessionID, ctx)
 		waitForGeneratedClientResponseStart(t, started, result)
 
+		expire()
 		assertGeneratedClientContextError(t, result, context.DeadlineExceeded)
 	})
 }

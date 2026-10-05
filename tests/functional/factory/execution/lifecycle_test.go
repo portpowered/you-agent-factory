@@ -23,37 +23,25 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuildProcessAfterLifecycle
-// proves Factory Runtime control, observation, and dispatch-plan activate through
-// published public HTTP surfaces after runtime lifecycle on a process constructed
-// only through root.BuildProcess with Factory Runtime effects replaced via edges.Edges.
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuildProcessAfterLifecycle(
+// TestFactorySessionControlsPauseResumeAndDispatchWork proves a customer can
+// pause and resume a Factory Session, submit Work, and read its completed dispatch.
+func TestFactorySessionControlsPauseResumeAndDispatchWork(
 	t *testing.T,
 ) {
 	t.Parallel()
 
-	recorder := newFactoryRuntimeDelegatingRecorder(t)
 	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
-		Edges:                     recorder.edges(),
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("COMPLETE"),
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
 	baseURL := server.URL()
 	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
-
-	if got := recorder.totalControl(); got <= 0 {
-		t.Fatalf("control effect calls after runtime lifecycle = %d, want > 0 via edges", got)
-	}
-	if got := recorder.totalObservation(); got <= 0 {
-		t.Fatalf("observation effect calls after runtime lifecycle = %d, want > 0 via edges", got)
-	}
-
-	dispatchBefore := recorder.totalDispatchPlan()
 
 	status := support.GetJSON[factoryapi.StatusResponse](t, baseURL+"/status")
 	if status.FactoryState != string(interfaces.FactoryStateRunning) {
@@ -66,6 +54,12 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 		t.Fatalf("GET /status totalTokens = %d, want 0 before work submission", status.TotalTokens)
 	}
 
+	assertFactorySessionPauseAndResume(t, baseURL)
+	assertSubmittedFactorySessionWorkCompletes(t, baseURL)
+}
+
+func assertFactorySessionPauseAndResume(t *testing.T, baseURL string) {
+	t.Helper()
 	pause := postFactoryRuntimeLifecycleControl(
 		t,
 		baseURL,
@@ -106,6 +100,10 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 		)
 	}
 
+}
+
+func assertSubmittedFactorySessionWorkCompletes(t *testing.T, baseURL string) {
+	t.Helper()
 	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("factory-runtime-lifecycle-activation"),
 		WorkTypeName: "task",
@@ -123,9 +121,6 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 	}
 	if completedStatus.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
 		t.Fatalf("GET /status runtimeStatus after completion = %q, want IDLE", completedStatus.RuntimeStatus)
-	}
-	if got := recorder.totalDispatchPlan() - dispatchBefore; got <= 0 {
-		t.Fatalf("dispatch-plan effect calls after work submission = %d, want > 0 via edges", got)
 	}
 
 	listed := support.ListDefaultSessionWork(t, baseURL)

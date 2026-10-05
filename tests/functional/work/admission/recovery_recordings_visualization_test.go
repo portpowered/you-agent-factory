@@ -29,13 +29,13 @@ const (
 	visualizationActivationRequestID = "fun-work-visualization-activation"
 )
 
-// TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle proves public
+// TestCLIWorkMoveRetriesFailedWork proves public
 // recovery/manual-move advances failed Work to a terminal customer-visible state
 // after runtime lifecycle on a process constructed only through root.BuildProcess
 // with edges.Edges effect replacement. Detailed recovery coverage remains under
 // tests/functional/work/recovery; this test closes the explicit public-process
 // activation gap.
-func TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
+func TestCLIWorkMoveRetriesFailedWork(t *testing.T) {
 	t.Parallel()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
@@ -103,12 +103,12 @@ func TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T
 	}
 }
 
-// TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle proves
+// TestWorkListShowsRecordedWork proves
 // public Work list reads activate after runtime lifecycle on a process constructed
 // only through root.BuildProcess with edges.Edges effect replacement. Recordings-
 // backed read contract coverage remains under tests/functional/work/recordings;
 // this test closes the explicit public-process activation gap for the read surface.
-func TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
+func TestWorkListShowsRecordedWork(t *testing.T) {
 	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, recordingsActivationFactoryConfig())
@@ -191,13 +191,13 @@ func recordingsActivationFactoryConfig() map[string]any {
 	}
 }
 
-// TestWorkVisualizationActivatesThroughRootBuildProcessAfterLifecycle proves
+// TestWorkGraphShowsSubmittedDependencies proves
 // dependency-graph visualization activates through the public Work CLI after
 // runtime lifecycle on a process constructed only through root.BuildProcess with
 // edges.Edges effect replacement. Detailed visualization coverage remains under
 // tests/functional/work/visualization; this test closes the explicit
 // public-process activation gap.
-func TestWorkVisualizationActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
+func TestWorkGraphShowsSubmittedDependencies(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})

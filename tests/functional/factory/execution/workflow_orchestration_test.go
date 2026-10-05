@@ -21,11 +21,11 @@ const (
 	factoryRuntimeJavaScriptSuccessResult = "factory-runtime-js:<SYNC_SUCCESS>"
 )
 
-// TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle
+// TestJavaScriptFactoryWorkflowCompletesSubmittedWork
 // proves an existing public JavaScript workflow surface produces a successful
 // outcome after runtime lifecycle on a process composed only through
 // root.BuildProcess with Factory Runtime effects replaced via edges.Edges.
-func TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle(
+func TestJavaScriptFactoryWorkflowCompletesSubmittedWork(
 	t *testing.T,
 ) {
 	t.Parallel()
@@ -83,11 +83,11 @@ func TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLi
 	}
 }
 
-// TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle
+// TestFactoryTransitionsCompleteSubmittedWork
 // proves an existing public orchestration surface routes multi-transition work
 // to documented terminals after runtime lifecycle on the same public-process path.
 // Complements the CLI-owned proofs in tests/functional/factory_runtime/orchestrators/petri/routing.
-func TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle(
+func TestFactoryTransitionsCompleteSubmittedWork(
 	t *testing.T,
 ) {
 	t.Parallel()

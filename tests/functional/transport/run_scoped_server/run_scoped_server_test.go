@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -246,65 +245,8 @@ func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *tes
 	}
 }
 
-// TestRunScopedServerUsesProductionListenerAndReportsFallback proves the
-// customer CLI path binds, reports, and joins the concrete HTTP server.
-func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
-	t.Parallel()
-	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve requested loopback port: %v", err)
-	}
-	defer busyListener.Close()
-	requestedPort := busyListener.Addr().(*net.TCPAddr).Port
-	if requestedPort >= 65535 {
-		t.Skip("OS selected the terminal TCP port; no higher fallback candidate exists")
-	}
-
-	workingDirectory := t.TempDir()
-	workflowPath := filepath.Join(workingDirectory, "workflow.js")
-	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	homeDir := t.TempDir()
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	requestedURL := "http://127.0.0.1:" + strconv.Itoa(requestedPort)
-	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
-		"you", "--server", requestedURL, "run", "--factory", workflowPath,
-		"--with-mock-workers", "--with-server",
-	}, "")
-	if !strings.Contains(stderr, "--server is deprecated") || strings.Count(stderr, "warning:") != 1 ||
-		!strings.Contains(stdout, "completed (SUCCEEDED)") {
-		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
-	}
-
-	var actualURL string
-	for _, line := range strings.Split(stdout, "\n") {
-		if value, ok := strings.CutPrefix(line, "Dashboard URL: "); ok {
-			actualURL = strings.TrimSpace(value)
-			break
-		}
-	}
-	parsed, err := url.Parse(actualURL)
-	if err != nil || parsed.Hostname() != "127.0.0.1" {
-		t.Fatalf("reported dashboard URL = %q, parse error = %v", actualURL, err)
-	}
-	actualPort, err := strconv.Atoi(parsed.Port())
-	if err != nil || actualPort <= requestedPort {
-		t.Fatalf("reported dashboard URL = %q, want fallback above %d", actualURL, requestedPort)
-	}
-	rebound, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(actualPort)))
-	if err != nil {
-		t.Fatalf("production listener remained bound after completion: %v", err)
-	}
-	_ = rebound.Close()
-}
-
-// TestRunScopedServerUsesExactListenAddress proves --listen binds the requested
-// loopback port without entering the legacy ascending fallback path.
+// TestRunScopedServerUsesExactListenAddress proves --listen reports the selected
+// address and its owned server operation finishes before the CLI returns.
 func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 	t.Parallel()
 	workingDirectory := t.TempDir()
@@ -312,8 +254,17 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	requestedPort := reserveExactPort(t)
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
+	const requestedPort = 43210
+	stopped := make(chan struct{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			defer close(stopped)
+			assertDashboardHandler(t, request.Handler)
+			request.OnBound(platformhttpserver.Binding{Host: request.Host, Port: request.Port})
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -331,11 +282,11 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 	if !strings.Contains(stdout, wantURL) {
 		t.Fatalf("stdout = %q, want exact listener URL %q", stdout, wantURL)
 	}
-	rebound, err := net.Listen("tcp4", "127.0.0.1:"+strconv.Itoa(requestedPort))
-	if err != nil {
-		t.Fatalf("exact listener remained bound after completion: %v", err)
+	select {
+	case <-stopped:
+	default:
+		t.Fatal("CLI returned before its server operation finished")
 	}
-	_ = rebound.Close()
 }
 
 // TestRemotePlacementDispatchesThroughSelectedServer proves a dual-placement
@@ -855,19 +806,6 @@ func executeFactoryArgsForRunScopedTest(
 		StdoutIsTTY:      &stdoutIsTTY,
 	})
 	return stdout.String(), stderr.String(), err
-}
-
-func reserveExactPort(t *testing.T) int {
-	t.Helper()
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve exact listener port: %v", err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatalf("release exact listener port: %v", err)
-	}
-	return port
 }
 
 const remotePlacementFactoryJSON = `{

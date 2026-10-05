@@ -50,8 +50,8 @@ func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 	fixture *deepResearchSharedFixture,
 ) {
 	provider := testutil.NewProviderCommandRunner(
-		providerResult(support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`)),
-		providerResult(support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`)),
 	)
 	scenario := fixture.newScenario(t, provider)
 	factoryPath := filepath.Join(scenario.factoryDir, factorydefinitions.FactoryConfigFile)
@@ -264,9 +264,9 @@ func testPackagedDeepResearchRequiredInputCompletes(
 	)
 
 	runner := testutil.NewProviderCommandRunner(
-		providerResult(support.CodexSuccessStdout(`{"evidence":"technical specialist evidence"}`)),
-		providerResult(support.CodexSuccessStdout(`{"evidence":"tradeoff specialist evidence"}`)),
-		providerResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: synthesized specialist evidence"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"evidence":"technical specialist evidence"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"evidence":"tradeoff specialist evidence"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: synthesized specialist evidence"}`)),
 	)
 	scenario := fixture.newScenario(t, runner)
 	scenario.open(t)
@@ -377,8 +377,8 @@ func testPackagedDeepResearchOptionalInputsReachWorkers(
 	)
 
 	runner := testutil.NewProviderCommandRunner(
-		providerResult(support.CodexSuccessStdout(`{"evidence":"optional specialist evidence"}`)),
-		providerResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: optional synthesized evidence"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"evidence":"optional specialist evidence"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: optional synthesized evidence"}`)),
 	)
 	scenario := fixture.newScenario(t, runner)
 	scenario.open(t)
@@ -495,9 +495,9 @@ func testPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis(
 	)
 
 	runner := testutil.NewProviderCommandRunner(
-		providerResult(support.CodexSuccessStdout(`{"wrong":"not evidence"}`)),
-		providerResult(support.CodexSuccessStdout(`{"evidence":"recovered specialist evidence"}`)),
-		providerResult(support.CodexSuccessStdout(`{"answer":"recovered evidence synthesis"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"wrong":"not evidence"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"evidence":"recovered specialist evidence"}`)),
+		deepResearchProviderResult(support.CodexSuccessStdout(`{"answer":"recovered evidence synthesis"}`)),
 	)
 	scenario := fixture.newScenario(t, runner)
 	scenario.open(t)
@@ -657,7 +657,7 @@ func startPackagedDeepResearchInvocation(
 	)
 }
 
-func providerResult(stdout []byte) platformprocess.CommandResult {
+func deepResearchProviderResult(stdout []byte) platformprocess.CommandResult {
 	return platformprocess.CommandResult{Stdout: stdout}
 }
 

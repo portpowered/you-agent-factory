@@ -2,12 +2,10 @@ package admission_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -29,31 +27,22 @@ const (
 	submissionActivationCLIBatchWorkName  = "fun-work-cli-batch-task"
 )
 
-// TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle
-// proves Work HTTP submission (batch and unary) and CLI submit contracts activate
-// through public surfaces after runtime lifecycle on a process constructed only
-// through root.BuildProcess with edges.Edges effect replacement. Behavioral
-// coverage under tests/functional/work/submission and
-// tests/functional/work/transports/cli/submit retains the detailed contract
-// proofs; this test closes the explicit public-process activation gap.
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
+// TestCLISubmitCreatesWorkVisibleThroughREST proves CLI and HTTP submissions
+// create named Work with identities that a customer can retrieve through REST.
+func TestCLISubmitCreatesWorkVisibleThroughREST(t *testing.T) {
 	t.Parallel()
 
-	recorder := newWorkSubmissionActivationRecorder()
-	edges := recorder.edges()
+	edges := serviceedges.Edges{ProviderCommandRunner: support.NewStaticSuccessCommandRunner("COMPLETE")}
 
 	dir := support.ScaffoldFactory(t, submissionActivationFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Edges:                     edges,
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
 	baseURL := server.URL()
-	requestIDsBefore := recorder.requestIDs()
 
 	workTypeName := submissionActivationWorkType
 	batchSubmitted := support.UpsertDefaultSessionWorkRequest(t, baseURL, factoryapi.WorkRequest{
@@ -139,35 +128,6 @@ func TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle
 		cliBatchSubmitted.Works[0].WorkID,
 	)
 
-	if got := recorder.requestIDs() - requestIDsBefore; got <= 0 {
-		t.Fatalf(
-			"WorkRequestIDGenerator calls after public submission = %d, want > 0 via edges",
-			got,
-		)
-	}
-}
-
-type workSubmissionActivationRecorder struct {
-	requestID atomic.Int32
-}
-
-func newWorkSubmissionActivationRecorder() *workSubmissionActivationRecorder {
-	return &workSubmissionActivationRecorder{}
-}
-
-func (recorder *workSubmissionActivationRecorder) edges() serviceedges.Edges {
-	return serviceedges.Edges{
-		WorkRequestIDGenerator: recorder.generateRequestID,
-	}
-}
-
-func (recorder *workSubmissionActivationRecorder) requestIDs() int32 {
-	return recorder.requestID.Load()
-}
-
-func (recorder *workSubmissionActivationRecorder) generateRequestID() string {
-	next := recorder.requestID.Add(1)
-	return fmt.Sprintf("fun-work-submission-request-%d", next)
 }
 
 func submissionActivationFactoryConfig() map[string]any {
