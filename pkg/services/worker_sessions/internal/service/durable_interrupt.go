@@ -176,8 +176,8 @@ func (r *registry) commitInterruptResult(ctx context.Context, operation *recordi
 	// Persist control facts without provider content, terminal diagnostics or
 	// execution secrets. Session/history reads retain their canonical owners.
 	safe := result.Clone()
-	safe.Source = workersessions.Session{ID: result.Source.ID, State: result.Source.State}
-	safe.Successor = workersessions.Session{ID: result.Successor.ID, State: result.Successor.State}
+	safe.Source = interruptSessionFacts(result.Source)
+	safe.Successor = interruptSessionFacts(result.Successor)
 	operation.Result, _ = json.Marshal(durableInterruptOutcome{InterruptResult: safe, FailureCauses: interruptFailureCodes(interruptErr)})
 	phase := "COMPLETED"
 	if interruptErr != nil {
@@ -185,4 +185,14 @@ func (r *registry) commitInterruptResult(ctx context.Context, operation *recordi
 		operation.FailureCode = string(result.Phase)
 	}
 	return r.advanceInterruptPhase(ctx, operation, phase)
+}
+
+// Lineage is part of the accepted snapshot, rather than a lookup of a session
+// that may have continued again by the time the operator retries.
+func interruptSessionFacts(session workersessions.Session) workersessions.Session {
+	return workersessions.Session{
+		ID: session.ID, State: session.State,
+		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
+		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
+	}
 }

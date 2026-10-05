@@ -461,8 +461,9 @@ default. `--remote` sends the complete request only to the configured
 `--server`; it never falls back to local state.
 
 Retry an interrupt with the same request ID, source, successor, and replacement
-message. A committed result preserves its phase and source/successor identity
-and state without stopping or admitting another execution. A recovered
+message. A committed result preserves its phase and source/successor identity,
+state, and accepted predecessor/successor links without stopping or admitting
+another execution. Later continuations do not change these saved links. A recovered
 admission failure leaves the source stopped. Use session inspection for richer
 session metadata. Durable replay validates the captured replacement input against
 the original request. Missing or corrupt captured input reports persistence

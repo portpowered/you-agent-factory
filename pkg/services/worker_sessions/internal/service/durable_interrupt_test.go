@@ -256,6 +256,9 @@ func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
 	if err != nil || !replayed.Accepted || replayed.Source.State != outcome.result.Source.State || replayed.Successor.ID != fixture.successorID {
 		t.Fatalf("journal replay=%#v err=%v", replayed, err)
 	}
+	if replayed.Source.SuccessorWorkerSessionID != outcome.result.Source.SuccessorWorkerSessionID || replayed.Successor.PredecessorWorkerSessionID != outcome.result.Successor.PredecessorWorkerSessionID {
+		t.Fatalf("journal replay lost accepted lineage: got=%#v original=%#v", replayed, outcome.result)
+	}
 	assertBoundaryEffects(t, fixture.boundary, 2, 1, "journal replay without memory")
 	// Catalog lookup is the read-only boundary after live handles are gone.
 	r.mu.Lock()
@@ -403,7 +406,7 @@ func TestInterruptJournalReplayPreservesTypedFailureWithoutPrivateDiagnostics(t 
 
 func TestInterruptJournalReplayRejectsInconsistentCommittedFacts(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"unknown-cause", "duplicate-cause", "unknown-phase", "wrong-source", "source-not-stopped", "wrong-successor", "unknown-state", "successor-not-admitted", "success-with-failure", "success-with-code"} {
+	for _, scenario := range []string{"unknown-cause", "duplicate-cause", "unknown-phase", "wrong-source", "source-not-stopped", "wrong-successor", "unknown-state", "successor-not-admitted", "success-with-failure", "success-with-code", "source-self-predecessor", "source-cycle", "foreign-source-successor", "foreign-successor-predecessor", "successor-self-link", "successor-cycle", "absent-successor-lineage"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			r, plan, store := newDurableInterruptFixture(t)
@@ -484,5 +487,76 @@ func mutateCommittedInterruptFacts(scenario string, outcome *durableInterruptOut
 		outcome.FailureCauses = []string{"SOURCE_CONFLICT"}
 	case "success-with-code":
 		operation.FailureCode = string(outcome.Phase)
+	default:
+		mutateCommittedInterruptLineage(scenario, outcome)
 	}
+}
+
+func mutateCommittedInterruptLineage(scenario string, outcome *durableInterruptOutcome) {
+	switch scenario {
+	case "source-self-predecessor":
+		outcome.Source.PredecessorWorkerSessionID = outcome.Source.ID
+	case "source-cycle":
+		outcome.Source.PredecessorWorkerSessionID = outcome.Successor.ID
+	case "foreign-source-successor":
+		outcome.Source.SuccessorWorkerSessionID = "other"
+	case "foreign-successor-predecessor":
+		outcome.Successor.PredecessorWorkerSessionID = "other"
+	case "successor-self-link":
+		outcome.Successor.SuccessorWorkerSessionID = outcome.Successor.ID
+	case "successor-cycle":
+		outcome.Successor.SuccessorWorkerSessionID = outcome.Source.ID
+	case "absent-successor-lineage":
+		outcome.Accepted = false
+		outcome.Successor = workersessions.Session{PredecessorWorkerSessionID: outcome.Source.ID}
+	}
+}
+
+func TestInterruptJournalReplayPreservesAcceptedLineageWithoutPrivateMetadata(t *testing.T) {
+	t.Parallel()
+	r, plan, store := newDurableInterruptFixture(t)
+	operation, err := r.beginInterruptIntent(t.Context(), plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, phase := range []string{"SOURCE_STOPPED", "SUCCESSOR_ADMITTED"} {
+		if err := r.advanceInterruptPhase(t.Context(), operation, phase); err != nil {
+			t.Fatal(err)
+		}
+	}
+	private := "private-provider-secret"
+	result := interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, true)
+	result.Source = workersessions.Session{
+		ID: "worker", State: workersessions.StateCanceled, Model: &private,
+		PredecessorWorkerSessionID: "earlier-worker", SuccessorWorkerSessionID: "successor",
+	}
+	result.Successor = workersessions.Session{
+		ID: "successor", State: workersessions.StateRunning, ReasoningEffort: &private,
+		PredecessorWorkerSessionID: "worker",
+	}
+	if err := r.commitInterruptResult(t.Context(), operation, result, nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(operation.Result), private) {
+		t.Fatal("private session metadata reached the journal")
+	}
+	// Later session mutations must not replace the snapshot accepted by this key.
+	r.mu.Lock()
+	source := r.sessions["worker"]
+	source.SuccessorWorkerSessionID = "later-worker"
+	r.sessions["worker"] = source
+	r.mu.Unlock()
+	want := result.Clone()
+	want.Source.Model = nil
+	want.Successor.ReasoningEffort = nil
+	replayed, found, err := r.replayDurableInterrupt(t.Context(), plan.request)
+	if err != nil || !found || !reflect.DeepEqual(replayed, want) {
+		t.Fatalf("accepted snapshot changed: got=%#v want=%#v found=%v err=%v", replayed, want, found, err)
+	}
+	replayed.Source.PredecessorWorkerSessionID = "caller-mutation"
+	refetched, _, err := r.replayDurableInterrupt(t.Context(), plan.request)
+	if err != nil || !reflect.DeepEqual(refetched, want) || len(store.records) != 4 {
+		t.Fatalf("retry mutated snapshot or journal: got=%#v err=%v records=%d", refetched, err, len(store.records))
+	}
+	assertNoSuccessor(t, r, "successor")
 }

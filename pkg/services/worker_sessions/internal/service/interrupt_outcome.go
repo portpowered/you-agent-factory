@@ -78,10 +78,7 @@ func interruptFailureForCode(code string) error {
 }
 
 func validInterruptOutcome(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {
-	if result.RequestID != req.RequestID || result.SourceWorkerSessionID != req.SourceWorkerSessionID || result.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
-		return false
-	}
-	if result.Source.ID != req.SourceWorkerSessionID || !result.Source.State.Valid() {
+	if !validInterruptResultIdentity(req, result) {
 		return false
 	}
 	if result.Successor.ID == "" {
@@ -99,4 +96,30 @@ func validInterruptOutcome(req workersessions.InterruptRequest, result workerses
 	default:
 		return false
 	}
+}
+
+func validInterruptResultIdentity(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {
+	return result.RequestID == req.RequestID && result.SourceWorkerSessionID == req.SourceWorkerSessionID &&
+		result.SuccessorWorkerSessionID == req.SuccessorWorkerSessionID && result.Source.ID == req.SourceWorkerSessionID &&
+		result.Source.State.Valid() && validInterruptLineage(req, result)
+}
+
+func validInterruptLineage(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {
+	source, successor := result.Source, result.Successor
+	if source.PredecessorWorkerSessionID == source.ID || source.PredecessorWorkerSessionID == req.SuccessorWorkerSessionID {
+		return false
+	}
+	if source.SuccessorWorkerSessionID != "" && source.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
+		return false
+	}
+	if successor.PredecessorWorkerSessionID != "" && successor.PredecessorWorkerSessionID != req.SourceWorkerSessionID {
+		return false
+	}
+	if successor.SuccessorWorkerSessionID != "" && (successor.SuccessorWorkerSessionID == successor.ID || successor.SuccessorWorkerSessionID == req.SourceWorkerSessionID) {
+		return false
+	}
+	if successor.ID == "" && (successor.PredecessorWorkerSessionID != "" || successor.SuccessorWorkerSessionID != "") {
+		return false
+	}
+	return true
 }
