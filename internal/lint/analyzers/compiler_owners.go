@@ -116,6 +116,11 @@ func compilerOwnedKeys(text string) ([]string, error) {
 			}
 		}
 		seen[key] = true
+		if constructionSiteRules[parts[0]] {
+			if err := validateConstructionSiteKey(parts); err != nil {
+				return nil, err
+			}
+		}
 		if strings.HasPrefix(parts[0], "testsleep-") {
 			if err := validateTimingOwnerKey(parts); err != nil {
 				return nil, err
@@ -135,7 +140,7 @@ func ownsCompilerMetadata(rule string) bool {
 			return true
 		}
 	}
-	return rule == "service-container-go-file" || rule == "test-cross-owner-policy" || rule == "test-transport-owner-policy" || rule == "petri-reference"
+	return rule == "service-container-go-file" || rule == "test-cross-owner-policy" || rule == "test-transport-owner-policy" || rule == "petri-reference" || constructionSiteRules[rule]
 }
 
 func validateTimingOwnerKey(parts []string) error {
