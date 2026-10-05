@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -285,7 +284,10 @@ func openRuntime(
 	}
 	defer func() {
 		if err != nil {
-			err = cleanup.Unwind(err)
+			if cleanupErr := cleanup.Close(); cleanupErr != nil {
+				err = errors.Join(err, cleanupErr)
+				products.closeArtifacts = cleanup.Close
+			}
 		}
 	}()
 	if workService == nil {
@@ -411,6 +413,7 @@ func openRuntime(
 			service2,
 			configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)
+	cleanup.OwnRuntimeRecord(startupRuntime, clock)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
@@ -437,15 +440,6 @@ func openRuntime(
 			)
 		}
 	}
-	cleanup.Add(func() error {
-		var finalizationErr error
-		if finalizer, ok := startupRuntime.(interface {
-			FinalizeRecording(time.Time) error
-		}); ok {
-			finalizationErr = finalizer.FinalizeRecording(clock.Now().UTC())
-		}
-		return errors.Join(finalizationErr, startupRuntime.CloseArtifacts())
-	})
 	webhookSubscription, err := startFactoryWebhookSubscription(
 		ctx,
 		webhooksService,

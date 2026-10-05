@@ -397,6 +397,49 @@ func TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress(t *tes
 	}
 }
 
+func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		engine factoryruntime.Service
+	}{
+		{name: "missing engine"},
+		{name: "missing ingress", engine: controlOnlyEngineFake{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cleanup := &runtimeOpeningCleanup{}
+			closeErr := errors.New("release failed")
+			calls := 0
+			cleanup.Add(func() error {
+				calls++
+				if calls == 1 {
+					return closeErr
+				}
+				return nil
+			})
+			activation, err := newRuntimeActivation(runtimeProducts{
+				engine: test.engine, closeArtifacts: cleanup.Close,
+			})
+			if err == nil || activation == nil || activation.Close == nil {
+				t.Fatalf("validation = (%v, %v), want failed activation with owned cleanup", activation, err)
+			}
+			if activation.Service != nil || activation.WorkAndEventIngress != nil || calls != 0 {
+				t.Fatal("validation published a service or released ownership before Root could retain it")
+			}
+			if err := activation.Close(t.Context()); !errors.Is(err, closeErr) {
+				t.Fatalf("failed release = %v, want %v", err, closeErr)
+			}
+			if err := activation.Close(t.Context()); err != nil {
+				t.Fatalf("retry release = %v", err)
+			}
+			if err := activation.Close(t.Context()); err != nil || calls != 2 {
+				t.Fatalf("released ownership = (%v, %d calls), want no further release", err, calls)
+			}
+		})
+	}
+}
+
 // controlOnlyEngineFake serves the Runtime Service contract without the
 // migration-only Work submission and event subscription operations.
 type controlOnlyEngineFake struct {

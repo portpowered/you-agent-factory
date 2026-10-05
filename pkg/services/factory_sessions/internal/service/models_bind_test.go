@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -477,11 +478,162 @@ func TestRuntimeOpeningCleanupPreservesPrimaryErrorAndAggregatesCleanupFailures(
 	}
 
 	if err := cleanup.Close(); !errors.Is(err, firstCleanupErr) || !errors.Is(err, secondCleanupErr) {
-		t.Fatalf("second Close() error = %v, want previously aggregated cleanup errors", err)
+		t.Fatalf("second Close() error = %v, want pending cleanup errors", err)
 	}
-	if !slices.Equal(events, []string{"second-close", "first-close"}) {
-		t.Fatalf("cleanup events after second Close() = %v, want each resource closed once", events)
+	if !slices.Equal(events, []string{"second-close", "first-close", "second-close", "first-close"}) {
+		t.Fatalf("cleanup events after second Close() = %v, want failed releases retried in reverse order", events)
 	}
+}
+
+func TestRuntimeOpeningCleanupRetriesOnlyPendingOwnership(t *testing.T) {
+	t.Parallel()
+	cleanup := &runtimeOpeningCleanup{}
+	closeErr := errors.New("resource still owned")
+	var events []string
+	fail := true
+	cleanup.Add(func() error {
+		events = append(events, "first")
+		return nil
+	})
+	cleanup.Add(func() error {
+		events = append(events, "second")
+		if fail {
+			return closeErr
+		}
+		return nil
+	})
+	cleanup.Add(func() error {
+		events = append(events, "third")
+		return nil
+	})
+	if err := cleanup.Close(); !errors.Is(err, closeErr) {
+		t.Fatalf("Close() = %v, want pending ownership", err)
+	}
+	fail = false
+	var closers sync.WaitGroup
+	for range 2 {
+		closers.Add(1)
+		go func() {
+			defer closers.Done()
+			if err := cleanup.Close(); err != nil {
+				t.Errorf("retry Close() = %v", err)
+			}
+		}()
+	}
+	closers.Wait()
+	if !slices.Equal(events, []string{"third", "second", "first", "second"}) {
+		t.Fatalf("release events = %v, want successful resources released once", events)
+	}
+}
+
+func TestRuntimeOpeningCleanupRetainsOwnershipAddedDuringClose(t *testing.T) {
+	t.Parallel()
+	cleanup := &runtimeOpeningCleanup{}
+	var events []string
+	cleanup.Add(func() error {
+		events = append(events, "initial")
+		cleanup.Add(func() error {
+			events = append(events, "later")
+			return nil
+		})
+		return nil
+	})
+	if err := cleanup.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanup.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(events, []string{"initial", "later"}) {
+		t.Fatalf("release events = %v, want later ownership preserved", events)
+	}
+}
+
+func TestRuntimeOpeningCleanupOwnsPartialRecordAndRetriesRelease(t *testing.T) {
+	t.Parallel()
+	cleanup := &runtimeOpeningCleanup{}
+	openingErr := errors.New("session result validation failed")
+	finalizeErr := errors.New("recording finalization failed")
+	closeErr := errors.New("artifact release failed")
+	record := &openingRecordCleanupFake{finalizeErr: finalizeErr, closeErr: closeErr}
+	cleanup.OwnRuntimeRecord(nil, openingCoordinatorClock{})
+	cleanup.OwnRuntimeRecord(record, openingCoordinatorClock{})
+	err := cleanup.Unwind(openingErr)
+	for _, expected := range []error{openingErr, finalizeErr, closeErr} {
+		if !errors.Is(err, expected) {
+			t.Fatalf("Unwind() = %v, missing cause %v", err, expected)
+		}
+	}
+	if !record.finalizedAt.Equal((openingCoordinatorClock{}).Now().UTC()) {
+		t.Fatalf("finalized at %v, want selected clock", record.finalizedAt)
+	}
+	if !slices.Equal(record.events, []string{"finalize", "artifacts"}) {
+		t.Fatalf("failed release order = %v", record.events)
+	}
+	record.finalizeErr, record.closeErr = nil, nil
+	if err := cleanup.Close(); err != nil {
+		t.Fatalf("retry Close() = %v", err)
+	}
+	if err := cleanup.Close(); err != nil {
+		t.Fatalf("released Close() = %v", err)
+	}
+	if !slices.Equal(record.events, []string{"finalize", "artifacts", "finalize", "artifacts"}) {
+		t.Fatalf("release events = %v, want one successful retry", record.events)
+	}
+}
+
+type openingRecordCleanupFake struct {
+	inertHostedInstance
+	events      []string
+	finalizedAt time.Time
+	finalizeErr error
+	closeErr    error
+}
+
+func TestRuntimeOpeningCleanupDoesNotRepeatSuccessfulRecordRelease(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name          string
+		finalizeFails bool
+		want          []string
+	}{
+		{name: "finalization", finalizeFails: true, want: []string{"finalize", "artifacts", "finalize"}},
+		{name: "artifacts", want: []string{"finalize", "artifacts", "artifacts"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			closeErr := errors.New("release failed")
+			record := &openingRecordCleanupFake{}
+			if test.finalizeFails {
+				record.finalizeErr = closeErr
+			} else {
+				record.closeErr = closeErr
+			}
+			cleanup := &runtimeOpeningCleanup{}
+			cleanup.OwnRuntimeRecord(record, openingCoordinatorClock{})
+			if err := cleanup.Close(); !errors.Is(err, closeErr) {
+				t.Fatalf("Close() = %v, want %v", err, closeErr)
+			}
+			record.finalizeErr, record.closeErr = nil, nil
+			if err := cleanup.Close(); err != nil {
+				t.Fatalf("retry Close() = %v", err)
+			}
+			if !slices.Equal(record.events, test.want) {
+				t.Fatalf("release events = %v, want %v", record.events, test.want)
+			}
+		})
+	}
+}
+
+func (record *openingRecordCleanupFake) FinalizeRecording(at time.Time) error {
+	record.events = append(record.events, "finalize")
+	record.finalizedAt = at
+	return record.finalizeErr
+}
+
+func (record *openingRecordCleanupFake) CloseArtifacts() error {
+	record.events = append(record.events, "artifacts")
+	return record.closeErr
 }
 
 type runtimeProductsSessionsRole struct {

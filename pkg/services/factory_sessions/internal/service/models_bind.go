@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
@@ -17,17 +19,13 @@ type modelsRuntimeBind struct {
 }
 
 // runtimeOpeningCleanup owns resources in acquisition order and releases them
-// exactly once in reverse order on either opening failure or runtime
-// shutdown. Add is safe to call concurrently with Close: a later Factory
-// Session build (for example a named-factory activation racing session
-// shutdown) can register a cleanup action after opening has already
-// returned, so both the action slice and the once-guarded release read it
-// under the same mutex.
+// in reverse order on opening failure or runtime shutdown. Successful releases
+// are removed; failed releases remain retryable. Close calls are serialized,
+// while Add can register newly acquired ownership during a release.
 type runtimeOpeningCleanup struct {
 	mu      sync.Mutex
 	actions []func() error
-	once    sync.Once
-	err     error
+	closeMu sync.Mutex
 }
 
 func (cleanup *runtimeOpeningCleanup) Add(action func() error) {
@@ -57,17 +55,55 @@ func (cleanup *runtimeOpeningCleanup) OwnModelsScope(
 	})
 }
 
-func (cleanup *runtimeOpeningCleanup) Close() error {
-	cleanup.once.Do(func() {
-		cleanup.mu.Lock()
-		actions := append([]func() error(nil), cleanup.actions...)
-		cleanup.actions = nil
-		cleanup.mu.Unlock()
-		for index := len(actions) - 1; index >= 0; index-- {
-			cleanup.err = errors.Join(cleanup.err, actions[index]())
+// OwnRuntimeRecord registers partial opening ownership before validating the
+// session result. Recording finalization precedes artifact release on each
+// attempt; failed releases remain owned by this cleanup.
+func (cleanup *runtimeOpeningCleanup) OwnRuntimeRecord(record factoryruntime.RuntimeRecord, clock factoryruntime.Clock) {
+	if record == nil {
+		return
+	}
+	finalized, artifactsClosed := false, false
+	cleanup.Add(func() error {
+		var finalizationErr, artifactsErr error
+		if !finalized {
+			if finalizer, ok := record.(interface{ FinalizeRecording(time.Time) error }); ok {
+				finalizationErr = finalizer.FinalizeRecording(clock.Now().UTC())
+			}
+			finalized = finalizationErr == nil
 		}
+		if !artifactsClosed {
+			artifactsErr = record.CloseArtifacts()
+			artifactsClosed = artifactsErr == nil
+		}
+		return errors.Join(finalizationErr, artifactsErr)
 	})
-	return cleanup.err
+}
+
+func (cleanup *runtimeOpeningCleanup) Close() error {
+	cleanup.closeMu.Lock()
+	defer cleanup.closeMu.Unlock()
+	cleanup.mu.Lock()
+	actions := cleanup.actions
+	cleanup.actions = nil
+	cleanup.mu.Unlock()
+	var closeErr error
+	for index := len(actions) - 1; index >= 0; index-- {
+		if err := actions[index](); err != nil {
+			closeErr = errors.Join(closeErr, err)
+		} else {
+			actions[index] = nil
+		}
+	}
+	var pending []func() error
+	for _, action := range actions {
+		if action != nil {
+			pending = append(pending, action)
+		}
+	}
+	cleanup.mu.Lock()
+	cleanup.actions = append(pending, cleanup.actions...)
+	cleanup.mu.Unlock()
+	return closeErr
 }
 
 func (cleanup *runtimeOpeningCleanup) Unwind(cause error) error {
