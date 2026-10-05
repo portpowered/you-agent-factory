@@ -12,6 +12,11 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		wantOK     bool
 	}{
 		{name: "ordinary package", importPath: ModulePath + "/pkg/services/work", want: LaneUnit, wantOK: true},
+		{name: "application wiring", importPath: ModulePath + "/pkg/wire", want: LaneIntegration, wantOK: true},
+		{name: "legacy wiring behavior", importPath: ModulePath + "/pkg/wire/internal/managedbackend", want: LaneIntegration, wantOK: true},
+		{name: "wire-like owner name", importPath: ModulePath + "/pkg/wireless", want: LaneUnit, wantOK: true},
+		{name: "service wiring", importPath: ModulePath + "/pkg/services/models/wire", want: LaneIntegration, wantOK: true},
+		{name: "nested service wiring", importPath: ModulePath + "/pkg/services/models/wire/subservice", want: LaneIntegration, wantOK: true},
 		{name: "packaged Factory source boundary", importPath: ModulePath + "/packages/packaged-factories", want: LaneMaintenance, wantOK: true},
 		{name: "model-provider publication boundary", importPath: ModulePath + "/packages/model-providers", want: LaneMaintenance, wantOK: true},
 		{name: "nested contract", importPath: ModulePath + "/pkg/transports/http/contracttests", want: LaneContract, wantOK: true},
@@ -33,6 +38,7 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		{name: "functional support", importPath: ModulePath + "/tests/functional/internal/support", want: LaneMaintenance, wantOK: true},
 		{name: "repository integration", importPath: ModulePath + "/tests/integration/transport/cli/process", want: LaneIntegration, wantOK: true},
 		{name: "stress", importPath: ModulePath + "/tests/stress/runtime", want: LaneStress, wantOK: true},
+		{name: "owner-scoped stress", importPath: ModulePath + "/pkg/services/models/internal/backends/localai/codecs/stresstests", want: LaneStress, wantOK: true},
 		{name: "load", importPath: ModulePath + "/tests/load/worker_sessions", want: LaneStress, wantOK: true},
 		{name: "release", importPath: ModulePath + "/tests/release", want: LaneRelease, wantOK: true},
 		{name: "ui", importPath: ModulePath + "/ui", want: LaneMaintenance, wantOK: true},

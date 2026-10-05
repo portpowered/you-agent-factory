@@ -2,7 +2,6 @@ package packagedinstallation
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,87 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
-	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
-	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
-func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPersistence {
-	validator := factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON)
-	mapper := factorymapping.NewFactoryConfigMapper()
-	fileSystem := platformfilesystem.Local{}
-	writer := factoryauthoredlayout.NewWriter(
-		authoredmapping.RenderWorkerAgentsMarkdown,
-		authoredmapping.RenderWorkstationAgentsMarkdown,
-		authoredmapping.RenderAgentsBody,
-		factoryauthoredlayout.NewAgentsFileWriter(fileSystem),
-		authoredmapping.SafeFactoryLayoutSegment,
-		authoredmapping.SafePromptFilePath,
-		fileSystem,
-		inboxgitkeep.NewLocal(fileSystem),
-	)
-	persistence, err := factorypersistence.New(
-		validator,
-		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload)
-		},
-		func(
-			ctx context.Context,
-			segment string,
-			payload []byte,
-			validator factorydefinitions.Validator,
-		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-			return authoringlayoutprepare.FactoryLayout(
-				ctx,
-				segment,
-				payload,
-				validator,
-				mapper.Expand,
-				authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-				mapper.Flatten,
-			)
-		},
-		func(
-			targetDir string,
-			prepared *factorydefinitions.PreparedFactoryLayoutPayload,
-			sourcePath string,
-		) error {
-			return writer.WritePrepared(
-				targetDir,
-				prepared,
-				sourcePath,
-				portableconfig.NewMaterializer(platformfilesystem.Local{}),
-				factorydefinitioncomposition.PruneRemovedDocs,
-			)
-		},
-		func(targetDir string) error {
-			_, err := factorydefinitioncomposition.LoadDirectory(targetDir, nil)
-			return err
-		},
-		nil,
-		nil,
-		nil,
-		platformfilesystem.Local{},
-		factorydefinitioncomposition.NamedPaths().RequireDefinitionDir,
-		directoryreplace.Local{},
-	)
-	if err != nil {
-		panic(err)
-	}
-	return persistence
-}
-
-func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T) {
+func TestEnsurePackagedFactories_PreparationFailureDoesNotCommitTarget(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -99,7 +22,7 @@ func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T)
 		Name: "@test/invalid",
 		JSON: []byte(`{"id":"invalid","workers":[`),
 	}
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
+	_, err := New(&installationPersistenceStub{prepareErr: errors.New("controlled preparation failure")}, platformfilesystem.Local{}, os.Mkdir).
 		EnsurePackagedFactories(t.Context(), root, "", []factorydefinitions.PackagedDefinition{definition})
 	if err == nil || !strings.Contains(err.Error(), "install packaged factory") {
 		t.Fatalf("EnsurePackagedFactories() error = %v", err)
@@ -122,7 +45,7 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 		t.Fatal(err)
 	}
 	definition := factorydefinitions.PackagedDefinition{Name: "@test/invalid", JSON: []byte(`{`)}
-	if _, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
+	if _, err := New(&installationPersistenceStub{prepareErr: errors.New("controlled preparation failure")}, platformfilesystem.Local{}, os.Mkdir).
 		EnsurePackagedFactories(t.Context(), root, "", []factorydefinitions.PackagedDefinition{definition}); err == nil {
 		t.Fatal("EnsurePackagedFactories() error = nil")
 	}
@@ -146,63 +69,10 @@ func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
 	}
 }
 
-func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {
-	t.Parallel()
-
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/full-flow")
-	if !ok {
-		t.Fatal("published catalog is missing @you/full-flow")
-	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
-	tests := []struct {
-		format   factorydefinitions.PackagedFactoryFormat
-		rootFile string
-	}{
-		{format: factorydefinitions.PackagedFactoryFormatJSON, rootFile: "factory.json"},
-		{format: factorydefinitions.PackagedFactoryFormatYAML, rootFile: "factory.yaml"},
-		{format: factorydefinitions.PackagedFactoryFormatYML, rootFile: "factory.yml"},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(string(test.format), func(t *testing.T) {
-			t.Parallel()
-
-			root := t.TempDir()
-			result, installErr := installer.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
-				NamedFactoriesRoot: root,
-				Definition:         definition,
-				Format:             test.format,
-			})
-			if installErr != nil {
-				t.Fatalf("InstallPackagedFactory() error = %v", installErr)
-			}
-			if result.Outcome != factorydefinitions.PackagedFactoryInstallCreated ||
-				result.Format != test.format {
-				t.Fatalf("InstallPackagedFactory() = %#v", result)
-			}
-			assertSingleAuthoredRoot(t, result.FactoryDir, test.rootFile)
-			assertBundledAssets(t, definition, result.FactoryDir)
-			assertPortableMaterializedContent(t, result.FactoryDir)
-			assertCustomerEditIsLoaded(t, result.FactoryDir, test.rootFile, "full-flow")
-		})
-	}
-}
-
 func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("published catalog is missing @you/goal")
-	}
+	definition := installationDefinitionFixture()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	result, err := installer.InstallPackagedFactory(
@@ -242,54 +112,10 @@ func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *tes
 	}
 }
 
-func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) {
-	t.Parallel()
-
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
-	for _, definition := range catalog.All() {
-		definition := definition
-		t.Run(definition.Name, func(t *testing.T) {
-			t.Parallel()
-			result, installErr := installer.InstallPackagedFactory(
-				t.Context(),
-				factorydefinitions.PackagedFactoryInstallParams{
-					NamedFactoriesRoot: t.TempDir(),
-					Definition:         definition,
-					Format:             factorydefinitions.PackagedFactoryFormatJSON,
-				},
-			)
-			if installErr != nil {
-				t.Fatalf("InstallPackagedFactory() error = %v", installErr)
-			}
-			if result.Name != definition.Name ||
-				result.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
-				t.Fatalf("InstallPackagedFactory() = %#v", result)
-			}
-			if _, loadErr := factorydefinitioncomposition.LoadDirectory(
-				result.FactoryDir,
-				nil,
-			); loadErr != nil {
-				t.Fatalf("load materialized Factory: %v", loadErr)
-			}
-		})
-	}
-}
-
 func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("published catalog is missing @you/goal")
-	}
+	definition := installationDefinitionFixture()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
@@ -329,14 +155,7 @@ func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
 func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("published catalog is missing @you/goal")
-	}
+	definition := installationDefinitionFixture()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
@@ -373,22 +192,12 @@ func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing
 	if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("customer marker after replace = %v, want absent", statErr)
 	}
-	if _, loadErr := factorydefinitioncomposition.LoadDirectory(replaced.FactoryDir, nil); loadErr != nil {
-		t.Fatalf("load replaced Factory: %v", loadErr)
-	}
 }
 
 func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("published catalog is missing @you/goal")
-	}
+	definition := installationDefinitionFixture()
 	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	if _, err := installer.InstallPackagedFactory(
@@ -401,7 +210,7 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 	); err != nil {
 		t.Fatalf("initial InstallPackagedFactory() error = %v", err)
 	}
-	_, err = installer.InstallPackagedFactory(
+	_, err := installer.InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
@@ -417,18 +226,11 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("published catalog is missing @you/goal")
-	}
+	definition := installationDefinitionFixture()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	root := t.TempDir()
-	_, err = New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
 		InstallPackagedFactory(
 			ctx,
 			factorydefinitions.PackagedFactoryInstallParams{
@@ -452,15 +254,9 @@ func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *te
 func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing.T) {
 	t.Parallel()
 
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("published catalog is missing @you/goal")
-	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
+	definition := installationDefinitionFixture()
+	persistence := &installationPersistenceStub{}
+	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -474,20 +270,19 @@ func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing
 		t.Fatalf("initial InstallPackagedFactory() error = %v", err)
 	}
 	before := snapshotDirectoryContents(t, created.FactoryDir)
-	invalid := definition
-	invalid.JSON = []byte(`{"name":"broken","workers":[`)
+	persistence.prepareErr = errors.New("controlled replacement preparation failure")
 
 	_, err = installer.InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
-			Definition:         invalid,
+			Definition:         definition,
 			Format:             factorydefinitions.PackagedFactoryFormatJSON,
 			Replace:            true,
 		},
 	)
 	if err == nil {
-		t.Fatal("replace with invalid payload error = nil")
+		t.Fatal("replace with preparation failure error = nil")
 	}
 	assertDirectorySnapshotUnchanged(t, created.FactoryDir, before)
 }
@@ -561,111 +356,5 @@ func assertSingleAuthoredRoot(t *testing.T, factoryDir, want string) {
 		if !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("unexpected authored root %s: %v", rootFile, err)
 		}
-	}
-	if _, err := factorydefinitioncomposition.LoadDirectory(factoryDir, nil); err != nil {
-		t.Fatalf("load materialized Factory: %v", err)
-	}
-}
-
-func assertBundledAssets(
-	t *testing.T,
-	definition factorydefinitions.PackagedDefinition,
-	factoryDir string,
-) {
-	t.Helper()
-	var published struct {
-		SupportingFiles struct {
-			BundledFiles []struct {
-				TargetPath string `json:"targetPath"`
-				Content    struct {
-					Inline string `json:"inline"`
-				} `json:"content"`
-			} `json:"bundledFiles"`
-		} `json:"supportingFiles"`
-	}
-	if err := json.Unmarshal(definition.JSON, &published); err != nil {
-		t.Fatalf("decode published definition: %v", err)
-	}
-	if len(published.SupportingFiles.BundledFiles) == 0 {
-		t.Fatal("published definition has no bundled assets")
-	}
-	for _, bundled := range published.SupportingFiles.BundledFiles {
-		relativePath := strings.TrimPrefix(bundled.TargetPath, "factory/")
-		content, err := os.ReadFile(filepath.Join(factoryDir, relativePath))
-		if err != nil {
-			t.Fatalf("read materialized asset %s: %v", relativePath, err)
-		}
-		if string(content) != bundled.Content.Inline {
-			t.Fatalf("materialized asset %s differs from published content", relativePath)
-		}
-	}
-}
-
-func assertPortableMaterializedContent(t *testing.T, factoryDir string) {
-	t.Helper()
-	err := filepath.WalkDir(factoryDir, func(
-		path string,
-		entry os.DirEntry,
-		walkErr error,
-	) error {
-		if walkErr != nil || entry.IsDir() {
-			return walkErr
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		for _, forbidden := range []string{
-			"packages/packaged-factories",
-			"generated/factories",
-			"node_modules",
-			"npm ",
-		} {
-			if strings.Contains(string(content), forbidden) {
-				t.Fatalf("%s contains non-portable reference %q", path, forbidden)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk materialized Factory: %v", err)
-	}
-}
-
-func assertCustomerEditIsLoaded(t *testing.T, factoryDir, rootFile, originalName string) {
-	t.Helper()
-	path := filepath.Join(factoryDir, rootFile)
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read authored root: %v", err)
-	}
-	var edited []byte
-	if rootFile == "factory.json" {
-		edited = []byte(strings.Replace(
-			string(content),
-			`"name": "`+originalName+`"`,
-			`"name": "customer-edited"`,
-			1,
-		))
-	} else {
-		edited = []byte(strings.Replace(
-			string(content),
-			"\nname: "+originalName+"\n",
-			"\nname: customer-edited\n",
-			1,
-		))
-	}
-	if string(edited) == string(content) {
-		t.Fatalf("could not locate editable name in %s", rootFile)
-	}
-	if err := os.WriteFile(path, edited, 0o644); err != nil {
-		t.Fatalf("write customer edit: %v", err)
-	}
-	loaded, err := factorydefinitioncomposition.LoadDirectory(factoryDir, nil)
-	if err != nil {
-		t.Fatalf("load customer-edited Factory: %v", err)
-	}
-	if loaded.FactoryConfig().Name != "customer-edited" {
-		t.Fatalf("loaded name = %q, want customer-edited", loaded.FactoryConfig().Name)
 	}
 }

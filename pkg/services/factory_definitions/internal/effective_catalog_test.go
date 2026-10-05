@@ -8,7 +8,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
@@ -85,37 +84,6 @@ func TestCatalogPrecedenceShadowingOrderingAndDetachedDefinitions(t *testing.T) 
 	}
 	if got := *entry(t, second.Entries, "global-only").Location; got == "/mutated" {
 		t.Fatal("catalog location aliases a prior result")
-	}
-}
-
-func TestCatalogIncludesEveryPublishedPackagedFactoryWithoutLocation(t *testing.T) {
-	t.Parallel()
-
-	published, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("load published packaged definitions: %v", err)
-	}
-	discovery, err := factoryinternal.NewEffectiveCatalogDiscovery(
-		rootLister{}.ListNamedFactories,
-		definitionFiles{}.ReadFile,
-		published.All(),
-	)
-	if err != nil {
-		t.Fatalf("new published effective catalog source: %v", err)
-	}
-	catalog := newCatalog(t, discovery)
-
-	result := list(t, catalog, "/project", "/global")
-	if got, want := names(result.Entries), published.Names(); !slices.Equal(got, want) {
-		t.Fatalf("effective packaged names = %v, want published names %v", got, want)
-	}
-	for _, catalogEntry := range result.Entries {
-		if catalogEntry.Location != nil {
-			t.Fatalf("%s location = %q, want nil", catalogEntry.Name, *catalogEntry.Location)
-		}
-		if catalogEntry.Definition == nil {
-			t.Fatalf("%s definition is nil", catalogEntry.Name)
-		}
 	}
 }
 

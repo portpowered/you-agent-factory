@@ -132,6 +132,7 @@ Backend behavior **MUST** be exposed through explicit service contracts and asse
 - Non-`wire` production code **MUST NOT** call `New...` to acquire a service, infrastructure adapter, client, store, runner, logger, clock, or other injectable collaborator. Those dependencies **MUST** be constructor-injected into the receiving service.
 - Pure domain-value constructors, request/result builders, standard-library value creation, allocation through Go's built-in `new`, and test fixture construction are not dependency construction and **MAY** remain outside `wire/`.
 - A `wire/` provider **MUST** construct only its focused implementation from explicit parameters. It **MUST NOT** hide a secondary graph, return a service bag for later lookup, or make runtime policy decisions.
+- All `wire/` packages **MUST** remain inert composition: constructors, provider sets, and bindings. Downloading, checksum verification, cache management, runtime backend selection, retries, and lifecycle execution **MUST** belong to the owning service implementation or lifecycle owner. Returning a callback or closure does not permit hiding that behavior in Wire. Providers **MAY** choose a constructor from explicit configuration without performing operational work or interpreting domain policy.
 - Tests **SHOULD** construct the implementation under test directly with explicit fakes. Application and functional tests **MUST** use the canonical `root.BuildProcess` and `pkg/wire` path described in Section 7.
 
 ### 3. Statefulness and Functional Style
@@ -284,6 +285,28 @@ Rules:
 
 - Most confidence **SHOULD** come from fast unit tests and targeted functional
   customer-behavior tests.
+- A unit test **MUST** exercise one individual component, struct, class, or
+  function with controlled collaborators. A package, composed service graph,
+  or monolithic test executable does not expand the unit's scope. Loading,
+  installing, materializing, or running real packaged factories belongs in
+  functional coverage through the public application boundary; focused
+  installer/loader/serializer unit tests use tiny synthetic inputs and explicit
+  dependency doubles.
+- When removing composition or packaged-factory tests from the unit lane,
+  coverage floors **MUST NOT** require recreating those fixtures. Reconcile
+  incidental unit coverage only after auditing the retained guarantees and
+  measuring production-block coverage in the appropriate lanes. Keep focused
+  component assertions for behavior that lacks equivalent coverage, record
+  the affected package floors and evidence, and leave unrelated floors and
+  remediation holds unchanged. A floor **MUST NOT** be lowered solely to pass
+  CI.
+- The full Go unit lane **SHOULD** use the consolidated monolith pipeline
+  defined in the factory testing standard: preserve package/component
+  isolation, validate reusable binaries through the Go toolchain, and execute
+  fresh tests. Minimize separate binaries to justified isolation or dependency
+  exceptions. Optimize total user plus kernel CPU toward a subminute warm-build
+  suite budget; include discovery, validation/build/link, execution, and
+  reporting, and report cold and changed-source rebuild costs separately.
 - Functional tests **SHOULD** focus on high-value end-to-end behavior, not every branch.
 - Functional application tests **MUST** construct the reusable customer process
   through `root.BuildProcess`, provide product configuration through the same

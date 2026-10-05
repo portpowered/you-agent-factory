@@ -16,7 +16,12 @@ guidance classifies a test differently, this document governs factory work.
 
 - Choose the lowest test layer that can prove the behavior without crossing a
   boundary that layer does not own.
-- Unit tests prove one package-owned component in isolation.
+- Unit tests prove one individual component, struct, class, or function in
+  isolation. A package, service family, or shared test binary is not a unit.
+- The full Go unit lane **SHOULD** use the consolidated monolith pipeline:
+  validate and build reusable test binaries once, then execute fresh tests.
+  Optimize aggregate user and kernel CPU time toward a subminute warm-build
+  suite budget, with cold and changed-source build costs reported separately.
 - Functional tests prove customer-observable behavior through a public
   application boundary with controlled external effects.
 - Functional tests **MUST** use Factory Sessions wherever the behavior can be
@@ -59,6 +64,27 @@ or validate an overall customer journey. A unit test that drives the whole
 system with mocks is a functional test in disguise and **MUST** be rewritten or
 moved.
 
+The unit **MUST** be one named component, struct, class, or function with its
+own behavior. A package containing several collaborating implementations is
+not itself a unit. Private methods and structures that implement that component
+may participate; independently owned validation, persistence, loading,
+rendering, scheduling, or execution components **MUST** be controlled
+collaborators rather than additional real implementations under test. Sharing
+a monolithic executable changes test packaging, not this boundary.
+
+Unit tests **MUST NOT** load the published packaged-factory catalog, install or
+materialize real packaged factories, or run packaged workflows as a general
+fixture. Those customer behaviors belong in functional tests through the public
+application boundary, with Factory Sessions for execution. Installer policy,
+serializer behavior, or a loader's individual operation may have focused unit
+tests using tiny synthetic inputs and explicit controlled collaborators.
+Published asset/schema conformance belongs in its contract or static gate;
+capacity-sized payloads belong in load/stress tests. A composed packaged-factory
+test **MUST** be removed when existing functional coverage proves the same
+behavior, or replaced with focused unit proof and the smallest necessary
+functional scenario. Moving a test to another directory while retaining
+internal graph construction does not make it a valid functional test.
+
 Dependencies outside the component **MUST** be represented by narrow fakes,
 stubs, test doubles, or in-memory implementations supplied through the same
 testable boundary used by production. Unit tests **MUST NOT** validate the
@@ -69,10 +95,120 @@ boundaries.
 Temporary files are allowed only when file behavior is the package-owned
 subject. Use an isolated temporary directory and assert the package's public
 file result, not incidental directory layout or internal write order.
+Diagnostic assertions **MUST** distinguish the diagnostic from incidental
+paths and test names; a substring found only in a temporary-directory name
+does not prove the expected error.
 
 Unit tests **SHOULD** be table-driven where that improves clarity, run in
 parallel when state ownership permits, and finish quickly enough to remain the
 default local feedback loop.
+
+Unit tests **MUST NOT** import or invoke Wire providers. Construct components
+directly with explicit test dependencies when construction is required. `wire/` packages
+**MUST NOT** host unit tests; behavioral code and its tests belong to the owning
+implementation. Compilation and generation-drift checks validate construction;
+binding inventories, constructor counts, and injected-instance identity checks
+belong in static checks when a concrete engineering rule requires them. The
+functional suite proves application behavior through the canonical graph.
+
+Tests for components within one service owner **MAY** share a test package to
+reduce repeated binary linking. Each test **MUST** retain component isolation
+and test-owned mutable state. Consolidation **MUST NOT** require new production
+exports, application construction, or weaker assertions. Compare fresh test
+execution CPU time with build-cache conditions stated explicitly; fewer
+binaries alone do not demonstrate a performance improvement. Coverage checks
+**MUST** instrument the tested implementations, including imported packages
+through scoped `-coverpkg` selection.
+
+### Consolidated Go unit pipeline
+
+The full unit lane **SHOULD** consolidate compatible tests into one monolithic
+test executable. Additional binaries are appropriate for an actual process
+isolation requirement or an incompatible test dependency graph. The runner
+owns discovery, build validation, execution, diagnostics, and those exceptions;
+consolidation does not remove the runner or turn unit tests into system tests.
+Focused package execution **MUST** remain available for local development.
+
+The current opt-in implementation is `make test-unit-monolith`, or
+`go run ./cmd/unitlane -monolith -count=1`. It requires Python 3 for overlay
+generation and uses native `go test -c` for build validation and registration.
+It always executes tests fresh; ordinary `make test` retains its existing
+package runner until full coverage and rebuild comparisons justify adoption.
+`make test-unit-monolith-prepare` builds the coordinator and all selected test
+binaries once. `make test-unit-monolith-prebuilt` executes that explicit source
+snapshot without rediscovery, regeneration, or build validation. Compact
+execution invokes no Go tools; detailed reporting retains `go tool test2json`.
+Re-run preparation after source, asset, dependency, toolchain, platform, build
+tag, or instrumentation changes. Prepared execution **MUST** include native
+exceptions and required helper processes; removing them would omit behavior.
+Compact reporting executes all registered tests but inventories only merged
+top-level tests and native package completion. Use `-monolith-details` for full
+subtest inventory comparisons; a smaller reporting inventory is not fewer tests.
+`make test-stress-fixtures` runs the retained large checkpoint, ASR, and metrics fixtures
+outside the unit lane. Owner-scoped `stresstests/` packages are classified as
+stress, including when discovered beneath `pkg/`.
+
+Source ownership and Go package boundaries **MUST** remain intact even when
+tests from multiple services share an executable. Consolidation **MUST NOT**
+merge production packages, introduce production exports for test registration,
+bypass Go `internal` visibility, inject Wire, or weaken assertions. Preserve
+package working directories, source locations, test names, helper-process
+selection, cleanup ordering, and parallel-subtest behavior. Process-wide
+environment and mutable globals require explicit ownership and restoration;
+serialize incompatible groups or retain a separate binary until isolation is
+established. Preserve `TestMain` setup, teardown, exit status, and leak checks;
+do not silently omit a package because its setup cannot be consolidated.
+Leak verification **MUST** run after the relevant parallel tests and cleanup
+have completed; broadening ignore lists to make consolidation pass is not an
+equivalent check. Disable incidental framework host probing through explicit
+test setup when it is outside the behavior being proved. For example,
+in-process Cobra command tests do not need Windows Explorer-launch process
+scans; actual executable-launch behavior belongs in integration testing.
+
+Preparation **MUST** let the Go toolchain validate source and build inputs.
+Validation includes test and production
+sources, dependencies, embedded assets, toolchain, build tags, target platform,
+and instrumentation flags. A persistent executable path alone is not proof
+that the artifact is current. Explicit prepared execution may skip validation
+for repeated runs of the same source snapshot; label that measurement as
+execution-only and record the preparation identity. Build-cache reuse is encouraged; test-result
+cache hits **MUST NOT** count as fresh execution in latency measurements.
+
+Harness migrations **MUST** account for every selected package and test,
+including native exceptions, skipped cases, examples, and fuzz seed cases.
+Compare executed cases and scoped implementation coverage, including imported
+implementations, before claiming equivalent coverage. An unchanged test count
+alone is not statement-coverage evidence. Failures in either the merged or
+separate binaries **MUST** fail the lane.
+
+Measure aggregate user plus kernel CPU for the runner and all descendants.
+Include discovery/generation, source validation, compilation/linking, process
+startup, fresh test execution, reporting, and cleanup. Report warm unchanged
+builds, representative source-change rebuilds, and cold builds separately.
+Attribute costs by stage; do not describe the entire build stage as linking or
+the entire native `go test` stage as test execution. Report wall time separately
+and retain the observed sample range. Required correctness and coverage runs
+**SHOULD** emit these diagnostics instead of duplicating the suite solely for
+timing.
+
+Report execution-only prepared measurements separately from complete
+prepare-and-execute measurements. Package process-CPU deltas attribute the
+shared process's work but exclude helper descendants; aggregate user plus
+kernel CPU accounting for the complete process tree remains the budget metric.
+The application `pkg/wire` tree and service-local `wire/` trees have no unit lane. Their retained private behavior
+witnesses are legacy integration coverage while behavior migrates to owners;
+they are not templates for new tests. `make test-wiring-integration` discovers
+all retained wiring packages; `make test-integration` includes that lane.
+`wire-smoke` also retains the application wiring witnesses. New application
+behavior uses public functional boundaries.
+
+Once repeated linking has been reduced, prioritize the remaining measured
+cost: unnecessary native binaries, repeated fixture construction, filesystem
+and serialization work, excessive test output, and redundant cases. Use the
+smallest fixture or snapshot that proves the behavior. Capacity-sized matrices,
+large replay histories, and throughput loops belong in load/stress suites;
+retain a representative unit case for each distinct behavior or boundary.
+Moving cases **MUST** preserve their required gate in the destination layer.
 
 ## 3. Functional tests
 
@@ -370,7 +506,8 @@ execution.
 
 ## 7. Location and naming
 
-- Unit tests live beside the package they own.
+- Unit tests live beside the package they own or in a shared test package within
+  the same service owner under the isolation rules in Section 2.
 - Functional scenarios live under
   `tests/functional/<customer-domain>/<behavior>/...`.
 - Integration scenarios live under `tests/integration/...` and consume a

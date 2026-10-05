@@ -12,11 +12,16 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
 func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
 	root := t.TempDir()
 	writeTestPackageFile(t, root, "factory")
+	writeTestPackageFile(t, root, "wire")
+	writeTestPackageFile(t, root, "wire/internal/managedbackend")
+	writeTestPackageFile(t, root, "services/models/wire")
 	writeTestPackageFile(t, root, "services/factory_definitions/internal/services/compilation/runtimetests")
 	writeTestPackageFile(t, root, "transports/http/contracttests")
 	writeTestPackageFile(t, root, "transports/http/servertests/factorysessionsse")
@@ -24,7 +29,7 @@ func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
 	writeTestPackageFile(t, root, "services/workers/provider/functionaltests")
 	writeTestPackageFile(t, root, "ignored/testdata/nested")
 
-	packages, err := discoverPackagesUnder(root, modulePath+"/pkg")
+	packages, err := discoverPackagesUnderMatching(root, modulePath+"/pkg", testlanes.IsUnitPackage)
 	if err != nil {
 		t.Fatalf("discoverPackagesUnder() error = %v", err)
 	}
@@ -33,6 +38,22 @@ func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
 	}
 	if !slices.Equal(packages, want) {
 		t.Fatalf("discoverPackages() = %v, want %v", packages, want)
+	}
+}
+
+func TestWiringIntegrationDiscoveryRetainsRootAndServiceWiring(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, pkg := range []string{"wire", "wire/internal/backend", "services/models/wire", "services/models/wire/nested", "services/work", "services/models/integrationtests", "wire/testdata/hidden"} {
+		writeTestPackageFile(t, root, pkg)
+	}
+	packages, err := discoverPackagesUnderMatching(root, modulePath+"/pkg", isWiringIntegrationPackage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{modulePath + "/pkg/services/models/wire", modulePath + "/pkg/services/models/wire/nested", modulePath + "/pkg/wire", modulePath + "/pkg/wire/internal/backend"}
+	if !slices.Equal(packages, want) {
+		t.Fatalf("wiring integrations = %v, want %v", packages, want)
 	}
 }
 
@@ -47,7 +68,7 @@ func TestDiscoverPackagesExcludesBuildConstrainedTestFiles(t *testing.T) {
 		t.Fatalf("write constrained test: %v", err)
 	}
 
-	packages, err := discoverPackagesUnder(root, modulePath+"/pkg")
+	packages, err := discoverPackagesUnderMatching(root, modulePath+"/pkg", testlanes.IsUnitPackage)
 	if err != nil {
 		t.Fatalf("discoverPackagesUnder() error = %v", err)
 	}
@@ -58,7 +79,7 @@ func TestDiscoverPackagesExcludesBuildConstrainedTestFiles(t *testing.T) {
 }
 
 func TestDiscoverPackagesReportsListFailure(t *testing.T) {
-	_, err := discoverPackagesUnder(filepath.Join(t.TempDir(), "missing"), modulePath+"/pkg")
+	_, err := discoverPackagesUnderMatching(filepath.Join(t.TempDir(), "missing"), modulePath+"/pkg", testlanes.IsUnitPackage)
 	if err == nil {
 		t.Fatal("discoverPackagesUnder() error = nil, want missing-root failure")
 	}
@@ -104,6 +125,50 @@ func TestLocalPackageArgumentsShortensRepositoryImports(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("localPackageArguments() = %v, want %v", got, want)
+	}
+}
+
+func TestRunUnitTestsBatchesByExecutedArguments(t *testing.T) {
+	restoreArgsFlagsAndCommand(t)
+	stdoutWriter = &bytes.Buffer{}
+	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
+	t.Setenv("UNITLANE_HELPER_TIMING_JSON", "1")
+	cfg := config{jobs: 2, short: true, count: 1, timeout: time.Minute}
+	for _, test := range []struct {
+		name     string
+		packages int
+		batches  int
+	}{
+		{name: "shortened imports fit together", packages: 450, batches: 1},
+		{name: "oversized arguments still split", packages: 800, batches: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			packages := make([]string, test.packages)
+			for index := range packages {
+				packages[index] = fmt.Sprintf("%s/pkg/services/owner%03d/internal/service", modulePath, index)
+			}
+			var commands [][]string
+			execCommand = func(name string, args ...string) *exec.Cmd {
+				commands = append(commands, slices.Clone(args))
+				return fakeUnitLaneCommand(name, args...)
+			}
+			if err := runUnitTests(cfg, packages); err != nil {
+				t.Fatalf("runUnitTests() error = %v", err)
+			}
+			if len(commands) != test.batches {
+				t.Fatalf("go test commands = %d, want %d", len(commands), test.batches)
+			}
+			var executed []string
+			for _, args := range commands {
+				if commandArgLen(args) > maxGoTestCommandLen {
+					t.Fatalf("go test argument length = %d, exceeds %d", commandArgLen(args), maxGoTestCommandLen)
+				}
+				executed = append(executed, helperUnitLanePackages(args)...)
+			}
+			if !slices.Equal(executed, packages) {
+				t.Fatal("go test batches must execute every package exactly once in order")
+			}
+		})
 	}
 }
 

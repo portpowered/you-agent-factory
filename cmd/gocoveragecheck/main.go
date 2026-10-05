@@ -602,7 +602,7 @@ func resolveTestPackages(cfg config) ([]string, error) {
 	}
 	switch cfg.suite {
 	case "", unitCoverageSuite:
-		return listGoPackages(unitTestPatterns, isBackendCoveragePackage, false)
+		return listGoPackages(unitTestPatterns, isBackendUnitTestPackage, false)
 	case functionalCoverageSuite:
 		return listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
 	default:
@@ -680,11 +680,19 @@ func isBackendCoveragePackage(importPath string) bool {
 		return false
 	case importPath == modulePath+"/pkg/transports/mcp/generated":
 		return false
+	case strings.HasSuffix(importPath, "/wire") || strings.Contains(importPath, "/wire/"):
+		// Measuring production wiring through functional tests does not select
+		// its legacy integration tests for the unit lane.
+		return true
 	case !testlanes.IsUnitPackage(importPath):
 		return false
 	default:
 		return true
 	}
+}
+
+func isBackendUnitTestPackage(importPath string) bool {
+	return isBackendCoveragePackage(importPath) && testlanes.IsUnitPackage(importPath)
 }
 
 func isFunctionalTestPackage(importPath string) bool {

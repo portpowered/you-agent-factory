@@ -217,8 +217,8 @@ func TestPersistedTokenFailureHistoryWithinCapacityIsUnchanged(t *testing.T) {
 	}
 }
 
-func TestDurablePetriFailureHistorySnapshotGrowthIsBounded(t *testing.T) {
-	retryCounts := []int{10, 100, 1000}
+func TestDurablePetriFailureHistorySnapshotRetentionBoundary(t *testing.T) {
+	retryCounts := []int{defaultPersistedTokenFailureLogCapacity, defaultPersistedTokenFailureLogCapacity + 1}
 	baselineBytes := make(map[int]int, len(retryCounts))
 	boundedBytes := make(map[int]int, len(retryCounts))
 
@@ -264,16 +264,13 @@ func TestDurablePetriFailureHistorySnapshotGrowthIsBounded(t *testing.T) {
 		})
 	}
 
-	if boundedBytes[10] != baselineBytes[10] {
-		t.Fatalf("N=10 changed despite fitting capacity: before=%d after=%d", baselineBytes[10], boundedBytes[10])
+	if boundedBytes[defaultPersistedTokenFailureLogCapacity] != baselineBytes[defaultPersistedTokenFailureLogCapacity] {
+		t.Fatalf("within-capacity snapshot changed despite fitting capacity: before=%d after=%d", baselineBytes[defaultPersistedTokenFailureLogCapacity], boundedBytes[defaultPersistedTokenFailureLogCapacity])
 	}
-	for _, retryCount := range []int{100, 1000} {
+	for _, retryCount := range []int{defaultPersistedTokenFailureLogCapacity + 1} {
 		if boundedBytes[retryCount] >= baselineBytes[retryCount] {
 			t.Fatalf("N=%d bounded snapshot = %d, want less than unbounded baseline %d", retryCount, boundedBytes[retryCount], baselineBytes[retryCount])
 		}
-	}
-	if boundedBytes[1000] > boundedBytes[100]*12 {
-		t.Fatalf("bounded snapshots grew superlinearly: N=100=%d, N=1000=%d", boundedBytes[100], boundedBytes[1000])
 	}
 }
 

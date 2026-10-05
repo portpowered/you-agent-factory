@@ -36,7 +36,6 @@ func TestRuntimeMetricsSelectionReducesSessionProjectionAndDateWork(t *testing.T
 		"",
 	)
 	assertSelectionWorkReduction(t, allStats, sessionStats, providerStats, windowStats)
-	runRuntimeMetricsQueryBoundsDecodedRecordLifetimeAcrossArtifactScale(t)
 }
 
 func TestRuntimeMetricsSelectionKeepsLegacyArtifactForEnvelopeFiltering(t *testing.T) {

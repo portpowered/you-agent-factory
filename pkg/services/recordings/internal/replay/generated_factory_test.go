@@ -98,6 +98,12 @@ Fallback body.
 	}
 
 	assertGeneratedFactoryMetadata(t, generated, factoryDir, "workflow-123")
+	assertGeneratedSplitRuntimeDefinitions(t, generated)
+	assertFactoryArtifactUsesGeneratedFactoryOnly(t, generated)
+}
+
+func assertGeneratedSplitRuntimeDefinitions(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
 	worker := onlyGeneratedWorker(t, generated)
 	if worker.Command == nil || *worker.Command != "go" {
 		t.Fatalf("generated worker command = %#v, want go", worker.Command)
@@ -105,7 +111,11 @@ Fallback body.
 	if worker.Type == nil || *worker.Type != "SCRIPT_WORKER" {
 		t.Fatalf("generated worker type = %#v, want SCRIPT_WORKER", worker.Type)
 	}
-	workstation := onlyGeneratedWorkstation(t, generated)
+	assertGeneratedSplitWorkstation(t, onlyGeneratedWorkstation(t, generated))
+}
+
+func assertGeneratedSplitWorkstation(t *testing.T, workstation factoryapi.Workstation) {
+	t.Helper()
 	if workstation.Body == nil || *workstation.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("generated workstation body = %#v, want prompt file content", workstation.Body)
 	}
@@ -118,7 +128,6 @@ Fallback body.
 	if workstation.Resources == nil || len(*workstation.Resources) != 1 || (*workstation.Resources)[0].Capacity != 1 {
 		t.Fatalf("generated resources = %#v, want capacity 1", workstation.Resources)
 	}
-	assertFactoryArtifactUsesGeneratedFactoryOnly(t, generated)
 }
 
 func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOnlyMaps(t *testing.T) {
