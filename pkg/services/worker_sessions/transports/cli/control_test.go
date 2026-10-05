@@ -32,6 +32,21 @@ func TestInterruptPersistenceErrorPreservesPhaseAndSafeDiagnostic(t *testing.T) 
 	}
 }
 
+func TestInterruptUnavailableRecoveryPreservesPhaseAndCause(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{workersessions.ErrInterruptExecutionUnavailable, workersessions.ErrInterruptServerStopping} {
+		mapped := mapInterruptServiceError(&workersessions.InterruptError{
+			Phase: workersessions.InterruptPhaseValidation,
+			Cause: errors.Join(workersessions.ErrInterruptValidation, cause),
+		})
+		var typed *CLIError
+		if !errors.As(mapped, &typed) || typed.Code != "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED" ||
+			typed.Phase != "VALIDATION" || !errors.Is(mapped, cause) {
+			t.Fatalf("unavailable recovery mapping=%#v", mapped)
+		}
+	}
+}
+
 func TestControlLocalMapsAllActionsAndJSONResult(t *testing.T) {
 	for _, action := range []workersessions.ControlAction{
 		workersessions.ControlActionPause, workersessions.ControlActionResume,

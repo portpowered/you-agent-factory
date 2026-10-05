@@ -515,7 +515,12 @@ An explicit storage conflict stops the operation. Reloading a saved record
 cannot override that refusal or authorize successor admission.
 An operation with only a pending intent or joined source reports execution unavailable
 until its prior ownership and admission can be reconciled safely; submitting
-the same request does not blindly repeat its effects. If a joined
+the same request does not blindly repeat its effects. CLI and HTTP report
+`WORKER_SESSION_INTERRUPT_ADMISSION_FAILED` at `VALIDATION` for a recovered
+intent without observed completion. A torn journal tail instead reports
+persistence unavailable (`INTERNAL_ERROR`); its committed log prefix remains
+readable with `INCOMPLETE` capture health when no terminal was committed. Neither result proves a source stop
+or successor admission. If a joined
 source snapshot was committed before interruption, the error
 includes those saved facts. A committed accepted successor snapshot returns
 success even when the final operation result is unavailable. Replay preserves

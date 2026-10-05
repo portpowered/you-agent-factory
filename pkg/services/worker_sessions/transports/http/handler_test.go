@@ -18,6 +18,19 @@ import (
 	"go.uber.org/zap"
 )
 
+func TestInterruptUnavailableRecoveryIsNotInvalidRequest(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{workersessions.ErrInterruptExecutionUnavailable, workersessions.ErrInterruptServerStopping} {
+		err := &workersessions.InterruptError{Phase: workersessions.InterruptPhaseValidation,
+			Cause: errors.Join(workersessions.ErrInterruptValidation, cause)}
+		status, code, message := interruptErrorResponse(err)
+		if status != http.StatusServiceUnavailable || code != "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED" ||
+			message != "Workers could not admit the Worker Session interrupt" {
+			t.Fatalf("unavailable recovery mapping=%d/%s/%s", status, code, message)
+		}
+	}
+}
+
 func TestInterruptPersistenceErrorIsNotInvalidRequest(t *testing.T) {
 	t.Parallel()
 	cause := errors.Join(recordings.ErrWorkerRecordingPersistence, workersessions.ErrInterruptValidation, errors.New("private-storage-detail"))

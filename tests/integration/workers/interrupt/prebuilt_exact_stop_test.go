@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -64,8 +65,14 @@ func TestExactStopRecoveryPrebuilt(t *testing.T) {
 	}
 	t.Run("partial-admission-restart", func(t *testing.T) {
 		t.Parallel()
-		assertPartialInterruptRecovery(t, binary)
+		assertPartialInterruptRecovery(t, binary, "")
 	})
+	for _, fault := range []string{"intent", "torn-tail"} {
+		t.Run(fault+"-restart", func(t *testing.T) {
+			t.Parallel()
+			assertPartialInterruptRecovery(t, binary, fault)
+		})
+	}
 }
 
 func (fixture *exactStopFixture) restart(t *testing.T) {
@@ -228,7 +235,7 @@ func (fixture *exactStopFixture) assertTerminal(t *testing.T, name, action strin
 
 // A sibling owns the future dispatch without owning the reserved successor ID.
 // The source must join before continuation detects this admission conflict.
-func assertPartialInterruptRecovery(t *testing.T, binary string) {
+func assertPartialInterruptRecovery(t *testing.T, binary, fault string) {
 	t.Helper()
 	thread := `{"type":"thread.started","thread_id":"exact-source-thread"}`
 	ps := strings.Replace(exactStopProviderPowerShell, "[Console]::Out.Flush()", "[Console]::WriteLine('"+thread+"')\n[Console]::Out.Flush()", 1)
@@ -248,6 +255,14 @@ func assertPartialInterruptRecovery(t *testing.T, binary string) {
 	}
 	fixture.stop(t, "sibling", "terminate", "APPLIED")
 	fixture.assertJoined(t, "sibling")
+	if fault != "" {
+		stopInterruptDaemon(t, binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
+		fixture.retainInterruptIntent(t, fault == "torn-tail")
+		fixture.daemon = startInterruptDaemon(t, fixture.ctx, binary, fixture.dir, fixture.url, fixture.env)
+		waitForInterruptStatus(t, fixture.ctx, fixture.daemon, fixture.url)
+		fixture.assertIncompleteInterruptRecovery(t, fault)
+		return
+	}
 	fixture.restart(t)
 	if repeated := fixture.partialInterrupt(t); !reflect.DeepEqual(first, repeated) {
 		t.Fatalf("reconstructed partial replay changed: first=%#v replay=%#v", first, repeated)
@@ -267,6 +282,103 @@ func assertPartialInterruptRecovery(t *testing.T, binary string) {
 	stopInterruptDaemon(t, binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
 	assertInterruptPortAvailable(t, fixture.port)
 	t.Log("delivered restart replays exact SUCCESSOR_ADMISSION failure and OPERATOR_CANCEL without successor execution")
+}
+
+// Crash-window fault injection retains an actual synced public-operation INTENT
+// and an unterminated next row. Later callback facts are deliberately absent:
+// the reconstructed host must not infer them from this test's child cleanup.
+func (fixture *exactStopFixture) retainInterruptIntent(t *testing.T, torn bool) {
+	t.Helper()
+	matched := 0
+	err := filepath.WalkDir(fixture.dir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(path, ".worker.jsonl") {
+			return walkErr
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		offset := 0
+		for _, line := range bytes.SplitAfter(data, []byte{'\n'}) {
+			offset += len(line)
+			var row struct {
+				ControlOperation struct {
+					Operation struct {
+						RequestID string `json:"requestId"`
+						Phase     string `json:"phase"`
+					} `json:"operation"`
+				} `json:"controlOperation"`
+			}
+			if json.Unmarshal(line, &row) == nil && row.ControlOperation.Operation.RequestID == "exact-partial" && row.ControlOperation.Operation.Phase == "INTENT" {
+				matched++
+				prefix := bytes.Clone(data[:offset])
+				if torn {
+					prefix = append(prefix, []byte(`{"version":2,"kind":"control-operation"`)...)
+				}
+				return os.WriteFile(path, prefix, 0o600)
+			}
+		}
+		return nil
+	})
+	if err != nil || matched != 1 {
+		t.Fatalf("retain one synced INTENT with torn tail: matched=%d error=%v", matched, err)
+	}
+}
+
+func (fixture *exactStopFixture) assertIncompleteInterruptRecovery(t *testing.T, fault string) {
+	t.Helper()
+	wantStatus, wantCode := http.StatusServiceUnavailable, "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED"
+	if fault == "torn-tail" {
+		wantStatus, wantCode = http.StatusInternalServerError, "INTERNAL_ERROR"
+	}
+	for range 2 {
+		payload := []byte(`{"requestId":"exact-partial","successorWorkerSessionId":"exact-successor","replacementMessage":"replacement"}`)
+		request, err := http.NewRequestWithContext(fixture.ctx, http.MethodPost, fixture.url+"/worker-sessions/exact-source/interrupt", bytes.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		var result factoryapi.WorkerSessionInterruptError
+		if readErr != nil || json.Unmarshal(body, &result) != nil || response.StatusCode != wantStatus ||
+			result.Code != wantCode || result.Phase != "VALIDATION" || result.Successor != nil || result.Source != nil {
+			t.Fatalf("INTENT/torn-tail retry fabricated effects: status=%d error=%v body=%s", response.StatusCode, readErr, body)
+		}
+		t.Logf("reconstructed INTENT/torn-tail HTTP %d: %s", response.StatusCode, body)
+	}
+	fixture.assertIncompleteCLIAndLogs(t, wantCode)
+	fixture.assertJoined(t, "source")
+	fixture.assertJoined(t, "sibling")
+	_, status, _ := getInterruptWorker(fixture.ctx, http.DefaultClient, fixture.url, "exact-successor")
+	if status != http.StatusNotFound {
+		t.Fatalf("incomplete intent admitted successor: HTTP %d", status)
+	}
+	if _, err := os.Stat(filepath.Join(fixture.state, "unexpected.marker")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("incomplete intent executed provider: %v", err)
+	}
+	stopInterruptDaemon(t, fixture.binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
+	assertInterruptPortAvailable(t, fixture.port)
+}
+
+func (fixture *exactStopFixture) assertIncompleteCLIAndLogs(t *testing.T, wantCode string) {
+	t.Helper()
+	cliResult := runInterruptBinary(t, fixture.ctx, fixture.binary, fixture.dir, fixture.env,
+		"--remote", "--server", fixture.url, "--json", "worker-sessions", "interrupt", "exact-source",
+		"--request-id", "exact-partial", "--successor-worker-session-id", "exact-successor",
+		"--replacement-message", "replacement", "--async")
+	if cliResult.err == nil || !strings.Contains(cliResult.stdout+cliResult.stderr, wantCode) ||
+		!strings.Contains(cliResult.stdout+cliResult.stderr, "VALIDATION") {
+		t.Fatalf("incomplete replay CLI error disagrees: error=%v stdout=%s stderr=%s", cliResult.err, cliResult.stdout, cliResult.stderr)
+	}
+	logs, err := getInterruptJSON[factoryapi.WorkerSessionLogPage](fixture.ctx, http.DefaultClient, fixture.url+"/worker-sessions/exact-source/logs")
+	if err != nil || logs.Health != factoryapi.INCOMPLETE || logs.CommittedPosition == 0 {
+		t.Fatalf("incomplete capture prefix: logs=%#v error=%v", logs, err)
+	}
 }
 
 func (fixture *exactStopFixture) assertSiblingAlive(t *testing.T) {
