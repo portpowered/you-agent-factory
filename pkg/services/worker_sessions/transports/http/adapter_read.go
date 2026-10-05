@@ -43,7 +43,8 @@ func (a *Adapter) GetWorkerSessionObservation(
 		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
 	}
 	observation, err := observations.GetObservation(ctx, workersessions.GetObservationRequest{
-		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+		ProviderSession:  providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+		FactorySessionID: scope.observationID(),
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
@@ -120,7 +121,8 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
 	}
 	observation, err := observations.GetObservation(ctx, workersessions.GetObservationRequest{
-		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+		ProviderSession:  providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+		FactorySessionID: scope.observationID(),
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("get Worker Session observation: %w", err)
@@ -230,7 +232,8 @@ func (a *Adapter) StreamWorkerSessionEventsWithCursor(
 	}
 
 	request := workersessions.GetObservationRequest{
-		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+		ProviderSession:  providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+		FactorySessionID: scope.observationID(),
 	}
 	observation, err := observations.GetObservation(ctx, request)
 	if err != nil {
@@ -240,7 +243,8 @@ func (a *Adapter) StreamWorkerSessionEventsWithCursor(
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
 	subscription, err := observations.StreamObservations(ctx, workersessions.StreamObservationsRequest{
-		ProviderSession: request.ProviderSession,
+		ProviderSession:  request.ProviderSession,
+		FactorySessionID: scope.observationID(),
 		// Carry the documented default explicitly so the canonical ledger
 		// receives the bounded stream policy at the transport boundary.
 		Limit:      workersessions.DefaultObservationStreamLimit,

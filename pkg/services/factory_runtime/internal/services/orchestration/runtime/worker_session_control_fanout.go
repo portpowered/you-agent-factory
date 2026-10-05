@@ -220,6 +220,11 @@ func (s *recordedWorkerSessionObservation) StreamObservations(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
+	scope, err := s.observationReadScope(req.FactorySessionID)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	req.FactorySessionID = scope
 	if subscription, handled, err := s.streamRecorded(ctx, req); handled {
 		return subscription, err
 	}

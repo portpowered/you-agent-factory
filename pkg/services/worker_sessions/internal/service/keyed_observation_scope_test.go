@@ -248,3 +248,76 @@ func TestKeyedRuntimeDirectReadAcceptsOnlyDefaultCompatibilityScope(t *testing.T
 		})
 	}
 }
+
+// The same provider reference is retained independently in each Factory Session.
+func TestKeyedRuntimeProviderReferenceReadsSelectScopeBeforeEnrichment(t *testing.T) {
+	t.Parallel()
+	for _, owner := range []string{"factory-a", "factory-b"} {
+		t.Run(owner, func(t *testing.T) {
+			t.Parallel()
+			projector := &trackingObservationProjector{}
+			topic := workersessions.Topic("worker-"+owner, owner)
+			reader := &observationEventReaderFake{readResults: []events.ReadResult{{
+				Outcome:  events.ReadOutcomeProgress,
+				Records:  []events.Record{replayObservationRecord(topic, 1, "message")},
+				Next:     events.Cursor{Topic: topic, Position: 1},
+				Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 1},
+			}}}
+			registry := newObservationRegistry(projector, reader)
+			for _, scope := range []string{"factory-a", "factory-b"} {
+				id := "worker-" + scope
+				registry.sessions[id] = observationSession(id, workersessions.StateCompleted)
+				metadata := observationMetadata()
+				metadata.factorySessionID = scope
+				registry.observations[id] = metadata
+			}
+			ctx := context.Background()
+			got, err := registry.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: observationProviderRef(), FactorySessionID: owner})
+			if err != nil || got.WorkerSessionID != "worker-"+owner || got.FactorySessionID != owner {
+				t.Fatalf("scoped provider observation = %+v, %v", got, err)
+			}
+			transcript, err := registry.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{ProviderSession: observationProviderRef(), FactorySessionID: owner})
+			if err != nil || transcript.WorkerSessionID != got.WorkerSessionID {
+				t.Fatalf("scoped provider transcript = %+v, %v", transcript, err)
+			}
+			stream, err := registry.StreamObservations(ctx, workersessions.StreamObservationsRequest{ProviderSession: observationProviderRef(), FactorySessionID: owner, ReplayOnly: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
+			delivery := stream.Next(ctx)
+			if delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.Cursor.WorkerSessionID != got.WorkerSessionID || reader.readRequests[0].Topic != topic {
+				t.Fatalf("scoped provider history = %+v; reads=%+v", delivery, reader.readRequests)
+			}
+			assertForeignProviderReadsHaveNoEffects(t, registry, projector, reader)
+			registry.providerSessions = nil
+			got, err = registry.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: observationProviderRef(), FactorySessionID: owner})
+			if err != nil || got.WorkerSessionID != "worker-"+owner || got.State != workersessions.StateCompleted {
+				t.Fatalf("optional transcript loss hid scoped identity = %+v, %v", got, err)
+			}
+		})
+	}
+}
+
+func assertForeignProviderReadsHaveNoEffects(t *testing.T, registry *registry, projector *trackingObservationProjector, reader *observationEventReaderFake) {
+	t.Helper()
+	ctx := context.Background()
+	calls := projector.calls
+	for _, foreign := range []string{"foreign", "   "} {
+		wantErr := workersessions.ErrObservationSessionNotFound
+		if foreign == "   " {
+			wantErr = workersessions.ErrInvalidObservationFactorySessionID
+		}
+		_, err := registry.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: observationProviderRef(), FactorySessionID: foreign})
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("foreign provider observation = %v", err)
+		}
+		_, err = registry.StreamObservations(ctx, workersessions.StreamObservationsRequest{ProviderSession: observationProviderRef(), FactorySessionID: foreign, ReplayOnly: true})
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("foreign provider history = %v", err)
+		}
+	}
+	if projector.calls != calls || reader.readCalls != 1 {
+		t.Fatal("foreign lookup reached enrichment/history")
+	}
+}

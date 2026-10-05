@@ -639,6 +639,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	scope, err := s.observationReadScope(req.FactorySessionID)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	req.FactorySessionID = scope
 	if s != nil && s.Service != nil {
 		observation, err := s.Service.GetObservation(ctx, req)
 		if err == nil {

@@ -129,11 +129,16 @@ type ListWorkerSessionObservationsResult struct {
 
 // GetObservationRequest names one exact Provider Session identity.
 type GetObservationRequest struct {
-	ProviderSession providers.SessionRef
+	// FactorySessionID selects the retained owner before optional enrichment.
+	FactorySessionID string
+	ProviderSession  providers.SessionRef
 }
 
 // Validate reports whether the request carries a complete typed identity.
 func (r GetObservationRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	if err := r.ProviderSession.Validate(); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
 	}
@@ -178,7 +183,8 @@ func (r ReadTranscriptByWorkerSessionIDRequest) Validate() error {
 // StreamObservationsRequest names one exact Provider Session identity and the
 // bounded live-delivery capacity requested from Events.
 type StreamObservationsRequest struct {
-	ProviderSession providers.SessionRef
+	FactorySessionID string
+	ProviderSession  providers.SessionRef
 	// Limit bounds the retained batch and live buffer. Zero uses the stable
 	// service default.
 	Limit int
@@ -197,6 +203,9 @@ const DefaultObservationStreamLimit = 64
 // Validate reports whether the request carries a complete identity and a
 // positive effective delivery limit.
 func (r StreamObservationsRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	if err := r.ProviderSession.Validate(); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
 	}

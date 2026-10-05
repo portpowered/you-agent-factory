@@ -735,12 +735,13 @@ func assertDefaultFactoryWorkerRetainedScope(t *testing.T, baseURL string) {
 		Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": name},
 	})
 	worker := waitForRouteCharacterizationDispatch(t, stream, support.StringPointerValue(submitted.WorkId))
-	for _, selector := range []string{"~default", resolvedDefaultWorkerSessionID(t, baseURL)} {
-		assertRecordedFactoryWorkerScope(t, baseURL, selector, worker.workerSessionID)
+	resolvedID := resolvedDefaultWorkerSessionID(t, baseURL)
+	for _, selector := range []string{"~default", resolvedID} {
+		assertRecordedFactoryWorkerScope(t, baseURL, selector, resolvedID, worker.workerSessionID)
 	}
 }
 
-func assertRecordedFactoryWorkerScope(t *testing.T, baseURL, selector, workerID string) {
+func assertRecordedFactoryWorkerScope(t *testing.T, baseURL, selector, expectedID, workerID string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), functionalWorkerSignalTimeout)
 	defer cancel()
@@ -757,10 +758,10 @@ func assertRecordedFactoryWorkerScope(t *testing.T, baseURL, selector, workerID 
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("retained Factory Worker through %s: HTTP %d", selector, response.StatusCode)
 	}
-	assertRecordedFactoryWorkerFrames(t, response, selector, workerID)
+	assertRecordedFactoryWorkerFrames(t, response, selector, expectedID, workerID)
 }
 
-func assertRecordedFactoryWorkerFrames(t *testing.T, response *http.Response, selector, workerID string) {
+func assertRecordedFactoryWorkerFrames(t *testing.T, response *http.Response, selector, expectedID, workerID string) {
 	t.Helper()
 	scanner := bufio.NewScanner(response.Body)
 	complete, terminal := false, false
@@ -772,7 +773,7 @@ func assertRecordedFactoryWorkerFrames(t *testing.T, response *http.Response, se
 		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(scanner.Text(), "data:"))), &frame); err != nil {
 			t.Fatal(err)
 		}
-		if frame.WorkerSessionId != workerID || frame.FactorySessionId == nil || *frame.FactorySessionId != selector {
+		if frame.WorkerSessionId != workerID || frame.FactorySessionId == nil || *frame.FactorySessionId != expectedID {
 			t.Fatalf("retained Worker identity through %s = %+v", selector, frame)
 		}
 		if frame.ReplaySummary != nil {

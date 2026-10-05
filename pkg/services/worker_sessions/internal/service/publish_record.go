@@ -802,7 +802,7 @@ func (r *registry) StreamObservations(ctx context.Context, req workersessions.St
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSession(req.ProviderSession)
+	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSession(req.ProviderSession, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
@@ -864,18 +864,21 @@ func validateObservationCursorWorkerSessionID(
 	return nil
 }
 
-func (r *registry) observationStreamSession(ref providers.SessionRef) (string, bool, workersessions.State, error) {
+func (r *registry) observationStreamSession(ref providers.SessionRef, factorySessionIDs ...string) (string, bool, workersessions.State, error) {
 	r.mu.RLock()
 	workerSessionID := ""
 	alreadyTerminal := false
 	workerSessionState := workersessions.StateReserved
 	for id, session := range r.sessions {
 		if session.ProviderSessionAssociation != nil &&
-			session.ProviderSessionAssociation.Reference == ref {
+			session.ProviderSessionAssociation.Reference == ref &&
+			observationFactoryScopeMatches(r.observations[id], factorySessionIDs...) {
+			if workerSessionID != "" && workerSessionID < id {
+				continue
+			}
 			workerSessionID = id
 			alreadyTerminal = session.Terminal()
 			workerSessionState = session.State
-			break
 		}
 	}
 	r.mu.RUnlock()

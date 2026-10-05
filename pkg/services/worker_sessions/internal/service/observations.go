@@ -384,7 +384,8 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	ids := make([]string, 0, 1)
 	for id, session := range r.sessions {
 		if session.ProviderSessionAssociation != nil &&
-			session.ProviderSessionAssociation.Reference == req.ProviderSession {
+			session.ProviderSessionAssociation.Reference == req.ProviderSession &&
+			observationFactoryScopeMatches(r.observations[id], req.FactorySessionID) {
 			ids = append(ids, id)
 		}
 	}
@@ -393,9 +394,8 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 		r.logger.Info("worker session observation get", "outcome", "not_found")
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
-	// An exact Provider Session identity must be unique. If corrupted or
-	// legacy state ever contains two matches, deterministic identity order
-	// still makes the result stable without exposing both as one observation.
+	// Provider references may recur across Factory Sessions. Select only within
+	// the requested owner, preserving deterministic order for retained attempts.
 	sortStrings(ids)
 	projected, err := r.projectObservation(ctx, ids[0])
 	// Native transcript detail is optional; the retained association and
