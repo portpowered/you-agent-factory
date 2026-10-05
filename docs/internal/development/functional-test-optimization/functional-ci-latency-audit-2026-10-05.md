@@ -20,8 +20,14 @@ Consolidation has a measured benefit. A controlled build-only comparison reduced
 **136 linker invocations to one**, **160.292s linker CPU to 1.807s**, and warm
 build wall time from **44.29s to 3.95s**. CPU time is summed across processes;
 it is not elapsed time that can be subtracted directly from a CI duration.
-The complete single-binary execution experiment still fails customer scenarios
-under contention and is not shipped as a passing test layout.
+The latest private single-binary execution repeat **passes** after removal of
+a process-wide working-directory mutation. It combines 63 package groups and
+takes **133.03s command wall / 116.653s package execution**, with **one linker
+at 1.609s wall / 1.585s CPU**. The repository's coverage evaluator accepts the
+recorded profile against unchanged total and package gates: **61.4% total**.
+This is an experimental package execution, not the full CI supervisor. Peak RSS
+is **6.28 GiB**; fixture memory and hosted behavior still need validation before
+shipping the all-in-one layout.
 
 The current source layout converges another **21 packages** into three existing
 customer-use-case packages: Factory execution, packaged Factory invocation,
@@ -1793,3 +1799,17 @@ absolute preserved the customer invocation. Five focused native repetitions
 passed in 3.729 seconds, and changed watch/mock scopes passed built-in and tagged
 repository lint. The private monolith is repeated with this correction before
 considering any shipping layout.
+
+
+The repeat with an absolute mock-worker Factory path passed: 133.03 seconds
+command wall and 116.653 seconds package execution, with no failed JSON events.
+The one linker consumed 1.609 wall seconds and 1.585 CPU seconds; two compilers
+consumed 32.799 CPU seconds. Whole-command CPU was 288.91 user plus 83.21 system
+seconds. Peak RSS was 6,584,844 KiB (6.28 GiB). The recorded profile was checked
+using the repository's own canonicalization, coverage evaluation and blocking
+manifest functions through a private audit-only harness: 61.4% total exceeds the
+unchanged 33.1% total threshold, and all active package gates pass with the
+existing 0.25-point epsilon and existing main holds. No baseline was edited.
+The private harness and monolith are not committed production tests. This
+measurement excludes the full functional supervisor and hosted CI environment;
+it proves feasibility, not completion of a latency checkpoint.
