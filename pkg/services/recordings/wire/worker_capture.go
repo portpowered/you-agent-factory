@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -9,6 +10,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerrecordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/wire"
 )
+
+// NewWorkerOwnerRecoveryOperation binds the existing writer's boot capability.
+// External writers retain their explicit ownership/recovery policy.
+func NewWorkerOwnerRecoveryOperation(writer recordings.WorkerRecordingWriter) recordings.WorkerOwnerRecoveryOperation {
+	if recovery, ok := writer.(interface{ RecoverWorkerOwners(context.Context) error }); ok {
+		return recovery.RecoverWorkerOwners
+	}
+	return func(context.Context) error { return nil }
+}
 
 // NewWorkerSessionRecorder constructs the Recordings-owned capture capability
 // over the process Events stream and an explicit durable writer. It performs

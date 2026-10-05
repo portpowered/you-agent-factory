@@ -10,12 +10,15 @@ import (
 	"strings"
 )
 
-func (IncarnationProbe) processStart(pid int) (string, error) {
-	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+func (probe IncarnationProbe) processStart(pid int) (string, error) {
+	if probe.ReadFile == nil {
+		return "", fmt.Errorf("process incarnation: file reader is required")
+	}
+	boot, err := probe.ReadFile("/proc/sys/kernel/random/boot_id")
 	if err != nil {
 		return "", err
 	}
-	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	stat, err := probe.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", ErrProcessGone

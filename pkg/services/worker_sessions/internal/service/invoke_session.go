@@ -176,16 +176,6 @@ func runtimeAttemptContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (r *registry) runtimeAttemptFor(id string) *runtimeAttempt {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	attempt := r.runtimeAttemptControls[strings.TrimSpace(id)]
-	r.mu.RUnlock()
-	return attempt
-}
-
 func (r *registry) runtimeAttemptPending(id string) bool {
 	if r == nil {
 		return false

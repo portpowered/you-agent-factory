@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -368,7 +367,7 @@ func TestStart_ProviderSessionInspectionFailureReachesTerminalEventWithSafeCause
 			}, nil
 		},
 	}
-	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, testutil.UnavailableWorkerControlStore{})
+	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -451,7 +450,7 @@ func TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSucce
 			}, inspectionErr
 		},
 	}
-	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, testutil.UnavailableWorkerControlStore{})
+	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

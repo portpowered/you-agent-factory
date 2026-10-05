@@ -9,10 +9,93 @@ import (
 	"runtime"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+func TestOwnerRecoveryJournalMatchesSchemaAndRejectsStaleFacts(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	prior := platformprocess.Incarnation{Host: "host", PID: 123, Start: "prior-start"}
+	writer := ownerRecoveryWriter(t, local, t.TempDir(), "prior-runtime", &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: prior}})
+	if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "recording", "worker")); err != nil {
+		t.Fatal(err)
+	}
+	probe := &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: platformprocess.Incarnation{Host: "host", PID: 456, Start: "new-start"}}, lookupErr: platformprocess.ErrProcessGone}
+	recovered := ownerRecoveryWriter(t, local, writer.root, "new-runtime", probe)
+	if err := recovered.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := local.ReadFile(writer.path("recording") + "l")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
+	var delta workerJournalEntry
+	if err := json.Unmarshal(lines[1], &delta); err != nil {
+		t.Fatal(err)
+	}
+	assertOwnerLossSchema(t, lines[1])
+	for _, test := range []struct {
+		name   string
+		mutate func(*workerJournalEntry)
+	}{
+		{"generation", func(d *workerJournalEntry) { d.RecordingGenerationID = "other" }},
+		{"epoch", func(d *workerJournalEntry) { d.OwnerEpoch = d.OwnerLoss.RecoveryOwnerEpoch }},
+		{"worker", func(d *workerJournalEntry) { d.WorkerSessionID = "other" }},
+		{"recording", func(d *workerJournalEntry) { d.RecordingID = "other" }},
+		{"version", func(d *workerJournalEntry) { d.Version = 1 }},
+		{"child", func(d *workerJournalEntry) { d.OwnerLoss.ChildLiveness = "DEAD" }},
+		{"same-process", func(d *workerJournalEntry) { d.OwnerLoss.RecoveryOwnerEpoch = d.OwnerEpoch }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var changed workerJournalEntry
+			if err := json.Unmarshal(lines[1], &changed); err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(&changed)
+			entry := &recordingEntry{sessions: make(map[string]*recordingSession)}
+			if err := entry.applyLine("recording", lines[0]); err != nil {
+				t.Fatal(err)
+			}
+			if err := entry.applyOwnerLoss("recording", changed); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+				t.Fatalf("stale fact accepted: %v", err)
+			}
+			if entry.sessions["worker"].projection.ExecutionTerminal != nil {
+				t.Fatal("invalid loss mutated terminal")
+			}
+		})
+	}
+}
+
+func assertOwnerLossSchema(t *testing.T, row []byte) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "schemas", "owner-loss-envelope.v2.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schemaDoc, document any
+	if err := json.Unmarshal(data, &schemaDoc); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(row, &document); err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("owner-loss-envelope.v2.schema.json", schemaDoc); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile("owner-loss-envelope.v2.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(document); err != nil {
+		t.Fatalf("stored owner loss envelope: %v", err)
+	}
+}
 
 // Validate actual persisted envelopes against the authored storage contract;
 // this tests encoding compatibility, not a source/registration inventory.

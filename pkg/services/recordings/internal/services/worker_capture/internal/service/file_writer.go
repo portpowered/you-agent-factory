@@ -37,6 +37,9 @@ type FileWriter struct {
 		CurrentProcess() (platformprocess.Incarnation, error)
 	}
 	ownerStamped       bool
+	ownerRecoveryMu    sync.Mutex
+	ownerRecoveryDone  bool
+	ownerDeaths        map[string]bool
 	catalogMu          sync.Mutex
 	catalog            map[string]recordings.WorkerSessionCatalogEntry
 	unavailable        map[string]struct{}
@@ -78,6 +81,7 @@ type workerJournalEntry struct {
 	Code                  string                                   `json:"code,omitempty"`
 	ExecutionTerminal     *recordings.WorkerRecordingTerminal      `json:"executionTerminal,omitempty"`
 	ControlOperation      *recordings.WorkerControlOperationRecord `json:"controlOperation,omitempty"`
+	OwnerLoss             *ownerLossFact                           `json:"ownerLoss,omitempty"`
 }
 
 var _ recordings.WorkerRecordingWriter = (*FileWriter)(nil)
@@ -190,6 +194,9 @@ func (session *recordingSession) prepareRecord(record events.Record) (recordings
 		}
 		return recordings.WorkerRecordingProjection{}, false, recordings.ErrWorkerRecordingDuplicate
 	}
+	if session.projection.Degradation == "OWNER_LOST" {
+		return recordings.WorkerRecordingProjection{}, false, recordings.ErrWorkerRecordingTerminal
+	}
 	projection, err := (recordings.WorkerRecordingCodec{}).AdvanceWorkerRecording(session.projection, record)
 	return projection, false, err
 }
@@ -235,10 +242,16 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	return nil
 }
 func (session *recordingSession) prepareFailure(delta workerJournalEntry) (recordings.WorkerRecordingProjection, error) {
+	if session.projection.Degradation == "OWNER_LOST" {
+		return recordings.WorkerRecordingProjection{}, recordings.ErrWorkerRecordingTerminal
+	}
 	if delta.Topic != session.projection.Topic {
 		return recordings.WorkerRecordingProjection{}, recordings.ErrWorkerRecordingOrder
 	}
 	if strings.TrimSpace(delta.Code) == "" {
+		return recordings.WorkerRecordingProjection{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	if delta.Code == "OWNER_LOST" {
 		return recordings.WorkerRecordingProjection{}, recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return (recordings.WorkerRecordingCodec{}).FailWorkerRecording(session.projection, delta.Code, delta.ExecutionTerminal)
@@ -368,6 +381,9 @@ func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry) error {
 		return recordings.ErrWorkerRecordingReplay
 	}
 	for _, legacy := range snapshot.Sessions {
+		if legacy.Failure == "OWNER_LOST" {
+			return recordings.ErrWorkerRecordingReplay
+		}
 		result, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot, WorkerSessionID: legacy.WorkerSessionID})
 		if err != nil {
 			return err
@@ -392,18 +408,25 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 	if err := json.Unmarshal(line, &delta); err != nil {
 		return fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingReplay, err)
 	}
-	if delta.Kind == "control-operation" {
+	if delta.Kind == "control-operation" || delta.Kind == "owner-loss" {
 		decoder := json.NewDecoder(bytes.NewReader(line))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&delta); err != nil {
 			return recordings.ErrWorkerRecordingReplay
+		}
+		if delta.Kind == "owner-loss" {
+			canonical, err := json.Marshal(delta)
+			if err != nil || !bytes.Equal(canonical, line) {
+				return recordings.ErrWorkerRecordingReplay
+			}
+			return entry.applyOwnerLoss(id, delta)
 		}
 		return entry.applyControlDelta(id, delta)
 	}
 	if delta.Version != 1 {
 		return recordings.ErrWorkerRecordingCompatibility
 	}
-	if delta.ControlOperation != nil {
+	if delta.ControlOperation != nil || delta.OwnerLoss != nil || delta.Code == "OWNER_LOST" {
 		return recordings.ErrWorkerRecordingReplay
 	}
 	if delta.RecordingID != id || strings.TrimSpace(delta.WorkerSessionID) == "" {

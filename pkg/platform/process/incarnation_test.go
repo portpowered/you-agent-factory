@@ -10,7 +10,7 @@ import (
 
 func TestIncarnationUsesStableOSCreationIdentity(t *testing.T) {
 	t.Parallel()
-	probe := IncarnationProbe{}
+	probe := IncarnationProbe{ReadFile: os.ReadFile}
 	first, err := probe.CurrentProcess()
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +26,7 @@ func TestIncarnationUsesStableOSCreationIdentity(t *testing.T) {
 
 func TestIncarnationLookupDistinguishesLiveAbsentAndInvalidProcesses(t *testing.T) {
 	t.Parallel()
-	probe := IncarnationProbe{}
+	probe := IncarnationProbe{ReadFile: os.ReadFile}
 	current, err := probe.CurrentProcess()
 	if err != nil {
 		t.Fatal(err)

@@ -22,5 +22,5 @@ func New(
 // NewFileWriter selects the durable local sidecar writer used by production
 // composition when no external Worker-recording writer override is supplied.
 func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, directory platformreplay.DirectoryScanner, clock recordings.WorkerCaptureClock, root, ownerEpoch string) (recordings.WorkerRecordingStore, error) {
-	return workerrecording.NewFileWriter(storage, appender, directory, clock, root, ownerEpoch, platformprocess.IncarnationProbe{})
+	return workerrecording.NewFileWriter(storage, appender, directory, clock, root, ownerEpoch, platformprocess.IncarnationProbe{ReadFile: storage.ReadFile})
 }

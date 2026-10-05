@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -2767,7 +2766,7 @@ func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) 
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		recording,
-		testutil.UnavailableWorkerControlStore{},
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -2817,7 +2816,7 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		recording,
-		testutil.UnavailableWorkerControlStore{},
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -2877,7 +2876,7 @@ func TestInvokeSession_PostHandoffRecordingFinalizationFailurePreservesExecution
 				platformclock.Real{},
 				unavailableProviderSessionsForCapture{},
 				terminalAwareRecordingService{recording: recording},
-				testutil.UnavailableWorkerControlStore{},
+				unavailableWorkerControlStore{},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -2913,7 +2912,7 @@ func TestInvokeSession_TerminalPublicationFailureStillSuppliesExecutionTruthToRe
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		terminalAwareRecordingService{recording: recording},
-		testutil.UnavailableWorkerControlStore{},
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -2981,7 +2980,7 @@ func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		observedRecorder,
-		testutil.UnavailableWorkerControlStore{},
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)

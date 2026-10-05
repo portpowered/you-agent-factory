@@ -42,6 +42,12 @@ func (s *LogReader) GetObservationByWorkerSessionID(ctx context.Context, req wor
 		return workersessions.Observation{}, err
 	}
 	result.TerminalCause = s.archivedTerminalCause(ctx, page, result)
+	if page.Health == recordings.WorkerRecordingStatusIncomplete && page.HealthReason == "OWNER_LOST" &&
+		page.Terminal.Phase == workers.PhaseFailed && page.Terminal.Position == 0 && result.State == workersessions.StateFailed {
+		cause := "OWNER_LOST"
+		result.TerminalCause = &cause
+		result.Failure = &workersessions.FailureCause{Kind: workersessions.FailureCauseProcessGone}
+	}
 	result.TokenUsage, err = s.archivedCapturedUsage(ctx, page, id)
 	if err != nil {
 		return workersessions.Observation{}, err

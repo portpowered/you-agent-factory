@@ -19,7 +19,9 @@ type Incarnation struct {
 }
 
 // IncarnationProbe reads OS identity; it does not choose recovery policy.
-type IncarnationProbe struct{}
+type IncarnationProbe struct {
+	ReadFile func(string) ([]byte, error)
+}
 
 // CurrentProcess returns the actual process identity, or an error when the OS
 // cannot establish it. Callers must preserve unknown ownership on failure.

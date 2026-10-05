@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
@@ -313,7 +312,7 @@ func TestProvideLocalWorkerSessionsBoundaryRetainsSelectedFactClockOnOpeningFail
 	facts := platformclock.NewDeterministic(factTime, time.Second)
 	deadlines := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
 	service, err := provideWorkerSessionsService(localBoundaryWorkersService{}, localBoundaryRejectedEvents{},
-		localBoundaryProviderSessions{}, logging.NoopLogger{}, facts, deadlines, nil, nil, testutil.UnavailableWorkerControlStore{})
+		localBoundaryProviderSessions{}, logging.NoopLogger{}, facts, deadlines, nil, nil, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,15 +1,170 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"runtime"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestOwnerRecoveryPersistsOneFencedLossWithoutWorkerCallback(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	root := t.TempDir()
+	prior := platformprocess.Incarnation{Host: "host", PID: 123, Start: "prior-start"}
+	original := ownerRecoveryWriter(t, local, root, "prior-runtime", &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: prior}, live: prior})
+	intent := controlIntent(t, original, "recording", "worker-one", "request")
+	if _, _, err := original.BeginWorkerControlOperation(t.Context(), intent); err != nil {
+		t.Fatal(err)
+	}
+	if err := original.PersistWorkerRecord(t.Context(), journalRecord(t, "recording", "worker-two")); err != nil {
+		t.Fatal(err)
+	}
+	probe := &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: platformprocess.Incarnation{Host: "host", PID: 456, Start: "new-start"}}, lookupErr: platformprocess.ErrProcessGone}
+	recovered := ownerRecoveryWriter(t, local, root, "new-runtime", probe)
+	before, err := recovered.LoadWorkerRecording(t.Context(), "recording")
+	if err != nil || before.Sessions[0].ExecutionTerminal != nil || probe.lookups != 0 {
+		t.Fatalf("ordinary read acquired authority: %+v %v", before, err)
+	}
+	for range 2 {
+		if err := recovered.RecoverWorkerOwners(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if probe.lookups != 1 {
+		t.Fatalf("queries=%d, want one per prior incarnation", probe.lookups)
+	}
+	assertOwnerLossPrefix(t, recovered, before)
+	data, err := local.ReadFile(recovered.path("recording") + "l")
+	if err != nil || bytes.Count(data, []byte(`"kind":"owner-loss"`)) != 2 {
+		t.Fatalf("loss facts: %s %v", data, err)
+	}
+	assertOwnerLossReplayAndFences(t, local, root, probe, recovered, intent, before, data)
+}
+
+func assertOwnerLossReplayAndFences(t *testing.T, local platformreplay.Local, root string, probe *ownerLivenessProbe, recovered *FileWriter, intent recordings.WorkerControlOperationRecord, before recordings.WorkerRecordingSnapshot, data []byte) {
+	t.Helper()
+	if _, created, err := recovered.BeginWorkerControlOperation(t.Context(), intent); err != nil || created {
+		t.Fatalf("committed key replay: %v %v", created, err)
+	}
+	intent.Operation.RequestID = "new-request"
+	if _, _, err := recovered.BeginWorkerControlOperation(t.Context(), intent); !errors.Is(err, recordings.ErrWorkerControlConflict) {
+		t.Fatalf("new authority after loss: %v", err)
+	}
+	late := journalRecord(t, "recording", "worker-one")
+	late.Record = mustRecord(t, terminalAppend(late.Record.ID.Topic, "worker-one"), 2)
+	if err := recovered.PersistWorkerRecord(t.Context(), late); !errors.Is(err, recordings.ErrWorkerRecordingTerminal) {
+		t.Fatalf("late callback: %v", err)
+	}
+	next := ownerRecoveryWriter(t, local, root, "third-runtime", probe)
+	if err := next.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	assertOwnerLossPrefix(t, next, before)
+	after, err := local.ReadFile(next.path("recording") + "l")
+	if err != nil || !bytes.Equal(data, after) || probe.lookups != 1 {
+		t.Fatal("later boot duplicated loss or queried a terminal owner")
+	}
+}
+
+func ownerRecoveryWriter(t *testing.T, local platformreplay.Local, root, epoch string, probe *ownerLivenessProbe) *FileWriter {
+	t.Helper()
+	store, err := NewFileWriter(local, local, local, &captureTimeProbe{}, root, epoch, probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store.(*FileWriter)
+}
+
+func assertOwnerLossPrefix(t *testing.T, writer *FileWriter, before recordings.WorkerRecordingSnapshot) {
+	t.Helper()
+	after, err := writer.LoadWorkerRecording(t.Context(), before.RecordingID)
+	if err != nil || len(after.Sessions) != len(before.Sessions) {
+		t.Fatalf("recovery: %+v %v", after, err)
+	}
+	for index, session := range after.Sessions {
+		if session.Status != recordings.WorkerRecordingStatusIncomplete || session.Failure != "OWNER_LOST" || session.ExecutionTerminal == nil ||
+			session.ExecutionTerminal.Phase != workers.PhaseFailed || session.ExecutionTerminal.Status != "FAILED" || session.ExecutionTerminal.Position != 0 ||
+			!reflect.DeepEqual(session.Records, before.Sessions[index].Records) || session.LastPosition != before.Sessions[index].LastPosition {
+			t.Fatalf("owner loss altered worker history: %+v", session)
+		}
+	}
+}
+
+func TestOwnerRecoveryUnknownOrAliveOwnersDoNotProduceLoss(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		host     string
+		legacy   bool
+		queryErr error
+	}{
+		{name: "alive", host: "host"}, {name: "remote", host: "remote"},
+		{name: "query-failed", host: "host", queryErr: errors.New("denied")}, {name: "legacy", host: "host", legacy: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			root := t.TempDir()
+			prior := platformprocess.Incarnation{Host: test.host, PID: 123, Start: "prior-start"}
+			if test.legacy {
+				prior = platformprocess.Incarnation{}
+			}
+			original := ownerRecoveryWriter(t, local, root, "prior-runtime", &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: prior}})
+			if err := original.PersistWorkerRecord(t.Context(), journalRecord(t, "recording", "worker")); err != nil {
+				t.Fatal(err)
+			}
+			before, err := local.ReadFile(original.path("recording") + "l")
+			if err != nil {
+				t.Fatal(err)
+			}
+			probe := &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: platformprocess.Incarnation{Host: "host", PID: 456, Start: "new-start"}}, live: prior, lookupErr: test.queryErr}
+			reopened := ownerRecoveryWriter(t, local, root, "new-runtime", probe)
+			if err := reopened.RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := reopened.LoadWorkerRecording(t.Context(), "recording")
+			if err != nil || snapshot.Sessions[0].ExecutionTerminal != nil {
+				t.Fatalf("unknown owner classified: %+v %v", snapshot, err)
+			}
+			after, err := local.ReadFile(original.path("recording") + "l")
+			if err != nil || !bytes.Equal(before, after) {
+				t.Fatal("unknown ownership mutated journal")
+			}
+		})
+	}
+}
+
+func TestOwnerRecoveryReconcilesUncertainSyncedLoss(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	root := t.TempDir()
+	prior := platformprocess.Incarnation{Host: "host", PID: 123, Start: "prior-start"}
+	original := ownerRecoveryWriter(t, local, root, "prior-runtime", &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: prior}})
+	if err := original.PersistWorkerRecord(t.Context(), journalRecord(t, "recording", "worker")); err != nil {
+		t.Fatal(err)
+	}
+	probe := &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: platformprocess.Incarnation{Host: "host", PID: 456, Start: "new-start"}}, lookupErr: platformprocess.ErrProcessGone}
+	writer := ownerRecoveryWriter(t, local, root, "new-runtime", probe)
+	writer.appender = &journalProbe{Local: local, failAfterSync: true}
+	if err := writer.RecoverWorkerOwners(t.Context()); err == nil || writer.ownerRecoveryDone {
+		t.Fatal("uncertain sync activated controls")
+	}
+	if err := writer.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := local.ReadFile(writer.path("recording") + "l")
+	if err != nil || bytes.Count(data, []byte(`"kind":"owner-loss"`)) != 1 || probe.lookups != 1 {
+		t.Fatalf("uncertain retry duplicated loss: %s %v", data, err)
+	}
+}
 
 type ownerLivenessProbe struct {
 	ownerIdentityProbe

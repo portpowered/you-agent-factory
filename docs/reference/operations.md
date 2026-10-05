@@ -523,7 +523,13 @@ readable with `INCOMPLETE` capture health when no terminal was committed. Neithe
 or successor admission.
 
 An abrupt host exit without a terminal callback also leaves capture health `INCOMPLETE`.
-The recovered log prefix stays readable. Cancel and terminate refuse with
+At host startup, a local OS check compares the recorded daemon PID and process
+creation identity. Confirmed loss is persisted once: exact-ID observation reports
+`FAILED`, failure kind `PROCESS_GONE`, and `terminalCause: OWNER_LOST`.
+The recovered log prefix stays readable. Child liveness remains `UNKNOWN`;
+owner loss does not establish child termination. Remote owners, failed OS queries,
+and older recordings without incarnation metadata retain unknown ownership.
+Cancel and terminate refuse with
 `WORKER_SESSION_CONTROL_FAILED` when the host cannot establish execution ownership.
 This refusal does not prove that the provider process stopped.
 

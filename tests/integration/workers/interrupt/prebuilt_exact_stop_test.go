@@ -87,9 +87,16 @@ func TestExactStopRecoveryPrebuilt(t *testing.T) {
 		waitForInterruptStatus(t, fixture.ctx, fixture.daemon, fixture.url)
 		fixture.assertUnownedStopRefusal(t)
 		fixture.assertIncompletePrefix(t)
-		_, status, err := getInterruptWorker(fixture.ctx, http.DefaultClient, fixture.url, "exact-source")
-		if err == nil || status != http.StatusInternalServerError {
-			t.Fatalf("missing terminal callback fabricated an observation: HTTP %d error=%v", status, err)
+		observation, status, err := getInterruptWorker(fixture.ctx, http.DefaultClient, fixture.url, "exact-source")
+		if err != nil || status != http.StatusOK || string(observation.State) != "FAILED" ||
+			observation.TerminalCause == nil || string(*observation.TerminalCause) != "OWNER_LOST" ||
+			observation.Failure == nil || string(observation.Failure.Kind) != "PROCESS_GONE" {
+			t.Fatalf("dead supervisor classification missing: observation=%+v HTTP %d error=%v", observation, status, err)
+		}
+		fixture.restart(t)
+		replayed, _, err := getInterruptWorker(fixture.ctx, http.DefaultClient, fixture.url, "exact-source")
+		if err != nil || !reflect.DeepEqual(observation, replayed) {
+			t.Fatalf("owner loss changed after another boot: before=%+v after=%+v error=%v", observation, replayed, err)
 		}
 		stopInterruptDaemon(t, binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
 		assertInterruptPortAvailable(t, fixture.port)

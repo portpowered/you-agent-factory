@@ -133,7 +133,7 @@ func (writer *FileWriter) BeginWorkerControlOperation(ctx context.Context, recor
 	}
 	// A new intent cannot acquire authority over an affirmatively dead
 	// supervisor. Existing keyed results above remain readable and replayable.
-	if session := entry.sessions[key.WorkerSessionID]; session.projection.ExecutionTerminal == nil && writer.ownerDeathWitness(session.ownerEpoch) {
+	if session := entry.sessions[key.WorkerSessionID]; session.projection.Degradation == "OWNER_LOST" || (session.projection.ExecutionTerminal == nil && writer.ownerDeathWitness(session.ownerEpoch)) {
 		return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerControlConflict
 	}
 	if record.InputArtifactRef != "" {
@@ -276,6 +276,13 @@ func (delta workerJournalEntry) validateControlEnvelope(id string) error {
 	if delta.Version != 2 {
 		return recordings.ErrWorkerRecordingCompatibility
 	}
+	if delta.OwnerLoss != nil {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	return delta.validateControlPayload(id)
+}
+
+func (delta workerJournalEntry) validateControlPayload(id string) error {
 	if delta.ControlOperation == nil || delta.Record != nil || delta.Topic != "" || delta.Code != "" || delta.ExecutionTerminal != nil || delta.CapturedAt == nil || delta.CapturedAt.IsZero() {
 		return recordings.ErrWorkerRecordingReplay
 	}

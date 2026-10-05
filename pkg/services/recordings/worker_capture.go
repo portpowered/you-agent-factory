@@ -8,6 +8,10 @@ import (
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
 )
 
+// WorkerOwnerRecoveryOperation activates same-journal ownership recovery once
+// before a host accepts controls or new execution. It never stops children.
+type WorkerOwnerRecoveryOperation func(context.Context) error
+
 // Worker recording values and the shared pure reducer live in the focused
 // Recordings-owned internal Worker capture package and are re-exported here
 // as the customer-facing service vocabulary.

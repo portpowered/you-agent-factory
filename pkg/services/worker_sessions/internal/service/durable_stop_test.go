@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -18,7 +17,7 @@ import (
 // Only the coordinator is real. This collaborator models the store's sync
 // acknowledgement/failure and records detached operation snapshots.
 type stopOperationStore struct {
-	testutil.UnavailableWorkerControlStore
+	unavailableWorkerControlStore
 	begin      func(context.Context, recordings.WorkerControlOperationRecord) error
 	advanceErr error
 	records    []recordings.WorkerControlOperationRecord

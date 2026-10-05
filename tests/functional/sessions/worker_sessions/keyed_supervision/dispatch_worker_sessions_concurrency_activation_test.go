@@ -746,7 +746,7 @@ func (r *identityCharacterizationRunner) Run(ctx context.Context, req platformpr
 // source records and uses the public reducer for reads, without allocating IDs.
 type identityRecordingWriter struct {
 	// These identity fixtures do not claim operation-journal durability.
-	testutil.UnavailableWorkerControlStore
+	unavailableWorkerControlStore
 	root    string
 	storage platformreplay.Local
 	mu      sync.Mutex
@@ -859,4 +859,33 @@ func identityInspectRecording(t *testing.T, server *identityFixture, writer *ide
 		}
 	}
 	return recordingID
+}
+
+// unavailableWorkerControlStore is a controlled persistence outage for tests
+// that do not own durable control behavior. Every operation fails explicitly;
+// it must never be used as evidence that an intent was committed or replayed.
+type unavailableWorkerControlStore struct{}
+
+func (unavailableWorkerControlStore) BeginWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) AdvanceWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord, uint64) (recordings.WorkerControlOperationRecord, error) {
+	return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) LoadWorkerControlOperation(context.Context, recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ListWorkerControlOperations(context.Context, recordings.WorkerControlTarget) ([]recordings.WorkerControlOperationRecord, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, json.RawMessage) (string, error) {
+	return "", recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
 }

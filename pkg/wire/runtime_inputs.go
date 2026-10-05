@@ -481,6 +481,7 @@ func provideDirectJavaScriptHostAdapter(
 	start platformhttpserver.Starter,
 	newRunner lifecycle.RunnerFactory,
 	logger *zap.Logger,
+	recoverOwners recordings.WorkerOwnerRecoveryOperation,
 ) (runcli.DirectJavaScriptHost, error) {
 	if validation == nil || invocationWorkType == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
 		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
@@ -498,6 +499,11 @@ func provideDirectJavaScriptHostAdapter(
 			return nil, err
 		}
 		return newRunner(func(ctx context.Context) error {
+			if recoverOwners != nil {
+				if err := recoverOwners(ctx); err != nil {
+					return err
+				}
+			}
 			return start(ctx, platformhttpserver.StartRequest{
 				Handler: handler, Host: host.Host, Port: host.Port,
 				AutoPort: host.AutoPort, Pprof: host.Pprof, Logger: logger,

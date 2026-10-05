@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -15,7 +14,7 @@ import (
 
 type archivedCauseStore struct {
 	capturedSummaryFake
-	testutil.UnavailableWorkerControlStore
+	unavailableWorkerControlStore
 	records []recordings.WorkerControlOperationRecord
 	listErr error
 }

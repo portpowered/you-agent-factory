@@ -51,6 +51,7 @@ type copiedLedgerReplayFixture struct {
 }
 
 type copiedLedgerWorkerRecordingWriter struct {
+	unavailableWorkerControlStore
 	delegate      *remoteWorkerRecordingStore
 	directory     string
 	mu            sync.RWMutex
