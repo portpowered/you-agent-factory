@@ -795,18 +795,56 @@ func TestRuntimeOpeningCleanupRetainsOwnershipAddedDuringClose(t *testing.T) {
 		})
 		return nil
 	})
-	if err := cleanup.Close(); err != nil {
-		t.Fatal(err)
+	activation, err := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+	if err == nil || activation == nil || activation.Service != nil {
+		t.Fatalf("partial activation = %v, %v, want cleanup without a live service", activation, err)
+	}
+	if err := activation.Close(t.Context()); !errors.Is(err, errRuntimeOpeningCleanupPending) {
+		t.Fatalf("partial activation cleanup = %v, want pending ownership", err)
 	}
 	if len(modelService.closeRequests) != 0 {
 		t.Fatal("Models dependency closed while newly registered consumer still owns cleanup")
 	}
-	if err := cleanup.Close(); err != nil {
+	if err := activation.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := activation.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(events, []string{"models-open", "initial", "later", "models-close"}) {
 		t.Fatalf("release events = %v, want later ownership preserved", events)
 	}
+}
+
+func TestRuntimeOpeningCleanupReportsModelsOwnershipAddedDuringRelease(t *testing.T) {
+	t.Parallel()
+	cleanup := &runtimeOpeningCleanup{}
+	var events []string
+	modelService := &recordingModelsService{events: &events}
+	bind, err := bindModelsRuntimeScope(t.Context(), modelService, "", func() *models.RuntimeConfig { return nil }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup.Add(func() error {
+		events = append(events, "consumer-close")
+		cleanup.OwnModelsScope(t.Context(), bind)
+		return nil
+	})
+	if err := cleanup.Close(); !errors.Is(err, errRuntimeOpeningCleanupPending) {
+		t.Fatalf("cleanup = %v, want retained Models ownership", err)
+	}
+	if len(modelService.closeRequests) != 0 {
+		t.Fatal("new Models ownership was released in the original batch")
+	}
+	for range 2 {
+		if err := cleanup.Close(); err != nil {
+			t.Fatalf("cleanup retry = %v", err)
+		}
+	}
+	if !slices.Equal(events, []string{"models-open", "consumer-close", "models-close"}) {
+		t.Fatalf("release events = %v, want each owned resource released once", events)
+	}
+	assertOnlyOwnedModelsScopeClosed(t, modelService.closeRequests, bind.Scope)
 }
 
 func TestRuntimeOpeningCleanupRetainsModelsAcrossConsumerAndDependencyFailures(t *testing.T) {

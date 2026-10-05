@@ -29,6 +29,8 @@ type runtimeOpeningCleanup struct {
 	closeMu sync.Mutex
 }
 
+var errRuntimeOpeningCleanupPending = errors.New("runtime opening cleanup still owns pending resources")
+
 func (cleanup *runtimeOpeningCleanup) Add(action func() error) {
 	if action == nil {
 		return
@@ -110,6 +112,12 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	cleanup.mu.Lock()
 	cleanup.actions = append(pending, cleanup.actions...)
 	cleanup.models = append(models, cleanup.models...)
+	// Opening callers retain the retry capability only when Close reports an
+	// incomplete release. Ownership registered by a closer must not turn into
+	// a successful release merely because the original batch completed.
+	if closeErr == nil && (len(cleanup.actions) != 0 || len(cleanup.models) != 0) {
+		closeErr = errRuntimeOpeningCleanupPending
+	}
 	cleanup.mu.Unlock()
 	return closeErr
 }
