@@ -163,6 +163,71 @@ func TestInitialActivationKeepsMutationAndProgressObservationsScopedAcrossCalls(
 	runtime.KeepAlive(initial)
 }
 
+func TestInitialActivationKeepsMutationAndProgressObservationsScopedAcrossOutcomes(t *testing.T) {
+	t.Parallel()
+	loaded, err := factorydefinitionfixtures.NewLoadedSource("factory", &interfaces.FactoryConfig{Name: "factory"}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources := &controlledInitialAssembly{failure: errors.New("controlled opening failure")}
+	var cancelDuringMaterialization context.CancelFunc
+	initial := factoryinternal.NewInitialActivation(resources, clockwork.NewFakeClock(), zap.NewNop(),
+		func(*interfaces.RuntimeSnapshot, string) (interfaces.MutableLoadedFactorySource, error) {
+			if cancelDuringMaterialization != nil {
+				cancelDuringMaterialization()
+			}
+			return loaded, nil
+		})
+	for _, outcome := range []struct {
+		name string
+		err  error
+	}{
+		{"success", nil},
+		{"failure", resources.failure},
+		{"cancellation", context.Canceled},
+	} {
+		t.Run(outcome.name, func(t *testing.T) {
+			resources.failure = outcome.err
+			ctx := t.Context()
+			if errors.Is(outcome.err, context.Canceled) {
+				canceled, cancel := context.WithCancel(ctx)
+				cancelDuringMaterialization = cancel
+				t.Cleanup(cancel)
+				ctx = canceled
+			}
+			observation := discardedInitialOpeningObservation(t, initial, ctx, outcome.err)
+			// Drop the fake engine's scoped callbacks and the result while the
+			// same reusable operation remains live across every outcome.
+			resources.mutations, resources.progress = nil, nil
+			runtime.GC()
+			if observation.Value() != nil {
+				t.Fatal("reusable initial operation retained discarded session observations")
+			}
+			runtime.KeepAlive(initial)
+		})
+	}
+}
+
+func discardedInitialOpeningObservation(t *testing.T, initial *factoryinternal.InitialActivation,
+	ctx context.Context, cause error,
+) weak.Pointer[openingSessionObservations] {
+	t.Helper()
+	observations := &openingSessionObservations{}
+	result, err := initial.Open(ctx, factory.RuntimeActivationRequest{
+		FactorySessionID: "discarded", RuntimeID: "discarded-runtime",
+	}, observations)
+	if !errors.Is(err, cause) {
+		t.Fatalf("initial opening error = %v, want %v", err, cause)
+	}
+	if errors.Is(cause, context.Canceled) && !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal("cancellation case did not cancel its opening context")
+	}
+	if cause == nil && (result == nil || result.Activation == nil) {
+		t.Fatal("successful controlled opening did not return its activation")
+	}
+	return weak.Make(observations)
+}
+
 func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
