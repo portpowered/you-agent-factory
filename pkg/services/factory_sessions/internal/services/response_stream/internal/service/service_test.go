@@ -340,28 +340,38 @@ func TestService_PublishDiagnosticsPreserveNoopResults(t *testing.T) {
 			}
 			results = append(results, result)
 		}
-		delivered, err := cursor.Drain()
-		if err != nil || !reflect.DeepEqual(delivered, results) || !reflect.DeepEqual(store.Events(), results) {
-			t.Fatalf("delivery/store differ: %#v, %v", delivered, err)
-		}
-		topic := responseEventTopicForTest("session-1")
-		read, err := authority.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 3})
-		if err != nil || len(read.Records) != 2 {
-			t.Fatalf("authority: %#v, %v", read, err)
-		}
-		for i, record := range read.Records {
-			var decoded responseevents.FactoryResponseEvent
-			if err := json.Unmarshal(record.Payload, &decoded); err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(decoded, results[i]) || int64(record.ID.Position) != results[i].Sequence {
-				t.Fatalf("authority content differs: %#v", decoded)
-			}
-		}
+		assertDiagnosticDelivery(t, store, cursor, results)
+		assertDiagnosticAuthority(t, authority, results)
 		if captureEnabled && !reflect.DeepEqual(results, baseline) {
 			t.Fatal("capture changed publication results")
 		}
 		baseline = results
+	}
+}
+
+func assertDiagnosticDelivery(t *testing.T, store *responseeventstore.SessionResponseEventStore, cursor *responsestreamservice.Cursor, results []responseevents.FactoryResponseEvent) {
+	t.Helper()
+	delivered, err := cursor.Drain()
+	if err != nil || !reflect.DeepEqual(delivered, results) || !reflect.DeepEqual(store.Events(), results) {
+		t.Fatalf("delivery/store differ: %#v, %v", delivered, err)
+	}
+}
+
+func assertDiagnosticAuthority(t *testing.T, authority events.Service, results []responseevents.FactoryResponseEvent) {
+	t.Helper()
+	topic := responseEventTopicForTest("session-1")
+	read, err := authority.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 3})
+	if err != nil || len(read.Records) != 2 {
+		t.Fatalf("authority: %#v, %v", read, err)
+	}
+	for i, record := range read.Records {
+		var decoded responseevents.FactoryResponseEvent
+		if err := json.Unmarshal(record.Payload, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(decoded, results[i]) || int64(record.ID.Position) != results[i].Sequence {
+			t.Fatalf("authority content differs: %#v", decoded)
+		}
 	}
 }
 
@@ -415,18 +425,7 @@ func TestService_PublishRejectedDiagnosticsPreserveStateAndPrivacy(t *testing.T)
 				prepareDiagnosticTerminal(t, tc.name, service, store, cursor)
 				before, sequence, calls := store.Events(), store.LatestSequence(), authority.calls
 				capture.records = nil
-				input := diagnosticInput()
-				selectedStore := store
-				switch tc.name {
-				case "events":
-					authority.rejection = sentinel
-				case "malformed":
-					input.Payload = json.RawMessage(`{"secret":"SECRET_MALFORMED"`)
-				case "session_mismatch":
-					input.FactorySessionID = "SECRET_CALLER_SESSION"
-				case "nil_store":
-					selectedStore = nil
-				}
+				selectedStore, input := diagnosticRejectionInput(tc.name, store, authority, sentinel)
 				result, err := service.Publish(selectedStore, input)
 				if err == nil || !reflect.DeepEqual(result, responseevents.FactoryResponseEvent{}) {
 					t.Fatalf("rejection = %#v, %v", result, err)
@@ -447,6 +446,21 @@ func TestService_PublishRejectedDiagnosticsPreserveStateAndPrivacy(t *testing.T)
 			}
 		})
 	}
+}
+
+func diagnosticRejectionInput(name string, store *responseeventstore.SessionResponseEventStore, authority *diagnosticAuthority, sentinel error) (*responseeventstore.SessionResponseEventStore, responseevents.FactoryResponseEvent) {
+	input := diagnosticInput()
+	switch name {
+	case "events":
+		authority.rejection = sentinel
+	case "malformed":
+		input.Payload = json.RawMessage(`{"secret":"SECRET_MALFORMED"`)
+	case "session_mismatch":
+		input.FactorySessionID = "SECRET_CALLER_SESSION"
+	case "nil_store":
+		store = nil
+	}
+	return store, input
 }
 
 func TestService_PublishDiagnosticsIsolateIndependentOwners(t *testing.T) {
