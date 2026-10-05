@@ -5,13 +5,14 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest hosted functional job, at `0958ddb01f`, passed in **5m07.456s for
-the full functional supervisor**, including **4m08.406s for the coverage
-invocation**. It reported 827 final passes, two skips and no final failures;
-its unchanged coverage gates passed. MCP stdio and mock-worker cases failed
-initially and passed on retry; those recovered failures remain in diagnostics.
-Every required verification job passed. The five-, three- and two-minute merge
-checkpoints remain unmet: the full supervisor is still over five minutes.
+The latest hosted functional job, at `02a491c07b`, passed in **5m33.016s for
+the full functional supervisor**, including **4m17.763s for the coverage
+invocation**. It reported 816 final passes, two skips and no final failures;
+unchanged coverage gates and all required verification jobs passed. Providers
+and mock-worker cases failed initially and passed on retry; those recovered
+failures remain in diagnostics. The five-, three- and two-minute merge
+checkpoints remain unmet. The preceding fully passing workflow is `0958ddb01f`, whose supervisor took
+5m07.420s.
 [PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867)
 contains the ongoing changes. Local measurements do not establish hosted latency.
 
@@ -1619,3 +1620,89 @@ This measurement rebuilt dependencies in a fresh source directory. It is not
 a controlled warm comparison with previous samples, and it does not establish
 a hosted checkpoint. It does provide complete passing verification with the
 unchanged gates, rather than extrapolating the isolated profile to CI.
+
+
+### Further customer-proof cleanup
+
+Two `readWorkAtState` fake-HTTP self-tests are removed because they exercise
+test helpers rather than the application. Removal of a legacy metadata
+conversion/clone roundtrip and programmatic metadata-snapshot rejection was
+also measured, but is not shipped yet: that removal uncovered two existing
+functional package floors that require equivalent customer-boundary proof. The real filesystem watcher scenarios and their public Work observers
+remain. These tests have no reviewed scenario declarations. They are not removed
+because of a runtime failure.
+
+The six retry scenarios previously in `tests/functional/workflow` move into
+Product customer journeys, removing one more application-linked binary. Each
+has its own process, home, Factory fixture and controlled provider. They run in
+parallel. Success observes correlated terminal Work directly rather than an
+unconditional quiet window; rejection/exhaustion still inspect terminal Work
+and public dispatch events. The long cases retain their `functionallong` tag.
+Three repeated focused runs, including the long retry cases, passed in 8.114s.
+Three obsolete missing-subsection exemptions for the vacated workflow sources
+are removed without adding new debt allowances. Complete coverage validation
+of these changes is running separately from the preceding source snapshot.
+
+
+The first full cleanup follow-up took **153.91s overall / 143.303s tests** and
+failed: 811 passes, two skips and one failure. The recording-path reuse case
+in Workers inference inherited the operator home, so packaged installation
+contended on `/home/andre/.you-agent-factory/factories` with other processes.
+This is an isolation failure, not a reason to remove the recording behavior.
+Both invocations now use one test-owned home and the existing isolated model
+cache environment. The test still reuses the same process and recording path
+and proves new Worker/recording identities and unmerged durable history.
+Three focused repetitions pass; a full isolated follow-up is required.
+
+The failed run observed 65 links / 104.767 linker CPU-seconds and two compiles /
+5.760 compiler CPU-seconds. Its warmer cache differs from the preceding fresh
+source rebuild; a shorter failed run establishes no latency checkpoint.
+
+
+### Hosted validation of immutable caches and duplicate-run removal
+
+Revision `02a491c07b` passes the hosted functional job and unchanged coverage
+gates: **333.016s full supervisor / 257.763s coverage invocation**, 816 final
+passes, two skips and no final failures. It records 696 compiler commands and
+63 linker commands. Providers' timeout-recovery case and JavaScript mock-worker
+case failed initially and passed retry; raw diagnostics retain both failures.
+Product customer journeys takes 151.687s, customer lifecycles 143.794s, packaged
+invocation 81.356s, Factory execution 59.471s and CLI customer commands 54.272s.
+
+This is slower overall than the preceding hosted 307.420s supervisor despite
+the isolated CPU improvement. The profiles establish avoided computation, not
+a hosted latency checkpoint. Cache state, contention and retries prevent treating
+single samples as a controlled comparison. The build-only one-link result remains
+a strong reason to continue consolidation, while complete execution and unchanged
+gates are required before shipping a monolith.
+
+Exact supervisor timestamps are retained in each run's
+`c09-critical-path/critical-path-timing.txt`. The earlier 0958 value of 307.456s
+in this document spans the whole workflow step including its shell preamble;
+the supervisor itself is 307.420s. The e120 supervisor is 398.914s (398.946s for
+the workflow step). Future checkpoint comparisons use supervisor start/end.
+[Hosted run 37331029622](https://github.com/portpowered/you-agent-factory/actions/runs/37331029622).
+
+The isolated-home cleanup repeat takes **139.92s overall / 126.732s tests**
+and still fails one existing Worker Session observation case (811 passes, two
+skips). Its recording fake represents missing history as a generic error, while
+the real reader returns typed `os.ErrNotExist`, which the application recognizes
+as absent live history. The fake now preserves that error contract. Five focused
+repetitions of selected-session observations, recording reuse and opening-gate
+scenarios pass in 12.776s. The inference environment helper also adopts the
+shared isolated-home helper so an operator's explicit model cache cannot leak in.
+The failed run records 65 links / 95.130 linker CPU-seconds and two compiles /
+1.373 compiler CPU-seconds. Its shorter failed duration establishes no checkpoint.
+
+
+The corrected follow-up has **812 passes, two skips and no test failures**, with
+**133.49s overall / 122.177s tests**, but fails two unchanged coverage floors:
+NameValue metadata validation drops from the required 72.22% to 29.63%, and
+Factory snapshot mapping from 75.00% to 68.75%. These gates are not weakened.
+The metadata-only tests remain temporarily pending replacement with appropriate
+public behavior; the two polling-helper self-tests can be removed independently.
+This failed run's 65 links consume 87.740 CPU-seconds, with 103.300s of active
+wall time; two compiles consume 0.999 CPU-seconds. A shorter invocation with a
+failed gate establishes no checkpoint. Recording reuse and selected-session
+observation now pass in this complete run with owned homes and typed fake
+missing-history behavior.

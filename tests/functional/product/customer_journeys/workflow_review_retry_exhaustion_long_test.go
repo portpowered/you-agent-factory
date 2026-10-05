@@ -1,6 +1,6 @@
 //go:build functionallong
 
-package workflow
+package customer_journeys_test
 
 import (
 	"slices"
@@ -14,6 +14,7 @@ import (
 )
 
 func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow review-retry exhaustion sweep")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "review_retry_exhaustion"))
@@ -50,6 +51,7 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 }
 
 func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow review-retry feedback propagation sweep")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "review_retry_exhaustion"))
@@ -93,6 +95,7 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 }
 
 func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow review-retry success-before-limit sweep")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "review_retry_exhaustion"))
@@ -103,7 +106,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 2 {
 		t.Errorf("expected swe called 2 times, got %d", got)

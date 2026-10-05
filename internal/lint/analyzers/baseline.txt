@@ -2683,9 +2683,6 @@ functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/packaged_goal_public_contract_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/service_lifecycle_smoke_long_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/service_pipeline_config_helpers_test.go
-functional-test-missing-subsection|tests/functional/workflow|tests/functional/workflow/config_driven_retry_loop_breaker_test.go
-functional-test-missing-subsection|tests/functional/workflow|tests/functional/workflow/doc.go
-functional-test-missing-subsection|tests/functional/workflow|tests/functional/workflow/review_retry_exhaustion_long_test.go
 functional-test-missing-subsection|tests/functional/work|tests/functional/work/doc.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/guards|tests/functional/factory_runtime/orchestrators/petri/guards/doc.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/routing|tests/functional/factory_runtime/orchestrators/petri/routing/doc.go

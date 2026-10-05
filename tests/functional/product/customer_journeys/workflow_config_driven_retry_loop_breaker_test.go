@@ -1,4 +1,4 @@
-package workflow
+package customer_journeys_test
 
 import (
 	"testing"
@@ -15,6 +15,7 @@ import (
 
 // TestConfigDrivenUnrecognizedProviderRefusalFailsOnce proves an unknown provider refusal does not enter the retry loop.
 func TestConfigDrivenUnrecognizedProviderRefusalFailsOnce(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "process_failure_breaker",
 		"workTypes": []any{map[string]any{
@@ -79,6 +80,7 @@ func TestConfigDrivenUnrecognizedProviderRefusalFailsOnce(t *testing.T) {
 }
 
 func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "retry_exhaustion"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Will exhaust retries"}`))
@@ -113,6 +115,7 @@ func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 }
 
 func TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "retry_exhaustion"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Will succeed on second try"}`))
@@ -124,7 +127,7 @@ func TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
 	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }
 
