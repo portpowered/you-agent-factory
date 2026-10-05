@@ -155,7 +155,6 @@ func TestInitialActivationKeepsMutationAndProgressObservationsScopedAcrossCalls(
 	// Once those callbacks are discarded, a live reusable owner must not keep
 	// the durable observation capability reachable.
 	first, second := weak.Make(observations[0]), weak.Make(observations[1])
-	observations = [2]*openingSessionObservations{}
 	resources.mutations, resources.progress = nil, nil
 	runtime.GC()
 	if first.Value() != nil || second.Value() != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
@@ -422,8 +423,8 @@ type controlledEngine struct {
 }
 
 func (e *controlledEngine) WorkflowContext() *factory_context.FactoryContext { return e.workflow }
-func (*controlledEngine) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
-	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet]{}, nil
+func (*controlledEngine) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	return &legacysnapshot.Snapshot{}, nil
 }
 
 type controlledEngineCall struct {
