@@ -25,6 +25,9 @@ func (r *registry) ListWorkerSessionObservations(
 	ctx context.Context,
 	req workersessions.ListWorkerSessionObservationsRequest,
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
+	if req.History != "" {
+		return r.listActiveHistory(ctx, req)
+	}
 	listStartedAt := r.clock.Now()
 	query, err := r.parseObservationListQuery(ctx, req)
 	if err != nil {
@@ -94,6 +97,11 @@ func decodeObservationListCursor(value string) (string, error) {
 	}
 	decoded, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
+		return "", workersessions.ErrInvalidObservationPagination
+	}
+	// A snapshot token is not a compatibility last-identity cursor. Reject the
+	// structured token rather than silently treating its JSON as a Worker ID.
+	if cursor, err := decodeHistoryCursor(value); err == nil && cursor.Signature != "" {
 		return "", workersessions.ErrInvalidObservationPagination
 	}
 	return string(decoded), nil

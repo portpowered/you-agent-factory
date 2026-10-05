@@ -84,14 +84,28 @@ const (
 
 const DefaultWorkerSessionObservationListMaxResults = 50
 
+const maxActiveHistoryNextTokenBytes = 4096
+
+// ObservationHistory selects an explicit fleet history query. Omission keeps
+// the process-local compatibility view. Active requires a current admitted
+// execution owner; a retained lifecycle state alone never establishes activity.
+type ObservationHistory string
+
+const ObservationHistoryActive ObservationHistory = "active"
+
 // ListWorkerSessionObservationsRequest is the bounded top-level observation
 // query. NextToken is an opaque base64 cursor returned by the previous page.
+// Explicit active history freezes sampled observations for five idle minutes,
+// with at most 64 snapshots and 16MiB retained per constructed profile. Expired,
+// evicted, foreign, or mismatched-filter tokens return invalid pagination.
+// Durable all/archived selection is not yet exposed by this service contract.
 type ListWorkerSessionObservationsRequest struct {
 	// RuntimeID optionally bounds a runtime-owned fleet source.
 	RuntimeID string
 	// FactorySessionID optionally bounds a runtime-owned source of the fleet.
 	FactorySessionID string
 	Scope            ObservationScope
+	History          ObservationHistory
 	States           []State
 	MaxResults       int
 	NextToken        string
@@ -103,6 +117,12 @@ func (r ListWorkerSessionObservationsRequest) Validate() error {
 	}
 	if !r.Scope.Valid() {
 		return ErrInvalidObservationScope
+	}
+	if r.History != "" && r.History != ObservationHistoryActive {
+		return ErrInvalidObservationHistory
+	}
+	if r.History != "" && len(r.NextToken) > maxActiveHistoryNextTokenBytes {
+		return ErrInvalidObservationPagination
 	}
 	for _, state := range r.States {
 		if !state.Valid() {
@@ -658,6 +678,7 @@ var (
 	ErrInvalidObservationFactorySessionID = errors.New("worker session observation: invalid Factory Session id")
 	ErrInvalidObservationIdentity         = errors.New("worker session observation: invalid provider session identity")
 	ErrInvalidObservationScope            = errors.New("worker session observation: invalid scope")
+	ErrInvalidObservationHistory          = errors.New("worker session observation: invalid history")
 	ErrInvalidObservationPagination       = errors.New("worker session observation: invalid pagination")
 	ErrInvalidObservationAttempt          = errors.New("worker session observation: invalid attempt")
 	ErrInvalidObservationDuration         = errors.New("worker session observation: invalid duration projection")

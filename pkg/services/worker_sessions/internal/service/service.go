@@ -58,12 +58,13 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
-	logs         *LogReader
-	mu           sync.RWMutex
-	sessions     map[string]workersessions.Session
-	publications map[string]*publication
-	supervisions map[string]*supervision
-	observations map[string]*observation
+	historySnapshots observationSnapshots
+	logs             *LogReader
+	mu               sync.RWMutex
+	sessions         map[string]workersessions.Session
+	publications     map[string]*publication
+	supervisions     map[string]*supervision
+	observations     map[string]*observation
 	// observationIDsBySessionWork lets a runtime list only the Worker Session
 	// attempts associated with its exact Factory Session and Work.
 	observationIDsBySessionWork map[observationWorkKey]map[string]struct{}
