@@ -1,6 +1,7 @@
 package analyzers
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -46,32 +47,13 @@ func transportFindings(pass *analysis.Pass, file *ast.File, importer string, tes
 type transportRecorder func(kind, target string, pos token.Pos)
 
 func transportLifecycle(pass *analysis.Pass, node ast.Node, importer string, record transportRecorder) {
-	var expression ast.Expr
-	switch node := node.(type) {
-	case *ast.CallExpr:
-		expression = node.Fun
-	case *ast.CompositeLit:
-		expression = node.Type
-	default:
+	literal, ok := node.(*ast.CompositeLit)
+	if !ok {
 		return
 	}
-	var id *ast.Ident
-	switch expr := expression.(type) {
-	case *ast.SelectorExpr:
-		id = expr.Sel
-	case *ast.Ident:
-		id = expr
-	default:
-		return
-	}
-	obj := pass.TypesInfo.Uses[id]
-	if obj == nil || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() {
-		return
-	}
-	path, name := obj.Pkg().Path(), obj.Name()
-	if _, prohibited := transportLifecycleSymbols[path+"."+name]; prohibited &&
-		!(under(importer, "pkg/transports/mapping") && path == "time" && mappingTimerCalls[name]) {
-		record("lifecycle", path+"."+name, id.Pos())
+	named, ok := types.Unalias(pass.TypesInfo.TypeOf(literal)).(*types.Named)
+	if ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "net/http" && named.Obj().Name() == "Server" {
+		record("lifecycle", "net/http.Server", literal.Pos())
 	}
 }
 
@@ -120,6 +102,12 @@ func transportObjectPolicy(obj types.Object, importer string, test bool, pos tok
 	mapping := under(importer, "pkg/transports/mapping")
 	// Existing mapping rule IDs retain ownership of overlapping observations.
 	if !test {
+		if _, function := obj.(*types.Func); function && obj.Parent() == obj.Pkg().Scope() {
+			if _, prohibited := transportLifecycleSymbols[qualified]; prohibited && !(mapping && path == "time" && mappingTimerCalls[name]) {
+				record("lifecycle", qualified, pos)
+			}
+		}
+
 		_, effect := transportProcessAndFilesystemSymbols[qualified]
 		if effect && !(mapping && (path == "os/exec" || path == "os" && mappingOSCalls[name])) {
 			record("external-effect", qualified, pos)
@@ -275,4 +263,56 @@ func transportForwarder(pass *analysis.Pass, fn *ast.FuncDecl) string {
 		}
 	}
 	return ""
+}
+
+// Package-level debt must not license more occurrences or neighboring files.
+// Unlisted operations already fail their original rule; these supplemental keys
+// protect the exact source and count of operations those rules currently allow.
+func reportTransportRecordedSites(pass *analysis.Pass, unit string, found []violation, hasTests bool) {
+	listed := baseline()
+	var sites []violation
+	for _, v := range found {
+		if !strings.HasPrefix(v.rule, "transport-") {
+			continue
+		}
+		if _, recorded := listed[v.key()]; !recorded {
+			continue
+		}
+		rule := "transport-recorded-site"
+		if strings.HasSuffix(v.rule, "-test") {
+			rule += "-test"
+		}
+		v.importee = timingFile(unit, pass.Fset.Position(v.pos).Filename) + "#" + v.rule + "#" + v.importee
+		v.rule = rule
+		sites = append(sites, v)
+	}
+	counts := map[string]int{}
+	for _, v := range sites {
+		counts[v.key()]++
+	}
+	for i := range sites {
+		sites[i].importee += fmt.Sprintf("::count=%d", counts[sites[i].key()])
+	}
+	reportWithBaseline(pass, unit, setOf("transport-recorded-site", "transport-recorded-site-test"), sites, hasTests, transportRecordedBaseline(pass, unit, listed))
+}
+
+func transportRecordedBaseline(pass *analysis.Pass, unit string, listed map[string]struct{}) map[string]struct{} {
+	selected, ignored := map[string]bool{}, map[string]bool{}
+	for _, file := range pass.Files {
+		selected[serviceSource(pass, unit, file)] = true
+	}
+	for _, name := range pass.IgnoredFiles {
+		ignored[sourceName(unit, name)] = true
+	}
+	for key := range listed {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) != 3 || !strings.HasPrefix(parts[0], "transport-recorded-site") || parts[1] != unit {
+			continue
+		}
+		name, _, _ := strings.Cut(parts[2], "#")
+		if !selected[name] && ignored[name] {
+			delete(listed, key)
+		}
+	}
+	return listed
 }

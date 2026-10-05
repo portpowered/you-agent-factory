@@ -214,7 +214,6 @@ func splitRecordedFindings[T any](findings []T, fingerprint func(T) string, base
 func filterRecordedScanResult(result scanResult, baseline recordedBoundaryBaseline) (scanResult, scanResult) {
 	visible := result
 	recorded := newRecordedScanResult(result)
-	filterRecordedPackageFindings(&visible, &recorded, baseline)
 	filterRecordedServiceFindings(&visible, &recorded, baseline)
 	filterRecordedRuntimeFindings(&visible, &recorded, baseline)
 	clearVisibleRecordedFindings(&visible)
@@ -224,76 +223,27 @@ func filterRecordedScanResult(result scanResult, baseline recordedBoundaryBaseli
 func newRecordedScanResult(result scanResult) scanResult {
 	return scanResult{
 		serviceConstructionBaselineCount:    result.serviceConstructionBaselineCount,
-		transportBehaviorBaselineCount:      result.transportBehaviorBaselineCount,
 		productionDefaultBaselineCount:      result.productionDefaultBaselineCount,
-		initializerBehaviorBaselineCount:    result.initializerBehaviorBaselineCount,
-		testBehaviorBaselineCount:           result.testBehaviorBaselineCount,
-		petriPublicSurfaceBaselineCount:     result.petriPublicSurfaceBaselineCount,
 		recordedServiceConstructionFindings: append([]serviceConstructionFinding(nil), result.recordedServiceConstructionFindings...),
-		recordedTransportBehaviorFindings:   append([]transportBehaviorFinding(nil), result.recordedTransportBehaviorFindings...),
 		recordedProductionDefaultFindings:   append([]productionDefaultFinding(nil), result.recordedProductionDefaultFindings...),
-		recordedInitializerBehaviorFindings: append([]initializerBehaviorFinding(nil), result.recordedInitializerBehaviorFindings...),
-		recordedTestBehaviorFindings:        append([]testBehaviorFinding(nil), result.recordedTestBehaviorFindings...),
-		recordedPetriPublicSurfaceFindings:  append([]petriPublicSurfaceFinding(nil), result.recordedPetriPublicSurfaceFindings...),
 	}
-}
-
-func filterRecordedPackageFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
-	visible.rootPackageFindings, recorded.rootPackageFindings = splitRecordedFindings(visible.rootPackageFindings, func(finding rootPackageFinding) string {
-		return boundaryFindingFingerprint("root-package", finding)
-	}, baseline)
-	visible.retiredPackageRootFindings, recorded.retiredPackageRootFindings = splitRecordedFindings(visible.retiredPackageRootFindings, func(finding retiredPackageRootFinding) string {
-		return boundaryFindingFingerprint("retired-package-root", finding)
-	}, baseline)
-	visible.handwrittenGeneratedFindings, recorded.handwrittenGeneratedFindings = splitRecordedFindings(visible.handwrittenGeneratedFindings, func(finding handwrittenGeneratedFinding) string {
-		return boundaryFindingFingerprint("handwritten-generated", finding)
-	}, baseline)
 }
 
 func filterRecordedServiceFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
 	visible.serviceConstructionFindings, recorded.serviceConstructionFindings = splitRecordedFindings(visible.serviceConstructionFindings, func(finding serviceConstructionFinding) string {
 		return boundaryFindingFingerprint("service-construction", finding)
 	}, baseline)
-	visible.externalImplementationFindings, recorded.externalImplementationFindings = splitRecordedFindings(visible.externalImplementationFindings, func(finding transportServiceImplementationFinding) string {
-		return boundaryFindingFingerprint("external-implementation", finding)
-	}, baseline)
 }
 
 func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
-	visible.transportBehaviorFindings, recorded.transportBehaviorFindings = splitRecordedFindings(visible.transportBehaviorFindings, func(finding transportBehaviorFinding) string {
-		return boundaryFindingFingerprint("transport-behavior", finding)
-	}, baseline)
-	visible.functionalProcessEdgeFindings, recorded.functionalProcessEdgeFindings = splitRecordedFindings(visible.functionalProcessEdgeFindings, func(finding functionalProcessEdgeFinding) string {
-		return boundaryFindingFingerprint("functional-process-edge", finding)
-	}, baseline)
-	visible.constructedServiceEdgesFindings, recorded.constructedServiceEdgesFindings = splitRecordedFindings(visible.constructedServiceEdgesFindings, func(finding constructedServiceEdgesFinding) string {
-		return boundaryFindingFingerprint("constructed-service-edge", finding)
-	}, baseline)
-	visible.testWorkNormalizationFindings, recorded.testWorkNormalizationFindings = splitRecordedFindings(visible.testWorkNormalizationFindings, func(finding testWorkNormalizationFinding) string {
-		return boundaryFindingFingerprint("test-work-normalization", finding)
-	}, baseline)
 	visible.productionDefaultFindings, recorded.productionDefaultFindings = splitRecordedFindings(visible.productionDefaultFindings, func(finding productionDefaultFinding) string {
 		return boundaryFindingFingerprint("production-default", finding)
-	}, baseline)
-	visible.initializerBehaviorFindings, recorded.initializerBehaviorFindings = splitRecordedFindings(visible.initializerBehaviorFindings, func(finding initializerBehaviorFinding) string {
-		return boundaryFindingFingerprint("initializer-behavior", finding)
-	}, baseline)
-	visible.testBehaviorFindings, recorded.testBehaviorFindings = splitRecordedFindings(visible.testBehaviorFindings, func(finding testBehaviorFinding) string { return boundaryFindingFingerprint("test-behavior", finding) }, baseline)
-	visible.petriPublicSurfaceFindings, recorded.petriPublicSurfaceFindings = splitRecordedFindings(visible.petriPublicSurfaceFindings, func(finding petriPublicSurfaceFinding) string {
-		return boundaryFindingFingerprint("petri-public-surface", finding)
-	}, baseline)
-	visible.providerEffectOwnershipFindings, recorded.providerEffectOwnershipFindings = splitRecordedFindings(visible.providerEffectOwnershipFindings, func(finding providerEffectOwnershipFinding) string {
-		return boundaryFindingFingerprint("provider-effect-ownership", finding)
 	}, baseline)
 }
 
 func clearVisibleRecordedFindings(visible *scanResult) {
 	visible.recordedServiceConstructionFindings = nil
-	visible.recordedTransportBehaviorFindings = nil
 	visible.recordedProductionDefaultFindings = nil
-	visible.recordedInitializerBehaviorFindings = nil
-	visible.recordedTestBehaviorFindings = nil
-	visible.recordedPetriPublicSurfaceFindings = nil
 }
 
 // volatileBoundaryFindingFields names finding fields that move when unrelated
@@ -332,26 +282,10 @@ func boundaryFindingFingerprint(category string, finding any) string {
 
 func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	fingerprints := make(map[string]struct{})
-	addBoundaryFindingFingerprints(fingerprints, "root-package", result.rootPackageFindings)
-	addBoundaryFindingFingerprints(fingerprints, "retired-package-root", result.retiredPackageRootFindings)
-	addBoundaryFindingFingerprints(fingerprints, "handwritten-generated", result.handwrittenGeneratedFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.serviceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)
-	addBoundaryFindingFingerprints(fingerprints, "external-implementation", result.externalImplementationFindings)
-	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.transportBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.recordedTransportBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "functional-process-edge", result.functionalProcessEdgeFindings)
-	addBoundaryFindingFingerprints(fingerprints, "constructed-service-edge", result.constructedServiceEdgesFindings)
-	addBoundaryFindingFingerprints(fingerprints, "test-work-normalization", result.testWorkNormalizationFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.productionDefaultFindings)
 	addBoundaryFindingFingerprints(fingerprints, "production-default", result.recordedProductionDefaultFindings)
-	addBoundaryFindingFingerprints(fingerprints, "initializer-behavior", result.initializerBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "initializer-behavior", result.recordedInitializerBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "test-behavior", result.testBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "test-behavior", result.recordedTestBehaviorFindings)
-	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.petriPublicSurfaceFindings)
-	addBoundaryFindingFingerprints(fingerprints, "petri-public-surface", result.recordedPetriPublicSurfaceFindings)
-	addBoundaryFindingFingerprints(fingerprints, "provider-effect-ownership", result.providerEffectOwnershipFindings)
 	return fingerprints
 }
 

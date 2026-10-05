@@ -133,8 +133,3 @@ func requireNonEmptyMigrationBaseline(path string, entryCount int) error {
 	}
 	return nil
 }
-
-func isApprovedPeerServiceContractImport(packagePath string, importPath string) bool {
-	_, approved := approvedPeerServiceContractImports[packagePath+"\x00"+importPath]
-	return approved
-}

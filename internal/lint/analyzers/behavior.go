@@ -96,6 +96,9 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 		}
 		if initializer {
 			initializerFindings(pass, file, add)
+			if !test {
+				initializerBoundaryFindings(pass, file)
+			}
 		}
 		if mapping {
 			mappingFindings(pass, file, add)
@@ -104,6 +107,7 @@ func runBehavior(pass *analysis.Pass) (any, error) {
 			transportFindings(pass, file, importer, test, add)
 		}
 	}
+	reportTransportRecordedSites(pass, unit, found, hasTests)
 	reportAgainstBaseline(pass, unit, behaviorRuleNames, found, hasTests)
 	return nil, nil
 }
