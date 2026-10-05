@@ -2,11 +2,14 @@ package smoke
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -267,7 +270,7 @@ func executeDocsSmokeCommandResult(
 ) (string, error) {
 	t.Helper()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := docsSmokeProcess(t)
 	inputs := support.FakeInputs(
 		context.Background(),
 		append([]string{"you"}, args...),
@@ -275,4 +278,36 @@ func executeDocsSmokeCommandResult(
 	inputs.WorkingDirectory = workingDir
 	err := process.Execute(inputs.Input)
 	return inputs.Stdout(), err
+}
+
+// The docs command is stateless, so every docs invocation shares one
+// root-built process instead of constructing a fresh application graph per call.
+var (
+	docsSmokeProcessOnce sync.Once
+	docsSmokeProcessInst support.ApplicationProcess
+	docsSmokeProcessErr  error
+)
+
+func docsSmokeProcess(t *testing.T) support.ApplicationProcess {
+	t.Helper()
+	docsSmokeProcessOnce.Do(func() {
+		docsSmokeProcessInst, docsSmokeProcessErr = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	})
+	if docsSmokeProcessErr != nil {
+		t.Fatalf("BuildProcess() error = %v", docsSmokeProcessErr)
+	}
+	return docsSmokeProcessInst
+}
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+	if closer, ok := docsSmokeProcessInst.(interface{ Close(context.Context) error }); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := closer.Close(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "close docs smoke process: %v\n", err)
+			exitCode = 1
+		}
+	}
+	os.Exit(exitCode)
 }
