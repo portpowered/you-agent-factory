@@ -98,6 +98,7 @@ type registry struct {
 	providerSessions         providersessions.Service
 	recording                recordings.WorkerSessionRecordingService
 	operations               recordings.WorkerControlOperationStore
+	stopOperations           sync.Map // request key -> *sync.Mutex; no registry lock spans a join
 	clock                    platformclock.Source
 	scheduler                platformclock.TimerSource
 	logger                   logging.Logger

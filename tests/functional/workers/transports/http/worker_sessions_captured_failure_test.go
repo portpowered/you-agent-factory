@@ -27,6 +27,21 @@ type capturedFaultStore struct {
 	acceptedThrough uint64
 	failureOnce     sync.Once
 	failed          chan struct{}
+	controlFailure  string
+}
+
+func (store *capturedFaultStore) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	if store.controlFailure == "intent" {
+		return recordings.WorkerControlOperationRecord{}, false, errors.New(capturedStorageFault)
+	}
+	return store.WorkerRecordingStore.BeginWorkerControlOperation(ctx, record)
+}
+
+func (store *capturedFaultStore) AdvanceWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
+	if store.controlFailure == "result" {
+		return recordings.WorkerControlOperationRecord{}, errors.New(capturedStorageFault)
+	}
+	return store.WorkerRecordingStore.AdvanceWorkerControlOperation(ctx, record, expected)
 }
 
 func (store *capturedFaultStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
@@ -37,9 +52,12 @@ func (store *capturedFaultStore) PersistWorkerRecord(ctx context.Context, record
 	return store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
-func capturedFailureServer(t *testing.T, acceptedThrough uint64) (*support.FunctionalAPIServer, *functionalWorkerGate, *capturedFaultStore) {
+func capturedFailureServer(t *testing.T, acceptedThrough uint64, controlFailure ...string) (*support.FunctionalAPIServer, *functionalWorkerGate, *capturedFaultStore) {
 	t.Helper()
 	fault := &capturedFaultStore{acceptedThrough: acceptedThrough, failed: make(chan struct{})}
+	if len(controlFailure) > 0 {
+		fault.controlFailure = controlFailure[0]
+	}
 	runner := newFunctionalWorkerGate(make(chan struct{}))
 	dir := support.ScaffoldSingleStepFactory(t, "captured-failure")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
@@ -50,6 +68,59 @@ func capturedFailureServer(t *testing.T, acceptedThrough uint64) (*support.Funct
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: fault, WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { fault.WorkerRecordingStore = store }, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
 	})
 	return server, runner, fault
+}
+
+// HTTP owns the stop/error contract; the remote CLI observes the same durable
+// captured health through its customer read command. Production composition
+// and the journal remain real, with only the selected storage effect failing.
+func TestExactStopControlPersistenceLossKeepsLiveStopAvailable(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"intent", "result"} {
+		for _, action := range []string{"cancel", "terminate"} {
+			t.Run(phase+"/"+action, func(t *testing.T) {
+				t.Parallel()
+				server, runner, _ := capturedFailureServer(t, ^uint64(0), phase)
+				response := postDirectWorkerSession(t, t.Context(), server.URL(), "stop-request", "stop-worker", "stop-dispatch")
+				_ = response.Body.Close()
+				if response.StatusCode != http.StatusAccepted {
+					t.Fatalf("admission status=%d", response.StatusCode)
+				}
+				runner.waitStarted(t)
+				prefix := readCapturedContinuation(t, server, "stop-worker", "")
+				stopped := postWorkerSessionControl(t, server.URL(), "stop-worker", action)
+				assertExactStopDurableLossResponse(t, stopped)
+				runner.waitCanceled(t)
+				shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/stop-worker")
+				want := factoryapi.WorkerSessionObservationStateCanceled
+				if action == "terminate" {
+					want = factoryapi.WorkerSessionObservationStateTerminated
+				}
+				if shown.State != want || runner.callCount() != 1 {
+					t.Fatalf("joined stop state=%s calls=%d", shown.State, runner.callCount())
+				}
+				logs := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/stop-worker/logs")
+				if logs.Health != factoryapi.DEGRADED || logs.CommittedPosition < prefix.CommittedPosition || len(logs.Events) < len(prefix.Events) || !reflect.DeepEqual(logs.Events[:len(prefix.Events)], prefix.Events) {
+					t.Fatalf("degraded stopped capture=%+v", logs)
+				}
+				cli := readCapturedContinuation(t, server, "stop-worker", "")
+				if !reflect.DeepEqual(cli, logs) {
+					t.Fatal("CLI/HTTP durable-loss logs differ")
+				}
+			})
+		}
+	}
+}
+
+func assertExactStopDurableLossResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusServiceUnavailable || !strings.Contains(string(body), "WORKER_SESSION_CONTROL_FAILED") || strings.Contains(string(body), "captured-storage-sentinel") {
+		t.Fatalf("durable-loss status=%d body=%s", response.StatusCode, body)
+	}
 }
 
 func TestWorkerSessionCapturedLogsOpeningFailure(t *testing.T) {

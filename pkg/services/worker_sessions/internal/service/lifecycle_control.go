@@ -321,6 +321,10 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 	if err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	return r.stopWithCommittedIntent(ctx, req, action, detachContext, target)
+}
+
+func (r *registry) executeFrozenStop(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool, target frozenControlTarget) (workersessions.ControlResult, error) {
 	if target.runtime != nil {
 		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, target)
 	}
