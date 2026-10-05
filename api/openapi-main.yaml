@@ -443,6 +443,46 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/logs:
+    get:
+      tags: [Worker Sessions]
+      operationId: readWorkerSessionLogs
+      summary: Read captured Worker Session observations
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: artifactRef
+          in: query
+          required: false
+          description: Retrieve the exact captured payload identified by a truncated event. Cannot be combined with limit or nextToken.
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - $ref: '#/components/parameters/NextToken'
+      responses:
+        '200':
+          description: A bounded captured prefix with its durable watermark.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionLogPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /worker-sessions/{worker_session_id}/transcript:
     get:
       tags:
@@ -2684,6 +2724,8 @@ components:
       $ref: './components/schemas/api/WorkerSessionEventDelivery.yaml'
     WorkerSessionEventRecord:
       $ref: './components/schemas/api/WorkerSessionEventRecord.yaml'
+    WorkerSessionLogPage:
+      $ref: './components/schemas/api/WorkerSessionLogPage.yaml'
     WorkerSessionEventCursor:
       $ref: './components/schemas/api/WorkerSessionEventCursor.yaml'
     CostsScope:

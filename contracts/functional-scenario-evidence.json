@@ -175,6 +175,13 @@
       ]
     },
     {
+      "test": "tests/functional/workers/transports/http/worker_sessions_captured_logs_test.go::TestWorkerSessionCapturedLogsCLIHTTPParity",
+      "stableIds": [
+        "cli/you.worker-sessions.read",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
       "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
       "stableIds": [
         "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
@@ -203,6 +210,13 @@
       "stableIds": [
         "rest/listWorkerSessions",
         "rest/terminateWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
+      "stableIds": [
+        "cli/you.worker-sessions.read",
+        "rest/readWorkerSessionLogs"
       ]
     },
     {

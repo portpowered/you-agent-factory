@@ -98,12 +98,13 @@ func provideHTTPRuntimeBindingWithMetrics(
 	sessionRequests factorysessionshttp.RequestPreparation,
 	metricsQuery factoryvisualization.RuntimeMetricsQuery,
 	costsQuery costs.CostsQuery,
+	logs workersessions.Service,
 ) (httpRuntimeBinding, error) {
 	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
 	return func(root *factorysessionwire.Root, sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
-		return newHTTPRuntimeHandlerWithMetrics(root, sessionID, cancellation, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery)
+		return newHTTPRuntimeHandlerWithMetrics(root, sessionID, cancellation, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery, logs)
 	}, nil
 }
 
@@ -119,6 +120,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	sessionRequests factorysessionshttp.RequestPreparation,
 	metricsQuery factoryvisualization.RuntimeMetricsQuery,
 	costsQuery costs.CostsQuery,
+	logs workersessions.Service,
 ) (http.Handler, error) {
 	if root == nil {
 		return nil, errors.New("bind HTTP mappings: Factory Sessions root is required")
@@ -146,7 +148,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 		return nil, err
 	}
 	recordingsAdapter := newHTTPRecordingsAdapter(root, presentation)
-	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, presentation)
+	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, presentation, logs)
 	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(root)
 	if metricsScopeResolver == nil {
 		return nil, errors.New("bind HTTP runtime: Factory Sessions metrics scope resolver is unavailable")
@@ -260,6 +262,7 @@ func newHTTPRecordingsAdapter(
 func newHTTPWorkerSessionsHandler(
 	root *factorysessionwire.Root,
 	presentation factorysessionwire.SessionPresentation,
+	logs workersessions.Service,
 ) *workersessionshttp.Handler {
 	if presentation.WorkerSessions == nil {
 		return nil
@@ -280,7 +283,7 @@ func newHTTPWorkerSessionsHandler(
 	fleet := workersessionswire.NewFleetObservationService(func(ctx context.Context) ([]workersessions.Service, error) {
 		return workerSessionObservationSources(ctx, root, presentation.WorkerSessions)
 	})
-	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet), presentation.Logger)
+	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), presentation.Logger)
 }
 
 func workerSessionObservationSources(

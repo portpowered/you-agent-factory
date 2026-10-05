@@ -105,8 +105,8 @@ func TestWorkerSessionsFleetListBoundedRootPages(t *testing.T) {
 	assertNormalizedFleetJSONEqual(t, "first page", firstCLI.raw, firstHTTP.raw)
 	assertNormalizedFleetJSONEqual(t, "continuation page", secondCLI.raw, secondHTTP.raw)
 	assertBoundedFleetCompleteSelection(t, firstHTTP.list, secondHTTP.list, expected)
-	// These command fixtures publish no usage draft. Native usage remains
-	// available on a selected Work/detail read, independently of fleet summary.
+	// These command fixtures publish turn.completed usage, captured separately
+	// from the optional native transcript used by compatibility reads.
 	for _, want := range expected {
 		if want.State == "COMPLETED" {
 			assertSuccessfulWorkerSessionWithProvider(t, ctx, process, env, factoryDir, baseURL, want.FactorySessionID, want.WorkID, want.ProviderSessionID)
@@ -307,8 +307,10 @@ func assertBoundedFleetObservation(t *testing.T, label string, session workerSes
 		if session.Failure != nil && string(session.Failure) != "null" {
 			t.Fatalf("%s successful row %q has failure=%s", label, session.WorkerSessionID, session.Failure)
 		}
-		if session.TokenUsage != nil {
-			t.Fatalf("%s successful row %q invented uncaptured token usage=%#v", label, session.WorkerSessionID, session.TokenUsage)
+		if session.TokenUsage == nil || session.TokenUsage.InputTokens == nil || *session.TokenUsage.InputTokens != 8 ||
+			session.TokenUsage.OutputTokens == nil || *session.TokenUsage.OutputTokens != 12 ||
+			session.TokenUsage.TotalTokens != nil {
+			t.Fatalf("%s successful row %q lost captured 8/12 usage or invented an unreported total=%#v", label, session.WorkerSessionID, session.TokenUsage)
 		}
 		return
 	}

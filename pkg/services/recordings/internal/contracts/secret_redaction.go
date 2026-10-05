@@ -98,6 +98,16 @@ func (value *RecordingRedactedValue) UnmarshalJSON(data []byte) error {
 // request.Payload before the caller serializes or publishes the result. An
 // empty Secrets list returns a detached copy of the original JSON bytes.
 func RedactDeclaredSecrets(request RecordingRedactionRequest) (RecordingRedactionResult, error) {
+	return redactDeclaredSecrets(request, false)
+}
+
+// RedactDeclaredSecretText preserves string fields for typed Worker payloads.
+// Other classified values use the same structured marker as Factory events.
+func RedactDeclaredSecretText(request RecordingRedactionRequest) (RecordingRedactionResult, error) {
+	return redactDeclaredSecrets(request, true)
+}
+
+func redactDeclaredSecrets(request RecordingRedactionRequest, preserveStrings bool) (RecordingRedactionResult, error) {
 	paths, err := validateRecordingRedactionRequest(request)
 	if err != nil {
 		return RecordingRedactionResult{}, err
@@ -114,7 +124,7 @@ func RedactDeclaredSecrets(request RecordingRedactionRequest) (RecordingRedactio
 		Provenance: RecordingSecretProvenanceDeclared,
 	}
 	for index, path := range paths {
-		document, err = replaceRecordingJSONAt(document, path, marker)
+		document, err = replaceRecordingJSONAt(document, path, marker, preserveStrings)
 		if err != nil {
 			return RecordingRedactionResult{}, fmt.Errorf(
 				"replace recording secret at JSON pointer %q: %w",
@@ -323,8 +333,11 @@ func decodeRecordingJSONPointerToken(token string) (string, error) {
 	return builder.String(), nil
 }
 
-func replaceRecordingJSONAt(document any, path []string, replacement RecordingRedactedValue) (any, error) {
+func replaceRecordingJSONAt(document any, path []string, replacement RecordingRedactedValue, preserveStrings bool) (any, error) {
 	if len(path) == 0 {
+		if _, text := document.(string); preserveStrings && text {
+			return "<redacted>", nil
+		}
 		return replacement, nil
 	}
 	switch value := document.(type) {
@@ -333,7 +346,7 @@ func replaceRecordingJSONAt(document any, path []string, replacement RecordingRe
 		if !ok {
 			return nil, ErrRecordingSecretPathNotFound
 		}
-		replaced, err := replaceRecordingJSONAt(child, path[1:], replacement)
+		replaced, err := replaceRecordingJSONAt(child, path[1:], replacement, preserveStrings)
 		if err != nil {
 			return nil, err
 		}
@@ -344,7 +357,7 @@ func replaceRecordingJSONAt(document any, path []string, replacement RecordingRe
 		if err != nil {
 			return nil, err
 		}
-		replaced, err := replaceRecordingJSONAt(value[index], path[1:], replacement)
+		replaced, err := replaceRecordingJSONAt(value[index], path[1:], replacement, preserveStrings)
 		if err != nil {
 			return nil, err
 		}

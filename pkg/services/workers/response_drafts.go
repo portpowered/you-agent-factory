@@ -220,6 +220,9 @@ type Draft struct {
 	ItemID             string          `json:"itemId,omitempty"`
 	ParentItemID       string          `json:"parentItemId,omitempty"`
 	ProviderSessionRef string          `json:"providerSessionRef,omitempty"`
+	// DeclaredSecretJSONPointers classifies fields relative to Payload at the
+	// publication boundary. Locations are never part of a serialized event.
+	DeclaredSecretJSONPointers []string `json:"-"`
 }
 
 // CloneDraft returns a draft whose mutable payload bytes are independent from
@@ -227,6 +230,7 @@ type Draft struct {
 func CloneDraft(draft Draft) Draft {
 	cloned := draft
 	cloned.Payload = append([]byte(nil), draft.Payload...)
+	cloned.DeclaredSecretJSONPointers = append([]string(nil), draft.DeclaredSecretJSONPointers...)
 	return cloned
 }
 

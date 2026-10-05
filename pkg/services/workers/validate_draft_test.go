@@ -3,6 +3,7 @@ package workers
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -212,6 +213,20 @@ func TestValidateDraft_DoesNotMutateInputOnFailure(t *testing.T) {
 
 	if string(draft.Payload) != string(original.Payload) || draft.Kind != original.Kind || draft.Phase != original.Phase {
 		t.Fatalf("ValidateDraft() mutated its input draft: got %+v, want %+v", draft, original)
+	}
+}
+
+func TestCloneDraftDetachesDeclaredSecretLocations(t *testing.T) {
+	t.Parallel()
+	original := Draft{Payload: json.RawMessage(`{"text":"secret"}`), DeclaredSecretJSONPointers: []string{"/text"}}
+	cloned := CloneDraft(original)
+	cloned.DeclaredSecretJSONPointers[0] = "/changed"
+	if original.DeclaredSecretJSONPointers[0] != "/text" {
+		t.Fatal("clone aliases declared-secret locations")
+	}
+	encoded, err := json.Marshal(original)
+	if err != nil || strings.Contains(string(encoded), "/text") {
+		t.Fatalf("draft serialized in-memory provenance: %s %v", encoded, err)
 	}
 }
 

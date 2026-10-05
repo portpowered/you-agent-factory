@@ -29,6 +29,12 @@ type Appender interface {
 	AppendFile(string, []byte) error
 }
 
+// DirectoryScanner enumerates artifact names in bounded batches through the
+// explicitly selected filesystem effect. The caller owns interpretation.
+type DirectoryScanner interface {
+	ScanDirectory(string, int, func([]os.DirEntry) error) error
+}
+
 type replayAppendFile interface {
 	io.Writer
 	io.Seeker
@@ -47,6 +53,29 @@ type Local struct {
 // by Wire.
 func NewLocal(operatingSystem string) Local {
 	return Local{operatingSystem: operatingSystem}
+}
+
+func (local Local) ScanDirectory(path string, batchSize int, visit func([]os.DirEntry) error) error {
+	if batchSize <= 0 || visit == nil {
+		return errors.New("replay directory scan requires a positive batch size and visitor")
+	}
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = directory.Close() }()
+	for {
+		entries, err := directory.ReadDir(batchSize)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+		if visitErr := visit(entries); visitErr != nil {
+			return visitErr
+		}
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+	}
 }
 
 // WriteFile atomically replaces path with a completed artifact snapshot.

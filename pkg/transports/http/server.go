@@ -364,6 +364,15 @@ func (s *Server) ReadWorkerSessionTranscriptByWorkerSessionId(
 	s.workerSessionsHTTP.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, workerSessionID)
 }
 
+// ReadWorkerSessionLogs forwards the finite captured activity read.
+func (s *Server) ReadWorkerSessionLogs(w http.ResponseWriter, r *http.Request, workerSessionID factoryapi.WorkerSessionID, params factoryapi.ReadWorkerSessionLogsParams) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "Worker Session recording is unavailable", "WORKER_SESSION_RECORDING_UNAVAILABLE")
+		return
+	}
+	s.workerSessionsHTTP.ReadWorkerSessionLogs(w, r, workerSessionID, params)
+}
+
 // StreamWorkerSessionEventsByTopLevelWorkerSessionId forwards the top-level
 // identity event stream.
 func (s *Server) StreamWorkerSessionEventsByTopLevelWorkerSessionId(

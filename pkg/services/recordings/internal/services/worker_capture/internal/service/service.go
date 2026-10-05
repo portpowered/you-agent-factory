@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"strconv"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -332,7 +334,7 @@ func (capture *capture) fail(err error) {
 	}
 	capture.mu.Unlock()
 	capture.persistFailureMarker()
-	capture.logger.Warn("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code, "error", err.Error())
+	capture.logger.Warn("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code)
 }
 
 // persistFailureMarker writes the safe capture-loss fact at most once for a
@@ -454,6 +456,7 @@ func cloneWorkerRecords(records []events.Record) []events.Record {
 
 func cloneWorkerProjection(projection recordings.WorkerRecordingProjection) recordings.WorkerRecordingProjection {
 	clone := projection
+	clone.CapturedAt = maps.Clone(projection.CapturedAt)
 	clone.Opening = projection.Opening.Detached()
 	clone.Records = cloneWorkerRecords(projection.Records)
 	if projection.Terminal != nil {
@@ -540,10 +543,27 @@ func (capture *capture) setExecutionTerminal(terminal recordings.WorkerRecording
 func (capture *capture) WorkerRecordingProjection() (recordings.WorkerRecordingProjection, error) {
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
-	if capture.failed != nil {
-		return cloneWorkerProjection(capture.projection), nil
+	projection := cloneWorkerProjection(capture.projection)
+	if reader, ok := capture.writer.(recordings.WorkerRecordingReader); ok {
+		snapshot, err := reader.LoadWorkerRecording(context.Background(), capture.request.RecordingID)
+		if err != nil {
+			return projection, err
+		}
+		for _, session := range snapshot.Sessions {
+			if session.WorkerSessionID == capture.request.WorkerSessionID {
+				projection.RecordingGenerationID = session.RecordingGenerationID
+				projection.OwnerEpoch = session.OwnerEpoch
+				projection.CapturedAt = maps.Clone(session.CapturedAt)
+				for position := range projection.CapturedAt {
+					index, err := strconv.ParseUint(position, 10, 64)
+					if err != nil || index > uint64(projection.LastPosition) {
+						delete(projection.CapturedAt, position)
+					}
+				}
+			}
+		}
 	}
-	return cloneWorkerProjection(capture.projection), nil
+	return projection, nil
 }
 
 func (capture *capture) Close(ctx context.Context) error {

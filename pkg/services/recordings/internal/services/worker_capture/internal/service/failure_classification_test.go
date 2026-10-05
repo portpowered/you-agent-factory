@@ -32,7 +32,7 @@ func TestFileWriterLegacyContinuationTerminalReplays(t *testing.T) {
 				t.Fatalf("legacy interruption = %#v, error %v", baseline, err)
 			}
 			want := persistLegacyContinuationTerminal(t, writer, kind)
-			reopened, err := NewFileWriter(local, writer.root)
+			reopened, err := newTestFileWriter(local, writer.root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -166,6 +166,12 @@ func TestWorkerRecordingFailureMarkerErrorUsesSafeStructuredDiagnostics(t *testi
 
 	capture.fail(fmt.Errorf("%w: secret payload must not be logged", recordings.ErrWorkerRecordingPersistence))
 
+	for _, fields := range logger.fields {
+		if strings.Contains(fmt.Sprint(fields), "secret") {
+			t.Fatalf("capture diagnostic leaked raw failure detail: %#v", fields)
+		}
+	}
+
 	markerIndex := -1
 	for index, message := range logger.messages {
 		if message == "Worker recording failure persistence failed" {
@@ -228,14 +234,14 @@ func TestFileWriterRetainsScopedTopicAcrossReload(t *testing.T) {
 	const topic events.Topic = "factory-worker-session/ZmFjdG9yeS1zZXNzaW9u/cmVjb3JkZWQtd29ya2Vy/events"
 	root := t.TempDir()
 	storage := platformreplay.NewLocal(runtime.GOOS)
-	writer, err := NewFileWriter(storage, root)
+	writer, err := NewFileWriter(storage, storage, storage, &captureTimeProbe{}, root, "scoped-owner")
 	if err != nil {
 		t.Fatal(err)
 	}
 	opening := mustRecord(t, openingAppend(topic, workerID), 1)
 	terminal := mustRecord(t, terminalAppend(topic, workerID), 2)
 	persistWorkerRecoveryPrefix(t, writer, recordingID, workerID, opening, terminal)
-	reloaded, err := NewFileWriter(storage, root)
+	reloaded, err := NewFileWriter(storage, storage, storage, &captureTimeProbe{}, root, "reloaded-owner")
 	if err != nil {
 		t.Fatal(err)
 	}

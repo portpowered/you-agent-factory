@@ -3,6 +3,7 @@ package internal_test
 import (
 	"context"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -326,6 +327,19 @@ type testRuntimeWorkers struct{ workers.Service }
 type stubWorkerSessionsService struct {
 	factory.WorkerAttemptOpener
 	execution workers.Service
+}
+
+// This execution-only double has no durable captured activity.
+func (*stubWorkerSessionsService) GetCapturedObservation(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+}
+
+func (*stubWorkerSessionsService) ReadLogs(context.Context, workersessions.ReadLogsRequest) (workersessions.LogPage, error) {
+	return workersessions.LogPage{}, workersessions.ErrSessionNotFound
+}
+
+func (*stubWorkerSessionsService) ReadLogsArtifact(context.Context, string, string) (io.ReadCloser, error) {
+	return nil, workersessions.ErrSessionNotFound
 }
 
 func (s *stubWorkerSessionsService) Reserve(context.Context, workersessions.ReserveRequest) (workersessions.Session, error) {

@@ -570,6 +570,12 @@ type ParseDiagnostic struct {
 // ObservationEvent is one detached canonical Events record projected without
 // exposing the Events store or its implementation.
 type ObservationEvent struct {
+	Truncated     bool
+	OriginalBytes int64
+	ReturnedBytes int64
+	ArtifactRef   string
+	// CapturedAt is present only when Recordings committed this record.
+	CapturedAt     *time.Time
 	Position       uint64
 	Cursor         ObservationCursor
 	SourceType     string
@@ -582,6 +588,10 @@ type ObservationEvent struct {
 
 func (e ObservationEvent) Clone() ObservationEvent {
 	clone := e
+	if e.CapturedAt != nil {
+		stamp := *e.CapturedAt
+		clone.CapturedAt = &stamp
+	}
 	clone.Cursor = e.Cursor.Clone()
 	clone.Payload = append(json.RawMessage(nil), e.Payload...)
 	return clone
@@ -869,7 +879,16 @@ func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
 	fragment workers.ProgressFragment,
 	factorySessionIDs ...string,
 ) error {
-	factorySessionID := observationFactorySessionID(factorySessionIDs)
+	safe, err := p.RedactProgressFragment(fragment)
+	if err != nil {
+		return err
+	}
+	return p.publishWorkerSessionProgress(ctx, observer, workerSessionID, safe, observationFactorySessionID(factorySessionIDs))
+}
+
+func (p *ProviderSessionObservationPublisher) publishWorkerSessionProgress(
+	ctx context.Context, observer Service, workerSessionID string, fragment workers.ProgressFragment, factorySessionID string,
+) error {
 	if !providerFragmentAgrees(fragment) {
 		return ErrProviderBindingConflict
 	}

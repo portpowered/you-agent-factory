@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -307,6 +308,19 @@ func waitForChildDispatchResult(t *testing.T, impl *factoryImpl, dispatchID stri
 // prove that boundary is never invoked.
 type preHandoffFailedWorkerSessionsService struct {
 	execution workers.Service
+}
+
+// No captured activity exists when opening publication fails before handoff.
+func (*preHandoffFailedWorkerSessionsService) GetCapturedObservation(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+}
+
+func (*preHandoffFailedWorkerSessionsService) ReadLogs(context.Context, workersessions.ReadLogsRequest) (workersessions.LogPage, error) {
+	return workersessions.LogPage{}, workersessions.ErrSessionNotFound
+}
+
+func (*preHandoffFailedWorkerSessionsService) ReadLogsArtifact(context.Context, string, string) (io.ReadCloser, error) {
+	return nil, workersessions.ErrSessionNotFound
 }
 
 func (s *preHandoffFailedWorkerSessionsService) Reserve(

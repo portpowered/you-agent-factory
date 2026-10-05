@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -25,14 +28,17 @@ type WorkerRecordingSnapshot struct {
 // WorkerSessionRecordingSnapshot contains one detached Worker topic history
 // in aggregate order.
 type WorkerSessionRecordingSnapshot struct {
-	WorkerSessionID    string                   `json:"workerSessionId"`
-	Topic              events.Topic             `json:"topic,omitempty"`
-	Status             WorkerRecordingStatus    `json:"status,omitempty"`
-	LastPosition       events.AggregateSequence `json:"lastPosition,omitempty"`
-	Failure            string                   `json:"failure,omitempty"`
-	InterruptionReason string                   `json:"interruptionReason,omitempty"`
-	ExecutionTerminal  *WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
-	Records            []events.Record          `json:"records"`
+	RecordingGenerationID string                   `json:"recordingGenerationId,omitempty"`
+	OwnerEpoch            string                   `json:"ownerEpoch,omitempty"`
+	CapturedAt            map[string]time.Time     `json:"capturedAt,omitempty"`
+	WorkerSessionID       string                   `json:"workerSessionId"`
+	Topic                 events.Topic             `json:"topic,omitempty"`
+	Status                WorkerRecordingStatus    `json:"status,omitempty"`
+	LastPosition          events.AggregateSequence `json:"lastPosition,omitempty"`
+	Failure               string                   `json:"failure,omitempty"`
+	InterruptionReason    string                   `json:"interruptionReason,omitempty"`
+	ExecutionTerminal     *WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
+	Records               []events.Record          `json:"records"`
 }
 
 // WorkerRecordingStatus is the durable recording-health state derived from
@@ -84,18 +90,21 @@ type WorkerRecordingTerminal struct {
 // durable prefixes; ReplayWorkerRecording returns them instead of hiding the
 // readable history behind a generic replay error.
 type WorkerRecordingProjection struct {
-	RecordingID        string
-	WorkerSessionID    string
-	Topic              events.Topic
-	Status             WorkerRecordingStatus
-	Complete           bool
-	LastPosition       events.AggregateSequence
-	Opening            events.Record
-	Terminal           *WorkerRecordingTerminal
-	ExecutionTerminal  *WorkerRecordingTerminal
-	Degradation        string
-	InterruptionReason string
-	Records            []events.Record
+	RecordingGenerationID string
+	OwnerEpoch            string
+	CapturedAt            map[string]time.Time
+	RecordingID           string
+	WorkerSessionID       string
+	Topic                 events.Topic
+	Status                WorkerRecordingStatus
+	Complete              bool
+	LastPosition          events.AggregateSequence
+	Opening               events.Record
+	Terminal              *WorkerRecordingTerminal
+	ExecutionTerminal     *WorkerRecordingTerminal
+	Degradation           string
+	InterruptionReason    string
+	Records               []events.Record
 }
 
 // WorkerRecordingReplayRequest selects one Worker Session history from a
@@ -330,6 +339,9 @@ func (codec WorkerRecordingCodec) replayWorkerRecordingSession(
 		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: interruption reason is only valid for INCOMPLETE recordings", ErrWorkerRecordingCompatibility)
 	}
 	projection.InterruptionReason = recoveredInterruptionReason(projection, failure)
+	projection.RecordingGenerationID = session.RecordingGenerationID
+	projection.OwnerEpoch = session.OwnerEpoch
+	projection.CapturedAt = maps.Clone(session.CapturedAt)
 	if legacyStatus != "" && !isLegacyWorkerRecordingStatus(session.Status) && legacyStatus != projection.Status {
 		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: declared status %q disagrees with durable evidence %q", ErrWorkerRecordingCompatibility, session.Status, projection.Status)
 	}
@@ -349,6 +361,12 @@ func validateWorkerRecordingSnapshot(snapshot WorkerRecordingSnapshot) error {
 			return fmt.Errorf("%w: Worker Session %q appears more than once", ErrWorkerRecordingDuplicate, workerSessionID)
 		}
 		seen[workerSessionID] = struct{}{}
+		for position, capturedAt := range session.CapturedAt {
+			index, err := strconv.ParseUint(position, 10, 64)
+			if err != nil || index == 0 || index > uint64(len(session.Records)) || position != strconv.FormatUint(index, 10) || capturedAt.IsZero() {
+				return fmt.Errorf("%w: invalid committed capture metadata", ErrWorkerRecordingReplay)
+			}
+		}
 		if session.LastPosition != 0 {
 			if len(session.Records) == 0 || session.LastPosition != session.Records[len(session.Records)-1].ID.Position {
 				return fmt.Errorf("%w: declared last position %d does not match the durable prefix", ErrWorkerRecordingOrder, session.LastPosition)

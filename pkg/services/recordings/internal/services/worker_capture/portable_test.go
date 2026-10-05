@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -12,6 +13,43 @@ import (
 )
 
 var workerRecordingCodec = WorkerRecordingCodec{}
+
+func TestWorkerPortableCapturedAtRoundTripAndIntegrity(t *testing.T) {
+	t.Parallel()
+	snapshot := portableSnapshot(t, "streaming", "codex", "codex")
+	stamp := time.Date(2026, 10, 4, 12, 13, 14, 123456789, time.UTC)
+	snapshot.Sessions[0].CapturedAt = map[string]time.Time{"1": stamp}
+	portable, err := workerRecordingCodec.BuildWorkerPortableRecording(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if portable.Records[0].CapturedAt == nil || !portable.Records[0].CapturedAt.Equal(stamp) || portable.Records[1].CapturedAt != nil {
+		t.Fatal("portable export lost known timestamp or invented an unknown timestamp")
+	}
+	encoded, err := workerRecordingCodec.EncodeWorkerPortableRecording(portable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := workerRecordingCodec.DecodeWorkerPortableRecording(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := workerRecordingCodec.ReplayWorkerPortableRecording(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := strconv.FormatUint(uint64(decoded.Records[0].Position), 10)
+	if !replayed.Projection.CapturedAt[key].Equal(stamp) || len(replayed.Projection.CapturedAt) != 1 {
+		t.Fatal("portable replay changed commit-time metadata")
+	}
+	*decoded.Records[0].CapturedAt = stamp.Add(time.Second)
+	if err := workerRecordingCodec.ValidateWorkerPortableRecording(decoded); !errors.Is(err, ErrWorkerPortableRecordingIntegrity) {
+		t.Fatalf("timestamp tampering not detected: %v", err)
+	}
+	if !portable.Records[0].CapturedAt.Equal(stamp) {
+		t.Fatal("decoded timestamp aliases the exported recording")
+	}
+}
 
 func TestWorkerPortableRecordingRoundTripPreservesFidelityMatrix(t *testing.T) {
 	tests := []struct {

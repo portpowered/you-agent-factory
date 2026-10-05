@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +106,7 @@ type WorkerPortableTerminal struct {
 // portable shape. Payload is the exact source-native workers.Draft JSON; the
 // adjacent fields are detached facts validated against that payload.
 type WorkerPortableRecord struct {
+	CapturedAt         *time.Time               `json:"capturedAt,omitempty"`
 	Position           events.AggregateSequence `json:"position"`
 	SourceType         events.SourceType        `json:"sourceType"`
 	SourceID           events.SourceID          `json:"sourceId"`
@@ -232,6 +234,9 @@ func (codec WorkerRecordingCodec) BuildWorkerPortableRecording(snapshot WorkerRe
 			)
 		}
 		records = append(records, portable)
+		if capturedAt, ok := session.CapturedAt[strconv.FormatUint(uint64(record.ID.Position), 10)]; ok {
+			records[len(records)-1].CapturedAt = cloneTime(&capturedAt)
+		}
 	}
 	opening, err := decodeWorkerDraft(projection.Opening)
 	if err != nil {
@@ -370,6 +375,15 @@ func (codec WorkerRecordingCodec) ReplayWorkerPortableRecording(recording Worker
 	if err != nil {
 		return WorkerRecordingReplayResult{}, err
 	}
+	var capturedAt map[string]time.Time
+	for _, record := range recording.Records {
+		if record.CapturedAt != nil {
+			if capturedAt == nil {
+				capturedAt = make(map[string]time.Time)
+			}
+			capturedAt[strconv.FormatUint(uint64(record.Position), 10)] = *cloneTime(record.CapturedAt)
+		}
+	}
 	return codec.ReplayWorkerRecording(WorkerRecordingReplayRequest{
 		Snapshot: WorkerRecordingSnapshot{
 			RecordingID: recording.Identity.RecordingID,
@@ -379,6 +393,7 @@ func (codec WorkerRecordingCodec) ReplayWorkerPortableRecording(recording Worker
 				Status:          WorkerRecordingStatusComplete,
 				LastPosition:    records[len(records)-1].ID.Position,
 				Records:         records,
+				CapturedAt:      capturedAt,
 			}},
 		},
 	})
@@ -875,6 +890,7 @@ func cloneWorkerPortableRecording(recording WorkerPortableRecording) WorkerPorta
 	for index, record := range recording.Records {
 		clone.Records[index] = record
 		clone.Records[index].Payload = append(json.RawMessage(nil), record.Payload...)
+		clone.Records[index].CapturedAt = cloneTime(record.CapturedAt)
 	}
 	return clone
 }

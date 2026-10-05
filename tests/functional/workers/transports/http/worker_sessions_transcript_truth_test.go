@@ -376,6 +376,7 @@ func assertWorkerTranscriptRedacted(t *testing.T, output string) {
 }
 
 type workScopedCLIEvent struct {
+	CapturedAt     *time.Time      `json:"capturedAt,omitempty"`
 	Position       int64           `json:"position"`
 	SourceType     string          `json:"sourceType"`
 	SourceID       string          `json:"sourceId"`

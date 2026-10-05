@@ -16,8 +16,9 @@ import (
 
 func workerSessionEventFrame(observation factoryapi.WorkerSessionObservation, delivery workersessions.ObservationDelivery) workerSessionEventFramePayload {
 	frame := workerSessionEventFrameWithIdentity(observation, delivery.Kind, &workerSessionEventRecordPayload{
-		Cursor:   workerSessionEventCursor(delivery.Event),
-		Position: delivery.Event.Position, SourceType: delivery.Event.SourceType, SourceID: delivery.Event.SourceID,
+		CapturedAt: delivery.Event.CapturedAt,
+		Cursor:     workerSessionEventCursor(delivery.Event),
+		Position:   delivery.Event.Position, SourceType: delivery.Event.SourceType, SourceID: delivery.Event.SourceID,
 		SourceSequence: delivery.Event.SourceSequence, SourceEventID: delivery.Event.SourceEventID,
 		SchemaID: delivery.Event.SchemaID, Payload: append(json.RawMessage(nil), delivery.Event.Payload...),
 	})

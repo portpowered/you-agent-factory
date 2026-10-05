@@ -2,6 +2,7 @@ package workersessions_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -10,6 +11,43 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestPublishCapturedUsagePreservesNativeTokenClasses(t *testing.T) {
+	t.Parallel()
+	spy := &workerRecordSpy{}
+	publisher := newCapturedPublisher(spy, func(workers.ProgressFragment) {})
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "usage.updated",
+		Payload: `{"input_tokens":0,"cached_input_tokens":5,"output_tokens":7,"reasoning_output_tokens":3}`,
+	})
+	if len(spy.published) != 1 || spy.published[0].Draft.Kind != workers.KindUsage || spy.published[0].Draft.Phase != workers.PhaseUpdated {
+		t.Fatalf("native usage did not become a capturable observation: %+v", spy.published)
+	}
+	var usage map[string]int64
+	if err := json.Unmarshal(spy.published[0].Draft.Payload, &usage); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]int64{"inputTokens": 0, "cachedInputTokens": 5, "outputTokens": 7, "reasoningOutputTokens": 3} {
+		if got, exists := usage[key]; !exists || got != want {
+			t.Fatalf("captured %s = %d, present=%t, want %d", key, got, exists, want)
+		}
+	}
+	if _, exists := usage["totalTokens"]; exists {
+		t.Fatal("capture invented an unreported total token count")
+	}
+	for _, detail := range []string{`{"total_tokens":0}`, `{"totalTokens":0}`} {
+		publisher.Publish(workers.ProgressFragment{
+			DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: "usage.updated", Payload: detail,
+		})
+		var reported map[string]int64
+		if err := json.Unmarshal(spy.published[len(spy.published)-1].Draft.Payload, &reported); err != nil {
+			t.Fatal(err)
+		}
+		if total, exists := reported["totalTokens"]; !exists || total != 0 {
+			t.Fatalf("capture lost explicit zero total: %s", detail)
+		}
+	}
+}
 
 // TestPublishRecordRequest_Validate_AcceptsWellFormedRequest proves a request
 // whose SessionID, complete Events identity, SchemaID, and Draft are each

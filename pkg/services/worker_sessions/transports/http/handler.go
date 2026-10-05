@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -662,6 +663,7 @@ type workerSessionEventFramePayload struct {
 }
 
 type workerSessionEventRecordPayload struct {
+	CapturedAt     *time.Time                          `json:"capturedAt,omitempty"`
 	Cursor         factoryapi.WorkerSessionEventCursor `json:"cursor"`
 	Position       uint64                              `json:"position"`
 	SourceType     string                              `json:"sourceType"`

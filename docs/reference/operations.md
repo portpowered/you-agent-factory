@@ -331,7 +331,61 @@ you --server http://localhost:7437 worker-sessions list --work-id <work-id>
 you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions stream --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
+you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id> --view logs --output json
 ```
+
+Use `read --view logs` to read a finite page of captured activity while the
+Worker runs or after execution ends. This view reads Portos recordings and
+does not require a Provider Session reference or provider transcript files.
+The default `read` view remains `transcript`.
+
+After a host restart, `show --worker-session-id` can inspect a captured terminal
+Worker Session without provider transcript files. The summary preserves captured
+identity, start time, usage, and capture health. Unknown end times and durations
+remain absent. A history without a captured terminal remains readable through
+`read --view logs`, but its summary is unavailable.
+
+Logs pages include the recording generation, committed position, capture
+health, and ordered events. New committed events include `capturedAt`, the
+host capture time. Older events omit this field. Capture health describes the
+recorded history independently of execution success.
+
+Script Worker output appears as progress records labelled `stdout` or `stderr`,
+preserving each captured chunk. If capture loses a record, logs return only
+the committed prefix. Health remains `INCOMPLETE` while the execution outcome
+is unknown and becomes `DEGRADED` when the terminal outcome is known.
+Live cancellation remains available after capture loss.
+
+The default page size is 100 events. Use `--limit` to select 1 through 1000
+events. If the response includes `nextToken`, pass it with `--next-token` to
+read the next page from the same committed head. At the head of an unfinished
+capture, the response includes a resume token. A read with that token returns
+an empty events array until more records commit, then returns the new records.
+Tokens belong to one
+Worker Session, recording generation, and storage profile. The HTTP operation
+is `GET /worker-sessions/{worker_session_id}/logs` with `limit` and `nextToken`.
+Unknown IDs return 404, invalid limits or tokens return 400, and unavailable
+recordings return 503. A selected host failure remains an error.
+
+Canceling a logs read detaches the observer and returns
+`WORKER_SESSION_LOGS_INTERRUPTED`; the admitted Worker keeps running. Retry
+against the same host to read its committed activity. An unreachable host
+returns `FACTORY_UNREACHABLE`.
+If storage cannot be read during catalog recovery, the read returns 503 without
+caching the ID as unknown; retry after storage access recovers.
+An identifiable damaged recording also returns 503 after catalog recovery;
+healthy sibling recordings remain readable. A torn final journal entry is
+excluded from the returned prefix, whose capture health reports the loss.
+
+Logs replace captured payloads larger than 1 MiB with a JSON `preview` object.
+The event includes `truncated: true`, `originalBytes`, `returnedBytes`, and
+`artifactRef`. The stored capture remains complete. Retrieve its exact payload
+with `read --view logs --worker-session-id <id> --artifact-ref <artifactRef>`.
+This writes the original payload bytes to stdout without adding an envelope or
+newline. HTTP clients use the same logs route with `artifactRef`; the response
+is streamed as `application/octet-stream`. Artifact retrieval cannot be combined
+with `limit` or `nextToken`, and a reference from another Worker Session is
+invalid.
 
 The unscoped top-level list is the fleet-wide view: it includes direct and
 Factory-originated observations across the process. Use `--scope direct`,

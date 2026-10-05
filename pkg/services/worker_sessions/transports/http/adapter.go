@@ -73,6 +73,7 @@ type sessionObservationResolver interface {
 }
 
 type Adapter struct {
+	logs         workersessions.Service
 	observations observationService
 	topLevel     topLevelObservationService
 	starter      startService

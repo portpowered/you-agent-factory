@@ -228,6 +228,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/worker-sessions/{worker_session_id}/logs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read captured Worker Session observations */
+    get: operations["readWorkerSessionLogs"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/worker-sessions/{worker_session_id}/transcript": {
     parameters: {
       query?: never;
@@ -1835,6 +1852,25 @@ export interface components {
      */
     WorkerSessionEventDelivery: WorkerSessionEventDelivery;
     WorkerSessionEventRecord: {
+      /** @description True when logs return a preview instead of the complete captured payload. */
+      truncated?: boolean;
+      /**
+       * Format: int64
+       * @description Byte count of the exact captured payload before truncation.
+       */
+      originalBytes?: number;
+      /**
+       * Format: int64
+       * @description Byte count of the encoded payload preview.
+       */
+      returnedBytes?: number;
+      /** @description Worker Session ID and record position used to retrieve the complete payload through the logs route. */
+      artifactRef?: string;
+      /**
+       * Format: date-time
+       * @description Host time at which Recordings committed this record. Omitted for older records and uncommitted live frames.
+       */
+      capturedAt?: string;
       /** @description Typed reconnect cursor for this canonical event record. */
       cursor: components["schemas"]["WorkerSessionEventCursor"];
       /**
@@ -1859,6 +1895,19 @@ export interface components {
       payload: {
         [key: string]: unknown;
       };
+    };
+    WorkerSessionLogPage: {
+      workerSessionId: string;
+      recordingGenerationId: string;
+      /** Format: int64 */
+      committedPosition: number;
+      /**
+       * @description Capture completeness, independent of execution success.
+       * @enum {string}
+       */
+      health: WorkerSessionLogPageHealth;
+      events: components["schemas"]["WorkerSessionEvent"][];
+      nextToken?: string;
     };
     WorkerSessionEventCursor: {
       /** @description Worker Session identity that owns the acknowledged position. */
@@ -8516,6 +8565,39 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  readWorkerSessionLogs: {
+    parameters: {
+      query?: {
+        /** @description Retrieve the exact captured payload identified by a truncated event. Cannot be combined with limit or nextToken. */
+        artifactRef?: string;
+        limit?: number;
+        /** @description Optional base64-encoded token ID cursor. */
+        nextToken?: components["parameters"]["NextToken"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A bounded captured prefix with its durable watermark. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+          "application/json": components["schemas"]["WorkerSessionLogPage"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
   readWorkerSessionTranscriptByWorkerSessionId: {
     parameters: {
       query?: never;
@@ -10548,6 +10630,13 @@ export const WorkerSessionEventDelivery = {
 } as const;
 export type WorkerSessionEventDelivery =
   (typeof WorkerSessionEventDelivery)[keyof typeof WorkerSessionEventDelivery];
+export const WorkerSessionLogPageHealth = {
+  COMPLETE: "COMPLETE",
+  DEGRADED: "DEGRADED",
+  INCOMPLETE: "INCOMPLETE",
+} as const;
+export type WorkerSessionLogPageHealth =
+  (typeof WorkerSessionLogPageHealth)[keyof typeof WorkerSessionLogPageHealth];
 export const CostsScopeKind = {
   ALL_FACTORY_SESSIONS: "ALL_FACTORY_SESSIONS",
   FACTORY_SESSION: "FACTORY_SESSION",

@@ -27,6 +27,40 @@ func TestWriteAndReadFileReplaceSnapshot(t *testing.T) {
 	}
 }
 
+func TestDirectoryScanBoundsBatchesAndPropagatesVisitorFailure(t *testing.T) {
+	t.Parallel()
+	storage := NewLocal(runtime.GOOS)
+	root := t.TempDir()
+	for _, name := range []string{"first", "second", "third"} {
+		if err := storage.WriteFile(filepath.Join(root, name), []byte("record")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := make(map[string]bool)
+	err := storage.ScanDirectory(root, 2, func(entries []os.DirEntry) error {
+		if len(entries) > 2 {
+			t.Fatalf("directory batch size=%d, want <=2", len(entries))
+		}
+		for _, entry := range entries {
+			if seen[entry.Name()] {
+				t.Fatalf("duplicate entry %q", entry.Name())
+			}
+			seen[entry.Name()] = true
+		}
+		return nil
+	})
+	if err != nil || len(seen) != 3 {
+		t.Fatalf("scan entries=%v error=%v", seen, err)
+	}
+	stop := errors.New("visitor stopped")
+	if err := storage.ScanDirectory(root, 2, func([]os.DirEntry) error { return stop }); !errors.Is(err, stop) {
+		t.Fatalf("visitor error=%v", err)
+	}
+	if err := storage.ScanDirectory(filepath.Join(root, "missing"), 2, func([]os.DirEntry) error { return nil }); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing directory error=%v", err)
+	}
+}
+
 func TestAppendAndReadFilePreservesCompletePrefix(t *testing.T) {
 	storage := NewLocal(runtime.GOOS)
 	path := filepath.Join(t.TempDir(), "nested", "run.replay.jsonl")

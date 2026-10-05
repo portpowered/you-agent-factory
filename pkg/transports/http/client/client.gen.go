@@ -1509,6 +1509,13 @@ const (
 	WorkerSessionInterruptSnapshotStateTerminated WorkerSessionInterruptSnapshotState = "TERMINATED"
 )
 
+// Defines values for WorkerSessionLogPageHealth.
+const (
+	COMPLETE   WorkerSessionLogPageHealth = "COMPLETE"
+	DEGRADED   WorkerSessionLogPageHealth = "DEGRADED"
+	INCOMPLETE WorkerSessionLogPageHealth = "INCOMPLETE"
+)
+
 // Defines values for WorkerSessionObservationDurationBasis.
 const (
 	WorkerSessionObservationDurationBasisACTIVECLOCK        WorkerSessionObservationDurationBasis = "ACTIVE_CLOCK"
@@ -8954,13 +8961,24 @@ type WorkerSessionEventDelivery string
 
 // WorkerSessionEventRecord defines model for WorkerSessionEventRecord.
 type WorkerSessionEventRecord struct {
-	Cursor WorkerSessionEventCursor `json:"cursor"`
+	// ArtifactRef Worker Session ID and record position used to retrieve the complete payload through the logs route.
+	ArtifactRef *string `json:"artifactRef,omitempty"`
+
+	// CapturedAt Host time at which Recordings committed this record. Omitted for older records and uncommitted live frames.
+	CapturedAt *time.Time               `json:"capturedAt,omitempty"`
+	Cursor     WorkerSessionEventCursor `json:"cursor"`
+
+	// OriginalBytes Byte count of the exact captured payload before truncation.
+	OriginalBytes *int64 `json:"originalBytes,omitempty"`
 
 	// Payload Source-native canonical event payload.
 	Payload map[string]interface{} `json:"payload"`
 
 	// Position Aggregate position assigned by the canonical Events ledger.
 	Position int64 `json:"position"`
+
+	// ReturnedBytes Byte count of the encoded payload preview.
+	ReturnedBytes *int64 `json:"returnedBytes,omitempty"`
 
 	// SchemaId Source-native payload schema identity.
 	SchemaId string `json:"schemaId"`
@@ -8976,6 +8994,9 @@ type WorkerSessionEventRecord struct {
 
 	// SourceType Source-native event family.
 	SourceType string `json:"sourceType"`
+
+	// Truncated True when logs return a preview instead of the complete captured payload.
+	Truncated *bool `json:"truncated,omitempty"`
 }
 
 // WorkerSessionExecutionMetadata defines model for WorkerSessionExecutionMetadata.
@@ -9085,6 +9106,21 @@ type WorkerSessionInterruptSnapshot struct {
 
 // WorkerSessionInterruptSnapshotState defines model for WorkerSessionInterruptSnapshot.State.
 type WorkerSessionInterruptSnapshotState string
+
+// WorkerSessionLogPage defines model for WorkerSessionLogPage.
+type WorkerSessionLogPage struct {
+	CommittedPosition int64                `json:"committedPosition"`
+	Events            []WorkerSessionEvent `json:"events"`
+
+	// Health Capture completeness, independent of execution success.
+	Health                WorkerSessionLogPageHealth `json:"health"`
+	NextToken             *string                    `json:"nextToken,omitempty"`
+	RecordingGenerationId string                     `json:"recordingGenerationId"`
+	WorkerSessionId       string                     `json:"workerSessionId"`
+}
+
+// WorkerSessionLogPageHealth Capture completeness, independent of execution success.
+type WorkerSessionLogPageHealth string
 
 // WorkerSessionObservation defines model for WorkerSessionObservation.
 type WorkerSessionObservation struct {
@@ -9946,6 +9982,16 @@ type ListWorkerSessionsParamsState string
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
 	// ReplayOnly Drain retained history without registering a live follower.
 	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+}
+
+// ReadWorkerSessionLogsParams defines parameters for ReadWorkerSessionLogs.
+type ReadWorkerSessionLogsParams struct {
+	// ArtifactRef Retrieve the exact captured payload identified by a truncated event. Cannot be combined with limit or nextToken.
+	ArtifactRef *string `form:"artifactRef,omitempty" json:"artifactRef,omitempty"`
+	Limit       *int    `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// NextToken Optional base64-encoded token ID cursor.
+	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
 }
 
 // InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
@@ -18629,6 +18675,9 @@ type ClientInterface interface {
 
 	InterruptWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ReadWorkerSessionLogs request
+	ReadWorkerSessionLogs(ctx context.Context, workerSessionId WorkerSessionID, params *ReadWorkerSessionLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// TerminateWorkerSession request
 	TerminateWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -18782,6 +18831,18 @@ func (c *Client) InterruptWorkerSessionWithBody(ctx context.Context, workerSessi
 
 func (c *Client) InterruptWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewInterruptWorkerSessionRequest(c.Server, workerSessionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReadWorkerSessionLogs(ctx context.Context, workerSessionId WorkerSessionID, params *ReadWorkerSessionLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReadWorkerSessionLogsRequest(c.Server, workerSessionId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -19523,6 +19584,94 @@ func NewInterruptWorkerSessionRequestWithBody(server string, workerSessionId Wor
 	return req, nil
 }
 
+// NewReadWorkerSessionLogsRequest generates requests for ReadWorkerSessionLogs
+func NewReadWorkerSessionLogsRequest(server string, workerSessionId WorkerSessionID, params *ReadWorkerSessionLogsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions/%s/logs", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ArtifactRef != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "artifactRef", runtime.ParamLocationQuery, *params.ArtifactRef); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.NextToken != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "nextToken", runtime.ParamLocationQuery, *params.NextToken); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewTerminateWorkerSessionRequest generates requests for TerminateWorkerSession
 func NewTerminateWorkerSessionRequest(server string, workerSessionId WorkerSessionID) (*http.Request, error) {
 	var err error
@@ -19671,6 +19820,9 @@ type ClientWithResponsesInterface interface {
 	InterruptWorkerSessionWithBodyWithResponse(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InterruptWorkerSessionClientResponse, error)
 
 	InterruptWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*InterruptWorkerSessionClientResponse, error)
+
+	// ReadWorkerSessionLogsWithResponse request
+	ReadWorkerSessionLogsWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *ReadWorkerSessionLogsParams, reqEditors ...RequestEditorFn) (*ReadWorkerSessionLogsClientResponse, error)
 
 	// TerminateWorkerSessionWithResponse request
 	TerminateWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error)
@@ -19980,6 +20132,31 @@ func (r InterruptWorkerSessionClientResponse) StatusCode() int {
 	return 0
 }
 
+type ReadWorkerSessionLogsClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *WorkerSessionLogPage
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON503      *WorkerSessionRecordingUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r ReadWorkerSessionLogsClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReadWorkerSessionLogsClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type TerminateWorkerSessionClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -20147,6 +20324,15 @@ func (c *ClientWithResponses) InterruptWorkerSessionWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParseInterruptWorkerSessionClientResponse(rsp)
+}
+
+// ReadWorkerSessionLogsWithResponse request returning *ReadWorkerSessionLogsClientResponse
+func (c *ClientWithResponses) ReadWorkerSessionLogsWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *ReadWorkerSessionLogsParams, reqEditors ...RequestEditorFn) (*ReadWorkerSessionLogsClientResponse, error) {
+	rsp, err := c.ReadWorkerSessionLogs(ctx, workerSessionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReadWorkerSessionLogsClientResponse(rsp)
 }
 
 // TerminateWorkerSessionWithResponse request returning *TerminateWorkerSessionClientResponse
@@ -20735,6 +20921,56 @@ func ParseInterruptWorkerSessionClientResponse(rsp *http.Response) (*InterruptWo
 			return nil, err
 		}
 		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReadWorkerSessionLogsClientResponse parses an HTTP response from a ReadWorkerSessionLogsWithResponse call
+func ParseReadWorkerSessionLogsClientResponse(rsp *http.Response) (*ReadWorkerSessionLogsClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReadWorkerSessionLogsClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WorkerSessionLogPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest WorkerSessionRecordingUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	case rsp.StatusCode == 200:
+		// Content-type (application/octet-stream) unsupported
 
 	}
 

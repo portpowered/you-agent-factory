@@ -21,6 +21,10 @@ import (
 
 // ReadConfig holds parameters for the Worker Sessions read command.
 type ReadConfig struct {
+	ArtifactRef     string
+	View            string
+	Limit           int
+	NextToken       string
 	Context         context.Context
 	Server          string
 	SessionID       string
@@ -60,6 +64,9 @@ func read(config ReadConfig) error {
 		return emitReadCLIError(config, config.JSON, err)
 	}
 	jsonOutput = config.JSON || format == "json"
+	if config.View == "logs" {
+		return readLogs(config, jsonOutput)
+	}
 	endpoint, err := workerSessionTranscriptEndpoint(config.Server, config.SessionID, config.WorkerSessionID, config.Provider, config.Kind, config.ID)
 	if err != nil {
 		return emitReadCLIError(config, jsonOutput, err)
@@ -98,6 +105,21 @@ func read(config ReadConfig) error {
 }
 
 func validateReadConfig(config ReadConfig) error {
+	if config.View != "" && config.View != "transcript" && config.View != "logs" {
+		return newCLIError("WORKER_SESSION_VIEW_INVALID", "--view must be transcript or logs", nil)
+	}
+	if config.View == "logs" && strings.TrimSpace(config.WorkerSessionID) == "" {
+		return newCLIError("WORKER_SESSION_ID_REQUIRED", "--view logs requires --worker-session-id", nil)
+	}
+	if config.View == "logs" && strings.TrimSpace(config.SessionID) != "" {
+		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--view logs uses the top-level Worker Session ID; omit --session", nil)
+	}
+	if config.View != "logs" && (config.Limit != 0 || config.NextToken != "" || config.ArtifactRef != "") {
+		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--limit and --next-token require --view logs", nil)
+	}
+	if config.ArtifactRef != "" && (config.Limit != 0 || config.NextToken != "") {
+		return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--artifact-ref cannot be combined with --limit or --next-token", nil)
+	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
 	}

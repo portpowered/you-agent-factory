@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -26,6 +27,39 @@ type ProviderSessionObservationPublisher struct {
 	// two Workers' sequences and reject valid records.
 	records   sync.Mutex
 	sequences map[string]uint64
+}
+
+// RedactProgressFragment applies declared-field redaction before capture and
+// downstream delivery, preserving a detached producer payload. Invalid secret
+// provenance returns a safe error and must suppress both publications.
+func (p *ProviderSessionObservationPublisher) RedactProgressFragment(fragment workers.ProgressFragment) (workers.ProgressFragment, error) {
+	var draft workers.Draft
+	switch value := fragment.CanonicalDraft.(type) {
+	case workers.Draft:
+		draft = workers.CloneDraft(value)
+	case *workers.Draft:
+		if value == nil {
+			return fragment, nil
+		}
+		draft = workers.CloneDraft(*value)
+	default:
+		return fragment, nil
+	}
+	if len(draft.DeclaredSecretJSONPointers) == 0 {
+		return fragment, nil
+	}
+	secrets := make([]recordings.RecordingSecret, len(draft.DeclaredSecretJSONPointers))
+	for index, pointer := range draft.DeclaredSecretJSONPointers {
+		secrets[index] = recordings.RecordingSecret{JSONPointer: pointer, Provenance: recordings.RecordingSecretProvenanceDeclared}
+	}
+	safe, err := recordings.RedactDeclaredSecretText(recordings.RecordingRedactionRequest{Payload: draft.Payload, Secrets: secrets})
+	if err != nil {
+		return fragment, recordings.ErrInvalidRecordingRedactionRequest
+	}
+	draft.Payload = safe.Payload
+	draft.DeclaredSecretJSONPointers = nil
+	fragment.CanonicalDraft = draft
+	return fragment, nil
 }
 
 // ErrRuntimeProgressUnsupervised identifies a runtime outside keyed admission
@@ -414,6 +448,12 @@ func isFinalOnlyProviderLifecycle(provider, nativeType string) bool {
 func progressFactVocabulary(fragment workers.ProgressFragment) (workers.Kind, workers.Phase, bool) {
 	rawKind := strings.ToLower(strings.TrimSpace(fragment.Metadata["kind"]))
 	rawPhase := strings.ToLower(strings.TrimSpace(fragment.Type))
+	// Script output names the command stream instead of a provider fact. Keep
+	// the exact chunk as labelled progress; require the runner's stream marker
+	// so unrelated bare event types do not become fabricated observations.
+	if rawKind == "" && (rawPhase == "stdout" || rawPhase == "stderr") && fragment.Metadata["stream"] == rawPhase {
+		return workers.KindProgress, workers.PhaseUpdated, true
+	}
 
 	// The native adapters put "noun.phase" in Type. Splitting it here keeps
 	// both vocabularies converging on one Kind/Phase resolution below rather
@@ -582,16 +622,14 @@ func progressDraftPayload(
 	}
 }
 
-// canonicalUsageDraftPayload preserves token-class presence while accepting
-// the camel-case canonical payload emitted by mock workers. Provider-native
-// usage details remain on their existing adapter path and continue to use the
-// ACP used_tokens fallback above.
+// canonicalUsageDraftPayload preserves token-class presence from canonical
+// payloads and native Codex usage observations before durable publication.
 type canonicalUsagePayload struct {
 	InputTokens           *int64 `json:"inputTokens,omitempty"`
 	CachedInputTokens     *int64 `json:"cachedInputTokens,omitempty"`
 	OutputTokens          *int64 `json:"outputTokens,omitempty"`
 	ReasoningOutputTokens *int64 `json:"reasoningOutputTokens,omitempty"`
-	TotalTokens           int64  `json:"totalTokens"`
+	TotalTokens           *int64 `json:"totalTokens,omitempty"`
 	Model                 string `json:"model,omitempty"`
 }
 
@@ -603,9 +641,27 @@ func canonicalUsageDraftPayload(detail string) (canonicalUsagePayload, bool) {
 	if err := json.Unmarshal([]byte(detail), &payload); err != nil {
 		return canonicalUsagePayload{}, false
 	}
+	if payload.InputTokens == nil && payload.CachedInputTokens == nil &&
+		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil && payload.TotalTokens == nil {
+		var native struct {
+			InputTokens           *int64 `json:"input_tokens"`
+			CachedInputTokens     *int64 `json:"cached_input_tokens"`
+			OutputTokens          *int64 `json:"output_tokens"`
+			ReasoningOutputTokens *int64 `json:"reasoning_output_tokens"`
+			TotalTokens           *int64 `json:"total_tokens"`
+		}
+		if json.Unmarshal([]byte(detail), &native) != nil {
+			return canonicalUsagePayload{}, false
+		}
+		payload.InputTokens = native.InputTokens
+		payload.CachedInputTokens = native.CachedInputTokens
+		payload.OutputTokens = native.OutputTokens
+		payload.ReasoningOutputTokens = native.ReasoningOutputTokens
+		payload.TotalTokens = native.TotalTokens
+	}
 	if strings.TrimSpace(payload.Model) == "" &&
 		payload.InputTokens == nil && payload.CachedInputTokens == nil &&
-		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil {
+		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil && payload.TotalTokens == nil {
 		return canonicalUsagePayload{}, false
 	}
 	return payload, true

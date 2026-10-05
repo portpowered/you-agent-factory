@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
+
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -26,12 +28,13 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)
 	recordPath := filepath.Join(t.TempDir(), "worker-sessions-read-surface.json")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	config := support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		Args:                      []string{"--record", recordPath},
 		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+	}
+	server := support.StartFunctionalAPIServer(t, config)
 	t.Cleanup(func() { server.Stop(t) })
 
 	emptyFleet := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions")
@@ -78,6 +81,8 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	if inFlight.Sessions[0].State != factoryapi.WorkerSessionObservationStateStarting && inFlight.Sessions[0].State != factoryapi.WorkerSessionObservationStateRunning {
 		t.Fatalf("in-flight Worker Session state = %q, want STARTING or RUNNING", inFlight.Sessions[0].State)
 	}
+	activeLogs := assertCapturedLogsCLIHTTPParity(t, server, inFlight.Sessions[0].WorkerSessionId)
+	assertCapturedFactoryReplayCompatibility(t, server, sessionID, workID, activeLogs.WorkerSessionId, false)
 
 	close(gate)
 	runner.waitCompleted(t)
@@ -95,6 +100,50 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	if completed.Sessions[0].State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("completed Worker Session state = %q, want COMPLETED", completed.Sessions[0].State)
 	}
+	endedLogs := assertCapturedLogsCLIHTTPParity(t, server, completed.Sessions[0].WorkerSessionId)
+	assertCapturedSummaryUsage(t, server, completed.Sessions[0].WorkerSessionId)
+	assertCapturedFactoryReplayCompatibility(t, server, sessionID, workID, endedLogs.WorkerSessionId, true)
+	if endedLogs.CommittedPosition <= activeLogs.CommittedPosition {
+		t.Fatalf("ended capture did not advance: active=%d ended=%d", activeLogs.CommittedPosition, endedLogs.CommittedPosition)
+	}
+	if activeLogs.Events[0].Event.CapturedAt == nil || endedLogs.Events[0].Event.CapturedAt == nil || !activeLogs.Events[0].Event.CapturedAt.Equal(*endedLogs.Events[0].Event.CapturedAt) {
+		t.Fatal("opening capture time changed between active and ended reads")
+	}
+	server.Close(t)
+	restarted := support.StartFunctionalAPIServer(t, config)
+	recovered := assertCapturedLogsCLIHTTPParity(t, restarted, completed.Sessions[0].WorkerSessionId)
+	assertCapturedSummaryUsage(t, restarted, completed.Sessions[0].WorkerSessionId)
+	archived := support.GetJSON[factoryapi.WorkerSessionObservation](t, restarted.URL()+"/worker-sessions/"+url.PathEscape(completed.Sessions[0].WorkerSessionId))
+	if archived.FactorySessionId == nil || *archived.FactorySessionId != sessionID || archived.State != factoryapi.WorkerSessionObservationStateCompleted || recovered.RecordingGenerationId != endedLogs.RecordingGenerationId || recovered.CommittedPosition != endedLogs.CommittedPosition {
+		t.Fatalf("restart lost captured Factory identity/head: %+v %+v", archived, recovered)
+	}
+	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")
+}
+
+// Both observers address only the stable Worker Session ID. The controlled
+// provider command fixture does not create any native provider transcript.
+func assertCapturedLogsCLIHTTPParity(t *testing.T, server *support.FunctionalAPIServer, id string) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+url.PathEscape(id)+"/logs")
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--server", server.URL(), "--output", "json"})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI captured logs: %v\n%s", err, inputs.Stderr())
+	}
+	var cli factoryapi.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil {
+		t.Fatal(err)
+	}
+	if page.WorkerSessionId != id || cli.WorkerSessionId != id || cli.RecordingGenerationId != page.RecordingGenerationId || len(page.Events) == 0 || len(cli.Events) == 0 {
+		t.Fatalf("captured CLI/HTTP identity differs: CLI=%+v HTTP=%+v", cli, page)
+	}
+	for _, observed := range []factoryapi.WorkerSessionLogPage{page, cli} {
+		for index, event := range observed.Events {
+			if event.Event.Position != int64(index+1) || event.Event.Position > observed.CommittedPosition || event.Event.CapturedAt == nil {
+				t.Fatalf("captured prefix or commit time invalid: %+v", event.Event)
+			}
+		}
+	}
+	return page
 }
 
 func waitForScopedProcessingWork(t *testing.T, baseURL, sessionID, workID string) {

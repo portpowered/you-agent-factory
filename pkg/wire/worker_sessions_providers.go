@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"path/filepath"
 	runtime "runtime"
 
@@ -63,7 +64,7 @@ func provideWorkerRecordingWriter(
 	edges serviceedges.Edges,
 ) (recordings.WorkerRecordingWriter, error) {
 	writer := edges.WorkerRecordingWriter
-	if writer == nil {
+	if writer == nil || edges.WorkerRecordingStoreObserver != nil {
 		projectRoot, err := provideFactorySessionsWorkingDirectory(edges).Getwd()
 		if err != nil {
 			return nil, fmt.Errorf("resolve Worker recording project root: %w", err)
@@ -71,15 +72,35 @@ func provideWorkerRecordingWriter(
 		if projectRoot == "" || !filepath.IsAbs(projectRoot) {
 			return nil, fmt.Errorf("resolve Worker recording project root: expected a non-empty absolute directory")
 		}
-		writer, err = recordingswire.NewWorkerRecordingFileWriter(
-			platformreplay.NewLocal(runtime.GOOS),
+		storage := platformreplay.NewLocal(runtime.GOOS)
+		store, err := recordingswire.NewWorkerRecordingFileWriter(
+			workerCaptureStorage{Local: storage, readFile: edges.RecordingReadFile}, storage, storage, platformclock.Ensure(edges.Clock),
 			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),
+			uuid.NewString(),
 		)
 		if err != nil {
 			return nil, err
 		}
+		if edges.WorkerRecordingStoreObserver != nil {
+			edges.WorkerRecordingStoreObserver(store)
+		}
+		if writer == nil {
+			writer = store
+		}
 	}
 	return writer, nil
+}
+
+type workerCaptureStorage struct {
+	platformreplay.Local
+	readFile recordings.RecordingReadFile
+}
+
+func (storage workerCaptureStorage) ReadFile(path string) ([]byte, error) {
+	if storage.readFile != nil {
+		return storage.readFile(path)
+	}
+	return storage.Local.ReadFile(path)
 }
 
 // provideWorkerSessionsService constructs the canonical process supervisor.
@@ -91,8 +112,11 @@ func provideWorkerSessionsService(
 	clock factoryruntime.Clock,
 	scheduler platformclock.TimerSource,
 	recorder recordings.WorkerSessionRecordingService,
+	writer recordings.WorkerRecordingWriter,
 ) (workersessions.Service, error) {
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder)
+	// Legacy injected writers still support execution without captured reads.
+	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

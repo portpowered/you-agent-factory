@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,7 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
+	logs         *LogReader
 	mu           sync.RWMutex
 	sessions     map[string]workersessions.Session
 	publications map[string]*publication
@@ -544,6 +546,7 @@ func (r *registry) ObserveProviderSession(
 // progress. Completeness is derived from a terminal lifecycle record inside
 // that captured range, not from the separately synchronized session state.
 type replayObservationSubscription struct {
+	capturedAt         map[string]time.Time
 	reader             EventsRetainedReader
 	topic              events.Topic
 	workerSessionID    string
@@ -670,7 +673,11 @@ func (s *replayObservationSubscription) Next(ctx context.Context) workersessions
 			s.eventsEmitted++
 			terminalReplay := s.terminalReplay
 			s.mu.Unlock()
-			return observationRecordDelivery(record, terminalReplay, s.workerSessionID)
+			delivery := observationRecordDelivery(record, terminalReplay, s.workerSessionID)
+			if stamp, ok := s.capturedAt[strconv.FormatUint(delivery.Event.Position, 10)]; ok {
+				delivery.Event.CapturedAt = &stamp
+			}
+			return delivery
 		}
 		if s.next.Position >= s.snapshotHead {
 			if !s.summarySent {

@@ -93,6 +93,16 @@ func (r *registry) PublishRuntimeProgress(
 	fragment workers.ProgressFragment,
 	next workers.ProgressPublisher,
 ) error {
+	safe, err := (&workersessions.ProviderSessionObservationPublisher{}).RedactProgressFragment(fragment)
+	if err != nil {
+		return err
+	}
+	return r.publishRuntimeProgress(ctx, key, safe, next)
+}
+
+func (r *registry) publishRuntimeProgress(
+	ctx context.Context, key workersessions.RuntimeAttemptKey, fragment workers.ProgressFragment, next workers.ProgressPublisher,
+) error {
 	ctx = runtimeAttemptContext(ctx)
 	key.RuntimeID = strings.TrimSpace(key.RuntimeID)
 	key.DispatchID = strings.TrimSpace(key.DispatchID)

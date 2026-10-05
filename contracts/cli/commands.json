@@ -10092,6 +10092,102 @@
             "since": "1.0.0"
           }
         },
+        "you.worker-sessions.read.flag.view": {
+          "id": "you.worker-sessions.read.flag.view",
+          "long": "view",
+          "usage": "read view: transcript (default) or logs",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "transcript",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.view",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.limit": {
+          "id": "you.worker-sessions.read.flag.limit",
+          "long": "limit",
+          "usage": "maximum captured events per page: 1..1000; omitted uses 100",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "int",
+          "required": false,
+          "default": "0",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.limit",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.next-token": {
+          "id": "you.worker-sessions.read.flag.next-token",
+          "long": "next-token",
+          "usage": "continue a captured logs page with its returned token",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.next-token",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.artifact-ref": {
+          "id": "you.worker-sessions.read.flag.artifact-ref",
+          "long": "artifact-ref",
+          "usage": "retrieve the complete captured payload from a truncated logs event",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.artifact-ref",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.read.flag.output": {
           "id": "you.worker-sessions.read.flag.output",
           "long": "output",
@@ -17275,7 +17371,7 @@
           },
           "description": {
             "id": "you.submit.batch.description",
-            "canonicalEnglish": "Upsert canonical FACTORY_REQUEST_BATCH JSON to a running you-agent-factory session.\n\nThe document must use type FACTORY_REQUEST_BATCH with at least one works entry. See you docs batch-inputs for the batch schema, relation rules, and examples.\n\nBatch input modes (first match wins):\n  --file <path>   read batch JSON from path; use --file - to read stdin\n  <path>          read batch JSON from an existing filesystem path (primary form)\n  -               read batch JSON from stdin\n  <inline-json>   positional whose first non-whitespace byte is { is parsed as JSON\n  (no args)       when stdin is not a TTY, read the full piped document from stdin\n\nWhen both --file and a positional path are provided, --file wins.\nWhen a file path or --file is set, stdin is ignored.\n\nInline JSON is convenient for small batches; shell argument length limits applyâ€”use a file or pipe for large documents.\n\nUse --dry-run to parse and validate locally, print a summary, and perform no HTTP. Valid --dry-run exits 0 even when the factory is unreachable.\n\nBy default the command targets the default compatibility session (~default). Use --session to upsert into one specific live factory session instead.\n\nGlobal flags (place before the subcommand): --server selects the factory API base URI; --json emits structured success output on stdout; --verbose and --debug emit concise request metadata on stderr without logging batch payload content."
+            "canonicalEnglish": "Upsert canonical FACTORY_REQUEST_BATCH JSON to a running you-agent-factory session.\n\nThe document must use type FACTORY_REQUEST_BATCH with at least one works entry. See you docs batch-inputs for the batch schema, relation rules, and examples.\n\nBatch input modes (first match wins):\n  --file <path>   read batch JSON from path; use --file - to read stdin\n  <path>          read batch JSON from an existing filesystem path (primary form)\n  -               read batch JSON from stdin\n  <inline-json>   positional whose first non-whitespace byte is { is parsed as JSON\n  (no args)       when stdin is not a TTY, read the full piped document from stdin\n\nWhen both --file and a positional path are provided, --file wins.\nWhen a file path or --file is set, stdin is ignored.\n\nInline JSON is convenient for small batches; shell argument length limits apply—use a file or pipe for large documents.\n\nUse --dry-run to parse and validate locally, print a summary, and perform no HTTP. Valid --dry-run exits 0 even when the factory is unreachable.\n\nBy default the command targets the default compatibility session (~default). Use --session to upsert into one specific live factory session instead.\n\nGlobal flags (place before the subcommand): --server selects the factory API base URI; --json emits structured success output on stdout; --verbose and --debug emit concise request metadata on stderr without logging batch payload content."
           }
         },
         "examples": [

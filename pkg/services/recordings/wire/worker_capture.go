@@ -23,7 +23,11 @@ func NewWorkerSessionRecorder(
 // writer from the policy-free replay storage effect selected by Wire.
 func NewWorkerRecordingFileWriter(
 	storage platformreplay.Storage,
+	appender platformreplay.Appender,
+	directory platformreplay.DirectoryScanner,
+	clock recordings.WorkerCaptureClock,
 	root string,
-) (recordings.WorkerRecordingWriter, error) {
-	return workerrecordingwire.NewFileWriter(storage, root)
+	ownerEpoch string,
+) (recordings.WorkerRecordingStore, error) {
+	return workerrecordingwire.NewFileWriter(storage, appender, directory, clock, root, ownerEpoch)
 }

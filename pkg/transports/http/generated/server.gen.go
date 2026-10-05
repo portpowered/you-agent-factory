@@ -1505,6 +1505,13 @@ const (
 	WorkerSessionInterruptSnapshotStateTerminated WorkerSessionInterruptSnapshotState = "TERMINATED"
 )
 
+// Defines values for WorkerSessionLogPageHealth.
+const (
+	COMPLETE   WorkerSessionLogPageHealth = "COMPLETE"
+	DEGRADED   WorkerSessionLogPageHealth = "DEGRADED"
+	INCOMPLETE WorkerSessionLogPageHealth = "INCOMPLETE"
+)
+
 // Defines values for WorkerSessionObservationDurationBasis.
 const (
 	WorkerSessionObservationDurationBasisACTIVECLOCK        WorkerSessionObservationDurationBasis = "ACTIVE_CLOCK"
@@ -8960,13 +8967,24 @@ type WorkerSessionEventDelivery string
 
 // WorkerSessionEventRecord defines model for WorkerSessionEventRecord.
 type WorkerSessionEventRecord struct {
-	Cursor WorkerSessionEventCursor `json:"cursor"`
+	// ArtifactRef Worker Session ID and record position used to retrieve the complete payload through the logs route.
+	ArtifactRef *string `json:"artifactRef,omitempty"`
+
+	// CapturedAt Host time at which Recordings committed this record. Omitted for older records and uncommitted live frames.
+	CapturedAt *time.Time               `json:"capturedAt,omitempty"`
+	Cursor     WorkerSessionEventCursor `json:"cursor"`
+
+	// OriginalBytes Byte count of the exact captured payload before truncation.
+	OriginalBytes *int64 `json:"originalBytes,omitempty"`
 
 	// Payload Source-native canonical event payload.
 	Payload map[string]interface{} `json:"payload"`
 
 	// Position Aggregate position assigned by the canonical Events ledger.
 	Position int64 `json:"position"`
+
+	// ReturnedBytes Byte count of the encoded payload preview.
+	ReturnedBytes *int64 `json:"returnedBytes,omitempty"`
 
 	// SchemaId Source-native payload schema identity.
 	SchemaId string `json:"schemaId"`
@@ -8982,6 +9000,9 @@ type WorkerSessionEventRecord struct {
 
 	// SourceType Source-native event family.
 	SourceType string `json:"sourceType"`
+
+	// Truncated True when logs return a preview instead of the complete captured payload.
+	Truncated *bool `json:"truncated,omitempty"`
 }
 
 // WorkerSessionExecutionMetadata defines model for WorkerSessionExecutionMetadata.
@@ -9091,6 +9112,21 @@ type WorkerSessionInterruptSnapshot struct {
 
 // WorkerSessionInterruptSnapshotState defines model for WorkerSessionInterruptSnapshot.State.
 type WorkerSessionInterruptSnapshotState string
+
+// WorkerSessionLogPage defines model for WorkerSessionLogPage.
+type WorkerSessionLogPage struct {
+	CommittedPosition int64                `json:"committedPosition"`
+	Events            []WorkerSessionEvent `json:"events"`
+
+	// Health Capture completeness, independent of execution success.
+	Health                WorkerSessionLogPageHealth `json:"health"`
+	NextToken             *string                    `json:"nextToken,omitempty"`
+	RecordingGenerationId string                     `json:"recordingGenerationId"`
+	WorkerSessionId       string                     `json:"workerSessionId"`
+}
+
+// WorkerSessionLogPageHealth Capture completeness, independent of execution success.
+type WorkerSessionLogPageHealth string
 
 // WorkerSessionObservation defines model for WorkerSessionObservation.
 type WorkerSessionObservation struct {
@@ -10123,6 +10159,16 @@ type ListWorkerSessionsParamsState string
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
 	// ReplayOnly Drain retained history without registering a live follower.
 	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+}
+
+// ReadWorkerSessionLogsParams defines parameters for ReadWorkerSessionLogs.
+type ReadWorkerSessionLogsParams struct {
+	// ArtifactRef Retrieve the exact captured payload identified by a truncated event. Cannot be combined with limit or nextToken.
+	ArtifactRef *string `form:"artifactRef,omitempty" json:"artifactRef,omitempty"`
+	Limit       *int    `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// NextToken Optional base64-encoded token ID cursor.
+	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
 }
 
 // PreviewFactoryJSONRequestBody defines body for PreviewFactory for application/json ContentType.
@@ -18970,6 +19016,9 @@ type ServerInterface interface {
 	// Interrupt one active Worker Session into a replacement
 	// (POST /worker-sessions/{worker_session_id}/interrupt)
 	InterruptWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Read captured Worker Session observations
+	// (GET /worker-sessions/{worker_session_id}/logs)
+	ReadWorkerSessionLogs(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID, params ReadWorkerSessionLogsParams)
 	// Pause one active Worker Session
 	// (POST /worker-sessions/{worker_session_id}/pause)
 	PauseWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
@@ -21189,6 +21238,58 @@ func (siw *ServerInterfaceWrapper) InterruptWorkerSession(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// ReadWorkerSessionLogs operation middleware
+func (siw *ServerInterfaceWrapper) ReadWorkerSessionLogs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReadWorkerSessionLogsParams
+
+	// ------------- Optional query parameter "artifactRef" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "artifactRef", r.URL.Query(), &params.ArtifactRef)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "artifactRef", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "nextToken" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReadWorkerSessionLogs(w, r, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PauseWorkerSession operation middleware
 func (siw *ServerInterfaceWrapper) PauseWorkerSession(w http.ResponseWriter, r *http.Request) {
 
@@ -21533,6 +21634,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByTopLevelWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/interrupt", wrapper.InterruptWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/logs", wrapper.ReadWorkerSessionLogs).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/pause", wrapper.PauseWorkerSession).Methods("POST")
 

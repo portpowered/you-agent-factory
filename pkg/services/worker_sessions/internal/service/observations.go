@@ -393,6 +393,11 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	// Provider references may recur across Factory Sessions. Select only within
 	// the requested owner, preserving deterministic order for retained attempts.
 	sortStrings(ids)
+	if r.publicationFor(ids[0]) != nil {
+		return r.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+			WorkerSessionID: ids[0], FactorySessionID: req.FactorySessionID,
+		})
+	}
 	projected, err := r.projectObservation(ctx, ids[0])
 	// Native transcript detail is optional; the retained association and
 	// lifecycle remain available when provider storage cannot be projected.
@@ -412,12 +417,21 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
-	// Provider detail is optional enrichment of the scoped Worker identity.
-	// Retain lifecycle facts when its native transcript cannot be projected.
-	projected, err := r.projectObservation(ctx, req.WorkerSessionID, req.FactorySessionID)
+	// Recorded identities use captured facts even if capture has become
+	// unreadable. Only legacy identities without a capture window retain the
+	// existing optional provider-detail enrichment.
+	ownerID := r.workerAddress(req.WorkerSessionID, req.FactorySessionID)
+	captured := r.publicationFor(ownerID) != nil
+	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID, req.FactorySessionID)
+	if !captured {
+		projected, err = r.projectObservation(ctx, req.WorkerSessionID, req.FactorySessionID)
+	}
 	if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", publicWorkerID(req.WorkerSessionID), "outcome", "not_found")
 		return workersessions.Observation{}, err
+	}
+	if captured {
+		projected.TokenUsage = r.capturedObservationUsage(ctx, ownerID)
 	}
 	r.logger.Info("worker session observation get by Worker Session", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
 	return projected, nil

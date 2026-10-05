@@ -115,6 +115,7 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.MkdirAll", wireSymbol: "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.OpenFile", wireSymbol: "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.ReadFile", symbol: "os.ReadFile", wireSymbol: "pkg/platform/replay.NewLocal"},
+	{filePath: "pkg/platform/replay/storage.go", operation: "Local.ScanDirectory", symbol: "os.Open", wireSymbol: "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/locking/file.go", operation: "LocalFileSystem.MkdirAll", symbol: "os.MkdirAll", wireSymbol: "pkg/platform/locking.New"},
 	{filePath: "pkg/platform/locking/file.go", operation: "LocalFileSystem.OpenFile", symbol: "os.OpenFile", wireSymbol: "pkg/platform/locking.New"},
 	{filePath: "pkg/platform/locking/file.go", operation: "LocalFileSystem", symbol: "os.File", wireSymbol: "pkg/platform/locking.New"},
