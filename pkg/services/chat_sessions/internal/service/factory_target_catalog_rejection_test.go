@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -17,39 +18,6 @@ import (
 
 var errCollaboratorUnavailable = errors.New("collaborator unavailable")
 
-// TestNewRejectsMissingFactoryDefinitions proves construction fails fast
-// when the narrow Factory Definitions catalog/path capability is nil,
-// instead of deferring the failure to an operation-time nil-interface panic
-// the first time ResolveFactoryTargetCatalog invokes it.
-func TestNewRejectsMissingFactoryDefinitions(t *testing.T) {
-	t.Parallel()
-
-	settings := &operatorSettingsFake{}
-	service, err := chatsessionsservice.New(settings, nil, logging.NoopLogger{})
-	if err == nil {
-		t.Fatal("New with nil factory definitions capability = nil error, want error")
-	}
-	if service != nil {
-		t.Fatalf("New with nil factory definitions capability returned a non-nil service: %#v", service)
-	}
-}
-
-// TestNewRejectsMissingOperatorSettings proves construction fails fast when
-// the Operator Settings root is nil, matching the same fail-fast contract as
-// TestNewRejectsMissingFactoryDefinitions for the other required collaborator.
-func TestNewRejectsMissingOperatorSettings(t *testing.T) {
-	t.Parallel()
-
-	definitions := &factoryDefinitionsFake{}
-	service, err := chatsessionsservice.New(nil, definitions, logging.NoopLogger{})
-	if err == nil {
-		t.Fatal("New with nil operator settings root = nil error, want error")
-	}
-	if service != nil {
-		t.Fatalf("New with nil operator settings root returned a non-nil service: %#v", service)
-	}
-}
-
 func TestResolveFactoryTargetCatalogRejectsEmptyProfile(t *testing.T) {
 	t.Parallel()
 
@@ -59,12 +27,9 @@ func TestResolveFactoryTargetCatalogRejectsEmptyProfile(t *testing.T) {
 		},
 	}
 	definitions := &factoryDefinitionsFake{}
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 
-	_, err = service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+	_, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
 	})
 	assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetProfileUnavailable, "")
@@ -89,12 +54,9 @@ func TestResolveFactoryTargetCatalogRejectsInvalidProfileNormalization(t *testin
 		},
 	}
 	definitions := &factoryDefinitionsFake{}
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 
-	_, err = service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+	_, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
 	})
 	assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetProfileUnavailable, "")
@@ -308,10 +270,7 @@ func TestResolveFactoryTargetCatalogRejectsUninstalledTargetAfterPriorSuccess(t 
 			return factorydefinitions.ListEffectiveFactoriesResult{Entries: installed}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 
 	first, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
@@ -366,17 +325,25 @@ func TestResolveFactoryTargetCatalogRejectsIncompatiblePinnedWorkingRoot(t *test
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	spy := &spyLogger{}
+	service := chatsessionsservice.New(settings, definitions, spy)
 
-	_, err = service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+	result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
 		FactoryDiscovery:     chatsessions.FactoryDiscoveryRoots{ProjectRoot: factorydefinitions.ProjectFactoriesRoot("/repos/project-a")},
 		ClientWorkingRoot:    "/repos/project-b",
 	})
 	assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetWorkingRootIncompatible, "factory:@you/factory-builder")
+	if !reflect.DeepEqual(result, chatsessions.ResolveFactoryTargetCatalogResult{}) {
+		t.Fatalf("partial failure result: %+v", result)
+	}
+	var typed *chatsessions.FactoryTargetCatalogError
+	if !errors.As(err, &typed) || typed.Cause != nil {
+		t.Fatalf("unsafe cause: %+v", typed)
+	}
+	spy.assertOperation(t, 0, "working_root_incompatible")
+	spy.assertNoForbiddenValuesLogged(t, "/operator.json", "/repos/project-a", "/repos/project-b", "factory:@you/factory-builder", errCollaboratorUnavailable.Error())
+
 }
 
 func TestResolveFactoryTargetCatalogAllowsCompatiblePinnedWorkingRoot(t *testing.T) {
@@ -412,10 +379,7 @@ func TestResolveFactoryTargetCatalogAllowsCompatiblePinnedWorkingRoot(t *testing
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 
 	result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
@@ -452,12 +416,10 @@ func TestResolveFactoryTargetCatalogWrapsCanonicalResolutionDependencyFailure(t 
 			return factorydefinitions.ResolveNamedFactoryResult{}, errCollaboratorUnavailable
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	spy := &spyLogger{}
+	service := chatsessionsservice.New(settings, definitions, spy)
 
-	_, err = service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+	result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
 		FactoryDiscovery:     chatsessions.FactoryDiscoveryRoots{ProjectRoot: "/repos/project-a"},
 		ClientWorkingRoot:    "/repos/project-a",
@@ -466,6 +428,16 @@ func TestResolveFactoryTargetCatalogWrapsCanonicalResolutionDependencyFailure(t 
 	if errors.Is(err, errCollaboratorUnavailable) {
 		t.Fatalf("error unwraps to the raw collaborator error, leaking internal detail: %v", err)
 	}
+	if !reflect.DeepEqual(result, chatsessions.ResolveFactoryTargetCatalogResult{}) {
+		t.Fatalf("partial failure result: %+v", result)
+	}
+	var typed *chatsessions.FactoryTargetCatalogError
+	if !errors.As(err, &typed) || typed.Cause != nil {
+		t.Fatalf("unsafe cause: %+v", typed)
+	}
+	spy.assertOperation(t, 0, "catalog_unavailable")
+	spy.assertNoForbiddenValuesLogged(t, "/operator.json", "/repos/project-a", "/repos/project-b", "factory:@you/factory-builder", errCollaboratorUnavailable.Error())
+
 }
 
 func TestResolveFactoryTargetCatalogPreservesProfileDependencyContextCause(t *testing.T) {
@@ -489,15 +461,18 @@ func TestResolveFactoryTargetCatalogPreservesProfileDependencyContextCause(t *te
 				},
 			}
 			definitions := &factoryDefinitionsFake{}
-			service, err := chatsessionsservice.New(settings, definitions, spy)
-			if err != nil {
-				t.Fatalf("New: unexpected error: %v", err)
-			}
+			service := chatsessionsservice.New(settings, definitions, spy)
 
 			result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 				OperatorSettingsPath: "/operator.json",
 			})
 			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetProfileUnavailable, "")
+			assertFactoryTargetCatalogContextCause(t, err, testCase.cause)
+			reason := "context_canceled"
+			if errors.Is(testCase.cause, context.DeadlineExceeded) {
+				reason = "context_deadline_exceeded"
+			}
+			spy.assertOperation(t, 0, reason)
 			if !errors.Is(err, testCase.cause) {
 				t.Fatalf("ResolveFactoryTargetCatalog: error = %v, want errors.Is match for %v", err, testCase.cause)
 			}
@@ -537,15 +512,18 @@ func TestResolveFactoryTargetCatalogPreservesCatalogListingDependencyContextCaus
 					return factorydefinitions.ListEffectiveFactoriesResult{}, testCase.cause
 				},
 			}
-			service, err := chatsessionsservice.New(settings, definitions, spy)
-			if err != nil {
-				t.Fatalf("New: unexpected error: %v", err)
-			}
+			service := chatsessionsservice.New(settings, definitions, spy)
 
 			result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 				OperatorSettingsPath: "/operator.json",
 			})
 			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetCatalogUnavailable, "")
+			assertFactoryTargetCatalogContextCause(t, err, testCase.cause)
+			reason := "context_canceled"
+			if errors.Is(testCase.cause, context.DeadlineExceeded) {
+				reason = "context_deadline_exceeded"
+			}
+			spy.assertOperation(t, 0, reason)
 			if !errors.Is(err, testCase.cause) {
 				t.Fatalf("ResolveFactoryTargetCatalog: error = %v, want errors.Is match for %v", err, testCase.cause)
 			}
@@ -591,10 +569,7 @@ func TestResolveFactoryTargetCatalogPreservesCanonicalResolutionDependencyContex
 					return factorydefinitions.ResolveNamedFactoryResult{}, testCase.cause
 				},
 			}
-			service, err := chatsessionsservice.New(settings, definitions, spy)
-			if err != nil {
-				t.Fatalf("New: unexpected error: %v", err)
-			}
+			service := chatsessionsservice.New(settings, definitions, spy)
 
 			result, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 				OperatorSettingsPath: "/operator.json",
@@ -602,6 +577,12 @@ func TestResolveFactoryTargetCatalogPreservesCanonicalResolutionDependencyContex
 				ClientWorkingRoot:    "/repos/project-a",
 			})
 			assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetCatalogUnavailable, "factory:@you/factory-builder")
+			assertFactoryTargetCatalogContextCause(t, err, testCase.cause)
+			reason := "context_canceled"
+			if errors.Is(testCase.cause, context.DeadlineExceeded) {
+				reason = "context_deadline_exceeded"
+			}
+			spy.assertOperation(t, 0, reason)
 			if !errors.Is(err, testCase.cause) {
 				t.Fatalf("ResolveFactoryTargetCatalog: error = %v, want errors.Is match for %v", err, testCase.cause)
 			}
@@ -629,12 +610,9 @@ func TestResolveFactoryTargetCatalogWrapsInstalledCatalogDependencyFailure(t *te
 			return factorydefinitions.ListEffectiveFactoriesResult{}, errCollaboratorUnavailable
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 
-	_, err = service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+	_, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
 	})
 	assertFactoryTargetCatalogError(t, err, chatsessions.ErrFactoryTargetCatalogUnavailable, "")
@@ -773,10 +751,7 @@ func TestResolveFactoryTargetCatalogLogsStartedAndFinishedSafely(t *testing.T) {
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, spy)
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, spy)
 
 	operatorSettingsPath := "/very/private/operator-settings.json"
 	if _, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
@@ -794,6 +769,7 @@ func TestResolveFactoryTargetCatalogLogsStartedAndFinishedSafely(t *testing.T) {
 	if !spy.containsKeyValue("choice_count", 1) {
 		t.Fatalf("log entries = %#v, want choice_count=1", spy.entries)
 	}
+	spy.assertOperation(t, 1, "")
 	spy.assertNoForbiddenValuesLogged(t, operatorSettingsPath, "factory:@you/factory-builder")
 }
 
@@ -816,13 +792,10 @@ func TestResolveFactoryTargetCatalogLogsFailureReasonWithoutLeakingValues(t *tes
 			return factorydefinitions.ListEffectiveFactoriesResult{}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, spy)
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, spy)
 
 	operatorSettingsPath := "/very/private/operator-settings.json"
-	_, err = service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
+	_, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: operatorSettingsPath,
 	})
 	if err == nil {
@@ -835,6 +808,7 @@ func TestResolveFactoryTargetCatalogLogsFailureReasonWithoutLeakingValues(t *tes
 	if !spy.containsKeyValue("reason", "catalog_empty") {
 		t.Fatalf("log entries = %#v, want reason=catalog_empty", spy.entries)
 	}
+	spy.assertOperation(t, 0, "catalog_empty")
 	spy.assertNoForbiddenValuesLogged(t, operatorSettingsPath, "factory:@you/factory-builder")
 }
 
@@ -861,10 +835,7 @@ func TestResolveFactoryTargetCatalogUsesEachInjectedCollaboratorExactlyOnce(t *t
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, nil)
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 
 	if _, err := service.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{
 		OperatorSettingsPath: "/operator.json",
@@ -907,10 +878,7 @@ func TestResolveFactoryTargetCatalogObservesLiveCollaboratorDrift(t *testing.T) 
 			}, nil
 		},
 	}
-	service, err := chatsessionsservice.New(settings, definitions, nil)
-	if err != nil {
-		t.Fatalf("New: unexpected error: %v", err)
-	}
+	service := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
 	req := chatsessions.ResolveFactoryTargetCatalogRequest{OperatorSettingsPath: "/operator.json"}
 
 	if _, err := service.ResolveFactoryTargetCatalog(context.Background(), req); err != nil {
@@ -918,8 +886,159 @@ func TestResolveFactoryTargetCatalogObservesLiveCollaboratorDrift(t *testing.T) 
 	}
 
 	installed = false
-	_, err = service.ResolveFactoryTargetCatalog(context.Background(), req)
+	_, err := service.ResolveFactoryTargetCatalog(context.Background(), req)
 	if err == nil {
 		t.Fatal("ResolveFactoryTargetCatalog (uninstalled) = nil error, want the drift to be observed on the very next call")
+	}
+}
+
+// assertOperation pins the whole diagnostic shape, including severity and the
+// field whitelist. Exact equality excludes raw collaborator/input values.
+func (s *spyLogger) assertOperation(t *testing.T, count int, reason string) {
+	t.Helper()
+	want := []spyLoggedEntry{{level: "info", msg: "chat_sessions.resolve_factory_target_catalog.started"}}
+	if reason == "" {
+		want = append(want, spyLoggedEntry{"info", "chat_sessions.resolve_factory_target_catalog.finished", []any{"choice_count", count}})
+	} else {
+		want = append(want, spyLoggedEntry{"warn", "chat_sessions.resolve_factory_target_catalog.failed", []any{"reason", reason}})
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !reflect.DeepEqual(s.entries, want) {
+		t.Fatalf("diagnostics: %+v, want %+v", s.entries, want)
+	}
+}
+
+// assertFactoryTargetCatalogContextCause checks classification and exact safe
+// sentinel identity: retaining a wrapper could expose collaborator error text.
+func assertFactoryTargetCatalogContextCause(t *testing.T, err, cause error) {
+	t.Helper()
+	var typed *chatsessions.FactoryTargetCatalogError
+	if !errors.As(err, &typed) || !errors.Is(typed.Cause, cause) {
+		t.Fatalf("safe context cause: %+v", typed)
+	}
+	if typed.Cause != cause { //nolint:errorlint // Safe causes must be the canonical sentinel itself, never a wrapper.
+		t.Fatalf("context cause = %v, want exact safe sentinel %v", typed.Cause, cause)
+	}
+}
+
+func assertSelectedLoggerCatalogOutcome(t *testing.T, got chatsessions.ResolveFactoryTargetCatalogResult, err error, reason, defaultTarget, hostile string) {
+	t.Helper()
+	if reason == "" {
+		if err != nil || got.CurrentTarget != defaultTarget || len(got.Choices) != 1 {
+			t.Fatalf("success: %+v %v", got, err)
+		}
+	} else {
+		var typed *chatsessions.FactoryTargetCatalogError
+		if !errors.As(err, &typed) || typed.Cause != nil || !reflect.DeepEqual(got, chatsessions.ResolveFactoryTargetCatalogResult{}) {
+			t.Fatalf("failure: %+v %v", got, err)
+		}
+		if strings.Contains(err.Error(), hostile) {
+			t.Fatalf("unsafe error: %v", err)
+		}
+	}
+}
+
+func TestResolveFactoryTargetCatalogSelectedLoggerParity(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"", "catalog_empty", "profile_unavailable", "catalog_unavailable", "reference_malformed", "target_not_installed", "target_not_allowed"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			const hostile = "credential=sk-private prompt-secret /private/error"
+			profile := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/review", AllowedTargets: []string{"factory:@you/review"}}
+			entries := []factorydefinitions.EffectiveFactoryCatalogEntry{installedFactoryEntry("@you/review", "Review"), installedFactoryEntry("@you/extra", "Extra")}
+			profileCalls, catalogCalls := 0, 0
+			settings := &operatorSettingsFake{resolveACPAgentProfile: func(string) (operatorsettings.ACPAgentProfile, error) {
+				profileCalls++
+				if reason == "profile_unavailable" {
+					return operatorsettings.ACPAgentProfile{}, errors.New(hostile)
+				}
+				return profile, nil
+			}}
+			definitions := &factoryDefinitionsFake{listEffectiveFactories: func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+				catalogCalls++
+				if reason == "catalog_unavailable" {
+					return factorydefinitions.ListEffectiveFactoriesResult{}, errors.New(hostile)
+				}
+				if reason == "catalog_empty" {
+					return factorydefinitions.ListEffectiveFactoriesResult{}, nil
+				}
+				return factorydefinitions.ListEffectiveFactoriesResult{Entries: entries}, nil
+			}}
+			spy := &spyLogger{}
+			selected := chatsessionsservice.New(settings, definitions, spy)
+			quiet := chatsessionsservice.New(settings, definitions, logging.NoopLogger{})
+			if profileCalls != 0 || catalogCalls != 0 || len(spy.messages()) != 0 {
+				t.Fatal("construction invoked effects")
+			}
+			req := chatsessions.ResolveFactoryTargetCatalogRequest{OperatorSettingsPath: hostile}
+			switch reason {
+			case "reference_malformed":
+				req.CurrentTarget = hostile
+			case "target_not_installed":
+				req.CurrentTarget = "factory:@you/missing"
+			case "target_not_allowed":
+				req.CurrentTarget = "factory:@you/extra"
+			}
+			got, err := selected.ResolveFactoryTargetCatalog(context.Background(), req)
+			want, quietErr := quiet.ResolveFactoryTargetCatalog(context.Background(), req)
+			if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(err, quietErr) {
+				t.Fatalf("logger changed outcome: %+v %v / %+v %v", got, err, want, quietErr)
+			}
+			assertSelectedLoggerCatalogOutcome(t, got, err, reason, profile.DefaultTarget, hostile)
+			spy.assertOperation(t, len(got.Choices), reason)
+			spy.assertNoForbiddenValuesLogged(t, hostile, req.CurrentTarget, profile.DefaultTarget)
+		})
+	}
+}
+
+func TestResolveFactoryTargetCatalogIndependentDiagnosticsAndLiveFacts(t *testing.T) {
+	t.Parallel()
+	profileA := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/review"}
+	entriesA := []factorydefinitions.EffectiveFactoryCatalogEntry{installedFactoryEntry("@you/review", "Review")}
+	profileB := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/other"}
+	entriesB := []factorydefinitions.EffectiveFactoryCatalogEntry{installedFactoryEntry("@you/other", "Other")}
+	captureA, captureB := &spyLogger{}, &spyLogger{}
+	callsA, callsB := 0, 0
+	makeCatalog := func(profile *operatorsettings.ACPAgentProfile, entries *[]factorydefinitions.EffectiveFactoryCatalogEntry, calls *int, capture *spyLogger) chatsessions.FactoryTargetCatalogService {
+		settings := &operatorSettingsFake{resolveACPAgentProfile: func(string) (operatorsettings.ACPAgentProfile, error) { *calls++; return *profile, nil }}
+		definitions := &factoryDefinitionsFake{listEffectiveFactories: func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+			*calls++
+			return factorydefinitions.ListEffectiveFactoriesResult{Entries: *entries}, nil
+		}}
+		return chatsessionsservice.New(settings, definitions, capture)
+	}
+	a := makeCatalog(&profileA, &entriesA, &callsA, captureA)
+	b := makeCatalog(&profileB, &entriesB, &callsB, captureB)
+	resolve := func(catalog chatsessions.FactoryTargetCatalogService) chatsessions.ResolveFactoryTargetCatalogResult {
+		t.Helper()
+		result, err := catalog.ResolveFactoryTargetCatalog(context.Background(), chatsessions.ResolveFactoryTargetCatalogRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	firstA := resolve(a)
+	if callsB != 0 || len(captureB.messages()) != 0 {
+		t.Fatal("A observed B's dependencies/effect")
+	}
+	firstB := resolve(b)
+	captureA.assertOperation(t, 1, "")
+	captureB.assertOperation(t, 1, "")
+	profileA = operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/changed"}
+	entriesA = []factorydefinitions.EffectiveFactoryCatalogEntry{installedFactoryEntry("@you/changed", "Changed"), installedFactoryEntry("@you/new", "New")}
+	secondA := resolve(a)
+	if secondA.CurrentTarget != profileA.DefaultTarget || len(secondA.Choices) != 2 || reflect.DeepEqual(firstA, secondA) {
+		t.Fatalf("stale A: %+v", secondA)
+	}
+	captureB.assertOperation(t, 1, "") // A's next call did not append to B.
+	secondB := resolve(b)
+	if !reflect.DeepEqual(firstB, secondB) || callsA != 4 || callsB != 4 {
+		t.Fatalf("crossed observations: %+v / %+v, %d / %d", firstB, secondB, callsA, callsB)
+	}
+	wantA := []spyLoggedEntry{{"info", "chat_sessions.resolve_factory_target_catalog.started", nil}, {"info", "chat_sessions.resolve_factory_target_catalog.finished", []any{"choice_count", 1}}, {"info", "chat_sessions.resolve_factory_target_catalog.started", nil}, {"info", "chat_sessions.resolve_factory_target_catalog.finished", []any{"choice_count", 2}}}
+	wantB := append(append([]spyLoggedEntry(nil), wantA[:2]...), wantA[:2]...)
+	if !reflect.DeepEqual(captureA.entries, wantA) || !reflect.DeepEqual(captureB.entries, wantB) {
+		t.Fatalf("crossed diagnostics: %+v / %+v", captureA.entries, captureB.entries)
 	}
 }

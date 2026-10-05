@@ -72,14 +72,23 @@ func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eve
 // NewFactoryTargetCatalogService constructs the Chat Sessions Factory
 // target-catalog root from the singular Operator Settings public service
 // root and Factory Definitions' narrow, read-only catalog/path capability.
-// logger is the direct, required operation-logging abstraction; callers with
-// no operation logging pass logging.NoopLogger{}.
+// logger selects operation diagnostics; nil and logging.NoopLogger{} preserve
+// quiet compatibility. Required peers are validated here before construction.
 func NewFactoryTargetCatalogService(
 	operatorSettings operatorsettings.Service,
 	factoryDefinitions factorydefinitions.CatalogPathsService,
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
-	return internalservice.New(operatorSettings, factoryDefinitions, logger)
+	if operatorSettings == nil {
+		return nil, fmt.Errorf("construct chat sessions factory target catalog: operator settings root is required")
+	}
+	if factoryDefinitions == nil {
+		return nil, fmt.Errorf("construct chat sessions factory target catalog: factory definitions catalog/path capability is required")
+	}
+	if logger == nil {
+		logger = logging.NoopLogger{}
+	}
+	return internalservice.New(operatorSettings, factoryDefinitions, logger), nil
 }
 
 // ResponseBridge is the Chat Sessions-owned producer bridge that sequences
