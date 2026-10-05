@@ -1,6 +1,7 @@
 package workersessions_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -71,6 +72,7 @@ func TestCapturedFollowBackfillsEvictedEventsRing(t *testing.T) {
 		}
 	}
 	stopSetup()
+	t.Log("all progress committed; checking public Events retention gap")
 	assertEvictedPublicEvents(t, ctx, baseURL, id)
 	close(gate.release)
 	close(runner.finish)
@@ -296,13 +298,20 @@ func assertEvictedPublicEvents(t *testing.T, ctx context.Context, baseURL, id st
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
+	// SSE can stay open while the Worker runs. Check its first data frame,
+	// rather than waiting for EOF and hiding a non-gap response until timeout.
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		frame := scanner.Bytes()
+		if !bytes.HasPrefix(frame, []byte("data:")) {
+			continue
+		}
+		if response.StatusCode != http.StatusOK || !bytes.Contains(frame, []byte(`"delivery":"SOURCE_FAILURE"`)) || !bytes.Contains(frame, []byte(`"WORKER_SESSION_STREAM_GAP"`)) {
+			t.Fatalf("real Events ring did not report evicted cursor: status=%d frame=%s", response.StatusCode, frame)
+		}
+		return
 	}
-	if response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte(`"delivery":"SOURCE_FAILURE"`)) || !bytes.Contains(body, []byte(`"WORKER_SESSION_STREAM_GAP"`)) {
-		t.Fatalf("real Events ring did not report evicted cursor: status=%d body=%s", response.StatusCode, body)
-	}
+	t.Fatalf("Events gap frame unavailable: status=%d scan=%v", response.StatusCode, scanner.Err())
 }
 
 func assertEvictionReplay(t *testing.T, ctx context.Context, baseURL, id string, output []byte, token string, execute evictionExecute) {
