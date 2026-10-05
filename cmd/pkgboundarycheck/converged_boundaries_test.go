@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -109,25 +108,6 @@ func TestRunAllowsOwningServiceAndWireTestsToImportServiceInternals(t *testing.T
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
 		t.Fatalf("run() error = %v, want owner and Wire tests allowed; stderr=%q", err, stderr.String())
 	}
-}
-
-func TestRunRejectsRetiredExecutionTestHarnessPackageAndImport(t *testing.T) {
-	t.Parallel()
-
-	const (
-		packagePath = "pkg/services/factory_sessions/internal/execution/testharness"
-		importPath  = "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/testharness"
-	)
-	t.Run("package", func(t *testing.T) {
-		repoRoot := t.TempDir()
-		writeGoImportFile(t, repoRoot, packagePath+"/harness.go", "testharness", "fmt")
-
-		stderr := &bytes.Buffer{}
-		err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-		if err == nil || !strings.Contains(stderr.String(), "prohibited retired package root: "+packagePath) {
-			t.Fatalf("run() = %v stderr=%q, want retired package root rejected", err, stderr.String())
-		}
-	})
 }
 
 func TestRunAllowsExactExternalEffectContractInTests(t *testing.T) {

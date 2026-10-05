@@ -292,6 +292,11 @@ fixtures retain their exemptions. Go enforces service-internal visibility.
 Compiler-excluded imports are checked too. Tests retain the existing
 `service-subpackage` policy, including public service transport adapters.
 The converged-import walker is retired.
+`Layering` also rejects compiler-visible recreation of retired package roots
+and their descendants through `retired-package-root`, reporting the canonical
+owner even for generated and test units. This rule has no debt allowance.
+The duplicate directory scanner is retired; empty directory scaffolding is
+obsolete and does not constitute a Go package.
 Other unmigrated boundary rules remain in `make pkg-boundary`.
 
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/baselines/frontend-deadcode-baseline.json`. The backend analyzer uses production entrypoints only, so production code referenced exclusively by tests remains a dead-code finding. It writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/baselines/deadcode-baseline.txt`. Review any drift before updating either baseline.

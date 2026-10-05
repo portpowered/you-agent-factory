@@ -30,9 +30,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	}
 
 	result := scanResult{}
-	if err := scanRetiredPackageRoots(repoRoot, cfg, &result); err != nil {
-		return scanResult{}, err
-	}
 	if err := scanRepositoryServiceConstruction(repoRoot, &result); err != nil {
 		return scanResult{}, err
 	}
@@ -40,28 +37,6 @@ func scanBoundaryRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return scanResult{}, err
 	}
 	return result, nil
-}
-
-func scanRetiredPackageRoots(repoRoot string, cfg config, result *scanResult) error {
-	for _, retiredRoot := range retiredPackageRoots {
-		if !strings.HasPrefix(retiredRoot.packagePath, cfg.packageRoot+"/") {
-			continue
-		}
-		info, statErr := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(retiredRoot.packagePath)))
-		if statErr != nil {
-			if os.IsNotExist(statErr) {
-				continue
-			}
-			return fmt.Errorf("stat retired package root %s: %w", retiredRoot.packagePath, statErr)
-		}
-		if info.IsDir() {
-			result.retiredPackageRootFindings = append(
-				result.retiredPackageRootFindings,
-				retiredPackageRootFinding{retiredRoot},
-			)
-		}
-	}
-	return nil
 }
 
 func scanRepositoryServiceConstruction(repoRoot string, result *scanResult) error {

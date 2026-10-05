@@ -280,58 +280,6 @@ func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	}
 }
 
-func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
-	t.Parallel()
-
-	for _, tt := range []struct {
-		packagePath    string
-		canonicalOwner string
-	}{
-		{packagePath: "pkg/models", canonicalOwner: "pkg/services/models"},
-		{packagePath: "pkg/work", canonicalOwner: "pkg/services/work"},
-		{packagePath: "pkg/workers", canonicalOwner: "pkg/services/workers"},
-		{packagePath: "pkg/modelhost", canonicalOwner: "pkg/services/models"},
-		{packagePath: "pkg/localmodels", canonicalOwner: "pkg/services/models"},
-		{packagePath: "pkg/hostedworkers", canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership"},
-		{packagePath: "pkg/invocations", canonicalOwner: "pkg/services/work, pkg/services/factory_sessions, or pkg/services/workers, according to the concern"},
-		{packagePath: "pkg/materialize", canonicalOwner: "pkg/services/work"},
-		{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
-		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/services/work"},
-		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/services/work"},
-		{packagePath: "pkg/workquery", canonicalOwner: "pkg/services/work"},
-		{packagePath: "pkg/interfaces", canonicalOwner: "the defining domain under pkg/services"},
-		{packagePath: "pkg/replay", canonicalOwner: "pkg/services/recordings/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics"},
-		{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
-		{packagePath: "pkg/platform/runtimeinput", canonicalOwner: "bounded owner requests assembled by pkg/wire"},
-	} {
-		t.Run(tt.packagePath, func(t *testing.T) {
-			t.Parallel()
-			repoRoot := t.TempDir()
-			makeDir(t, repoRoot, tt.packagePath)
-
-			stderr := &bytes.Buffer{}
-			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-			if err == nil {
-				t.Fatal("run() error = nil, want retired package root failure")
-			}
-
-			got := stderr.String()
-			for _, want := range []string{
-				"prohibited retired package root: " + tt.packagePath,
-				"canonical owner: " + tt.canonicalOwner,
-				"move the code to " + tt.canonicalOwner + " and delete the retired root",
-			} {
-				if !strings.Contains(got, want) {
-					t.Fatalf("run() stderr = %q, want substring %q", got, want)
-				}
-			}
-			if strings.Contains(got, "unapproved root package family") {
-				t.Fatalf("run() stderr = %q, want retired-root diagnostic instead of generic root diagnostic", got)
-			}
-		})
-	}
-}
-
 func TestRunAllowsSameOwnerSubpackagesAndPeerRoots(t *testing.T) {
 	t.Parallel()
 
@@ -401,74 +349,6 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 		if got := stdout.String(); !strings.Contains(got, want) {
 			t.Fatalf("run() stdout = %q, want substring %q", got, want)
 		}
-	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("run() stderr = %q, want empty", got)
-	}
-}
-
-func TestRunRejectsRecreatedRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
-	t.Parallel()
-
-	for _, owner := range factoryRetiredPackageRoots {
-		owner := owner
-		t.Run(owner.packagePath, func(t *testing.T) {
-			t.Parallel()
-
-			repoRoot := t.TempDir()
-			makeDir(t, repoRoot, owner.packagePath)
-
-			stderr := &bytes.Buffer{}
-			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-			if err == nil {
-				t.Fatal("run() error = nil, want retired package root failure")
-			}
-			for _, want := range []string{
-				"prohibited retired package root: " + owner.packagePath,
-				"canonical owner: " + owner.canonicalOwner,
-				"move the code to " + owner.canonicalOwner + " and delete the retired root",
-			} {
-				if got := stderr.String(); !strings.Contains(got, want) {
-					t.Fatalf("run() stderr = %q, want substring %q", got, want)
-				}
-			}
-			if got := stderr.String(); strings.Contains(got, "unapproved root package family: "+owner.packagePath) {
-				t.Fatalf("run() stderr = %q, want actionable retired-owner diagnostic only", got)
-			}
-		})
-	}
-}
-
-func TestRunAcceptsCanonicalConvergedPackageImports(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	for index, owner := range factoryRetiredPackageRoots {
-		canonicalOwner := strings.Split(owner.canonicalOwner, ",")[0]
-		canonicalOwner = strings.Split(canonicalOwner, " or ")[0]
-		consumerPath := fmt.Sprintf("pkg/config/canonical_import_%d.go", index)
-		consumerPackage := "config"
-		if serviceOwner, isServiceSubpackage := serviceSubpackageOwner(canonicalOwner); isServiceSubpackage {
-			consumerPath = fmt.Sprintf("pkg/services/%s/canonical_import_%d.go", serviceOwner, index)
-			consumerPackage = strings.ReplaceAll(serviceOwner, "_", "")
-		}
-		writeGoImportFile(
-			t,
-			repoRoot,
-			consumerPath,
-			consumerPackage,
-			repositoryImportPrefix+canonicalOwner,
-		)
-	}
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err != nil {
-		t.Fatalf("run() error = %v, want canonical owner imports accepted", err)
-	}
-	if got := stdout.String(); !strings.Contains(got, "package boundary passed") {
-		t.Fatalf("run() stdout = %q, want package-boundary success", got)
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty", got)

@@ -1,7 +1,6 @@
 package main
 
 type scanResult struct {
-	retiredPackageRootFindings          []retiredPackageRootFinding
 	serviceConstructionFindings         []serviceConstructionFinding
 	recordedServiceConstructionFindings []serviceConstructionFinding
 	staleServiceConstructionEntries     []serviceConstructionBaselineEntry
@@ -10,15 +9,6 @@ type scanResult struct {
 	recordedProductionDefaultFindings   []productionDefaultFinding
 	staleProductionDefaultEntries       []productionDefaultBaselineEntry
 	productionDefaultBaselineCount      int
-}
-
-type retiredPackageRoot struct {
-	packagePath    string
-	canonicalOwner string
-}
-
-type retiredPackageRootFinding struct {
-	retiredPackageRoot
 }
 
 type serviceConstructionFinding struct {

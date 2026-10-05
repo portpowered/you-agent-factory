@@ -21,6 +21,62 @@ var Layering = &analysis.Analyzer{
 	Run:  runLayering,
 }
 
+// retiredPackageOwners rejects compiler-visible recreation of retired roots.
+// Empty directory scaffolding is obsolete; package identity owns this rule.
+var retiredPackageOwners = []struct {
+	root  string
+	owner string
+}{
+	{"pkg/factory", "pkg/services/factory_definitions, pkg/services/factory_sessions, pkg/services/factory_runtime, or pkg/services/recordings according to ownership"},
+	{"pkg/packagedfactories", "pkg/services/factory_definitions/internal/services/distribution"},
+	{"pkg/factorydefinition", "pkg/services/factory_definitions/definition"},
+	{"pkg/factorysessionexecution", "pkg/services/factory_sessions"},
+	{"pkg/factorysessions", "pkg/services/factory_sessions"},
+	{"pkg/petri", "pkg/services/factory_runtime"},
+	{"pkg/api", "pkg/transports/http"},
+	{"pkg/apisurface", "pkg/transports/mapping"},
+	{"pkg/cli", "pkg/transports/cli"},
+	{"pkg/transports/cli/startup", "pkg/initializer/process"},
+	{"pkg/services/factory_definitions/contracts", "pkg/services/factory_definitions"},
+	{"pkg/platform/namedfactorypath", "pkg/services/factory_definitions"},
+	{"pkg/platform/defaultpaths", "the defining service owner, or pkg/platform/internal/runtimeartifact for policy-free artifact mechanics"},
+	{"pkg/wire/runtimeproviders", "focused provider files in pkg/wire"},
+	{"pkg/generatedclient", "pkg/transports/http/client"},
+	{"pkg/hostedworkers", "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership"},
+	{"pkg/internal/cursorstorage", "pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor"},
+	{"pkg/internal/metrics", "pkg/services/factory_runtime/internal/services/orchestration/metrics for domain contracts and pkg/platform/metrics for file-backed recording"},
+	{"pkg/platform/runtimeinput", "bounded owner requests assembled by pkg/wire"},
+	{"pkg/invocations", "pkg/services/work, pkg/services/factory_sessions, or pkg/services/workers, according to the concern"},
+	{"pkg/interfaces", "the defining domain under pkg/services"},
+	{"pkg/localmodels", "pkg/services/models"},
+	{"pkg/logging", "pkg/platform/logging"},
+	{"pkg/materialize", "pkg/services/work"},
+	{"pkg/mcp", "pkg/transports/mcp"},
+	{"pkg/modelhost", "pkg/services/models"},
+	{"pkg/models", "pkg/services/models"},
+	{"pkg/orchestrators", "pkg/services/factory_runtime"},
+	{"pkg/replay", "pkg/services/recordings/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics"},
+	{"pkg/service", "pkg/services for product services and pkg/wire for composition"},
+	{"pkg/sessionpersistence", "pkg/services/factory_sessions/internal/cursors/persistence"},
+	{"pkg/services/provider_sessions/cursor/persistence", "pkg/services/factory_sessions/internal/cursors/persistence"},
+	{"pkg/services/factory_sessions/internal/execution/testharness", "owner-local _test.go construction in pkg/services/factory_sessions/internal/execution"},
+	{"pkg/testutil", "internal/testutil or package-local test helpers"},
+	{"pkg/timework", "pkg/services/automations/internal/services/cron"},
+	{"pkg/services/automations/timework", "pkg/services/automations/internal/services/cron"},
+	{"pkg/work", "pkg/services/work"},
+	{"pkg/workcontent", "pkg/services/work"},
+	{"pkg/workers", "pkg/services/workers"},
+	{"pkg/services/automation", "pkg/services/automations"},
+	{"pkg/services/bundle", "exact service-root or Factory Sessions consumer contracts supplied by pkg/wire"},
+	{"pkg/services/factory_runtime/resource", "pkg/services/factory_definitions/internal/services/catalog/resource"},
+	{"pkg/services/models/provider", "pkg/services/models"},
+	{"pkg/services/provider_sessions/cursor", "pkg/services/provider_sessions/internal/services/cursor_reader"},
+	{"pkg/services/provider_sessions/cursor/session", "pkg/services/factory_sessions/internal/cursors"},
+	{"pkg/services/workers/application", "pkg/services/workers/service with flat constructor parameters"},
+	{"pkg/workgraph", "pkg/services/work"},
+	{"pkg/workquery", "pkg/services/work"},
+}
+
 // edge is one import of importee by importer, observed in one source file.
 type edge struct {
 	importer string // module-relative package path, _test suffix removed
@@ -220,6 +276,12 @@ func runLayering(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 	importer := strings.TrimSuffix(unit, "_test")
+	for _, retired := range retiredPackageOwners {
+		if under(importer, retired.root) {
+			pass.Reportf(pass.Files[0].Package, "retired-package-root: prohibited retired package root %s; canonical owner: %s", retired.root, retired.owner)
+			break
+		}
+	}
 	// Preserve the legacy eight-family predicate; this does not authorize
 	// recreating the retired config/internal families in product code.
 	if tail, ok := strings.CutPrefix(importer, "pkg/"); ok {

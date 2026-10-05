@@ -8,7 +8,6 @@ import (
 )
 
 func writeBoundaryFindings(writer io.Writer, findings scanResult) {
-	writeRetiredPackageRootFindings(writer, findings.retiredPackageRootFindings)
 	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
 	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
 	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
@@ -28,14 +27,6 @@ func writeGeneratedCodeExceptionSummary(writer io.Writer, policy boundaryPolicy)
 		return
 	}
 	fmt.Fprintf(writer, "[agent-factory:pkg-boundary] active generated-code exceptions: %s\n", strings.Join(exceptions, ", "))
-}
-
-func writeRetiredPackageRootFindings(writer io.Writer, findings []retiredPackageRootFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited retired package root: %s\n", finding.packagePath)
-		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
-		fmt.Fprintf(writer, "  remediation: move the code to %s and delete the retired root.\n", finding.canonicalOwner)
-	}
 }
 
 func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
