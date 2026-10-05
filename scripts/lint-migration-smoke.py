@@ -425,6 +425,8 @@ def main() -> None:
             write(root, "internal/lint/analyzers/baseline.txt", "old|a|b\nnew|a|b\n")
             fixtures.lint(root, "baseline-new-rule", [])
             write(root, "internal/lint/analyzers/baseline.txt", "old|a|c\n")
+            fixtures.lint(root, "baseline-count-neutral-replacement", [])
+            write(root, "internal/lint/analyzers/baseline.txt", "old|a|c\nold|a|d\n")
             fixtures.lint(root, "baseline-established-growth", [("repolint", "established baseline rules gained keys")])
             write(root, "internal/lint/analyzers/baseline.txt", "")
             fixtures.lint(root, "baseline-deletion", [])
