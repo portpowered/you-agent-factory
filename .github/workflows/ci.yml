@@ -843,6 +843,18 @@ jobs:
             .github/workflows/ci.yml
       - name: Check Go formatting
         run: make fmt-check
+      - name: Race-check shared lint components
+        if: always()
+        run: go test -race ./internal/lint/analyzers ./tools/golangcilintplugin -run 'CompilerMetadata|WireSelection|Plugin' -count=1 -timeout 15m
+      - name: Build and smoke-test shared lint plugin
+        run: |
+          make golangci-build
+          python3 scripts/lint-migration-smoke.py manifest --golangci "$PWD/.artifacts/golangci/golangci-repository"
+      - name: Verify generated-host deadcode boundary
+        run: |
+          go test ./cmd/deadcodecheck -count=1 -timeout 3m
+          go build -o .artifacts/golangci/deadcodecheck ./cmd/deadcodecheck
+          python3 scripts/deadcode-host-smoke.py --checker "$PWD/.artifacts/golangci/deadcodecheck"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -906,6 +918,7 @@ jobs:
         env:
           LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
           LINT_FULL: "1"
+          GOLANGCI_PREBUILT: "1"
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-

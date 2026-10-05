@@ -129,7 +129,7 @@ func waitForFunctionalServerCompletion(
 				status.Categories.Terminal+status.Categories.Failed > 0) {
 			return status
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("factory did not reach COMPLETED within %s", timeout)
 	return factoryapi.StatusResponse{}
@@ -149,7 +149,7 @@ func waitForFunctionalServerIdleTerminal(
 			status.Categories.Terminal == 1 {
 			return status
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("factory did not reach running idle terminal state within %s", timeout)
 	return factoryapi.StatusResponse{}

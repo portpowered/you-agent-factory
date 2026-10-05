@@ -172,8 +172,6 @@ internal/functionaltestmetadata/record.go: unreachable func: CustomerScenarioCou
 internal/packagedfactorycatalog/definition_catalog.go: unreachable func: DefinitionCatalog.Lookup
 internal/packagedfactorycatalog/definition_catalog.go: unreachable func: DefinitionCatalog.Names
 internal/packagedfactorycatalog/manifest.go: unreachable func: GenerateManifest
-internal/retiredsurfaceguard/inventory.go: unreachable func: SettledRetiredCLIPaths
-internal/retiredsurfaceguard/inventory.go: unreachable func: SettledRetiredDocsTopics
 internal/testpath/testpath.go: unreachable func: MustRepoPathFromCaller
 internal/testpath/testpath.go: unreachable func: MustRepoRootFromCaller
 internal/testpath/testpath.go: unreachable func: isRepoRoot
@@ -1945,8 +1943,6 @@ pkg/transports/acp/internal/session/session.go: unreachable func: chunkUpdate
 pkg/transports/acp/internal/stdio/prompt_stream.go: unreachable func: Server.rebuildWorkerChildProjectionBudget
 pkg/transports/acp/internal/stdio/response_bridge.go: unreachable func: attachmentCache.boundWorkerChildProjection
 pkg/transports/cli/acp/service.go: unreachable func: filterACPProviders
-pkg/transports/cli/baseline/docs_topics.go: unreachable func: SerializeDocsTopicIndex
-pkg/transports/cli/baseline/docs_topics.go: unreachable func: formatDocsTopicLine
 pkg/transports/cli/baseline/fixture_text.go: unreachable func: NormalizeFixtureText
 pkg/transports/cli/baseline/fixture_text.go: unreachable func: ReadFixtureText
 pkg/transports/cli/baseline/help_output.go: unreachable func: NormalizeHelpOutput

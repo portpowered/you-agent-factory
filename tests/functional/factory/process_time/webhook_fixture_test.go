@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,14 +91,23 @@ func openWebhookSession(t *testing.T, c *timeCohort, key string) string {
 
 func executeWebhookCommand(t *testing.T, c *timeCohort, id string, args ...string) []byte {
 	t.Helper()
+	out, err := tryWebhookCommand(t, c, id, args...)
+	if err != nil {
+		t.Fatalf("webhook command: %v", err)
+	}
+	return out
+}
+
+func tryWebhookCommand(t *testing.T, c *timeCohort, id string, args ...string) ([]byte, error) {
+	t.Helper()
 	command := append([]string{"you", "--server", c.url, "--json"}, args...)
 	command = append(command, "--session", id)
 	inputs := support.FakeInputs(t.Context(), command)
 	inputs.Env = c.env
 	if err := c.cli.Execute(inputs.Input); err != nil {
-		t.Fatalf("webhook command: %v\n%s\n%s", err, inputs.Stdout(), inputs.Stderr())
+		return nil, fmt.Errorf("%w: stdout=%s stderr=%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	return []byte(inputs.Stdout())
+	return []byte(inputs.Stdout()), nil
 }
 
 func emitWebhookWork(t *testing.T, c *timeCohort, id string) string {
@@ -113,6 +123,17 @@ func emitWebhookWork(t *testing.T, c *timeCohort, id string) string {
 	if err := json.Unmarshal(data, &result); err != nil || result.WorkID == "" {
 		t.Fatalf("submit=%s, error=%v", data, err)
 	}
-	executeWebhookCommand(t, c, id, "work", "move", result.WorkID, "queued")
+	// Submit acknowledges the Work Request before the runtime has materialized
+	// the Work, so an immediate move can race admission and report "work not
+	// found". Retry only that public not-found answer until admission commits.
+	if _, err := support.WaitForObservation(30*time.Second, func() (bool, error) {
+		_, err := tryWebhookCommand(t, c, id, "work", "move", result.WorkID, "queued")
+		if err != nil && !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("webhook command: %v", err)
+		}
+		return err == nil, err
+	}, func(moved bool) bool { return moved }); err != nil {
+		t.Fatalf("work move %s: %v", result.WorkID, err)
+	}
 	return result.WorkID
 }

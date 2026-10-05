@@ -24,7 +24,7 @@ flowchart TB
     s_services_workers["workers<br/>22145 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
-    s_services_events["events<br/>1939 LOC · 0 subservices"]
+    s_services_events["events<br/>1936 LOC · 0 subservices"]
     s_services_recordings["recordings<br/>30980 LOC · 8 subservices"]
   end
   subgraph metrics["Metrics"]

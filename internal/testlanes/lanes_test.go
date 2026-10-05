@@ -21,6 +21,7 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		{name: "nested functional", importPath: ModulePath + "/pkg/services/workers/provider/functionaltests", want: LaneFunctional, wantOK: true},
 		{name: "command", importPath: ModulePath + "/cmd/factory", want: LaneMaintenance, wantOK: true},
 		{name: "internal", importPath: ModulePath + "/internal/contractstaging", want: LaneMaintenance, wantOK: true},
+		{name: "shared lint plugin", importPath: ModulePath + "/tools/golangcilintplugin", want: LaneMaintenance, wantOK: true},
 		{name: "root contracts", importPath: ModulePath + "/contracts", want: LaneContract, wantOK: true},
 		{name: "CLI production baseline", importPath: ModulePath + "/pkg/transports/cli/baseline", want: LaneContract, wantOK: true},
 		{name: "CLI input inventory", importPath: ModulePath + "/pkg/transports/cli/cliinputs", want: LaneContract, wantOK: true},
