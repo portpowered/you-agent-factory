@@ -649,24 +649,6 @@ func DefaultSessionSuccessor(state *sessionruntime.Service, runtimeState *State)
 	return session
 }
 
-// StopSession removes one live session, updates active-runtime selection, and
-// stops its Factory Runtime through the injected lifecycle edge.
-func StopSession(
-	state *sessionruntime.Service,
-	runtimeState *State,
-	sessionID string,
-	stop func(RuntimeHandle) error,
-) error {
-	if state == nil {
-		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
-	}
-	session := state.Resolve(sessionID)
-	if session == nil {
-		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
-	}
-	return StopSessionGeneration(state, runtimeState, session, stop)
-}
-
 // StopSessionGeneration keeps all shutdown effects on the captured generation,
 // even when a replacement is published before shutdown begins.
 func StopSessionGeneration(
