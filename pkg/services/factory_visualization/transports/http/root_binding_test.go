@@ -189,9 +189,11 @@ func TestMetricsHandlerMapsTypedSessionScopeFailures(t *testing.T) {
 		status     int
 		wantCode   factoryapi.ErrorResponseCode
 		wantPhrase string
+		wantFamily factoryapi.ErrorFamily
 	}{
 		{
 			name:       "unknown public session",
+			wantFamily: factoryapi.ErrorFamilyBadRequest,
 			err:        factoryvisualizationhttp.NewMetricsSessionNotFoundError("missing-live-id", nil),
 			status:     http.StatusNotFound,
 			wantCode:   factoryapi.ErrorResponseCode(factoryvisualizationhttp.MetricsSessionNotFoundCode),
@@ -199,6 +201,7 @@ func TestMetricsHandlerMapsTypedSessionScopeFailures(t *testing.T) {
 		},
 		{
 			name:       "known session without retained scope",
+			wantFamily: factoryapi.ErrorFamilyInternalServerError,
 			err:        factoryvisualizationhttp.NewMetricsScopeUnavailableError("known-live-id", nil),
 			status:     http.StatusServiceUnavailable,
 			wantCode:   factoryapi.ErrorResponseCode(factoryvisualizationhttp.MetricsScopeUnavailableCode),
@@ -225,6 +228,7 @@ func TestMetricsHandlerMapsTypedSessionScopeFailures(t *testing.T) {
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode error response: %v", err)
 			}
+			assertMetricsErrorContract(t, recorder, test.wantFamily, test.wantCode, test.err.Error())
 			if response.Code != test.wantCode || !strings.Contains(response.Message, test.wantPhrase) {
 				t.Fatalf("error response = %#v, want code %q and phrase %q", response, test.wantCode, test.wantPhrase)
 			}
@@ -270,7 +274,7 @@ func TestMetricsHandlerEncodesMetricDetails(t *testing.T) {
 		}, nil
 	})
 	handler := factoryvisualizationhttp.NewMetricsHandler(
-		factoryvisualizationhttp.NewMetricsAdapter(query, nil, "/tmp/metrics"), nil,
+		factoryvisualizationhttp.NewMetricsAdapter(query, nil, "/tmp/metrics"), zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
 	handler.GetMetrics(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{})
@@ -298,19 +302,22 @@ func TestMetricsHandlerEncodesMetricDetails(t *testing.T) {
 
 func TestMetricsHandlerMapsQueryFailures(t *testing.T) {
 	tests := []struct {
-		name   string
-		err    error
-		status int
-		code   factoryapi.ErrorResponseCode
+		name    string
+		err     error
+		status  int
+		code    factoryapi.ErrorResponseCode
+		family  factoryapi.ErrorFamily
+		message string
 	}{
 		{
 			name: "invalid request",
 			err: &factoryvisualization.RuntimeMetricsQueryError{
 				Kind: factoryvisualization.RuntimeMetricsQueryInvalidInput, Message: "invalid metrics request",
 			},
+			family: factoryapi.ErrorFamilyBadRequest, message: "invalid metrics request",
 			status: http.StatusBadRequest, code: factoryapi.ErrorResponseCode(factoryvisualizationhttp.MetricsInvalidRequestCode),
 		},
-		{name: "query failure", err: errors.New("reader failed"), status: http.StatusInternalServerError, code: factoryapi.ErrorResponseCode(factoryvisualizationhttp.MetricsQueryFailedCode)},
+		{family: factoryapi.ErrorFamilyInternalServerError, message: "failed to query runtime metrics", name: "query failure", err: errors.New("reader failed"), status: http.StatusInternalServerError, code: factoryapi.ErrorResponseCode(factoryvisualizationhttp.MetricsQueryFailedCode)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -330,6 +337,7 @@ func TestMetricsHandlerMapsQueryFailures(t *testing.T) {
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode error response: %v", err)
 			}
+			assertMetricsErrorContract(t, recorder, test.family, test.code, test.message)
 			if response.Code != test.code || response.Message == "" {
 				t.Fatalf("error response = %#v, want code %q and message", response, test.code)
 			}
@@ -346,9 +354,24 @@ func TestMetricsScopeErrorUnwrapsCauseAndConstructorsHandleNil(t *testing.T) {
 	if factoryvisualizationhttp.NewMetricsAdapter(nil, nil, "") != nil {
 		t.Fatal("NewMetricsAdapter(nil) returned a handler")
 	}
-	if factoryvisualizationhttp.NewMetricsHandler(nil, nil) != nil {
+	if factoryvisualizationhttp.NewMetricsHandler(nil, zap.NewNop()) != nil {
 		t.Fatal("NewMetricsHandler(nil) returned a handler")
 	}
 }
 
 func stringPointer(value string) *string { return &value }
+
+func assertMetricsErrorContract(t *testing.T, rec *httptest.ResponseRecorder, family factoryapi.ErrorFamily, code factoryapi.ErrorResponseCode, message string) {
+	t.Helper()
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("content type = %q", rec.Header().Get("Content-Type"))
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"family": string(family), "code": string(code), "message": message}
+	if !reflect.DeepEqual(body, want) {
+		t.Fatalf("body = %#v, want %#v", body, want)
+	}
+}

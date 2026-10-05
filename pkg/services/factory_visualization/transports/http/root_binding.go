@@ -22,13 +22,10 @@ type RootBinding struct {
 }
 
 // NewHandlerFromRoot constructs an HTTP adapter that calls through the supplied
-// Visualization root. Tests inject a focused fake implementing VisualizationRoot
+// Visualization root and selected logger. Tests inject a focused fake implementing VisualizationRoot
 // without constructing real activation_lifecycle, live_view_projection,
 // response_event_presentation, or service-local Wire graphs.
 func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Adapter {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	return NewHandler(Dependencies{
 		VisualizationRoot: binding.Visualization,
 	}, logger)
