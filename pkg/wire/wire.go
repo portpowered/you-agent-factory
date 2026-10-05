@@ -349,6 +349,7 @@ var servicesSet = wire.NewSet(
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewEngineOpening,
+	factoryruntimewire.NewOutboxOpening,
 	factoryruntimewire.NewDefinitionMapper,
 	provideRuntimePreparationWorkstationLoader,
 	factoryruntimewire.NewRuntimePreparation,

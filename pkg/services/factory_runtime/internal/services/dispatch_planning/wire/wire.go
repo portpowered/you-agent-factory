@@ -6,6 +6,11 @@ import (
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service"
 )
 
+// NewOpening selects reusable opening behavior without allocating an outbox.
+func NewOpening() dispatchplanning.OutboxOpening {
+	return internalservice.NewOpening()
+}
+
 // New constructs a dispatch-planning capability over the Workers publication
 // edge supplied by its Factory Runtime parent.
 func New(

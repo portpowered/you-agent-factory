@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
@@ -19,6 +20,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -998,14 +1000,28 @@ func TestNew_WithClockStampsDispatchesDeterministically(t *testing.T) {
 	}
 }
 
+type observedOutboxOpening struct {
+	dispatchplanning.OutboxOpening
+	calls int
+}
+
+func (opening *observedOutboxOpening) Open(
+	publisher dispatchplanning.WorkersPublisher,
+	canceler dispatchplanning.WorkersCanceler,
+) dispatchplanning.Service {
+	opening.calls++
+	return opening.OutboxOpening.Open(publisher, canceler)
+}
+
 func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
 	t.Parallel()
 	var identities atomic.Int64
 	newID := func() string { return fmt.Sprintf("opening-%d", identities.Add(1)) }
+	dispatchOpening := &observedOutboxOpening{OutboxOpening: dispatchplanningwire.NewOpening()}
 	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil,
 		interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
-		}), testRuntimeWorkService{}, newID, newID, nil, nil)
+		}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening)
 	selectOpening := func(cfg *testFactoryConfig) { cfg.engineOpening = opening }
 	if _, err := newTestFactory(selectOpening); err == nil {
 		t.Fatal("opening without a net succeeded")
@@ -1025,6 +1041,9 @@ func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
 		return engine
 	}
 	first, peer := open(base), open(base.Add(time.Hour))
+	if dispatchOpening.calls != 2 {
+		t.Fatalf("selected outbox openings = %d, want one per admitted runtime", dispatchOpening.calls)
+	}
 	peerBefore, err := peer.GetEngineStateSnapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)

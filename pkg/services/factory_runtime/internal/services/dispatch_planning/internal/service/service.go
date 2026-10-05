@@ -37,6 +37,23 @@ type intentRecord struct {
 
 var _ dispatchplanning.Service = (*Planner)(nil)
 
+// Opening owns stateless dispatch opening behavior. Each Open allocates only
+// the selected runtime's outbox state and retains its attempt callbacks.
+type Opening struct{}
+
+var _ dispatchplanning.OutboxOpening = (*Opening)(nil)
+
+func NewOpening() *Opening {
+	return &Opening{}
+}
+
+func (*Opening) Open(
+	publisher dispatchplanning.WorkersPublisher,
+	canceler dispatchplanning.WorkersCanceler,
+) dispatchplanning.Service {
+	return openOutbox(publisher, canceler)
+}
+
 // New constructs a dispatch planner without a Workers cancellation edge. It is
 // useful for inert planning and publication-only tests.
 func New(publisher dispatchplanning.WorkersPublisher) *Planner {
@@ -45,6 +62,13 @@ func New(publisher dispatchplanning.WorkersPublisher) *Planner {
 
 // NewWithCancellation constructs the complete Runtime-owned outbox boundary.
 func NewWithCancellation(
+	publisher dispatchplanning.WorkersPublisher,
+	canceler dispatchplanning.WorkersCanceler,
+) *Planner {
+	return openOutbox(publisher, canceler)
+}
+
+func openOutbox(
 	publisher dispatchplanning.WorkersPublisher,
 	canceler dispatchplanning.WorkersCanceler,
 ) *Planner {

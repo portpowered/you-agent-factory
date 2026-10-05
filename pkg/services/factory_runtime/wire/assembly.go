@@ -7,6 +7,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
@@ -129,6 +131,12 @@ func NewWorkstationRequestExecutor(service workers.Service,
 // EngineOpening owns the reusable engine collaborators; each Open owns fresh state.
 type EngineOpening = runtime.EngineOpening
 
+type OutboxOpening = dispatchplanning.OutboxOpening
+
+func NewOutboxOpening() OutboxOpening {
+	return dispatchplanningwire.NewOpening()
+}
+
 func NewEngineOpening(
 	interpolation factorydefinitions.InvocationInterpolationService,
 	providerSessions providersessions.Service,
@@ -140,6 +148,7 @@ func NewEngineOpening(
 	newID factoryruntime.IDGenerator,
 	runtimeDirs factoryruntime.RuntimeDirectoryFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	dispatchOpening OutboxOpening,
 ) *EngineOpening {
-	return runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping, workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes)
+	return runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping, workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening)
 }

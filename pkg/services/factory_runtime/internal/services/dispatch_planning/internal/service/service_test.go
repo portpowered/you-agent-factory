@@ -12,6 +12,52 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestOpeningKeepsPublicationAndStopStateIndependent(t *testing.T) {
+	t.Parallel()
+	opening := NewOpening()
+	ctx := context.Background()
+	var firstCalls, peerCalls, firstCancels int
+	first := opening.Open(func(context.Context, workers.WorkstationDispatchRequest) error {
+		firstCalls++
+		return nil
+	}, func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		firstCancels++
+		if request.DispatchID != "shared-dispatch" {
+			t.Fatalf("canceled dispatch = %q", request.DispatchID)
+		}
+		return workers.WorkstationDispatchCancelResult{}, nil
+	})
+	peer := opening.Open(func(context.Context, workers.WorkstationDispatchRequest) error {
+		peerCalls++
+		return nil
+	}, nil)
+	decision := runnableDecision("shared-dispatch", "shared-correlation", "review", "reviewer", "work-1")
+	planned, err := first.Plan(ctx, dispatchplanning.PlanRequest{Decisions: []dispatchplanning.RunnableDecision{decision}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := planned.Actions[0]
+	if _, err := first.Publish(ctx, action); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := peer.Intent(decision.Dispatch.DispatchID); ok {
+		t.Fatal("first publication appeared in peer outbox")
+	}
+	if err := first.Stop(ctx, dispatchplanning.RuntimeStopReasonTerminated); err != nil {
+		t.Fatal(err)
+	}
+	if peer.State().Mode != dispatchplanning.RuntimeOutboxModeActive {
+		t.Fatal("stopping first outbox stopped peer")
+	}
+	publication, err := peer.Publish(ctx, action)
+	if err != nil || publication.Outcome != dispatchplanning.PublicationOutcomeAccepted {
+		t.Fatalf("peer publication = %#v, %v; want independently accepted intent", publication, err)
+	}
+	if firstCalls != 1 || peerCalls != 1 || firstCancels != 1 {
+		t.Fatalf("runtime callback counts = %d/%d/%d, want 1/1/1", firstCalls, peerCalls, firstCancels)
+	}
+}
+
 func TestPlanPreservesSchedulerOrderAndCanonicalWorkersFacts(t *testing.T) {
 	t.Parallel()
 

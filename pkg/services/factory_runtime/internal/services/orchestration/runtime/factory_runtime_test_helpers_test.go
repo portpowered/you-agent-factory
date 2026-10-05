@@ -18,6 +18,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -198,7 +199,7 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 				return interfaces.WorkPropagationModeOutputAsPayload
 			}), testRuntimeWorkService{},
 			func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
-			func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil)
+			func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening())
 	}
 	runtime, err := opening.Open(
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil,

@@ -17,7 +17,6 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
-	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
@@ -138,6 +137,7 @@ var _ TickableFactory = (*factoryImpl)(nil)
 // EngineOpening retains reusable engine policy selected once by Wire.
 // Open allocates the marking, buffers, attempts and dispatch state for one runtime.
 type EngineOpening struct {
+	dispatchOpening            dispatchplanning.OutboxOpening
 	invocationInterpolation    interfaces.InvocationInterpolationService
 	providerSessions           providersessions.Service
 	quorumPolicy               interfaces.QuorumPolicyService
@@ -161,8 +161,10 @@ func NewEngineOpening(
 	newID factory.IDGenerator,
 	expectedArtifactFileSystemValue any,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	dispatchOpening dispatchplanning.OutboxOpening,
 ) *EngineOpening {
 	return &EngineOpening{
+		dispatchOpening:            dispatchOpening,
 		invocationInterpolation:    invocationInterpolation,
 		providerSessions:           providerSessions,
 		quorumPolicy:               quorumPolicy,
@@ -278,7 +280,7 @@ func (opening *EngineOpening) Open(
 	if err := reconcileRuntimeRestoredDispatches(cfg, effectiveEventHistory); err != nil {
 		return nil, err
 	}
-	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
+	dispatchResultHook, dispatchPlan, err := opening.configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
 	)
 	if err != nil {
@@ -487,7 +489,7 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 	}, f.clock.Now())
 }
 
-func configureRuntimeDispatch(
+func (opening *EngineOpening) configureRuntimeDispatch(
 	cfg *runtimeConfig,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	eventHistory recordings.RuntimeLedger,
@@ -506,7 +508,7 @@ func configureRuntimeDispatch(
 	canceler := func(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 		return cancelStatelessAttempt(ctx, cfg, request)
 	}
-	planner := dispatchplanningwire.New(
+	planner := opening.dispatchOpening.Open(
 		publisher,
 		canceler,
 	)
