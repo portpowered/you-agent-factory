@@ -26,7 +26,7 @@ import (
 )
 
 // Dedicated bounded stress cell: one Direct Worker Session, one script,
-// 10,048 small progress records, and a five-minute ceiling. The real default
+// 10,048 small progress records, and a six-minute total ceiling. The real default
 // Events ring (10,000 records) is evicted while the observer's HTTP connection
 // is gated. Capture commits are observed between 64-record batches to avoid
 // conflating ring eviction with capture overload. This proves continuity under
@@ -35,14 +35,19 @@ func TestCapturedFollowBackfillsEvictedEventsRing(t *testing.T) {
 	if testing.Short() {
 		t.Skip("dedicated Events retention stress cell")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 	defer cancel()
+	// Bound priming separately so a slow real-store setup cannot consume the
+	// entire observer/reconnect verification window. This is a continuity cell,
+	// not a latency verdict; L1 retains its own customer timing thresholds.
+	setupCtx, stopSetup := context.WithTimeout(ctx, 5*time.Minute)
+	defer stopSetup()
 	dir := prepareEvictionFactory(t)
 	gate := &evictionConnection{entered: make(chan struct{}), release: make(chan struct{})}
 	runner := &evictionScript{started: make(chan struct{}), batches: make(chan int), finish: make(chan struct{})}
 	baseURL, execute := startEvictionHost(t, ctx, dir, gate, runner)
-	id := admitEvictionScript(t, ctx, baseURL, runner.started)
-	prefix := waitEvictionCapture(t, ctx, baseURL, id, 2)
+	id := admitEvictionScript(t, setupCtx, baseURL, runner.started)
+	prefix := waitEvictionCapture(t, setupCtx, baseURL, id, 2)
 	if prefix.NextToken == nil || prefix.CommittedPosition != 2 {
 		t.Fatalf("initial capture not resumable: %+v", prefix)
 	}
@@ -51,20 +56,21 @@ func TestCapturedFollowBackfillsEvictedEventsRing(t *testing.T) {
 	go func() {
 		done <- execute(ctx, &output, "--server", baseURL, "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--follow", "--output", "json")
 	}()
-	waitEvictionSignal(t, ctx, gate.entered)
+	waitEvictionSignal(t, setupCtx, gate.entered)
 	// The observer has drained positions 1..2; hold its notification connection
 	// until the source ring has lost that prefix. Its durable token stays valid.
 	for emitted := 0; emitted < 10048; emitted += 64 {
 		select {
 		case runner.batches <- 64:
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+		case <-setupCtx.Done():
+			t.Fatal(setupCtx.Err())
 		}
-		waitEvictionCapture(t, ctx, baseURL, id, int64(emitted+66))
+		waitEvictionCapture(t, setupCtx, baseURL, id, int64(emitted+66))
 		if emitted%2048 == 0 {
 			t.Logf("committed progress records=%d", emitted+64)
 		}
 	}
+	stopSetup()
 	assertEvictedPublicEvents(t, ctx, baseURL, id)
 	close(gate.release)
 	close(runner.finish)
@@ -258,7 +264,9 @@ func waitEvictionCapture(t *testing.T, ctx context.Context, baseURL, id string, 
 	t.Helper()
 	// Durable commits have no public subscription. Poll only their watermark;
 	// the bounded cadence is an observation mechanism, never a readiness sleep.
-	ticker := time.NewTicker(10 * time.Millisecond)
+	// Leave the real capture writer time to commit each bounded batch rather
+	// than repeatedly acquiring its read barrier during stress setup.
+	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		body := fleetProfileHTTP(t, ctx, http.MethodGet, baseURL+"/worker-sessions/"+id+"/logs?limit=1", nil)
