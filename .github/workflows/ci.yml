@@ -855,11 +855,10 @@ jobs:
         run: |
           make golangci-build
           python3 scripts/lint-migration-smoke.py manifest --golangci "$PWD/.artifacts/golangci/golangci-repository"
-      - name: Verify generated-host deadcode boundary
+      - name: Verify direct upstream deadcode boundary
         run: |
-          go test ./cmd/deadcodecheck -count=1 -timeout 3m
-          go build -o .artifacts/golangci/deadcodecheck ./cmd/deadcodecheck
-          python3 scripts/deadcode-host-smoke.py --checker "$PWD/.artifacts/golangci/deadcodecheck"
+          python3 -m unittest discover -s scripts -p "deadcode_report_test.py"
+          python3 scripts/deadcode-host-smoke.py --reporter "$PWD/scripts/deadcode-report.py" -- go run golang.org/x/tools/cmd/deadcode@v0.25.1
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
