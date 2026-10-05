@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
@@ -334,6 +335,7 @@ func TestRootUpdateACPAgentProfile_RejectsCodecEncodeFailureWithoutReplacement(t
 	}
 
 	failingRoot := newFilesystemRootWithOptions(t, filesystemRootOptions{
+		logger:     logging.NoopLogger{},
 		files:      platformfilesystem.Local{},
 		createTemp: testCreateTemporaryFile,
 		decode:     globalconfigmapping.Decode,
@@ -419,6 +421,7 @@ func TestRootUpdateACPAgentProfile_RejectsPublishFailureWithExistingDocumentInta
 	}
 
 	failingRoot := newFilesystemRootWithOptions(t, filesystemRootOptions{
+		logger:     logging.NoopLogger{},
 		files:      &renameFailingFileSystem{FileSystem: platformfilesystem.Local{}},
 		createTemp: testCreateTemporaryFile,
 		decode:     globalconfigmapping.Decode,
