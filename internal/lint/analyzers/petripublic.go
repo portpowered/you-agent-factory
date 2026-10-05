@@ -1,7 +1,9 @@
 package analyzers
 
 import (
+	"go/ast"
 	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/analysis"
 )
@@ -20,6 +22,7 @@ func runPetriPublic(pass *analysis.Pass) (any, error) {
 	if !ok || under(unit, "pkg/services/factory_runtime/internal") {
 		return nil, nil
 	}
+	petriReferenceFindings(pass, unit)
 	var found []violation
 	scope := pass.Pkg.Scope()
 	for _, name := range scope.Names() {
@@ -38,6 +41,70 @@ func runPetriPublic(pass *analysis.Pass) (any, error) {
 	reportAgainstBaseline(pass, unit, map[string]bool{"petri-public": true}, found, false)
 	return nil, nil
 }
+
+// References to retired root contracts are prohibited even inside private
+// declarations. Resolve the referenced object, not its spelling: aliases and
+// dot imports cannot hide a reference, and local shadows are unrelated.
+func petriReferenceFindings(pass *analysis.Pass, unit string) {
+	var found []violation
+	selected := map[string]bool{}
+	hasTests := false
+	for _, file := range pass.Files {
+		path := serviceSource(pass, unit, file)
+		selected[path] = true
+		hasTests = hasTests || strings.HasSuffix(path, "_test.go")
+		if ast.IsGenerated(file) || strings.Contains("/"+path, "/testdata/") {
+			continue
+		}
+		found = append(found, inspectPetriReferences(pass, file, unit, path)...)
+	}
+	reportWithBaseline(pass, unit, setOf("petri-reference"), countedTestPolicy(found), hasTests, petriReferenceBaseline(pass, unit, selected, hasTests))
+}
+
+func inspectPetriReferences(pass *analysis.Pass, file *ast.File, unit, path string) []violation {
+	var found []violation
+	ast.Inspect(file, func(node ast.Node) bool {
+		id, ok := node.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		obj := pass.TypesInfo.Uses[id]
+		if obj == nil || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() {
+			return true
+		}
+		owner := strings.TrimPrefix(obj.Pkg().Path(), modulePrefix)
+		if obj.Pkg().Path() == modulePrefix+owner && petriReferenceOwners[owner] && petriReferenceSymbols[obj.Name()] {
+			found = append(found, violation{rule: "petri-reference", importer: unit,
+				importee: path + "#" + owner + "." + obj.Name(), pos: id.Pos(),
+				hint: "keep live engine references inside Factory Runtime internals; authored PETRI configuration remains allowed"})
+		}
+		return true
+	})
+	return found
+}
+
+func petriReferenceBaseline(pass *analysis.Pass, unit string, selected map[string]bool, hasTests bool) map[string]struct{} {
+	ignored := map[string]bool{}
+	for _, name := range pass.IgnoredFiles {
+		ignored[sourceName(unit, name)] = true
+	}
+	listed := baseline()
+	for key := range listed {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) != 3 || parts[0] != "petri-reference" || parts[1] != unit {
+			continue
+		}
+		path, _, _ := strings.Cut(parts[2], "#")
+		if !selected[path] && (ignored[path] || (!hasTests && strings.HasSuffix(path, "_test.go"))) {
+			delete(listed, key)
+		}
+	}
+	return listed
+}
+
+var petriReferenceOwners = setOf("pkg/services/factory_runtime", "pkg/services/factory_definitions", "pkg/services/factory_definitions/internal/contracts")
+
+var petriReferenceSymbols = setOf("Net", "RuntimeNet", "PetriMarking", "PetriMarkingSnapshot", "RuntimeToken", "RuntimeTokenColor", "PetriTransition", "EnabledTransition", "EngineStateSnapshot", "StateSnapshot", "NewEngineStateSnapshot")
 
 // Each exported root owns its visited set: cycles terminate without hiding a
 // second root's leak. The baseline reporter deduplicates repeated leaked types.

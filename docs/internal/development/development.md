@@ -174,7 +174,7 @@ unit command enumerates only
 `./pkg/...`, then uses the shared `internal/testlanes` policy to exclude
 specialized packages. Code under `cmd/`, `internal/`, `tests/`, root
 `contracts/`, and the Go UI embed package is intentionally outside unit
-discovery. `make test-lane-audit` verifies that every required Go test package
+discovery. The TestLane analyzer in `make repolint` verifies that every required Go test package
 has one primary owner. Unit, functional, and lint package concurrency defaults
 to the bounded `GO_LANE_BUDGET`: `max(2, logical CPUs /
 YOU_EXPECTED_CONCURRENT_LANES)`, with the divisor defaulting to 4. The
@@ -226,7 +226,78 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make pkg-maint` is the stable maintainer and reviewer command path for the handwritten `pkg/` maintainability lane. It runs `go run ./cmd/pkgmaintcheck -root .`, scans only owned `pkg/` Go source, excludes generated artifacts and `testdata` through the same repo-owned path rules as the backend size gate, and reports `file-lines`, `function-lines`, and `cyclomatic-complexity` violations with actual values and configured limits. The current thresholds are 1000 file lines, 100 function lines, and cyclomatic complexity 15. Use rule-scoped inline directives only when a later maintainability story needs a narrow exception tied to a concrete runtime, boundary, or generated-artifact constraint: `pkgmaintcheck:ignore-file-lines`, `pkgmaintcheck:ignore-function-lines`, or `pkgmaintcheck:ignore-cyclomatic-complexity`, each paired with a reviewer-readable justification comment and a matching accountable entry in `docs/internal/baselines/backend-exemption-budget.json`.
 
-Burn down an exemption by removing both the inline directive and its matching `docs/internal/baselines/backend-exemption-budget.json` entry in the same change, then run `make backend-size` and `make pkg-maint`. Removing only the directive leaves a stale entry and fails the applicable command; removing both lowers the checked baseline without requiring cleanup of unrelated exemptions. The exemption budget covers only these size and complexity directives. Root package-family and migration-shim policy remains exclusively owned by `make pkg-boundary`.
+Burn down an exemption by removing both the inline directive and its matching `docs/internal/baselines/backend-exemption-budget.json` entry in the same change, then run `make backend-size` and `make pkg-maint`. Removing only the directive leaves a stale entry and fails the applicable command; removing both lowers the checked baseline without requiring cleanup of unrelated exemptions. The exemption budget covers only these size and complexity directives. Root package-family policy is enforced by the shared Layering analyzer through `make repolint`; remaining migration-shim policy stays in `make pkg-boundary`.
+
+The `Behavior` analyzer in `make repolint` also owns Initializer import,
+product lifecycle mode/slot, edge-bag, retired declaration, command-construction,
+and stream-stat boundaries. It consumes compiler AST and resolved objects,
+preserves exact lifecycle import allowances and excludes tests/generated sources
+for these rules. These Initializer boundary rules have no legacy debt and reject
+every occurrence; the legacy scanner and unused store loader are retired.
+
+The `ProcessEdges` analyzer in `make repolint` owns the zero-debt Process Edges
+contract rules: no Models-wire imports (including tests and descendants), only
+`Edges` and the reviewed types in `models_effects.go` at the root, and exactly
+Models' `service_contract.go:Service` interface. These checks consume compiler
+files, including generated production declarations. Package documentation is
+reviewed as architecture prose; literal documentation phrases are not gated.
+It also rejects Workers' `CommandRunner`, `CommandRequest` and `CommandResult`
+in functional sources and the exact shared `provider_command_runner.go` fake.
+Compiler identities cover aliases and dot imports without confusing local
+lookalikes; Platform process ports remain allowed. Generated sources stay in
+scope and every occurrence is rejected without debt allowances.
+The `ProviderOwnership` analyzer owns zero-debt Providers leaf effect and
+catalog/execution ownership. Compiler-resolved types preserve the exact Workers
+request bridge and direct leaf aggregation allowances, rejecting redeclarations,
+wrappers and competing provider families. Generated production declarations are
+checked; test declarations are excluded.
+The `TestBoundary` analyzer owns zero-debt cross-owner test Work normalization
+and functional-test transport composition (with exact generated HTTP client
+and contract allowances). Transport test `PrepareInvocationInput` declarations
+may only delegate directly to a receiver callback; parsing, normalization and
+authored response policy remain Work-owned.
+HTTP transport tests also reject internal engine literals for the five retired
+runtime types, resolving aliases and dot imports through compiler identities.
+Detached public results and tests outside HTTP transport retain their scope.
+Service tests cannot construct the customer process, and transport tests retain
+only the six exact reviewed command-inventory/parity source exceptions. Built
+CLI harness construction is prohibited throughout package tests. These checks
+resolve calls and captured function references without permitting debt.
+Compiler-resolved function references cover aliases, dot imports and captured
+values in test files and reusable test support. Work-owned tests remain allowed;
+generated files and ordinary production consumers are excluded.
+Test policy for named Factory paths, Operator Settings paths/environment, and
+mock Worker configuration also remains service-owned. Exact service owners and
+Wire composition are allowed; other tests and reusable support cannot call or
+capture those policy functions. Exact compiler-observed file/symbol/count debt
+is recorded in the shared baseline; count changes and stale entries fail.
+Transport tests also reject the exact named service-policy operations and local
+Provider Session policy helpers through `TestBoundary`. Compiler identities
+preserve alias/dot imports and captured callable values while allowing detached
+results and same-named methods. Exact source/symbol/count debt uses the shared
+baseline; the legacy test-behavior walker and its baseline-writing flag are retired.
+`Layering` enforces generated-only source at the exact HTTP client and server
+contract package roots, including tests and compiler-excluded Go inputs.
+Descendant packages remain allowed to contain handwritten source. This rule
+has no debt allowance; its legacy source walker is retired.
+`Layering` also owns `constructed-service-edges`: production service sources,
+including generated and compiler-excluded Go inputs, cannot import the broad
+`pkg/services/edges` bag. The edges owner and its descendants, tests, and
+testdata fixtures retain their exemptions. Its legacy scanner is retired.
+`Layering` rejects ordinary production consumers importing service implementation
+subpackages through `external-service-subpackage`, alongside its existing
+service, initializer and platform import rules. Wire composition, service owners
+and matching protocol adapters remain allowed; generated files and testdata
+fixtures retain their exemptions. Go enforces service-internal visibility.
+Compiler-excluded imports are checked too. Tests retain the existing
+`service-subpackage` policy, including public service transport adapters.
+The converged-import walker is retired.
+`Layering` also rejects compiler-visible recreation of retired package roots
+and their descendants through `retired-package-root`, reporting the canonical
+owner even for generated and test units. This rule has no debt allowance.
+The duplicate directory scanner is retired; empty directory scaffolding is
+obsolete and does not constitute a Go package.
+Other unmigrated boundary rules remain in `make pkg-boundary`.
 
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/baselines/frontend-deadcode-baseline.json`. The backend analyzer uses production entrypoints only, so production code referenced exclusively by tests remains a dead-code finding. It writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/baselines/deadcode-baseline.txt`. Review any drift before updating either baseline.
 
@@ -814,3 +885,17 @@ Successful graph saves converge the document plane and live snapshot without a f
 - [Dashboard UI Bun Validation](dashboard-ui-bun-validation.md)
 - [Agent Factory Intent](../intents/agent-factory.md)
 - [Standards Index](../standards/STANDARDS.md)
+
+Transport behavior rules run through the compiler-backed `Behavior` analyzer.
+The legacy transport walker and its JSON baseline are retired. Existing
+package-level transport debt also requires exact `transport-recorded-site`
+source/symbol/count keys in the shared analyzer baseline; neighboring files and
+additional occurrences fail. Compiler metadata rejects removed source owners.
+
+`Petripublic` also enforces references to the exact retired Factory Runtime and
+Factory Definitions root contracts, including private declarations, tests and
+captured values. Compiler identities preserve aliases and dot imports while
+ignoring local shadows and unrelated objects. Factory Runtime internals,
+generated sources and testdata retain their exemptions. Exact file/symbol/count
+debt uses `petri-reference` in the shared baseline; the Petri surface walker and
+its JSON store are retired. `petri-public` exported-type enforcement is unchanged.

@@ -71,9 +71,6 @@ func countClassifiedDependencyViolations(findings scanResult) classifiedDependen
 	for _, finding := range findings.serviceConstructionFindings {
 		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
 	}
-	for _, finding := range findings.externalImplementationFindings {
-		counts.add(effectiveBoundarySourceClass(finding.class, finding.filePath))
-	}
 	for _, entry := range findings.staleServiceConstructionEntries {
 		class, err := sourceClassFromBaseline(entry.Class, entry.FilePath)
 		if err == nil {
@@ -105,17 +102,12 @@ func countProductionBoundaryFindings[T any](findings []T, class func(T) boundary
 func testOnlyDependencyFindings(findings scanResult) scanResult {
 	result := scanResult{}
 	result.serviceConstructionFindings = filterServiceConstructionFindingsByClass(findings.serviceConstructionFindings, testOnlySourceClass)
-	result.externalImplementationFindings = filterTransportImplementationFindingsByClass(findings.externalImplementationFindings, testOnlySourceClass)
 	result.staleServiceConstructionEntries = filterServiceConstructionBaselineEntriesByClass(findings.staleServiceConstructionEntries, testOnlySourceClass)
 	return result
 }
 
 func filterServiceConstructionFindingsByClass(findings []serviceConstructionFinding, want boundarySourceClass) []serviceConstructionFinding {
 	return filterByClass(findings, want, func(finding serviceConstructionFinding) boundarySourceClass { return finding.class }, func(finding serviceConstructionFinding) string { return finding.filePath })
-}
-
-func filterTransportImplementationFindingsByClass(findings []transportServiceImplementationFinding, want boundarySourceClass) []transportServiceImplementationFinding {
-	return filterByClass(findings, want, func(finding transportServiceImplementationFinding) boundarySourceClass { return finding.class }, func(finding transportServiceImplementationFinding) string { return finding.filePath })
 }
 
 func filterServiceConstructionBaselineEntriesByClass(findings []serviceConstructionBaselineEntry, want boundarySourceClass) []serviceConstructionBaselineEntry {
@@ -133,4 +125,19 @@ func filterByClass[T any](findings []T, want boundarySourceClass, class func(T) 
 		}
 	}
 	return filtered
+}
+
+func bytesContainGeneratedMarker(content []byte) bool {
+	const marker = "Code generated "
+	const suffix = " DO NOT EDIT."
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "package ") {
+			return false
+		}
+		if strings.HasPrefix(trimmed, "// "+marker) && strings.Contains(trimmed, suffix) {
+			return true
+		}
+	}
+	return false
 }
