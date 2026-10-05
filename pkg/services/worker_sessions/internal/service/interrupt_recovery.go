@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -46,9 +47,30 @@ func (r *registry) replayDurableInterrupt(ctx context.Context, req workersession
 	if record.Target != target {
 		return result, true, newInterruptError(result.Phase, result, workersessions.ErrInterruptSourceConflict)
 	}
+	if err := r.validateInterruptReplayInput(ctx, key, req, record, payload); err != nil {
+		r.logger.Warn("worker session interrupt replay refused", "sessionID", req.SourceWorkerSessionID, "requestID", req.RequestID, "phase", "VALIDATION", "outcome", "persistence_unavailable")
+		return result, true, newInterruptError(result.Phase, result, err)
+	}
 	replayed, replayErr := decodeInterruptOutcome(req, record)
 	r.logger.Info("worker session interrupt replay", "sessionID", req.SourceWorkerSessionID, "requestID", req.RequestID, "phase", record.Operation.Phase, "outcome", "read_only")
 	return replayed, true, replayErr
+}
+
+// The journal digest identifies the original tuple; the immutable artifact is
+// its recoverable input. Both must agree before a stored outcome is trusted.
+// Read failures are normalized so filesystem/provider details stay private.
+func (r *registry) validateInterruptReplayInput(ctx context.Context, key recordings.WorkerControlOperationKey, req workersessions.InterruptRequest, record recordings.WorkerControlOperationRecord, payload []byte) error {
+	operation := record.Operation
+	if operation.Version != 1 || operation.ResumeMode != "provider" || operation.RequestID != req.RequestID ||
+		operation.WorkerSessionID != req.SourceWorkerSessionID || operation.ExpectedAttemptID == "" ||
+		operation.ExpectedAttemptID != record.Target.ExpectedAttemptID || record.InputArtifactRef == "" {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	stored, err := r.operations.ReadWorkerControlInput(ctx, key, record.InputArtifactRef)
+	if err != nil || !bytes.Equal(stored, payload) {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	return nil
 }
 
 func (r *registry) interruptReplayCapture(ctx context.Context, id string) (recordings.WorkerControlTarget, error) {

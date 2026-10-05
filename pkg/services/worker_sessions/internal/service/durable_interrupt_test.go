@@ -15,10 +15,12 @@ import (
 
 type interruptInputStore struct {
 	stopOperationStore
-	input    json.RawMessage
-	writeErr error
-	readErr  error
-	corrupt  bool
+	input         json.RawMessage
+	writeErr      error
+	readErr       error
+	corrupt       bool
+	readKeys      []recordings.WorkerControlOperationKey
+	ignoreLoadKey bool // Inject a corrupt store response at the coordinator boundary.
 }
 
 func (s *interruptInputStore) LoadWorkerControlOperation(_ context.Context, key recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
@@ -26,7 +28,7 @@ func (s *interruptInputStore) LoadWorkerControlOperation(_ context.Context, key 
 		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
 	}
 	record := s.records[len(s.records)-1]
-	if interruptOperationKey(record) != key {
+	if !s.ignoreLoadKey && interruptOperationKey(record) != key {
 		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
 	}
 	return record.Detached(), nil
@@ -40,11 +42,90 @@ func (s *interruptInputStore) PersistWorkerControlInput(_ context.Context, _ rec
 	return "scoped-input", nil
 }
 
-func (s *interruptInputStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
+func (s *interruptInputStore) ReadWorkerControlInput(_ context.Context, key recordings.WorkerControlOperationKey, ref string) (json.RawMessage, error) {
+	s.readKeys = append(s.readKeys, key)
+	if ref != "scoped-input" {
+		return nil, os.ErrNotExist
+	}
 	if s.corrupt {
 		return json.RawMessage(`{}`), nil
 	}
 	return append(json.RawMessage(nil), s.input...), s.readErr
+}
+
+func TestInterruptJournalReplayRequiresExactCapturedInput(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"intact", "missing", "corrupt", "changed-input", "read-failure", "missing-ref", "foreign-ref", "unknown-version", "recorded-mode", "wrong-request", "wrong-worker", "wrong-attempt", "missing-attempt"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseValidation, false)
+			if err := r.commitInterruptResult(t.Context(), operation, result, workersessions.ErrInterruptSourceConflict); err != nil {
+				t.Fatal(err)
+			}
+			mutateInterruptCapturedInput(scenario, store)
+			calls := 0
+			plan.supervision.installCancel(func() { calls++ })
+			replayed, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+			want := recordings.ErrWorkerRecordingPersistence
+			if scenario == "intact" {
+				want = workersessions.ErrInterruptSourceConflict
+				if !reflect.DeepEqual(replayed, result) {
+					t.Fatalf("intact captured result changed: %#v", replayed)
+				}
+			}
+			if !found || !errors.Is(replayErr, want) || replayed.Accepted || calls != 0 || strings.Contains(replayErr.Error(), "private-input-path") {
+				t.Fatalf("captured replay=%#v found=%v err=%v effects=%d", replayed, found, replayErr, calls)
+			}
+			if len(store.records) != 2 {
+				t.Fatalf("read-only replay appended %d records", len(store.records))
+			}
+			for _, key := range store.readKeys {
+				if key != interruptOperationKey(*operation) {
+					t.Fatalf("input read crossed scoped key: %#v", key)
+				}
+			}
+			assertNoSuccessor(t, r, "successor")
+		})
+	}
+}
+
+func mutateInterruptCapturedInput(scenario string, store *interruptInputStore) {
+	record := &store.records[len(store.records)-1]
+	switch scenario {
+	case "missing":
+		store.readErr = os.ErrNotExist
+	case "corrupt":
+		store.corrupt = true
+	case "changed-input":
+		var input workersessions.InterruptRequest
+		_ = json.Unmarshal(store.input, &input)
+		input.ReplacementMessage = "different replacement"
+		store.input, _ = json.Marshal(input)
+	case "read-failure":
+		store.readErr = errors.New("private-input-path")
+	case "missing-ref":
+		record.InputArtifactRef = ""
+	case "foreign-ref":
+		record.InputArtifactRef = "foreign-profile-input"
+	case "unknown-version":
+		record.Operation.Version++
+	case "recorded-mode":
+		record.Operation.ResumeMode = "recorded"
+	case "wrong-request":
+		record.Operation.RequestID = "other-request"
+		store.ignoreLoadKey = true
+	case "wrong-worker":
+		record.Operation.WorkerSessionID = "other-worker"
+	case "wrong-attempt":
+		record.Operation.ExpectedAttemptID = "other-attempt"
+	case "missing-attempt":
+		record.Operation.ExpectedAttemptID = ""
+	}
 }
 
 func newDurableInterruptFixture(t *testing.T) (*registry, interruptPlan, *interruptInputStore) {

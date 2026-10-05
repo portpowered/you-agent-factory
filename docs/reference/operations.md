@@ -464,7 +464,10 @@ Retry an interrupt with the same request ID, source, successor, and replacement
 message. A committed result preserves its phase and source/successor identity
 and state without stopping or admitting another execution. A recovered
 admission failure leaves the source stopped. Use session inspection for richer
-session metadata. An incomplete durable operation reports execution unavailable
+session metadata. Durable replay validates the captured replacement input against
+the original request. Missing or corrupt captured input reports persistence
+unavailable without stopping a Worker Session or admitting a successor.
+An incomplete durable operation reports execution unavailable
 until its prior ownership and admission can be reconciled safely; submitting
 the same request does not blindly repeat its effects.
 
