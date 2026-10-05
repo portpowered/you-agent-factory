@@ -927,6 +927,7 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		return workersessions.ErrPublicationNotOpen
 	}
 	pub.open = false
+	pub.terminalAttemptID = attemptID
 	recording := pub.recording
 	pub.recording = nil
 	draft.Provenance = lifecycleProvenance(pub.provider)

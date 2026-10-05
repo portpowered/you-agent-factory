@@ -1800,6 +1800,11 @@ export interface components {
       recordingHealth?: WorkerSessionObservationRecordingHealth;
       /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
       recordingHealthReason?: string;
+      /**
+       * @description Why the attempt ended. Null while nonterminal. Operator causes require a committed control operation for this exact attempt.
+       * @enum {string|null}
+       */
+      terminalCause?: WorkerSessionObservationTerminalCause;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
     };
     /** @description Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics. */
@@ -10615,6 +10620,17 @@ export const WorkerSessionObservationRecordingHealth = {
 } as const;
 export type WorkerSessionObservationRecordingHealth =
   (typeof WorkerSessionObservationRecordingHealth)[keyof typeof WorkerSessionObservationRecordingHealth];
+export const WorkerSessionObservationTerminalCause = {
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  OPERATOR_CANCEL: "OPERATOR_CANCEL",
+  OPERATOR_TERMINATE: "OPERATOR_TERMINATE",
+  OPERATOR_KILL: "OPERATOR_KILL",
+  OPERATOR_INTERRUPT: "OPERATOR_INTERRUPT",
+  OWNER_LOST: "OWNER_LOST",
+} as const;
+export type WorkerSessionObservationTerminalCause =
+  (typeof WorkerSessionObservationTerminalCause)[keyof typeof WorkerSessionObservationTerminalCause];
 export const WorkerSessionEventRecordingHealth = {
   WorkerSessionEventRecordingHealthComplete: "COMPLETE",
   WorkerSessionEventRecordingHealthDegraded: "DEGRADED",

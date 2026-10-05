@@ -98,6 +98,9 @@ func TestExactStopControlPersistenceLossKeepsLiveStopAvailable(t *testing.T) {
 				if shown.State != want || runner.callCount() != 1 {
 					t.Fatalf("joined stop state=%s calls=%d", shown.State, runner.callCount())
 				}
+				if shown.TerminalCause != nil {
+					t.Fatalf("uncommitted stop claimed terminal cause %s", *shown.TerminalCause)
+				}
 				logs := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/stop-worker/logs")
 				if logs.Health != factoryapi.DEGRADED || logs.CommittedPosition < prefix.CommittedPosition || len(logs.Events) < len(prefix.Events) || !reflect.DeepEqual(logs.Events[:len(prefix.Events)], prefix.Events) {
 					t.Fatalf("degraded stopped capture=%+v", logs)

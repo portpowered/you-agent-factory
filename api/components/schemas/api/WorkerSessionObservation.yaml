@@ -131,5 +131,12 @@ properties:
   recordingHealthReason:
     type: string
     description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
+  terminalCause:
+    type: string
+    nullable: true
+    enum: [COMPLETED, FAILED, OPERATOR_CANCEL, OPERATOR_TERMINATE, OPERATOR_KILL, OPERATOR_INTERRUPT, OWNER_LOST]
+    description: >-
+      Why the attempt ended. Null while nonterminal. Operator causes require a
+      committed control operation for this exact attempt.
   parse:
     $ref: './WorkerSessionParseDiagnostics.yaml'

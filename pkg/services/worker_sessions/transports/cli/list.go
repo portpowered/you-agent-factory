@@ -213,6 +213,7 @@ type listJSONObservation struct {
 	ReasoningEffort          *string                                             `json:"reasoningEffort"`
 	RecordingHealth          *factoryapi.WorkerSessionObservationRecordingHealth `json:"recordingHealth"`
 	RecordingHealthReason    *string                                             `json:"recordingHealthReason"`
+	TerminalCause            *factoryapi.WorkerSessionObservationTerminalCause   `json:"terminalCause"`
 	StartedAt                *time.Time                                          `json:"startedAt"`
 	State                    factoryapi.WorkerSessionObservationState            `json:"state"`
 	ConfirmationState        factoryapi.ConfirmationState                        `json:"confirmationState"`

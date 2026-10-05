@@ -41,6 +41,7 @@ func (s *LogReader) GetObservationByWorkerSessionID(ctx context.Context, req wor
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
+	result.TerminalCause = s.archivedTerminalCause(ctx, page, result)
 	result.TokenUsage, err = s.archivedCapturedUsage(ctx, page, id)
 	if err != nil {
 		return workersessions.Observation{}, err

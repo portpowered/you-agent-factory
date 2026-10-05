@@ -345,6 +345,13 @@ identity, start time, usage, and capture health. Unknown end times and durations
 remain absent. A history without a captured terminal remains readable through
 `read --view logs`, but its summary is unavailable.
 
+Worker Session summaries expose `terminalCause` when the reason is known.
+Live sessions report no terminal cause. Natural outcomes report `COMPLETED` or
+`FAILED`. `OPERATOR_CANCEL` and `OPERATOR_TERMINATE` require a committed,
+applied control for the exact attempt. Failed persistence or a no-op control
+does not establish an operator cause. Older captures may leave the cause
+unknown. The existing `failure.kind` classification remains available separately.
+
 Logs pages include the recording generation, committed position, capture
 health, and ordered events. New committed events include `capturedAt`, the
 host capture time. Older events omit this field. Capture health describes the

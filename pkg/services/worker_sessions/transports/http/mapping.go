@@ -647,6 +647,10 @@ func mapWorkerSessionIdentity(result *factoryapi.WorkerSessionObservation, obser
 }
 
 func mapWorkerSessionResolvedFacts(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
+	if observation.TerminalCause != nil {
+		cause := factoryapi.WorkerSessionObservationTerminalCause(*observation.TerminalCause)
+		result.TerminalCause = &cause
+	}
 	if observation.Model != nil {
 		result.Model = cloneString(observation.Model)
 	}

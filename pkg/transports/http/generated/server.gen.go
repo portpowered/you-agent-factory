@@ -1027,9 +1027,9 @@ const (
 
 // Defines values for OrchestratorPhaseStatus.
 const (
-	ACTIVE    OrchestratorPhaseStatus = "ACTIVE"
-	COMPLETED OrchestratorPhaseStatus = "COMPLETED"
-	SKIPPED   OrchestratorPhaseStatus = "SKIPPED"
+	OrchestratorPhaseStatusACTIVE    OrchestratorPhaseStatus = "ACTIVE"
+	OrchestratorPhaseStatusCOMPLETED OrchestratorPhaseStatus = "COMPLETED"
+	OrchestratorPhaseStatusSKIPPED   OrchestratorPhaseStatus = "SKIPPED"
 )
 
 // Defines values for PromptTemplateDiagnosticKind.
@@ -1536,6 +1536,17 @@ const (
 	WorkerSessionObservationStateRunning    WorkerSessionObservationState = "RUNNING"
 	WorkerSessionObservationStateStarting   WorkerSessionObservationState = "STARTING"
 	WorkerSessionObservationStateTerminated WorkerSessionObservationState = "TERMINATED"
+)
+
+// Defines values for WorkerSessionObservationTerminalCause.
+const (
+	WorkerSessionObservationTerminalCauseCOMPLETED         WorkerSessionObservationTerminalCause = "COMPLETED"
+	WorkerSessionObservationTerminalCauseFAILED            WorkerSessionObservationTerminalCause = "FAILED"
+	WorkerSessionObservationTerminalCauseOPERATORCANCEL    WorkerSessionObservationTerminalCause = "OPERATOR_CANCEL"
+	WorkerSessionObservationTerminalCauseOPERATORINTERRUPT WorkerSessionObservationTerminalCause = "OPERATOR_INTERRUPT"
+	WorkerSessionObservationTerminalCauseOPERATORKILL      WorkerSessionObservationTerminalCause = "OPERATOR_KILL"
+	WorkerSessionObservationTerminalCauseOPERATORTERMINATE WorkerSessionObservationTerminalCause = "OPERATOR_TERMINATE"
+	WorkerSessionObservationTerminalCauseOWNERLOST         WorkerSessionObservationTerminalCause = "OWNER_LOST"
 )
 
 // Defines values for WorkerSessionObservationTranscript.
@@ -9163,11 +9174,14 @@ type WorkerSessionObservation struct {
 	RecordingHealth *WorkerSessionObservationRecordingHealth `json:"recordingHealth,omitempty"`
 
 	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
-	RecordingHealthReason *string                            `json:"recordingHealthReason,omitempty"`
-	StartedAt             *time.Time                         `json:"startedAt"`
-	State                 WorkerSessionObservationState      `json:"state"`
-	TokenUsage            *ProviderSessionTokenUsage         `json:"tokenUsage,omitempty"`
-	Transcript            WorkerSessionObservationTranscript `json:"transcript"`
+	RecordingHealthReason *string                       `json:"recordingHealthReason,omitempty"`
+	StartedAt             *time.Time                    `json:"startedAt"`
+	State                 WorkerSessionObservationState `json:"state"`
+
+	// TerminalCause Why the attempt ended. Null while nonterminal. Operator causes require a committed control operation for this exact attempt.
+	TerminalCause *WorkerSessionObservationTerminalCause `json:"terminalCause"`
+	TokenUsage    *ProviderSessionTokenUsage             `json:"tokenUsage,omitempty"`
+	Transcript    WorkerSessionObservationTranscript     `json:"transcript"`
 
 	// TurnId Optional turn correlation identifier.
 	TurnId *string `json:"turnId"`
@@ -9196,6 +9210,9 @@ type WorkerSessionObservationRecordingHealth string
 
 // WorkerSessionObservationState defines model for WorkerSessionObservation.State.
 type WorkerSessionObservationState string
+
+// WorkerSessionObservationTerminalCause Why the attempt ended. Null while nonterminal. Operator causes require a committed control operation for this exact attempt.
+type WorkerSessionObservationTerminalCause string
 
 // WorkerSessionObservationTranscript defines model for WorkerSessionObservation.Transcript.
 type WorkerSessionObservationTranscript string

@@ -329,7 +329,10 @@ type Observation struct {
 	RecordingHealth       recordings.WorkerRecordingStatus
 	RecordingHealthReason string
 	Failure               *FailureCause
-	Parse                 ParseDiagnostics
+	// TerminalCause is known only from a natural terminal outcome or a
+	// committed, causally applied control for the exact captured attempt.
+	TerminalCause *string
+	Parse         ParseDiagnostics
 }
 
 // Validate reports whether an observation has a coherent detached identity,
@@ -443,6 +446,7 @@ func (o Observation) Clone() Observation {
 	o.ProviderSession = o.ProviderSession.Clone()
 	o.Model = cloneString(o.Model)
 	o.ReasoningEffort = cloneString(o.ReasoningEffort)
+	o.TerminalCause = cloneString(o.TerminalCause)
 	o.WorkIDs = append([]string(nil), o.WorkIDs...)
 	if o.StartedAt != nil {
 		started := *o.StartedAt
