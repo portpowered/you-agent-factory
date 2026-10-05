@@ -118,7 +118,7 @@ func TestDirectDurableCapabilityPreservesAddressedResumeAndPauseOutcomes(t *test
 	execution := &routingExecution{}
 	host := &durableLifecycleGatewayHost{}
 	registry := responsestream.NewRegistry(newServiceTestResponseStream, serviceTestClock)
-	gateway := factorysessionservice.NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(host, host, registry), nil, nil, nil, nil, nil, execution)
+	gateway := factorysessionservice.NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(host, host, registry), nil, nil, nil, nil, nil, execution, nil, nil, nil)
 
 	ctx := context.Background()
 	if got, err := gateway.StartAsync(ctx, factorysessionexecution.StartRequest{RequestID: "request-route"}); err != nil || got.SessionID != "dur-sess-outer" {

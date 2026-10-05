@@ -450,7 +450,7 @@ func TestGatewayInjectedStreamsPreserveRetainedOutputCompletionAndPeers(t *testi
 	}
 	streams.InferenceProgressPublisherFactory(nil)("selected")(fragment("retained"))
 	host := SessionServiceHost(state, nil, nil, nil, "", nil, nil, nil, nil, nil)
-	gateway := NewWithLiveChangeCoordinator(host, streams, nil, nil, nil, nil, nil, nil)
+	gateway := NewWithLiveChangeCoordinator(host, streams, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	gateway.InferenceProgressPublisherFactory(nil)("selected")(fragment("selected-output"))
 	gateway.InferenceProgressPublisherFactory(nil)("peer")(fragment("peer-output"))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -538,4 +538,83 @@ func registerIndependentProjectionSession(state *sessionruntime.Service, id stri
 		Handle:  &runtimebinding.SessionState{Handle: invocationQueryRun{record: &generationRuntimeRecord{service: runtime}}},
 		Runtime: &factorysessions.LiveRuntime{Factory: runtime, BackendScopeID: "backend-" + id, RuntimeConfig: invocationQueryConfig{config: &factorydefinitions.FactoryConfig{}}},
 	}, id == "first")
+}
+
+type gatewayActivationClock struct {
+	factorydefinitions.DefinitionActivationGateway
+	now time.Time
+}
+
+func (g gatewayActivationClock) SaveNow() time.Time { return g.now }
+
+func TestGatewayInjectedRootCapabilitiesPreserveRequestsResultsAndErrors(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	host := SessionServiceHost(state, nil, nil, nil, "", nil, nil, nil, nil, nil)
+	streams := stream.NewManagerWithDependencies(state, sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle), state.ResponseStreams())
+	invoker := &canonicalSessionInvokerFake{result: factorydefinitions.FactoryInvocationResult{
+		RequestID: "request", TraceID: "trace", SessionID: "selected", WorkID: "work",
+		Status: factorydefinitions.InvocationTerminalStatusCompleted,
+	}}
+	selectedTime := time.Date(2026, 10, 5, 1, 2, 3, 0, time.UTC)
+	failure := errors.New("selected activation failure")
+	var activated string
+	var activationErr error
+	ctx := context.Background()
+	gateway := NewWithLiveChangeCoordinator(host, streams, nil, nil, nil, nil, nil, nil, invoker,
+		func(got context.Context, name string) error {
+			if got != ctx {
+				t.Fatal("activation lost request context")
+			}
+			activated = name
+			return activationErr
+		}, gatewayActivationClock{now: selectedTime})
+	assertGatewayInjectedInvocation(t, ctx, gateway, invoker, failure)
+	if err := gateway.ActivateNamedFactory(ctx, "first"); err != nil || activated != "first" {
+		t.Fatalf("activation = %q, %v", activated, err)
+	}
+	activationErr = failure
+	if err := gateway.ActivateNamedFactory(ctx, "second"); !errors.Is(err, failure) || activated != "second" {
+		t.Fatalf("activation failure = %q, %v", activated, err)
+	}
+	if got := gateway.DefinitionActivationGateway().SaveNow(); !got.Equal(selectedTime) {
+		t.Fatalf("selected activation time = %v", got)
+	}
+}
+
+func TestGatewayOptionalRootCapabilitiesPreserveUnavailableErrors(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	host := SessionServiceHost(state, nil, nil, nil, "", nil, nil, nil, nil, nil)
+	streams := stream.NewManagerWithDependencies(state, sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle), state.ResponseStreams())
+	gateway := NewWithLiveChangeCoordinator(host, streams, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	if _, err := gateway.InvokeFactorySession(context.Background(), "missing", factorysessions.InvocationRequest{}); err == nil || err.Error() != "Factory Session invocation service is required" {
+		t.Fatalf("optional invocation = %v", err)
+	}
+	if err := gateway.ActivateNamedFactory(context.Background(), "missing"); err == nil || err.Error() != "Factory Session activation service is required" {
+		t.Fatalf("optional activation = %v", err)
+	}
+	if gateway.DefinitionActivationGateway() != nil {
+		t.Fatal("optional activation gateway was substituted")
+	}
+}
+
+func assertGatewayInjectedInvocation(t *testing.T, ctx context.Context, gateway *Service, invoker *canonicalSessionInvokerFake, failure error) {
+	t.Helper()
+	requestID := "request"
+	result, err := gateway.InvokeFactorySession(ctx, "selected", factorysessions.InvocationRequest{RequestID: &requestID})
+	if err != nil || result.RequestID != "request" || result.TraceID != "trace" || result.SessionID != "selected" || result.WorkID != "work" || result.Status != factorysessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("injected invocation = %#v, %v", result, err)
+	}
+	if invoker.sessionID != "selected" || invoker.requestID != requestID {
+		t.Fatal("invocation lost addressed request")
+	}
+	invoker.err = failure
+	if _, err := gateway.InvokeFactorySession(ctx, "selected", factorysessions.InvocationRequest{}); !errors.Is(err, failure) {
+		t.Fatalf("invocation failure = %v", err)
+	}
+	invoker.err = nil
+	if _, err := gateway.InvokeFactorySession(ctx, "peer", factorysessions.InvocationRequest{}); err != nil || invoker.sessionID != "peer" {
+		t.Fatalf("peer invocation = %v", err)
+	}
 }

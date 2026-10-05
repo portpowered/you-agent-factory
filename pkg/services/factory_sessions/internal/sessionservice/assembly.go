@@ -484,12 +484,14 @@ func (a *Assembly) Complete(
 		a.liveChangeCoordinator,
 		a.recordedHistory,
 		runtime.durableExecution,
+		a.invoker,
+		runtime.ActivateNamedFactory,
+		runtime.DefinitionActivationGateway(),
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	invoker := a.invoker
 	bound.Invoker = invoker
 	a.registry.Upsert(session, true)
-	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
 	// The per-runtime gateway is returned to the operation caller. The
 	// process-scoped assembly keeps its original stable service slot so
 	// concurrent session completions cannot replace or race the shared root.

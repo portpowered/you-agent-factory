@@ -281,7 +281,7 @@ func TestIndependentSessionHostGatewayRetainsDirectDurableReadsAndErrors(t *test
 	state := newWorkResolverSessionState()
 	host := SessionServiceHost(state, nil, nil, nil, "", nil, nil, nil, nil, nil)
 	streams := sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle)
-	gateway := NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(state, streams, &responsestream.Registry{}), nil, nil, nil, nil, nil, durable)
+	gateway := NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(state, streams, &responsestream.Registry{}), nil, nil, nil, nil, nil, durable, nil, nil, nil)
 	for _, id := range []string{"selected", "peer"} {
 		got, err := gateway.GetSession(context.Background(), id)
 		if err != nil || got.SessionID != id || got.Status != factorysessions.LifecycleStatusPaused {
@@ -293,7 +293,7 @@ func TestIndependentSessionHostGatewayRetainsDirectDurableReadsAndErrors(t *test
 	if _, err := gateway.GetSession(context.Background(), "selected"); !errors.Is(err, failure) {
 		t.Fatalf("durable error = %v", err)
 	}
-	optional := NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(state, streams, &responsestream.Registry{}), nil, nil, nil, nil, nil, nil)
+	optional := NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(state, streams, &responsestream.Registry{}), nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if _, err := optional.GetSession(context.Background(), "selected"); !errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured) {
 		t.Fatalf("optional durable read = %v", err)
 	}

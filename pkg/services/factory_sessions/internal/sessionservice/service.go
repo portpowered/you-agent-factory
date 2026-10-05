@@ -66,7 +66,7 @@ func NewWithReconnectValidation(
 		return nil
 	}
 	streams := stream.NewManagerWithResponseService(sessions, observer, responseStreams, nil)
-	return NewWithLiveChangeCoordinator(host, streams, reconnects, results, nil, nil, nil, host.DurableExecution())
+	return NewWithLiveChangeCoordinator(host, streams, reconnects, results, nil, nil, nil, host.DurableExecution(), nil, nil, nil)
 }
 
 // NewWithLiveChangeCoordinator constructs the session gateway with the
@@ -82,19 +82,25 @@ func NewWithLiveChangeCoordinator(
 	liveChange factorysessioncontracts.LiveChangeCoordinator,
 	history RecordedHistory,
 	durable durableexecution.Service,
+	invoker roles.SessionInvoker,
+	activate func(context.Context, string) error,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
 ) *Service {
 	if host == nil || streams == nil {
 		return nil
 	}
 	return &Service{
-		host:            host,
-		liveChange:      liveChange,
-		streams:         streams,
-		reconnects:      reconnects,
-		results:         results,
-		responseEvents:  responseEvents,
-		durable:         durable,
-		recordedHistory: history,
+		host:              host,
+		liveChange:        liveChange,
+		streams:           streams,
+		reconnects:        reconnects,
+		results:           results,
+		responseEvents:    responseEvents,
+		durable:           durable,
+		recordedHistory:   history,
+		invoker:           invoker,
+		activate:          activate,
+		activationGateway: activationGateway,
 	}
 }
 

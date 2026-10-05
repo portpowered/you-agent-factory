@@ -32,7 +32,7 @@ func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factoryses
 	if err != nil {
 		t.Fatalf("construct response-stream registry: %v", err)
 	}
-	return factorysessionservice.NewWithLiveChangeCoordinator(host, stream.NewManagerWithResponseService(host, host, registry, responseService), nil, nil, responseService, nil, nil, host.DurableExecution())
+	return factorysessionservice.NewWithLiveChangeCoordinator(host, stream.NewManagerWithResponseService(host, host, registry, responseService), nil, nil, responseService, nil, nil, host.DurableExecution(), nil, nil, nil)
 }
 
 func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testing.T) {

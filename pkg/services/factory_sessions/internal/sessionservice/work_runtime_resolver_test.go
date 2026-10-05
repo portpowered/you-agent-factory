@@ -923,7 +923,7 @@ func (h gatewayHistoryHost) DurableExecution() durableexecution.Service { return
 
 func newGatewayHistoryFixture(history RecordedHistory, durable durableexecution.Service) *Service {
 	host := gatewayHistoryHost{durable: durable}
-	return NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(host, host, &responsestream.Registry{}), nil, nil, nil, nil, history, durable)
+	return NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(host, host, &responsestream.Registry{}), nil, nil, nil, nil, history, durable, nil, nil, nil)
 }
 
 func TestServiceListSessionsUsesInjectedRecordedHistoryForHistoryScope(t *testing.T) {
