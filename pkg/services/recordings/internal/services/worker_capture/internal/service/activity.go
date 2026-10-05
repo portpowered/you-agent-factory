@@ -83,8 +83,12 @@ func (writer *FileWriter) LookupWorkerSessionCapture(ctx context.Context, id str
 	}
 	writer.catalogMu.Lock()
 	entry, ok := writer.catalog[id]
+	_, unavailable := writer.unavailable[id]
 	writer.catalogMu.Unlock()
 	if !ok {
+		if unavailable {
+			return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
+		}
 		return recordings.WorkerSessionCatalogEntry{}, os.ErrNotExist
 	}
 	return entry, nil
@@ -126,19 +130,24 @@ func (writer *FileWriter) indexCatalogFiles(ctx context.Context, files []os.DirE
 		if err != nil {
 			continue
 		}
-		writer.rebuildRecordingIndex(ctx, id)
+		if err := writer.rebuildRecordingIndex(ctx, id); err != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			writer.indexUnavailableCapture(file.Name(), data)
+		}
 	}
 	return nil
 }
 
-func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) {
+func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) error {
 	// Join this store's append barrier so reconstruction cannot advertise bytes
 	// that another goroutine has written but has not yet synchronized.
 	entry := writer.entry(id)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
-	if writer.hydrate(ctx, id, entry) != nil {
-		return
+	if err := writer.hydrate(ctx, id, entry); err != nil {
+		return err
 	}
 	for _, session := range entry.sessions {
 		if len(session.records) == 0 {
@@ -150,6 +159,37 @@ func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) 
 			writer.catalog[indexed.WorkerSessionID] = indexed
 		}
 		writer.catalogMu.Unlock()
+	}
+	return nil
+}
+
+// A damaged history may still identify its Worker Sessions. Retain only those
+// routing identities, never a projection, watermark or raw decoder error.
+// Healthy captures take precedence over an unavailable identity.
+func (writer *FileWriter) indexUnavailableCapture(name string, data []byte) {
+	var ids []string
+	if strings.HasSuffix(name, ".worker.jsonl") {
+		line, _, complete := bytes.Cut(data, []byte{'\n'})
+		var opening workerJournalEntry
+		if !complete || json.Unmarshal(line, &opening) != nil {
+			return
+		}
+		ids = append(ids, opening.WorkerSessionID)
+	} else {
+		var snapshot recordings.WorkerRecordingSnapshot
+		if json.Unmarshal(data, &snapshot) != nil {
+			return
+		}
+		for _, session := range snapshot.Sessions {
+			ids = append(ids, session.WorkerSessionID)
+		}
+	}
+	writer.catalogMu.Lock()
+	defer writer.catalogMu.Unlock()
+	for _, id := range ids {
+		if strings.TrimSpace(id) != "" {
+			writer.unavailable[id] = struct{}{}
+		}
 	}
 }
 

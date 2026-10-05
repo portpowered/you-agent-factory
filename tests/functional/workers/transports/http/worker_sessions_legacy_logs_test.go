@@ -70,7 +70,7 @@ func assertLegacyCapturedEvents(t *testing.T, legacy, current factoryapi.WorkerS
 	}
 }
 
-func writeLegacyCapturedFixture(t *testing.T, root string, page factoryapi.WorkerSessionLogPage) {
+func writeLegacyCapturedFixture(t *testing.T, root string, page factoryapi.WorkerSessionLogPage) string {
 	t.Helper()
 	var records []events.Record
 	for _, frame := range page.Events {
@@ -103,7 +103,9 @@ func writeLegacyCapturedFixture(t *testing.T, root string, page factoryapi.Worke
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte(opening.RecordingID))
-	if err := os.WriteFile(filepath.Join(dir, hex.EncodeToString(digest[:])+".worker.json"), data, 0o600); err != nil {
+	path := filepath.Join(dir, hex.EncodeToString(digest[:])+".worker.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return path
 }

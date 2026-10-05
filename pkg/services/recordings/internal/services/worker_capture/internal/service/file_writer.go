@@ -34,6 +34,7 @@ type FileWriter struct {
 	ownerEpoch    string
 	catalogMu     sync.Mutex
 	catalog       map[string]recordings.WorkerSessionCatalogEntry
+	unavailable   map[string]struct{}
 	catalogLoaded bool
 	rebuildMu     sync.Mutex
 }
@@ -89,7 +90,7 @@ func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appen
 	if clock == nil || strings.TrimSpace(ownerEpoch) == "" {
 		return nil, fmt.Errorf("worker recording file writer: clock and owner epoch are required")
 	}
-	return &FileWriter{storage: storage, appender: appender, directory: directory, clock: clock, ownerEpoch: ownerEpoch, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry)}, nil
+	return &FileWriter{storage: storage, appender: appender, directory: directory, clock: clock, ownerEpoch: ownerEpoch, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry), unavailable: make(map[string]struct{})}, nil
 }
 func (writer *FileWriter) entry(id string) *recordingEntry {
 	writer.mu.Lock()

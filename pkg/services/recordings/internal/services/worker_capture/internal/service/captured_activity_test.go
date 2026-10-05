@@ -20,6 +20,47 @@ type captureTimeProbe struct {
 	calls int
 }
 
+func TestFileWriterCatalogKeepsDamagedCaptureUnavailable(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	for _, id := range []string{"healthy", "malformed", "torn"} {
+		record := journalRecord(t, id, id+"-worker")
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for id, tail := range map[string]string{"malformed": "not json\n", "torn": "{\"uncommitted\":"} {
+		if err := local.AppendFile(writer.path(id)+"l", []byte(tail)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reopened, err := newTestFileWriter(local, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDamagedCapturedCatalog(t, reopened)
+}
+
+func assertDamagedCapturedCatalog(t *testing.T, reopened recordings.WorkerRecordingStore) {
+	t.Helper()
+	for range 2 {
+		page, err := reopened.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: "malformed-worker"})
+		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(page.Records) != 0 || page.Catalog.CommittedPosition != 0 {
+			t.Fatalf("damaged capture fabricated absence or accepted state: page=%+v error=%v", page, err)
+		}
+	}
+	for _, id := range []string{"healthy-worker", "torn-worker"} {
+		page, err := reopened.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: id})
+		if err != nil || len(page.Records) != 1 || page.Catalog.CommittedPosition != 1 || page.Health != recordings.WorkerRecordingStatusIncomplete {
+			t.Fatalf("committed prefix lost or claimed complete: page=%+v error=%v", page, err)
+		}
+	}
+	if _, err := reopened.LookupWorkerSessionCapture(t.Context(), "unknown-worker"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unknown identity error=%v", err)
+	}
+}
+
 type catalogScanProbe struct {
 	local platformreplay.Local
 	fault error
