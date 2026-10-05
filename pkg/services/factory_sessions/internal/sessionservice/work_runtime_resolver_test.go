@@ -1011,11 +1011,22 @@ func TestInjectedGatewayHistoryKeepsScopeExclusionPolicy(t *testing.T) {
 		t.Run(string(scope), func(t *testing.T) {
 			t.Parallel()
 			history := &gatewayHistoryStub{err: errors.New("history must not be selected")}
-			durable := &gatewayHistoryDurableStub{}
+			durable := &gatewayHistoryDurableStub{result: factorysessions.ListSessionsResult{
+				Scope:           scope,
+				LiveSessions:    []factorysessions.LiveSessionSummary{{ID: "live-peer"}},
+				DurableSessions: []factorysessions.DurableSessionListSummary{{SessionID: "persisted-peer"}},
+			}}
 			service := newGatewayHistoryFixture(history, durable)
-			request := factorysessions.ListSessionsRequest{Scope: scope, ExcludeRecordedHistory: true}
-			if _, err := service.ListSessions(context.Background(), request); err != nil || history.request.Scope != "" {
+			request := factorysessions.ListSessionsRequest{Scope: scope, ExcludeRecordedHistory: true,
+				Filters: factorysessions.SessionListFilters{Statuses: []factorysessions.LifecycleStatus{factorysessions.LifecycleStatusPaused}, ProjectBoundary: "selected-project"}}
+			result, err := service.ListSessions(context.Background(), request)
+			if err != nil || history.request.Scope != "" {
 				t.Fatalf("excluded history = %v, request = %#v", err, history.request)
+			}
+			// The gateway preserves its injected owner's rows; scope/filter
+			// selection belongs to that owner and is not simulated here.
+			if !reflect.DeepEqual(result, durable.result) || len(result.RecordedSessions) != 0 {
+				t.Fatalf("history exclusion changed peer rows: %#v, want %#v", result, durable.result)
 			}
 			if scope == "" {
 				request.Scope = factorysessions.DefaultSessionListScope
