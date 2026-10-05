@@ -50,6 +50,10 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runRealHostHistoryRecovery(t, process)
 	})
+	t.Run("real host captured metadata recovery", func(t *testing.T) {
+		t.Parallel()
+		runCapturedMetadataRecovery(t, process)
+	})
 	t.Run("real host interrupt and transcript", func(t *testing.T) {
 		t.Parallel()
 		runRealHostInterrupt(t, process)
