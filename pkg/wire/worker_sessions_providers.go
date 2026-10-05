@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -105,7 +106,7 @@ func (storage workerCaptureStorage) ReadFile(path string) ([]byte, error) {
 
 // provideWorkerSessionsService constructs the canonical process supervisor.
 func provideWorkerHistorySnapshotBudget() *workersessionswire.HistorySnapshotBudget {
-	return new(workersessionswire.HistorySnapshotBudget)
+	return &workersessionswire.HistorySnapshotBudget{Entropy: rand.Reader}
 }
 
 func provideWorkerSessionsService(

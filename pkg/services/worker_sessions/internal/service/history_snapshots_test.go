@@ -1,15 +1,35 @@
 package service
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+var historyFixtureSeed atomic.Int64
+
+func newTestHistoryBudget() *HistorySnapshotBudget {
+	return &HistorySnapshotBudget{Entropy: rand.New(rand.NewSource(historyFixtureSeed.Add(1)))}
+}
+
+func TestHistorySnapshotEntropyFailurePreservesBudget(t *testing.T) {
+	t.Parallel()
+	for _, budget := range []*HistorySnapshotBudget{new(HistorySnapshotBudget), {Entropy: bytes.NewReader(nil)}} {
+		cache := newObservationSnapshots(budget)
+		_, err := cache.first(historySnapshotFixtures(), "filter", 1, time.Unix(0, 0))
+		if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) || len(budget.entries) != 0 || budget.bytes != 0 {
+			t.Fatalf("failed entropy retained snapshot: err=%v entries=%d bytes=%d", err, len(budget.entries), budget.bytes)
+		}
+	}
+}
 
 func historySnapshotFixtures() []workersessions.Observation {
 	return []workersessions.Observation{
@@ -21,7 +41,7 @@ func historySnapshotFixtures() []workersessions.Observation {
 
 func TestHistorySnapshotDetachedReplayAndSignedOffsets(t *testing.T) {
 	t.Parallel()
-	cache := newObservationSnapshots(new(HistorySnapshotBudget))
+	cache := newObservationSnapshots(newTestHistoryBudget())
 	now := time.Unix(0, 0)
 	observations := historySnapshotFixtures()
 	first, err := cache.first(observations, "filter", 1, now)
@@ -58,7 +78,7 @@ func TestHistorySnapshotDetachedReplayAndSignedOffsets(t *testing.T) {
 
 func TestHistorySnapshotIdleExpiryExtendsOnlyOnSuccessfulRead(t *testing.T) {
 	t.Parallel()
-	cache := newObservationSnapshots(new(HistorySnapshotBudget))
+	cache := newObservationSnapshots(newTestHistoryBudget())
 	now := time.Unix(0, 0)
 	first, err := cache.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {
@@ -80,7 +100,7 @@ func TestHistorySnapshotIdleExpiryExtendsOnlyOnSuccessfulRead(t *testing.T) {
 
 func TestHistorySnapshotCountEvictsLeastRecentlyUsed(t *testing.T) {
 	t.Parallel()
-	cache := newObservationSnapshots(new(HistorySnapshotBudget))
+	cache := newObservationSnapshots(newTestHistoryBudget())
 	now := time.Unix(0, 0)
 	tokens := make([]string, 0, historySnapshotCount)
 	for range historySnapshotCount {
@@ -109,7 +129,7 @@ func TestHistorySnapshotCountEvictsLeastRecentlyUsed(t *testing.T) {
 
 func TestHistorySnapshotConcurrentReplayHasDetachedPages(t *testing.T) {
 	t.Parallel()
-	cache := newObservationSnapshots(new(HistorySnapshotBudget))
+	cache := newObservationSnapshots(newTestHistoryBudget())
 	now := time.Unix(0, 0)
 	first, err := cache.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {
@@ -131,7 +151,7 @@ func TestHistorySnapshotConcurrentReplayHasDetachedPages(t *testing.T) {
 
 func TestHistorySnapshotBytePressureEvictsBeforeAdmittingNextPage(t *testing.T) {
 	t.Parallel()
-	cache := newObservationSnapshots(new(HistorySnapshotBudget))
+	cache := newObservationSnapshots(newTestHistoryBudget())
 	now := time.Unix(0, 0)
 	first, err := cache.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {
@@ -164,7 +184,7 @@ func TestHistorySnapshotBytePressureEvictsBeforeAdmittingNextPage(t *testing.T) 
 
 func TestHistorySnapshotSharedBudgetEvictsAcrossViews(t *testing.T) {
 	t.Parallel()
-	budget := new(HistorySnapshotBudget)
+	budget := newTestHistoryBudget()
 	registry, fleet := newObservationSnapshots(budget), newObservationSnapshots(budget)
 	now := time.Unix(0, 0)
 	first, err := registry.first(historySnapshotFixtures(), "filter", 1, now)
@@ -201,9 +221,9 @@ func TestHistorySnapshotSharedBudgetEvictsAcrossViews(t *testing.T) {
 
 func TestHistorySnapshotSharedBudgetKeepsProfilesIsolated(t *testing.T) {
 	t.Parallel()
-	profile := new(HistorySnapshotBudget)
+	profile := newTestHistoryBudget()
 	registry, fleet := newObservationSnapshots(profile), newObservationSnapshots(profile)
-	other := newObservationSnapshots(new(HistorySnapshotBudget))
+	other := newObservationSnapshots(newTestHistoryBudget())
 	now := time.Unix(0, 0)
 	page, err := registry.first(historySnapshotFixtures(), "filter", 1, now)
 	if err != nil {

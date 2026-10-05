@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -31,6 +30,9 @@ const (
 // in one constructed profile. Composition supplies the same budget to its
 // registry and fleet views; separate profiles never share one.
 type HistorySnapshotBudget struct {
+	// Entropy supplies unpredictable cursor identities and signing keys.
+	// Composition selects the implementation; reads are serialized by mu.
+	Entropy io.Reader
 	mu      sync.Mutex
 	entries map[string]*observationSnapshot
 	bytes   int
@@ -100,13 +102,16 @@ func (s *observationSnapshots) first(observations []workersessions.Observation, 
 		return result, err
 	}
 	var entropy [32]byte
-	if _, err := rand.Read(entropy[:]); err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Entropy == nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if _, err := io.ReadFull(s.Entropy, entropy[:]); err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	id := hex.EncodeToString(entropy[:16])
 	copy(entry.secret[:], entropy[16:])
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.prune(now)
 	for len(s.entries) >= historySnapshotCount || s.bytes+size > historySnapshotBytes {
 		s.evictOldest()

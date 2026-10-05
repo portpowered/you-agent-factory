@@ -42,7 +42,7 @@ func TestCapturedLogsRetainCommittedIdentityAndDetachedTime(t *testing.T) {
 			ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"MESSAGE"}`),
 		}, CapturedAt: &stamp}},
 	}}
-	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, fake, new(HistorySnapshotBudget))
+	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, fake, newTestHistoryBudget())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestCapturedLogsReturnSafeTypedStorageOutcomes(t *testing.T) {
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, &capturedActivityFake{err: cell.source}, new(HistorySnapshotBudget))
+			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, &capturedActivityFake{err: cell.source}, newTestHistoryBudget())
 			if err != nil {
 				t.Fatal(err)
 			}
