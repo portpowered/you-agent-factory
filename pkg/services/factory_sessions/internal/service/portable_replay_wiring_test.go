@@ -11,7 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -686,15 +685,10 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	string,
 	string,
 	string,
-	providers.Service,
-	platformprocess.CommandRunner,
-	platformprocess.CommandRunner,
 	*workers.MockWorkersConfig,
 	factorydefinitions.RuntimeMode,
 	factoryruntime.Scheduler,
 	bool,
-	recordings.SubmissionRecorder,
-	recordings.DispatchRecorder,
 	string,
 	factoryruntime.RuntimeLogStorageConfig,
 	factoryruntime.RuntimeFileLoggingPolicy,
@@ -709,7 +703,6 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	*bool,
 	factoryruntime.Clock,
 	*zap.Logger,
-	factoryruntime.WorkersMockCommandRunnerFactory,
 	func(string) workers.ProgressPublisher,
 	func(string) func(string),
 	factoryruntime.SessionObservations,
@@ -723,7 +716,6 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	*recordings.LoadResumeInputResult,
 	*factorydefinitions.FactoryWorldState,
 	[]factorydefinitions.FactoryEvent,
-	automations.Service,
 	bool,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	return &factoryruntime.RuntimeInitialOpening{Record: assembler.runtime,

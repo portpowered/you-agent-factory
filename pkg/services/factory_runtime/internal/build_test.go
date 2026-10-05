@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
@@ -29,6 +30,7 @@ import (
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -128,15 +130,14 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil,
-		runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	observations := [2]*openingSessionObservations{{}, {}}
 	for index, sessionID := range []string{"candidate", "peer"} {
 		result, openErr := assembleTestInitialOpening(t.Context(), assembly, dir, loaded, clockwork.NewFakeClock(),
-			factory.RuntimeActivationRequest{FactorySessionID: sessionID, RuntimeID: "runtime-" + sessionID}, observations[index])
+			factory.RuntimeActivationRequest{FactorySessionID: sessionID, RuntimeID: "runtime-" + sessionID}, nil, observations[index])
 		assertUnpublishedOpeningFailure(t, result, openErr, resources.failure)
 	}
 	for index, sessionID := range []string{"candidate", "peer"} {
@@ -154,6 +155,66 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 	}
 	if !reflect.DeepEqual(sessions.runtimeIDs, []string{"runtime-candidate", "runtime-peer"}) {
 		t.Fatalf("progress supervision identities = %v; want each admitted runtime", sessions.runtimeIDs)
+	}
+}
+
+func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources := &observationResourceOpening{failure: errors.New("controlled resource failure")}
+	sessions := &stubWorkerSessionsService{}
+	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("selected provider")})
+	script := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("selected script")})
+	mock := &workers.MockWorkersConfig{}
+	decorations := 0
+	decorate := func(selected *workers.MockWorkersConfig, _ interfaces.RuntimeDefinitionLookup, next platformprocess.CommandRunner) platformprocess.CommandRunner {
+		if selected != mock {
+			t.Fatal("preparation changed the selected mock configuration")
+		}
+		decorations++
+		return next
+	}
+	var effects []string
+	submit := func(work.FactorySubmissionRecord) { effects = append(effects, "submission") }
+	dispatch := func(recordings.FactoryDispatchRecord) { effects = append(effects, "dispatch") }
+	loader := func(path string, _ interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
+		return loadedFactoryFixture(path)
+	}
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil,
+		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil,
+		nil, provider, script, decorate, submit, dispatch, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, err := assembleTestInitialOpening(t.Context(), assembly, dir, loaded, clockwork.NewFakeClock(),
+		factory.RuntimeActivationRequest{FactorySessionID: "candidate", RuntimeID: "initial"}, mock)
+	assertUnpublishedOpeningFailure(t, initial, err, resources.failure)
+	for runner, output := range map[platformprocess.CommandRunner]string{
+		initial.Spec.ProviderCommandRunner: "selected provider", initial.Spec.CommandRunnerOverride: "selected script",
+	} {
+		result, runErr := runner.Run(t.Context(), platformprocess.CommandRequest{Command: "controlled"})
+		if runErr != nil || string(result.Stdout) != output {
+			t.Fatalf("selected command output = %q, %v; want %q", result.Stdout, runErr, output)
+		}
+	}
+	if _, err := initial.ReplacementBuilder.BuildReplacement(t.Context(), dir, dir, "successor", dir); !errors.Is(err, resources.failure) {
+		t.Fatalf("replacement error = %v, want controlled resource failure", err)
+	}
+	for index := range resources.submissions {
+		resources.submissions[index](work.FactorySubmissionRecord{})
+		resources.dispatches[index](recordings.FactoryDispatchRecord{})
+	}
+	if decorations != 4 || !reflect.DeepEqual(effects, []string{"submission", "dispatch", "submission", "dispatch"}) {
+		t.Fatalf("fixed effects = %v, decorations = %d; want both openings", effects, decorations)
 	}
 }
 
@@ -202,9 +263,11 @@ func (sessions *observationWorkerSessions) PublishRuntimeProgress(_ context.Cont
 }
 
 type observationResourceOpening struct {
-	failure   error
-	mutations []factory.PetriMutationRecorder
-	progress  []workers.ProgressPublisher
+	failure     error
+	mutations   []factory.PetriMutationRecorder
+	progress    []workers.ProgressPublisher
+	submissions []recordings.SubmissionRecorder
+	dispatches  []recordings.DispatchRecorder
 }
 
 func (opening *observationResourceOpening) Open(
@@ -215,8 +278,8 @@ func (opening *observationResourceOpening) Open(
 	_ bool,
 	_ factory.Scheduler,
 	_ bool,
-	_ recordings.SubmissionRecorder,
-	_ recordings.DispatchRecorder,
+	submission recordings.SubmissionRecorder,
+	dispatch recordings.DispatchRecorder,
 	_ string,
 	_ factory.RuntimeLogStorageConfig,
 	_ factory.RuntimeFileLoggingPolicy,
@@ -242,6 +305,8 @@ func (opening *observationResourceOpening) Open(
 	_ ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
 	opening.mutations = append(opening.mutations, mutations)
+	opening.submissions = append(opening.submissions, submission)
+	opening.dispatches = append(opening.dispatches, dispatch)
 	opening.progress = append(opening.progress, worker.(interface {
 		RuntimeProgressPublisher() workers.ProgressPublisher
 	}).RuntimeProgressPublisher())
@@ -787,8 +852,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open,
-		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -842,7 +906,7 @@ func assembleCleanupTestRuntime(
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (*factory.RuntimeActivation, error) {
-	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request)
+	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request, nil)
 	if opening == nil {
 		return nil, err
 	}
@@ -854,7 +918,7 @@ func assembleTestRuntimeRecord(
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (factory.RuntimeReplacementBuilder, factory.RuntimeRecord, factory.SessionBuildSpec, error) {
-	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request)
+	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request, nil)
 	if opening == nil {
 		return nil, nil, factory.SessionBuildSpec{}, err
 	}
@@ -865,6 +929,7 @@ func assembleTestInitialOpening(
 	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
+	mockWorkers *workers.MockWorkersConfig,
 	observations ...factory.SessionObservations,
 ) (*factory.RuntimeInitialOpening, error) {
 	var observe factory.SessionObservations
@@ -872,12 +937,46 @@ func assembleTestInitialOpening(
 		observe = observations[0]
 	}
 	return assembly.Assemble(
-		ctx, "", "", false, "recording.json", "", request.FactorySessionID, request.FactorySessionID,
-		nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
-		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
-		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0,
-		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, observe, nil,
-		dir, dir, dir, loaded, request.RuntimeID, nil, nil, nil, nil, nil, false,
+		ctx,
+		"",
+		"",
+		false,
+		"recording.json",
+		"",
+		request.FactorySessionID,
+		request.FactorySessionID,
+		mockWorkers,
+		interfaces.RuntimeModeBatch,
+		nil,
+		false,
+		"",
+		factory.RuntimeLogStorageConfig{},
+		factory.RuntimeFileLoggingPolicyDisabled,
+		factory.RuntimeMetricsPolicyDisabled,
+		"",
+		factory.RuntimeMetricsStorageConfig{},
+		0,
+		"",
+		"",
+		false,
+		false,
+		nil,
+		clock,
+		zap.NewNop(),
+		nil,
+		nil,
+		observe,
+		nil,
+		dir,
+		dir,
+		dir,
+		loaded,
+		request.RuntimeID,
+		nil,
+		nil,
+		nil,
+		nil,
+		false,
 	)
 }
 
@@ -913,9 +1012,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		snapshots = append(snapshots, source)
 		return nil, nil
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open,
-		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{},
-		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, snapshot)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, snapshot, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

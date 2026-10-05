@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -169,7 +168,6 @@ func openPortableReplayDurableOwner(
 	clockEdge factoryruntime.Clock,
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
 	workerService workers.Service,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
@@ -179,9 +177,6 @@ func openPortableReplayDurableOwner(
 	resolveClock factoryruntime.ClockResolver,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 ) (durableexecution.Service, func() error, error) {
 	if durableExecutionFactory == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution operation is required")
@@ -222,14 +217,8 @@ func openPortableReplayDurableOwner(
 				durable.Service,
 				workerService,
 				providerForDurable,
-				providerOverride,
 				providerCommandRunner,
-				scriptCommandRunner,
-				workersMockCommandRunnerFactory,
-				submissionRecorder,
-				dispatchRecorder,
 				recordingsRuntime,
-				automationService,
 			)
 			// A failed opening can still own artifacts. Register them before
 			// forwarding the error; the durable owner must stop before release.
@@ -251,14 +240,8 @@ func preparePortableReplayRuntime(
 	durableOwner durableexecution.Service,
 	workerService workers.Service,
 	providerForDurable providers.Service,
-	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	opening, err := assemblePortableReplayRuntime(
 		ctx,
@@ -268,14 +251,7 @@ func preparePortableReplayRuntime(
 		logger,
 		factoryRuntimeAssembler,
 		durableOwner,
-		providerOverride,
-		providerCommandRunner,
-		scriptCommandRunner,
-		workersMockCommandRunnerFactory,
-		submissionRecorder,
-		dispatchRecorder,
 		recordingsRuntime,
-		automationService,
 	)
 	if err != nil {
 		return opening, err
@@ -356,14 +332,7 @@ func assemblePortableReplayRuntime(
 	logger *zap.Logger,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
 	durableOwner durableexecution.Service,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	if factoryRuntimeAssembler == nil {
 		return nil, fmt.Errorf("construct portable replay runtime: Factory Runtime assembler is required")
@@ -398,15 +367,10 @@ func assemblePortableReplayRuntime(
 		configured.Recordings.WorkflowID,
 		configured.Session.SessionID,
 		configured.Session.SessionID,
-		providerOverride,
-		providerCommandRunner,
-		scriptCommandRunner,
 		configured.Workers.MockWorkers,
 		configured.Runtime.Mode,
 		factoryruntime.Scheduler(nil),
 		false,
-		submissionRecorder,
-		dispatchRecorder,
 		configured.Runtime.LogDirectory,
 		configured.Runtime.LogConfig,
 		factoryruntime.RuntimeFileLoggingPolicy(configured.Runtime.FileLoggingPolicy),
@@ -421,7 +385,6 @@ func assemblePortableReplayRuntime(
 		configured.Workers.InvocationSkipPermissionsOverride,
 		clock,
 		logger,
-		workersMockCommandRunnerFactory,
 		nil,
 		nil,
 		observations,
@@ -435,7 +398,6 @@ func assemblePortableReplayRuntime(
 		nil,
 		nil,
 		nil,
-		automationService,
 		false,
 	)
 	if err != nil {

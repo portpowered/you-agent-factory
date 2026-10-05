@@ -19,6 +19,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -41,6 +42,28 @@ import (
 	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	"go.uber.org/zap"
 )
+
+// provideFactoryRuntimeAssembly binds process execution effects once. The
+// named runner roles preserve Wire's provider/script effect distinction.
+func provideFactoryRuntimeAssembly(
+	bundleOpening factoryruntimewire.BundleOpening,
+	sidecars *factoryruntimewire.SidecarOpening,
+	instanceHost factoryruntimewire.InstanceHost,
+	preparation *factoryruntimewire.RuntimePreparation,
+	recordingsRuntime recordings.RuntimeScopeService,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
+	providerOverride factorysessionwire.ProviderOverrideService,
+	providerCommandRunner factorysessionwire.ProviderCommandRunner,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	automationService automations.Service,
+) (*factoryruntimewire.Assembly, error) {
+	return factoryruntimewire.NewAssembly(bundleOpening, sidecars, instanceHost, preparation,
+		recordingsRuntime, initialFactorySnapshot, providerOverride, providerCommandRunner,
+		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService)
+}
 
 func provideWorkersMockWorkersConfigFileSystem(
 	edges serviceedges.Edges,

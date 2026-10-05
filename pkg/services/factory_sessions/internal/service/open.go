@@ -206,7 +206,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.clock,
 			r.providerOverride,
 			r.providerCommandRunner,
-			r.scriptCommandRunner,
 			r.workerService,
 			r.workersMockCommandRunnerFactory,
 			r.providerFromCommandRunnerFactory,
@@ -216,9 +215,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.resolveClock,
 			r.factoryRuntimeAssembler,
 			r.recordingsRuntime,
-			r.automationService,
-			r.submissionRecorder,
-			r.dispatchRecorder,
 		)
 		if err != nil {
 			return runtimeProducts{}, err
@@ -403,15 +399,10 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			opening.configured.Recordings.WorkflowID,
 			opening.sessionID,
 			opening.metricsSessionID,
-			r.providerOverride,
-			r.providerCommandRunner,
-			r.scriptCommandRunner,
 			opening.configured.Workers.MockWorkers,
 			opening.configured.Runtime.Mode,
 			factoryruntime.Scheduler(nil),
 			false,
-			r.submissionRecorder,
-			r.dispatchRecorder,
 			opening.configured.Runtime.LogDirectory,
 			opening.configured.Runtime.LogConfig,
 			factoryruntime.RuntimeFileLoggingPolicy(opening.configured.Runtime.FileLoggingPolicy),
@@ -426,7 +417,6 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			opening.configured.Workers.InvocationSkipPermissionsOverride,
 			opening.clock,
 			opening.logger,
-			r.workersMockCommandRunnerFactory,
 			r.factorySessionsRuntimeAssembly.InferenceProgressPublisherFactory(opening.logger),
 			r.factorySessionsRuntimeAssembly.DispatchCompletionObserverFactory(),
 			opening.observations,
@@ -440,7 +430,6 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			opening.resumeInput,
 			opening.restoredWorldState,
 			opening.restoredEventHistory,
-			r.automationService,
 			opening.configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)
 	if initial != nil {

@@ -2,6 +2,7 @@ package wire
 
 import (
 	"fmt"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"io/fs"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -15,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -89,8 +91,17 @@ func NewAssembly(
 	preparation *RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
+	providerOverride providers.Service,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	automationService automations.Service,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(bundleOpening, sidecars, instanceHost, preparation, recordingsRuntime, initialFactorySnapshot)
+	return factoryruntimeinternal.NewAssembly(bundleOpening, sidecars, instanceHost, preparation,
+		recordingsRuntime, initialFactorySnapshot, providerOverride, providerCommandRunner,
+		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService)
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening

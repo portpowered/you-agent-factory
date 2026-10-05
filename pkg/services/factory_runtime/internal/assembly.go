@@ -25,12 +25,19 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	bundleOpening          BundleOpeningOperation
-	sidecars               *SidecarOpening
-	instanceHost           instancehost.Service
-	preparation            *runtimebuild.Service
-	recordingsRuntime      recordings.RuntimeScopeService
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory
+	bundleOpening            BundleOpeningOperation
+	sidecars                 *SidecarOpening
+	instanceHost             instancehost.Service
+	preparation              *runtimebuild.Service
+	recordingsRuntime        recordings.RuntimeScopeService
+	initialFactorySnapshot   factorydefinitions.InitialFactorySnapshotFactory
+	providerOverride         providers.Service
+	providerCommandRunner    platformprocess.CommandRunner
+	scriptCommandRunner      platformprocess.CommandRunner
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
+	submissionRecorder       recordings.SubmissionRecorder
+	dispatchRecorder         recordings.DispatchRecorder
+	automationService        automations.Service
 }
 
 // NewAssembly constructs the inert compatibility assembly selected by Wire.
@@ -43,6 +50,13 @@ func NewAssembly(
 	preparation *runtimebuild.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
+	providerOverride providers.Service,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
+	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	automationService automations.Service,
 ) (*Assembly, error) {
 	if bundleOpening == nil {
 		return nil, fmt.Errorf("factory runtime bundle opening is required")
@@ -54,6 +68,10 @@ func NewAssembly(
 		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
 		preparation:       preparation,
 		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot,
+		providerOverride: providerOverride, providerCommandRunner: providerCommandRunner,
+		scriptCommandRunner: scriptCommandRunner, mockCommandRunnerFactory: mockCommandRunnerFactory,
+		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder,
+		automationService: automationService,
 	}, nil
 }
 
@@ -70,15 +88,10 @@ func (a *Assembly) Assemble(
 	workflowID string,
 	defaultSessionID string,
 	metricsSessionID string,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler factoryruntime.Scheduler,
 	inlineDispatch bool,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	runtimeLogDir string,
 	runtimeLogConfig factoryruntime.RuntimeLogStorageConfig,
 	runtimeFileLoggingPolicy factoryruntime.RuntimeFileLoggingPolicy,
@@ -93,7 +106,6 @@ func (a *Assembly) Assemble(
 	invocationSkipPermissionsOverride *bool,
 	clock factoryruntime.Clock,
 	baseLogger *zap.Logger,
-	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	progressFactory func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 	observations factoryruntime.SessionObservations,
@@ -107,7 +119,6 @@ func (a *Assembly) Assemble(
 	resumeInput *recordings.LoadResumeInputResult,
 	restoredWorldState *factorydefinitions.FactoryWorldState,
 	restoredEventHistory []factorydefinitions.FactoryEvent,
-	automationService automations.Service,
 	serviceMode bool,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	if a == nil || a.bundleOpening == nil {
@@ -145,8 +156,8 @@ func (a *Assembly) Assemble(
 		BaseLogger: baseLogger, Clock: clock, ProviderOverride: replayProvider,
 		ReplayCommandRunner: replayCommandRunner, SubmissionHooks: replayhooks.Adapt(replayHooks),
 		CompletionPlanner: completionPlanner, PetriMutationRecorder: petriMutationRecorder,
-	}, providerOverride, providerCommandRunner, scriptCommandRunner, mockWorkersConfig,
-		runtimebuild.MockCommandRunnerFactory(mockCommandRunnerFactory))
+	}, a.providerOverride, a.providerCommandRunner, a.scriptCommandRunner, mockWorkersConfig,
+		runtimebuild.MockCommandRunnerFactory(a.mockCommandRunnerFactory))
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +193,7 @@ func (a *Assembly) Assemble(
 			ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
 			runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
 			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
-			submissionRecorder, dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
+			a.submissionRecorder, a.dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
 			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
 			progressPublisher, dispatchCompleted, worldStateProjector, a.recordingsRuntime, a.initialFactorySnapshot,
 		)
@@ -195,8 +206,8 @@ func (a *Assembly) Assemble(
 			Dir: factoryDir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
 		}, factoryruntime.SessionBuildSpec{
 			Clock: clock, BaseLogger: baseLogger, PetriMutationRecorder: petriMutationRecorder,
-		}, providerOverride, providerCommandRunner, scriptCommandRunner, mockWorkersConfig,
-			runtimebuild.MockCommandRunnerFactory(mockCommandRunnerFactory))
+		}, a.providerOverride, a.providerCommandRunner, a.scriptCommandRunner, mockWorkersConfig,
+			runtimebuild.MockCommandRunnerFactory(a.mockCommandRunnerFactory))
 		if err != nil {
 			return nil, err
 		}
@@ -207,7 +218,7 @@ func (a *Assembly) Assemble(
 	if err != nil {
 		return result, err
 	}
-	attachInvocationScheduleFactory(ctx, automationService, instance)
+	attachInvocationScheduleFactory(ctx, a.automationService, instance)
 	result.Lifecycle = a.instanceHost.Scope(clock)
 	result.Sidecars = a.sidecars.Scope(serviceMode)
 	return result, nil
