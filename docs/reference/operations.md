@@ -520,7 +520,14 @@ the same request does not blindly repeat its effects. CLI and HTTP report
 intent without observed completion. A torn journal tail instead reports
 persistence unavailable (`INTERNAL_ERROR`); its committed log prefix remains
 readable with `INCOMPLETE` capture health when no terminal was committed. Neither result proves a source stop
-or successor admission. If a joined
+or successor admission.
+
+An abrupt host exit without a terminal callback also leaves capture health `INCOMPLETE`.
+The recovered log prefix stays readable. Cancel and terminate refuse with
+`WORKER_SESSION_CONTROL_FAILED` when the host cannot establish execution ownership.
+This refusal does not prove that the provider process stopped.
+
+If a joined
 source snapshot was committed before interruption, the error
 includes those saved facts. A committed accepted successor snapshot returns
 success even when the final operation result is unavailable. Replay preserves

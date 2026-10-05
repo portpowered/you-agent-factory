@@ -10,12 +10,14 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -72,6 +74,88 @@ func TestExactStopRecoveryPrebuilt(t *testing.T) {
 			t.Parallel()
 			assertPartialInterruptRecovery(t, binary, fault)
 		})
+	}
+	t.Run("host-crash-without-terminal", func(t *testing.T) {
+		t.Parallel()
+		fixture := startExactStopFixture(t, binary)
+		fixture.invoke(t, "source")
+		fixture.assertLive(t, "source")
+		t.Cleanup(func() { cleanupExactStopChild(fixture.pids["source"]) })
+		fixture.assertIncompletePrefix(t)
+		fixture.crashHost(t)
+		fixture.daemon = startInterruptDaemon(t, fixture.ctx, binary, fixture.dir, fixture.url, fixture.env)
+		waitForInterruptStatus(t, fixture.ctx, fixture.daemon, fixture.url)
+		fixture.assertUnownedStopRefusal(t)
+		fixture.assertIncompletePrefix(t)
+		_, status, err := getInterruptWorker(fixture.ctx, http.DefaultClient, fixture.url, "exact-source")
+		if err == nil || status != http.StatusInternalServerError {
+			t.Fatalf("missing terminal callback fabricated an observation: HTTP %d error=%v", status, err)
+		}
+		stopInterruptDaemon(t, binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
+		assertInterruptPortAvailable(t, fixture.port)
+	})
+}
+
+// Kill only the fixture's host, allowing the production owner to disappear
+// without delivering a terminal callback. Child cleanup is test-owned and
+// deliberately happens after all public recovery assertions.
+func (fixture *exactStopFixture) crashHost(t *testing.T) {
+	t.Helper()
+	if err := fixture.daemon.cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-fixture.daemon.done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("crashed host did not exit")
+	}
+	fixture.daemon.mu.Lock()
+	fixture.daemon.stopped = true
+	fixture.daemon.mu.Unlock()
+	assertInterruptPortAvailable(t, fixture.port)
+}
+
+func cleanupExactStopChild(pid int) {
+	if runtime.GOOS == "windows" {
+		_ = exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").Run()
+		return
+	}
+	if process, err := os.FindProcess(pid); err == nil {
+		_ = process.Kill()
+	}
+}
+
+func (fixture *exactStopFixture) assertIncompletePrefix(t *testing.T) {
+	t.Helper()
+	logs, err := getInterruptJSON[factoryapi.WorkerSessionLogPage](fixture.ctx, http.DefaultClient, fixture.url+"/worker-sessions/exact-source/logs")
+	if err != nil || logs.Health != factoryapi.INCOMPLETE || logs.CommittedPosition == 0 {
+		t.Fatalf("crash prefix fabricated a terminal: logs=%#v error=%v", logs, err)
+	}
+}
+
+func (fixture *exactStopFixture) assertUnownedStopRefusal(t *testing.T) {
+	t.Helper()
+	for _, action := range []string{"cancel", "terminate"} {
+		request, err := http.NewRequestWithContext(fixture.ctx, http.MethodPost, fixture.url+"/worker-sessions/exact-source/"+action, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		var result factoryapi.ErrorResponse
+		if readErr != nil || json.Unmarshal(body, &result) != nil || response.StatusCode != http.StatusServiceUnavailable || string(result.Code) != "WORKER_SESSION_CONTROL_FAILED" {
+			t.Fatalf("unowned %s fabricated stop/join: status=%d error=%v body=%s", action, response.StatusCode, readErr, body)
+		}
+		cliResult := runInterruptBinary(t, fixture.ctx, fixture.binary, fixture.dir, fixture.env,
+			"--remote", "--server", fixture.url, "--json", "worker-sessions", action, "exact-source")
+		if cliResult.err == nil || !strings.Contains(cliResult.stdout+cliResult.stderr, "WORKER_SESSION_CONTROL_FAILED") {
+			t.Fatalf("unowned CLI %s disagrees: error=%v stdout=%s stderr=%s", action, cliResult.err, cliResult.stdout, cliResult.stderr)
+		}
+		t.Logf("crashed-host %s refuses without claiming APPLIED/NOOP: HTTP %d %s", action, response.StatusCode, body)
 	}
 }
 
