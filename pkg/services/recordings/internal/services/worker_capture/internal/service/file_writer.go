@@ -79,12 +79,12 @@ func (writer *FileWriter) entry(id string) *recordingEntry {
 	}
 	return entry
 }
-func (entry *recordingEntry) session(recordingID, sessionID string) *recordingSession {
+func (entry *recordingEntry) session(recordingID, sessionID string, topic events.Topic) *recordingSession {
 	if session := entry.sessions[sessionID]; session != nil {
 		return session
 	}
 	return &recordingSession{projection: recordings.WorkerRecordingProjection{
-		RecordingID: recordingID, WorkerSessionID: sessionID, Topic: events.Topic("worker-session/" + sessionID + "/events"),
+		RecordingID: recordingID, WorkerSessionID: sessionID, Topic: topic,
 		Status: recordings.WorkerRecordingStatusIncomplete}, identities: make(map[events.AppendIdentity]events.Record)}
 }
 func (entry *recordingEntry) commit(session *recordingSession) {
@@ -116,7 +116,7 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	if entry.damaged {
 		return recordings.ErrWorkerRecordingReplay
 	}
-	session := entry.session(record.RecordingID, record.WorkerSessionID)
+	session := entry.session(record.RecordingID, record.WorkerSessionID, record.Record.ID.Topic)
 	projection, duplicate, err := session.prepareRecord(record.Record)
 	if err != nil || duplicate {
 		return err
@@ -167,7 +167,7 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	if entry.damaged {
 		return recordings.ErrWorkerRecordingReplay
 	}
-	session := entry.session(failure.RecordingID, failure.WorkerSessionID)
+	session := entry.session(failure.RecordingID, failure.WorkerSessionID, failure.Topic)
 	delta := workerJournalEntry{Version: 1, Kind: "failure", RecordingID: failure.RecordingID, WorkerSessionID: failure.WorkerSessionID, Topic: failure.Topic, Code: failure.Code, ExecutionTerminal: failure.ExecutionTerminal}
 	projection, err := session.prepareFailure(delta)
 	if err != nil {
@@ -316,7 +316,7 @@ func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry) error {
 		if err != nil {
 			return err
 		}
-		session := entry.session(id, legacy.WorkerSessionID)
+		session := entry.session(id, legacy.WorkerSessionID, legacy.Topic)
 		session.records = result.Projection.Records
 		session.projection = result.Projection
 		session.projection.Records = nil
@@ -338,7 +338,11 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 	if delta.RecordingID != id || strings.TrimSpace(delta.WorkerSessionID) == "" {
 		return recordings.ErrWorkerRecordingReplay
 	}
-	session := entry.session(id, delta.WorkerSessionID)
+	topic := delta.Topic
+	if delta.Record != nil {
+		topic = delta.Record.ID.Topic
+	}
+	session := entry.session(id, delta.WorkerSessionID, topic)
 	switch delta.Kind {
 	case "record":
 		if err := session.applyRecordDelta(delta); err != nil {

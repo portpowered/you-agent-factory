@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -83,6 +84,8 @@ type runtimeConfig struct {
 	net                                *state.Net
 	scheduler                          scheduler.Scheduler
 	executeService                     executeCapability
+	workerExecution                    workers.Service
+	workerAttemptScheduler             platformclock.TimerSource
 	promptRenderer                     runtimePromptRenderer
 	templateFieldResolver              runtimeTemplateFieldResolver
 	promptSourceReader                 func(string) ([]byte, error)
@@ -90,6 +93,7 @@ type runtimeConfig struct {
 	attemptCapacity                    int
 	newID                              factory.IDGenerator
 	workerSessions                     workersessions.Service
+	workerAttempts                     factory.WorkerAttemptOpener
 	runtimeConfig                      interfaces.RuntimeDefinitionLookup
 	invocationInterpolation            interfaces.InvocationInterpolationService
 	invocationFileReader               interfaces.FileReader
@@ -137,8 +141,9 @@ var _ TickableFactory = (*factoryImpl)(nil)
 func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
-	statelessService executeCapability,
+	statelessService workers.Service,
 	workerSessionsService workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	invocationInterpolation interfaces.InvocationInterpolationService,
 	invocationFileReader interfaces.FileReader,
@@ -147,6 +152,7 @@ func New(
 	runtimeMode interfaces.RuntimeMode,
 	logger logging.Logger,
 	clock factory.Clock,
+	workerAttemptScheduler platformclock.TimerSource,
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
 	recordingID string,
@@ -181,9 +187,12 @@ func New(
 		net:                                net,
 		scheduler:                          runtimeScheduler,
 		executeService:                     statelessService,
+		workerExecution:                    statelessService,
+		workerAttemptScheduler:             workerAttemptScheduler,
 		promptRenderer:                     promptRenderer,
 		templateFieldResolver:              templateFieldResolver,
 		workerSessions:                     workerSessionsService,
+		workerAttempts:                     workerAttempts,
 		attemptCapacity:                    defaultRuntimeAttemptCapacity,
 		newID:                              newID,
 		runtimeConfig:                      runtimeDefinitions,
@@ -467,7 +476,10 @@ func configureRuntimeDispatch(
 ) {
 	var resultHook *dispatchPlanningResultHook
 	publisher := func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
-		return startThroughStatelessWorkers(ctx, cfg, request, resultHook.acceptWorkersResult)
+		// Accepted planned dispatches belong to Runtime. Resume can drain this
+		// outbox from an HTTP control request whose context ends with its response;
+		// only the Runtime cancellation edge may stop the admitted execution.
+		return startThroughStatelessWorkers(context.WithoutCancel(ctx), cfg, request, resultHook.acceptWorkersResult)
 	}
 	canceler := func(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 		return cancelStatelessAttempt(ctx, cfg, request)

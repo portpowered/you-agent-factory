@@ -41,11 +41,14 @@ const (
 type ControlRequest struct {
 	ID        string
 	RequestID string
+	// FactorySessionID optionally selects the immutable owning Factory Session.
+	// Runtime controls supply it; direct identity-only callers leave it empty.
+	FactorySessionID string
 }
 
 // Validate reports whether req identifies one stable Worker Session.
 func (req ControlRequest) Validate() error {
-	if !validSessionID(req.ID) {
+	if !validSessionID(req.ID) || (req.FactorySessionID != "" && strings.TrimSpace(req.FactorySessionID) == "") {
 		return ErrInvalidSessionID
 	}
 	return nil

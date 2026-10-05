@@ -188,9 +188,10 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	if workerSessionsService == nil {
 		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
 	}
+	workerAttempts, _ := workerSessionsService.(factory.WorkerAttemptOpener)
 	runtime, err := New(
-		cfg.net, cfg.scheduler, workerService, workerSessionsService, cfg.runtimeConfig, nil, nil,
-		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock,
+		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil, nil,
+		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock, platformclock.Real{},
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
 		cfg.restoredWorldState, false, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
@@ -1978,6 +1979,7 @@ type runtimeLedgerWithoutWorkerRecorder struct{ recordings.RuntimeLedger }
 // to the already injected Workers root, so Runtime tests do not construct peer
 // services through their private wire packages.
 type runtimeWorkerSessionsService struct {
+	factory.WorkerAttemptOpener
 	*fakeWorkerSessionsService
 
 	mu       sync.Mutex
@@ -2027,6 +2029,10 @@ func (service *runtimeWorkerSessionsService) Get(
 func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
 	ctx context.Context,
 	request workersessions.RuntimeAttemptRequest,
+	execution workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

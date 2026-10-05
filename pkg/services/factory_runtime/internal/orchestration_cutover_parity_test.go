@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
@@ -23,6 +23,7 @@ import (
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"go.uber.org/zap"
 )
 
@@ -98,6 +99,7 @@ func TestOrchestrationCompileSelectsJavaScriptKindWithoutPetriNet(t *testing.T) 
 }
 
 func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -116,7 +118,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -135,6 +137,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 }
 
 func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -165,6 +168,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testRuntimeID, workflows, workflows)),
 		nil,
+		platformclock.Real{},
 	).Build(
 		context.Background(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
@@ -174,7 +178,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {

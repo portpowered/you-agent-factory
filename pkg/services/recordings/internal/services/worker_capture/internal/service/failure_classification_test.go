@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -219,3 +220,50 @@ func (logger *captureDiagnosticLogger) Warn(message string, fields ...any) {
 }
 
 const legacyWorkerOpeningFixture = `{"recordingId":"legacy","sessions":[{"workerSessionId":"legacy-session","records":[{"ID":{"Topic":"worker-session/legacy-session/events","Position":1},"SourceType":"worker_session_lifecycle","SourceID":"legacy-session","SourceSequence":1,"SourceEventID":"started","SchemaID":"workers.draft.v1","Payload":{"kind":"SESSION","phase":"STARTED","provenance":{"delivery":"SYNTHESIZED","fidelity":"LIFECYCLE_ONLY","nativeEventType":"worker_session_lifecycle","provider":"","representation":"NOTIFICATION"},"payload":{"status":"STARTING","workerSessionId":"legacy-session"}}}]}]}`
+
+func TestFileWriterRetainsScopedTopicAcrossReload(t *testing.T) {
+	t.Parallel()
+	const recordingID = "scoped-recording"
+	const workerID = "recorded-worker"
+	const topic events.Topic = "factory-worker-session/ZmFjdG9yeS1zZXNzaW9u/cmVjb3JkZWQtd29ya2Vy/events"
+	root := t.TempDir()
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	writer, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opening := mustRecord(t, openingAppend(topic, workerID), 1)
+	terminal := mustRecord(t, terminalAppend(topic, workerID), 2)
+	persistWorkerRecoveryPrefix(t, writer, recordingID, workerID, opening, terminal)
+	reloaded, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := reloaded.(recordings.WorkerRecordingReader).LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil || replay.Projection.Topic != topic || replay.Projection.WorkerSessionID != workerID || !replay.Projection.Complete {
+		t.Fatalf("scoped replay = %+v, %v", replay, err)
+	}
+	codec := recordings.WorkerRecordingCodec{}
+	portable, err := codec.BuildWorkerPortableRecording(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	portableReplay, err := codec.ReplayWorkerPortableRecording(portable)
+	if err != nil || portableReplay.Projection.Topic != topic || portableReplay.Projection.WorkerSessionID != workerID {
+		t.Fatalf("portable scoped replay = %+v, %v", portableReplay, err)
+	}
+	foreign := mustRecord(t, terminalAppend("factory-worker-session/b3RoZXItc2Vzc2lvbg/cmVjb3JkZWQtd29ya2Vy/events", workerID), 3)
+	foreign.SourceEventID = "foreign-terminal"
+	err = reloaded.PersistWorkerRecord(context.Background(), recordings.WorkerRecordingRecord{RecordingID: recordingID, WorkerSessionID: workerID, Record: foreign})
+	if !errors.Is(err, recordings.ErrWorkerRecordingOrder) {
+		t.Fatalf("foreign topic append = %v", err)
+	}
+	after, err := reloaded.(recordings.WorkerRecordingReader).LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil || !reflect.DeepEqual(snapshot, after) {
+		t.Fatalf("foreign topic changed retained recording: %v", err)
+	}
+}

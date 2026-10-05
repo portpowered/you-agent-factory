@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ObservationService is retained as the public name for the Worker Sessions
@@ -86,13 +87,20 @@ const DefaultWorkerSessionObservationListMaxResults = 50
 // ListWorkerSessionObservationsRequest is the bounded top-level observation
 // query. NextToken is an opaque base64 cursor returned by the previous page.
 type ListWorkerSessionObservationsRequest struct {
-	Scope      ObservationScope
-	States     []State
-	MaxResults int
-	NextToken  string
+	// RuntimeID optionally bounds a runtime-owned fleet source.
+	RuntimeID string
+	// FactorySessionID optionally bounds a runtime-owned source of the fleet.
+	FactorySessionID string
+	Scope            ObservationScope
+	States           []State
+	MaxResults       int
+	NextToken        string
 }
 
 func (r ListWorkerSessionObservationsRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	if !r.Scope.Valid() {
 		return ErrInvalidObservationScope
 	}
@@ -121,11 +129,16 @@ type ListWorkerSessionObservationsResult struct {
 
 // GetObservationRequest names one exact Provider Session identity.
 type GetObservationRequest struct {
-	ProviderSession providers.SessionRef
+	// FactorySessionID selects the retained owner before optional enrichment.
+	FactorySessionID string
+	ProviderSession  providers.SessionRef
 }
 
 // Validate reports whether the request carries a complete typed identity.
 func (r GetObservationRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	if err := r.ProviderSession.Validate(); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
 	}
@@ -136,6 +149,9 @@ func (r GetObservationRequest) Validate() error {
 // without requiring a provider-native session reference.
 type GetObservationByWorkerSessionIDRequest struct {
 	WorkerSessionID string
+	// FactorySessionID selects the owning retained scope. Empty preserves the
+	// unscoped direct Worker lookup.
+	FactorySessionID string
 }
 
 // Validate reports whether the request carries a complete Worker Session
@@ -144,6 +160,9 @@ func (r GetObservationByWorkerSessionIDRequest) Validate() error {
 	if !validSessionID(r.WorkerSessionID) {
 		return ErrInvalidSessionID
 	}
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	return nil
 }
 
@@ -151,19 +170,19 @@ func (r GetObservationByWorkerSessionIDRequest) Validate() error {
 // recorded Provider Session association should be projected.
 type ReadTranscriptByWorkerSessionIDRequest struct {
 	WorkerSessionID string
+	// FactorySessionID selects the recorded association's owning scope.
+	FactorySessionID string
 }
 
 func (r ReadTranscriptByWorkerSessionIDRequest) Validate() error {
-	if !validSessionID(r.WorkerSessionID) {
-		return ErrInvalidSessionID
-	}
-	return nil
+	return GetObservationByWorkerSessionIDRequest(r).Validate()
 }
 
 // StreamObservationsRequest names one exact Provider Session identity and the
 // bounded live-delivery capacity requested from Events.
 type StreamObservationsRequest struct {
-	ProviderSession providers.SessionRef
+	FactorySessionID string
+	ProviderSession  providers.SessionRef
 	// Limit bounds the retained batch and live buffer. Zero uses the stable
 	// service default.
 	Limit int
@@ -182,6 +201,9 @@ const DefaultObservationStreamLimit = 64
 // Validate reports whether the request carries a complete identity and a
 // positive effective delivery limit.
 func (r StreamObservationsRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	if err := r.ProviderSession.Validate(); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
 	}
@@ -200,8 +222,10 @@ func (r StreamObservationsRequest) Validate() error {
 // Session and the bounded delivery policy for its retained/live stream.
 type StreamObservationsByWorkerSessionIDRequest struct {
 	WorkerSessionID string
-	Limit           int
-	ReplayOnly      bool
+	// FactorySessionID selects the source topic's owning retained scope.
+	FactorySessionID string
+	Limit            int
+	ReplayOnly       bool
 	// Cursor resumes strictly after the last acknowledged Worker Session event.
 	Cursor *ObservationCursor
 }
@@ -209,8 +233,10 @@ type StreamObservationsByWorkerSessionIDRequest struct {
 // Validate reports whether the request carries a complete Worker Session
 // identity and a non-negative effective delivery limit.
 func (r StreamObservationsByWorkerSessionIDRequest) Validate() error {
-	if !validSessionID(r.WorkerSessionID) {
-		return ErrInvalidSessionID
+	if err := (GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: r.WorkerSessionID, FactorySessionID: r.FactorySessionID,
+	}).Validate(); err != nil {
+		return err
 	}
 	if r.Limit < 0 {
 		return ErrInvalidObservationStreamLimit
@@ -266,6 +292,8 @@ type Observation struct {
 	Model           *string
 	ReasoningEffort *string
 	Direct          bool
+	// RuntimeID retains the admitting source owner for internal read routing.
+	RuntimeID string `json:"-"`
 	// FactorySessionID is the Factory Session that admitted this observation,
 	// when the runtime supplied one. Worker Sessions records the correlation but
 	// does not authorize or resolve a caller-selected scope here.
@@ -650,12 +678,17 @@ var (
 type ReadTranscriptRequest struct {
 	WorkerSessionID string
 	ProviderSession providers.SessionRef
+	// FactorySessionID fences the selected identity to its owning retained scope.
+	FactorySessionID string
 }
 
 // Validate reports whether the request carries exactly one complete typed
 // identity. Accepting both identities would make a disagreement ambiguous and
 // could let a legacy provider reference escape its Worker Session scope.
 func (r ReadTranscriptRequest) Validate() error {
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
+	}
 	workerSessionID := strings.TrimSpace(r.WorkerSessionID)
 	providerIdentityPresent := strings.TrimSpace(string(r.ProviderSession.Provider)) != "" ||
 		strings.TrimSpace(r.ProviderSession.Kind) != "" || strings.TrimSpace(r.ProviderSession.ID) != ""
@@ -824,3 +857,68 @@ var (
 	// could not project the normalized transcript source.
 	ErrObservationTranscriptProjectionUnavailable = errors.New("worker session transcript: projection unavailable")
 )
+
+// PublishWorkerSessionProgress commits progress to an already-resolved Worker
+// Session. The runtime owner validates the immutable key and physical attempt
+// first; this operation never resolves a bare dispatch or forwards output.
+// A zero-value publisher owns only this session's source sequence and lock.
+func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
+	ctx context.Context,
+	observer Service,
+	workerSessionID string,
+	fragment workers.ProgressFragment,
+	factorySessionIDs ...string,
+) error {
+	factorySessionID := observationFactorySessionID(factorySessionIDs)
+	if !providerFragmentAgrees(fragment) {
+		return ErrProviderBindingConflict
+	}
+	draft, canonical := canonicalDraftFromFragment(fragment)
+	if canonical && !providerIdentityAgrees(fragment, draft) {
+		return ErrProviderBindingConflict
+	}
+	if canonical && draft.DispatchID != fragment.Correlation.AttemptID {
+		return ErrProviderBindingAttemptMismatch
+	}
+	if reference := sessionRefFromContinuation(fragment.Continuation); reference != nil {
+		if _, err := observer.AssociateProviderSession(ctx, ProviderSessionAssociationRequest{
+			WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID, DispatchID: fragment.Correlation.DispatchID,
+			Reference: reference.Clone(),
+		}); err != nil {
+			return err
+		}
+	}
+	if fragment.Kind == workers.ProviderSessionObservedFragmentKind {
+		return nil
+	}
+	if !canonical {
+		if !isWorkerAuthoredFragment(fragment) {
+			return nil
+		}
+		var ok bool
+		draft, ok = draftFromProgressFragment(fragment)
+		if !ok {
+			return nil
+		}
+	}
+	// The registry supplied the physical attempt, while downstream consumers
+	// retain the original logical dispatch and correlation unchanged.
+	if !canonical {
+		draft.DispatchID = fragment.Correlation.AttemptID
+	}
+	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
+		if _, err := observer.EnsureProviderBinding(ctx, ProviderBindingRequest{
+			WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID, DispatchID: fragment.Correlation.AttemptID, Provider: provider,
+		}); err != nil {
+			return err
+		}
+	}
+	return p.publishWorkerDraftContext(ctx, observer, workerSessionID, draft, factorySessionID)
+}
+
+func observationFactorySessionID(scopes []string) string {
+	if len(scopes) == 0 {
+		return ""
+	}
+	return scopes[0]
+}

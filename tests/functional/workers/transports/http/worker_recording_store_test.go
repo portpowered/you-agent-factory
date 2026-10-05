@@ -45,6 +45,9 @@ func (store *remoteWorkerRecordingStore) PersistWorkerRecord(
 	snapshot := cloneRemoteWorkerRecordingSnapshot(store.snapshots[record.RecordingID])
 	snapshot.RecordingID = record.RecordingID
 	session := remoteWorkerRecordingSession(&snapshot, record.WorkerSessionID)
+	if len(session.Records) == 0 {
+		session.Topic = record.Record.ID.Topic
+	}
 	for _, accepted := range session.Records {
 		if accepted.Identity() != record.Record.Identity() {
 			continue

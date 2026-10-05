@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -48,7 +49,7 @@ func (r *registry) reconcileOverdueAttempt(
 	supervision.clearDeadlineExceeded()
 	r.logger.Info(
 		"worker session reconciliation failed",
-		"sessionID", id,
+		"sessionID", publicWorkerID(id),
 		"attemptID", attemptID,
 		"dispatchID", attemptID,
 		"reason", string(workers.WorkstationDispatchReconciliationReasonTimeout),
@@ -80,6 +81,9 @@ type continueTuple struct {
 }
 
 type continuePlan struct {
+	executor  workers.Service
+	clock     platformclock.Source
+	scheduler platformclock.TimerSource
 	request   workersessions.ContinueRequest
 	execution workers.WorkstationDispatchRequest
 	direct    bool
@@ -87,6 +91,9 @@ type continuePlan struct {
 }
 
 type continuationSourceSnapshot struct {
+	executor   workers.Service
+	clock      platformclock.Source
+	scheduler  platformclock.TimerSource
 	session    workersessions.Session
 	execution  workers.WorkstationDispatchRequest
 	dispatchID string
@@ -251,6 +258,7 @@ func (r *registry) snapshotContinuationSourceLocked(
 		direct = metadata.direct
 	}
 	return continuationSourceSnapshot{
+		executor: supervision.executor, clock: supervision.clock, scheduler: supervision.scheduler,
 		session:    source,
 		execution:  execution,
 		dispatchID: dispatchID,
@@ -313,6 +321,7 @@ func (r *registry) storeContinuationReservationLocked(
 	replay := &continueReplay{
 		tuple: tuple,
 		plan: continuePlan{
+			executor: snapshot.executor, clock: snapshot.clock, scheduler: snapshot.scheduler,
 			request:   req,
 			execution: continuation,
 			direct:    snapshot.direct,
@@ -386,6 +395,14 @@ func continuationDispatchID(sourceDispatchID, successorID string) string {
 }
 
 func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueResult, error) {
+	runtimeID := strings.TrimSpace(plan.execution.Execution.RuntimeID)
+	if runtimeID != "" {
+		if !r.beginRuntimeOpening(runtimeID) {
+			r.releaseContinuationReservation(plan)
+			return r.continuationResult(plan), continuationNotAccepted(workersessions.ErrContinuationServerStopping)
+		}
+		defer r.finishRuntimeOpening(runtimeID)
+	}
 	serverCtx := r.serverOwnedContext()
 	invoke := workersessions.InvokeSessionRequest{
 		ID:        plan.request.SuccessorWorkerSessionID,
@@ -402,6 +419,9 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 			verifyTopicReady: true,
 			lineage:          plan.lineage,
 		},
+		plan.executor,
+		plan.clock,
+		plan.scheduler,
 	)
 	if err != nil {
 		r.releaseContinuationReservation(plan)
@@ -547,7 +567,7 @@ func (r *registry) publishSessionLineageRecord(
 		pub.mu.Unlock()
 		return workersessions.ErrOutOfOrderPublication
 	}
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(sessionID), identity, workerDraftSchemaID, draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(sessionID), identity, workerDraftSchemaID, draft)
 	if err != nil {
 		pub.mu.Unlock()
 		return err
@@ -571,14 +591,14 @@ func (r *registry) persistClosedLineageRecord(ctx context.Context, recordingID, 
 	if !ok || writer == nil {
 		r.logger.Info(
 			"worker session continuation lineage recording unavailable",
-			"sessionID", sessionID,
+			"sessionID", publicWorkerID(sessionID),
 			"outcome", "unavailable",
 		)
 		return
 	}
 	err := writer.PersistWorkerRecord(context.WithoutCancel(ctx), recordings.WorkerRecordingRecord{
 		RecordingID:     recordingID,
-		WorkerSessionID: sessionID,
+		WorkerSessionID: publicWorkerID(sessionID),
 		Record:          record.Detached(),
 	})
 	if err == nil {
@@ -586,14 +606,14 @@ func (r *registry) persistClosedLineageRecord(ctx context.Context, recordingID, 
 	}
 	r.logger.Info(
 		"worker session continuation lineage recording failed",
-		"sessionID", sessionID,
+		"sessionID", publicWorkerID(sessionID),
 		"outcome", "degraded",
 	)
 	if failureWriter, ok := r.recording.(recordings.WorkerRecordingFailureWriter); ok && failureWriter != nil {
 		_ = failureWriter.PersistWorkerRecordingFailure(context.WithoutCancel(ctx), recordings.WorkerRecordingFailure{
 			RecordingID:     recordingID,
-			WorkerSessionID: sessionID,
-			Topic:           workersessions.Topic(sessionID),
+			WorkerSessionID: publicWorkerID(sessionID),
+			Topic:           r.observationTopic(sessionID),
 			Code:            "CONTINUATION_LINEAGE_PERSISTENCE_FAILED",
 		})
 	}
@@ -611,6 +631,9 @@ func (r *registry) publishAttemptLineageRecord(
 	attemptNumber int,
 ) error {
 	currentDispatchID := attempt.Execution.Dispatch.DispatchID
+	r.mu.RLock()
+	clock := r.observationClockLocked(sessionID)
+	r.mu.RUnlock()
 	lineage := workers.SessionLineage{
 		PreviousDispatchID: previousDispatchID,
 		PreviousAttemptID:  previousDispatchID,
@@ -618,7 +641,7 @@ func (r *registry) publishAttemptLineageRecord(
 	payload := openingSessionPayload(
 		sessionID,
 		currentDispatchID,
-		r.clock.Now(),
+		clock.Now(),
 		attempt.Execution,
 		&lineage,
 	)
@@ -736,4 +759,233 @@ func interruptSuccessorAdmittedState(state workersessions.State) bool {
 	default:
 		return false
 	}
+}
+
+func (r *registry) associateProviderSession(
+	req workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	req.WorkerSessionID = r.workerAddressLocked(req.WorkerSessionID, req.FactorySessionID)
+	return r.associateProviderSessionLocked(req)
+}
+
+func (r *registry) providerBindingOwner(req workersessions.ProviderBindingRequest) (string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	req.WorkerSessionID = r.workerAddressLocked(req.WorkerSessionID, req.FactorySessionID)
+	dispatchID := strings.TrimSpace(req.DispatchID)
+	if req.WorkerSessionID != "" {
+		if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
+			return req.WorkerSessionID, attempt.attemptID == dispatchID && r.runtimeAttemptOwners[attempt.key] == req.WorkerSessionID
+		}
+		if supervision := r.supervisions[req.WorkerSessionID]; supervision != nil && supervision.runtimeKey.RuntimeID != "" {
+			supervision.mu.Lock()
+			owned := supervision.dispatchID == dispatchID && r.runtimeAttemptOwners[supervision.runtimeKey] == req.WorkerSessionID
+			supervision.mu.Unlock()
+			return req.WorkerSessionID, owned
+		}
+		return req.WorkerSessionID, r.dispatchOwners[dispatchID] == req.WorkerSessionID
+	}
+	ownerID, exists := r.dispatchOwners[dispatchID]
+	return ownerID, exists
+}
+
+func (r *registry) associateProviderSessionLocked(
+	req workersessions.ProviderSessionAssociationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	session, exists := r.sessions[req.WorkerSessionID]
+	if !exists {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
+	}
+	supervision := r.supervisions[req.WorkerSessionID]
+	attempt := r.runtimeAttemptControls[req.WorkerSessionID]
+	if !r.providerAssociationOwnedLocked(req) {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+
+	turnID := ""
+	dispatchID := req.DispatchID
+	attemptID := dispatchID
+	if supervision != nil {
+		supervision.mu.Lock()
+		turnID = supervision.turnID
+		dispatchID = supervision.dispatchID
+		attemptID = dispatchID
+		if supervision.runtimeKey.RuntimeID != "" {
+			dispatchID = supervision.runtimeKey.DispatchID
+		}
+		supervision.mu.Unlock()
+	} else if attempt != nil {
+		// Runtime owns execution, but its immutable handle still identifies the
+		// physical attempt. A logical dispatch may survive several attempts.
+		dispatchID = attempt.dispatchID
+		attemptID = attempt.attemptID
+		if observation := r.observations[req.WorkerSessionID]; observation != nil {
+			turnID = observation.turnID
+		}
+	}
+	association := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: publicWorkerID(req.WorkerSessionID),
+		TurnID:          turnID,
+		DispatchID:      dispatchID,
+		AttemptID:       attemptID,
+		Reference:       req.Reference.Clone(),
+	}
+	if existing := session.ProviderSessionAssociation; existing != nil {
+		if existing.Reference == association.Reference {
+			return workersessions.ProviderSessionAssociationResult{
+				Association: existing.Clone(),
+				Outcome:     workersessions.ProviderSessionAssociationOutcomeDuplicate,
+			}, nil
+		}
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationConflict
+	}
+	if session.Terminal() {
+		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationNotAvailable
+	}
+
+	session.ProviderSessionAssociation = &association
+	r.sessions[req.WorkerSessionID] = session
+	return workersessions.ProviderSessionAssociationResult{
+		Association: association.Clone(),
+		Outcome:     workersessions.ProviderSessionAssociationOutcomeAccepted,
+	}, nil
+}
+
+type runtimeAdmission struct {
+	closed   bool
+	openings int
+	drained  chan struct{}
+}
+
+func (r *registry) closeRuntimeAdmission(ctx context.Context, runtimeID string) error {
+	r.mu.Lock()
+	admission := r.runtimeAdmissionLocked(runtimeID)
+	admission.closed = true
+	drained := admission.drained
+	r.mu.Unlock()
+	r.logger.Info("runtime Worker admission closed", "runtimeID", runtimeID, "outcome", "closed")
+	select {
+	case <-drained:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// CloseRuntimeAttempts seals this runtime's admission, joins opening effects,
+// then joins its admitted attempts without discarding retained observations.
+// An opening that loses the final admission race terminalizes its own capture;
+// the closed runtime ID cannot admit another attempt. Peer scopes stay open.
+func (r *registry) CloseRuntimeAttempts(ctx context.Context, runtimeID string) error {
+	ctx = runtimeAttemptContext(ctx)
+	runtimeID = strings.TrimSpace(runtimeID)
+	if runtimeID == "" {
+		return workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := r.closeRuntimeAdmission(ctx, runtimeID); err != nil {
+		return err
+	}
+	r.mu.RLock()
+	var ids []string
+	for _, attempt := range r.runtimeAttemptControls {
+		if attempt.key.RuntimeID == runtimeID {
+			ids = append(ids, attempt.workerID)
+		}
+	}
+	for id, supervision := range r.supervisions {
+		supervision.mu.Lock()
+		owned := supervision.runtimeKey.RuntimeID == runtimeID || (supervision.serverOwned && strings.TrimSpace(supervision.execution.Execution.RuntimeID) == runtimeID)
+		supervision.mu.Unlock()
+		if owned {
+			ids = append(ids, id)
+		}
+	}
+	r.mu.RUnlock()
+	results := make(chan error, len(ids))
+	for _, id := range ids {
+		go func() {
+			_, err := r.Cancel(ctx, workersessions.ControlRequest{ID: id})
+			if err == nil {
+				err = r.waitForSupervisionDriver(ctx, id)
+			}
+			results <- err
+		}()
+	}
+	var closeErr error
+	for range ids {
+		select {
+		case err := <-results:
+			closeErr = errors.Join(closeErr, err)
+		case <-ctx.Done():
+			return errors.Join(closeErr, ctx.Err())
+		}
+	}
+	return closeErr
+}
+
+func (r *registry) registerInvocationSupervision(
+	ctx context.Context,
+	req workersessions.InvokeSessionRequest,
+	options invocationPreparationOptions,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+) (invocationPreparation, error) {
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if options.verifyTopicReady {
+		eventReadyFields := []any{"sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting)}
+		if options.requestID != "" {
+			eventReadyFields = append(eventReadyFields, "requestID", options.requestID)
+		}
+		r.logger.Info("worker session start", eventReadyFields...)
+	}
+	supervision, canStart := r.registerSupervisionOwned(
+		options.serverOwned,
+		req.ID,
+		attemptID,
+		req.Execution.Execution.Dispatch.Execution.RequestID,
+		executor,
+		clock,
+		scheduler,
+		options.runtimeKey,
+		req.Execution,
+	)
+	if !canStart {
+		if options.runtimeKey.RuntimeID != "" {
+			final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+			return invocationPreparation{session: final, terminal: true, preAdmission: true, failure: workersessions.ErrStartAdmissionFailed}, nil
+		}
+		final, _ := r.Get(context.WithoutCancel(ctx), workersessions.GetRequest{ID: req.ID})
+		if options.serverOwned && r.runtimeAdmissionClosed(req.Execution.Execution.RuntimeID) && !final.Terminal() {
+			final = r.cancelInvocationBeforeAdmission(ctx, req.ID, attemptID)
+			return invocationPreparation{session: final, terminal: true, failure: workersessions.ErrStartServerStopping}, nil
+		}
+		if options.serverOwned && r.isStopping() && !final.Terminal() {
+			final = r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+			return invocationPreparation{
+				session:  final,
+				terminal: true,
+				failure:  workersessions.ErrStartServerStopping,
+			}, nil
+		}
+		if final.Terminal() {
+			r.publishTerminalSnapshot(ctx, req.ID, attemptID, final)
+			return invocationPreparation{
+				session:  final,
+				terminal: true,
+				failure:  workersessions.ErrStartAdmissionFailed,
+			}, nil
+		}
+		return invocationPreparation{}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
+	}
+	supervision.mu.Lock()
+	supervision.retryBudget = req.Retry.Attempts()
+	supervision.continuing = options.continuation
+	supervision.mu.Unlock()
+	return invocationPreparation{supervision: supervision}, nil
 }
