@@ -71,6 +71,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
+	checkout := newInitialOpeningWorktreeScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
 	for _, dir := range []string{reused.candidateDir, reused.peerDir} {
@@ -93,6 +94,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		FactoryRuntimeDirectories: files,
 		ScriptCommandRunner:       initialOpeningScriptRunner{effects: effects},
 		ProviderCommandRunner:     initialOpeningProviderRunner{effects: effects},
+		WorkersWorktreeGit:        initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter:          api.Start,
 	})
 	if err != nil {
@@ -170,6 +172,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		assertInitialOpeningProviderSelection(t, effects, selected.peerDir)
 		assertInitialOpeningHistoryPreserved(t, sessions, selected.peerID, peerHistory)
 		assertInitialOpeningInvocation(t, sessions, selected.peerID)
+	})
+	t.Run("reused customer checkout survives session close and destination reuse", func(t *testing.T) {
+		t.Parallel()
+		testInitialOpeningWorktreeReuse(t, sessions, checkout, effects)
 	})
 }
 
