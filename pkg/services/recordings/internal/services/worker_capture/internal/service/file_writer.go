@@ -56,6 +56,7 @@ type recordingSession struct {
 	records          []events.Record
 	identities       map[events.AppendIdentity]events.Record
 	summaryPositions [summaryFactCount]uint64
+	usagePositions   []uint64
 }
 type workerJournalEntry struct {
 	RecordingGenerationID string                              `json:"recordingGenerationId,omitempty"`

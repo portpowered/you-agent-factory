@@ -39,6 +39,9 @@ func (session *recordingSession) rememberSummary(record events.Record) {
 	if draft.Kind == workers.KindUsage {
 		var usage workers.UsagePayload
 		if json.Unmarshal(draft.Payload, &usage) == nil {
+			// Keep only positions in the already retained records, not another
+			// payload copy. Pages can select usage at a frozen committed head.
+			session.usagePositions = append(session.usagePositions, position)
 			if capturedUsageCountersPresent(draft.Payload) {
 				session.summaryPositions[summaryUsage] = position
 			}

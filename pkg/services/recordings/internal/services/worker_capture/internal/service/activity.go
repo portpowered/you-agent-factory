@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -330,18 +331,19 @@ func (writer *FileWriter) pageCursor(token string, catalog recordings.WorkerSess
 }
 
 func capturedUsage(session *recordingSession, head uint64) *workers.UsagePayload {
-	var result *workers.UsagePayload
-	for _, record := range session.records[:head] {
-		var draft workers.Draft
-		if json.Unmarshal(record.Payload, &draft) != nil || draft.Kind != workers.KindUsage || draft.Phase != workers.PhaseUpdated {
-			continue
-		}
-		var usage workers.UsagePayload
-		if json.Unmarshal(draft.Payload, &usage) == nil {
-			result = &usage
-		}
+	index := sort.Search(len(session.usagePositions), func(index int) bool {
+		return session.usagePositions[index] > head
+	})
+	if index == 0 {
+		return nil
 	}
-	return result
+	position := session.usagePositions[index-1]
+	var draft workers.Draft
+	var usage workers.UsagePayload
+	if json.Unmarshal(session.records[position-1].Payload, &draft) != nil || json.Unmarshal(draft.Payload, &usage) != nil {
+		return nil
+	}
+	return &usage
 }
 
 func timePointer(value time.Time) *time.Time { stamp := value.UTC(); return &stamp }

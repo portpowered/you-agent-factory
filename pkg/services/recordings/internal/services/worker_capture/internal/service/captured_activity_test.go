@@ -20,6 +20,80 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestFileWriterCapturedUsageKeepsFrozenHeadAcrossRestart(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	record := journalRecord(t, "usage-head", "summary-worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerCapturedActivityRequest{WorkerSessionID: record.WorkerSessionID, Limit: 1}
+	initial, err := writer.ReadWorkerCapturedActivity(t.Context(), request)
+	if err != nil || initial.TokenUsage != nil {
+		t.Fatalf("opening invented usage: %+v, %v", initial, err)
+	}
+	persistUsageHeadRecords(t, writer, record, 2, []string{
+		`{"totalTokens":12,"model":"first"}`, `{"label":"working"}`,
+	})
+	frozen, err := writer.ReadWorkerCapturedActivity(t.Context(), request)
+	if err != nil || frozen.NextToken == "" {
+		t.Fatalf("freeze prefix: %+v, %v", frozen, err)
+	}
+	persistUsageHeadRecords(t, writer, record, 4, []string{
+		`{"inputTokens":0,"totalTokens":0}`, `{"model":"latest"}`, `{"label":"working"}`,
+	})
+	record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, record.WorkerSessionID), 7)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, store := range []recordings.WorkerRecordingStore{writer, reopened} {
+		assertCapturedUsageHead(t, store, request, frozen.NextToken)
+	}
+}
+
+func persistUsageHeadRecords(t *testing.T, writer *FileWriter, record recordings.WorkerRecordingRecord, start uint64, payloads []string) {
+	t.Helper()
+	for index, payload := range payloads {
+		kind := workers.KindUsage
+		if strings.Contains(payload, "label") {
+			kind = workers.KindProgress
+		}
+		record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, kind, payload, start+uint64(index))
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+		// Replayed admission must not add a second usage entry or event.
+		if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertCapturedUsageHead(t *testing.T, writer recordings.WorkerRecordingStore, request recordings.WorkerCapturedActivityRequest, token string) {
+	t.Helper()
+	request.NextToken = token
+	for position := uint64(2); position <= 3; position++ {
+		page, err := writer.ReadWorkerCapturedActivity(t.Context(), request)
+		if err != nil || page.Catalog.CommittedPosition != 3 || len(page.Records) != 1 || uint64(page.Records[0].Record.ID.Position) != position || page.TokenUsage == nil {
+			t.Fatalf("frozen page %d: %+v, %v", position, page, err)
+		}
+		if page.TokenUsage.TotalTokens != 12 || page.TokenUsage.Model != "first" || page.Terminal != nil {
+			t.Fatalf("later commit leaked into frozen usage: %+v", page)
+		}
+		page.TokenUsage.TotalTokens = 999
+		request.NextToken = page.NextToken
+	}
+	page, err := writer.ReadWorkerCapturedActivity(t.Context(), request)
+	if err != nil || page.Catalog.CommittedPosition != 7 || page.TokenUsage == nil || page.TokenUsage.Model != "latest" || page.TokenUsage.TotalTokens != 0 {
+		t.Fatalf("refreshed usage lost model-only/zero update: %+v, %v", page, err)
+	}
+}
+
 func TestFileWriterCapturedActiveLossPreservesIncompletePrefix(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)
@@ -442,6 +516,7 @@ func TestFileWriterCatalogSummaryExcludesRejectedAppend(t *testing.T) {
 	if got := mustCatalogSummary(t, writer); !reflect.DeepEqual(got, want) {
 		t.Fatalf("summary advertised uncommitted metadata: got=%+v want=%+v", got, want)
 	}
+	assertCapturedUsageTokens(t, writer, record.WorkerSessionID, nil)
 	probe.fault = nil
 	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
 		t.Fatal(err)
@@ -450,6 +525,7 @@ func TestFileWriterCatalogSummaryExcludesRejectedAppend(t *testing.T) {
 	if got.Catalog.CommittedPosition != 2 || len(got.MetadataRecords) != 1 || len(got.CapturedAt) != 2 {
 		t.Fatalf("accepted retry failed to publish metadata: %+v", got)
 	}
+	assertCapturedUsageTokens(t, writer, record.WorkerSessionID, &workers.UsagePayload{TotalTokens: 10})
 }
 
 func TestFileWriterCatalogSummaryRehydratesUncertainCommit(t *testing.T) {
@@ -470,6 +546,7 @@ func TestFileWriterCatalogSummaryRehydratesUncertainCommit(t *testing.T) {
 	if got.Catalog.CommittedPosition != 2 || len(got.MetadataRecords) != 1 || len(got.CapturedAt) != 2 {
 		t.Fatalf("summary failed to recover synchronized bytes after uncertain close: %+v", got)
 	}
+	assertCapturedUsageTokens(t, writer, record.WorkerSessionID, &workers.UsagePayload{TotalTokens: 10})
 }
 
 func TestFileWriterCatalogSummaryKeepsPartialSelectionAndRetryFacts(t *testing.T) {
@@ -530,6 +607,15 @@ func TestFileWriterCatalogSummaryRebuildsLegacyFactsWithoutStamps(t *testing.T) 
 	if !reflect.DeepEqual(got.Opening, want.Opening) || !reflect.DeepEqual(got.MetadataRecords, want.MetadataRecords) ||
 		!reflect.DeepEqual(got.Terminal, want.Terminal) || got.Health != want.Health {
 		t.Fatalf("legacy summary lost source facts: got=%+v want=%+v", got, want)
+	}
+	assertCapturedUsageTokens(t, legacy, record.WorkerSessionID, &workers.UsagePayload{})
+}
+
+func assertCapturedUsageTokens(t *testing.T, store recordings.WorkerRecordingStore, id string, want *workers.UsagePayload) {
+	t.Helper()
+	page, err := store.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: id, Limit: 1})
+	if err != nil || !reflect.DeepEqual(page.TokenUsage, want) {
+		t.Fatalf("captured usage = %+v, want %+v; error %v", page.TokenUsage, want, err)
 	}
 }
 
