@@ -1062,7 +1062,7 @@ golangci-lint-run:
 	$(GOLANGCI_LINT) run ./...
 
 deadcode: golangci-build
-	$(call run_lint_checker,./cmd/deadcodecheck,-golangci-host-file "$(GOLANGCI_DIR)/host-path.txt")
+	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode
