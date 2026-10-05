@@ -4,7 +4,6 @@
 # Unlisted findings and stale entries fail. Absent merge-base rule IDs seed once.
 # Established rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
-application-graph-test|tests/integration/models_test|pkg/wire
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/apitypes
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping
