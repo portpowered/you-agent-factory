@@ -110,6 +110,10 @@ func TestPackagedFactorySourceCatalogSnapshots(t *testing.T) {
 	}{
 		{"json", map[string]string{"factories/new/factory.json": packagedSourceFixture("@you/new", "new")}, ""},
 		{"yaml", map[string]string{"factories/new/factory.yaml": "name: '@you/new'\nid: new\nworkTypes: []\nresources: []\nworkers: []\nworkstations: []\n"}, ""},
+		{"yml", map[string]string{"factories/new/factory.yml": "name: '@you/new'\nid: new\nworkTypes: []\nresources: []\nworkers: []\nworkstations: []\n"}, ""},
+		{"missing-asset", map[string]string{"factories/new/factory.json": `{"name":"@you/new","id":"new","workTypes":[],"resources":[],"workers":[{"name":"worker","type":"AGENT_WORKER","promptFile":"prompts/missing.md"}],"workstations":[]}`}, "missing.md"},
+		{"owned-asset", map[string]string{"factories/new/factory.json": `{"name":"@you/new","id":"new","workTypes":[],"resources":[],"workers":[{"name":"worker","type":"AGENT_WORKER","promptFile":"prompts/worker.md"}],"workstations":[]}`, "factories/new/prompts/worker.md": "Owned prompt.\n"}, ""},
+		{"invalid-slug", map[string]string{"factories/ new/factory.json": packagedSourceFixture("@you/new", "new")}, "invalid directory slug"},
 		{"js", map[string]string{"factories/new/factory.js": "/* @you-factory-meta\n{\"name\":\"@you/new\",\"id\":\"new\",\"version\":1}\n*/\nexport default {};"}, ""},
 		{"missing-root", map[string]string{"factories/new/asset.txt": "text"}, "no root Factory"},
 		{"duplicate-root", map[string]string{"factories/new/factory.json": "{}", "factories/new/factory.yml": "{}"}, "2 root Factory"},
