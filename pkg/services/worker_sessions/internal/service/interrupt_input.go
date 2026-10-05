@@ -98,6 +98,9 @@ func interruptJSONContains(document any, value string) bool {
 }
 
 func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersessions.InterruptRequest, attemptID string) error {
+	if !uniqueInterruptJSONFields(stored) {
+		return recordings.ErrWorkerRecordingPersistence
+	}
 	// Earlier request-only artifacts remain read-only replay evidence. They do
 	// not contain a recipe and cannot authorize pending replacement recovery.
 	if bytes.Equal(stored, legacyPayload) {

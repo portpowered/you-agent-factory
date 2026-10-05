@@ -22,12 +22,60 @@ type durableInterruptOutcome struct {
 // Treat the saved response as a versioned contract, just like captured input.
 // Silently discarding unknown fields could hide an incompatible/private row.
 func readInterruptOutcome(payload json.RawMessage, outcome *durableInterruptOutcome) error {
+	if !uniqueInterruptJSONFields(payload) {
+		return recordings.ErrWorkerRecordingPersistence
+	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(outcome) != nil || decoder.Decode(new(any)) != io.EOF {
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	return nil
+}
+
+// Duplicate members can conceal credentials or contradictory facts behind a
+// later value. Validate every object before decoding into the saved contract.
+func uniqueInterruptJSONFields(payload []byte) bool {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	if readUniqueInterruptJSONValue(decoder) != nil {
+		return false
+	}
+	_, err := decoder.Token()
+	return err == io.EOF
+}
+
+func readUniqueInterruptJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, compound := token.(json.Delim)
+	if !compound {
+		return nil
+	}
+	if delimiter != '{' && delimiter != '[' {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	seen := make(map[string]bool)
+	for decoder.More() {
+		if delimiter == '{' {
+			key, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			name, ok := key.(string)
+			if !ok || seen[name] {
+				return recordings.ErrWorkerRecordingPersistence
+			}
+			seen[name] = true
+		}
+		if err := readUniqueInterruptJSONValue(decoder); err != nil {
+			return err
+		}
+	}
+	_, err = decoder.Token()
+	return err
 }
 
 type interruptFailureIdentity struct {
