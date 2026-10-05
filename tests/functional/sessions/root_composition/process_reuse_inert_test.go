@@ -559,14 +559,6 @@ func assertInvocationPrimaryResultText(
 	}
 }
 
-func assertPathDoesNotExist(t testing.TB, path, label string) {
-	t.Helper()
-	_, err := os.Stat(path)
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("%s stat error = %v, want path not to exist", label, err)
-	}
-}
-
 func assertPathExists(t testing.TB, path, label string) {
 	t.Helper()
 	if _, err := os.Stat(path); err != nil {

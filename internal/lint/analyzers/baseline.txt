@@ -2309,7 +2309,6 @@ testsleep-deadline-test|tests/functional/models/root_composition_test|tests/func
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/localai_omni_cli_server_parity_test.go::assertLocalAIOMNIServerReleased::deadline::1
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::runTTSCancellation::deadline::1
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::runTTSCancellation::deadline::2
-testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy::deadline::1
 testsleep-deadline-test|tests/functional/models/root_composition_test|tests/functional/models/root_composition/tts_story_test.go::waitForTTSHostLifecycle::deadline::1
 testsleep-deadline-test|tests/functional/orchestration/petri/guards|tests/functional/orchestration/petri/guards/guard_cases_test.go::sharedGuardProviderTimeout::deadline::1
 testsleep-deadline-test|tests/functional/providers/acp_test|tests/functional/providers/acp/daemon_concurrency_test.go::TestProvidersACPRunsConcurrentPromptsOnIndependentRequestOwnedPeers::deadline::1
@@ -2550,7 +2549,6 @@ testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/ses
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::waitForFactorySessionDispatchStatus::sleep::1
 testsleep-sleep-test|tests/functional/sessions/root_composition_test|tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go::waitForP3P7RetainedTerminalDispatch::sleep::1
 testsleep-sleep-test|tests/functional/sessions/root_composition_test|tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go::waitForP3P7SessionWork::sleep::1
-testsleep-sleep-test|tests/functional/sessions/root_composition_test|tests/functional/sessions/root_composition/work_admission_response_stream_test.go::waitForDefaultSessionWorkCount::sleep::1
 testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/functional/transport/cli/session_resume/resume_smoke_test.go::waitForCLIResumeSmokeDispatchStatus::sleep::1
 testsleep-sleep-test|tests/functional/transport/cli/session_resume_test|tests/functional/transport/cli/session_resume/resume_smoke_test.go::waitForDurableSessionStatusViaCLI::sleep::1
 testsleep-sleep-test|tests/functional/work/recovery|tests/functional/work/recovery/helpers_test.go::waitForSessionInFlightDispatches::sleep::1
