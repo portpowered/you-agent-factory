@@ -991,3 +991,56 @@ assertions are separated from fixture setup. The retired
 `ValidateLocalInvocationRequest` service-root lint allowance is also deleted;
 its stale entry failed packaged-factory verification. Hosted validation remains
 required after these corrections.
+
+### Hosted result and single-binary consolidation experiment
+
+Hosted run `37292866856` at `630fb269c5` passed functional coverage: 1,020
+tests passed, two skipped and none failed. The test invocation took **388.339s
+(6m28s)**, and its complete supervisor took **474.070s (7m54s)**. Diagnostics
+observed 846 compiler commands and 138 linker commands. The dependency-cache
+restore succeeded, but instrumented compilation still occurred. This hosted
+result does not meet the five-minute checkpoint. The same workflow failed lint
+and packaged-factory verification for the specific issues corrected above.
+
+Following the request to evaluate monolithic test packages, a private build-only
+experiment combines 709 Go source files from 133 customer-test package groups
+into one package. Typed identifier references, including embedded struct fields,
+are namespaced to prevent collisions, and embedded test assets are preserved.
+The binary lists all **1,008 customer test functions**. Its original fixture
+`TestMain` routines are dormant in the build-only variant; no successful customer
+execution or coverage-gate result is claimed from that variant.
+
+The controlled build comparison uses four CPUs, `GOMAXPROCS=4`, jobs 12,
+`-vet=off`, `-ldflags=-w`, `-covermode=count`, and the exact canonical backend
+coverage package list. The existing-layout command uses `-exec=/bin/true` so
+that test bodies and fixture setup do not contaminate build/link measurements.
+
+| Build-only configuration | Command wall | Compiler CPU | Linker CPU | Links |
+| --- | ---: | ---: | ---: | ---: |
+| Existing layout, warm compiler cache | 44.29s | 0s | 160.292s | 136 |
+| Single customer binary, first compilation | 16.67s | 31.675s | 1.745s | 1 |
+| Single customer binary, warm compiler cache | 3.95s | 0s | 1.807s | 1 |
+
+The existing-layout measurement includes three fixture-support test binaries
+and 12 fixture self-tests. These are already classified as maintenance by
+`ForImportPath`, but functional discovery excluded only the support root and
+accidentally included its descendants and the REST-client fixture package.
+Discovery now consistently excludes `tests/functional/internal/`. The fixture
+tests remain available in their maintenance packages. Customer coverage floors
+still require a full-lane check after this classification correction.
+
+These measurements strongly favor reducing the number of functional binaries.
+They also show why summed linker CPU cannot simply be subtracted from total
+elapsed time: the existing layout's 160.292s linker CPU occupies only 42.334s
+of active elapsed intervals when test execution is absent. The first consolidated
+compile costs about 31.7s CPU for the large test source package. The next step is
+an execution experiment retaining every fixture's setup/cleanup and the original
+scenario concurrency; a package move alone can accidentally serialize tests.
+Raw evidence is under `.artifacts/latency-audit/linux-baseline-build/`,
+`linux-monolith-count/`, `linux-monolith-count-warm/`, and `hosted-630/`.
+
+The intervening local full run after model isolation also passed all coverage
+gates, with 1,018 tests passed and two skipped, taking **258.10s overall** and
+237.974s for tests. It recorded 139 links consuming 234.122s CPU and only 3.828s
+compiler CPU. The spread from the preceding passing 191.29s run prevents treating
+focused model-case savings as a guaranteed full-lane reduction.
