@@ -484,6 +484,12 @@ func assembleRuntimeBundle(
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err
 	}
+	// Filesystem effects may finish after admission was canceled. Keep the
+	// unpublished engine inside this opening owner so unwind releases only its
+	// resources, without sealing worker admission for a same-identity retry.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	bundle.Factory = activeFactory
 	bundle.InputFiles = inputFiles
