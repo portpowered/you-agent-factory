@@ -231,6 +231,7 @@ class SizeFixtures:
 class BoundaryFixtures(SizeFixtures):
     """Seven grouped witnesses through the compiled plugin, including cache reuse."""
 
+    cycle_key = "service-cycle-weight|internal/lint/analyzers|0\n"
     effect_source = 'package effects\nimport "time"\nfunc Run() { _ = time.Now() }\n'
     # Exercise an existing embedded production key; fixture text cannot change
     # the delivered host's tolerance, and this lane never adds fixture debt.
@@ -246,7 +247,13 @@ class BoundaryFixtures(SizeFixtures):
         write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
         write(root, "pkg/wire/wire.go", "package wire\n")
         write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
-        write(root, "internal/lint/analyzers/baseline.txt", debt)
+        service = next((path.split("/")[2] for path in sources
+                        if path.startswith("pkg/services/")), None)
+        # These isolated service graphs are acyclic; preserve their numeric
+        # policy while independently mutating package-boundary debt.
+        write(root, "internal/lint/analyzers/baseline.txt", (self.cycle_key if service else "") + debt)
+        if service:
+            write(root, "pkg/services/lint_fixture/source.go", "package fixture\ntype Service interface {}\n")
         for name, source in sources.items():
             write(root, name, source)
         checked(["git", "init", "-q"], root)
@@ -306,7 +313,7 @@ class BoundaryFixtures(SizeFixtures):
         self.lint(root, "E-removed-use", [("repolint", "stale baseline entry")])
         (root / self.debt_path).unlink()
         self.lint(root, "E-vanished-owner", [("repolint", "compiler-ownership:")])
-        write(root, "internal/lint/analyzers/baseline.txt", "")
+        write(root, "internal/lint/analyzers/baseline.txt", self.cycle_key)
         self.lint(root, "E-deleted-resolved-key", [])
 
     def missing_inputs(self) -> None:
@@ -593,6 +600,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("service-cycle")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
             baseline = "internal/lint/analyzers/baseline.txt"
             prefix = "service-cycle-weight|internal/lint/analyzers|"
