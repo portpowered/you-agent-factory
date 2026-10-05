@@ -384,18 +384,23 @@ export async function packAndVerify({
 	};
 }
 
-export function runCatalogDriftCheck(repositoryRoot) {
+export function runCatalogDriftCheck(repositoryRoot, launch = spawn) {
 	return new Promise((resolvePromise, rejectPromise) => {
-		const child = spawn(
-			"go",
-			["run", "./cmd/packagedfactorycatalogcheck", "-root", repositoryRoot],
+		const child = launch(
+			"make",
+			["repository-lint-run"],
 			{
 				cwd: repositoryRoot,
 				shell: process.platform === "win32",
 				stdio: ["ignore", "pipe", "pipe"],
 			},
 		);
+		let stdout = "";
 		let stderr = "";
+		child.stdout.setEncoding("utf8");
+		child.stdout.on("data", (chunk) => {
+			stdout += chunk;
+		});
 		child.stderr.setEncoding("utf8");
 		child.stderr.on("data", (chunk) => {
 			stderr += chunk;
@@ -405,7 +410,7 @@ export function runCatalogDriftCheck(repositoryRoot) {
 			if (status !== 0) {
 				rejectPromise(
 					new Error(
-						`${DIAGNOSTIC_PREFIX} generated catalog drift check failed\n${stderr.trim()}`,
+						`${DIAGNOSTIC_PREFIX} generated catalog drift check failed\n${stdout.trim()}\n${stderr.trim()}`,
 					),
 				);
 				return;

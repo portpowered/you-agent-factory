@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -35,7 +36,10 @@ func (r *registry) logReconciliation(
 ) {
 	elapsedMS := int64(0)
 	if !startedAt.IsZero() {
-		elapsedMS = r.clock.Now().Sub(startedAt).Milliseconds()
+		r.mu.RLock()
+		clock := r.observationClockLocked(id)
+		r.mu.RUnlock()
+		elapsedMS = clock.Now().Sub(startedAt).Milliseconds()
 		if elapsedMS < 0 {
 			elapsedMS = 0
 		}
@@ -47,7 +51,7 @@ func (r *registry) logReconciliation(
 		configuredTimeoutMS = deadlineAt.Sub(startedAt).Milliseconds()
 	}
 	fields := []any{
-		"sessionID", id,
+		"sessionID", publicWorkerID(id),
 		"attemptID", attemptID,
 		"dispatchID", result.DispatchID,
 		"reason", string(result.ReconciliationReason),
@@ -87,13 +91,17 @@ func (r *registry) publishExecution(
 	admitted := make(chan struct{})
 	finished := make(chan struct{})
 	dispatchDone := make(chan error, 1)
-	execution := r.execution
+	execution := supervision.executor
+	var progress func(workers.ExecutionCorrelation, workers.ProgressFragment)
+	if supervision.runtimeKey.RuntimeID == "" {
+		progress = r.directAttemptProgress(sessionID, supervision)
+	}
 	go func() {
 		defer close(finished)
 		result, dispatchErr := executeWithService(attemptContext, execution, request, supervision, func() {
 			r.acceptSupervision(sessionID, supervision)
 			close(admitted)
-		})
+		}, progress)
 		if errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) && supervision.pendingTerminalControlBeforeAdmission() != "" {
 			// Let a terminal control that claimed this exact unadmitted
 			// supervision commit first. Publishing the canceled handoff must not
@@ -102,7 +110,7 @@ func (r *registry) publishExecution(
 			r.finishSupervisionPublication(supervision)
 			<-supervision.done
 		}
-		r.completeSupervision(sessionID, supervision, result, dispatchErr)
+		r.completeSupervision(attemptContext, sessionID, supervision, result, dispatchErr)
 		dispatchDone <- dispatchErr
 	}()
 	select {
@@ -127,6 +135,7 @@ func executeWithService(
 	request workers.WorkstationDispatchRequest,
 	supervision *supervision,
 	admit func(),
+	progress func(workers.ExecutionCorrelation, workers.ProgressFragment),
 ) (result workers.WorkstationDispatchResult, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -142,6 +151,9 @@ func executeWithService(
 	if conversionErr != nil {
 		return failedDispatchResult(request, conversionErr)
 	}
+	if supervision.runtimeKey.RuntimeID != "" {
+		executeRequest.Correlation.DispatchID = supervision.runtimeKey.DispatchID
+	}
 	if !supervision.admissionAllowed() {
 		return canceledDispatchResult(request)
 	}
@@ -151,6 +163,12 @@ func executeWithService(
 	}
 	if executeRequest.Input.ProcessLifecycleObserver == nil {
 		executeRequest.Input.ProcessLifecycleObserver = processLifecycleObserver{supervision: supervision}
+	}
+	if progress != nil {
+		correlation := executeRequest.Correlation
+		executeRequest.Input.ProgressPublisher = func(fragment workers.ProgressFragment) {
+			progress(correlation, fragment)
+		}
 	}
 	executeResult, executeErr := execution.Execute(ctx, executeRequest)
 	if supervision.processGoneObserved() {
@@ -523,7 +541,7 @@ func cloneSessionContinuation(value *workers.ProviderContinuationRef) *workers.P
 	return &clone
 }
 
-func (r *registry) completeSupervision(id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
+func (r *registry) completeSupervision(ctx context.Context, id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
 	snapshot := supervision.completionSnapshot()
 	if snapshot.deadlineExceeded {
 		result = timeoutDispatchResult(result)
@@ -540,6 +558,9 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	}
 	if r.completeRetryableSupervision(id, supervision, snapshot, result, dispatchErr, priorState) {
 		return
+	}
+	if supervision.runtimeKey.RuntimeID != "" && dispatchErr == nil && snapshot.action == "" && result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCompleted {
+		r.publishBufferedWorkerOutput(context.WithoutCancel(ctx), id, snapshot.dispatchID, result.Result)
 	}
 	r.completeTerminalSupervision(id, supervision, snapshot, result, dispatchErr, priorState)
 }
@@ -586,7 +607,7 @@ func (r *registry) reconcileContinuationResult(id string, snapshot completionSna
 		return result
 	}
 	result = invalidContinuationResult(result)
-	r.logger.Info("worker session continuation result rejected", "sessionID", id, "attemptID", snapshot.dispatchID, "outcome", "reference_mismatch")
+	r.logger.Info("worker session continuation result rejected", "sessionID", publicWorkerID(id), "attemptID", snapshot.dispatchID, "outcome", "reference_mismatch")
 	return result
 }
 
@@ -602,7 +623,7 @@ func (r *registry) completePausedSupervision(
 	}
 	r.finishControlHistory(controlReservationFor(supervision), workersessions.ControlOutcomeApplied, snapshot.dispatchID, workersessions.StatePaused)
 	supervision.clearRequestedAction()
-	r.logger.Info("worker session control", "sessionID", id, "attemptID", snapshot.dispatchID, "action", string(snapshot.action), "outcome", string(workersessions.ControlOutcomeApplied))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(id), "attemptID", snapshot.dispatchID, "action", string(snapshot.action), "outcome", string(workersessions.ControlOutcomeApplied))
 	supervision.signalPaused()
 	return true
 }
@@ -623,7 +644,7 @@ func (r *registry) completeRetryableSupervision(
 		return false
 	}
 	r.logReconciliationIfNeeded(id, snapshot.dispatchID, result, priorState, workersessions.StateRunning, snapshot.startedAt, snapshot.deadlineAt)
-	r.logger.Info("worker session attempt", "sessionID", id, "attemptID", snapshot.dispatchID, "outcome", "retryable_failure")
+	r.logger.Info("worker session attempt", "sessionID", publicWorkerID(id), "attemptID", snapshot.dispatchID, "outcome", "retryable_failure")
 	supervision.finishAttempt()
 	return true
 }
@@ -720,4 +741,257 @@ func invalidContinuationResult(result workers.WorkstationDispatchResult) workers
 func dispatchCanceled(result workers.WorkstationDispatchResult, dispatchErr error) bool {
 	return result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled ||
 		errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled)
+}
+
+// runtimeAttemptDispatchConflictLocked preserves the direct dispatch fence
+// while allowing equal physical defaults in distinct runtime scopes.
+func (r *registry) runtimeAttemptDispatchConflictLocked(key workersessions.RuntimeAttemptKey, workerID, attemptID string) bool {
+	ownerID, owned := r.dispatchOwners[key.DispatchID]
+	if !owned || ownerID == workerID || attemptID != key.DispatchID {
+		return false
+	}
+	return true
+}
+
+// BeginRuntimeAttempt opens the Worker Session observation and recording
+// window, then returns control to Factory Runtime. It intentionally stops
+// before registerInvocationSupervision or any Workers boundary call: Runtime
+// has already admitted the detached attempt and remains responsible for its
+// execution, cancellation, and terminal race. The exact cancellation resource
+// is required before opening effects and installed with the RUNNING state.
+// The supplied fact clock is retained for opening, active duration and terminal
+// timing even after the live attempt handle is released. Required execution
+// and deadline effects are supplied independently of direct-session defaults;
+// this observation-only opening does not invoke Workers or schedule a timer.
+func (r *registry) BeginRuntimeAttempt(
+	ctx context.Context,
+	req workersessions.RuntimeAttemptRequest,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+) (workersessions.RuntimeAttempt, error) {
+	if r == nil {
+		return nil, workersessions.ErrStartAdmissionFailed
+	}
+	execution, resolved, err := prepareRuntimeAttemptExecution(req)
+	if err != nil {
+		return nil, err
+	}
+	if executor == nil {
+		return nil, ErrMissingExecution
+	}
+	if clock == nil {
+		return nil, ErrMissingClock
+	}
+	if scheduler == nil {
+		return nil, ErrMissingScheduler
+	}
+	if cancel == nil {
+		return nil, errRuntimeAttemptControlUnavailable
+	}
+	req.ID = scopedWorkerAddress(req.ID, req.Execution.Execution.FactorySessionID)
+	ctx = runtimeAttemptContext(ctx)
+	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
+	key := workersessions.RuntimeAttemptKey{RuntimeID: strings.TrimSpace(req.Key.RuntimeID), DispatchID: logicalDispatchID}
+	if !r.beginRuntimeOpening(key.RuntimeID) {
+		return nil, workersessions.ErrStartAdmissionFailed
+	}
+	defer r.finishRuntimeOpening(key.RuntimeID)
+	r.mu.RLock()
+	conflict := r.runtimeAttemptDispatchConflictLocked(key, req.ID, attemptID)
+	r.mu.RUnlock()
+	if conflict {
+		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	if !r.reserveRuntimeAttemptKey(key, req.ID) {
+		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	opened := false
+	defer func() {
+		if !opened {
+			r.releaseRuntimeAttemptKey(key, req.ID)
+		}
+	}()
+
+	prepared, err := r.prepareInvocation(
+		context.WithoutCancel(ctx),
+		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
+		invocationPreparationOptions{runtimeOwned: true, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID},
+		executor,
+		clock,
+		scheduler,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if preparationErr := runtimeAttemptPreparationError(prepared); preparationErr != nil {
+		return nil, preparationErr
+	}
+	handle := &runtimeAttempt{
+		registry:    r,
+		key:         key,
+		workerID:    req.ID,
+		dispatchID:  logicalDispatchID,
+		attemptID:   attemptID,
+		correlation: resolved.Correlation,
+		completed:   make(chan struct{}),
+		cancel:      cancel,
+	}
+	if err := r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle); err != nil {
+		if errors.Is(err, workersessions.ErrStartAdmissionFailed) {
+			_ = handle.Complete(ctx, canceledBeforeAdmissionResult(execution), workers.ErrWorkstationDispatchCanceled)
+		} else {
+			r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
+		}
+		return nil, err
+	}
+	opened = true
+	return workersessions.RuntimeAttempt(handle.Complete), nil
+}
+
+func (r *registry) reserveRuntimeAttemptKey(key workersessions.RuntimeAttemptKey, workerID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.runtimeAttemptOwners[key]; exists {
+		return false
+	}
+	if r.runtimeAttemptOwners == nil {
+		r.runtimeAttemptOwners = make(map[workersessions.RuntimeAttemptKey]string)
+	}
+	r.runtimeAttemptOwners[key] = workerID
+	return true
+}
+
+func (r *registry) releaseRuntimeAttemptKey(key workersessions.RuntimeAttemptKey, workerID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.runtimeAttemptOwners[key] == workerID {
+		delete(r.runtimeAttemptOwners, key)
+	}
+}
+
+func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handle *runtimeAttempt) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if admission := r.runtimeAdmissions[handle.key.RuntimeID]; admission != nil && admission.closed {
+		return workersessions.ErrStartAdmissionFailed
+	}
+	session, exists := r.sessions[workerID]
+	if !exists || session.State != workersessions.StateStarting {
+		return workersessions.ErrStartAdmissionFailed
+	}
+	if r.runtimeAttempts == nil {
+		r.runtimeAttempts = make(map[string]struct{})
+	}
+	if r.latestRuntimeDispatchIDs == nil {
+		r.latestRuntimeDispatchIDs = make(map[string]string)
+	}
+	if r.runtimeAttemptOwners[handle.key] != workerID || r.runtimeAttemptDispatchConflictLocked(handle.key, workerID, attemptID) {
+		return workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	r.runtimeAttempts[workerID] = struct{}{}
+	r.latestRuntimeDispatchIDs[workerID] = logicalDispatchID
+	if r.runtimeAttemptControls == nil {
+		r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
+	}
+	r.runtimeAttemptControls[workerID] = handle
+	session.State = workersessions.StateRunning
+	r.sessions[workerID] = session
+	return nil
+}
+
+func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
+	switch outcome {
+	case workersessions.PublishOutcomeAccepted:
+		return "accepted"
+	case workersessions.PublishOutcomeDuplicate:
+		return "duplicate"
+	default:
+		return "unspecified"
+	}
+}
+
+func (r *registry) registerSupervision(
+	id, dispatchID, turnID string,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
+	return r.registerSupervisionOwned(false, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, workersessions.RuntimeAttemptKey{}, executions...)
+}
+
+func (r *registry) registerServerOwnedSupervision(
+	id, dispatchID, turnID string,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
+	return r.registerSupervisionOwned(true, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, workersessions.RuntimeAttemptKey{}, executions...)
+}
+
+func (r *registry) registerSupervisionOwned(
+	serverOwned bool,
+	id, dispatchID, turnID string,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	runtimeKey workersessions.RuntimeAttemptKey,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stopping {
+		return nil, false
+	}
+	if session, exists := r.sessions[id]; !exists || session.State != workersessions.StateStarting {
+		return nil, false
+	}
+	if runtimeKey.RuntimeID != "" && r.runtimeAdmissions[runtimeKey.RuntimeID].closed {
+		return nil, false
+	}
+	if serverOwned && len(executions) > 0 {
+		if admission := r.runtimeAdmissions[strings.TrimSpace(executions[0].Execution.RuntimeID)]; admission != nil && admission.closed {
+			return nil, false
+		}
+	}
+	supervision := newSupervision(dispatchID, turnID, executions...)
+	supervision.runtimeKey = runtimeKey
+	supervision.executor = executor
+	supervision.clock = clock
+	supervision.scheduler = scheduler
+	supervision.serverOwned = serverOwned
+	supervision.startedAt = clock.Now()
+	r.supervisions[id] = supervision
+	if runtimeKey.RuntimeID == "" {
+		r.dispatchOwners[dispatchID] = id
+	}
+	return supervision, true
+}
+
+func (r *registry) prepareRuntimeInvocation(
+	ctx context.Context, req workersessions.RuntimeAttemptRequest, retry workersessions.RetryPolicy,
+	key workersessions.RuntimeAttemptKey, attemptID string,
+	executor workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource,
+) (invocationPreparation, workersessions.InvokeSessionRequest, error) {
+	r.mu.RLock()
+	conflict := r.runtimeAttemptDispatchConflictLocked(key, req.ID, attemptID)
+	r.mu.RUnlock()
+	if conflict || !r.reserveRuntimeAttemptKey(key, req.ID) {
+		return invocationPreparation{}, workersessions.InvokeSessionRequest{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+	execution := cloneWorkstationDispatchRequest(req.Execution)
+	execution.Execution.Dispatch.DispatchID = attemptID
+	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry}
+	prepared, err := r.prepareInvocation(context.WithoutCancel(ctx), invoke,
+		invocationPreparationOptions{runtimeKey: key, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID}, executor, clock, scheduler)
+	if err != nil {
+		r.releaseRuntimeAttemptKey(key, req.ID)
+	}
+	return prepared, invoke, err
+}
+
+func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
+	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
+	attemptID := strings.TrimSpace(req.AttemptID)
+	if attemptID == "" {
+		attemptID = logicalDispatchID
+	}
+	return logicalDispatchID, attemptID
 }

@@ -146,6 +146,52 @@ func TestProviderTupleObservationPreservesLiveIdentityWithoutTranscript(t *testi
 	}
 }
 
+func TestWorkerIdentityObservationEnrichesOnlySelectedScope(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		provider   providersessions.Service
+		transcript workersessions.TranscriptAvailability
+		wantErr    error
+	}{
+		{"available", observationProjectorFake{}, workersessions.TranscriptAvailabilityAvailable, nil},
+		{"missing projector", nil, workersessions.TranscriptAvailabilityUnavailable, nil},
+		{"missing transcript", observationProjectorFake{err: providersessions.ErrSessionNotFound}, workersessions.TranscriptAvailabilityUnavailable, nil},
+		{"failed projection", observationProjectorFake{err: errors.New("storage unavailable")}, workersessions.TranscriptAvailabilityUnavailable, nil},
+		{"canceled", observationProjectorFake{err: providersessions.ErrOperationCanceled}, workersessions.TranscriptAvailabilityUnavailable, workersessions.ErrObservationCanceled},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			registry := newObservationRegistry(test.provider, nil)
+			for _, scope := range []string{"selected", "peer"} {
+				address := scopedWorkerAddress("worker-1", scope)
+				state := workersessions.StateCompleted
+				if scope == "peer" {
+					state = workersessions.StateRunning
+				}
+				registry.sessions[address] = observationSession("worker-1", state)
+				metadata := observationMetadata()
+				metadata.factorySessionID = scope
+				registry.observations[address] = metadata
+			}
+			got, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{
+				WorkerSessionID: "worker-1", FactorySessionID: "selected",
+			})
+			if test.wantErr != nil {
+				if !errors.Is(err, test.wantErr) {
+					t.Fatalf("observation error = %v, want %v", err, test.wantErr)
+				}
+				return
+			}
+			if err != nil || got.WorkerSessionID != "worker-1" || got.FactorySessionID != "selected" ||
+				got.State != workersessions.StateCompleted || got.Transcript != test.transcript ||
+				got.ProviderSession != observationProviderRef() || !got.ProviderSessionAvailable ||
+				!reflect.DeepEqual(got.WorkIDs, []string{"work-1"}) || got.AttemptID != "attempt-1" {
+				t.Fatalf("scoped observation = %#v, %v", got, err)
+			}
+		})
+	}
+}
 func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 	if observationContextError(nil) != nil || observationContextError(context.Background()) != nil {
 		t.Fatal("observationContextError() rejected nil/background context")
@@ -267,7 +313,7 @@ func TestInvokeRetryAndObservationBoundaryGuards(t *testing.T) {
 		t.Fatalf("ensureObservation() overwrote existing attempt = %q", got)
 	}
 	registry.sessions["worker-factory"] = workersessions.Session{ID: "worker-factory", State: workersessions.StateRunning}
-	registry.ensureObservationWithFactorySession("worker-factory", "attempt-factory", "turn-factory", []string{"work-factory"}, false, " session-factory ")
+	registry.ensureObservationWithClock("worker-factory", "attempt-factory", "turn-factory", []string{"work-factory"}, false, " session-factory ", registry.clock)
 	projectedFactory := baseObservation("worker-factory", registry.sessions["worker-factory"], registry.observations["worker-factory"])
 	if projectedFactory.FactorySessionID != "session-factory" {
 		t.Fatalf("Factory Session attribution = %q, want trimmed session-factory", projectedFactory.FactorySessionID)

@@ -240,7 +240,7 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet pkg-boundary packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
+LINT_TARGETS_BASE := vet pkg-boundary packaged-factory-source-check packaged-factory-consumption-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -317,7 +317,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: lint-full pkg-boundary packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
+.PHONY: lint-full pkg-boundary packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: readme-check deadcode dashboard-verify
 
@@ -442,7 +442,7 @@ api-package-pack-smoke:
 
 api-package-verify: api-package-pack-smoke
 
-packaged-factory-package-smoke: packaged-factory-catalog-check packaged-factory-package-script-test
+packaged-factory-package-smoke: repository-lint-run packaged-factory-package-script-test
 
 packaged-factory-package-verify: packaged-factory-package-smoke
 
@@ -450,11 +450,11 @@ packaged-factory-package-script-test:
 	node --test scripts/packaged-factories-package-pack.test.mjs scripts/packaged-factories-package-candidate.test.mjs scripts/packaged-factories-package-consumer.test.mjs scripts/packaged-factories-package-pr-dry-run.test.mjs scripts/packaged-factories-package-registry.test.mjs scripts/packaged-factories-package-publish.test.mjs scripts/packaged-factories-package-development-command.test.mjs
 	$(PYTHON) -B -m unittest discover -s packages/packaged-factories/factories/dub-video/scripts -p 'test_dub_*.py'
 
-packaged-factory-package-pack-check: packaged-factory-catalog-check
+packaged-factory-package-pack-check: repository-lint-run
 	node -e "require('node:fs').rmSync('.artifacts/packaged-factories-local-pack', { recursive: true, force: true })"
 	node scripts/packaged-factories-package-candidate.mjs --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-pack --run-id 1 --source-commit $(shell git rev-parse HEAD)
 
-packaged-factory-package-candidate-dry-run: packaged-factory-catalog-check
+packaged-factory-package-candidate-dry-run: repository-lint-run
 	node -e "require('node:fs').rmSync('.artifacts/packaged-factories-local-dry-run', { recursive: true, force: true })"
 	node scripts/packaged-factories-package-pr-dry-run.mjs --event-name pull_request --prerequisite-result success --ref refs/pull/local/head --repository portpowered/you-agent-factory --run-id 1 --source-commit $(shell git rev-parse HEAD) --pull-request-head-sha $(shell git rev-parse HEAD) --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-dry-run --workspace-directory .
 
@@ -998,9 +998,6 @@ packaged-factory-consumption-check:
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
 
-packaged-factory-catalog-check:
-	$(call run_lint_checker,./cmd/packagedfactorycatalogcheck,-root ".")
-
 provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
@@ -1059,7 +1056,7 @@ golangci-lint-run:
 	$(GOLANGCI_LINT) run ./...
 
 deadcode: golangci-build
-	$(call run_lint_checker,./cmd/deadcodecheck,-golangci-host-file "$(GOLANGCI_DIR)/host-path.txt")
+	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode

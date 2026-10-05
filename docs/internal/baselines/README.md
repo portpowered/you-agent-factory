@@ -165,7 +165,7 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `docs/internal/baselines/backend-exemption-budget.json` | `make lint` → `backend-size`, `pkg-maint` | `internal/exemptionbudget/budget.go:Reconcile`, `cmd/backendsizecheck`, `cmd/pkgmaintcheck` | Backend quality gates | Directive identity and exemption-budget row | `make backend-size`, `make pkg-maint` | R-01 | `sha256:e3f3e6b60a34ad3f48cd9e497e405f0b63a6e663abc39d6e36bfc75f8d7bd8cc` |
 | `docs/internal/baselines/backend-package-file-count.json` | `make lint` → `pkg-file-count` | `cmd/pkgfilecountcheck/main.go` | Backend package-shape gate | Package path and tracked Go file count | `make pkg-file-count` | R-02 | `sha256:c87c5eed895cfbab2a9923849f1678851f0f0853b98cca930bc3d2fc75c18cc3` |
-| `docs/internal/baselines/deadcode-baseline.txt` | `make lint` → `deadcode` | `cmd/deadcodecheck/main.go` | Backend dead-code gate | Normalized unreachable-symbol identity | `make deadcode` | S-01 | `sha256:85d4df809d0d8789edb86837dd45da313c3c33e5b2779d076ef7628637272076` |
+| `docs/internal/baselines/deadcode-baseline.txt` | `make lint` → `deadcode` | `scripts/deadcode-report.py` | Backend dead-code gate | Normalized unreachable-symbol identity | `make deadcode` | S-01 | `sha256:85d4df809d0d8789edb86837dd45da313c3c33e5b2779d076ef7628637272076` |
 | `docs/internal/baselines/frontend-deadcode-baseline.json` | `make lint` → `ui-deadcode` | `ui/scripts/check-deadcode-baseline.ts` | Dashboard dead-code gate | Normalized Knip issue identity | `make ui-deadcode` | R-03 | `sha256:988791a647d158530d962cf9b6f03b187f381b97ed78d10bcad1439b3d6d2e5b` |
 | `docs/internal/baselines/functional-os-spawn-baseline.json` | `make lint` → `functional-os-boundary-check` | `Makefile:569-570`, `cmd/functionalosboundarycheck/main.go`, `cmd/functionalosboundarycheck/scanner.go`, `cmd/functionalosboundarycheck/json.go`, `cmd/functionalosboundarycheck/model.go`, `cmd/functionalosboundarycheck/policy.go` | Functional-test OS-boundary gate | Package count ceiling plus stable OS-spawn site identity | `make functional-os-boundary-check` | R-18 | `sha256:28b22f4f35fabc4ca3e2343cbe57662431d7af9d2e222a329495dde4a0e565d1` |
 | `docs/internal/baselines/functional-undocumented-tests.json` | `make verify-tests` → `test-maintenance` | `internal/functionaltestmetadata/baseline_repo_test.go:TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests` | Functional test metadata | Relative test file and `Test*` name | `go test ./internal/functionaltestmetadata -run TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests -count=1` | R-04 | `sha256:6fb6ce8170a2c0518acb65051d830a38a4d122c343475023112ab2ad2aeaa7b0` |
@@ -642,3 +642,32 @@ Petri root-contract references now use `petri-reference` exact compiler-observed
 file/symbol/count keys in `internal/lint/analyzers/baseline.txt`, alongside the
 existing `petri-public` exported-type keys. `make repolint` rejects count changes,
 stale findings and vanished source owners; the separate Petri JSON store is retired.
+
+### Direct upstream backend deadcode
+
+`make deadcode` invokes `golang.org/x/tools/cmd/deadcode@v0.25.1` directly
+through `scripts/deadcode-report.py`; the private `cmd/deadcodecheck` command
+has been removed. The customer-authorized external-tool exception retains this
+target, baseline, and report. Package-local `unused` cannot replace exported
+whole-program reachability across the repository and generated golangci host.
+There were no retired-surface or layout rules to drop; only wrapper plumbing
+and its build/helper-process dependencies were removed.
+
+The report adapter preserves these rules (PRD R-01 through R-12):
+
+1. Analyze both production module graphs with the same upstream pin and module filter.
+2. Use main/init roots, with no test roots.
+3. Require an absolute retained host pointer, golangci module identity, and an unversioned same-checkout replacement.
+4. Use compiler-owned dependency directories; require plugin and analyzer ownership inside the checkout.
+5. Keep host-owned identities only when dead in both programs, and reject malformed or outside-checkout host positions.
+6. Normalize separators, line endings, whitespace and numeric positions; sort without deduplication.
+7. Retain the existing OS/architecture filename suffix exclusions.
+8. Exclude only the exact preserved `third_party/acp-go-sdk/` source prefix.
+9. Compare exact normalized identities, rejecting additions and removals without writing the baseline.
+10. Write `bin/deadcode-current.txt` before reading the baseline; preserve it on drift/read failure.
+11. Preserve match/drift diagnostics, paths, counts, `LINT_VIOLATION_COUNT`, stderr and nonzero failures.
+12. Preserve the environment, force `gotypesalias=1`, disable workspaces and use the repository compiler version plus `+auto`.
+
+The adapter reads upstream/compiler output only; it does not discover sources
+or implement reachability analysis. The real-tool fixture is
+`scripts/deadcode-host-smoke.py --reporter <absolute-reporter-path> -- go run golang.org/x/tools/cmd/deadcode@v0.25.1`.

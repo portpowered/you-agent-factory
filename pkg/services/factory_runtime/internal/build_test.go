@@ -2,7 +2,6 @@ package internal_test
 
 import (
 	"context"
-	"errors"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"os"
 	"path/filepath"
@@ -29,6 +28,7 @@ import (
 )
 
 func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
@@ -56,7 +56,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 		"/recordings/session.json", nil, nil, false, nil, nil, nil, nil,
 		runtimeScopes,
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -77,6 +77,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 }
 
 func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
@@ -93,7 +94,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -114,6 +115,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 }
 
 func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
@@ -141,7 +143,7 @@ func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *tes
 		loaded, "runtime-identity-handoff", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		runtimeScopes,
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -171,6 +173,7 @@ func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *tes
 }
 
 func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
@@ -187,7 +190,7 @@ func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.
 		loaded, "runtime-identity-fallback", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -230,7 +233,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, false, nil, nil, nil, nil,
 		runtimeScopes,
-		testRuntimeWorkers{}, failingRuntimeWorkerSessionsFactory(), nil,
+		testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
 	)
 	if err == nil {
 		t.Fatal("Build succeeded, want partial-opening failure")
@@ -241,6 +244,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 }
 
 func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *testing.T) {
+	sessions := &stubWorkerSessionsService{}
 	dir := t.TempDir()
 	logDir := t.TempDir()
 	metricsDir := t.TempDir()
@@ -258,7 +262,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -296,7 +300,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
 		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
-		testRuntimeWorkerSessionsFactory(t),
+		sessions, sessions,
 		nil,
 	)
 	if err != nil {
@@ -315,24 +319,12 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 
 type testRuntimeWorkers struct{ workers.Service }
 
-func testRuntimeWorkerSessionsFactory(t *testing.T) factory.WorkerSessionsFactory {
-	t.Helper()
-	return func(execution workers.Service, _ platformclock.Source) (workersessions.Service, error) {
-		return &stubWorkerSessionsService{execution: execution}, nil
-	}
-}
-
-func failingRuntimeWorkerSessionsFactory() factory.WorkerSessionsFactory {
-	return func(workers.Service, platformclock.Source) (workersessions.Service, error) {
-		return nil, errors.New("worker sessions construction failed")
-	}
-}
-
 // stubWorkerSessionsService is a minimal workersessions.Service double for
 // build-composition tests: Start hands the request straight to the resolved
 // Workers execution boundary, mirroring the real cutover seam's shape
 // without pulling in the peer worker_sessions implementation package.
 type stubWorkerSessionsService struct {
+	factory.WorkerAttemptOpener
 	execution workers.Service
 }
 
@@ -461,6 +453,7 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil,
+		platformclock.Real{},
 	)
 }
 
@@ -481,6 +474,7 @@ func testRuntimeFactoryWithSinkCallbacks(
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil,
+		platformclock.Real{},
 	)
 }
 

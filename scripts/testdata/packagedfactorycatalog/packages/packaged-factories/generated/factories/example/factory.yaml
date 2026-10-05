@@ -1,0 +1,15 @@
+id: example
+name: example
+orchestrator:
+    javascript:
+        inlineSource:
+            encoding: utf-8
+            inline: |
+                /* @you-factory-meta
+                {"name":"@you/example","id":"example","version":1}
+                */
+                return {};
+        metadata:
+            name: '@you/example'
+            version: "1"
+    kind: JAVASCRIPT

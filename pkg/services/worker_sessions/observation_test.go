@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -236,10 +237,7 @@ type publisherServiceSpy struct {
 	Service
 	ensureResult ProviderBindingResult
 	ensureErr    error
-	resolvedID   string
-	resolveErr   error
 	publishErr   error
-	observeErr   error
 }
 
 func publisherTestDraft() workers.Draft {
@@ -257,19 +255,8 @@ func (s *publisherServiceSpy) EnsureProviderBinding(
 	return s.ensureResult, s.ensureErr
 }
 
-func (s *publisherServiceSpy) WorkerSessionIDForDispatch(context.Context, string) (string, error) {
-	return s.resolvedID, s.resolveErr
-}
-
 func (s *publisherServiceSpy) PublishRecord(context.Context, PublishRecordRequest) (PublishRecordResult, error) {
 	return PublishRecordResult{}, s.publishErr
-}
-
-func (s *publisherServiceSpy) ObserveProviderSession(
-	context.Context,
-	ProviderSessionObservationRequest,
-) (ProviderSessionAssociationResult, error) {
-	return ProviderSessionAssociationResult{}, s.observeErr
 }
 
 func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
@@ -419,223 +406,6 @@ func assertProgressProvenance(t *testing.T) {
 		Type:     "run.completed",
 	}); got.Delivery != workers.DeliverySynthesized || got.Fidelity != workers.FidelityLifecycleOnly || got.Representation != workers.RepresentationNotification {
 		t.Fatalf("Antigravity lifecycle provenance = %#v, want synthesized/lifecycle-only/notification", got)
-	}
-}
-
-func TestPublisher_CanonicalPublicationErrorPolicy(t *testing.T) {
-	draft := publisherTestDraft()
-	draft.DispatchID = "dispatch-1"
-	fragment := workers.ProgressFragment{DispatchID: "dispatch-1"}
-	publisher := NewProviderSessionObservationPublisher(nil)
-
-	if publisher.publishCanonicalWorkerRecord(nil, fragment, draft) {
-		t.Fatal("nil observer should reject canonical publication")
-	}
-	if publisher.publishCanonicalWorkerRecord(&publisherServiceSpy{}, workers.ProgressFragment{}, draft) {
-		t.Fatal("blank dispatch should reject canonical publication")
-	}
-	contradictory := draft
-	contradictory.Provenance.Provider = "codex"
-	if publisher.publishCanonicalWorkerRecord(&publisherServiceSpy{}, workers.ProgressFragment{DispatchID: "dispatch-1", Provider: "claude"}, contradictory) {
-		t.Fatal("contradictory canonical provider should be rejected")
-	}
-
-	for _, test := range []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "binding ordinary error forwards", err: errors.New("binding failed"), want: true},
-		{name: "binding conflict suppresses", err: ErrProviderBindingConflict, want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			providerDraft := draft
-			providerDraft.Provenance.Provider = "codex"
-			spy := &publisherServiceSpy{ensureErr: test.err}
-			if got := publisher.publishCanonicalWorkerRecord(spy, fragment, providerDraft); got != test.want {
-				t.Fatalf("canonical binding result = %v, want %v", got, test.want)
-			}
-		})
-	}
-
-	for _, test := range []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "resolve ordinary error forwards", err: errors.New("resolve failed"), want: true},
-		{name: "resolve conflict suppresses", err: ErrProviderBindingConflict, want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			spy := &publisherServiceSpy{resolveErr: test.err}
-			if got := publisher.publishCanonicalWorkerRecord(spy, fragment, draft); got != test.want {
-				t.Fatalf("canonical resolve result = %v, want %v", got, test.want)
-			}
-		})
-	}
-
-	for _, test := range []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "publish ordinary error forwards", err: errors.New("publish failed"), want: true},
-		{name: "publish conflict suppresses", err: ErrProviderBindingConflict, want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			spy := &publisherServiceSpy{resolvedID: "worker-1", publishErr: test.err}
-			if got := publisher.publishCanonicalWorkerRecord(spy, fragment, draft); got != test.want {
-				t.Fatalf("canonical publish result = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestPublisher_WorkerPublicationErrorPolicy(t *testing.T) {
-	publisher := NewProviderSessionObservationPublisher(nil)
-	if !publisher.publishWorkerRecord(nil, workers.ProgressFragment{DispatchID: "dispatch-1"}) {
-		t.Fatal("nil observer should not fail a worker publication")
-	}
-	if !publisher.publishWorkerRecord(&publisherServiceSpy{}, workers.ProgressFragment{DispatchID: "dispatch-1", Type: "unknown"}) {
-		t.Fatal("unrecognized worker fragment should be ignored")
-	}
-
-	base := workers.ProgressFragment{
-		DispatchID: "dispatch-1",
-		Kind:       workers.ProgressFragmentKind,
-		Type:       "message.delta",
-		Payload:    "hello",
-	}
-	for _, test := range []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "binding ordinary error forwards", err: errors.New("binding failed"), want: true},
-		{name: "binding conflict suppresses", err: ErrProviderBindingConflict, want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			fragment := base
-			fragment.Provider = "codex"
-			spy := &publisherServiceSpy{ensureErr: test.err}
-			if got := publisher.publishWorkerRecord(spy, fragment); got != test.want {
-				t.Fatalf("worker binding result = %v, want %v", got, test.want)
-			}
-		})
-	}
-
-	for _, test := range []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "resolve ordinary error forwards", err: errors.New("resolve failed"), want: true},
-		{name: "resolve conflict forwards", err: ErrProviderBindingConflict, want: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			spy := &publisherServiceSpy{resolveErr: test.err}
-			if got := publisher.publishWorkerRecord(spy, base); got != test.want {
-				t.Fatalf("worker resolve result = %v, want %v", got, test.want)
-			}
-		})
-	}
-
-	for _, test := range []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "publish ordinary error forwards", err: errors.New("publish failed"), want: true},
-		{name: "publish conflict suppresses", err: ErrProviderBindingConflict, want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			spy := &publisherServiceSpy{resolvedID: "worker-1", publishErr: test.err}
-			if got := publisher.publishWorkerRecord(spy, base); got != test.want {
-				t.Fatalf("worker publish result = %v, want %v", got, test.want)
-			}
-		})
-	}
-
-	if err := (ProviderBindingRequest{}).Validate(); !errors.Is(err, ErrInvalidProviderBinding) {
-		t.Fatalf("empty provider binding validation = %v, want ErrInvalidProviderBinding", err)
-	}
-	if err := (ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "codex"}).Validate(); err != nil {
-		t.Fatalf("valid provider binding validation = %v, want nil", err)
-	}
-
-	if publisher.publishWorkerDraft(nil, "worker-1", publisherTestDraft()) != nil {
-		t.Fatal("nil observer should skip worker draft publication")
-	}
-	if publisher.publishWorkerDraft(&publisherServiceSpy{}, " ", publisherTestDraft()) != nil {
-		t.Fatal("blank session should skip worker draft publication")
-	}
-}
-
-func TestPublisher_DoesNotForwardInternalProviderObservation(t *testing.T) {
-	forwarded := 0
-	publisher := NewProviderSessionObservationPublisher(func(workers.ProgressFragment) { forwarded++ })
-	publisher.Publish(workers.ProgressFragment{Kind: workers.ProviderSessionObservedFragmentKind})
-	if forwarded != 0 {
-		t.Fatalf("forwarded internal provider observation count = %d, want 0", forwarded)
-	}
-}
-
-func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
-	var forwarded []workers.ProgressFragment
-	publisher := NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
-		forwarded = append(forwarded, fragment)
-	}).WithUnassociatedProgressFallback()
-	observer := &publisherServiceSpy{}
-	publisher.Bind(observer)
-	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-runtime"}
-	progress := workers.ProgressFragment{
-		DispatchID:   "runtime-dispatch",
-		Kind:         workers.ResponseFragmentKind,
-		Continuation: testContinuationFromSessionRef(&reference),
-	}
-	observer.observeErr = ErrProviderSessionAssociationAttemptMismatch
-
-	publisher.Publish(progress)
-	if len(forwarded) != 1 || forwarded[0].DispatchID != progress.DispatchID {
-		t.Fatalf("fallback forwarded=%#v, want one downstream progress", forwarded)
-	}
-
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID:   progress.DispatchID,
-		Kind:         workers.ProviderSessionObservedFragmentKind,
-		Continuation: (progress.Continuation).ClonePtr(),
-	})
-	if len(forwarded) != 1 {
-		t.Fatalf("internal association hand-off forwarded=%#v, want suppressed", forwarded)
-	}
-
-	// A Runtime-owned worker observation can be associated successfully while
-	// its durable source-native publication is temporarily unavailable. The
-	// response stream still receives that provider-authored fragment.
-	observer.observeErr = nil
-	observer.publishErr = ErrProviderBindingConflict
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID:   "runtime-dispatch-publication-fallback",
-		Kind:         workers.ProgressFragmentKind,
-		Type:         "message.delta",
-		Payload:      "still visible",
-		Continuation: testContinuationFromSessionRef(&reference),
-	})
-	if len(forwarded) != 2 || forwarded[1].DispatchID != "runtime-dispatch-publication-fallback" {
-		t.Fatalf("publication fallback forwarded=%#v, want one downstream progress", forwarded)
-	}
-}
-
-func TestPublisher_SuppressesConflictingCanonicalOutput(t *testing.T) {
-	forwarded := 0
-	publisher := NewProviderSessionObservationPublisher(func(workers.ProgressFragment) { forwarded++ })
-	publisher.Bind(&publisherServiceSpy{ensureErr: ErrProviderBindingConflict})
-	draft := publisherTestDraft()
-	draft.DispatchID = "dispatch-1"
-	draft.Provenance.Provider = "codex"
-	publisher.Publish(workers.CanonicalDraftFragment("dispatch-1", draft))
-	if forwarded != 0 {
-		t.Fatalf("forwarded conflicting canonical output count = %d, want 0", forwarded)
 	}
 }
 
@@ -818,3 +588,98 @@ func TestReadTranscriptResultAndEntry_ValidateAndClone(t *testing.T) {
 func intPointer(value int) *int { return &value }
 
 func stringPointer(value string) *string { return &value }
+
+func TestRuntimeProgressPublisher_CapturesScopeAndPreservesForwardingDecision(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name          string
+		err           error
+		kind          string
+		wantForwarded int
+	}{
+		{name: "accepted", wantForwarded: 1},
+		{name: "rejected", err: ErrProviderBindingAttemptMismatch},
+		{name: "standalone", err: ErrRuntimeProgressUnsupervised, wantForwarded: 1},
+		{name: "internal standalone", err: ErrRuntimeProgressUnsupervised, kind: workers.ProviderSessionObservedFragmentKind},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			forwarded := 0
+			calls := 0
+			ctx := t.Context()
+			operation := RuntimeProgressPublisher(func(gotCtx context.Context, key RuntimeAttemptKey, fragment workers.ProgressFragment, next workers.ProgressPublisher) error {
+				calls++
+				if gotCtx != ctx {
+					t.Error("publication lost its captured operation context")
+				}
+				if key != (RuntimeAttemptKey{RuntimeID: "owned-runtime", DispatchID: "logical-dispatch"}) {
+					t.Errorf("publication key = %#v, want captured runtime and logical dispatch", key)
+				}
+				if fragment.Correlation.RuntimeID != "foreign-runtime" || fragment.DispatchID != "physical-attempt" {
+					t.Errorf("fragment correlation was rewritten: %#v", fragment)
+				}
+				if test.err == nil {
+					next(fragment)
+				}
+				return test.err
+			})
+			publish := operation.ForRuntime(ctx, " owned-runtime ", func(workers.ProgressFragment) { forwarded++ })
+			operation = func(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error {
+				t.Error("replacement operation used after scope capture")
+				return nil
+			}
+			publish(workers.ProgressFragment{
+				DispatchID: "physical-attempt", Kind: test.kind,
+				Correlation: workers.ExecutionCorrelation{RuntimeID: "foreign-runtime", DispatchID: " logical-dispatch "},
+			})
+			if calls != 1 || forwarded != test.wantForwarded {
+				t.Fatalf("calls=%d forwarded=%d, want 1/%d", calls, forwarded, test.wantForwarded)
+			}
+		})
+	}
+}
+
+func TestRuntimeProgressPublisher_RejectsProviderConflictBeforePublication(t *testing.T) {
+	t.Parallel()
+	operation := RuntimeProgressPublisher(func(context.Context, RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error {
+		t.Error("conflicting provider reached publication")
+		return nil
+	})
+	operation.ForRuntime(t.Context(), "runtime", func(workers.ProgressFragment) { t.Error("conflicting provider forwarded") })(workers.ProgressFragment{
+		Provider:     "claude",
+		Continuation: &providers.ContinuationRef{Provider: "codex"},
+	})
+}
+
+// Selected publication returns the exact effect error; the immutable owning
+// runtime decides suppression and reports rejected records through its logger.
+func TestPublisher_SelectedPublicationReturnsEffectErrors(t *testing.T) {
+	t.Parallel()
+	for _, canonical := range []bool{false, true} {
+		for _, stage := range []string{"binding", "record"} {
+			for _, want := range []error{ErrProviderBindingConflict, ErrProviderBindingAttemptMismatch, ErrPublicationNotOpen, ErrOutOfOrderPublication, ErrSessionNotFound, errors.New("effect failed")} {
+				t.Run(fmt.Sprintf("canonical=%t/%s/%v", canonical, stage, want), func(t *testing.T) {
+					t.Parallel()
+					spy := &publisherServiceSpy{}
+					if stage == "binding" {
+						spy.ensureErr = want
+					} else {
+						spy.publishErr = want
+					}
+					fragment := workers.ProgressFragment{DispatchID: "logical", Provider: "codex", Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "hello", Correlation: workers.ExecutionCorrelation{DispatchID: "logical", AttemptID: "physical"}}
+					if canonical {
+						draft := publisherTestDraft()
+						draft.DispatchID = "physical"
+						draft.Provenance.Provider = "codex"
+						fragment = workers.CanonicalDraftFragment("logical", draft)
+						fragment.Correlation = workers.ExecutionCorrelation{DispatchID: "logical", AttemptID: "physical"}
+					}
+					publisher := &ProviderSessionObservationPublisher{}
+					if err := publisher.PublishWorkerSessionProgress(context.Background(), spy, "selected-worker", fragment); !errors.Is(err, want) {
+						t.Fatalf("selected publication error = %v, want %v", err, want)
+					}
+				})
+			}
+		}
+	}
+}

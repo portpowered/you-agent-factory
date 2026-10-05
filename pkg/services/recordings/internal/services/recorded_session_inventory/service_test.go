@@ -110,7 +110,7 @@ func TestListRecordedSessionsSkipsMalformedCandidateAndReportsIt(t *testing.T) {
 			bad:  {},
 			good: {Portable: portableInput("good-session")},
 		},
-		errors: map[string]error{bad: errors.New("unsupported replay compatibility version")},
+		errors: map[string]error{bad: errors.New("credential=planted-secret absolute-home-path")},
 	}
 	logger := &warnSpy{}
 	inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, logger)
@@ -121,6 +121,10 @@ func TestListRecordedSessionsSkipsMalformedCandidateAndReportsIt(t *testing.T) {
 	}
 	if len(result.Sessions) != 1 || result.Sessions[0].FactorySessionID != "good-session" {
 		t.Fatalf("sessions = %#v, want only the readable recording", result.Sessions)
+	}
+	wantWarnings := []recordings.RecordedSessionDiagnostic{{ArtifactReference: "2026/08/24/bad.json", Code: "UNREADABLE_RECORDING", Reason: "Recording could not be read or decoded, or has no valid session identity."}}
+	if !reflect.DeepEqual(result.Warnings, wantWarnings) {
+		t.Fatalf("warnings = %#v, want %#v", result.Warnings, wantWarnings)
 	}
 	if logger.warns == 0 {
 		t.Fatal("skipped recording was not reported through a warning diagnostic")

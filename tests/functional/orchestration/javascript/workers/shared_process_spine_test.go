@@ -76,6 +76,11 @@ func TestJavaScriptSharedWorkerBehavior(t *testing.T) {
 		{"mock-workers/partial-passthrough", runJavaScriptPartialMockWorkers},
 		{"overrides/unknown-provider", runJavaScriptUnknownProviderOverride},
 		{"isolation/concurrent-success-failure", runJavaScriptConcurrentIsolation},
+		{"isolation/runtime-children", runJavaScriptRuntimeChildren},
+		{"isolation/local-cli-beside-runtime", runJavaScriptLocalCLIBesideRuntime},
+		{"isolation/standalone-file", runJavaScriptStandaloneFile},
+		{"isolation/resume-beside-live-peer", runJavaScriptResumeBesideLivePeer},
+		{"isolation/provider-failure-beside-live-peer", runJavaScriptProviderFailureBesideLivePeer},
 	}
 	for _, test := range tests {
 		test := test

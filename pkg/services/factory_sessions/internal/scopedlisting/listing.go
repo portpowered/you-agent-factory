@@ -77,6 +77,7 @@ func List(
 		LiveSessions:     liveRows,
 		DurableSessions:  append([]factorysessions.DurableSessionListSummary(nil), scoped.DurableSessions...),
 		RecordedSessions: append([]factorysessions.RecordedSessionListSummary(nil), scoped.RecordedSessions...),
+		Warnings:         append([]factorysessions.RecordedSessionDiagnostic(nil), scoped.Warnings...),
 	}, nil
 }
 

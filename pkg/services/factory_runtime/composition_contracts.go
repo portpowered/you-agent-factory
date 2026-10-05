@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -75,10 +76,13 @@ type WorkersMockCommandRunnerFactory func(
 	platformprocess.CommandRunner,
 ) platformprocess.CommandRunner
 
-// WorkerSessionsFactory constructs the per-session Worker Sessions service
-// (W4 Runtime dispatch cutover) from the directly injected Workers execution
-// service and the canonical runtime clock. Wire composes
-// the one construction path (worker_sessions/wire.NewService plus its Events,
-// logging, and Provider Sessions dependencies) behind this factory so Factory
-// Runtime never imports a peer service's wire or internal packages directly.
-type WorkerSessionsFactory func(workers.Service, platformclock.Source) (workersessions.Service, error)
+// WorkerAttemptOpener supplies keyed supervision independently of historical
+// Worker Session reads and controls. Execution, fact time, deadlines and
+// cancellation are selected for each admission rather than by construction.
+type WorkerAttemptOpener interface {
+	AdmitRuntimeAttemptAsync(context.Context, workersessions.StartRequest, workers.Service, platformclock.Source, platformclock.TimerSource) (workersessions.StartResult, error)
+	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, workers.Service, platformclock.Source, platformclock.TimerSource, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
+	InvokeRuntimeSession(context.Context, workersessions.RuntimeAttemptRequest, workersessions.RetryPolicy, workers.Service, platformclock.Source, platformclock.TimerSource) (workersessions.InvokeSessionResult, error)
+	PublishRuntimeProgress(context.Context, workersessions.RuntimeAttemptKey, workers.ProgressFragment, workers.ProgressPublisher) error
+	CloseRuntimeAttempts(context.Context, string) error
+}

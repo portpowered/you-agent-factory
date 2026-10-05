@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"regexp"
@@ -58,14 +59,28 @@ func loadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 		if errors.Is(err, fs.ErrNotExist) {
 			return providersessions.Detail{}, providersessions.ErrSessionNotFound
 		}
-		return providersessions.Detail{}, providersessions.ErrSessionStorageUnavailable
+		return providersessions.Detail{}, safeCodexStorageError("open", err)
 	}
 	defer file.Close()
 	if err := ctx.Err(); err != nil {
 		return providersessions.Detail{}, err
 	}
 
-	parsed, err := parseCodexSessionDetailsForSession(ctx, file, normalizedID)
+	// Capture a finite high-water mark after opening, before the first read.
+	// Prefer the opened file's metadata when the storage edge supplies it.
+	var info fs.FileInfo
+	if statter, ok := file.(interface{ Stat() (fs.FileInfo, error) }); ok {
+		info, err = statter.Stat()
+	} else {
+		info, err = files.Stat(resolved.absolutePath)
+	}
+	if err != nil {
+		return providersessions.Detail{}, safeCodexStorageError("stat", err)
+	}
+	resolved.sizeBytes = info.Size()
+	modifiedAt := info.ModTime()
+	resolved.modifiedAt = &modifiedAt
+	parsed, err := parseCodexSessionDetailsForSession(ctx, io.LimitReader(file, resolved.sizeBytes), normalizedID)
 	if err != nil {
 		return providersessions.Detail{}, err
 	}
@@ -316,4 +331,19 @@ func pathInsideRoot(root, path string) bool {
 		return false
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+// Keep only an actionable cause category; native errors can contain host paths
+// or provider payloads. The public storage failure remains errors.Is-compatible.
+func safeCodexStorageError(operation string, cause error) error {
+	safeCause := errors.New("io_failure")
+	switch {
+	case errors.Is(cause, fs.ErrPermission):
+		safeCause = fs.ErrPermission
+	case errors.Is(cause, fs.ErrNotExist):
+		safeCause = fs.ErrNotExist
+	case errors.Is(cause, io.ErrUnexpectedEOF):
+		safeCause = io.ErrUnexpectedEOF
+	}
+	return fmt.Errorf("%w: %s: %w", providersessions.ErrSessionStorageUnavailable, operation, safeCause)
 }

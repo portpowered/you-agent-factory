@@ -224,6 +224,7 @@ func (s *Service) ListSessions(ctx context.Context, request factorysessions.List
 		return factorysessions.ListSessionsResult{}, err
 	}
 	result.RecordedSessions = append(result.RecordedSessions, history.RecordedSessions...)
+	result.Warnings = append(result.Warnings, history.Warnings...)
 	sort.SliceStable(result.RecordedSessions, func(left, right int) bool {
 		if result.RecordedSessions[left].SessionID != result.RecordedSessions[right].SessionID {
 			return result.RecordedSessions[left].SessionID < result.RecordedSessions[right].SessionID

@@ -1,13 +1,25 @@
 package workersessions
 
-import "github.com/portpowered/infinite-you/pkg/services/events"
+import (
+	"encoding/base64"
+	"strings"
 
-// Topic returns the deterministic Events topic for Worker Session id:
-// worker-session/<id>/events. Start commits the opening SESSION/STARTED
-// record here before Workers invocation, and every terminal outcome commits
-// its terminal SESSION record here after accepted output. Any caller reading
-// or subscribing to a Worker Session's record stream derives the same topic
-// identity through this one function rather than hand-formatting the string.
-func Topic(id string) events.Topic {
-	return events.Topic("worker-session/" + id + "/events")
+	"github.com/portpowered/infinite-you/pkg/services/events"
+)
+
+// Topic returns the deterministic Events topic for a Worker Session. Factory
+// callers supply the owning Factory Session to isolate retained replay records.
+// Direct callers omit the scope and retain worker-session/<id>/events.
+// The supplied Worker identity remains unchanged in records and public cursors.
+func Topic(id string, factorySessionIDs ...string) events.Topic {
+	factorySessionID := ""
+	if len(factorySessionIDs) > 0 {
+		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
+	}
+	if factorySessionID == "" {
+		return events.Topic("worker-session/" + id + "/events")
+	}
+	return events.Topic("factory-worker-session/" +
+		base64.RawURLEncoding.EncodeToString([]byte(factorySessionID)) + "/" +
+		base64.RawURLEncoding.EncodeToString([]byte(id)) + "/events")
 }

@@ -9,18 +9,12 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-type hostSupervisionDeadlineTimer struct{ timer *time.Timer }
-
-func (timer hostSupervisionDeadlineTimer) C() <-chan time.Time { return timer.timer.C }
-func (timer hostSupervisionDeadlineTimer) Stop() bool          { return timer.timer.Stop() }
 
 type interruptTuple struct {
 	sourceID    string
@@ -370,7 +364,7 @@ func (r *registry) appendControlRecordLocked(
 		Outcome:         outcome,
 		RequestID:       reservation.requestID,
 		CorrelationID:   reservation.correlation,
-		WorkerSessionID: reservation.sessionID,
+		WorkerSessionID: publicWorkerID(reservation.sessionID),
 		DispatchID:      strings.TrimSpace(dispatchID),
 		AttemptID:       strings.TrimSpace(dispatchID),
 		State:           state,
@@ -398,7 +392,7 @@ func (r *registry) appendControlRecordLocked(
 		SourceSequence: sequence,
 		SourceEventID:  eventID,
 	}
-	_, err := r.appendDraft(ctx, workersessions.Topic(reservation.sessionID), identity, workerDraftSchemaID, draft)
+	_, err := r.appendDraft(ctx, r.observationTopic(reservation.sessionID), identity, workerDraftSchemaID, draft)
 	return err
 }
 
@@ -846,9 +840,10 @@ func (r *registry) transitionToPaused(id string) bool {
 // The request carries the registry-owned reference unchanged so the Workers
 // provider runner must route only through Providers.Continue.
 func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
-	if err := req.Validate(); err != nil {
+	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	req.ID = r.workerAddress(req.ID, req.FactorySessionID)
 	reservation, err := r.beginControlHistory(ctx, req.ID, workersessions.ControlActionResume, req.RequestID)
 	if err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -943,7 +938,7 @@ func (r *registry) resumePublicationFailure(
 		DispatchID: continuation.Execution.Dispatch.DispatchID,
 	}
 	r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
-	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 	return result, publicationErr
 }
 
@@ -972,7 +967,7 @@ func (r *registry) resumeAdmissionResult(
 			DispatchID: continuation.Execution.Dispatch.DispatchID,
 		}
 		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
-		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", continuation.Execution.Dispatch.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+		r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", continuation.Execution.Dispatch.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 		return result, workersessions.ErrStartAdmissionFailed
 	}
 	result := workersessions.ControlResult{
@@ -982,7 +977,7 @@ func (r *registry) resumeAdmissionResult(
 		DispatchID: continuation.Execution.Dispatch.DispatchID,
 	}
 	r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
-	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+	r.logger.Info("worker session control", "sessionID", publicWorkerID(req.ID), "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 	return result, nil
 }
 

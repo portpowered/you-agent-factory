@@ -2375,8 +2375,13 @@ export interface components {
       contentType?: string;
       /** @description Concrete MIME type for media or file-backed output, when known. */
       mediaType?: string;
-      /** @description Inline output content. JSON values are carried as their canonical JSON text. */
+      /** @description Inline UTF-8 output content. JSON values are carried as their canonical JSON text. Do not combine with contentBase64. */
       content?: string;
+      /**
+       * Format: byte
+       * @description Base64-encoded inline binary output content. Do not combine with content.
+       */
+      contentBase64?: string;
       /** @description Optional opaque artifact metadata for materialized output. */
       artifact?: components["schemas"]["ModelInvocationArtifact"];
     };
@@ -3634,6 +3639,8 @@ export interface components {
       durableSessions?: components["schemas"]["FactorySessionDurableSummary"][];
       /** @description Read-only recorded Factory Session summaries when scope is HISTORY or ALL. */
       recordedSessions?: components["schemas"]["FactorySessionRecordedSummary"][];
+      /** @description Recording artifacts omitted from history because they could not be read or decoded. */
+      warnings?: components["schemas"]["FactorySessionRecordingWarning"][];
     };
     /**
      * @description Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
@@ -7727,6 +7734,14 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
+    };
+    FactorySessionRecordingWarning: {
+      /** @description Recording-root-relative artifact path. This value does not grant filesystem access. */
+      artifactReference: string;
+      /** @enum {string} */
+      code: FactorySessionRecordingWarningCode;
+      /** @description Safe explanation that excludes recording content and absolute host paths. */
+      reason: string;
     };
     /** @description Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs. */
     DispatchCancellation: {
@@ -12293,6 +12308,11 @@ export const WorkstationGuardType = {
 } as const;
 export type WorkstationGuardType =
   (typeof WorkstationGuardType)[keyof typeof WorkstationGuardType];
+export const FactorySessionRecordingWarningCode = {
+  UNREADABLE_RECORDING: "UNREADABLE_RECORDING",
+} as const;
+export type FactorySessionRecordingWarningCode =
+  (typeof FactorySessionRecordingWarningCode)[keyof typeof FactorySessionRecordingWarningCode];
 export const DispatchCancellationReason = {
   CANCELED: "CANCELED",
   SUPERSEDED: "SUPERSEDED",
