@@ -68,8 +68,8 @@ func assertRootProcessUnwindsCancellationAtStartupDisclosure(t *testing.T, fixtu
 		Context: ctx, WorkingDirectory: dir,
 	}
 	err := fixture.process.Execute(inputs)
-	if err != nil || !errors.Is(ctx.Err(), context.Canceled) || strings.Count(stdout.String(), "Factory initiated:") != 1 {
-		t.Fatalf("startup cancellation error = %v, context=%v stdout=%q stderr=%q, want orderly cancellation after one startup disclosure", err, ctx.Err(), stdout.String(), stderr.String())
+	if !errors.Is(err, context.Canceled) || !errors.Is(ctx.Err(), context.Canceled) || strings.Count(stdout.String(), "Factory initiated:") != 1 {
+		t.Fatalf("startup cancellation error = %v, context=%v stdout=%q stderr=%q, want context.Canceled after one startup disclosure", err, ctx.Err(), stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "completed successfully") {
 		t.Fatalf("startup cancellation stdout = %q, want no success result", stdout.String())

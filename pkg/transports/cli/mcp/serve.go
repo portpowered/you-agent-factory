@@ -29,16 +29,21 @@ type ServeBinding struct {
 func ResolvedServeHandler(
 	binding ServeBinding,
 ) func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
-	return func(cmd *cobra.Command, inputs, _ resolvedinput.Inputs) error {
+	return func(cmd *cobra.Command, inputs, inherited resolvedinput.Inputs) error {
 		projectRoot, err := inputs.String(projectRootInputID)
 		if err != nil {
 			return fmt.Errorf("read MCP project root input: %w", err)
+		}
+		serverURL, err := inherited.String("you.flag.server")
+		if err != nil {
+			return fmt.Errorf("read MCP server input: %w", err)
 		}
 		if binding.InitializeStdio == nil {
 			return fmt.Errorf("MCP stdio initializer is required")
 		}
 		return binding.InitializeStdio(cmd.Context(), MCPIntent{
 			ProjectRoot: projectRoot,
+			ServerURL:   serverURL,
 			Stdin:       cmd.InOrStdin(),
 			Stdout:      cmd.OutOrStdout(),
 		})

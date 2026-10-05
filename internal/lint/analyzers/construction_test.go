@@ -1,6 +1,7 @@
 package analyzers
 
 import (
+	"fmt"
 	"testing"
 
 	"golang.org/x/tools/go/analysis/analysistest"
@@ -14,11 +15,13 @@ func TestConstructionOwnerAndQualifiedUses(t *testing.T) {
 		"m/pkg/consumer", "m/pkg/dot", "m/pkg/external")
 }
 func TestConstructionExactDebtAndStale(t *testing.T) {
-	useFixtures(t, "service-construction|pkg/listed|pkg/services/b.NewThing", "service-construction|pkg/ctorstale|pkg/services/b.NewThing")
+	useFixtures(t, "service-construction|pkg/listed|pkg/services/b.NewThing", "service-construction|pkg/ctorstale|pkg/services/b.NewThing",
+		"construction-recorded-site|pkg/listed|pkg/listed/l.go#service-construction#pkg/services/b.NewThing::count=1")
 	analysistest.Run(t, analysistest.TestData(), Construction, "m/pkg/listed", "m/pkg/ctorstale")
 }
 func TestConstructionDefersTaggedStale(t *testing.T) {
-	useFixtures(t, "service-construction|pkg/tagged|pkg/services/b.NewThing")
+	useFixtures(t, "service-construction|pkg/tagged|pkg/services/b.NewThing",
+		"construction-recorded-site|pkg/tagged|pkg/tagged/debt.go#service-construction#pkg/services/b.NewThing::count=1")
 	old := Construction.Flags.Lookup("check-stale").Value.String()
 	t.Cleanup(func() { _ = Construction.Flags.Set("check-stale", old) })
 	_ = Construction.Flags.Set("check-stale", "false")
@@ -26,7 +29,8 @@ func TestConstructionDefersTaggedStale(t *testing.T) {
 }
 
 func TestConstructionTaggedDebtStrict(t *testing.T) {
-	useFixtures(t, "service-construction|pkg/tagged|pkg/services/b.NewThing")
+	useFixtures(t, "service-construction|pkg/tagged|pkg/services/b.NewThing",
+		"construction-recorded-site|pkg/tagged|pkg/tagged/debt.go#service-construction#pkg/services/b.NewThing::count=1")
 	t.Setenv("GOFLAGS", "-tags=integration")
 	analysistest.Run(t, analysistest.TestData(), Construction, "m/pkg/tagged")
 }
@@ -99,6 +103,7 @@ var converted = b.BuildValue(1) // want "service-construction-callable-test: pkg
 func TestConstructionCallableDebtAndStale(t *testing.T) {
 	useFixtures(t,
 		"service-construction-callable|pkg/consumer|pkg/services/callable.NewCallback",
+		"construction-recorded-site|pkg/consumer|pkg/consumer/c.go#service-construction-callable#pkg/services/callable.NewCallback::count=1",
 		"service-construction-callable|pkg/stale|pkg/services/callable.NewCallback")
 	files := map[string]string{
 		"m/pkg/services/callable/b.go": "package builder\nvar NewCallback = func() {}\n",
@@ -111,4 +116,90 @@ func TestConstructionCallableDebtAndStale(t *testing.T) {
 	}
 	t.Cleanup(cleanup)
 	analysistest.Run(t, dir, Construction, "m/pkg/consumer", "m/pkg/stale")
+}
+
+func TestConstructionRecordedSites(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, filename string
+	}{
+		{"exact", "var captured = b.NewThing", "a.go"},
+		{"line motion", "\n\n\nvar captured = b.NewThing", "a.go"},
+		{"extra", `var captured = b.NewThing // want "construction-recorded-site:.*count=2"
+var another = b.NewThing`, "a.go"},
+		{"neighbor", `var captured = b.NewThing // want "construction-recorded-site:.*b.go"`, "b.go"},
+		{"removed", "var _ = b.Unrelated", "a.go"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const unit = "pkg/sites"
+			useFixtures(t, "service-construction|"+unit+"|pkg/services/b.NewThing",
+				"construction-recorded-site|"+unit+"|"+unit+"/a.go#service-construction#pkg/services/b.NewThing::count=1")
+			pkg := "package sites"
+			if tc.name == "extra" || tc.name == "neighbor" || tc.name == "removed" {
+				pkg += ` // want "stale baseline entry.*construction-recorded-site"`
+			}
+			if tc.name == "removed" {
+				pkg += ` "stale baseline entry.*service-construction"`
+			}
+			files := map[string]string{
+				"m/pkg/services/b/b.go":         "package b\nfunc NewThing() {}\nvar Unrelated = 1\n",
+				"m/" + unit + "/" + tc.filename: fmt.Sprintf("%s\nimport b \"m/pkg/services/b\"\n%s\n", pkg, tc.source),
+			}
+			dir, cleanup, err := analysistest.WriteFiles(files)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(cleanup)
+			analysistest.Run(t, dir, Construction, "m/"+unit)
+		})
+	}
+}
+
+func TestConstructionRecordedTestSites(t *testing.T) {
+	for _, external := range []bool{false, true} {
+		t.Run(fmt.Sprint(external), func(t *testing.T) {
+			unit, pkg := "pkg/sites", "sites"
+			if external {
+				unit += "_test"
+				pkg += "_test"
+			}
+			useFixtures(t, "service-construction-test|"+unit+"|pkg/services/b.NewThing",
+				"construction-recorded-site-test|"+unit+"|pkg/sites/a_test.go#service-construction-test#pkg/services/b.NewThing::count=1")
+			testPackage := "package " + pkg + ` // want "stale baseline entry.*construction-recorded-site-test"`
+			files := map[string]string{
+				"m/pkg/services/b/b.go": "package b\nfunc NewThing() {}\n",
+				"m/pkg/sites/a_test.go": testPackage + `
+import b "m/pkg/services/b"
+var captured = b.NewThing // want "construction-recorded-site-test:.*count=2"
+var another = b.NewThing
+`,
+			}
+			if external {
+				files["m/pkg/sites/a.go"] = "package sites\n"
+			}
+			dir, cleanup, err := analysistest.WriteFiles(files)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(cleanup)
+			analysistest.Run(t, dir, Construction, "m/pkg/sites")
+		})
+	}
+}
+
+func TestConstructionRecordedInactiveSources(t *testing.T) {
+	useFixtures(t,
+		"service-construction|pkg/sites|pkg/services/b.NewThing",
+		"construction-recorded-site|pkg/sites|pkg/sites/a.go#service-construction#pkg/services/b.NewThing::count=1",
+		"construction-recorded-site|pkg/sites|pkg/sites/tagged.go#service-construction#pkg/services/b.NewThing::count=1")
+	files := map[string]string{
+		"m/pkg/services/b/b.go": "package b\nfunc NewThing() {}\n",
+		"m/pkg/sites/a.go":      "package sites\nimport b \"m/pkg/services/b\"\nvar captured = b.NewThing\n",
+		"m/pkg/sites/tagged.go": "//go:build boundaryinactive\n\npackage sites\nimport b \"m/pkg/services/b\"\nvar tagged = b.NewThing\n",
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, Construction, "m/pkg/sites")
 }

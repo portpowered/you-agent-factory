@@ -946,6 +946,51 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "mcp/mcp.tool.you.worker_session.control",
+      "name": "you.worker_session.control",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
+          "boundary": "mcp"
+        }
+      ]
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.worker_session.list",
+      "name": "you.worker_session.list",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
+          "boundary": "mcp"
+        }
+      ]
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.worker_session.read",
+      "name": "you.worker_session.read",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
+          "boundary": "mcp"
+        }
+      ]
+    },
+    {
       "stableId": "rest/approveFactorySession",
       "name": "approveFactorySession",
       "interface": "rest",

@@ -29,6 +29,7 @@ func TestCompilerMetadataExactOwners(t *testing.T) {
 		"deprecated-runtime-api-test|pkg/a_test|pkg/a/a_test.go#TestRun",
 		"functional-test-missing-subsection|pkg/a_test|pkg/a/a_test.go",
 		"transport-recorded-site|pkg/a_test|pkg/a/a_test.go#transport-lifecycle#context.WithCancel::count=1",
+		"construction-recorded-site-test|pkg/a_test|pkg/a/a_test.go#service-construction-test#pkg/services/b.NewThing::count=1",
 		"service-root-exported-function|pkg/a_test|pkg/a/a_test.go#New",
 		"service-container-go-file|pkg/a_test|pkg/a/a_test.go",
 	} {
@@ -48,6 +49,25 @@ func TestCompilerMetadataExactOwners(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCompilerMetadataConstructionSiteParsing(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{
+		"pkg/a/a.go#service-construction#pkg/services/b.NewThing::count=0",
+		"pkg/a/a.go#service-construction#pkg/services/b.NewThing::count=01",
+		"pkg/a/a.go#service-construction#pkg/services/b.NewThing::count=1::count=2",
+		"pkg/a/a.go#service-construction#pkg/services/b.NewThing",
+		"pkg/a/a.go#other#pkg/services/b.NewThing::count=1",
+		"pkg/a/a.go#service-construction#::count=1",
+		"pkg/a/a_test.go#service-construction-test#pkg/services/b.NewThing::count=1",
+		"pkg/a/../b/a.go#service-construction#pkg/services/b.NewThing::count=1",
+		"pkg/ab/a.go#service-construction#pkg/services/b.NewThing::count=1",
+	} {
+		if _, err := compilerOwnedKeys("construction-recorded-site|pkg/a|" + target); err == nil {
+			t.Errorf("invalid construction key accepted: %s", target)
+		}
 	}
 }
 

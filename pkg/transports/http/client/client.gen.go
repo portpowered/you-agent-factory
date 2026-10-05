@@ -4,6 +4,7 @@
 package generatedclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -111,8 +112,8 @@ const (
 
 // Defines values for DispatchCancellationReason.
 const (
-	CANCELED   DispatchCancellationReason = "CANCELED"
-	SUPERSEDED DispatchCancellationReason = "SUPERSEDED"
+	DispatchCancellationReasonCANCELED   DispatchCancellationReason = "CANCELED"
+	DispatchCancellationReasonSUPERSEDED DispatchCancellationReason = "SUPERSEDED"
 )
 
 // Defines values for DispatchReconciliationSource.
@@ -1602,6 +1603,25 @@ const (
 // Defines values for SortBy.
 const (
 	SortByStateType SortBy = "state.type"
+)
+
+// Defines values for ListWorkerSessionsParamsScope.
+const (
+	ListWorkerSessionsParamsScopeAll     ListWorkerSessionsParamsScope = "all"
+	ListWorkerSessionsParamsScopeDirect  ListWorkerSessionsParamsScope = "direct"
+	ListWorkerSessionsParamsScopeFactory ListWorkerSessionsParamsScope = "factory"
+)
+
+// Defines values for ListWorkerSessionsParamsState.
+const (
+	ListWorkerSessionsParamsStateCANCELED   ListWorkerSessionsParamsState = "CANCELED"
+	ListWorkerSessionsParamsStateCOMPLETED  ListWorkerSessionsParamsState = "COMPLETED"
+	ListWorkerSessionsParamsStateFAILED     ListWorkerSessionsParamsState = "FAILED"
+	ListWorkerSessionsParamsStatePAUSED     ListWorkerSessionsParamsState = "PAUSED"
+	ListWorkerSessionsParamsStateRESERVED   ListWorkerSessionsParamsState = "RESERVED"
+	ListWorkerSessionsParamsStateRUNNING    ListWorkerSessionsParamsState = "RUNNING"
+	ListWorkerSessionsParamsStateSTARTING   ListWorkerSessionsParamsState = "STARTING"
+	ListWorkerSessionsParamsStateTERMINATED ListWorkerSessionsParamsState = "TERMINATED"
 )
 
 // AgentRunResponseEventPayload Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
@@ -9897,6 +9917,39 @@ type GetMetricsCostsParams struct {
 	// SessionId Optional Factory Session identity to scope the report.
 	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
 }
+
+// ListWorkerSessionsParams defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParams struct {
+	// Scope Origin scope to inspect. Omit for the fleet-wide view.
+	Scope *ListWorkerSessionsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+
+	// State Optional repeated Worker Session lifecycle state filters.
+	State *[]ListWorkerSessionsParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
+	MaxResults *MaxResults `form:"maxResults,omitempty" json:"maxResults,omitempty"`
+
+	// Limit Optional positive result bound applied after state and origin filters. Omit to use the default page size of 50. Zero and negative values are invalid.
+	Limit *WorkerSessionLimit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// NextToken Optional base64-encoded token ID cursor.
+	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+}
+
+// ListWorkerSessionsParamsScope defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsScope string
+
+// ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsState string
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByTopLevelWorkerSessionId.
+type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
+	// ReplayOnly Drain retained history without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+}
+
+// InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
+type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
 
 // Getter for additional properties for BundledFile. Returns the specified
 // element and whether it was found
@@ -18559,8 +18612,25 @@ type ClientInterface interface {
 	// GetStatus request
 	GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListWorkerSessions request
+	ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetWorkerSessionObservationByWorkerSessionId request
 	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelWorkerSession request
+	CancelWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StreamWorkerSessionEventsByTopLevelWorkerSessionId request
+	StreamWorkerSessionEventsByTopLevelWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InterruptWorkerSessionWithBody request with any body
+	InterruptWorkerSessionWithBody(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InterruptWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TerminateWorkerSession request
+	TerminateWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReadWorkerSessionTranscriptByWorkerSessionId request
 	ReadWorkerSessionTranscriptByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -18650,8 +18720,80 @@ func (c *Client) GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListWorkerSessionsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetWorkerSessionObservationByWorkerSessionIdRequest(c.Server, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CancelWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelWorkerSessionRequest(c.Server, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StreamWorkerSessionEventsByTopLevelWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStreamWorkerSessionEventsByTopLevelWorkerSessionIdRequest(c.Server, workerSessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InterruptWorkerSessionWithBody(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInterruptWorkerSessionRequestWithBody(c.Server, workerSessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InterruptWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInterruptWorkerSessionRequest(c.Server, workerSessionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TerminateWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTerminateWorkerSessionRequest(c.Server, workerSessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -19097,6 +19239,119 @@ func NewGetStatusRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewListWorkerSessionsRequest generates requests for ListWorkerSessions
+func NewListWorkerSessionsRequest(server string, params *ListWorkerSessionsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "state", runtime.ParamLocationQuery, *params.State); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.MaxResults != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "maxResults", runtime.ParamLocationQuery, *params.MaxResults); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.NextToken != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "nextToken", runtime.ParamLocationQuery, *params.NextToken); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetWorkerSessionObservationByWorkerSessionIdRequest generates requests for GetWorkerSessionObservationByWorkerSessionId
 func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID) (*http.Request, error) {
 	var err error
@@ -19124,6 +19379,177 @@ func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, worke
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCancelWorkerSessionRequest generates requests for CancelWorkerSession
+func NewCancelWorkerSessionRequest(server string, workerSessionId WorkerSessionID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions/%s/cancel", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewStreamWorkerSessionEventsByTopLevelWorkerSessionIdRequest generates requests for StreamWorkerSessionEventsByTopLevelWorkerSessionId
+func NewStreamWorkerSessionEventsByTopLevelWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions/%s/events", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ReplayOnly != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "replayOnly", runtime.ParamLocationQuery, *params.ReplayOnly); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewInterruptWorkerSessionRequest calls the generic InterruptWorkerSession builder with application/json body
+func NewInterruptWorkerSessionRequest(server string, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInterruptWorkerSessionRequestWithBody(server, workerSessionId, "application/json", bodyReader)
+}
+
+// NewInterruptWorkerSessionRequestWithBody generates requests for InterruptWorkerSession with any type of body
+func NewInterruptWorkerSessionRequestWithBody(server string, workerSessionId WorkerSessionID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions/%s/interrupt", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTerminateWorkerSessionRequest generates requests for TerminateWorkerSession
+func NewTerminateWorkerSessionRequest(server string, workerSessionId WorkerSessionID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions/%s/terminate", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -19229,8 +19655,25 @@ type ClientWithResponsesInterface interface {
 	// GetStatusWithResponse request
 	GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusClientResponse, error)
 
+	// ListWorkerSessionsWithResponse request
+	ListWorkerSessionsWithResponse(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*ListWorkerSessionsClientResponse, error)
+
 	// GetWorkerSessionObservationByWorkerSessionIdWithResponse request
 	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
+
+	// CancelWorkerSessionWithResponse request
+	CancelWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*CancelWorkerSessionClientResponse, error)
+
+	// StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse request
+	StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse, error)
+
+	// InterruptWorkerSessionWithBodyWithResponse request with any body
+	InterruptWorkerSessionWithBodyWithResponse(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InterruptWorkerSessionClientResponse, error)
+
+	InterruptWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*InterruptWorkerSessionClientResponse, error)
+
+	// TerminateWorkerSessionWithResponse request
+	TerminateWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error)
 
 	// ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse request
 	ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse, error)
@@ -19410,6 +19853,30 @@ func (r GetStatusClientResponse) StatusCode() int {
 	return 0
 }
 
+type ListWorkerSessionsClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ListWorkerSessionsResponse
+	JSON400      *BadRequest
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r ListWorkerSessionsClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListWorkerSessionsClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetWorkerSessionObservationByWorkerSessionIdClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19429,6 +19896,111 @@ func (r GetWorkerSessionObservationByWorkerSessionIdClientResponse) Status() str
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetWorkerSessionObservationByWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CancelWorkerSessionClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *WorkerSessionControlResponse
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON409      *WorkerSessionControlConflict
+	JSON500      *WorkerSessionControlInternalError
+	JSON503      *WorkerSessionControlUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelWorkerSessionClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelWorkerSessionClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InterruptWorkerSessionClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *WorkerSessionInterruptResponse
+	JSON400      *WorkerSessionInterruptBadRequest
+	JSON404      *WorkerSessionInterruptNotFound
+	JSON409      *WorkerSessionInterruptConflict
+	JSON500      *WorkerSessionInterruptInternalError
+	JSON503      *WorkerSessionInterruptUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r InterruptWorkerSessionClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InterruptWorkerSessionClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TerminateWorkerSessionClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *WorkerSessionControlResponse
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON409      *WorkerSessionControlConflict
+	JSON500      *WorkerSessionControlInternalError
+	JSON503      *WorkerSessionControlUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r TerminateWorkerSessionClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TerminateWorkerSessionClientResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -19524,6 +20096,15 @@ func (c *ClientWithResponses) GetStatusWithResponse(ctx context.Context, reqEdit
 	return ParseGetStatusClientResponse(rsp)
 }
 
+// ListWorkerSessionsWithResponse request returning *ListWorkerSessionsClientResponse
+func (c *ClientWithResponses) ListWorkerSessionsWithResponse(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*ListWorkerSessionsClientResponse, error) {
+	rsp, err := c.ListWorkerSessions(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListWorkerSessionsClientResponse(rsp)
+}
+
 // GetWorkerSessionObservationByWorkerSessionIdWithResponse request returning *GetWorkerSessionObservationByWorkerSessionIdClientResponse
 func (c *ClientWithResponses) GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
 	rsp, err := c.GetWorkerSessionObservationByWorkerSessionId(ctx, workerSessionId, reqEditors...)
@@ -19531,6 +20112,50 @@ func (c *ClientWithResponses) GetWorkerSessionObservationByWorkerSessionIdWithRe
 		return nil, err
 	}
 	return ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse(rsp)
+}
+
+// CancelWorkerSessionWithResponse request returning *CancelWorkerSessionClientResponse
+func (c *ClientWithResponses) CancelWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*CancelWorkerSessionClientResponse, error) {
+	rsp, err := c.CancelWorkerSession(ctx, workerSessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelWorkerSessionClientResponse(rsp)
+}
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse request returning *StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse
+func (c *ClientWithResponses) StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse, error) {
+	rsp, err := c.StreamWorkerSessionEventsByTopLevelWorkerSessionId(ctx, workerSessionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse(rsp)
+}
+
+// InterruptWorkerSessionWithBodyWithResponse request with arbitrary body returning *InterruptWorkerSessionClientResponse
+func (c *ClientWithResponses) InterruptWorkerSessionWithBodyWithResponse(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InterruptWorkerSessionClientResponse, error) {
+	rsp, err := c.InterruptWorkerSessionWithBody(ctx, workerSessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInterruptWorkerSessionClientResponse(rsp)
+}
+
+func (c *ClientWithResponses) InterruptWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, body InterruptWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*InterruptWorkerSessionClientResponse, error) {
+	rsp, err := c.InterruptWorkerSession(ctx, workerSessionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInterruptWorkerSessionClientResponse(rsp)
+}
+
+// TerminateWorkerSessionWithResponse request returning *TerminateWorkerSessionClientResponse
+func (c *ClientWithResponses) TerminateWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error) {
+	rsp, err := c.TerminateWorkerSession(ctx, workerSessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTerminateWorkerSessionClientResponse(rsp)
 }
 
 // ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse request returning *ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse
@@ -19867,6 +20492,46 @@ func ParseGetStatusClientResponse(rsp *http.Response) (*GetStatusClientResponse,
 	return response, nil
 }
 
+// ParseListWorkerSessionsClientResponse parses an HTTP response from a ListWorkerSessionsWithResponse call
+func ParseListWorkerSessionsClientResponse(rsp *http.Response) (*ListWorkerSessionsClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListWorkerSessionsClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ListWorkerSessionsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse parses an HTTP response from a GetWorkerSessionObservationByWorkerSessionIdWithResponse call
 func ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse(rsp *http.Response) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -19908,6 +20573,229 @@ func ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse(rsp *http.R
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCancelWorkerSessionClientResponse parses an HTTP response from a CancelWorkerSessionWithResponse call
+func ParseCancelWorkerSessionClientResponse(rsp *http.Response) (*CancelWorkerSessionClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelWorkerSessionClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WorkerSessionControlResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest WorkerSessionControlConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest WorkerSessionControlInternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest WorkerSessionControlUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse parses an HTTP response from a StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse call
+func ParseStreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse(rsp *http.Response) (*StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseInterruptWorkerSessionClientResponse parses an HTTP response from a InterruptWorkerSessionWithResponse call
+func ParseInterruptWorkerSessionClientResponse(rsp *http.Response) (*InterruptWorkerSessionClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InterruptWorkerSessionClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest WorkerSessionInterruptResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest WorkerSessionInterruptBadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest WorkerSessionInterruptNotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest WorkerSessionInterruptConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest WorkerSessionInterruptInternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest WorkerSessionInterruptUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTerminateWorkerSessionClientResponse parses an HTTP response from a TerminateWorkerSessionWithResponse call
+func ParseTerminateWorkerSessionClientResponse(rsp *http.Response) (*TerminateWorkerSessionClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TerminateWorkerSessionClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WorkerSessionControlResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest WorkerSessionControlConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest WorkerSessionControlInternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest WorkerSessionControlUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

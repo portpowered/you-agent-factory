@@ -408,3 +408,20 @@ func environmentValue(lookup func(string) (string, bool), name string) string {
 func homeEnvironmentForProcessTest(home string) []string {
 	return []string{"HOME=" + home, "USERPROFILE=" + home}
 }
+
+func TestProcessExecuteJoinsCallerCancellationAndCommandFailure(t *testing.T) {
+	t.Parallel()
+	storageErr := errors.New("terminal storage unavailable")
+	ctx, cancel := context.WithCancel(t.Context())
+	factory := processCommandFactory{newCommand: func(func(string) (string, bool)) *cobra.Command {
+		return &cobra.Command{Use: "you", RunE: func(*cobra.Command, []string) error {
+			cancel()
+			return fmt.Errorf("native command diagnostic: %w", storageErr)
+		}}
+	}}
+	process := newProcessForTest(t, factory, startupcli.Functions{})
+	err := process.Execute(Input{Context: ctx, Args: []string{"you"}, Env: homeEnvironmentForProcessTest(t.TempDir()), WorkingDirectory: t.TempDir()})
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, storageErr) || !strings.HasPrefix(err.Error(), "native command diagnostic:") {
+		t.Fatalf("Execute = %v, want native diagnostic and joined cancellation/storage causes", err)
+	}
+}

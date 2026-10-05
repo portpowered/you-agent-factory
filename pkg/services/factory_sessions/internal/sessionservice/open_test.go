@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"go.uber.org/zap"
 )
 
@@ -21,7 +22,11 @@ func newServiceTestResponseStream() *responsestream.SessionResponseStream {
 	return responsestream.NewSessionResponseStream(serviceTestClock)
 }
 
-func newServiceTestGateway(host factorysessionservice.LegacyHost) *factorysessionservice.Service {
+func newServiceTestGateway(host interface {
+	factorysessionservice.Host
+	controlplane.DurableLifecycleHost
+	stream.Host
+}) *factorysessionservice.Service {
 	registry := responsestream.NewRegistry(newServiceTestResponseStream, serviceTestClock)
 	return factorysessionservice.New(host, registry)
 }

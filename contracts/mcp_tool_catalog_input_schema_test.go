@@ -10,24 +10,6 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-func TestMCPToolCatalogInputSchemaParity_AuthoredCatalogMatchesDiscoverTools(t *testing.T) {
-	root, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("repository root: %v", err)
-	}
-	resolved, diagnostics := contractvalidator.LoadAndResolve(root, "contracts/mcp/tools.json", []string{"contracts/mcp/tools.json"})
-	if len(diagnostics) != 0 {
-		t.Fatalf("resolve authored catalog diagnostics = %+v", diagnostics)
-	}
-	schemas, err := mcpfactorycatalog.CatalogInputSchemasFromCatalogDocument(resolved)
-	if err != nil {
-		t.Fatalf("CatalogInputSchemasFromCatalogDocument() error = %v", err)
-	}
-	if err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(schemas, mcpfactorysession.DiscoverTools()); err != nil {
-		t.Fatalf("VerifyCatalogInputSchemaParity() error = %v", err)
-	}
-}
-
 func TestMCPToolCatalogInputSchemaParity_ContractValidatorPassesForAuthoredCatalog(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {

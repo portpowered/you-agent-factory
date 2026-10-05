@@ -8,6 +8,7 @@ type DiscoveryMetadata struct {
 
 // DiscoveryToolRecord is one canonical MCP tool discovery surface.
 type DiscoveryToolRecord struct {
+	Annotations map[string]any `json:"annotations,omitempty"`
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
