@@ -213,17 +213,9 @@ PACKAGE_BOUNDARY_BASE_REF ?=
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-# "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
-# Entries are keyed by source content, never by checkout path, so a fresh worktree
-# reuses checkers another worktree compiled. Set a path to opt out.
-LINT_CHECKER_CACHE_DIR ?= auto
 # Memoizes the package-boundary base-tree scan per base commit and checker build.
 # Empty disables it.
 PACKAGE_BOUNDARY_BASELINE_CACHE_DIR ?= auto
-# Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
-LINT_CHECKER_FALLBACK ?= 0
-LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
-LINT_CHECKER_DRIVER ?=
 LINT_LANE_PACKAGE := ./cmd/lintlane
 # Optional CI outputs can be defined but blank. Use the canonical lane budget
 # for blank handoffs; lintlane still rejects invalid nonblank overrides.
@@ -246,10 +238,6 @@ LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
 LINT_UI_CHANGED = $(shell base=$$(git merge-base HEAD origin/main 2>/dev/null) && { git diff --quiet $$base -- ui && test -z "$$(git ls-files --others --exclude-standard ui)" || echo 1; } || echo 1)
 LINT_TARGETS ?= $(if $(or $(strip $(CI)),$(strip $(LINT_FULL)),$(strip $(LINT_UI_CHANGED))),$(LINT_TARGETS_UI) )$(LINT_TARGETS_BASE)$(if $(or $(strip $(CI)),$(strip $(LINT_FULL))), $(LINT_TARGETS_CI_ONLY))
-
-define run_lint_checker
-$(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
-endef
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -606,7 +594,7 @@ test-localai-runner-v2-prebuilt: export INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT :
 test-localai-runner-v2-prebuilt:
 	$(GO) test ./tests/internal/localai/omni_media_probe -run '^TestProbeRunnerV2PrebuiltCLIHandoff$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
-test-integration:
+test-integration: test-lintlane-integration
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/tts_clean_install ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/cancel ./tests/integration/workers/interrupt -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -973,7 +961,7 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
+	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS)
 
 lint-full:
 	$(MAKE) lint LINT_FULL=1
@@ -987,28 +975,28 @@ architecture:
 	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
 
 pkg-boundary:
-	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
+	$(GO) run ./cmd/pkgboundarycheck -root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,)
 
 service-cycle-check:
-	$(call run_lint_checker,./cmd/servicecyclecheck,-root ".")
+	$(GO) run ./cmd/servicecyclecheck -root "."
 
 packaged-factory-source-check:
-	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
+	$(GO) run ./cmd/packagedfactorysourcecheck -root "."
 
 packaged-factory-consumption-check:
-	$(call run_lint_checker,./cmd/packagedfactoryconsumptioncheck,-root ".")
+	$(GO) run ./cmd/packagedfactoryconsumptioncheck -root "."
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
 
 packaged-factory-catalog-check:
-	$(call run_lint_checker,./cmd/packagedfactorycatalogcheck,-root ".")
+	$(GO) run ./cmd/packagedfactorycatalogcheck -root "."
 
 provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
 provider-catalog-check:
-	$(call run_lint_checker,./cmd/providercatalogcheck,-root ".")
+	$(GO) run ./cmd/providercatalogcheck -root "."
 
 model-provider-package-generate:
 	node scripts/model-provider-package.mjs generate
@@ -1062,7 +1050,7 @@ golangci-lint-run:
 	$(GOLANGCI_LINT) run ./...
 
 deadcode: golangci-build
-	$(call run_lint_checker,./cmd/deadcodecheck,-golangci-host-file "$(GOLANGCI_DIR)/host-path.txt")
+	$(GO) run ./cmd/deadcodecheck -golangci-host-file "$(GOLANGCI_DIR)/host-path.txt"
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode
@@ -1319,3 +1307,12 @@ ui-public-package-publish-prepare:
 clean:
 	$(GO) clean ./...
 	rm -rf $(BIN_DIR)
+
+.PHONY: build-lintlane-integration test-lintlane-integration
+build-lintlane-integration:
+	@mkdir -p ".artifacts/integration/lintlane"
+	$(GO) build -o ".artifacts/integration/lintlane/lintlane$(if $(filter Windows_NT,$(OS)),.exe,)" ./cmd/lintlane
+
+test-lintlane-integration: export YOU_LINTLANE_ARTIFACT := $(abspath .artifacts/integration/lintlane/lintlane$(if $(filter Windows_NT,$(OS)),.exe,))
+test-lintlane-integration: build-lintlane-integration
+	$(GO) test -tags=integration -p=$(UNIT_DEFAULT_JOBS) ./tests/integration/tooling/lintlane -count=1 -timeout $(GO_TEST_TIMEOUT)

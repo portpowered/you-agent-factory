@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -198,38 +197,6 @@ func TestCheckerViolationCountRequiresOneNonnegativeMachineReadableMarker(t *tes
 	}
 }
 
-func TestRunMakeTargetForwardsTargetAndEnvironment(t *testing.T) {
-	original := execCommand
-	t.Cleanup(func() { execCommand = original })
-	t.Setenv("LINTLANE_HELPER", "forwarded")
-	t.Setenv("GO_WANT_LINTLANE_HELPER", "1")
-	execCommand = func(name string, args ...string) *exec.Cmd {
-		helperArgs := append([]string{"-test.run=TestLintlaneHelperProcess", "--", name}, args...)
-		return exec.Command(os.Args[0], helperArgs...)
-	}
-
-	var output bytes.Buffer
-	if err := runMakeTarget("fixture-make", "pkg-maint", &output, &output); err != nil {
-		t.Fatalf("runMakeTarget() error = %v; output = %q", err, output.String())
-	}
-	got := output.String()
-	if !strings.HasPrefix(got, "helper target=fixture-make|--no-print-directory|") || !strings.Contains(got, "|pkg-maint env=forwarded\n") {
-		t.Fatalf("helper output = %q", got)
-	}
-}
-
-func TestLintlaneHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_LINTLANE_HELPER") != "1" {
-		return
-	}
-	args, ok := helperCommandArgs(os.Args)
-	if !ok || len(args) < 1 {
-		os.Exit(2)
-	}
-	fmt.Printf("helper target=%s env=%s\n", strings.Join(args, "|"), os.Getenv("LINTLANE_HELPER"))
-	os.Exit(0)
-}
-
 func TestRunRejectsInvalidJobsBeforeCheckerExecution(t *testing.T) {
 	for _, test := range []struct {
 		name     string
@@ -287,11 +254,50 @@ func TestParseConfigPreservesTargetSelection(t *testing.T) {
 	}
 }
 
-func helperCommandArgs(argv []string) ([]string, bool) {
-	for index, arg := range argv {
-		if arg == "--" {
-			return argv[index+1:], true
-		}
+func TestRunRejectsInvalidInputsBeforeTargets(t *testing.T) {
+	original := executeTarget
+	t.Cleanup(func() { executeTarget = original })
+	var executions int
+	executeTarget = func(_, _ string, _, _ io.Writer) error {
+		executions++
+		return nil
 	}
-	return nil, false
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-checker-driver", "old", "lint"}, "flag provided but not defined: -checker-driver"},
+		{[]string{"-checker-package", "old", "lint"}, "flag provided but not defined: -checker-package"},
+		{[]string{"-cache-dir", "old", "lint"}, "flag provided but not defined: -cache-dir"},
+		{[]string{"-go", "old", "lint"}, "flag provided but not defined: -go"},
+		{[]string{"-make", " \t", "lint"}, "make executable must not be empty"},
+		{[]string{"-report-file", " \t", "lint"}, "report file must not be empty"},
+		{nil, "at least one lint target is required"},
+		{[]string{"--", " "}, "lint target names must not be empty"},
+	} {
+		t.Run(test.want, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run(test.args, &stdout, &stderr); code != 2 {
+				t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+			}
+			if executions != 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), test.want) {
+				t.Fatalf("executions = %d, stdout = %q, stderr = %q", executions, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunReportsUnwritableReportDestination(t *testing.T) {
+	original := executeTarget
+	t.Cleanup(func() { executeTarget = original })
+	executeTarget = func(_, _ string, _, _ io.Writer) error { return nil }
+	// A directory cannot be overwritten as a report file on either supported OS.
+	reportPath := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-report-file", reportPath, "lint"}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want report failure", code)
+	}
+	if !strings.Contains(stderr.String(), "write lint report "+reportPath) {
+		t.Fatalf("stderr = %q, want destination-specific error", stderr.String())
+	}
 }

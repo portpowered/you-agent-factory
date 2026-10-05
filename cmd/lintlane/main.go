@@ -19,14 +19,10 @@ import (
 const defaultLintJobs = 4
 
 type config struct {
-	makeTool        string
-	checkerDriver   string
-	checkerPackage  string
-	checkerCacheDir string
-	goTool          string
-	reportFile      string
-	jobs            int
-	targets         []string
+	makeTool   string
+	reportFile string
+	jobs       int
+	targets    []string
 }
 
 type targetResult struct {
@@ -60,21 +56,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	runner := executeTarget
-	cleanup := func() {}
-	if cfg.checkerDriver != "" {
-		runner = makeTargetRunner(cfg.checkerDriver)
-	} else if cfg.checkerPackage != "" {
-		checkerDriver, release, err := prepareCheckerDriver(cfg, stderr)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		cleanup = release
-		runner = makeTargetRunner(checkerDriver)
-	}
-	defer cleanup()
-	results := runTargets(cfg.makeTool, cfg.targets, cfg.jobs, runner)
+	results := runTargets(cfg.makeTool, cfg.targets, cfg.jobs, executeTarget)
 	if cfg.reportFile != "" {
 		if err := writeReportFile(cfg.reportFile, cfg.jobs, time.Since(started), results); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -92,10 +74,6 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 	flags := flag.NewFlagSet("lintlane", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	makeTool := flags.String("make", "make", "Make executable used to run each lint target")
-	checkerDriver := flags.String("checker-driver", "", "compiled lint checker driver to pass to child Make targets")
-	checkerPackage := flags.String("checker-package", "", "checker driver package to compile once for this lint lane")
-	checkerCacheDir := flags.String("cache-dir", ".cache/lint-checkers", "directory for temporary lint lane executables")
-	goTool := flags.String("go", "go", "Go executable used to compile the lint checker driver")
 	reportFile := flags.String("report-file", "", "JSON file for the complete per-target lint report")
 	jobsRaw := flags.String("jobs", strconv.Itoa(defaultLintJobs), "maximum number of lint targets to run concurrently")
 	if err := flags.Parse(args); err != nil {
@@ -107,18 +85,6 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 	}
 	if strings.TrimSpace(*makeTool) == "" {
 		return config{}, errors.New("make executable must not be empty")
-	}
-	if strings.TrimSpace(*checkerDriver) == "" && *checkerDriver != "" {
-		return config{}, errors.New("checker driver must not be empty")
-	}
-	if strings.TrimSpace(*checkerPackage) == "" && *checkerPackage != "" {
-		return config{}, errors.New("checker package must not be empty")
-	}
-	if strings.TrimSpace(*checkerCacheDir) == "" {
-		return config{}, errors.New("checker cache directory must not be empty")
-	}
-	if strings.TrimSpace(*goTool) == "" {
-		return config{}, errors.New("go tool must not be empty")
 	}
 	if strings.TrimSpace(*reportFile) == "" && *reportFile != "" {
 		return config{}, errors.New("report file must not be empty")
@@ -133,14 +99,10 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 		}
 	}
 	return config{
-		makeTool:        *makeTool,
-		checkerDriver:   *checkerDriver,
-		checkerPackage:  *checkerPackage,
-		checkerCacheDir: *checkerCacheDir,
-		goTool:          *goTool,
-		reportFile:      *reportFile,
-		jobs:            jobs,
-		targets:         targets,
+		makeTool:   *makeTool,
+		reportFile: *reportFile,
+		jobs:       jobs,
+		targets:    targets,
 	}, nil
 }
 
@@ -153,44 +115,6 @@ func parseLintJobs(raw string) (int, error) {
 		return 0, fmt.Errorf("invalid -jobs value: expected a positive integer, received %q", raw)
 	}
 	return jobs, nil
-}
-
-func prepareCheckerDriver(cfg config, stderr io.Writer) (string, func(), error) {
-	cacheDir, err := filepath.Abs(resolveCacheDir(cfg.checkerCacheDir))
-	if err != nil {
-		return "", func() {}, fmt.Errorf("resolve lint lane cache directory: %w", err)
-	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", func() {}, fmt.Errorf("create lint lane cache directory: %w", err)
-	}
-	driverDir, err := os.MkdirTemp(cacheDir, ".lintlane-driver-")
-	if err != nil {
-		return "", func() {}, fmt.Errorf("create lint lane driver directory: %w", err)
-	}
-	release := func() { _ = os.RemoveAll(driverDir) }
-	driverPath := filepath.Join(driverDir, "lintcheck"+executableSuffix())
-	command := execCommand(cfg.goTool, "build", "-o", driverPath, cfg.checkerPackage)
-	command.Env = os.Environ()
-	command.Stdout = io.Discard
-	command.Stderr = stderr
-	if err := command.Run(); err != nil {
-		release()
-		return "", func() {}, fmt.Errorf("compile lint checker driver %s: %w", cfg.checkerPackage, err)
-	}
-	return driverPath, release, nil
-}
-
-func executableSuffix() string {
-	if runtime.GOOS == "windows" {
-		return ".exe"
-	}
-	return ""
-}
-
-func makeTargetRunner(checkerDriver string) targetRunner {
-	return func(makeTool, target string, stdout, stderr io.Writer) error {
-		return runMakeTargetWithVariables(makeTool, target, []string{"LINT_CHECKER_DRIVER=" + checkerDriver}, stdout, stderr)
-	}
 }
 
 func runTargets(makeTool string, targets []string, jobs int, runner targetRunner) []targetResult {
@@ -231,12 +155,7 @@ func runTargets(makeTool string, targets []string, jobs int, runner targetRunner
 }
 
 func runMakeTarget(makeTool, target string, stdout, stderr io.Writer) error {
-	return runMakeTargetWithVariables(makeTool, target, nil, stdout, stderr)
-}
-
-func runMakeTargetWithVariables(makeTool, target string, variables []string, stdout, stderr io.Writer) error {
 	args := []string{"--no-print-directory"}
-	args = append(args, variables...)
 	if shell := windowsMakeShell(); shell != "" {
 		args = append(args, "SHELL="+shell)
 	}
@@ -392,20 +311,4 @@ func (b *lockedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
-}
-
-// autoCacheDir selects a per-user cache directory shared by every worktree of
-// the same user. Cache entries are keyed by source content, never by checkout
-// path, so a fresh worktree reuses checkers compiled by another one.
-const autoCacheDir = "auto"
-
-func resolveCacheDir(dir string) string {
-	if strings.TrimSpace(dir) != autoCacheDir {
-		return dir
-	}
-	base, err := os.UserCacheDir()
-	if err != nil || base == "" {
-		return ".cache/lint-checkers"
-	}
-	return filepath.Join(base, "you-lint", "lint-checkers")
 }

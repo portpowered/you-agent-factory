@@ -717,6 +717,12 @@ jobs:
           INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
           INFINITE_YOU_RESTART_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/integration/sessions/restart/restart-baseline.json
           LOCALAI_PLATFORM_CONFORMANCE_HELPER_PATH: ${{ github.workspace }}/.artifacts/integration/bin/platform-conformance-helper
+      - name: Race-check lint execution and artifact integration witnesses
+        run: |
+          sha256sum .artifacts/integration/lintlane/lintlane
+          go test -race -tags=integration -p=2 ./cmd/lintlane ./tests/integration/tooling/lintlane -count=1 -timeout 5m
+        env:
+          YOU_LINTLANE_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/lintlane/lintlane
       - name: Upload restart characterization evidence
         if: always()
         uses: actions/upload-artifact@v4
