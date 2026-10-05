@@ -14,9 +14,9 @@ func NewService(
 	eventIDs responseeventstore.ResponseEventIDGenerator,
 	retentionLimits *factorysessions.ResponseEventRetentionLimits,
 	eventsService events.Service,
-	logger ...logging.Logger,
+	logger logging.Logger,
 ) (responsestreamservice.Service, error) {
-	service, err := internalservice.New(eventIDs, retentionLimits, eventsService, logger...)
+	service, err := internalservice.New(eventIDs, retentionLimits, eventsService, logger)
 	if err != nil {
 		return nil, err
 	}

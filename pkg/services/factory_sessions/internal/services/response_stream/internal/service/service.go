@@ -52,7 +52,7 @@ func New(
 	eventIDs responseeventstore.ResponseEventIDGenerator,
 	limits *factorysessions.ResponseEventRetentionLimits,
 	eventsService events.Service,
-	logger ...logging.Logger,
+	logger logging.Logger,
 ) (*ResponseStream, error) {
 	if eventIDs == nil {
 		return nil, errors.New("construct Factory Session response streams: event ID generator is required")
@@ -63,7 +63,7 @@ func New(
 	service := &ResponseStream{
 		eventIDs: eventIDs,
 		events:   eventsService,
-		logger:   logging.EnsureLogger(firstLogger(logger)),
+		logger:   logger,
 	}
 	if limits != nil {
 		service.retentionLimits = &responseeventstore.RetentionLimits{
@@ -73,13 +73,6 @@ func New(
 		}
 	}
 	return service, nil
-}
-
-func firstLogger(loggers []logging.Logger) logging.Logger {
-	if len(loggers) == 0 {
-		return nil
-	}
-	return loggers[0]
 }
 
 func (s *ResponseStream) NewEventStore(sessionID string, clock factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
@@ -171,21 +164,30 @@ func (s *ResponseStream) Complete(store *responseeventstore.SessionResponseEvent
 // left completely untouched -- no partial, mirrored, or locally-only record
 // is ever produced, and the store can never retain a record Events did not
 // accept.
-func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (published responseevents.FactoryResponseEvent, err error) {
+	// Attribution comes from the owned store and generated identity, never the
+	// caller's event. Error text and response content are deliberately excluded.
+	sessionID, eventID, failureClass := "", "", "invalid_event"
+	if store != nil {
+		sessionID = store.FactorySessionID()
+	}
+	s.logger.Debug("Factory Session response publication", "operation", "publish", "outcome", "started", "session_id", sessionID)
+	defer func() { s.logPublication(published, sessionID, eventID, failureClass, err) }()
 	if store == nil {
+		failureClass = "missing_store"
 		return responseevents.FactoryResponseEvent{}, errors.New("Factory Session response-event store is required")
 	}
-	eventID := strings.TrimSpace(s.eventIDs())
+	eventID = strings.TrimSpace(s.eventIDs())
 	if eventID == "" {
+		failureClass = "empty_identity"
 		return responseevents.FactoryResponseEvent{}, errors.New("response event ID generator returned an empty identity")
 	}
-	sessionID := store.FactorySessionID()
-
-	published, err := store.PublishThroughAuthority(event, func(prepared responseevents.FactoryResponseEvent, sequenceHint int64) (int64, string, error) {
+	published, err = store.PublishThroughAuthority(event, func(prepared responseevents.FactoryResponseEvent, sequenceHint int64) (int64, string, error) {
 		prepared.Sequence = sequenceHint
 		prepared.EventID = eventID
 		payload, err := json.Marshal(prepared)
 		if err != nil {
+			failureClass = "encoding_failed"
 			return 0, "", fmt.Errorf("encode factory session response event for Events: %w", err)
 		}
 		result, err := s.events.Append(context.Background(), events.AppendRequest{
@@ -198,6 +200,7 @@ func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventS
 			Payload:        payload,
 		})
 		if err != nil {
+			failureClass = "events_rejected"
 			return 0, "", fmt.Errorf("factory session response event rejected by Events: %w", err)
 		}
 		return int64(result.Record.ID.Position), eventID, nil
@@ -206,6 +209,23 @@ func (s *ResponseStream) Publish(store *responseeventstore.SessionResponseEventS
 		return responseevents.FactoryResponseEvent{}, err
 	}
 	return published, nil
+}
+
+func (s *ResponseStream) logPublication(published responseevents.FactoryResponseEvent, sessionID, eventID, failureClass string, err error) {
+	outcome := "succeeded"
+	if err != nil {
+		outcome = "rejected"
+		switch {
+		case errors.Is(err, responseeventstore.ErrStoreCompleted):
+			failureClass = "store_completed"
+		case errors.Is(err, responseeventstore.ErrStoreClosed):
+			failureClass = "store_closed"
+		}
+	} else {
+		failureClass = "none"
+	}
+	s.logger.Debug("Factory Session response publication", "operation", "publish", "outcome", outcome,
+		"class", failureClass, "session_id", sessionID, "event_id", eventID, "sequence", published.Sequence)
 }
 
 // responseEventTopic names the Events topic one Factory Session's response
