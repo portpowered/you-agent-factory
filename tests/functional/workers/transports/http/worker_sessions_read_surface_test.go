@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
+
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -78,6 +80,7 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	if inFlight.Sessions[0].State != factoryapi.WorkerSessionObservationStateStarting && inFlight.Sessions[0].State != factoryapi.WorkerSessionObservationStateRunning {
 		t.Fatalf("in-flight Worker Session state = %q, want STARTING or RUNNING", inFlight.Sessions[0].State)
 	}
+	activeLogs := assertCapturedLogsCLIHTTPParity(t, server, inFlight.Sessions[0].WorkerSessionId)
 
 	close(gate)
 	runner.waitCompleted(t)
@@ -95,6 +98,40 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	if completed.Sessions[0].State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("completed Worker Session state = %q, want COMPLETED", completed.Sessions[0].State)
 	}
+	endedLogs := assertCapturedLogsCLIHTTPParity(t, server, completed.Sessions[0].WorkerSessionId)
+	if endedLogs.CommittedPosition <= activeLogs.CommittedPosition {
+		t.Fatalf("ended capture did not advance: active=%d ended=%d", activeLogs.CommittedPosition, endedLogs.CommittedPosition)
+	}
+	if activeLogs.Events[0].Event.CapturedAt == nil || endedLogs.Events[0].Event.CapturedAt == nil || !activeLogs.Events[0].Event.CapturedAt.Equal(*endedLogs.Events[0].Event.CapturedAt) {
+		t.Fatal("opening capture time changed between active and ended reads")
+	}
+	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")
+}
+
+// Both observers address only the stable Worker Session ID. The controlled
+// provider command fixture does not create any native provider transcript.
+func assertCapturedLogsCLIHTTPParity(t *testing.T, server *support.FunctionalAPIServer, id string) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+url.PathEscape(id)+"/logs")
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--server", server.URL(), "--output", "json"})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI captured logs: %v\n%s", err, inputs.Stderr())
+	}
+	var cli factoryapi.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil {
+		t.Fatal(err)
+	}
+	if page.WorkerSessionId != id || cli.WorkerSessionId != id || cli.RecordingGenerationId != page.RecordingGenerationId || len(page.Events) == 0 || len(cli.Events) == 0 {
+		t.Fatalf("captured CLI/HTTP identity differs: CLI=%+v HTTP=%+v", cli, page)
+	}
+	for _, observed := range []factoryapi.WorkerSessionLogPage{page, cli} {
+		for index, event := range observed.Events {
+			if event.Event.Position != int64(index+1) || event.Event.Position > observed.CommittedPosition || event.Event.CapturedAt == nil {
+				t.Fatalf("captured prefix or commit time invalid: %+v", event.Event)
+			}
+		}
+	}
+	return page
 }
 
 func waitForScopedProcessingWork(t *testing.T, baseURL, sessionID, workID string) {

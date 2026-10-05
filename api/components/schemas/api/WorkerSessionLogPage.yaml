@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required: [workerSessionId, recordingGenerationId, committedPosition, health, events]
+properties:
+  workerSessionId:
+    type: string
+    minLength: 1
+  recordingGenerationId:
+    type: string
+    minLength: 1
+  committedPosition:
+    type: integer
+    format: int64
+    minimum: 0
+  health:
+    type: string
+    enum: [COMPLETE, DEGRADED, INCOMPLETE]
+    description: Capture completeness, independent of execution success.
+  events:
+    type: array
+    maxItems: 1000
+    items:
+      $ref: './WorkerSessionEvent.yaml'
+  nextToken:
+    type: string
+    minLength: 1

@@ -331,7 +331,27 @@ you --server http://localhost:7437 worker-sessions list --work-id <work-id>
 you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions stream --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
+you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id> --view logs --output json
 ```
+
+Use `read --view logs` to read a finite page of captured activity while the
+Worker runs or after execution ends. This view reads Portos recordings and
+does not require a Provider Session reference or provider transcript files.
+The default `read` view remains `transcript`.
+
+Logs pages include the recording generation, committed position, capture
+health, and ordered events. New committed events include `capturedAt`, the
+host capture time. Older events omit this field. Capture health describes the
+recorded history independently of execution success.
+
+The default page size is 100 events. Use `--limit` to select 1 through 1000
+events. If the response includes `nextToken`, pass it with `--next-token` to
+read the next page from the same committed head. Start a new read without a
+token to observe activity captured since that head. Tokens belong to one
+Worker Session, recording generation, and storage profile. The HTTP operation
+is `GET /worker-sessions/{worker_session_id}/logs` with `limit` and `nextToken`.
+Unknown IDs return 404, invalid limits or tokens return 400, and unavailable
+recordings return 503. A selected host failure remains an error.
 
 The unscoped top-level list is the fleet-wide view: it includes direct and
 Factory-originated observations across the process. Use `--scope direct`,

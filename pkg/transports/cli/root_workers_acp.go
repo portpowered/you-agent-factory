@@ -801,6 +801,21 @@ func executeGeneratedWorkerSessionsReadWithValues(
 	if err := requireWorkerSessionsCommand(cmd); err != nil {
 		return err
 	}
+	view, err := commandInputValue[string](values, "you.worker-sessions.read.flag.view")
+	if err != nil {
+		return err
+	}
+	limit, err := commandInputValue[int](values, "you.worker-sessions.read.flag.limit")
+	if err != nil {
+		return err
+	}
+	nextToken, err := commandInputValue[string](values, "you.worker-sessions.read.flag.next-token")
+	if err != nil {
+		return err
+	}
+	if cmd.Flags().Changed("limit") && (limit < 1 || limit > 1000) {
+		return fmt.Errorf("--limit must be between 1 and 1000")
+	}
 	provider, err := commandInputValue[string](values, "you.worker-sessions.read.flag.provider")
 	if err != nil {
 		return err
@@ -827,6 +842,7 @@ func executeGeneratedWorkerSessionsReadWithValues(
 	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return read(workersessionscli.ReadConfig{
+		View: view, Limit: limit, NextToken: nextToken,
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		WorkerSessionID: workerSessionID, Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),

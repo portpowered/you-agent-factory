@@ -382,6 +382,36 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/logs:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionLogs
+      summary: Read captured Worker Session observations
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - $ref: '#/components/parameters/NextToken'
+      responses:
+        '200':
+          description: A bounded captured prefix with its durable watermark.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionLogPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /worker-sessions/{worker_session_id}/transcript:
     get:
       tags:
@@ -4018,6 +4048,10 @@ components:
         - schemaId
         - payload
       properties:
+        capturedAt:
+          type: string
+          format: date-time
+          description: Host time at which Recordings committed this record. Omitted for older records and uncommitted live frames.
         cursor:
           $ref: '#/components/schemas/WorkerSessionEventCursor'
           description: Typed reconnect cursor for this canonical event record.
@@ -4047,6 +4081,41 @@ components:
           type: object
           additionalProperties: true
           description: Source-native canonical event payload.
+    WorkerSessionLogPage:
+      type: object
+      additionalProperties: false
+      required:
+        - workerSessionId
+        - recordingGenerationId
+        - committedPosition
+        - health
+        - events
+      properties:
+        workerSessionId:
+          type: string
+          minLength: 1
+        recordingGenerationId:
+          type: string
+          minLength: 1
+        committedPosition:
+          type: integer
+          format: int64
+          minimum: 0
+        health:
+          type: string
+          enum:
+            - COMPLETE
+            - DEGRADED
+            - INCOMPLETE
+          description: Capture completeness, independent of execution success.
+        events:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/WorkerSessionEvent'
+        nextToken:
+          type: string
+          minLength: 1
     WorkerSessionEventCursor:
       type: object
       additionalProperties: false

@@ -33,6 +33,16 @@ func provideWorkerRecordingReader(
 	return workerRecordingReaderCapability{reader: reader}, nil
 }
 
+func provideWorkerLogsService(writer recordings.WorkerRecordingWriter, logger logging.Logger) (workersessions.LogsService, error) {
+	reader, ok := writer.(recordings.WorkerCapturedActivityReader)
+	if !ok {
+		// Legacy injected writers support capture without finite catalog reads.
+		// Keep that execution edge valid and report unavailable at the logs route.
+		return nil, nil
+	}
+	return workersessionswire.NewLogsService(reader, logger)
+}
+
 type workerRecordingReaderCapability struct {
 	reader recordings.WorkerRecordingReader
 }

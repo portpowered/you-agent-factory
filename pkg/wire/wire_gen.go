@@ -756,7 +756,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(factoryStatusProjector, handler, contentPreparation, v172, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery)
+	logsService, err := provideWorkerLogsService(v56, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(factoryStatusProjector, handler, contentPreparation, v172, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery, logsService)
 	if err != nil {
 		return nil, err
 	}
@@ -955,6 +959,7 @@ var servicesSet = wire11.NewSet(
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
 	provideWorkerRecordingReader,
+	provideWorkerLogsService,
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,

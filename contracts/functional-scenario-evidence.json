@@ -198,6 +198,13 @@
       ]
     },
     {
+      "test": "tests/functional/workers/transports/http/worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
+      "stableIds": [
+        "cli/you.worker-sessions.read",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"

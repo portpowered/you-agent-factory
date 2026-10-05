@@ -542,6 +542,8 @@ type ParseDiagnostic struct {
 // ObservationEvent is one detached canonical Events record projected without
 // exposing the Events store or its implementation.
 type ObservationEvent struct {
+	// CapturedAt is present only when Recordings committed this record.
+	CapturedAt     *time.Time
 	Position       uint64
 	Cursor         ObservationCursor
 	SourceType     string
@@ -554,6 +556,10 @@ type ObservationEvent struct {
 
 func (e ObservationEvent) Clone() ObservationEvent {
 	clone := e
+	if e.CapturedAt != nil {
+		stamp := *e.CapturedAt
+		clone.CapturedAt = &stamp
+	}
 	clone.Cursor = e.Cursor.Clone()
 	clone.Payload = append(json.RawMessage(nil), e.Payload...)
 	return clone
