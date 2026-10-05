@@ -34,16 +34,34 @@ func (r sessionLifecycleReader) StopLiveSession(sessionID string) error {
 	if session == nil {
 		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
-	err := runtimebinding.StopSessionGeneration(r.state, r.active, session, func(factory.RuntimeRun) error {
+	active, release := r.cleanupFacts(session)
+	err := runtimebinding.StopSessionGeneration(r.state, active, session, func(factory.RuntimeRun) error {
 		if r.control == nil {
 			return fmt.Errorf("factory session control service is required")
 		}
 		return r.control.StopLiveGeneration(context.Background(), session)
 	})
-	if err == nil && r.releaseAdmission != nil {
-		r.releaseAdmission(sessionID)
+	if err == nil && release != nil {
+		release(sessionID)
 	}
 	return err
+}
+
+func (r sessionLifecycleReader) cleanupFacts(session *livesession.LiveSession) (*runtimebinding.State, func(string)) {
+	active, release := r.active, r.releaseAdmission
+	// The process host has no opening-time state. Until T15/T17 retire the
+	// per-record owner, take its cleanup facts from the captured generation.
+	if bound := runtimebinding.SessionStateFrom(session); bound != nil {
+		if owner, ok := bound.Owner.(*SessionRuntime); ok && owner != nil {
+			if active == nil {
+				active = &owner.runtimeState
+			}
+			if release == nil {
+				release = owner.releaseWorkAdmissionProjection
+			}
+		}
+	}
+	return active, release
 }
 
 func (r sessionLifecycleReader) ObserveLiveLifecycleControl(

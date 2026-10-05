@@ -74,7 +74,19 @@ func (r sessionIdentityReader) resolveByLogicalKey(
 }
 
 func (r sessionIdentityReader) BackendScopeID() string {
-	return runtimebinding.BackendScopeID(r.backendScope, nil)
+	var session *livesession.LiveSession
+	if r.state != nil {
+		session = r.state.Current()
+	}
+	return r.backendScopeForSession(session)
+}
+
+func (r sessionIdentityReader) backendScopeForSession(session *livesession.LiveSession) string {
+	scope := r.backendScope
+	if bound := runtimebinding.SessionStateFrom(session); bound != nil && strings.TrimSpace(scope) == "" {
+		scope = bound.ProjectionBackendScope
+	}
+	return runtimebinding.BackendScopeID(scope, session)
 }
 
 func (r sessionIdentityReader) LogicalSessionKeyID(session *livesession.LiveSession) string {
@@ -83,7 +95,7 @@ func (r sessionIdentityReader) LogicalSessionKeyID(session *livesession.LiveSess
 	}
 	placement := session.Placement()
 	resolved, err := r.identity.Normalize(context.Background(), identity.NormalizeRequest{
-		BackendScopeID: r.BackendScopeID(), FolderPath: placement.FolderPath, Target: placement.Target,
+		BackendScopeID: r.backendScopeForSession(session), FolderPath: placement.FolderPath, Target: placement.Target,
 	})
 	if err != nil {
 		return ""

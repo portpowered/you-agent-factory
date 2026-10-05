@@ -65,7 +65,7 @@ type SessionRuntime struct {
 	scopeControl     SessionScopeControl
 	scopeActivation  SessionScopeActivation
 	openingSession   *livesession.LiveSession
-	sessionGateway   sessionGateway
+	sessionGateway   roles.SessionGateway
 	runtimeBuild     runtimeports.RuntimeReplacementBuilder
 	modelsScope      models.RuntimeScopeRef
 	runtimeLifecycle runtimeports.RuntimeLifecycle

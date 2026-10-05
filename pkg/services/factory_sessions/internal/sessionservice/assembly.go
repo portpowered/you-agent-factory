@@ -37,7 +37,6 @@ type Assembly struct {
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
-	gatewayStreams               *stream.Manager
 	projectionReader             runtimebinding.SessionProjectionOwner
 	namedFactoryActivator        func(context.Context, string) error
 	definitionActivationGateway  factorydefinitions.DefinitionActivationGateway
@@ -45,7 +44,6 @@ type Assembly struct {
 	scopeControl                 SessionScopeControl
 	scopeActivation              SessionScopeActivation
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
-	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
@@ -104,7 +102,6 @@ func NewAssembly(
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
-		gatewayStreams:               gatewayStreams,
 		projectionReader:             projectionReader,
 		namedFactoryActivator:        namedFactoryActivator,
 		definitionActivationGateway:  definitionActivationGateway,
@@ -112,7 +109,6 @@ func NewAssembly(
 		scopeControl:                 control,
 		scopeActivation:              activation,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
-		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
 		eventIDs:                     eventIDs,
 		sessionIDs:                   sessionIDs,
@@ -461,6 +457,7 @@ func (a *Assembly) Complete(
 		a.namedPaths,
 		a.initialWorkFiles,
 		a.identity,
+		a.SessionGateway,
 	)
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
@@ -477,32 +474,10 @@ func (a *Assembly) Complete(
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
 	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
-	gateway := NewWithLiveChangeCoordinator(
-		SessionServiceHost(
-			runtime.sessionState, &runtime.runtimeState, a.scopeControl,
-			runtime.releaseWorkAdmissionProjection, runtime.backendScopeID,
-			runtime.identity, runtime.clock, runtime.worldStateProjector,
-			runtime.newJavaScriptCheckpointStore, runtime.logger,
-		),
-		a.gatewayStreams,
-		runtime.ReconnectCursorValidator(),
-		a.sessionResultProjection,
-		a.responseStreams,
-		a.liveChangeCoordinator,
-		a.recordedHistory,
-		runtime.durableExecution,
-		a.invoker,
-		a.namedFactoryActivator,
-		a.definitionActivationGateway,
-	)
-	gateway = runtime.AttachSessionGateway(gateway)
 	invoker := a.invoker
 	bound.Invoker = invoker
 	a.registry.Upsert(session, true)
-	// The per-runtime gateway is returned to the operation caller. The
-	// process-scoped assembly keeps its original stable service slot so
-	// concurrent session completions cannot replace or race the shared root.
-	return runtime, gateway, invoker, definitionHost{runtime: runtime}, a.definitionActivationGateway, nil
+	return runtime, a.SessionGateway, invoker, definitionHost{runtime: runtime}, a.definitionActivationGateway, nil
 }
 
 type completionSessionIdentity struct {

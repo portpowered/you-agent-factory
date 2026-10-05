@@ -18,14 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type sessionGateway interface {
-	roles.SessionGateway
-	factorysessions.LiveControlService
-	factorysessions.LiveLifecycleControlService
-	JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore
-	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
-}
-
 // ResolveFactorySessionRuntimeScope resolves a public Factory Session selector
 // to its canonical identity and default-session status without building a full
 // read projection. Both facts are needed to scope Worker Session observations.
@@ -242,27 +234,9 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 
 var _ roles.SessionGateway = (*Service)(nil)
 
-// AttachSessionGateway installs the Wire-constructed gateway used by all
-// SessionRuntime operations. It returns the same gateway for provider chaining.
-func (fs *SessionRuntime) AttachSessionGateway(gateway *Service) *Service {
-	if fs != nil && gateway != nil {
-		fs.sessionGateway = gateway
-	}
-	return gateway
-}
-
-// Gateway returns the single gateway attached to this Factory Session runtime.
+// Gateway returns the injected process gateway used by this runtime.
 func (fs *SessionRuntime) Gateway() roles.SessionGateway {
 	return fs.requireSessionGateway()
-}
-
-// ReconnectCursorValidator exposes the injected Recordings capability to the
-// gateway constructor without exposing the concrete ledger implementation.
-func (fs *SessionRuntime) ReconnectCursorValidator() factorysessions.ReconnectCursorValidator {
-	if fs == nil {
-		return nil
-	}
-	return fs.reconnectCursorValidator
 }
 
 // SessionServiceHost constructs keyed gateway reads and lifecycle effects from
@@ -290,7 +264,7 @@ func SessionServiceHost(
 	}
 }
 
-func (fs *SessionRuntime) requireSessionGateway() sessionGateway {
+func (fs *SessionRuntime) requireSessionGateway() roles.SessionGateway {
 	if fs == nil {
 		return nil
 	}

@@ -23,6 +23,7 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	sessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"go.uber.org/goleak"
 	"go.uber.org/zap"
@@ -807,5 +808,84 @@ func assertKeyedActivationBuildFailure(t *testing.T, gateway factorydefinitions.
 		if !errors.Is(err, failure) || !errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) {
 			t.Fatalf("addressed build error = %v, want invalid factory and %v", err, failure)
 		}
+	}
+}
+
+type scopedIdentityStub struct{ sessionidentity.Service }
+
+func (scopedIdentityStub) Normalize(_ context.Context, request sessionidentity.NormalizeRequest) (sessionidentity.ResolvedIdentity, error) {
+	return sessionidentity.ResolvedIdentity{LogicalSessionKeyID: request.BackendScopeID + "/" + request.FolderPath}, nil
+}
+
+func TestProcessHostIdentityUsesAddressedScopeAndCurrentReplacement(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	for _, id := range []string{"first", "peer"} {
+		state.Registry().Upsert(&livesession.LiveSession{
+			ID: id, SessionState: livesession.SessionState{FolderPath: id},
+			Runtime: &factorysessions.LiveRuntime{BackendScopeID: "runtime-" + id},
+			Handle:  &runtimebinding.SessionState{ProjectionBackendScope: "override-" + id},
+		}, id == "peer")
+	}
+	host := SessionServiceHost(state, nil, nil, nil, "", scopedIdentityStub{}, nil, nil, nil, nil)
+	if host.BackendScopeID() != "override-peer" || host.LogicalSessionKeyID(state.Resolve("first")) != "override-first/first" {
+		t.Fatal("process host used current scope for an addressed peer")
+	}
+	replacement := &livesession.LiveSession{
+		ID: "peer", SessionState: livesession.SessionState{FolderPath: "replacement"},
+		Runtime: &factorysessions.LiveRuntime{BackendScopeID: "replacement-scope"},
+	}
+	state.Registry().Upsert(replacement, true)
+	if host.BackendScopeID() != "replacement-scope" || host.LogicalSessionKeyID(replacement) != "replacement-scope/replacement" {
+		t.Fatal("process host retained the previous generation's scope")
+	}
+	explicit := SessionServiceHost(state, nil, nil, nil, " selected ", scopedIdentityStub{}, nil, nil, nil, nil)
+	if explicit.BackendScopeID() != "selected" || explicit.LogicalSessionKeyID(state.Resolve("first")) != "selected/first" {
+		t.Fatal("explicit scope lost precedence")
+	}
+}
+
+func TestProcessHostStopUsesCapturedOwnerAndPreservesRetryPeer(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	failure := errors.New("injected keyed stop failure")
+	lifecycle := &hostLifecycleStub{err: failure}
+	var released []string
+	owners := make(map[string]*SessionRuntime)
+	for _, id := range []string{"first", "peer"} {
+		owner := &SessionRuntime{releaseWorkAdmissionProjection: func(id string) { released = append(released, id) }}
+		run := invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}}
+		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Handle: run, Owner: owner}}, id == "peer")
+		owner.runtimeState.SetActive(context.Background(), id, run)
+		owners[id] = owner
+	}
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, _ factoryruntime.Clock) error {
+		return lifecycle.Stop(run)
+	}, zap.NewNop())
+	host := SessionServiceHost(state, nil, control, nil, "", nil, nil, nil, nil, nil)
+	if err := host.StopLiveSession("first"); !errors.Is(err, failure) || len(released) != 0 {
+		t.Fatalf("failed keyed stop = %v, releases = %v", err, released)
+	}
+	assertProcessHostStopRecords(t, host, owners, "first")
+	lifecycle.err = nil
+	if err := host.StopLiveSession("first"); err != nil || !reflect.DeepEqual(released, []string{"first"}) {
+		t.Fatalf("keyed retry = %v, releases = %v", err, released)
+	}
+	if _, err := host.SessionFactory("first"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("retired first read = %v", err)
+	}
+	assertProcessHostStopRecords(t, host, owners, "peer")
+}
+
+func assertProcessHostStopRecords(t *testing.T, host Host, owners map[string]*SessionRuntime, selected string) {
+	t.Helper()
+	if _, err := host.SessionFactory("peer"); err != nil {
+		t.Fatalf("peer read = %v", err)
+	}
+	if active := owners["first"].runtimeState.Active(); active == nil || active.SessionID != selected {
+		t.Fatalf("selected owner active = %#v", active)
+	}
+	if active := owners["peer"].runtimeState.Active(); active == nil || active.SessionID != "peer" {
+		t.Fatalf("peer owner active = %#v", active)
 	}
 }

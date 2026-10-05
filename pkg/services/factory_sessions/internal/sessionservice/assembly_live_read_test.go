@@ -196,20 +196,26 @@ func TestSessionHostLifecycleDiagnosticsStayOnAddressedRecord(t *testing.T) {
 func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
 	t.Parallel()
 	state := newWorkResolverSessionState()
-	active := &runtimebinding.State{}
+	var released, replacementReleased bool
+	owner := &SessionRuntime{releaseWorkAdmissionProjection: func(string) { released = true }}
+	active := &owner.runtimeState
 	newSession := func() *livesession.LiveSession {
 		return &livesession.LiveSession{ID: "selected", Handle: &runtimebinding.SessionState{
 			Handle: invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}},
 		}}
 	}
 	previous, replacement := newSession(), newSession()
+	runtimebinding.SessionStateFrom(previous).Owner = owner
+	runtimebinding.SessionStateFrom(replacement).Owner = &SessionRuntime{
+		releaseWorkAdmissionProjection: func(string) { replacementReleased = true },
+	}
 	state.Registry().Upsert(previous, true)
 	active.SetActive(context.Background(), previous.ID, runtimebinding.HandleFromSession(previous))
 	lifecycle := &hostLifecycleStub{onStop: func() { state.Registry().Upsert(replacement, true) }}
 	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, _ factoryruntime.Clock) error {
 		return lifecycle.Stop(run)
 	}, zap.NewNop())
-	reader := sessionLifecycleReader{state: state, active: active, control: control}
+	reader := sessionLifecycleReader{state: state, control: control}
 	if err := reader.StopLiveSession("selected"); err != nil {
 		t.Fatal(err)
 	}
@@ -218,6 +224,9 @@ func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
 	}
 	if lifecycle.stopped != runtimebinding.HandleFromSession(previous) || active.ActiveHandle() != runtimebinding.HandleFromSession(replacement) {
 		t.Fatal("stop or active selection crossed replacement generations")
+	}
+	if !released || replacementReleased {
+		t.Fatal("cleanup did not stay on the captured generation's owner")
 	}
 }
 
