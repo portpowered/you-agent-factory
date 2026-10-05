@@ -208,6 +208,32 @@
       "package_count": 393,
       "test_count": 18893,
       "inventory_scope": "all subtests"
+    },
+    {
+      "sample": "final-component-hot",
+      "scope": "prepared execution only; seven added component owners",
+      "measurement": {
+        "command": [
+          ".artifacts/unitlane.exe",
+          "-monolith-prebuilt",
+          "-count=1",
+          "-jobs=2",
+          "-monolith-details",
+          "-timing-output",
+          "C:\\Users\\andre\\AppData\\Local\\Temp\\you-unit-audit-20261004\\final-component-hot.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 59.77844489994459,
+        "user_cpu_seconds": 13.484375,
+        "kernel_cpu_seconds": 19.78125,
+        "total_cpu_seconds": 33.265625,
+        "process_count": 76,
+        "active_processes": 0
+      },
+      "complete": true,
+      "packages": 397,
+      "reported_test_entries": 18926,
+      "inventory_scope": "full test/subtest entries with detailed reporting"
     }
   ],
   "package_cpu_attribution": "process CPU deltas for merged package groups and direct native process CPU; excludes helper descendants; Windows accounting quantization applies",

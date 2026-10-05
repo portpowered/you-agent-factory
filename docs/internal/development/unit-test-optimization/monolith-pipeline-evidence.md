@@ -210,3 +210,40 @@ come primarily from fixture/effect work and reporting, rather than additional
 production package merging. The runner still coordinates all selected groups,
 native exceptions, failures, and cleanup; removing it would not preserve those
 guarantees.
+
+## Hosted coverage lane reconciliation
+
+Hosted run `37293075863` passed all 391 selected unit packages and all
+functional and integration scenarios. The unit coverage gate then rejected
+two obsolete Wire requirements. Removing those requirements exposed 23
+incidental service-floor drops from the removed composition/materialization
+fixtures. No implementation or retained assertion was removed to repair the
+gate.
+
+The same-head unit/functional production-block union meets the prior unit
+floor for 16 affected packages. Their unit floors now reflect the component
+lane; their broader guarantees remain in the passing functional lane. This
+includes two assembly/forwarding owners with zero component coverage and
+100% functional coverage. Existing remediation holds and unrelated floors
+remain unchanged. The package measurements and exact prior/reconciled floors
+are recorded in `coverage-lane-reconciliation.json`; this is a deliberate
+scope reconciliation, not a claim that functional coverage counts as unit
+coverage or that all production statements are covered.
+
+Seven areas keep their prior floors and receive tiny component tests:
+mock dispatch selection, rejection, script effects and input selectors;
+detached CLI parse/capture observations; invalid empty artifact summaries;
+inference materialization failure/cancellation cleanup and projection
+fallbacks; and pure default-work-type, work-propagation, and Quorum-lineage
+policies with tiny synthetic definitions. Five fresh focused coverage processes
+passed. Combined with the
+captured hosted unit profile, coverage is 157/211 statements for artifact
+export, 376/404 for inference (within the existing 0.25-point tolerance),
+75/93 for the mock runner, and 79/88 for CLI observation. No application graph,
+published factory, actual script process, or elapsed-time wait is needed.
+
+The final prepared snapshot passes all 397 packages and 18,926 test/subtest
+entries, using 33.265625 aggregate user-plus-kernel CPU seconds and 59.778445
+elapsed seconds with full detailed reporting. The 33 additional entries belong
+to the seven component owners above. Preparation/build costs remain separate;
+the earlier samples are historical measurements of their stated snapshots.

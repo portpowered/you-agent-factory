@@ -279,6 +279,14 @@ Rules:
   functional coverage through the public application boundary; focused
   installer/loader/serializer unit tests use tiny synthetic inputs and explicit
   dependency doubles.
+- When removing composition or packaged-factory tests from the unit lane,
+  coverage floors **MUST NOT** require recreating those fixtures. Reconcile
+  incidental unit coverage only after auditing the retained guarantees and
+  measuring production-block coverage in the appropriate lanes. Keep focused
+  component assertions for behavior that lacks equivalent coverage, record
+  the affected package floors and evidence, and leave unrelated floors and
+  remediation holds unchanged. A floor **MUST NOT** be lowered solely to pass
+  CI.
 - The full Go unit lane **SHOULD** use the consolidated monolith pipeline
   defined in the factory testing standard: preserve package/component
   isolation, validate reusable binaries through the Go toolchain, and execute
