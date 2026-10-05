@@ -1,7 +1,10 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -291,4 +294,110 @@ func assertFleetUnavailableObservation(t *testing.T, observation factoryapi.Work
 	if observation.WorkId != nil || observation.WorkName != nil || observation.ProviderSession != nil || observation.DurationMillis != nil || observation.Failure != nil {
 		t.Fatalf("unavailable optional facts = %#v, want explicit nulls", observation)
 	}
+}
+
+// The same Work ID can belong to separate Factory Sessions. A fleet page
+// resolves each session once, retaining attribution even for terminal Work.
+func TestFleetWorkAttributionReadsEachSessionOnce(t *testing.T) {
+	t.Parallel()
+	reader := &fleetWorkReader{reads: make(map[string]int)}
+	adapter := NewAdapter(&fakeObservationService{}, reader)
+	observations := make([]workersessions.Observation, 0, 200)
+	for index := range 200 {
+		observations = append(observations, workersessions.Observation{
+			WorkerSessionID:  fmt.Sprintf("worker-%d", index),
+			FactorySessionID: fmt.Sprintf("session-%d", index%2),
+			WorkIDs:          []string{fmt.Sprintf("work-%d", index/2)},
+		})
+	}
+	for range 2 {
+		attribution, err := adapter.resolveWorkAttribution(context.Background(), observations)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for index, observation := range observations {
+			got := attribution[observation.WorkerSessionID]
+			wantName := fmt.Sprintf("session-%d/name-%d", index%2, index/2)
+			if got.WorkID != observation.WorkIDs[0] || got.WorkName != wantName {
+				t.Fatalf("attribution = %#v, want %s", got, wantName)
+			}
+		}
+	}
+	for session, reads := range reader.reads {
+		if reads != 2 {
+			t.Fatalf("%s reads = %d, want one per request", session, reads)
+		}
+	}
+	if len(reader.reads) != 2 {
+		t.Fatalf("session reads = %#v", reader.reads)
+	}
+}
+
+func TestFleetWorkAttributionMissingAndCanceledReads(t *testing.T) {
+	t.Parallel()
+	for _, cancelRead := range []bool{false, true} {
+		t.Run(fmt.Sprint(cancelRead), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			reader := &fleetWorkReader{reads: make(map[string]int), fail: true}
+			if cancelRead {
+				reader.cancel = cancel
+			}
+			adapter := NewAdapter(&fakeObservationService{}, reader)
+			observations := []workersessions.Observation{
+				{WorkerSessionID: "worker-a", WorkIDs: []string{"missing"}},
+				{WorkerSessionID: "worker-b", WorkIDs: []string{"missing"}},
+			}
+			got, err := adapter.resolveWorkAttribution(ctx, observations)
+			if cancelRead {
+				if !errors.Is(err, context.Canceled) || got != nil {
+					t.Fatalf("canceled result = %#v, %v", got, err)
+				}
+			} else {
+				if err != nil || len(got) != 2 {
+					t.Fatalf("missing result = %#v, %v", got, err)
+				}
+				for _, item := range got {
+					if item.WorkID != "missing" || item.WorkName != "" {
+						t.Fatalf("missing attribution = %#v", item)
+					}
+				}
+			}
+			if reader.reads["~default"] != 1 {
+				t.Fatalf("reads = %#v", reader.reads)
+			}
+		})
+	}
+}
+
+type fleetWorkReader struct {
+	work.Service
+	reads  map[string]int
+	fail   bool
+	cancel context.CancelFunc
+}
+
+func (r *fleetWorkReader) GetWork(context.Context, string, string) (work.ReadModel, error) {
+	panic("fleet must not read Work per row")
+}
+
+func (r *fleetWorkReader) ListWork(_ context.Context, session string, options work.ListOptions) (work.ListResult, error) {
+	r.reads[session]++
+	if r.cancel != nil {
+		r.cancel()
+	}
+	if r.fail {
+		return work.ListResult{}, work.ErrWorkNotFound
+	}
+	if !options.IncludeSuperseded || options.MaxResults < 100 || options.NextToken != "" {
+		return work.ListResult{}, errors.New("fleet must read all Work including superseded")
+	}
+	result := work.ListResult{}
+	for index := range 100 {
+		result.Results = append(result.Results, work.ReadModel{
+			WorkID: fmt.Sprintf("work-%d", index), Name: fmt.Sprintf("%s/name-%d", session, index),
+		})
+	}
+	return result, nil
 }
