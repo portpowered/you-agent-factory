@@ -36,19 +36,18 @@ type Assembly struct {
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
+	invoker                      roles.InvocationService
+	scopeControl                 SessionScopeControl
+	scopeActivation              SessionScopeActivation
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
-	interpolation                factorydefinitions.InvocationInterpolationService
-	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
-	ttsObservability             factorydefinitions.TTSObservabilityService
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	recordedSessionInventory     recordings.RecordedSessionInventory
 	directoryInspection          roles.DirectoryInspection
 	namedPaths                   factorydefinitions.NamedPathResolver
-	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 	responseStreams              responsestreamservice.Service
@@ -72,18 +71,17 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams StreamManager,
+	invoker roles.InvocationService,
+	control SessionScopeControl,
+	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
 	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
@@ -95,19 +93,18 @@ func NewAssembly(
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
+		invoker:                      invoker,
+		scopeControl:                 control,
+		scopeActivation:              activation,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
-		interpolation:                interpolation,
-		invocationWorkTypes:          invocationWorkTypes,
-		ttsObservability:             ttsObservability,
 		eventIDs:                     eventIDs,
 		sessionIDs:                   sessionIDs,
 		resolveHome:                  resolveHome,
 		recordedSessionInventory:     recordedSessionInventory,
 		directoryInspection:          directoryInspection,
 		namedPaths:                   namedPaths,
-		invocationInputFiles:         invocationInputFiles,
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
@@ -440,6 +437,9 @@ func (a *Assembly) Complete(
 		a.newJavaScriptCheckpointStore,
 		a.sessionResultProjection,
 		a.state,
+		a.scopeControl,
+		a.scopeActivation,
+		session,
 		a.sessionIDs,
 		a.resolveHome,
 		a.directoryInspection,
@@ -455,6 +455,7 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Session runtime state is required")
 	}
 	bound.Owner = runtime
+	bound.Logger = logger
 	runtime.startupSessionID = identity.id
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
@@ -471,10 +472,7 @@ func (a *Assembly) Complete(
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	gateway.bindRecordedSessionHistory(a.ListSessions)
-	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
+	invoker := a.invoker
 	bound.Invoker = invoker
 	a.registry.Upsert(session, true)
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())

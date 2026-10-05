@@ -310,6 +310,9 @@ func provideFactoryRuntimeDispatchRecorder(edges serviceedges.Edges) recordings.
 }
 
 func provideFactorySessionInvocationMetricsRecorder(edges serviceedges.Edges) factorysessionwire.InvocationMetricsRecorder {
+	if edges.InvocationMetricsRecorder == nil {
+		return factorysessionwire.DisabledInvocationMetricsRecorder{}
+	}
 	return edges.InvocationMetricsRecorder
 }
 

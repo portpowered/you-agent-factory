@@ -6,20 +6,17 @@ import (
 	"fmt"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
 // PrepareOwnedSessionClose terminates the session without removing its record.
 // The record remains available when later cleanup needs a retry.
-func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, sessionID string) error {
+func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, session *livesession.LiveSession) error {
 	if fs == nil {
 		return fmt.Errorf("Factory Session runtime is required")
 	}
 	if err := ctx.Err(); err != nil {
-		return err
-	}
-	session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID)
-	if err != nil {
 		return err
 	}
 	if runtime := runtimebinding.ServiceForSession(session); runtime != nil {
@@ -43,9 +40,26 @@ func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, sessionI
 
 // RetireOwnedSession removes the canonical record only after all other
 // shutdown effects have succeeded.
-func (fs *SessionRuntime) RetireOwnedSession(sessionID string) error {
+func (fs *SessionRuntime) RetireOwnedSession(ctx context.Context, session *livesession.LiveSession) error {
 	if fs == nil {
 		return fmt.Errorf("Factory Session runtime is required")
 	}
-	return fs.stopFactorySession(sessionID)
+	err := runtimebinding.CleanupSessionGeneration(session, func(runtimebinding.RuntimeHandle) error {
+		return fs.scopeControl.StopLiveGeneration(ctx, session)
+	})
+	if err != nil {
+		return err
+	}
+	if err := fs.scopeActivation.Retire(ctx, SessionScope{Session: session}); err != nil {
+		return err
+	}
+	successor := fs.sessionState.Resolve(session.ID)
+	if successor == nil {
+		successor = runtimebinding.NextLiveSession(fs.sessionState, session.ID)
+	}
+	fs.runtimeState.RetireActive(session.ID, runtimebinding.HandleFromSession(session), successor)
+	if fs.retireWorkAdmissionProjection != nil {
+		fs.retireWorkAdmissionProjection(session.ID, session.Runtime, runtimebinding.BundleFromSession(session))
+	}
+	return nil
 }

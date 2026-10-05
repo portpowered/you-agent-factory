@@ -664,19 +664,37 @@ func StopSession(
 	if session == nil {
 		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
+	return StopSessionGeneration(state, runtimeState, session, stop)
+}
+
+// StopSessionGeneration keeps all shutdown effects on the captured generation,
+// even when a replacement is published before shutdown begins.
+func StopSessionGeneration(
+	state *sessionruntime.Service,
+	runtimeState *State,
+	session *livesession.LiveSession,
+	stop func(RuntimeHandle) error,
+) error {
+	if err := CleanupSessionGeneration(session, stop); err != nil {
+		return err
+	}
+	state.UnregisterGeneration(session)
+	successor := state.Resolve(session.ID)
+	if successor == nil {
+		successor = NextLiveSession(state, session.ID)
+	}
+	runtimeState.RetireActive(session.ID, HandleFromSession(session), successor)
+	return nil
+}
+
+// CleanupSessionGeneration stops and deactivates a captured runtime without
+// retiring its registration. Failed cleanup retains the record for retry.
+func CleanupSessionGeneration(session *livesession.LiveSession, stop func(RuntimeHandle) error) error {
 	handle := HandleFromSession(session)
 	if handle == nil {
 		return fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
-	sessionID = session.ID
 	binding := BindingForSession(session)
-	if active := runtimeState.Active(); active != nil && active.SessionID == sessionID {
-		if successor := NextLiveSession(state, sessionID); successor != nil {
-			runtimeState.SetActive(active.Context, successor.ID, HandleFromSession(successor))
-		} else {
-			runtimeState.ClearActive()
-		}
-	}
 	var cleanupErrs []error
 	if stop != nil {
 		if err := stop(handle); err != nil &&
@@ -689,11 +707,7 @@ func StopSession(
 	if err := deactivateRuntimeBinding(binding); err != nil {
 		cleanupErrs = append(cleanupErrs, fmt.Errorf("deactivate Factory Runtime binding: %w", err))
 	}
-	if err := errors.Join(cleanupErrs...); err != nil {
-		return err
-	}
-	state.Unregister(sessionID)
-	return nil
+	return errors.Join(cleanupErrs...)
 }
 
 // FailStartup stops the failed runtime and closes its activation before
@@ -707,20 +721,29 @@ func FailStartup(
 	stop func(RuntimeHandle) error,
 	startupErr error,
 ) error {
-	runtimeState.ClearActive()
+	// Capture cleanup ownership before stopping the run: stopping or closing
+	// activation may publish a replacement under this same public session ID.
+	var session *livesession.LiveSession
+	if state != nil {
+		session = state.Resolve(sessionID)
+		if HandleFromSession(session) != handle {
+			session = nil
+		}
+	}
+	runtimeState.RetireActive(sessionID, handle, nil)
 	if handle != nil && stop != nil {
 		if stopErr := stop(handle); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
 			return errors.Join(startupErr, stopErr)
 		}
 	}
-	if state != nil {
-		bound := SessionStateFrom(state.Resolve(sessionID))
+	if session != nil {
+		bound := SessionStateFrom(session)
 		if bound != nil && bound.Activation != nil {
 			if err := bound.Activation.Close(context.Background()); err != nil {
 				return errors.Join(startupErr, err)
 			}
 		}
-		state.Unregister(sessionID)
+		state.UnregisterGeneration(session)
 	}
 	return startupErr
 }
@@ -751,16 +774,34 @@ func HandleStartFailure(
 	mode interfaces.RuntimeMode,
 	onSessionRemoved func(string),
 ) error {
+	// Readiness may have published a replacement or selected a peer before
+	// returning. Cleanup owns the failed run, never a fresh lookup by ID.
+	var failed *livesession.LiveSession
+	if state != nil {
+		failed = state.Resolve(sessionID)
+		if HandleFromSession(failed) != handle {
+			failed = nil
+		}
+	}
+	if active := runtimeState.Active(); active != nil && active.Handle == handle {
+		runtimeState.RetireActive(active.SessionID, handle, nil)
+	}
+	retireFailed := func() {
+		if failed != nil {
+			state.UnregisterGeneration(failed)
+		}
+		if onSessionRemoved != nil && (state == nil || state.Resolve(sessionID) == nil) {
+			onSessionRemoved(sessionID)
+		}
+	}
 	if SessionClosedDuringStartup(state, sessionID, mode) {
-		runtimeState.ClearActive()
-		unregisterSession(state, sessionID, onSessionRemoved)
+		retireFailed()
 		if stop != nil {
 			_ = stop(handle)
 		}
 		return nil
 	}
-	runtimeState.ClearActive()
-	unregisterSession(state, sessionID, onSessionRemoved)
+	retireFailed()
 	var stopErr error
 	if stop != nil {
 		stopErr = stop(handle)
@@ -804,11 +845,17 @@ func ShutdownOtherLiveSessions(
 		return nil
 	}
 	var errs []error
+	// Capture every generation before the first shutdown effect. A stop can
+	// publish a replacement for itself or for a later session in the traversal.
+	// Those newly admitted runs do not belong to this shutdown window.
+	sessions := make([]*livesession.LiveSession, 0, state.Registry().Count())
 	for _, sessionID := range state.Registry().IDs() {
 		session := state.Resolve(sessionID)
-		if session == nil {
-			continue
+		if session != nil {
+			sessions = append(sessions, session)
 		}
+	}
+	for _, session := range sessions {
 		handle := HandleFromSession(session)
 		if handle == except {
 			continue
@@ -822,7 +869,7 @@ func ShutdownOtherLiveSessions(
 		if err := deactivateRuntimeBinding(binding); err != nil {
 			errs = append(errs, err)
 		}
-		state.Unregister(sessionID)
+		state.UnregisterGeneration(session)
 	}
 	return errors.Join(errs...)
 }

@@ -23,31 +23,32 @@ func TestWorkRequestBoundary_InvocationSubmitConstructsDetachedWorkRequest(t *te
 	var submitted work.WorkRequest
 	sourceKind := factorysessions.InvocationInputSourceKindText
 	owner := legacyinvocation.NewSessionOwner(
-		func(string) (*factorydefinitions.FactoryConfig, error) {
-			return &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
-				Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
-			}}}, nil
+		boundaryInvocationAuthority{
+			func(string) (*factorydefinitions.FactoryConfig, error) {
+				return &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
+					Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
+				}}}, nil
+			},
+			func(_ context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+				submitted = work.WorkRequestFromSubmitRequests([]work.SubmitRequest{request})
+				if sessionID != "session-1" {
+					return work.WorkRequestSubmitResult{}, fmt.Errorf("session = %q, want session-1", sessionID)
+				}
+				if len(submitted.Works) != 1 || submitted.Works[0].WorkTypeID != "task" {
+					return work.WorkRequestSubmitResult{}, fmt.Errorf("submitted request = %#v, want one task work", submitted)
+				}
+				return work.WorkRequestSubmitResult{
+					RequestID: "request-1",
+					TraceID:   "trace-1",
+					Accepted:  true,
+					WorkID:    "work-1",
+					Name:      "task",
+				}, nil
+			},
+			func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+				return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
+			},
 		},
-		func(_ context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
-			submitted = work.WorkRequestFromSubmitRequests([]work.SubmitRequest{request})
-			if sessionID != "session-1" {
-				return work.WorkRequestSubmitResult{}, fmt.Errorf("session = %q, want session-1", sessionID)
-			}
-			if len(submitted.Works) != 1 || submitted.Works[0].WorkTypeID != "task" {
-				return work.WorkRequestSubmitResult{}, fmt.Errorf("submitted request = %#v, want one task work", submitted)
-			}
-			return work.WorkRequestSubmitResult{
-				RequestID: "request-1",
-				TraceID:   "trace-1",
-				Accepted:  true,
-				WorkID:    "work-1",
-				Name:      "task",
-			}, nil
-		},
-		func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
-			return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
-		},
-		nil,
 		nil,
 		nil,
 		nil,
@@ -84,14 +85,15 @@ func TestWorkRequestBoundary_InvocationSubmitRejectsTypedAdmissionFailure(t *tes
 
 	sourceKind := factorysessions.InvocationInputSourceKindText
 	owner := legacyinvocation.NewSessionOwner(
-		func(string) (*factorydefinitions.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
-		func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
-			return work.WorkRequestSubmitResult{}, fmt.Errorf("work_request: invalid Work Request: %w", work.ErrInvalidWorkRequest)
+		boundaryInvocationAuthority{
+			func(string) (*factorydefinitions.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
+			func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+				return work.WorkRequestSubmitResult{}, fmt.Errorf("work_request: invalid Work Request: %w", work.ErrInvalidWorkRequest)
+			},
+			func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
+				return legacyinvocation.SessionInvocationObservation{}, nil
+			},
 		},
-		func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
-			return legacyinvocation.SessionInvocationObservation{}, nil
-		},
-		nil,
 		nil,
 		nil,
 		nil,

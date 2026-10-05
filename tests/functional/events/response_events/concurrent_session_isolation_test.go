@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -739,10 +740,12 @@ type isolatedCommandGate struct {
 	release  chan struct{}
 	returned chan error
 	output   string
+	failure  error
 }
 
 type fourScopeCodexRunner struct {
 	gates map[string]*isolatedCommandGate
+	calls atomic.Uint32
 }
 
 func (r *fourScopeCodexRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -750,8 +753,16 @@ func (r *fourScopeCodexRunner) Run(ctx context.Context, request platformprocess.
 }
 
 func (r *fourScopeCodexRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	r.calls.Add(1)
 	observed := string(request.Stdin) + "\n" + strings.Join(request.Args, "\n")
-	for prompt, gate := range r.gates {
+	prompts := make([]string, 0, len(r.gates))
+	for prompt := range r.gates {
+		prompts = append(prompts, prompt)
+	}
+	// Longest marker first keeps a peer's extended marker from selecting A.
+	sort.Slice(prompts, func(i, j int) bool { return len(prompts[i]) > len(prompts[j]) })
+	for _, prompt := range prompts {
+		gate := r.gates[prompt]
 		if !strings.Contains(observed, prompt) {
 			continue
 		}
@@ -777,6 +788,9 @@ func (r *fourScopeCodexRunner) RunStreaming(ctx context.Context, request platfor
 			return platformprocess.CommandResult{}, ctx.Err()
 		case <-gate.release:
 			gate.returned <- nil
+			if gate.failure != nil {
+				return platformprocess.CommandResult{}, gate.failure
+			}
 			stdout := support.CodexSuccessStdout(gate.output)
 			if observer != nil {
 				observer(platformprocess.OutputStreamStdout, bytes.TrimPrefix(stdout, prefix))
@@ -853,3 +867,6 @@ func assertCanceledIsolationHistory(t *testing.T, baseURL, canceledID string, ga
 	}
 	assertResponseEventStreamResumesFromCursor(t, baseURL, canceledID, acknowledged)
 }
+
+// One immutable root graph serves independent explicit sessions. Only the
+// timeout/cancellation sequence is ordered, because peer health is its observer.

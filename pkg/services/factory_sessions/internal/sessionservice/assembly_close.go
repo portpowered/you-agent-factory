@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
@@ -29,13 +30,13 @@ func (a *Assembly) CloseSession(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("%w: session owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
 	owner, ok := bound.Owner.(interface {
-		PrepareOwnedSessionClose(context.Context, string) error
-		RetireOwnedSession(string) error
+		PrepareOwnedSessionClose(context.Context, *livesession.LiveSession) error
+		RetireOwnedSession(context.Context, *livesession.LiveSession) error
 	})
 	if !ok {
 		return fmt.Errorf("%w: session close is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
-	if err := owner.PrepareOwnedSessionClose(ctx, id); err != nil {
+	if err := owner.PrepareOwnedSessionClose(ctx, session); err != nil {
 		return err
 	}
 	if bound.Activation != nil {
@@ -43,5 +44,5 @@ func (a *Assembly) CloseSession(ctx context.Context, sessionID string) error {
 			return err
 		}
 	}
-	return owner.RetireOwnedSession(id)
+	return owner.RetireOwnedSession(ctx, session)
 }

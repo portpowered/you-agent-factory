@@ -1,10 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -51,7 +59,8 @@ func (owner *closeRegistryOwnerFake) BuildSessionProjectionContext(_ context.Con
 	return factorysessions.ProjectionContext{FactorySessionID: session.ID}, nil
 }
 
-func (owner *closeRegistryOwnerFake) PrepareOwnedSessionClose(_ context.Context, sessionID string) error {
+func (owner *closeRegistryOwnerFake) PrepareOwnedSessionClose(_ context.Context, session *livesession.LiveSession) error {
+	sessionID := session.ID
 	*owner.order = append(*owner.order, sessionID)
 	if sessionID == owner.failID {
 		return owner.failErr
@@ -59,8 +68,8 @@ func (owner *closeRegistryOwnerFake) PrepareOwnedSessionClose(_ context.Context,
 	return nil
 }
 
-func (owner *closeRegistryOwnerFake) RetireOwnedSession(sessionID string) error {
-	owner.registry.Remove(sessionID)
+func (owner *closeRegistryOwnerFake) RetireOwnedSession(_ context.Context, session *livesession.LiveSession) error {
+	owner.registry.RemoveGeneration(session)
 	return nil
 }
 
@@ -89,10 +98,146 @@ func TestAssemblyCloseDrainsCanonicalRegistryAndRetainsFailedSession(t *testing.
 	}
 }
 
+func TestRetireOwnedSessionUsesScopedStopAndRetainsFailedCleanup(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	registerScopeControlRuntime(state, "a", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	registerScopeControlRuntime(state, "b", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	selected := runtimebinding.SessionStateFrom(state.Resolve("a"))
+	session := state.Resolve("a")
+	selected.Clock = state.Clock()
+	failure := errors.New("injected stop failure")
+	stopErr := failure
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
+		if run != selected.Handle || clock != selected.Clock {
+			t.Fatal("retirement stopped a foreign runtime or selected clock")
+		}
+		return stopErr
+	}, zap.NewNop())
+	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state)}
+	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
+		t.Fatalf("failed retirement = %v", err)
+	}
+	if state.Resolve("a") == nil || state.Resolve("b") == nil {
+		t.Fatal("failed cleanup lost the retryable session or its peer")
+	}
+	stopErr = nil
+	if err := owner.RetireOwnedSession(context.Background(), session); err != nil {
+		t.Fatalf("retry retirement = %v", err)
+	}
+	if state.Resolve("a") != nil || state.Resolve("b") == nil {
+		t.Fatal("successful retirement did not remove only A")
+	}
+}
+
+func TestRetireOwnedSessionRetainsPartiallyActivatedScopeForCleanupRetry(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	activation := NewScopeActivation(state)
+	registerScopeControlRuntime(state, "a", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	registerScopeControlRuntime(state, "b", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	session := state.Resolve("a")
+	bound := runtimebinding.SessionStateFrom(session)
+	bound.Clock = state.Clock()
+	failure := errors.New("partial activation cleanup failed")
+	cleanupErr := failure
+	stopped := false
+	binding := factoryruntime.RuntimeBinding{}.New("a-runtime", session.Runtime.Factory,
+		func(context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
+			if !stopped {
+				t.Fatal("deactivation ran before owned runtime stop returned")
+			}
+			return factoryruntime.RuntimeDeactivationResult{}, cleanupErr
+		})
+	if err := activation.Activate(context.Background(), SessionScope{Session: session, Binding: binding}); err != nil {
+		t.Fatal(err)
+	}
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
+		if run != bound.Handle || clock != bound.Clock {
+			t.Fatal("partial activation cleanup stopped a foreign run")
+		}
+		stopped = true
+		return nil
+	}, zap.NewNop())
+	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: activation}
+	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
+		t.Fatalf("partial activation cleanup = %v, want original cause", err)
+	}
+	if state.Resolve("a") != session || state.Resolve("b") == nil {
+		t.Fatal("failed activation cleanup lost its retryable scope or peer")
+	}
+	cleanupErr = nil
+	if err := owner.RetireOwnedSession(context.Background(), session); err != nil {
+		t.Fatalf("cleanup retry = %v", err)
+	}
+	if state.Resolve("a") != nil || state.Resolve("b") == nil {
+		t.Fatal("cleanup retry did not retire only A")
+	}
+}
+
 type stubRuntimeSidecars struct {
 	preseedCalls int
 	startCalls   int
 	stopCalls    int
+}
+
+type closedScopeRun struct {
+	invocationQueryRun
+	done chan struct{}
+}
+
+func (r closedScopeRun) RunDoneCh() <-chan struct{} { return r.done }
+
+type closeScopeActivation func(context.Context) error
+
+func (f closeScopeActivation) Close(ctx context.Context) error { return f(ctx) }
+
+func TestAssemblyCloseKeepsCapturedGenerationAcrossActivationReplacement(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	oldRuntime := &scopedControlRuntime{status: "RUNNING"}
+	registerScopeControlRuntime(state, "a", oldRuntime, zap.NewNop())
+	registerScopeControlRuntime(state, "b", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+	oldSession := state.Resolve("a")
+	oldBound := runtimebinding.SessionStateFrom(oldSession)
+	oldRecord := runtimebinding.BundleFromSession(oldSession)
+	done := make(chan struct{})
+	close(done)
+	oldBound.Handle = closedScopeRun{invocationQueryRun: invocationQueryRun{record: oldRecord}, done: done}
+	oldBound.Clock = state.Clock()
+	var replacement *livesession.LiveSession
+	replacementRuntime := &scopedControlRuntime{status: "RUNNING"}
+	var stopped, retired bool
+	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
+		if run != oldBound.Handle || clock != oldBound.Clock {
+			t.Fatal("close stopped replacement run or used its clock")
+		}
+		stopped = true
+		return nil
+	}, zap.NewNop())
+	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state),
+		retireWorkAdmissionProjection: func(id string, runtime *factorysessions.LiveRuntime, record factoryruntime.RuntimeRecord) {
+			if id != "a" || runtime != oldSession.Runtime || record != oldRecord {
+				t.Fatal("close retired a foreign Work projection generation")
+			}
+			retired = true
+		},
+	}
+	oldBound.Owner = owner
+	oldBound.Activation = closeScopeActivation(func(context.Context) error {
+		registerScopeControlRuntime(state, "a", replacementRuntime, zap.NewNop())
+		replacement = state.Resolve("a")
+		return nil
+	})
+	assembly := &Assembly{state: state, registry: state.Registry()}
+	if err := assembly.CloseSession(context.Background(), "a"); err != nil {
+		t.Fatalf("CloseSession = %v", err)
+	}
+	if !stopped || !retired || oldRuntime.controls != 1 || state.Resolve("a") != replacement || state.Resolve("b") == nil {
+		t.Fatal("close lost captured effects, replacement or peer")
+	}
+	assertReplacementControlAfterClose(t, control, replacementRuntime, oldRuntime)
+
 }
 
 func (s *stubRuntimeSidecars) Preseed(context.Context, factoryruntime.RuntimeRecord) error {
@@ -188,7 +333,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}
@@ -201,5 +346,88 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state.Unregister("supplied")
 	if assembly.Resolve("supplied") != nil {
 		t.Fatal("assembly retained retired authority entry")
+	}
+}
+
+func assertReplacementControlAfterClose(t *testing.T, control SessionScopeControl, replacementRuntime, oldRuntime *scopedControlRuntime) {
+	t.Helper()
+	result, err := control.CancelLiveFactorySession(context.Background(), "a", factorysessions.ControlRequest{RequestID: "replacement-cancel"})
+	if err != nil || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted || replacementRuntime.controls != 1 || oldRuntime.controls != 1 {
+		t.Fatalf("replacement control after close = %+v, %v", result, err)
+	}
+}
+
+// The real rolling sink rejects writes after close. Capturing zap's error
+// destination exposes the quiet-stderr regression that an observer alone misses.
+type stopLogPath struct {
+	platformartifact.Reserver
+	path string
+}
+
+func (p stopLogPath) Reserve(string, time.Time, string, string) (string, error) { return p.path, nil }
+
+func TestScopeStopDiagnosticsOutliveRuntimeLogSink(t *testing.T) {
+	t.Parallel()
+	for _, closeBefore := range []bool{false, true} {
+		t.Run(fmt.Sprintf("closedBeforeStop=%t", closeBefore), func(t *testing.T) {
+			t.Parallel()
+			for _, failure := range []error{nil, errors.New("owned stop failed after sink close")} {
+				assertStopLogSinkLifetime(t, closeBefore, failure)
+			}
+		})
+	}
+}
+func assertStopLogSinkLifetime(t *testing.T, closeBefore bool, failure error) {
+	t.Helper()
+	state := newWorkResolverSessionState()
+	core, diagnostics := observer.New(zap.InfoLevel)
+	var writeErrors bytes.Buffer
+	processLogger := zap.New(core, zap.ErrorOutput(zapcore.AddSync(&writeErrors)))
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	opener, err := platformlogging.NewRuntimeLogOpener(stopLogPath{path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink, err := opener.Open(platformlogging.RuntimeLogOpeningRequest{BaseLogger: processLogger, RuntimeInstanceID: "owned-runtime", RootDirectory: filepath.Dir(path), StartTimeUTC: time.Unix(1, 0), CollisionID: "owned-log"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sink.Close() })
+	sink.Logger().Info("runtime log opened")
+	registerScopeControlRuntime(state, "owned", &scopedControlRuntime{status: "RUNNING"}, sink.Logger())
+	if closeBefore {
+		if err := sink.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	control := NewScopeControl(state, func(factoryruntime.RuntimeRun, factoryruntime.Clock) error {
+		if err := sink.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return failure
+	}, processLogger)
+	err = control.StopLiveSession(t.Context(), "owned")
+	if !errors.Is(err, failure) {
+		t.Fatalf("stop error = %v, want %v", err, failure)
+	}
+	if writeErrors.Len() != 0 {
+		t.Fatalf("write through closed runtime sink: %s", writeErrors.String())
+	}
+	terminal := "live Factory Session runtime stopped"
+	if failure != nil {
+		terminal = "stop live Factory Session runtime failed"
+	}
+	entries := diagnostics.FilterMessage(terminal).All()
+	if len(entries) != 1 {
+		t.Fatalf("terminal diagnostics = %#v", entries)
+	}
+	if failure != nil && entries[0].ContextMap()["error"] != failure.Error() {
+		t.Fatalf("lost stop failure diagnostic: %#v", entries[0])
+	}
+	if entries[0].ContextMap()["session_id"] != "owned" {
+		t.Fatalf("missing shutdown correlation: %#v", entries[0])
+	}
+	if diagnostics.FilterMessage("stopping live Factory Session runtime").Len() != 1 {
+		t.Fatal("missing stop intent")
 	}
 }

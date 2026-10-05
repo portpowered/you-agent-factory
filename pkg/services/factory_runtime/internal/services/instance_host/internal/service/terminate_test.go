@@ -125,9 +125,7 @@ func TestStopActiveHostedInstanceStopsSidecarsRunLoopAndFinalizesArtifacts(t *te
 	}()
 
 	clock := clockwork.NewFakeClockAt(finishedAt)
-	scoped := host.Scope(clock)
-
-	stopErr := scoped.Stop(handle)
+	stopErr := host.StopWithClock(handle, clock)
 	if stopErr != nil {
 		t.Fatalf("Stop() error = %v, want ordinary shutdown cancellation normalized", stopErr)
 	}
@@ -146,6 +144,54 @@ func TestStopActiveHostedInstanceStopsSidecarsRunLoopAndFinalizesArtifacts(t *te
 	}
 	if len(host.handles) != 0 {
 		t.Fatalf("handles after stop = %d, want registry cleared", len(host.handles))
+	}
+}
+
+func TestStopWithClockPreservesAddressedTimeAndPeerProgress(t *testing.T) {
+	t.Parallel()
+	host := newTestHost(t)
+	selectedTime := time.Date(2003, 4, 5, 6, 7, 8, 0, time.UTC)
+	peerTime := selectedTime.Add(24 * time.Hour)
+	recordingA, recordingB := &terminalRecording{}, &terminalRecording{}
+	engineA := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
+	engineB := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
+	bundleA, bundleB := testBundle(engineA, "clock-a"), testBundle(engineB, "clock-b")
+	bundleA.Recording, bundleB.Recording = recordingA, recordingB
+	a, err := host.Start(context.Background(), bundleA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = host.Stop(a) })
+	b, err := host.Start(context.Background(), bundleB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = host.Stop(b) })
+	if err := host.StopWithClock(a, clockwork.NewFakeClockAt(selectedTime)); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.StopWithClock(a, clockwork.NewFakeClockAt(peerTime)); !errors.Is(err, factory.ErrAlreadyStopped) {
+		t.Fatalf("repeated addressed stop = %v", err)
+	}
+	if recordingA.finalizeCalls != 1 || !recordingA.finishedAt.Equal(selectedTime) {
+		t.Fatalf("A finalization = %d at %s", recordingA.finalizeCalls, recordingA.finishedAt)
+	}
+	if recordingB.finalizeCalls != 0 {
+		t.Fatal("stopping A finalized B")
+	}
+	paused, err := host.Pause(context.Background(), b)
+	if err != nil || paused.Outcome != factory.ControlOutcomeAccepted {
+		t.Fatalf("peer pause = %v, %v", paused, err)
+	}
+	resumed, err := host.Resume(context.Background(), b)
+	if err != nil || resumed.Outcome != factory.ControlOutcomeAccepted {
+		t.Fatalf("peer resume = %v, %v", resumed, err)
+	}
+	if err := host.StopWithClock(b, clockwork.NewFakeClockAt(peerTime)); err != nil {
+		t.Fatal(err)
+	}
+	if recordingB.finalizeCalls != 1 || !recordingB.finishedAt.Equal(peerTime) {
+		t.Fatalf("B finalization = %d at %s", recordingB.finalizeCalls, recordingB.finishedAt)
 	}
 }
 

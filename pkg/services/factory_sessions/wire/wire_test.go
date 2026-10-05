@@ -5,6 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"io/fs"
 	"path/filepath"
 	"runtime"
@@ -12,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -40,7 +47,6 @@ func TestNewRuntimeAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "home directory resolver", mutate: func(in *newServiceInputs) { in.resolveHome = nil }},
 		{name: "directory inspection", mutate: func(in *newServiceInputs) { in.directoryInspection = nil }},
 		{name: "named path resolver", mutate: func(in *newServiceInputs) { in.namedPaths = nil }},
-		{name: "invocation input reader", mutate: func(in *newServiceInputs) { in.invocationInputFiles = nil }},
 		{name: "initial Work reader", mutate: func(in *newServiceInputs) { in.initialWorkFiles = nil }},
 		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
 		{name: "events root", mutate: func(in *newServiceInputs) { in.eventsService = nil }},
@@ -324,18 +330,14 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 	state := NewSessionState(registry, responseRegistry, in.clock, in.eventIDs, in.sessionIDs, responses)
 	streams := NewStreamManager(state, NewStreamObserver(), responseRegistry, responses)
 	return NewRuntimeAssembly(
-		registry, state, streams,
+		registry, state, streams, sessioninvocation.NewSessionOwner(NewInvocationAuthority(state, platformclock.Real{}, nil), NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), NewScopeControl(state, nil, zap.NewNop()), NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
-		in.interpolation,
-		in.invocationWorkTypes,
-		in.ttsObservability,
 		in.eventIDs,
 		in.sessionIDs,
 		in.resolveHome,
 		in.directoryInspection,
 		in.namedPaths,
-		in.invocationInputFiles,
 		in.initialWorkFiles,
 		identity,
 		responses,
@@ -476,5 +478,69 @@ func TestResponseStreamRegistryReturnsSelectedAllocationError(t *testing.T) {
 	registry, err := NewResponseStreamRegistry(failingResponseRegistry{err: failure}, &recordingClock{})
 	if registry != nil || !errors.Is(err, failure) {
 		t.Fatalf("allocation = (%v, %v), want nil and selected error", registry, err)
+	}
+}
+
+// This component witness checks emitted effects, rather than construction identity.
+func TestInvocationTelemetryUsesAddressedLoggerAndSelectedMetrics(t *testing.T) {
+	t.Parallel()
+	registry := NewSessionRegistry()
+	state := &SessionState{}
+	// The paired state owns selection; each session owns its logger.
+	inputs := validNewServiceInputs()
+	responses, err := NewResponseStreams(inputs.eventIDs, nil, inputs.eventsService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	streams, err := NewResponseStreamRegistry(responses, inputs.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state = NewSessionState(registry, streams, inputs.clock, inputs.eventIDs, inputs.sessionIDs, responses)
+	logs := make(map[string]*observer.ObservedLogs)
+	for _, id := range []string{"a", "b"} {
+		core, observed := observer.New(zap.InfoLevel)
+		logs[id] = observed
+		registry.Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Logger: zap.New(core).With(zap.String("owned_scope", id))}}, false)
+	}
+	fallbackCore, fallback := observer.New(zap.InfoLevel)
+	metrics := &invocationTelemetryMetrics{}
+	telemetry := NewInvocationTelemetry(state, nil, metrics, zap.New(fallbackCore))
+	cfg := &factorydefinitions.FactoryConfig{}
+	for _, id := range []string{"a", "b"} {
+		telemetry.NormalizationAttempt(cfg, work.InputSourceLabel("text"))
+		telemetry.LogInvocationSubmitted(id, work.InputSourceLabel("text"), cfg, work.WorkRequestSubmitResult{RequestID: "request-" + id})
+	}
+	if len(metrics.records) != 2 || metrics.records[0].Name != sessioninvocation.InvocationMetricNormalizationAttempts {
+		t.Fatalf("selected metrics = %#v", metrics.records)
+	}
+	for _, id := range []string{"a", "b"} {
+		entries := logs[id].All()
+		if len(entries) != 1 || entries[0].ContextMap()["session_id"] != id || entries[0].ContextMap()["owned_scope"] != id {
+			t.Fatalf("scope %s emitted logs = %#v", id, entries)
+		}
+	}
+	if fallback.Len() != 0 {
+		t.Fatalf("addressed emissions reached fallback: %v", fallback.All())
+	}
+	telemetry.LogInvocationSubmitted("missing", work.InputSourceLabel("text"), cfg, work.WorkRequestSubmitResult{})
+	if fallback.Len() != 1 {
+		t.Fatal("missing addressed logger did not use selected process logger")
+	}
+}
+
+type invocationTelemetryMetrics struct {
+	records []factorysessions.InvocationMetric
+}
+
+func (m *invocationTelemetryMetrics) RecordInvocationMetric(metric factorysessions.InvocationMetric) {
+	m.records = append(m.records, metric)
+}
+
+func TestNewInvocationOwnerRequiresInputReader(t *testing.T) {
+	t.Parallel()
+	owner, err := NewInvocationOwner(nil, nil, nil, nil, nil, nil, nil, nil)
+	if err == nil || owner != nil {
+		t.Fatalf("owner=%v error=%v, want missing input reader", owner, err)
 	}
 }

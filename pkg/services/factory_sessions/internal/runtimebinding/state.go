@@ -102,6 +102,25 @@ func (s *State) ClearActive() {
 	s.activeMu.Unlock()
 }
 
+// RetireActive changes selection only after successful cleanup, and only if
+// the retired run still owns it. A replacement or peer selected during cleanup
+// keeps its own active context and handle.
+func (s *State) RetireActive(sessionID string, handle RuntimeHandle, successor *livesession.LiveSession) {
+	if s == nil {
+		return
+	}
+	s.activeMu.Lock()
+	defer s.activeMu.Unlock()
+	if s.active == nil || s.active.SessionID != sessionID || s.active.Handle != handle {
+		return
+	}
+	if successor == nil {
+		s.active = nil
+		return
+	}
+	s.active = &ActiveRuntime{Context: s.active.Context, SessionID: successor.ID, Handle: HandleFromSession(successor)}
+}
+
 func (s *State) Current(defaultInstance func() RuntimeInstance) RuntimeInstance {
 	if handle := s.ActiveHandle(); handle != nil {
 		if instance := handle.RuntimeInstance(); instance != nil {

@@ -153,17 +153,15 @@ func (s *Service) WithRuntimeRead(fn func(*factorysessions.LiveRuntime) error) e
 	return fn(runtime)
 }
 
-// UpdateRuntime mutates one session's runtime view while activation and
-// replacement are excluded. It is used by the opening boundary to publish the
-// opaque Runtime binding after the process root has atomically activated it.
-func (s *Service) UpdateRuntime(sessionID string, update func(*factorysessions.LiveRuntime) error) error {
-	if s == nil || update == nil {
+// UpdateRuntimeGeneration publishes only to the captured opening generation.
+// A replacement admitted while activation completes must keep its own binding.
+func (s *Service) UpdateRuntimeGeneration(session *livesession.LiveSession, update func(*factorysessions.LiveRuntime) error) error {
+	if s == nil || session == nil || update == nil {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
 	s.activation.Lock()
 	defer s.activation.Unlock()
-	session := s.Resolve(sessionID)
-	if session == nil || session.Runtime == nil {
+	if s.Resolve(session.ID) != session || session.Runtime == nil {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
 	return update(session.Runtime)
@@ -427,14 +425,31 @@ func (s *Service) Unregister(sessionID string) {
 		return
 	}
 	session := s.Resolve(sessionID)
-	if session == nil {
-		return
+	s.UnregisterGeneration(session)
+}
+
+// UnregisterGeneration retires only the captured record and its response
+// streams. Replacement under the same identity must remain queryable and open.
+func (s *Service) UnregisterGeneration(session *livesession.LiveSession) bool {
+	if s == nil || s.registry == nil || session == nil {
+		return false
+	}
+	streams := s.responses.Existing(livesession.CanonicalID(session))
+	if !s.registry.RemoveGeneration(session) {
+		return false
 	}
 	if s.close != nil {
 		s.close(session)
 	}
-	s.CloseResponseStreams(session)
-	s.registry.Remove(session.ID)
+	if s.responseEvents != nil {
+		s.responseEvents.Close(session.ResponseEvents)
+	} else {
+		session.CloseResponseEvents()
+	}
+	if streams != nil {
+		streams.Close()
+	}
+	return true
 }
 
 // Current returns the selected live session.

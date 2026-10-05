@@ -18,6 +18,7 @@ type Service interface {
 	Current() *livesession.LiveSession
 	Get(string) *livesession.LiveSession
 	Remove(string)
+	RemoveGeneration(*livesession.LiveSession) bool
 	Count() int
 	IDs() []string
 	DefaultSession() *livesession.LiveSession
@@ -101,6 +102,25 @@ func (r *Registry) Remove(id string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.removeLocked(id)
+}
+
+// RemoveGeneration removes only the record selected by the caller. A replaced
+// record under the same session identity belongs to a different retirement.
+func (r *Registry) RemoveGeneration(session *livesession.LiveSession) bool {
+	if r == nil || session == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.sessions[session.ID] != session {
+		return false
+	}
+	r.removeLocked(session.ID)
+	return true
+}
+
+func (r *Registry) removeLocked(id string) {
 	delete(r.sessions, id)
 	if r.selectedID != id {
 		return

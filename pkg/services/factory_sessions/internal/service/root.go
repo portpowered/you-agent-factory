@@ -29,17 +29,16 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams legacyservice.StreamManager,
+	invoker roles.InvocationService,
+	control legacyservice.SessionScopeControl,
+	activation legacyservice.SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
@@ -47,6 +46,15 @@ func NewAssembly(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (roles.RuntimeAssembly, error) {
+	if activation == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
+	}
+	if control == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: scoped control is required")
+	}
+	if invoker == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: invocation owner is required")
+	}
 	if err := validateRootDependencies(
 		sessionResultProjection,
 		eventIDs,
@@ -54,7 +62,6 @@ func NewAssembly(
 		resolveHome,
 		directoryInspection,
 		namedPaths,
-		invocationInputFiles,
 		initialWorkFiles,
 		identityService,
 		responseStreams,
@@ -65,19 +72,15 @@ func NewAssembly(
 		return nil, err
 	}
 	assemblyRole := legacyservice.NewAssembly(
-		registry, state, streams,
+		registry, state, streams, invoker, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
-		interpolation,
-		invocationWorkTypes,
-		ttsObservability,
 		clock,
 		eventIDs,
 		sessionIDs,
 		resolveHome,
 		directoryInspection,
 		namedPaths,
-		invocationInputFiles,
 		initialWorkFiles,
 		identityService,
 		responseStreams,
@@ -136,7 +139,6 @@ func validateRootDependencies(
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
@@ -158,9 +160,6 @@ func validateRootDependencies(
 	}
 	if namedPaths == nil {
 		return fmt.Errorf("construct Factory Sessions: named path resolver is required")
-	}
-	if invocationInputFiles == nil {
-		return fmt.Errorf("construct Factory Sessions: invocation input reader is required")
 	}
 	if initialWorkFiles == nil {
 		return fmt.Errorf("construct Factory Sessions: initial Work reader is required")
