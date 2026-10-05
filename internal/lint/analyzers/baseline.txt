@@ -130,7 +130,6 @@ transport-concurrency|pkg/transports/acp/internal/stdio|make(chan)
 transport-concurrency|pkg/transports/acp/internal/stdio|sync.Mutex
 transport-lifecycle|pkg/transports/acp/internal/stdio|time.NewTimer
 transport-lifecycle|pkg/transports/cli/run|context.WithCancel
-transport-platform-selection|pkg/transports/acp/internal/stdio|pkg/platform/logging.EnsureLogger
 petri-public|internal/testutil|AssertGuardedLoopBreakerTransition|pkg/services/factory_runtime/internal/orchestrators/petri.Arc
 petri-public|internal/testutil|AssertGuardedLoopBreakerTransition|pkg/services/factory_runtime/internal/orchestrators/petri.ArcCardinality
 petri-public|internal/testutil|AssertGuardedLoopBreakerTransition|pkg/services/factory_runtime/internal/orchestrators/petri.ArcDirection
@@ -3117,7 +3116,6 @@ test-cross-owner-policy|tests/functional/operator_settings/root_composition_test
 # Exact observed transport debt sites; original rule IDs remain unchanged.
 transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/prompt_stream.go#transport-concurrency#sync.Mutex::count=2
 transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/prompt_stream.go#transport-lifecycle#time.NewTimer::count=1
-transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/prompt_stream.go#transport-platform-selection#pkg/platform/logging.EnsureLogger::count=1
 transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-concurrency#make(chan)::count=2
 transport-recorded-site|pkg/transports/acp/internal/stdio|pkg/transports/acp/internal/stdio/server.go#transport-concurrency#sync.Mutex::count=1
 transport-recorded-site|pkg/transports/cli/run|pkg/transports/cli/run/factory_invocation_input.go#transport-lifecycle#context.WithCancel::count=1
