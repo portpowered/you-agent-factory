@@ -2,7 +2,7 @@ import { BACKEND_LINT_COMMENT_MARKER } from "./backend-lint-report.mjs";
 
 export const BACKEND_LINT_EVENTS = Object.freeze(["pull_request", "merge_group", "push"]);
 // Keep this positive: the workflow must never pass an empty jobs value to
-// lintlane when runner parallelism discovery is unavailable.
+// Make lint when runner parallelism discovery is unavailable.
 export const BACKEND_LINT_FALLBACK_JOBS = 2;
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
 

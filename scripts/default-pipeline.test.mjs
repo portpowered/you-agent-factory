@@ -30,6 +30,7 @@ async function createHarness(t, failMatch = "") {
 			"const [tool, ...args] = process.argv.slice(2);",
 			"const command = args.join(\" \" );",
 			"appendFileSync(process.env.FAKE_LOG, `${tool}|${command}\\n`);",
+			'if (args.includes("--begin-run")) process.stdout.write("fake-run\\n");',
 			"if (process.env.FAKE_FAIL_MATCH && command.includes(process.env.FAKE_FAIL_MATCH)) process.exit(23);",
 		].join("\n") + "\n",
 	);
@@ -101,6 +102,7 @@ async function toolEvents(logPath) {
 
 function phaseForEvent(event) {
 	const [tool, command = ""] = event.split("|", 2);
+	if (tool === "nested-make" && (command.includes("lint-observe-selected") || command.includes("lint-run"))) return "lint";
 	if (tool === "nested-make") return "nested-make";
 	if (tool === "node" && (command.includes("bundle:rest") || command.includes("generate-openapi-types"))) return "generate-api";
 	if (tool === "python" && command.includes("generate-operator-config-schema.py")) return "generate-api";
@@ -111,7 +113,7 @@ function phaseForEvent(event) {
 	if (tool === "go" && command.startsWith("build ")) return "build";
 	if (tool === "go" && command.includes("./cmd/unitlane")) return "test";
 	if (tool === "node" && command.startsWith("--test ")) return "test";
-	if (tool === "go" && command.includes("./cmd/lintlane")) return "lint";
+	if (tool === "node" && command.includes("backend-lint-report.mjs")) return "lint";
 	return "unknown";
 }
 
@@ -126,7 +128,7 @@ function assertDefaultPhaseOrder(events) {
 	assert.equal(phases.filter((phase) => phase === "ui-build").length, 1);
 	assert.equal(phases.filter((phase) => phase === "build").length, 1);
 	assert.equal(phases.filter((phase) => phase === "test").length, 2);
-	assert.equal(phases.filter((phase) => phase === "lint").length, 1);
+	assert.equal(phases.filter((phase) => phase === "lint").length, platform === "win32" ? 1 : 4);
 }
 
 function requireMake(t) {
@@ -180,7 +182,7 @@ test("make -n default emits all phases without running tool or nested-make proce
 		"cmd/factory",
 		"cmd/unitlane",
 		"scripts/development-package-workflow.test.mjs",
-		"cmd/lintlane",
+		platform === "win32" ? "lint-run" : "--begin-run",
 	]) {
 		assert.ok(result.stdout.includes(marker), `dry run omitted ${marker}`);
 	}
@@ -206,12 +208,12 @@ test("the lint lane receives a positive jobs value for every CI jobs handoff", a
 		const result = runMake(harness, scenario.args);
 		assert.equal(result.status, 0, `${scenario.label}: ${result.stdout}\n${result.stderr}`);
 		const lintEvents = (await toolEvents(harness.logPath)).filter((event) =>
-			event.includes("./cmd/lintlane"),
+			event.includes(platform === "win32" ? "lint-run" : "--begin-run"),
 		);
 		assert.equal(lintEvents.length, 1, `${scenario.label}: ${lintEvents.join("\n")}`);
 		assert.match(
 			lintEvents[0],
-			new RegExp(`\\s-jobs\\s+${scenario.jobs}\\s`),
+			new RegExp(platform === "win32" ? `LINT_JOBS=${scenario.jobs}(?:\\s|$)` : `\\s--jobs\\s+${scenario.jobs}\\s`),
 			`${scenario.label}: ${lintEvents[0]}`,
 		);
 	}
