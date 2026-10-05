@@ -15,6 +15,7 @@ import (
 )
 
 type logsServiceFake struct {
+	workersessions.Service
 	page workersessions.LogPage
 	err  error
 }

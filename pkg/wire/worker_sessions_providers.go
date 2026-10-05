@@ -33,16 +33,6 @@ func provideWorkerRecordingReader(
 	return workerRecordingReaderCapability{reader: reader}, nil
 }
 
-func provideWorkerLogsService(writer recordings.WorkerRecordingWriter, logger logging.Logger) (workersessions.LogsService, error) {
-	reader, ok := writer.(recordings.WorkerCapturedActivityReader)
-	if !ok {
-		// Legacy injected writers support capture without finite catalog reads.
-		// Keep that execution edge valid and report unavailable at the logs route.
-		return nil, nil
-	}
-	return workersessionswire.NewLogsService(reader, logger)
-}
-
 type workerRecordingReaderCapability struct {
 	reader recordings.WorkerRecordingReader
 }
@@ -122,8 +112,11 @@ func provideWorkerSessionsService(
 	clock factoryruntime.Clock,
 	scheduler platformclock.TimerSource,
 	recorder recordings.WorkerSessionRecordingService,
+	writer recordings.WorkerRecordingWriter,
 ) (workersessions.Service, error) {
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder)
+	// Legacy injected writers still support execution without captured reads.
+	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

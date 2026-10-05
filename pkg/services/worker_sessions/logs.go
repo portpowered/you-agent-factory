@@ -1,25 +1,8 @@
 package workersessions
 
 import (
-	"context"
 	"errors"
-	"io"
 )
-
-// LogsService reads finite, committed activity without consulting provider files.
-type LogsService interface {
-	ReadLogs(context.Context, ReadLogsRequest) (LogPage, error)
-}
-
-type LogsArtifactService interface {
-	ReadLogsArtifact(context.Context, string, string) (io.ReadCloser, error)
-}
-
-// CapturedObservationReader inspects durable terminal identity without granting
-// live execution authority. Histories without a terminal remain available as logs.
-type CapturedObservationReader interface {
-	GetObservationByWorkerSessionID(context.Context, GetObservationByWorkerSessionIDRequest) (Observation, error)
-}
 
 type ReadLogsRequest struct {
 	WorkerSessionID string

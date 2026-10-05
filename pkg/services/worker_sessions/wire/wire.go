@@ -44,8 +44,9 @@ func NewService(
 	scheduler platformclock.TimerSource,
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
+	captured recordings.WorkerCapturedActivityReader,
 ) (workersessions.Service, error) {
-	return internalservice.New(
+	return internalservice.NewWithCapturedActivity(
 		execution,
 		eventsAppender,
 		logger,
@@ -53,5 +54,6 @@ func NewService(
 		scheduler,
 		providerSessions,
 		recording,
+		captured,
 	)
 }

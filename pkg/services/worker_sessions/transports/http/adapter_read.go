@@ -347,8 +347,8 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 		WorkerSessionID: workerSessionID,
 	})
 	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-		if captured, ok := a.logs.(workersessions.CapturedObservationReader); ok {
-			observation, err = captured.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
+		if a.logs != nil {
+			observation, err = a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
 		}
 	}
 	if err != nil {

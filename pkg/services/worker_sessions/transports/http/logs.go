@@ -11,7 +11,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func (a *Adapter) WithLogsService(service workersessions.LogsService) *Adapter {
+func (a *Adapter) WithLogsService(service workersessions.Service) *Adapter {
 	if a == nil {
 		return nil
 	}
@@ -62,12 +62,7 @@ func (h *Handler) readLogsArtifact(w http.ResponseWriter, r *http.Request, id st
 		h.writeLogsError(w, workersessions.ErrInvalidLogsRequest)
 		return
 	}
-	reader, ok := h.adapter.logs.(workersessions.LogsArtifactService)
-	if !ok {
-		h.writeLogsError(w, workersessions.ErrLogsUnavailable)
-		return
-	}
-	stream, err := reader.ReadLogsArtifact(r.Context(), id, *params.ArtifactRef)
+	stream, err := h.adapter.logs.ReadLogsArtifact(r.Context(), id, *params.ArtifactRef)
 	if err != nil {
 		h.writeLogsError(w, err)
 		return

@@ -453,7 +453,6 @@ pkg/initializer/process/contracts.go: unreachable func: Functions.InitializeSyst
 pkg/initializer/process/contracts.go: unreachable func: Functions.ProcessContext
 pkg/initializer/process/contracts.go: unreachable func: Functions.Run
 pkg/initializer/process/contracts.go: unreachable func: Functions.Stdio
-pkg/platform/clock/clock.go: unreachable func: Ensure
 pkg/platform/httpserver/listener_starter.go: unreachable func: StarterWithListener
 pkg/platform/internal/runtimeartifact/paths.go: unreachable func: RuntimeArtifactPath
 pkg/platform/internal/runtimeartifact/paths.go: unreachable func: RuntimeLogsDatedDir

@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -18,7 +20,7 @@ type LogReader struct {
 	logger logging.Logger
 }
 
-func NewLogReader(reader recordings.WorkerCapturedActivityReader, logger logging.Logger) (workersessions.LogsService, error) {
+func NewLogReader(reader recordings.WorkerCapturedActivityReader, logger logging.Logger) (*LogReader, error) {
 	if reader == nil {
 		return nil, recordings.ErrMissingWorkerRecordingReader
 	}
@@ -97,4 +99,46 @@ func (s *LogReader) ReadLogsArtifact(ctx context.Context, id, ref string) (io.Re
 	default:
 		return stream, nil
 	}
+}
+
+func (r *registry) ReadLogs(ctx context.Context, req workersessions.ReadLogsRequest) (workersessions.LogPage, error) {
+	if r.logs == nil {
+		return workersessions.LogPage{}, workersessions.ErrLogsUnavailable
+	}
+	return r.logs.ReadLogs(ctx, req)
+}
+
+func (r *registry) ReadLogsArtifact(ctx context.Context, id, ref string) (io.ReadCloser, error) {
+	if r.logs == nil {
+		return nil, workersessions.ErrLogsUnavailable
+	}
+	return r.logs.ReadLogsArtifact(ctx, id, ref)
+}
+
+func (r *registry) GetCapturedObservation(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	if r.logs == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+	}
+	return r.logs.GetObservationByWorkerSessionID(ctx, req)
+}
+
+// NewWithCapturedActivity constructs supervision and durable reads as one service.
+func NewWithCapturedActivity(
+	execution workers.Service, eventsAppender EventsAppender, logger logging.Logger,
+	clock platformclock.Source, scheduler platformclock.TimerSource,
+	providerSessions providersessions.Service, recording recordings.WorkerSessionRecordingService,
+	captured recordings.WorkerCapturedActivityReader,
+) (workersessions.Service, error) {
+	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording)
+	if err != nil {
+		return nil, err
+	}
+	if captured != nil {
+		reader, err := NewLogReader(captured, logger)
+		if err != nil {
+			return nil, err
+		}
+		service.(*registry).logs = reader
+	}
+	return service, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -20,7 +21,7 @@ func (publish RuntimeProgressPublisher) ForRuntime(ctx context.Context, runtimeI
 	runtimeID = strings.TrimSpace(runtimeID)
 	return func(fragment workers.ProgressFragment) {
 		var err error
-		fragment, err = RedactProgressFragment(fragment)
+		fragment, err = (&ProviderSessionObservationPublisher{}).RedactProgressFragment(fragment)
 		if err != nil {
 			return
 		}
@@ -105,6 +106,13 @@ func (a RuntimeAttempt) Complete(
 // one session's supervision state and is the only route to an admitted
 // Workers dispatch's explicit cancellation boundary.
 type Service interface {
+	// ReadLogs returns a finite committed prefix without consulting provider files.
+	ReadLogs(context.Context, ReadLogsRequest) (LogPage, error)
+	// ReadLogsArtifact streams the exact captured bytes for a scoped artifact reference.
+	ReadLogsArtifact(context.Context, string, string) (io.ReadCloser, error)
+	// GetCapturedObservation reads durable terminal identity without restoring execution authority.
+	GetCapturedObservation(context.Context, GetObservationByWorkerSessionIDRequest) (Observation, error)
+
 	// Reserve validates req and, when req.ID is not already registered,
 	// stores a new session in StateReserved and returns its snapshot.
 	// Reserving an identity that already exists returns

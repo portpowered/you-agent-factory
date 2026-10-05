@@ -58,6 +58,7 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
+	logs         *LogReader
 	mu           sync.RWMutex
 	sessions     map[string]workersessions.Session
 	publications map[string]*publication

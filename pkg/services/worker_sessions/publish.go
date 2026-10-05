@@ -32,7 +32,7 @@ type ProviderSessionObservationPublisher struct {
 // RedactProgressFragment applies declared-field redaction before capture and
 // downstream delivery, preserving a detached producer payload. Invalid secret
 // provenance returns a safe error and must suppress both publications.
-func RedactProgressFragment(fragment workers.ProgressFragment) (workers.ProgressFragment, error) {
+func (p *ProviderSessionObservationPublisher) RedactProgressFragment(fragment workers.ProgressFragment) (workers.ProgressFragment, error) {
 	var draft workers.Draft
 	switch value := fragment.CanonicalDraft.(type) {
 	case workers.Draft:

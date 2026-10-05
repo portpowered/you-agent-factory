@@ -879,7 +879,7 @@ func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
 	fragment workers.ProgressFragment,
 	factorySessionIDs ...string,
 ) error {
-	safe, err := RedactProgressFragment(fragment)
+	safe, err := p.RedactProgressFragment(fragment)
 	if err != nil {
 		return err
 	}

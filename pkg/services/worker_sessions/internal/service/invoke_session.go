@@ -93,7 +93,7 @@ func (r *registry) PublishRuntimeProgress(
 	fragment workers.ProgressFragment,
 	next workers.ProgressPublisher,
 ) error {
-	safe, err := workersessions.RedactProgressFragment(fragment)
+	safe, err := (&workersessions.ProviderSessionObservationPublisher{}).RedactProgressFragment(fragment)
 	if err != nil {
 		return err
 	}

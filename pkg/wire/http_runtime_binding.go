@@ -98,7 +98,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 	sessionRequests factorysessionshttp.RequestPreparation,
 	metricsQuery factoryvisualization.RuntimeMetricsQuery,
 	costsQuery costs.CostsQuery,
-	logs workersessions.LogsService,
+	logs workersessions.Service,
 ) (httpRuntimeBinding, error) {
 	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
@@ -120,7 +120,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	sessionRequests factorysessionshttp.RequestPreparation,
 	metricsQuery factoryvisualization.RuntimeMetricsQuery,
 	costsQuery costs.CostsQuery,
-	logs workersessions.LogsService,
+	logs workersessions.Service,
 ) (http.Handler, error) {
 	if root == nil {
 		return nil, errors.New("bind HTTP mappings: Factory Sessions root is required")
@@ -262,7 +262,7 @@ func newHTTPRecordingsAdapter(
 func newHTTPWorkerSessionsHandler(
 	root *factorysessionwire.Root,
 	presentation factorysessionwire.SessionPresentation,
-	logs workersessions.LogsService,
+	logs workersessions.Service,
 ) *workersessionshttp.Handler {
 	if presentation.WorkerSessions == nil {
 		return nil
