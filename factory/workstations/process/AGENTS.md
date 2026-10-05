@@ -98,12 +98,17 @@ a valid decision.
   problems. The PR's package-level latency result is the primary performance
   verdict; if it does not improve, continue with the next bounded optimization.
   Actual behavior regressions caused by the diff remain blocking.
-- Commit frequently
-- Push early and keep pushing. After a compilable increment passes focused
-  tests and applicable changed lint checks, push it.
+- Commit frequently, locally. The worktree persists between visits, so local
+  commits are safe. Push in batches: at most once per process visit, at the end
+  of the visit, after the commits pass focused tests and applicable changed lint
+  checks. Do NOT push while CI for your previously pushed head is still running
+  (every push cancels that run), unless (a) the new commits fix a failure that
+  run already reported, (b) this is the final push of the lane (all stories
+  done), or (c) the visit is about to stop on a blocker or breaker and the
+  commits must be preserved.
   Open its PR with `gh pr create` without `--draft`.
-  If its existing PR is a draft, run `gh pr ready <n>` at this first increment.
-  After every push, run `gh pr merge <n> --squash` to arm merge or enqueue it.
+  If its existing PR is a draft, run `gh pr ready <n>` at this first push.
+  After each push, run `gh pr merge <n> --squash` to arm merge or enqueue it.
   Record unfinished independent stories as deferred to a successor.
   Name each story, remaining outcome, reason, and successor handoff.
   Never use unfinished stories as a reason to retain a draft.

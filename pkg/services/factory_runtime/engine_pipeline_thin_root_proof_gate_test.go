@@ -26,9 +26,11 @@ func TestPublishedServiceRejectsOperationsBeforeActivation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInstanceHost() error = %v", err)
 	}
-	orchestration := factoryruntimewire.NewOrchestration(
-		func() string { return "del-run-engine-pipeline-thin-root-proof-id" }, nil, nil,
-	)
+	mapper, err := factoryruntimewire.NewDefinitionMapper(func() string { return "del-run-engine-pipeline-thin-root-proof-id" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	orchestration := factoryruntimewire.NewOrchestration(mapper, nil, nil)
 	dispatchPlan := factoryruntimewire.NewDispatchPlanning(
 		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
 		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {

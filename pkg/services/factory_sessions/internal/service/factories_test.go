@@ -79,6 +79,9 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.Webhooks,
 		fixture.Workers,
 		fixture.OperatorSettings,
+		func(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
+			return nil, nil
+		},
 	)
 }
 
@@ -270,7 +273,6 @@ func assertFactoryDefinitionsPortsRetained(t *testing.T, opening *Root, dependen
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions paths", opening.namedPaths, group.NamedPaths)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions service", opening.factoryDefinitions, group.Service)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions runtime router", opening.definitionRuntimeRouter, group.RuntimeRouter)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions initial snapshot", opening.initialFactorySnapshotFactory, group.InitialFactorySnapshotFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions loader", opening.loadFactory, group.LoadFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions source", opening.newLoadedFactory, group.NewLoadedFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions replay decoder", opening.decodeReplayConfig, group.DecodeReplayConfig)
@@ -390,7 +392,6 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Definitions named path resolver", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NamedPaths = nil }},
 		{"Factory Definitions service", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Service = nil }},
 		{"Factory Definitions runtime router", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.RuntimeRouter = nil }},
-		{"Factory Definitions initial factory snapshot factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.InitialFactorySnapshotFactory = nil }},
 		{"Factory Definitions loaded factory loader", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.LoadFactory = nil }},
 		{"Factory Definitions loaded factory source factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NewLoadedFactory = nil }},
 		{"Factory Definitions replay runtime config decoder", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.DecodeReplayConfig = nil }},
@@ -436,15 +437,14 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			Clock:                           openingCoordinatorClock{},
 		},
 		FactoryDefinitions: &FactoryDefinitionsPorts{
-			Validator:                     validatorConstructionStub{},
-			NamedPaths:                    namedPathsConstructionStub{},
-			Service:                       factoryDefinitionsConstructionStub{},
-			RuntimeRouter:                 &factorysessions.DefinitionRuntimeRouter{},
-			InitialFactorySnapshotFactory: inertRuntimeOpeningFunction[factorydefinitions.InitialFactorySnapshotFactory](calls),
-			LoadFactory:                   inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
-			NewLoadedFactory:              inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),
-			DecodeReplayConfig:            inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
-			CaptureLoadedFactorySnapshot:  inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
+			Validator:                    validatorConstructionStub{},
+			NamedPaths:                   namedPathsConstructionStub{},
+			Service:                      factoryDefinitionsConstructionStub{},
+			RuntimeRouter:                &factorysessions.DefinitionRuntimeRouter{},
+			LoadFactory:                  inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
+			NewLoadedFactory:             inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),
+			DecodeReplayConfig:           inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
+			CaptureLoadedFactorySnapshot: inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
 		},
 		FactorySessions: &FactorySessionsPorts{
 			RuntimeAssembly:                factorySessionsRoot,

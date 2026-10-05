@@ -18,10 +18,72 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestSessionObservationRequiresDurableProgressAtAcquisition(t *testing.T) {
+	t.Parallel()
+	opening := &sessionRuntimeOpening{durableExecution: DurableExecution{Service: &mutationOnlyOpeningOwner{}}}
+	err := opening.bindSessionObservations()
+	if err == nil || !strings.Contains(err.Error(), "must record mutations and publish worker progress") {
+		t.Fatalf("opening without durable progress error = %v", err)
+	}
+}
+
+func TestSessionObservationBindingPreservesBothOpeningOwners(t *testing.T) {
+	t.Parallel()
+	var firstMutations, secondMutations []string
+	var firstProgress, secondProgress []string
+	first := &durableOpeningObservationStub{mutations: &firstMutations, progress: &firstProgress}
+	second := &durableOpeningObservationStub{mutations: &secondMutations, progress: &secondProgress}
+	firstOpening := &sessionRuntimeOpening{durableExecution: DurableExecution{Service: first}}
+	secondOpening := &sessionRuntimeOpening{durableExecution: DurableExecution{Service: second}}
+	for _, opening := range []*sessionRuntimeOpening{firstOpening, secondOpening} {
+		if err := opening.bindSessionObservations(); err != nil {
+			t.Fatalf("bind observations: %v", err)
+		}
+	}
+	// Acquiring a peer must not replace either capability of the first owner.
+	for index, opening := range []*sessionRuntimeOpening{firstOpening, secondOpening} {
+		sessionID := []string{"first", "second"}[index]
+		if err := opening.observations.RecordPetriTokenMutations(sessionID, nil); err != nil {
+			t.Fatalf("record scoped mutations: %v", err)
+		}
+		opening.observations.PublishWorkerProgress(workers.ProgressFragment{Payload: sessionID})
+	}
+	if !reflect.DeepEqual(firstMutations, []string{"first"}) ||
+		!reflect.DeepEqual(firstProgress, []string{"first"}) ||
+		!reflect.DeepEqual(secondMutations, []string{"second"}) ||
+		!reflect.DeepEqual(secondProgress, []string{"second"}) {
+		t.Fatalf("observation owners crossed: mutations %v/%v, progress %v/%v",
+			firstMutations, secondMutations, firstProgress, secondProgress)
+	}
+}
+
+type durableOpeningObservationStub struct {
+	durableexecution.Service
+	mutations, progress *[]string
+}
+
+func (owner *durableOpeningObservationStub) RecordPetriTokenMutations(sessionID string, _ []factorydefinitions.TokenMutationRecord) error {
+	*owner.mutations = append(*owner.mutations, sessionID)
+	return nil
+}
+
+func (owner *durableOpeningObservationStub) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	*owner.progress = append(*owner.progress, fragment.Payload)
+}
+
+type mutationOnlyOpeningOwner struct {
+	durableexecution.Service
+}
+
+func (*mutationOnlyOpeningOwner) RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error {
+	return nil
+}
 
 func restoreCurrentBoardState(
 	service historicalRecordingReader,
@@ -394,6 +456,86 @@ func TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress(t *tes
 	products := runtimeProducts{engine: controlOnlyEngineFake{}}
 	if _, err := newRuntimeActivation(products); err == nil {
 		t.Fatal("newRuntimeActivation() error = nil, want a missing-ingress failure")
+	}
+}
+
+func TestRuntimeActivationConsumesDeclaredOpeningAndKeepsSessionCleanup(t *testing.T) {
+	t.Parallel()
+	ingress := &activationServiceFake{}
+	service := controlOnlyEngineFake{}
+	var releases []string
+	initial := &factoryruntime.RuntimeActivation{
+		Service: service, WorkAndEventIngress: ingress,
+		Close: func(context.Context) error {
+			releases = append(releases, "runtime")
+			return nil
+		},
+	}
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.Add(func() error { return initial.Close(t.Context()) })
+	cleanup.Add(func() error { releases = append(releases, "session"); return nil })
+	activation, err := newRuntimeActivation(runtimeProducts{
+		activation: initial, closeArtifacts: cleanup.Close,
+	})
+	if err != nil || activation.Service != service {
+		t.Fatalf("declared activation = %#v, %v; want selected service", activation, err)
+	}
+	if _, err := activation.WorkAndEventIngress.SubmitWorkRequest(t.Context(), work.WorkRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if ingress.submitCalls.Load() != 1 || len(releases) != 0 {
+		t.Fatal("declared ingress did not receive Work or publication released resources")
+	}
+	for range 2 {
+		if err := activation.Close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(releases, []string{"session", "runtime"}) {
+		t.Fatalf("releases = %v; want one session-before-runtime release", releases)
+	}
+}
+
+func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		engine factoryruntime.Service
+	}{
+		{name: "missing engine"},
+		{name: "missing ingress", engine: controlOnlyEngineFake{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cleanup := &runtimeOpeningCleanup{}
+			closeErr := errors.New("release failed")
+			calls := 0
+			cleanup.Add(func() error {
+				calls++
+				if calls == 1 {
+					return closeErr
+				}
+				return nil
+			})
+			activation, err := newRuntimeActivation(runtimeProducts{
+				engine: test.engine, closeArtifacts: cleanup.Close,
+			})
+			if err == nil || activation == nil || activation.Close == nil {
+				t.Fatalf("validation = (%v, %v), want failed activation with owned cleanup", activation, err)
+			}
+			if activation.Service != nil || activation.WorkAndEventIngress != nil || calls != 0 {
+				t.Fatal("validation published a service or released ownership before Root could retain it")
+			}
+			if err := activation.Close(t.Context()); !errors.Is(err, closeErr) {
+				t.Fatalf("failed release = %v, want %v", err, closeErr)
+			}
+			if err := activation.Close(t.Context()); err != nil {
+				t.Fatalf("retry release = %v", err)
+			}
+			if err := activation.Close(t.Context()); err != nil || calls != 2 {
+				t.Fatalf("released ownership = (%v, %d calls), want no further release", err, calls)
+			}
+		})
 	}
 }
 

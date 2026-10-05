@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -173,7 +174,7 @@ func (f *fakeEventsAppender) commitCount(topic events.Topic) int {
 func newSequencingTestSession(t *testing.T) (*Store, chatsessions.Session, *fakeEventsAppender) {
 	t.Helper()
 	appender := newFakeEventsAppender()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, appender)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, appender, logging.NoopLogger{})
 	created, err := store.CreateSession(context.Background(), validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -347,7 +348,7 @@ func TestStore_Sequence_ParentFromAnotherSessionIsRejected(t *testing.T) {
 func TestStore_Sequence_UnknownSessionReportsNotFound(t *testing.T) {
 	ctx := context.Background()
 	appender := newFakeEventsAppender()
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil, logging.NoopLogger{})
 
 	if _, err := store.Sequence(ctx, sequenceRequest("does-not-exist", 1, "")); !errors.Is(err, chatsessions.ErrNotFound) {
 		t.Fatalf("Sequence(unknown session): got %v, want ErrNotFound", err)
@@ -639,7 +640,7 @@ func TestStore_Sequence_DuplicateAndContradictoryRetriesNeverConsumeGenerator(t 
 	ctx := context.Background()
 	appender := newFakeEventsAppender()
 	gen, callCount := countingIDs("id")
-	store := NewStore(gen, fixedClock(time.Now()), appender, appender)
+	store := NewStore(gen, fixedClock(time.Now()), appender, appender, logging.NoopLogger{})
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -856,7 +857,7 @@ func TestStore_Sequence_AssignedItemFailingValidationIsRejected(t *testing.T) {
 		}
 		return ""
 	}
-	store := NewStore(blankAfterFirst, fixedClock(time.Now()), appender, nil)
+	store := NewStore(blankAfterFirst, fixedClock(time.Now()), appender, nil, logging.NoopLogger{})
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -876,7 +877,7 @@ func TestStore_Sequence_AppendFailurePropagatesWithoutIndexingItem(t *testing.T)
 	appender := stubAppender{fn: func(context.Context, events.AppendRequest) (events.AppendResult, error) {
 		return events.AppendResult{}, appendErr
 	}}
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil, logging.NoopLogger{})
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -904,7 +905,7 @@ func TestStore_Sequence_UnexpectedAppendOutcomeIsReportedAsError(t *testing.T) {
 			Outcome: bogusOutcome,
 		}, nil
 	}}
-	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil)
+	store := NewStore(sequentialIDs("id"), fixedClock(time.Now()), appender, nil, logging.NoopLogger{})
 	created, err := store.CreateSession(ctx, validCreateRequest())
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)

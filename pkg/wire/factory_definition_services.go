@@ -516,8 +516,8 @@ func provideFactoryRuntimeRoot(
 }
 
 // provideRuntimeOrchestration completes the process owner with both workflow ports.
-func provideRuntimeOrchestration(newID factoryruntime.IDGenerator, workflows factoryruntime.JavaScriptWorkflows) factoryruntimewire.Orchestration {
-	return factoryruntimewire.NewOrchestration(newID, workflows, workflows)
+func provideRuntimeOrchestration(mapper factoryruntimewire.DefinitionMapper, workflows factoryruntime.JavaScriptWorkflows) factoryruntimewire.Orchestration {
+	return factoryruntimewire.NewOrchestration(mapper, workflows, workflows)
 }
 
 // provideRuntimeDispatchPlanning supplies explicit dormant edges until activation

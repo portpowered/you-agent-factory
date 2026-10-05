@@ -17,7 +17,6 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
-	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
@@ -135,22 +134,63 @@ var _ factoryhost.Engine = (*factoryImpl)(nil)
 var _ factory.Service = (*factoryImpl)(nil)
 var _ TickableFactory = (*factoryImpl)(nil)
 
-// New constructs a Factory from explicit runtime collaborators.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func New(
+// EngineOpening retains reusable engine policy selected once by Wire.
+// Open allocates the marking, buffers, attempts and dispatch state for one runtime.
+type EngineOpening struct {
+	dispatchOpening            dispatchplanning.OutboxOpening
+	invocationInterpolation    interfaces.InvocationInterpolationService
+	providerSessions           providersessions.Service
+	quorumPolicy               interfaces.QuorumPolicyService
+	outputShaping              interfaces.InvocationOutputShapingService
+	workPropagation            interfaces.WorkPropagationPolicyService
+	workService                work.Service
+	workRequestIDs             work.RequestIDGenerator
+	newID                      factory.IDGenerator
+	expectedArtifactFileSystem expectedArtifactFileSystem
+	decisionEnvelopes          interfaces.DecisionEnvelopeService
+}
+
+func NewEngineOpening(
+	invocationInterpolation interfaces.InvocationInterpolationService,
+	providerSessions providersessions.Service,
+	quorumPolicy interfaces.QuorumPolicyService,
+	outputShaping interfaces.InvocationOutputShapingService,
+	workPropagation interfaces.WorkPropagationPolicyService,
+	workService work.Service,
+	workRequestIDs work.RequestIDGenerator,
+	newID factory.IDGenerator,
+	expectedArtifactFileSystemValue any,
+	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	dispatchOpening dispatchplanning.OutboxOpening,
+) *EngineOpening {
+	return &EngineOpening{
+		dispatchOpening:            dispatchOpening,
+		invocationInterpolation:    invocationInterpolation,
+		providerSessions:           providerSessions,
+		quorumPolicy:               quorumPolicy,
+		outputShaping:              outputShaping,
+		workPropagation:            workPropagation,
+		workService:                workService,
+		workRequestIDs:             workRequestIDs,
+		newID:                      newID,
+		expectedArtifactFileSystem: expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
+		decisionEnvelopes:          decisionEnvelopes,
+	}
+}
+
+// Open initializes one exclusively owned engine from runtime-scoped values.
+func (opening *EngineOpening) Open(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	statelessService workers.Service,
 	workerSessionsService workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
-	invocationInterpolation interfaces.InvocationInterpolationService,
 	invocationFileReader interfaces.FileReader,
 	workflowContext *factory_context.FactoryContext,
 	publicSessionID string,
 	runtimeMode interfaces.RuntimeMode,
-	logger logging.Logger,
+	logger factory.Logger,
 	clock factory.Clock,
 	workerAttemptScheduler platformclock.TimerSource,
 	inlineDispatch bool,
@@ -160,7 +200,6 @@ func New(
 	worldStateProjector factory.WorldStateProjector,
 	restoredWorldState *interfaces.FactoryWorldState,
 	skipRestoredDispatchReconciliation bool,
-	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
 	factoryEventRecorder factory.FactoryEventRecorder,
 	submissionHooks []factory.SubmissionHook,
@@ -168,16 +207,8 @@ func New(
 	completionRecorder factory.CompletionRecorder,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
-	workService work.Service,
-	workRequestIDs work.RequestIDGenerator,
-	newID factory.IDGenerator,
-	expectedArtifactFileSystemValue any,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) (factoryhost.Engine, error) {
-	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, workRequestIDs, newID, statelessService, workerSessionsService); err != nil {
+	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, opening.workRequestIDs, opening.newID, statelessService, workerSessionsService); err != nil {
 		return nil, err
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)
@@ -194,16 +225,16 @@ func New(
 		workerSessions:                     workerSessionsService,
 		workerAttempts:                     workerAttempts,
 		attemptCapacity:                    defaultRuntimeAttemptCapacity,
-		newID:                              newID,
+		newID:                              opening.newID,
 		runtimeConfig:                      runtimeDefinitions,
-		invocationInterpolation:            invocationInterpolation,
+		invocationInterpolation:            opening.invocationInterpolation,
 		invocationFileReader:               invocationFileReader,
 		workflowContext:                    workflowContext.Clone(),
 		publicSessionID:                    strings.TrimSpace(publicSessionID),
 		runtimeMode:                        runtimeMode,
 		logger:                             logger,
 		clock:                              clock,
-		workRequestIDs:                     workRequestIDs,
+		workRequestIDs:                     opening.workRequestIDs,
 		inlineDispatch:                     inlineDispatch,
 		eventHistory:                       eventHistory,
 		recordingID:                        strings.TrimSpace(recordingID),
@@ -211,7 +242,7 @@ func New(
 		worldStateProjector:                worldStateProjector,
 		restoredWorldState:                 restoredWorldState,
 		skipRestoredDispatchReconciliation: skipRestoredDispatchReconciliation,
-		providerSessions:                   providerSessions,
+		providerSessions:                   opening.providerSessions,
 		submissionRecorder:                 submissionRecorder,
 		factoryEventRecorder:               factoryEventRecorder,
 		submissionHooks:                    append([]factory.SubmissionHook(nil), submissionHooks...),
@@ -219,15 +250,21 @@ func New(
 		completionRecorder:                 completionRecorder,
 		petriMutationRecorder:              petriMutationRecorder,
 		completionDeliveryPlanner:          completionDeliveryPlanner,
-		quorumPolicy:                       quorumPolicy,
-		outputShaping:                      outputShaping,
-		workPropagation:                    workPropagation,
-		workService:                        workService,
-		expectedArtifactFileSystem:         expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
-		decisionEnvelopes:                  firstDecisionEnvelopeService(decisionEnvelopes),
+		quorumPolicy:                       opening.quorumPolicy,
+		outputShaping:                      opening.outputShaping,
+		workPropagation:                    opening.workPropagation,
+		workService:                        opening.workService,
+		expectedArtifactFileSystem:         opening.expectedArtifactFileSystem,
+		decisionEnvelopes:                  opening.decisionEnvelopes,
 	}
-	if restoredWorldState != nil && eventHistory != nil {
-		cfg.restoredEventPrefix = cloneFactoryEventsInOrder(eventHistory.CanonicalEvents())
+	return opening.openConfiguredRuntime(cfg)
+}
+
+// openConfiguredRuntime allocates the runtime-owned state after selection has
+// been captured. The config belongs exclusively to this opening and its engine.
+func (opening *EngineOpening) openConfiguredRuntime(cfg *runtimeConfig) (factoryhost.Engine, error) {
+	if cfg.restoredWorldState != nil && cfg.eventHistory != nil {
+		cfg.restoredEventPrefix = cloneFactoryEventsInOrder(cfg.eventHistory.CanonicalEvents())
 	}
 	if cfg.executeService != nil {
 		cfg.attempts = newAttemptLifecycle(cfg.executeService, cfg.newID, cfg.attemptCapacity)
@@ -240,14 +277,14 @@ func New(
 		return nil, fmt.Errorf("restore Factory Runtime Work board: %w", err)
 	}
 	historicalWorkIDs := restoredHistoricalWorkIDs(cfg)
-	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs, historicalWorkIDs)
+	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, opening.newID, seededRestoredWorkIDs, historicalWorkIDs)
 	replayHistoricalWorks := restoredHistoricalAdmissionWorks(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	if err := reconcileRuntimeRestoredDispatches(cfg, effectiveEventHistory); err != nil {
 		return nil, err
 	}
-	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
+	dispatchResultHook, dispatchPlan, err := opening.configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
 	)
 	if err != nil {
@@ -337,15 +374,6 @@ func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 		return &schedulerAdapter{inner: cfg.scheduler}
 	}
 	return scheduler.NewWorkInQueueScheduler(50, cfg.runtimeConfig)
-}
-
-func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
-	if len(services) == 0 {
-		return nil
-	}
-	return services[0]
 }
 
 // buildRuntimeMarking returns the fresh marking, the exact restored Work
@@ -465,7 +493,7 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 	}, f.clock.Now())
 }
 
-func configureRuntimeDispatch(
+func (opening *EngineOpening) configureRuntimeDispatch(
 	cfg *runtimeConfig,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	eventHistory recordings.RuntimeLedger,
@@ -484,7 +512,7 @@ func configureRuntimeDispatch(
 	canceler := func(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 		return cancelStatelessAttempt(ctx, cfg, request)
 	}
-	planner := dispatchplanningwire.New(
+	planner := opening.dispatchOpening.Open(
 		publisher,
 		canceler,
 	)

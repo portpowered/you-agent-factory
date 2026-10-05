@@ -46,7 +46,8 @@ type EventsReader = internalservice.EventsReader
 // NewService constructs the singular in-memory Chat Sessions root from
 // explicit construction ports. newID, now, eventsAppender, and eventsReader
 // are required; logger is optional and defaults to a no-op logger when
-// omitted. This is the one canonical constructor for chatsessions.Service:
+// omitted or when its first argument is nil. Only the first logger argument
+// is selected. This is the one canonical constructor for chatsessions.Service:
 // production code has no alternate path to a Service value.
 func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eventsReader EventsReader, logger ...logging.Logger) (chatsessions.Service, error) {
 	if newID == nil {
@@ -61,20 +62,33 @@ func NewService(newID IDGenerator, now Clock, eventsAppender EventsAppender, eve
 	if eventsReader == nil {
 		return nil, fmt.Errorf("construct chat sessions: events reader is required")
 	}
-	return internalservice.NewStore(newID, now, eventsAppender, eventsReader, logger...), nil
+	var selected logging.Logger = logging.NoopLogger{}
+	if len(logger) > 0 && logger[0] != nil {
+		selected = logger[0]
+	}
+	return internalservice.NewStore(newID, now, eventsAppender, eventsReader, selected), nil
 }
 
 // NewFactoryTargetCatalogService constructs the Chat Sessions Factory
 // target-catalog root from the singular Operator Settings public service
 // root and Factory Definitions' narrow, read-only catalog/path capability.
-// logger is the direct, required operation-logging abstraction; callers with
-// no operation logging pass logging.NoopLogger{}.
+// logger selects operation diagnostics; nil and logging.NoopLogger{} preserve
+// quiet compatibility. Required peers are validated here before construction.
 func NewFactoryTargetCatalogService(
 	operatorSettings operatorsettings.Service,
 	factoryDefinitions factorydefinitions.CatalogPathsService,
 	logger logging.Logger,
 ) (chatsessions.FactoryTargetCatalogService, error) {
-	return internalservice.New(operatorSettings, factoryDefinitions, logger)
+	if operatorSettings == nil {
+		return nil, fmt.Errorf("construct chat sessions factory target catalog: operator settings root is required")
+	}
+	if factoryDefinitions == nil {
+		return nil, fmt.Errorf("construct chat sessions factory target catalog: factory definitions catalog/path capability is required")
+	}
+	if logger == nil {
+		logger = logging.NoopLogger{}
+	}
+	return internalservice.New(operatorSettings, factoryDefinitions, logger), nil
 }
 
 // ResponseBridge is the Chat Sessions-owned producer bridge that sequences

@@ -17,8 +17,8 @@ import (
 type DocumentService = settingsdocument.Service
 type ResolutionService = resolution.Service
 
-// NewService binds completed owners. Nil classification and logger selection
-// occur once at this supported construction boundary; construction is inert.
+// NewService binds completed owners and forwards the selected logger unchanged.
+// Supported owner nil classification is preserved; construction is inert.
 func NewService(
 	document DocumentService,
 	resolution ResolutionService,
@@ -37,7 +37,7 @@ func NewService(
 		return nil, fmt.Errorf("construct Operator Settings: resolution is required")
 	}
 	return operatorservice.New(document, resolution, files, createTemp, decoder, encoder,
-		idGenerator, logging.EnsureLogger(logger), diagnostics)
+		idGenerator, logger, diagnostics)
 }
 
 // NewResolutionService constructs the effective-resolution owner.

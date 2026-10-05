@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"io/fs"
 	"reflect"
 	"slices"
@@ -299,9 +300,13 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	mapper, err := factoryruntimewire.NewDefinitionMapper(provideFactoryRuntimeIDGenerator(edges))
+	if err != nil {
+		t.Fatal(err)
+	}
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
-		provideOrchestrationJavaScriptExecution(provideRuntimeOrchestration(provideFactoryRuntimeIDGenerator(edges), workflows)),
+		provideOrchestrationJavaScriptExecution(provideRuntimeOrchestration(mapper, workflows)),
 		writer,
 		stores,
 		syncWaits,

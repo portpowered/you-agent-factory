@@ -11,7 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -68,6 +67,42 @@ func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t 
 	}
 }
 
+func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing.T) {
+	t.Parallel()
+	openingErr := errors.New("partial replay resource opening failed")
+	artifactErr := errors.New("partial replay artifact release failed")
+	var events []string
+	owner := &portableReplayRuntimeOwner{restorable: true, events: &events}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	factory.factoryRuntimeAssembler = portableReplayRuntimeAssemblerStub{
+		runtime: &portableReplayRuntimeRecord{closeArtifacts: func() error {
+			events = append(events, "partial-runtime-close")
+			return artifactErr
+		}},
+		err: openingErr,
+	}
+	products, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = products.execution.Resume(t.Context(), "session-js-checkpoint-001",
+		factorysessions.ControlRequest{RequestID: "resume-partial-opening"})
+	if !errors.Is(err, openingErr) {
+		t.Fatalf("resume error = %v, want original opening cause", err)
+	}
+	if owner.resumeCalls != 0 || len(events) != 0 {
+		t.Fatalf("failed opening resumed or closed outside its owner: resumes=%d events=%v", owner.resumeCalls, events)
+	}
+	for range 2 {
+		if err := products.closeArtifacts(); !errors.Is(err, artifactErr) {
+			t.Fatalf("application cleanup = %v, want retained partial artifact cause", err)
+		}
+	}
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "partial-runtime-close"}) {
+		t.Fatalf("partial cleanup = %v, want owner before artifacts without repeated effects", events)
+	}
+}
+
 func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	ownerErr := errors.New("durable owner close failed")
 	artifactErr := errors.New("replay artifacts close failed")
@@ -75,12 +110,12 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{events: &events, closeErr: ownerErr}
 	cleanup := newPortableReplayRuntimeCleanup()
 	cleanup.SetOwner(owner)
-	cleanup.Set(&portableReplayRuntimeRecord{
+	cleanup.Set(portableReplayCleanupOpening(&portableReplayRuntimeRecord{
 		closeArtifacts: func() error {
 			events = append(events, "runtime-artifacts-close")
 			return artifactErr
 		},
-	})
+	}))
 
 	err := cleanup.Close()
 	if !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
@@ -638,6 +673,7 @@ func (*portableReplayRuntimeRecord) BeginWorkerAttempt(
 
 type portableReplayRuntimeAssemblerStub struct {
 	runtime runtimeports.RuntimeInstance
+	err     error
 }
 
 func (assembler portableReplayRuntimeAssemblerStub) Assemble(
@@ -649,17 +685,10 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	string,
 	string,
 	string,
-	factorydefinitions.WorkstationLoader,
-	factoryruntime.LoadedFactoryLoader,
-	providers.Service,
-	platformprocess.CommandRunner,
-	platformprocess.CommandRunner,
 	*workers.MockWorkersConfig,
 	factorydefinitions.RuntimeMode,
 	factoryruntime.Scheduler,
 	bool,
-	recordings.SubmissionRecorder,
-	recordings.DispatchRecorder,
 	string,
 	factoryruntime.RuntimeLogStorageConfig,
 	factoryruntime.RuntimeFileLoggingPolicy,
@@ -674,13 +703,8 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	*bool,
 	factoryruntime.Clock,
 	*zap.Logger,
-	factoryruntime.WorkersMockCommandRunnerFactory,
-	func(string) workers.ProgressPublisher,
-	func(string) func(string),
-	factoryruntime.PetriMutationRecorder,
-	factoryruntime.WorldStateProjector,
-	recordings.RuntimeScopeService,
-	factorydefinitions.InitialFactorySnapshotFactory,
+	bool,
+	factoryruntime.SessionObservations,
 	string,
 	string,
 	string,
@@ -690,17 +714,16 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	*recordings.LoadResumeInputResult,
 	*factorydefinitions.FactoryWorldState,
 	[]factorydefinitions.FactoryEvent,
-	automations.Service,
 	bool,
-) (
-	runtimeports.RuntimeReplacementBuilder,
-	runtimeports.RuntimeInstance,
-	factoryruntime.SessionBuildSpec,
-	runtimeports.RuntimeLifecycle,
-	runtimeports.RuntimeSidecarService,
-	error,
-) {
-	return nil, assembler.runtime, factoryruntime.SessionBuildSpec{}, nil, nil, nil
+) (*factoryruntime.RuntimeInitialOpening, error) {
+	return &factoryruntime.RuntimeInitialOpening{Record: assembler.runtime,
+		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error {
+			if assembler.runtime == nil {
+				return nil
+			}
+			return assembler.runtime.CloseArtifacts()
+		}},
+	}, assembler.err
 }
 
 var _ durableexecution.Service = (*portableReplayRuntimeOwner)(nil)
@@ -785,5 +808,11 @@ func assertResumeRecoveryMetadata(
 		metadata.SuccessorRecordingID != recoveryRecordingID("runtime-1") ||
 		!metadata.PreviousRecordedAt.Equal(want.PreviousRecordedAt) {
 		t.Fatalf("opened resume recovery metadata = %#v, want selected source and successor identities", metadata)
+	}
+}
+
+func portableReplayCleanupOpening(record runtimeports.RuntimeInstance) *factoryruntime.RuntimeInitialOpening {
+	return &factoryruntime.RuntimeInitialOpening{Record: record,
+		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error { return record.CloseArtifacts() }},
 	}
 }

@@ -68,7 +68,7 @@ func (s *Service) Execute(
 
 	identity, err := s.prepareAttempt(ctx, &request, cleanup)
 	if err != nil {
-		return workers.ExecuteResult{}, s.preStartError(ctx, cleanup, err)
+		return workers.ExecuteResult{}, s.preStartError(ctx, cleanup, correlation, err)
 	}
 	if request.Input.PreparedRequestObserver != nil {
 		request.Input.PreparedRequestObserver(request)
@@ -120,9 +120,10 @@ func (s *Service) prepareAttempt(
 func (s *Service) preStartError(
 	ctx context.Context,
 	cleanup *cleanupRegistry,
+	correlation workers.ExecutionCorrelation,
 	executeErr error,
 ) error {
-	cleanupErr := cleanup.run(s.logger)
+	cleanupErr := cleanup.run(s.logger, correlation)
 	if contextErr := ctx.Err(); contextErr != nil {
 		return contextErr
 	}
@@ -137,7 +138,7 @@ func (s *Service) executeStarted(
 	cleanup *cleanupRegistry,
 	temporaryFiles workers.TemporaryFileSystem,
 ) (workers.ExecuteResult, error) {
-	defer cleanup.run(s.logger)
+	defer func() { _ = cleanup.run(s.logger, correlation) }()
 
 	startedAt := s.clock()
 	sequence := atomic.Int64{}
@@ -148,15 +149,7 @@ func (s *Service) executeStarted(
 		Timestamp:   startedAt,
 		Phase:       "execute.started",
 	})
-	s.logger.Info(
-		"workers execute started",
-		"factory_session_id", correlation.FactorySessionID,
-		"runtime_id", correlation.RuntimeID,
-		"generation_id", correlation.GenerationID,
-		"dispatch_id", correlation.DispatchID,
-		"attempt_id", correlation.AttemptID,
-		"runner_id", request.Target.RunnerID,
-	)
+	s.logger.Info("workers execute started", append(executionLogFields(correlation), "runner_id", request.Target.RunnerID)...)
 
 	execCtx, cancel := s.withTimeout(ctx, request.Target.Timeout)
 	defer cancel()
@@ -174,7 +167,7 @@ func (s *Service) executeStarted(
 			runErr = contextErr
 		}
 	}
-	cleanupErr := cleanup.run(s.logger)
+	cleanupErr := cleanup.run(s.logger, correlation)
 	if cleanupErr != nil {
 		runErr = errors.Join(runErr, cleanupFailure(cleanupErr))
 	}
@@ -188,16 +181,8 @@ func (s *Service) executeStarted(
 		execCtx.Err() == context.Canceled,
 	)
 	s.emitTerminal(observationContext, &sequence, result, finishedAt)
-	s.logger.Info(
-		"workers execute finished",
-		"factory_session_id", correlation.FactorySessionID,
-		"runtime_id", correlation.RuntimeID,
-		"generation_id", correlation.GenerationID,
-		"dispatch_id", correlation.DispatchID,
-		"attempt_id", correlation.AttemptID,
-		"outcome", string(result.Outcome),
-		"duration_ms", finishedAt.Sub(startedAt).Milliseconds(),
-	)
+	s.logger.Info("workers execute finished", append(executionLogFields(correlation),
+		"outcome", string(result.Outcome), "duration_ms", finishedAt.Sub(startedAt).Milliseconds())...)
 	return result.Clone(), nil
 }
 
@@ -514,14 +499,9 @@ func (s *Service) emit(
 	}
 	observation.Sequence = sequence.Add(1)
 	observation = observation.Clone()
-	if err := deliverObservation(s.observe, context.WithoutCancel(ctx), observation); err != nil {
-		s.logger.Warn(
-			"workers observation delivery failed",
-			"dispatch_id", observation.Correlation.DispatchID,
-			"attempt_id", observation.Correlation.AttemptID,
-			"kind", string(observation.Kind),
-			"error", err.Error(),
-		)
+	if category, err := deliverObservation(s.observe, context.WithoutCancel(ctx), observation); err != nil {
+		s.logger.Warn("workers observation delivery failed", append(executionLogFields(observation.Correlation),
+			"kind", string(observation.Kind), "error", category)...)
 	}
 }
 
@@ -529,16 +509,18 @@ func deliverObservation(
 	sink workers.ObservationSink,
 	ctx context.Context,
 	observation workers.ExecutionObservation,
-) (err error) {
+) (category string, err error) {
 	if sink == nil {
-		return nil
+		return "", nil
 	}
+	category = "observer_error"
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = errors.New("Workers observation sink panicked")
+			category = "observer_panic"
 		}
 	}()
-	return sink(ctx, observation)
+	return category, sink(ctx, observation)
 }
 
 func panicFailure(recovered any, stack []byte, preserveCompatibilityCause bool) error {

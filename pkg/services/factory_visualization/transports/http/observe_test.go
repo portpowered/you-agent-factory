@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +17,8 @@ import (
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestObserveHTTP_DecodesModeAndMapsSuccess(t *testing.T) {
@@ -306,4 +311,227 @@ func (fake *observeVisualizationRootFake) ClosePresentation(
 	factoryvisualization.ClosePresentationRequest,
 ) (factoryvisualization.ClosePresentationResult, error) {
 	panic("unexpected ClosePresentation call in observe HTTP adapter test")
+}
+
+// diagnosticObserveRoot controls only the root boundary of the HTTP Adapter.
+type diagnosticObserveRoot struct {
+	*observeVisualizationRootFake
+	observe func(context.Context, factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error)
+}
+
+func (root *diagnosticObserveRoot) Observe(ctx context.Context, req factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error) {
+	return root.observe(ctx, req)
+}
+
+func diagnosticAdapter(root factoryvisualization.Root, logger *zap.Logger, fromRoot bool) *factoryvisualizationhttp.Adapter {
+	if fromRoot {
+		return factoryvisualizationhttp.NewHandlerFromRoot(factoryvisualizationhttp.RootBinding{Visualization: root}, logger)
+	}
+	return factoryvisualizationhttp.NewHandler(factoryvisualizationhttp.Dependencies{VisualizationRoot: root}, logger)
+}
+
+func assertObserveFailure(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Code != http.StatusInternalServerError || rec.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("response = %d %v %s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"family": "INTERNAL_SERVER_ERROR", "code": "INTERNAL_ERROR", "message": "factory visualization request failed"}
+	if !reflect.DeepEqual(body, want) {
+		t.Fatalf("body = %#v, want %#v", body, want)
+	}
+}
+
+func assertSelectedDiagnostic(t *testing.T, logs *observer.ObservedLogs, message, name, correlation, failure string) {
+	t.Helper()
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("diagnostics = %#v, want one", entries)
+	}
+	entry := entries[0]
+	if entry.Level != zap.ErrorLevel || entry.Message != message || entry.LoggerName != name {
+		t.Fatalf("diagnostic = %#v", entry)
+	}
+	want := map[string]any{"correlation": correlation, "error": failure}
+	if !reflect.DeepEqual(entry.ContextMap(), want) {
+		t.Fatalf("fields = %#v, want %#v", entry.ContextMap(), want)
+	}
+}
+
+func TestHandleObserveSelectedDiagnosticPolicy(t *testing.T) {
+	t.Parallel()
+	for _, fromRoot := range []bool{false, true} {
+		for _, policy := range []string{"capture", "disabled", "noop"} {
+			t.Run(fmt.Sprintf("fromRoot=%t/%s", fromRoot, policy), func(t *testing.T) {
+				t.Parallel()
+				logger, logs, hooks := selectedDiagnosticLogger(policy, "selected", "request-a")
+				calls := 0
+				req := httptest.NewRequest(http.MethodPost, "/observe", strings.NewReader(`{"mode":"RETAINED_THEN_LIVE"}`))
+				root := &diagnosticObserveRoot{observe: func(ctx context.Context, input factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error) {
+					calls++
+					if ctx != req.Context() || input.Mode != factoryvisualization.ObserveModeRetainedThenLive || input.Reconnect != nil {
+						t.Errorf("delegate input/context = %#v/%v", input, ctx)
+					}
+					return factoryvisualization.ObserveResult{}, errors.New("controlled observe failure")
+				}}
+				rec := httptest.NewRecorder()
+				diagnosticAdapter(root, logger, fromRoot).HandleObserve(rec, req)
+				assertObserveFailure(t, rec)
+				if calls != 1 {
+					t.Fatalf("calls = %d", calls)
+				}
+				if policy == "capture" {
+					assertSelectedDiagnostic(t, logs, "factory visualization observe request failed", "selected", "request-a", "controlled observe failure")
+				} else if logs.Len() != 0 || hooks.Load() != 0 {
+					t.Fatal("disabled logger emitted diagnostics")
+				}
+			})
+		}
+	}
+}
+
+type diagnosticFailingWriter struct {
+	header http.Header
+	status int
+	writes int
+}
+
+func (w *diagnosticFailingWriter) Header() http.Header    { return w.header }
+func (w *diagnosticFailingWriter) WriteHeader(status int) { w.status = status }
+func (w *diagnosticFailingWriter) Write([]byte) (int, error) {
+	w.writes++
+	return 0, errors.New("controlled write failure")
+}
+
+func TestHTTPEncodingSelectedDiagnosticPolicy(t *testing.T) {
+	t.Parallel()
+	for _, component := range []string{"adapter", "metrics", "absent-metrics"} {
+		for _, policy := range []string{"capture", "disabled", "noop"} {
+			t.Run(component+"/"+policy, func(t *testing.T) {
+				t.Parallel()
+				logger, logs, hooks := selectedDiagnosticLogger(policy, "encoder", "response-a")
+				writer := &diagnosticFailingWriter{header: make(http.Header)}
+				message := "encode response failed"
+				status := http.StatusOK
+				switch component {
+				case "adapter":
+					root := &observeVisualizationRootFake{}
+					diagnosticAdapter(root, logger, true).HandleObserve(writer, httptest.NewRequest(http.MethodPost, "/observe", strings.NewReader(`{"mode":"RETAINED_THEN_LIVE"}`)))
+					if !root.observeInvoked {
+						t.Fatal("delegate was not called")
+					}
+				case "metrics":
+					calls := 0
+					query := factoryvisualization.RuntimeMetricsQuery(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+						calls++
+						return factoryvisualization.RuntimeMetricsQueryResult{}, nil
+					})
+					handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, nil, "/controlled"), logger)
+					handler.GetMetrics(writer, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{})
+					if calls != 1 {
+						t.Fatalf("query calls = %d", calls)
+					}
+					message = "encode metrics response failed"
+				case "absent-metrics":
+					var handler *factoryvisualizationhttp.MetricsHandler
+					handler.GetMetrics(writer, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{})
+					status = http.StatusInternalServerError
+				}
+				if writer.status != status || writer.header.Get("Content-Type") != "application/json" || writer.writes != 1 {
+					t.Fatalf("writer = %#v", writer)
+				}
+				if policy == "capture" && component != "absent-metrics" {
+					assertSelectedDiagnostic(t, logs, message, "encoder", "response-a", "controlled write failure")
+				} else if logs.Len() != 0 || hooks.Load() != 0 {
+					t.Fatal("disabled or absent handler emitted diagnostics")
+				}
+			})
+		}
+	}
+}
+
+func TestHandleObserveParallelSelectedLoggers(t *testing.T) {
+	t.Parallel()
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{}, 2)
+	defer close(release)
+	done := make(chan struct{}, 2)
+	responses := [2]*httptest.ResponseRecorder{httptest.NewRecorder(), httptest.NewRecorder()}
+	logs := [2]*observer.ObservedLogs{}
+	calls := [2]int{}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // Failure ceiling; channels prove overlap.
+	defer cancel()
+	for i := range responses {
+		core, observed := observer.New(zap.ErrorLevel)
+		logs[i] = observed
+		logger := zap.New(core).Named(fmt.Sprintf("adapter-%d", i)).With(zap.String("correlation", fmt.Sprintf("request-%d", i)))
+		root := &diagnosticObserveRoot{observe: func(context.Context, factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error) {
+			calls[i]++
+			entered <- struct{}{}
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return factoryvisualization.ObserveResult{}, ctx.Err()
+			}
+			if i == 0 {
+				return factoryvisualization.ObserveResult{}, errors.New("isolated failure")
+			}
+			return factoryvisualization.ObserveResult{View: factoryvisualization.ProjectedView{TickCount: 17}}, nil
+		}}
+		handler := diagnosticAdapter(root, logger, i == 0)
+		go func() {
+			handler.HandleObserve(responses[i], httptest.NewRequest(http.MethodPost, "/observe", strings.NewReader(`{"mode":"RETAINED_THEN_LIVE"}`)))
+			done <- struct{}{}
+		}()
+	}
+	for range 2 {
+		select {
+		case <-entered:
+		case <-ctx.Done():
+			t.Fatal("requests did not overlap")
+		}
+	}
+	release <- struct{}{}
+	release <- struct{}{}
+	for range 2 {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			t.Fatal("requests did not finish")
+		}
+	}
+	assertObserveFailure(t, responses[0])
+	assertSelectedDiagnostic(t, logs[0], "factory visualization observe request failed", "adapter-0", "request-0", "isolated failure")
+	if logs[1].Len() != 0 || calls != [2]int{1, 1} {
+		t.Fatalf("peer logs/calls = %v/%v", logs[1].All(), calls)
+	}
+	assertObservePeerSuccess(t, responses[1])
+}
+
+func assertObservePeerSuccess(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	var body factoryvisualizationhttp.ObserveHTTPResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" || body.View.TickCount != 17 {
+		t.Fatalf("peer response = %#v %s", rec, rec.Body.String())
+	}
+}
+
+func selectedDiagnosticLogger(policy, name, correlation string) (*zap.Logger, *observer.ObservedLogs, *atomic.Int32) {
+	level := zap.ErrorLevel
+	if policy == "disabled" {
+		level = zap.FatalLevel
+	}
+	core, logs := observer.New(level)
+	logger := zap.New(core).Named(name).With(zap.String("correlation", correlation))
+	hooks := &atomic.Int32{}
+	if policy == "noop" {
+		logger = zap.NewNop().WithOptions(zap.Hooks(func(zapcore.Entry) error { hooks.Add(1); return nil }))
+	}
+	return logger, logs, hooks
 }

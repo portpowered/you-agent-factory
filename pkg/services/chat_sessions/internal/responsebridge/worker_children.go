@@ -437,9 +437,6 @@ func (s *Service) logWorkerChildRecordSkipped(
 	record events.Record,
 	err error,
 ) {
-	if s == nil || s.logger == nil {
-		return
-	}
 	s.logger.Warn(
 		"chat sessions skipped malformed worker child record",
 		"op", responseBridgeOperation,
