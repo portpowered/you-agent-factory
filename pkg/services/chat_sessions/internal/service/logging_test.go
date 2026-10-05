@@ -297,22 +297,7 @@ func TestStore_SelectedLoggerPreservesQuietOperationResults(t *testing.T) {
 func exerciseStoreLoggerOperations(t *testing.T, store *Store) []any {
 	t.Helper()
 	ctx := context.Background()
-	created, err := store.CreateSession(ctx, validCreateRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if created.Session.ID != "session-1" || created.Session.Version != 1 {
-		t.Fatalf("unexpected session: %+v", created)
-	}
-	read, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := chatsessions.StartTurnRequest{RequestID: startTurnRequestID("turn"), SessionID: created.Session.ID, ExpectedVersion: 1}
-	started, err := store.StartTurn(ctx, req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	created, read, started, req := startStoreLoggerOperations(t, store)
 	retried, err := store.StartTurn(ctx, req)
 	if err != nil || !reflect.DeepEqual(retried, started) {
 		t.Fatalf("turn retry: %+v, %v", retried, err)
@@ -497,42 +482,9 @@ func TestStore_SelectedLoggerRejectedOperationsDoNotMutate(t *testing.T) {
 				t.Fatal(err)
 			}
 			*calls = nil
-			switch kind {
-			case "validation":
-				_, err = store.CreateSession(ctx, chatsessions.CreateSessionRequest{})
-				var typed *chatsessions.ValidationError
-				if !errors.As(err, &typed) {
-					t.Fatalf("validation type: %v", err)
-				}
-			case "conflict":
-				_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{RequestID: startTurnRequestID("second"), SessionID: created.Session.ID, ExpectedVersion: 1})
-				var typed *chatsessions.ConflictError
-				if !errors.As(err, &typed) {
-					t.Fatalf("conflict type: %v", err)
-				}
-			case "busy":
-				_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{RequestID: startTurnRequestID("second"), SessionID: created.Session.ID, ExpectedVersion: started.Session.Version})
-				var typed *chatsessions.BusyError
-				if !errors.As(err, &typed) {
-					t.Fatalf("busy type: %v", err)
-				}
-			case "not_found":
-				_, err = store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: "missing"})
-				var typed *chatsessions.NotFoundError
-				if !errors.As(err, &typed) {
-					t.Fatalf("not-found type: %v", err)
-				}
-			case "invalid_transition":
-				_, err = store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{SessionID: created.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateCompleted})
-				if !errors.Is(err, chatsessions.ErrInvalidTransition) {
-					t.Fatalf("transition: %v", err)
-				}
-			case "invariant_violation":
-				_, err = store.AdvanceStreamHead(ctx, advanceStreamHeadRequest(created.Session.ID, 1, started.Session.Version, 1))
-				var typed *chatsessions.UncommittedStreamPositionError
-				if !errors.As(err, &typed) {
-					t.Fatalf("invariant type: %v", err)
-				}
+			err = rejectStoreLoggerOperation(t, store, created, started, kind)
+			if err == nil {
+				t.Fatal("rejected operation returned nil error")
 			}
 			if len(*calls) != 2 || len((*calls)[1].kv) != 6 || !hasKV((*calls)[1].kv, "error_class", kind) {
 				t.Fatalf("failure diagnostics: %+v", *calls)
@@ -544,4 +496,70 @@ func TestStore_SelectedLoggerRejectedOperationsDoNotMutate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func startStoreLoggerOperations(t *testing.T, store *Store) (chatsessions.CreateSessionResult, chatsessions.GetSessionResult, chatsessions.StartTurnResult, chatsessions.StartTurnRequest) {
+	t.Helper()
+	ctx := context.Background()
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Session.ID != "session-1" || created.Session.Version != 1 {
+		t.Fatalf("unexpected session: %+v", created)
+	}
+	read, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := chatsessions.StartTurnRequest{RequestID: startTurnRequestID("turn"), SessionID: created.Session.ID, ExpectedVersion: 1}
+	started, err := store.StartTurn(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return created, read, started, req
+}
+
+func rejectStoreLoggerOperation(t *testing.T, store *Store, created chatsessions.CreateSessionResult, started chatsessions.StartTurnResult, kind string) error {
+	t.Helper()
+	ctx := context.Background()
+	var err error
+	switch kind {
+	case "validation":
+		_, err = store.CreateSession(ctx, chatsessions.CreateSessionRequest{})
+		var typed *chatsessions.ValidationError
+		if !errors.As(err, &typed) {
+			t.Fatalf("validation type: %v", err)
+		}
+	case "conflict":
+		_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{RequestID: startTurnRequestID("second"), SessionID: created.Session.ID, ExpectedVersion: 1})
+		var typed *chatsessions.ConflictError
+		if !errors.As(err, &typed) {
+			t.Fatalf("conflict type: %v", err)
+		}
+	case "busy":
+		_, err = store.StartTurn(ctx, chatsessions.StartTurnRequest{RequestID: startTurnRequestID("second"), SessionID: created.Session.ID, ExpectedVersion: started.Session.Version})
+		var typed *chatsessions.BusyError
+		if !errors.As(err, &typed) {
+			t.Fatalf("busy type: %v", err)
+		}
+	case "not_found":
+		_, err = store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: "missing"})
+		var typed *chatsessions.NotFoundError
+		if !errors.As(err, &typed) {
+			t.Fatalf("not-found type: %v", err)
+		}
+	case "invalid_transition":
+		_, err = store.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{SessionID: created.Session.ID, TurnID: started.Turn.ID, Next: chatsessions.TurnStateCompleted})
+		if !errors.Is(err, chatsessions.ErrInvalidTransition) {
+			t.Fatalf("transition: %v", err)
+		}
+	case "invariant_violation":
+		_, err = store.AdvanceStreamHead(ctx, advanceStreamHeadRequest(created.Session.ID, 1, started.Session.Version, 1))
+		var typed *chatsessions.UncommittedStreamPositionError
+		if !errors.As(err, &typed) {
+			t.Fatalf("invariant type: %v", err)
+		}
+	}
+	return err
 }

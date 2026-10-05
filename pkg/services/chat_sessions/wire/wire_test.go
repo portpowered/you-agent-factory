@@ -280,22 +280,7 @@ func TestNewResponseBridgeConstructsFromInjectedSequencer(t *testing.T) {
 func exerciseServiceLoggerOperations(t *testing.T, store chatsessions.Service) []any {
 	t.Helper()
 	ctx := context.Background()
-	created, err := store.CreateSession(ctx, validCreateRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if created.Session.ID != "session-1" || created.Session.Version != 1 {
-		t.Fatalf("unexpected session: %+v", created)
-	}
-	read, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := chatsessions.StartTurnRequest{RequestID: validCreateRequest().RequestID, SessionID: created.Session.ID, ExpectedVersion: 1}
-	started, err := store.StartTurn(ctx, req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	created, read, started, req := startServiceLoggerOperations(t, store)
 	retried, err := store.StartTurn(ctx, req)
 	if err != nil || !reflect.DeepEqual(retried, started) {
 		t.Fatalf("turn retry: %+v, %v", retried, err)
@@ -330,4 +315,26 @@ func exerciseServiceLoggerOperations(t *testing.T, store chatsessions.Service) [
 		t.Fatalf("terminal facts: %+v", final)
 	}
 	return []any{created, read, started, retried, intent, retry, advanced, final}
+}
+
+func startServiceLoggerOperations(t *testing.T, store chatsessions.Service) (chatsessions.CreateSessionResult, chatsessions.GetSessionResult, chatsessions.StartTurnResult, chatsessions.StartTurnRequest) {
+	t.Helper()
+	ctx := context.Background()
+	created, err := store.CreateSession(ctx, validCreateRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Session.ID != "session-1" || created.Session.Version != 1 {
+		t.Fatalf("unexpected session: %+v", created)
+	}
+	read, err := store.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: created.Session.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := chatsessions.StartTurnRequest{RequestID: validCreateRequest().RequestID, SessionID: created.Session.ID, ExpectedVersion: 1}
+	started, err := store.StartTurn(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return created, read, started, req
 }
