@@ -38,6 +38,7 @@ type Assembly struct {
 	submissionRecorder       recordings.SubmissionRecorder
 	dispatchRecorder         recordings.DispatchRecorder
 	automationService        automations.Service
+	worldStateProjector      factoryruntime.WorldStateProjector
 }
 
 // NewAssembly constructs the inert compatibility assembly selected by Wire.
@@ -57,6 +58,7 @@ func NewAssembly(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) (*Assembly, error) {
 	if bundleOpening == nil {
 		return nil, fmt.Errorf("factory runtime bundle opening is required")
@@ -71,7 +73,7 @@ func NewAssembly(
 		providerOverride: providerOverride, providerCommandRunner: providerCommandRunner,
 		scriptCommandRunner: scriptCommandRunner, mockCommandRunnerFactory: mockCommandRunnerFactory,
 		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder,
-		automationService: automationService,
+		automationService: automationService, worldStateProjector: worldStateProjector,
 	}, nil
 }
 
@@ -109,7 +111,6 @@ func (a *Assembly) Assemble(
 	progressFactory func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 	observations factoryruntime.SessionObservations,
-	worldStateProjector factoryruntime.WorldStateProjector,
 	dir string,
 	factoryRootDir string,
 	executionBaseDir string,
@@ -195,7 +196,7 @@ func (a *Assembly) Assemble(
 			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
 			a.submissionRecorder, a.dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
 			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
-			progressPublisher, dispatchCompleted, worldStateProjector, a.recordingsRuntime, a.initialFactorySnapshot,
+			progressPublisher, dispatchCompleted, a.worldStateProjector, a.recordingsRuntime, a.initialFactorySnapshot,
 		)
 	}
 	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {

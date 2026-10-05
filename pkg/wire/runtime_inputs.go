@@ -59,10 +59,11 @@ func provideFactoryRuntimeAssembly(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) (*factoryruntimewire.Assembly, error) {
 	return factoryruntimewire.NewAssembly(bundleOpening, sidecars, instanceHost, preparation,
 		recordingsRuntime, initialFactorySnapshot, providerOverride, providerCommandRunner,
-		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService)
+		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService, worldStateProjector)
 }
 
 func provideWorkersMockWorkersConfigFileSystem(

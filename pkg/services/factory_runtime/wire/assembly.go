@@ -98,10 +98,11 @@ func NewAssembly(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) (*Assembly, error) {
 	return factoryruntimeinternal.NewAssembly(bundleOpening, sidecars, instanceHost, preparation,
 		recordingsRuntime, initialFactorySnapshot, providerOverride, providerCommandRunner,
-		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService)
+		scriptCommandRunner, mockCommandRunnerFactory, submissionRecorder, dispatchRecorder, automationService, worldStateProjector)
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening

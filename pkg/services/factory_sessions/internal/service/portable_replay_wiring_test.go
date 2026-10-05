@@ -706,7 +706,6 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	func(string) workers.ProgressPublisher,
 	func(string) func(string),
 	factoryruntime.SessionObservations,
-	factoryruntime.WorldStateProjector,
 	string,
 	string,
 	string,

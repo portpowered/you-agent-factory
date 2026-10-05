@@ -130,7 +130,7 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil, nil, nil, nil, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +184,12 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 		return next
 	}
 	var effects []string
+	projector := func(events []interfaces.FactoryEvent, tick int) (interfaces.FactoryWorldState, error) {
+		if len(events) != 1 || events[0].Id != "selected-event" {
+			t.Fatalf("projection events = %#v, want selected event", events)
+		}
+		return interfaces.FactoryWorldState{Tick: tick}, nil
+	}
 	submit := func(work.FactorySubmissionRecord) { effects = append(effects, "submission") }
 	dispatch := func(recordings.FactoryDispatchRecord) { effects = append(effects, "dispatch") }
 	loader := func(path string, _ interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
@@ -191,7 +197,7 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	}
 	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil,
 		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), &testRuntimeScopeServiceStub{}, nil,
-		nil, provider, script, decorate, submit, dispatch, nil)
+		nil, provider, script, decorate, submit, dispatch, nil, projector)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,9 +218,21 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	for index := range resources.submissions {
 		resources.submissions[index](work.FactorySubmissionRecord{})
 		resources.dispatches[index](recordings.FactoryDispatchRecord{})
+		assertSelectedOpeningProjection(t, resources.projectors[index], index+1)
 	}
 	if decorations != 4 || !reflect.DeepEqual(effects, []string{"submission", "dispatch", "submission", "dispatch"}) {
 		t.Fatalf("fixed effects = %v, decorations = %d; want both openings", effects, decorations)
+	}
+}
+
+func assertSelectedOpeningProjection(t *testing.T, projector factory.WorldStateProjector, tick int) {
+	t.Helper()
+	if projector == nil {
+		t.Fatal("opening lost the fixed world-state projector")
+	}
+	state, err := projector([]interfaces.FactoryEvent{{Id: "selected-event"}}, tick)
+	if err != nil || state.Tick != tick {
+		t.Fatalf("opening projection = %#v, %v; want tick %d", state, err, tick)
 	}
 }
 
@@ -268,6 +286,7 @@ type observationResourceOpening struct {
 	progress    []workers.ProgressPublisher
 	submissions []recordings.SubmissionRecorder
 	dispatches  []recordings.DispatchRecorder
+	projectors  []factory.WorldStateProjector
 }
 
 func (opening *observationResourceOpening) Open(
@@ -296,7 +315,7 @@ func (opening *observationResourceOpening) Open(
 	_ []factory.SubmissionHook,
 	_ factory.CompletionDeliveryPlanner,
 	mutations factory.PetriMutationRecorder,
-	_ factory.WorldStateProjector,
+	projector factory.WorldStateProjector,
 	_ recordings.RuntimeScopeService,
 	worker workers.Service,
 	_ workersessions.Service,
@@ -307,6 +326,7 @@ func (opening *observationResourceOpening) Open(
 	opening.mutations = append(opening.mutations, mutations)
 	opening.submissions = append(opening.submissions, submission)
 	opening.dispatches = append(opening.dispatches, dispatch)
+	opening.projectors = append(opening.projectors, projector)
 	opening.progress = append(opening.progress, worker.(interface {
 		RuntimeProgressPublisher() workers.ProgressPublisher
 	}).RuntimeProgressPublisher())
@@ -852,7 +872,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, nil, nil, nil, nil, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -966,7 +986,6 @@ func assembleTestInitialOpening(
 		nil,
 		nil,
 		observe,
-		nil,
 		dir,
 		dir,
 		dir,
@@ -1012,7 +1031,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		snapshots = append(snapshots, source)
 		return nil, nil
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, snapshot, nil, nil, nil, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, snapshot, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

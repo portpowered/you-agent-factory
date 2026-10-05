@@ -850,14 +850,14 @@ func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime
 func TestNewAssemblyRetainsSelectedBundleOpening(t *testing.T) {
 	opening := &BundleOpening{}
 	sidecars := NewSidecarOpening(nil, platformclock.Real{})
-	assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, &assemblyWorldStateOpening{}, nil, nil, nil, nil, nil, nil, nil, nil)
+	assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, &assemblyWorldStateOpening{}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil || assembly.bundleOpening == nil {
 		t.Fatalf("NewAssembly = %#v, %v; want selected opening", assembly, err)
 	}
-	if assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+	if assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
 		t.Fatalf("NewAssembly without recordings = %#v, %v; want required dependency failure", assembly, err)
 	}
-	if assembly, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+	if assembly, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
 		t.Fatalf("NewAssembly without opening = %#v, %v; want required dependency failure", assembly, err)
 	}
 }

@@ -214,7 +214,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.providerIdentities,
 			r.resolveClock,
 			r.factoryRuntimeAssembler,
-			r.recordingsRuntime,
 		)
 		if err != nil {
 			return runtimeProducts{}, err
@@ -420,7 +419,6 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			r.factorySessionsRuntimeAssembly.InferenceProgressPublisherFactory(opening.logger),
 			r.factorySessionsRuntimeAssembly.DispatchCompletionObserverFactory(),
 			opening.observations,
-			opening.recordingProjections.ReconstructFactoryWorldState,
 			opening.configured.Definition.Directory,
 			opening.root.FactoryRootDir,
 			opening.configured.Definition.ExecutionBaseDir,

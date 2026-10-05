@@ -176,7 +176,6 @@ func openPortableReplayDurableOwner(
 	providerIdentities factorysessions.ProviderIdentityResolver,
 	resolveClock factoryruntime.ClockResolver,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
-	recordingsRuntime recordings.RuntimeScopeService,
 ) (durableexecution.Service, func() error, error) {
 	if durableExecutionFactory == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution operation is required")
@@ -218,7 +217,6 @@ func openPortableReplayDurableOwner(
 				workerService,
 				providerForDurable,
 				providerCommandRunner,
-				recordingsRuntime,
 			)
 			// A failed opening can still own artifacts. Register them before
 			// forwarding the error; the durable owner must stop before release.
@@ -241,7 +239,6 @@ func preparePortableReplayRuntime(
 	workerService workers.Service,
 	providerForDurable providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
-	recordingsRuntime recordings.RuntimeScopeService,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	opening, err := assemblePortableReplayRuntime(
 		ctx,
@@ -251,7 +248,6 @@ func preparePortableReplayRuntime(
 		logger,
 		factoryRuntimeAssembler,
 		durableOwner,
-		recordingsRuntime,
 	)
 	if err != nil {
 		return opening, err
@@ -332,17 +328,9 @@ func assemblePortableReplayRuntime(
 	logger *zap.Logger,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
 	durableOwner durableexecution.Service,
-	recordingsRuntime recordings.RuntimeScopeService,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	if factoryRuntimeAssembler == nil {
 		return nil, fmt.Errorf("construct portable replay runtime: Factory Runtime assembler is required")
-	}
-	if recordingsRuntime == nil {
-		return nil, fmt.Errorf("construct portable replay runtime: Recordings runtime scope is required")
-	}
-	projection := recordingsRuntime.Projection()
-	if projection == nil {
-		return nil, fmt.Errorf("construct portable replay runtime: Recordings projection is unavailable")
 	}
 	mutationOwner, ok := durableOwner.(interface {
 		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
@@ -388,7 +376,6 @@ func assemblePortableReplayRuntime(
 		nil,
 		nil,
 		observations,
-		projection.ReconstructFactoryWorldState,
 		configured.Definition.Directory,
 		root.FactoryRootDir,
 		configured.Definition.ExecutionBaseDir,

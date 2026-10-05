@@ -526,7 +526,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v145 := provideFactoryRuntimeSubmissionRecorder(edges2)
 	v146 := provideFactoryRuntimeDispatchRecorder(edges2)
-	v147, err := provideFactoryRuntimeAssembly(v118, v133, v16, v142, v143, initialFactorySnapshotFactory, v75, v144, v73, workersMockCommandRunnerFactory, v145, v146, root)
+	v147, err := provideFactoryRuntimeAssembly(v118, v133, v16, v142, v143, initialFactorySnapshotFactory, v75, v144, v73, workersMockCommandRunnerFactory, v145, v146, root, worldStateProjector)
 	if err != nil {
 		return nil, err
 	}
