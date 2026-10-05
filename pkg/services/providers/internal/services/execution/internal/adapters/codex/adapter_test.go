@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"reflect"
 	"testing"
 
@@ -391,7 +392,7 @@ func countPhase(progress []providers.ExecuteProgress, phase string) int {
 
 func newCodexRoot(t *testing.T, effect codex.Effect) providers.Service {
 	t.Helper()
-	catalog, err := catalogwire.NewService()
+	catalog, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,9 +403,21 @@ func newCodexRoot(t *testing.T, effect codex.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalog, executionService, disabledACP{}, nil, logging.NoopLogger{}, disabledACP{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return root
+}
+
+// disabledACP is an inert native-only fixture. Root routing cannot dispatch
+// into its unused ACP operations; Close is an explicit completed capability.
+type disabledACP struct{ acp.Service }
+
+func (disabledACP) Resolve(providers.ID) (providers.ID, bool) { return "", false }
+func (disabledACP) Integrations() []providers.ACPIntegration  { return nil }
+func (disabledACP) Close(context.Context) error               { return nil }
+
+func (disabledACP) Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP provider continuation is unavailable"}
 }

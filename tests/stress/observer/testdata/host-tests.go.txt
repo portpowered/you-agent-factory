@@ -1,0 +1,82 @@
+
+func TestInProcessObserverHostLifecycle(t *testing.T) {
+	t.Parallel()
+	host := newTestHost(t)
+	identity := fmt.Sprintf("instance_host:%p", host)
+	t.Cleanup(func() { baselineobservation.Unregister(identity) })
+	currentFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
+	current := startReadyHostedHandle(t, host, currentFactory, "observer-current")
+	t.Cleanup(func() {
+		if !current.Completed() {
+			_ = host.Stop(current)
+		}
+	})
+	snapshot, err := baselineobservation.CaptureOwner(identity)
+	if err != nil || snapshot.Host.HandleCount != 1 || snapshot.Host.Handles[0].Key != "observer-current" || snapshot.Host.Handles[0].HandleIdentity != fmt.Sprintf("%p", current) {
+		t.Fatalf("current snapshot: %#v, %v", snapshot, err)
+	}
+	snapshot.Host.Handles[0].Key = "mutated-copy"
+	replacementFactory := newLifecycleControlFactory(t, interfaces.FactoryStateRunning)
+	replacement, err := host.Replace(instancehost.ReplaceRequest{Current: current, Replacement: testBundle(replacementFactory, "observer-replacement"), ServiceContext: t.Context(), ReadinessContext: t.Context()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if !replacement.Completed() {
+			_ = host.Stop(replacement)
+		}
+	})
+	snapshot, err = baselineobservation.CaptureOwner(identity)
+	if err != nil || snapshot.Host.HandleCount != 1 || snapshot.Host.Handles[0].Key != "observer-replacement" || snapshot.Host.Handles[0].HandleIdentity != fmt.Sprintf("%p", replacement) {
+		t.Fatalf("replacement snapshot: %#v, %v", snapshot, err)
+	}
+	// Replacement retires the registry entry, not necessarily the old run loop.
+	if err := host.lifecycle.Stop(current.(*factoryhost.Handle)); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.Stop(replacement); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = baselineobservation.CaptureOwner(identity)
+	if err != nil || snapshot.Host.HandleCount != 0 {
+		t.Fatalf("joined snapshot: %#v, %v", snapshot, err)
+	}
+}
+
+func TestInProcessObserverHostConcurrentReads(t *testing.T) {
+	t.Parallel()
+	host := newTestHost(t)
+	identity := fmt.Sprintf("instance_host:%p", host)
+	t.Cleanup(func() { baselineobservation.Unregister(identity) })
+	done := make(chan struct{})
+	var readers sync.WaitGroup
+	readers.Add(1)
+	go func() {
+		defer readers.Done()
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			snapshot, err := baselineobservation.CaptureOwner(identity)
+			if err != nil || snapshot.Host.HandleCount != len(snapshot.Host.Handles) {
+				t.Errorf("inconsistent snapshot: %#v, %v", snapshot, err)
+				return
+			}
+		}
+	}()
+	for i := 0; i < 12; i++ {
+		handle, err := host.Start(t.Context(), testBundle(newLifecycleControlFactory(t, interfaces.FactoryStateRunning), fmt.Sprintf("observer-%d", i)))
+		if err != nil {
+			t.Error(err)
+			break
+		}
+		if err := host.Stop(handle); err != nil {
+			t.Error(err)
+			break
+		}
+	}
+	close(done)
+	readers.Wait()
+}

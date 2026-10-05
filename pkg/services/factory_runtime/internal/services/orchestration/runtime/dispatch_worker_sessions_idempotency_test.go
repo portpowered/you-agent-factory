@@ -842,11 +842,10 @@ func runInvokeWorker(
 	return request, got.result
 }
 
-func TestMergeRecordedObservationsKeepsTerminalTimingAcrossRestart(t *testing.T) {
+func TestMergeRecordedObservationsKeepsHistoricalOnlyTerminalTimingAcrossRestart(t *testing.T) {
 	recordedStarted := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 	recordedEnded := recordedStarted.Add(2 * time.Second)
 	recordedDuration := 2 * time.Second
-	processStarted := recordedEnded.Add(30 * time.Second)
 
 	merged := mergeRecordedObservations(
 		[]workersessions.Observation{{
@@ -857,11 +856,7 @@ func TestMergeRecordedObservationsKeepsTerminalTimingAcrossRestart(t *testing.T)
 			Duration:        &recordedDuration,
 			DurationBasis:   workersessions.DurationBasisRecordedTimestamps,
 		}},
-		[]workersessions.Observation{{
-			WorkerSessionID: "worker-terminal",
-			State:           workersessions.StateCompleted,
-			StartedAt:       &processStarted,
-		}},
+		nil,
 	)
 	if len(merged) != 1 || merged[0].StartedAt == nil || !merged[0].StartedAt.Equal(recordedStarted) ||
 		merged[0].EndedAt == nil || !merged[0].EndedAt.Equal(recordedEnded) ||

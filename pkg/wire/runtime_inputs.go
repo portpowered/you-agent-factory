@@ -64,7 +64,9 @@ func provideRunInputPathInspector() platformfilesystem.PathInspector {
 type runtimeArtifactClock func() time.Time
 type runtimeArtifactIDGenerator func() string
 
-func provideRuntimeArtifactClock() runtimeArtifactClock             { return time.Now }
+func provideRuntimeArtifactClock(source platformclock.Source) runtimeArtifactClock {
+	return source.Now
+}
 func provideRuntimeArtifactIDGenerator() runtimeArtifactIDGenerator { return uuid.NewString }
 
 func provideRuntimeLoggerFactory() factoryruntime.RuntimeLoggerFactory {
@@ -372,15 +374,20 @@ func provideAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocato
 }
 
 func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
-	clock := edges.AgyPTYClock
-	if clock == nil {
-		clock = platformclock.Real{}
+	clock, scheduler := edges.Clock, edges.ProcessScheduler
+	// BuildProcess normalizes the default pair once. A specialized clock
+	// replaces only the capabilities it supplies, preserving explicit waits.
+	if edges.AgyPTYClock != nil {
+		clock = edges.AgyPTYClock
+		if specialized, ok := edges.AgyPTYClock.(platformclock.TimerSource); ok {
+			scheduler = specialized
+		}
 	}
 	host := edges.AgyPTYHost
 	if host == nil {
 		host = platformpty.NewHost()
 	}
-	return providerswire.NewAgyPTYAllocator(host, clock)
+	return providerswire.NewAgyPTYAllocator(host, clock, scheduler)
 }
 
 func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {
@@ -616,9 +623,8 @@ func (resolver workerSessionsFactorySessionScopeResolver) WorkerSessionsObservat
 }
 
 // provideWatchReconnectWait selects the scheduler once without starting timers.
-// T21 adopts the normalized process scheduler at this composition boundary.
-func provideWatchReconnectWait() workcli.ReconnectWait {
-	return bindWatchReconnectWait(platformclock.Real{})
+func provideWatchReconnectWait(scheduler platformclock.TimerSource) workcli.ReconnectWait {
+	return bindWatchReconnectWait(scheduler)
 }
 
 func bindWatchReconnectWait(scheduler platformclock.TimerSource) workcli.ReconnectWait {

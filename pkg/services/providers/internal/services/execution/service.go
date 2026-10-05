@@ -94,8 +94,8 @@ func (failure AttemptFailure) Unwrap() []error {
 	return causes
 }
 
-// Registration binds one canonical Providers identity to one private adapter
-// attempt.
+// Registration binds one canonical Providers identity to completed ordinary and
+// continuation attempts. Composition supplies both operations explicitly.
 type Registration struct {
 	Provider providers.ID
 	Attempt  Attempt

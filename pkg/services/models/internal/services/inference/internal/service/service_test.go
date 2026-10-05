@@ -552,7 +552,7 @@ func newInferenceServiceWithHost(
 	if assets == nil {
 		assets = availableInferenceAssets{}
 	}
-	var executionDeadline func() time.Duration
+	executionDeadline := func() time.Duration { return 30 * time.Minute }
 	if len(deadline) > 0 {
 		executionDeadline = deadline[0]
 	}

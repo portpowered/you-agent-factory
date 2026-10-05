@@ -5,8 +5,6 @@
 # Established rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
 application-graph-test|tests/integration/models_test|pkg/wire
-domain-transport-test|pkg/services/costs/internal/service|pkg/transports/http/client
-domain-transport-test|pkg/services/costs/internal/service|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/apitypes
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping
@@ -119,18 +117,15 @@ service-construction-test|pkg/services/factory_sessions/internal/service|pkg/ser
 service-construction-test|pkg/services/factory_sessions_test|pkg/services/work.NewInvocationPolicyService
 service-construction-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire.NewProjectionService
 service-construction-test|pkg/services/factory_visualization/wire|pkg/services/recordings/wire.NewProjectionService
-service-construction-test|pkg/services/operator_settings/transports/cli/initsetup_test|pkg/services/providers/wire.NewService
 service-construction-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/worker_sessions/wire_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire.NewService
-service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/providers/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions.NewProviderSessionObservationPublisher
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire.NewService
 service-construction-test|pkg/transports/acp/internal/stdio|pkg/services/chat_sessions/wire.NewService
 service-construction-test|tests/functional/recordings/root_composition_test|pkg/services/recordings/transports/cli.New
 service-construction-test|tests/functional/sessions_test|pkg/services/factory_sessions/wire.NewLiveChangeCoordinator
 service-construction-test|tests/functional/workers/inference_test|pkg/services/recordings/wire.NewWorkerRecordingFileWriter
-service-construction-test|tests/functional/workers/invoke_continue|pkg/services/providers/wire.NewService
 service-construction|pkg/services/factory_runtime/internal|pkg/services/worker_sessions.NewProviderSessionObservationPublisher
 service-construction|pkg/services/factory_sessions/internal/execution|pkg/services/factory_runtime.NewWorkflowSourceReader
 service-construction|pkg/services/factory_sessions/internal/sessionservice|pkg/services/work.NewInvocationPolicyService
@@ -1874,8 +1869,6 @@ testsleep-deadline-test|pkg/platform/metrics|pkg/platform/metrics/runtime_metric
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_cancellation_unix_test.go::TestExecCommandRunner_ContextCancelReturnsWhenDescendantKeepsPipeOpen::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::2
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::1
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::2
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_grace_unix_test.go::reapCommandHelperLeader::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_test.go::TestExecCommandRunner_ContextDeadlineReturnsSystemError::deadline::1
 testsleep-deadline-test|pkg/platform/taskgroup|pkg/platform/taskgroup/task_group_test.go::TestGroupDoneClosesAfterEveryTaskReturnsRegardlessOfOutcome::deadline::1
@@ -2068,9 +2061,7 @@ testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/servic
 testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/services/models/internal/backends/localai/tts_protocol_test.go::TestPinnedTTSBackendPreservesCancellationAndReadinessClassification::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/services/models/internal/backends/localai/tts_protocol_test.go::TestPinnedTTSBackendPreservesCancellationAndReadinessClassification::deadline::2
 testsleep-deadline-test|pkg/services/models/internal/effects|pkg/services/models/internal/effects/asr_live_correlation_signals_test.go::testSignalContext::deadline::1
-testsleep-deadline-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/supervisor_test.go::TestCatalogHost_SupervisedBackend_UnloadRejectsLoadingRuntime::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_inference_test.go::awaitCloseRaceSignal::deadline::1
-testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_inference_test.go::TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_scoped_pull_test.go::TestRootRemoveModelAssetsSerializesCacheRemovalAgainstLeaseAcquisition::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/service|pkg/services/models/internal/service/runtime_factory_scoped_pull_test.go::TestRootRemoveModelAssetsSerializesCacheRemovalAgainstLeaseAcquisition::deadline::2
 testsleep-deadline-test|pkg/services/models/internal/services/assets/internal/service|pkg/services/models/internal/services/assets/internal/service/generic_cache_concurrency_test.go::TestPrepareGenericAssetsAllowsDistinctCrossServiceTransfersToOverlap::deadline::1
@@ -2512,13 +2503,6 @@ testsleep-sleep-test|pkg/services/factory_visualization/transports/http_test|pkg
 testsleep-sleep-test|pkg/services/factory_visualization/transports/http_test|pkg/services/factory_visualization/transports/http/request_context_test.go::TestHandleObserve_CanceledDuringRootCallCompletesWithoutHang::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go::TestNewRootConstructsInertRoot::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go::TestNewRootConstructsInertRoot::sleep::2
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/diagnostics_test.go::TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/diagnostics_test.go::TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric::sleep::2
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/lease_policy_test.go::TestCatalogHost_IdleUnloadDoesNotEvictActiveLease::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/lease_policy_test.go::TestCatalogHost_IdleUnloadStopsRuntimeAfterLastLeaseReleased::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/managed_runtime_compat_test.go::TestInspectReadiness_ReportsSupervisedRuntimeCrash::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/supervisor_test.go::TestCatalogHost_SupervisedBackend_CancellationStopsManagedProcess::sleep::1
-testsleep-sleep-test|pkg/services/models/internal/legacyhost|pkg/services/models/internal/legacyhost/supervisor_test.go::TestCatalogHost_SupervisedBackend_PostStartCrashSurfacesFailedReadiness::sleep::1
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric::sleep::1
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric::sleep::2
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostPostStartCrashSurfacesFailedReadinessOnInspect::sleep::1

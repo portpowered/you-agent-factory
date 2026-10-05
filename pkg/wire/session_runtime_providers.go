@@ -161,19 +161,14 @@ func provideConfiguredProvidersService(
 	integrations []operatorsettings.ACPIntegration,
 	workersRunner platformprocess.CommandRunner,
 ) (providers.Service, error) {
-	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
+	agyPTYEffect, err := provideProvidersAgyPTYEffect(edges)
 	if err != nil {
 		return nil, err
 	}
-	options := []providerswire.Option{
-		providerswire.WithAgyPTY(agyPTYPlatform),
-		providerswire.WithAgyCommandClock(effectiveProviderCommandClock(edges)),
-		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
-		providerswire.WithExecutableLocator(provideProvidersExecutableLocator(edges)),
-		providerswire.WithStdioPipeFactory(provideProvidersStdioPipeFactory(edges)),
-		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
-		providerswire.WithCatalogCapabilityOverrides(edges.ProviderCatalogCapabilityOverrides...),
-		providerswire.WithRegistrations(edges.ProviderRegistrations...),
+	configuration := providerswire.Configuration{
+		ACPIntegrations:  projectACPIntegrations(integrations),
+		CatalogOverrides: edges.ProviderCatalogCapabilityOverrides,
+		Registrations:    edges.ProviderRegistrations,
 	}
 	if workersRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
@@ -181,10 +176,8 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithWorkersCommandRunner(
-			workerswire.NewProviderCommandRunner(loggedRunner),
-		))
-		return newConfiguredProvidersService(options, loggedRunner)
+		return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	if edges.ProviderCommandRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
@@ -192,11 +185,8 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		options = append(options, providerswire.WithWorkersCommandRunner(
-			workerswire.NewProviderCommandRunner(loggedRunner),
-		))
-		return newConfiguredProvidersService(options, loggedRunner)
+		return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
@@ -207,11 +197,8 @@ func provideConfiguredProvidersService(
 		provideWorkersAgentToolFileSystem(edges),
 	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	options = append(options, providerswire.WithWorkersCommandRunner(
-		workerswire.NewProviderCommandRunner(loggedRunner),
-	))
-	return newConfiguredProvidersService(options, loggedRunner)
+	return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 }
 
 func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess.ExecutableLocator {
@@ -246,6 +233,14 @@ func providerCommandRunnerWithLogging(
 
 func effectiveProviderCommandClock(edges serviceedges.Edges) platformclock.Source {
 	return edges.Clock
+}
+
+// A Now-only override controls duration views without acquiring timer capability.
+func effectiveProviderScheduler(edges serviceedges.Edges) platformclock.TimerSource {
+	if scheduler, ok := edges.Clock.(platformclock.TimerSource); ok {
+		return scheduler
+	}
+	return platformclock.Real{}
 }
 
 func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []providers.ACPIntegration {
@@ -689,9 +684,6 @@ func provideCostsQuery(
 func provideCostsQueryCapability(
 	query costs.CostsQuery,
 ) (processcontract.RuntimeCostsQueryCapability, error) {
-	if query == nil {
-		return nil, errors.New("construct runtime costs query capability: query is required")
-	}
 	return runtimeCostsQueryCapability{query: query}, nil
 }
 
@@ -1024,12 +1016,11 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 	return platformfilesystem.Local{}
 }
 
-// provideProvidersAgyPTYPlatform projects the Providers-owned PTY effect into
-// the Workers-private invocation seam at the canonical composition boundary.
-func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
+// provideProvidersAgyPTYEffect completes the native adapter before root assembly.
+func provideProvidersAgyPTYEffect(edges serviceedges.Edges) (providerswire.AgyEffect, error) {
 	allocator, err := provideProvidersAgyPTYAllocator(edges)
 	if err != nil {
-		return providerswire.AgyPTYPlatformDependencies{}, err
+		return nil, err
 	}
 	executableLocator := edges.WorkersExecutableLocator
 	if executableLocator == nil {
@@ -1039,11 +1030,10 @@ func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.Agy
 	if executableInspector == nil {
 		executableInspector = platformfilesystem.Local{}
 	}
-	return providerswire.AgyPTYPlatformDependencies{
-		Allocator: allocator,
-		Locator:   executableLocator,
-		Inspector: executableInspector,
-	}, nil
+	return providerswire.NewAgyPTYEffect(
+		allocator, executableLocator, executableInspector,
+		effectiveProviderCommandClock(edges), providerswire.AgyPTYPolicy{},
+	), nil
 }
 
 func provideWorkersFactoryDocsFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileTree {

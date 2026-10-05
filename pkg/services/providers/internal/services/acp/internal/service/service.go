@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -52,6 +54,8 @@ type Service struct {
 	newCommand   platformprocess.CommandFactory
 	locator      platformprocess.ExecutableLocator
 	stdioPipes   platformprocess.StdioPipeFactory
+	scheduler    platformclock.TimerSource
+	logger       logging.Logger
 }
 
 var _ acp.ContinuationService = (*Service)(nil)
@@ -66,12 +70,16 @@ func New(
 	newCommand platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
+	scheduler platformclock.TimerSource,
+	logger logging.Logger,
 ) (acp.ContinuationService, error) {
 	service := &Service{
 		providers:  map[providers.ID]*provider{},
 		newCommand: newCommand,
 		locator:    locator,
 		stdioPipes: stdioPipes,
+		scheduler:  scheduler,
+		logger:     logger,
 	}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
@@ -140,12 +148,12 @@ func (service *Service) run(
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
-	defer attempt.release()
+	defer service.releaseAttempt(attempt)
 	cwd, err := absoluteWorkingDirectory(request.WorkingDirectory)
 	if err != nil {
 		return providers.ExecuteResult{}, invalidFailure(err)
 	}
-	return attempt.execute(ctx, cwd, openCodeEnvironment(canonical, requestEnvironment(request)), resume)
+	return service.executeAttempt(ctx, attempt, cwd, openCodeEnvironment(canonical, requestEnvironment(request)), resume)
 }
 
 // resolveProvider resolves id (including an accepted alias) to its canonical
@@ -221,7 +229,7 @@ func (service *Service) Close(ctx context.Context) error {
 	service.mu.Unlock()
 	var first error
 	for _, target := range retired {
-		if err := target.stopAttempts(ctx); err != nil && first == nil {
+		if err := service.stopAttempts(ctx, target); err != nil && first == nil {
 			first = fmt.Errorf("close ACP provider %q: %w", target.id, err)
 		}
 	}
@@ -284,7 +292,7 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 			next[id] = current
 			continue
 		}
-		next[id] = newProvider(id, values[id], command, service.newCommand, service.locator, service.stdioPipes)
+		next[id] = newProvider(id, values[id], command)
 		if current := service.providers[id]; current != nil {
 			retired = append(retired, current)
 		}
@@ -303,7 +311,7 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 	// replacement never reaches this point.
 	var first error
 	for _, target := range retired {
-		if err := target.stopAttempts(ctx); err != nil && first == nil {
+		if err := service.stopAttempts(ctx, target); err != nil && first == nil {
 			first = fmt.Errorf("drain ACP provider %q: %w", target.id, err)
 		}
 	}
@@ -341,9 +349,6 @@ type provider struct {
 	id          providers.ID
 	integration providers.ACPIntegration
 	command     Command
-	newCommand  platformprocess.CommandFactory
-	locator     platformprocess.ExecutableLocator
-	stdioPipes  platformprocess.StdioPipeFactory
 
 	mu sync.Mutex
 	// attempts is registration-ordered so Claim resolves an ambiguous
@@ -360,17 +365,11 @@ func newProvider(
 	id providers.ID,
 	integration providers.ACPIntegration,
 	command Command,
-	newCommand platformprocess.CommandFactory,
-	locator platformprocess.ExecutableLocator,
-	stdioPipes platformprocess.StdioPipeFactory,
 ) *provider {
 	return &provider{
 		id:          id,
 		integration: integration.Clone(),
 		command:     Command{Name: command.Name, Args: append([]string(nil), command.Args...)},
-		newCommand:  newCommand,
-		locator:     locator,
-		stdioPipes:  stdioPipes,
 	}
 }
 
@@ -398,12 +397,14 @@ func (target *provider) matches(integration providers.ACPIntegration, command Co
 func (target *provider) newAttempt(request providers.ExecuteRequest) *attempt {
 	lifecycle, cancelLifecycle := context.WithCancel(context.Background())
 	owned := &attempt{
-		provider:        target,
-		request:         request,
-		lifecycle:       lifecycle,
-		cancelLifecycle: cancelLifecycle,
-		startupSettled:  make(chan struct{}),
-		teardownChanged: make(chan struct{}),
+		provider:          target,
+		request:           request,
+		lifecycle:         lifecycle,
+		cancelLifecycle:   cancelLifecycle,
+		startupSettled:    make(chan struct{}),
+		teardownChanged:   make(chan struct{}),
+		executionReleased: make(chan struct{}),
+		completion:        make(chan struct{}),
 	}
 	target.mu.Lock()
 	target.attempts = append(target.attempts, owned)
@@ -428,7 +429,8 @@ func (target *provider) claim(attemptID string) (acp.Generation, bool) {
 }
 
 // stopAttempts retires every attempt registered to this provider and then
-// finishes tearing each one down. Cancellation is deliberately a separate pass:
+// initiates bounded teardown for each one. Outstanding joins retain their owner.
+// Cancellation is deliberately a separate pass:
 // an attempt whose teardown has to wait for a peer or an in-flight startup must
 // not hold back the cancellation of its siblings, or one stuck attempt would
 // leave every other same-provider attempt running after this returned.
@@ -438,7 +440,7 @@ func (target *provider) claim(attemptID string) (acp.Generation, bool) {
 // neither double-stop an attempt that is already finishing on its own nor leave
 // one unfinished. An attempt that never launched a process completes here
 // immediately.
-func (target *provider) stopAttempts(ctx context.Context) error {
+func (service *Service) stopAttempts(ctx context.Context, target *provider) error {
 	target.mu.Lock()
 	live := target.attempts
 	target.attempts = nil
@@ -451,7 +453,7 @@ func (target *provider) stopAttempts(ctx context.Context) error {
 	}
 	var first error
 	for _, current := range owned {
-		if err := current.stop(ctx); err != nil && first == nil {
+		if err := service.stopAttempt(ctx, current); err != nil && first == nil {
 			first = err
 		}
 	}
@@ -519,9 +521,14 @@ type attempt struct {
 	// its own context ends during startup, and the attempt's own release is
 	// then the one caller that must finish the teardown.
 	teardownOwner bool
-	// teardownDone records that nothing is owned anymore - because a teardown
-	// terminated the published process, or because startup settled without ever
-	// publishing one - so no later caller has anything left to do.
+	// Stop completion is bounded; resource completion can remain outstanding.
+	stopSettled       bool
+	stopErr           error
+	completion        chan struct{}
+	executionReleased chan struct{}
+	executionRelease  sync.Once
+	// teardownDone records actual completion of parent, protocol and progress
+	// work, or startup settling without publication. Stop expiry is distinct.
 	teardownDone bool
 	// teardownChanged is closed and replaced on every change of the two
 	// decisions above, so a caller waiting for a teardown it lost wakes for the
@@ -540,32 +547,35 @@ type attempt struct {
 // tree. Teardown and execution may both hold this bundle concurrently, so every
 // field is written before publication and never written again.
 type attemptHandles struct {
-	cmd        *exec.Cmd
-	stdin      io.WriteCloser
-	stdout     io.ReadCloser
-	connection *acpsdk.ClientSideConnection
-	client     *client
-	finished   chan error
-	tree       platformprocess.SubprocessTree
+	cmd            *exec.Cmd
+	stdin          io.WriteCloser
+	stdout         io.ReadCloser
+	connection     *acpsdk.ClientSideConnection
+	client         *client
+	finished       chan struct{}
+	stdio          platformprocess.StdioChannel
+	protocolJoined <-chan struct{}
+	tree           platformprocess.SubprocessTree
 }
 
-// release unregisters this attempt and completes the teardown of the process it
-// owns. It runs on every terminal path of an Execute or Continue, including an
+// release unregisters this attempt and initiates bounded process teardown.
+// A retained owner observes eventual completion when resources remain outstanding. It runs on every terminal path of an Execute or Continue, including an
 // unexpected unwind.
 //
 // Teardown is claimed, not assumed: when a Close or Configure already retired
 // this attempt, either that teardown still owns it - and release waits for the
 // completion it will reach - or that teardown gave it back because its own
 // context ended while startup was still in flight, and release is the caller
-// that must complete it. Releasing an attempt can therefore never leave a
-// published process running, however its retirement was decided.
-func (a *attempt) release() {
+// that must stop it. A parent still running after a kill-wait expiry remains
+// owned by the eventual completion goroutine.
+func (service *Service) releaseAttempt(a *attempt) {
+	a.executionRelease.Do(func() { close(a.executionReleased) })
 	a.provider.unregister(a)
 	// Retirement only refuses later launches; the attempt's own terminal path
 	// always offers to complete the teardown, and the claim below decides
 	// whether this call is the one that performs it.
 	a.retire()
-	_ = a.stop(context.Background())
+	_ = service.stopAttempt(context.Background(), a)
 }
 
 // retire cancels this attempt's own lifecycle, refuses any later launch, and
@@ -643,8 +653,9 @@ func (target *provider) unregister(owned *attempt) {
 // execute runs one complete request-owned ACP attempt. Its defer makes every
 // early return below leave nothing owned behind: the caller releases this
 // attempt, which terminates this attempt's process.
-func (a *attempt) execute(
+func (service *Service) executeAttempt(
 	ctx context.Context,
+	a *attempt,
 	cwd string,
 	environment []string,
 	resume *providers.SessionRef,
@@ -660,12 +671,12 @@ func (a *attempt) execute(
 	if err := ctx.Err(); err != nil {
 		return providers.ExecuteResult{}, nativeFailure(err)
 	}
-	if err := a.provider.preflight(ctx, cwd, environment); err != nil {
+	if err := service.preflight(ctx, a.provider, cwd, environment); err != nil {
 		return providers.ExecuteResult{}, err
 	}
 	prompt := promptBlocks(request)
 
-	initialized, err := a.start(ctx, cwd, environment)
+	initialized, err := service.startAttempt(ctx, a, cwd, environment)
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
@@ -766,11 +777,11 @@ const (
 	piAcpStartupInfoField = "startupInfo"
 )
 
-func (target *provider) preflight(ctx context.Context, cwd string, environment []string) error {
+func (service *Service) preflight(ctx context.Context, target *provider, cwd string, environment []string) error {
 	if target.id != providers.IDPi {
 		return nil
 	}
-	return piPreflight(ctx, target.newCommand, target.locator, cwd, environment)
+	return piPreflight(ctx, service.newCommand, service.locator, cwd, environment, service.scheduler, service.logger)
 }
 
 // pi-acp replays this session metadata as an agent message outside the prompt
@@ -869,10 +880,10 @@ func (a *attempt) promptWithWindow(
 	return response, err
 }
 
-func (target *provider) resolveLaunchName() (string, error) {
+func (service *Service) resolveLaunchName(target *provider) (string, error) {
 	name := target.command.Name
 	if target.id == providers.ID("pi") && name == "you" && slices.Equal(target.command.Args, []string{"pi-acp"}) {
-		current, ok := target.locator.(platformprocess.CurrentExecutableLocator)
+		current, ok := service.locator.(platformprocess.CurrentExecutableLocator)
 		if !ok {
 			return "", dependencyFailure("ACP current executable locator is unavailable")
 		}
@@ -885,8 +896,8 @@ func (target *provider) resolveLaunchName() (string, error) {
 		}
 		return resolved, nil
 	}
-	if target.locator != nil {
-		if _, err := target.locator.LookPath(name); err != nil {
+	if service.locator != nil {
+		if _, err := service.locator.LookPath(name); err != nil {
 			return "", providers.ExecuteFailure{
 				Kind:    providers.ExecuteFailureKindDependency,
 				Message: fmt.Sprintf("ACP executable %q is unavailable", name),
@@ -919,11 +930,11 @@ func classifyNegotiatedVersion(id providers.ID, initialized acpsdk.InitializeRes
 // as a dependency failure rather than defaulted here, so this service never
 // selects a pipe implementation for itself. Every attempt gets its own channel,
 // so no two attempts can ever read or write through the same pipe.
-func (target *provider) newACPStdio() (platformprocess.StdioChannel, error) {
-	if target.stdioPipes == nil {
+func (service *Service) newACPStdio() (platformprocess.StdioChannel, error) {
+	if service.stdioPipes == nil {
 		return nil, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP standard stream channel is unavailable"}
 	}
-	channel, err := target.stdioPipes()
+	channel, err := service.stdioPipes()
 	if err != nil {
 		return nil, dependencyFailure(err.Error())
 	}
@@ -943,7 +954,7 @@ func (target *provider) newACPStdio() (platformprocess.StdioChannel, error) {
 // handle is ever handed out ahead of the process that owns it - before the
 // handshake begins, and the defer settles startup on every path, so a teardown
 // racing startup is released either way.
-func (a *attempt) start(ctx context.Context, cwd string, environment []string) (acpsdk.InitializeResponse, error) {
+func (service *Service) startAttempt(ctx context.Context, a *attempt, cwd string, environment []string) (acpsdk.InitializeResponse, error) {
 	request, id := a.request, a.provider.id
 	if !a.beginLaunch() {
 		// Retirement already refused this launch, so there is no process for
@@ -952,17 +963,17 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 		return acpsdk.InitializeResponse{}, dependencyFailure(fmt.Sprintf("ACP provider %q attempt was retired before it started", id))
 	}
 	defer a.settleStartup()
-	if a.provider.newCommand == nil {
+	if service.newCommand == nil {
 		return acpsdk.InitializeResponse{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
 	}
-	if a.provider.stdioPipes == nil {
+	if service.stdioPipes == nil {
 		return acpsdk.InitializeResponse{}, dependencyFailure("ACP standard stream channel is unavailable")
 	}
-	launchName, err := a.provider.resolveLaunchName()
+	launchName, err := service.resolveLaunchName(a.provider)
 	if err != nil {
 		return acpsdk.InitializeResponse{}, err
 	}
-	cmd := a.provider.newCommand(launchName, a.provider.command.Args...)
+	cmd := service.newCommand(launchName, a.provider.command.Args...)
 	if cmd == nil {
 		return acpsdk.InitializeResponse{}, dependencyFailure("ACP command factory returned nil")
 	}
@@ -972,7 +983,7 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 	// The parent-owned channel keeps the response reader independent of
 	// cmd.Wait: this process holds its own read end until the peer is retired,
 	// and releases only its copies of the child's ends once the start succeeds.
-	stdio, err := a.provider.newACPStdio()
+	stdio, err := service.newACPStdio()
 	if err != nil {
 		return acpsdk.InitializeResponse{}, err
 	}
@@ -984,14 +995,14 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 	}
 	stdio.Detach()
 	tree, _ := platformprocess.AttachSubprocessTree(cmd)
-	finished := make(chan error, 1)
-	go func() { finished <- cmd.Wait() }()
+	finished := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(finished) }()
 	requests, responses := stdio.Requests(), stdio.Responses()
 	client := &client{}
 	connection := acpsdk.NewClientSideConnection(client, requests, responses)
 	a.publish(&attemptHandles{
 		cmd: cmd, stdin: requests, stdout: responses,
-		connection: connection, client: client, finished: finished, tree: tree,
+		connection: connection, client: client, finished: finished, tree: tree, stdio: stdio, protocolJoined: connection.Joined(),
 	})
 	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
 		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
@@ -1005,7 +1016,7 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 		// finish, so the redacted stderr detail is captured instead of racing
 		// it. Retirement is deliberately not performed here: this failure keeps
 		// its original RPC cause, context and typed classification.
-		_ = a.stop(context.Background())
+		_ = service.stopAttempt(context.Background(), a)
 		return acpsdk.InitializeResponse{}, rpcFailure(ctx, "initialize", id, err, a.stderr.String(), request)
 	}
 	if version := classifyNegotiatedVersion(id, initialized); version != nil {
@@ -1027,7 +1038,7 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 // ends while startup is still in flight it hands the teardown back rather than
 // terminating nothing, which is what keeps a later spawned process owned even
 // when an external Close or Configure could not wait for it.
-func (a *attempt) stop(ctx context.Context) error {
+func (service *Service) stopAttempt(ctx context.Context, a *attempt) error {
 	owned, err := a.acquireTeardown(ctx)
 	if !owned {
 		// Another caller already completed this teardown, so nothing is owned;
@@ -1049,22 +1060,41 @@ func (a *attempt) stop(ctx context.Context) error {
 		a.completeTeardown()
 		return nil
 	}
-	defer a.completeTeardown()
-	return handles.terminate(ctx)
+	stopErr := service.terminate(ctx, handles)
+	a.stateMu.Lock()
+	a.stopSettled, a.stopErr = true, stopErr
+	a.signalTeardownLocked()
+	a.stateMu.Unlock()
+	// Keep one completion authority reachable even after a caller's wait expires.
+	go func() {
+		<-handles.finished
+		if handles.protocolJoined != nil {
+			<-handles.protocolJoined
+		}
+		<-a.executionReleased
+		if handles.client != nil {
+			handles.client.release()
+		}
+		platformprocess.CloseSubprocessTreeWithEffects(handles.cmd, handles.tree, service.scheduler, service.logger)
+		a.completeTeardown()
+	}()
+	return stopErr
 }
 
 // acquireTeardown elects the single caller that performs this attempt's process
 // teardown. owned is false, with a nil error, once teardown has completed,
-// because then this attempt owns nothing any caller could terminate. A caller
+// because then this attempt owns nothing any caller could terminate. Once stop
+// settles, later callers observe its retained disposition while joins stay owned. A caller
 // that finds another caller performing the teardown waits for that teardown to
 // complete or hand ownership back, so a handover is always picked up by exactly
 // one caller instead of being dropped between two.
 func (a *attempt) acquireTeardown(ctx context.Context) (bool, error) {
 	for {
 		a.stateMu.Lock()
-		if a.teardownDone {
+		if a.teardownDone || a.stopSettled {
+			err := a.stopErr
 			a.stateMu.Unlock()
-			return false, nil
+			return false, err
 		}
 		if !a.teardownOwner {
 			a.teardownOwner = true
@@ -1081,12 +1111,12 @@ func (a *attempt) acquireTeardown(ctx context.Context) (bool, error) {
 	}
 }
 
-// completeTeardown records that this attempt owns nothing further: either its
-// published process was terminated, or startup settled without ever publishing
-// one. It wakes every caller waiting to learn the teardown's outcome.
+// completeTeardown records that all published resources actually finished,
+// or startup settled without publishing any. It wakes waiting callers.
 func (a *attempt) completeTeardown() {
 	a.stateMu.Lock()
 	a.teardownOwner, a.teardownDone = false, true
+	close(a.completion)
 	a.signalTeardownLocked()
 	a.stateMu.Unlock()
 }
@@ -1135,35 +1165,38 @@ func (a *attempt) awaitStartup(ctx context.Context) (*attemptHandles, error) {
 // The bundle is immutable, so this can run while the attempt's own goroutine is
 // still issuing protocol calls: those calls fail against the closed stream and
 // the process, which is the outcome that ends this attempt.
-func (h *attemptHandles) terminate(ctx context.Context) error {
+func (service *Service) terminate(ctx context.Context, h *attemptHandles) error {
 	if h == nil {
 		return nil
 	}
 	_ = h.stdin.Close()
 	var stopErr error
 	exited := false
+	grace := service.scheduler.NewTimer(500 * time.Millisecond)
+	defer grace.Stop()
 	select {
 	case <-h.finished:
 		exited = true
 	case <-ctx.Done():
 		stopErr = ctx.Err()
-		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
-	case <-time.After(500 * time.Millisecond):
-		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
+		_ = platformprocess.TerminateSubprocessTreeWithEffects(h.cmd, h.tree, service.scheduler, service.logger)
+	case <-grace.C():
+		_ = platformprocess.TerminateSubprocessTreeWithEffects(h.cmd, h.tree, service.scheduler, service.logger)
 	}
 	if !exited {
+		kill := service.scheduler.NewTimer(2 * time.Second)
+		defer kill.Stop()
 		select {
 		case <-h.finished:
-		case <-time.After(2 * time.Second):
+		case <-kill.C():
 			if stopErr == nil {
 				stopErr = errors.New("ACP process did not exit after termination")
 			}
 		}
 	}
-	platformprocess.CloseSubprocessTree(h.cmd, h.tree)
 	// The response reader outlives the peer only while the peer is retained;
 	// releasing it here keeps a retired peer from holding an open pipe handle.
-	_ = h.stdout.Close()
+	h.stdio.Close()
 	return stopErr
 }
 

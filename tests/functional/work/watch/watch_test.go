@@ -4,19 +4,16 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
 	workWatchWorkType = "task"
-	workWatchWorkName = "watch-terminal-regression"
 )
 
 // TestWorkWatchFollowsStateTransitionsUntilTerminal proves the customer
@@ -24,92 +21,14 @@ const (
 // finite CLI watch invocation observes canonical Work transitions through the
 // terminal transition and exits successfully.
 func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
-	t.Parallel()
-	dir := support.ScaffoldFactory(t, workWatchFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
-	streamGate := newWorkWatchStreamGate(t, server.URL())
-
-	process := workWatchProcess
-
-	payloadPath := filepath.Join(t.TempDir(), "watch-request.md")
-	if err := os.WriteFile(payloadPath, []byte("# observe terminal work\n"), 0o600); err != nil {
-		t.Fatalf("write submit payload: %v", err)
-	}
-
-	sessionID := factorysessions.DefaultSessionID
-	submitInputs := workWatchInputs(t, []string{
-		"you", "--server", server.URL(), "--json", "submit",
-		"--session", sessionID,
-		"--name", workWatchWorkName,
-		"--work-type-name", workWatchWorkType,
-		"--payload", payloadPath,
-	})
-	if err := process.Execute(submitInputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(submit) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			submitInputs.Stdout(),
-			submitInputs.Stderr(),
-		)
-	}
-	workID := decodeSubmittedWorkID(t, submitInputs.Stdout())
-
-	watchInputs := workWatchInputs(t, []string{
-		"you", "--server", streamGate.URL(), "work", "watch",
-		"--session", sessionID,
-	})
-	watchCommand := support.StartProcessCommand(t, process, watchInputs.Input)
-	streamGate.wait(t)
-	for _, state := range []string{"processing", "complete"} {
-		moveInputs := workWatchInputs(t, []string{
-			"you", "--server", server.URL(), "--json", "work", "move",
-			workID, state, "--session", sessionID,
-		})
-		if err := process.Execute(moveInputs.Input); err != nil {
-			t.Fatalf(
-				"Process.Execute(work move %s) error = %v\nstdout:\n%s\nstderr:\n%s",
-				state,
-				err,
-				moveInputs.Stdout(),
-				moveInputs.Stderr(),
-			)
-		}
-	}
-	awaitWorkWatchCompletion(t, watchCommand, watchInputs)
-
-	lines := decodeWatchLines(t, watchInputs.Stdout())
-	wantTransitions := [][2]string{{"init", "processing"}, {"processing", "complete"}}
-	assertWorkWatchTransitionLines(t, lines, sessionID, workID, wantTransitions)
-	if !strings.HasSuffix(watchInputs.Stdout(), "\n") {
-		t.Fatalf("work watch output does not end with a complete line: %q", watchInputs.Stdout())
-	}
+	runWorkWatchSelectedProcessTime(t)
 	functionalevidence.Covers(t, "cli/you.work.watch")
 }
 
-// awaitWorkWatchCompletion waits for the finite watch invocation to exit and
-// asserts it completed cleanly with no stderr diagnostics.
-func awaitWorkWatchCompletion(t *testing.T, watchCommand *support.ProcessCommand, watchInputs *support.CapturedInputs) {
+func runWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T, scenario *selectedWatchScenario) {
 	t.Helper()
-	select {
-	case <-watchCommand.Done():
-	case <-t.Context().Done():
-		t.Fatalf("work watch context canceled before finite completion: %v", t.Context().Err())
-	}
-	if err := watchCommand.Err(); err != nil {
-		t.Fatalf(
-			"Process.Execute(work watch) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			watchInputs.Stdout(),
-			watchInputs.Stderr(),
-		)
-	}
-	if strings.TrimSpace(watchInputs.Stderr()) != "" {
-		t.Fatalf("work watch wrote diagnostics without verbose mode: %q", watchInputs.Stderr())
-	}
+	scenario.move(t, "processing")
+	scenario.finish(t)
 }
 
 // assertWorkWatchTransitionLines asserts the decoded watch lines match the

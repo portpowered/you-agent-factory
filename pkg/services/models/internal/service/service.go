@@ -10,65 +10,14 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
-	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
-	"go.uber.org/zap"
 )
 
 // ErrInvalidDependencies classifies model-service construction failures.
 var ErrInvalidDependencies = errors.New("model service dependencies are invalid")
-
-// Service owns model catalog, readiness, and pull behavior.
-type Service struct {
-	runtimeConfigLookup models.RuntimeConfigLoader
-	host                modelhost.Host
-	assetPuller         localmodels.AssetPuller
-	loggerValue         *zap.Logger
-	clock               func() time.Time
-	pullMetrics         modelseffects.PullMetricsRecorder
-}
-
-// NewService constructs a model-domain service after validating every required
-// collaborator. It applies only model-service-local defaults and performs no
-// process-mode selection or application lifecycle work.
-func NewService(
-	runtimeConfig models.RuntimeConfigLoader,
-	host modelhost.Host,
-	assetPuller localmodels.AssetPuller,
-	logger *zap.Logger,
-	clock func() time.Time,
-	pullMetrics modelseffects.PullMetricsRecorder,
-) (*Service, error) {
-	if runtimeConfig == nil {
-		return nil, missingDependencyError("runtime configuration lookup")
-	}
-	if isNilDependency(host) {
-		return nil, missingDependencyError("model host")
-	}
-	if isNilDependency(assetPuller) {
-		return nil, missingDependencyError("model asset puller")
-	}
-	if logger == nil {
-		return nil, missingDependencyError("logger")
-	}
-	if clock == nil {
-		return nil, missingDependencyError("clock")
-	}
-	return &Service{
-		runtimeConfigLookup: runtimeConfig,
-		host:                host,
-		assetPuller:         assetPuller,
-		loggerValue:         logger,
-		clock:               clock,
-		pullMetrics:         pullMetrics,
-	}, nil
-}
 
 func missingDependencyError(name string) error {
 	return fmt.Errorf("%w: %s is required", ErrInvalidDependencies, name)
@@ -104,9 +53,8 @@ func (o *Root) CloseRuntimeScope(
 	if err != nil {
 		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
 	}
-	o.runtimeMu.Lock()
-	delete(o.runtimeByScope, request.Scope)
-	o.runtimeMu.Unlock()
+	o.resources.CloseScope(request.Scope)
+	o.closeScopedExecution(request.Scope)
 	if closer, ok := o.runtimeHost.(interface {
 		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
 	}); ok {
@@ -115,24 +63,6 @@ func (o *Root) CloseRuntimeScope(
 		}
 	}
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
-}
-
-func (s *Service) runtimeConfig() *models.RuntimeConfig {
-	if s == nil || s.runtimeConfigLookup == nil {
-		return nil
-	}
-	return s.runtimeConfigLookup()
-}
-
-func (s *Service) modelHost() modelhost.Host {
-	if s == nil {
-		return nil
-	}
-	return s.host
-}
-
-func (s *Service) now() time.Time {
-	return s.clock()
 }
 
 type modelSourceReference struct {
@@ -220,7 +150,7 @@ func (o *Root) normalizeAssetPreflightRequest(
 			Offline: request.Offline,
 		},
 		resolution.Resolved,
-		o.process.BackendArtifactPlatform,
+		o.backendArtifactPlatform,
 	)
 	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, configuration, request.Offline)
 	if err != nil {
@@ -504,17 +434,6 @@ func resolveImmutableRevision(
 	return strings.TrimSpace(resolved), nil
 }
 
-func defaultHuggingFaceRevision(ctx context.Context, source string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	parsed, err := parseConfiguredSource(source)
-	if err != nil || !isImmutableRevision(parsed.Revision) {
-		return "", models.ErrModelRevisionUnresolved
-	}
-	return parsed.Revision, nil
-}
-
 func parseConfiguredSource(value string) (modelSourceReference, error) {
 	source, isSource, err := parseModelSource(strings.TrimSpace(value))
 	if !isSource || err != nil {
@@ -783,194 +702,4 @@ func safeModelName(value string) bool {
 		return false
 	}
 	return value != ""
-}
-
-func (o *Root) scopedRuntime(scope models.RuntimeScopeRef) (models.Service, error) {
-	return o.scopedRuntimeWithBuilder(scope, func(binding models.RuntimeBinding) (models.Service, error) {
-		assets, err := localmodels.NewScopedAssetPuller(o.assets, scope)
-		if err != nil {
-			return nil, err
-		}
-		return o.runtimeForBindingWithAssets(scope, binding, assets)
-	})
-}
-
-func (o *Root) scopedRuntimeWithBuilder(
-	scope models.RuntimeScopeRef,
-	builder func(models.RuntimeBinding) (models.Service, error),
-) (models.Service, error) {
-	if o == nil || o.runtimeScopes == nil {
-		return nil, models.ErrUnsupportedOperation
-	}
-	if scope.IsZero() {
-		return nil, models.ErrRuntimeScopeInvalid
-	}
-	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String()))
-	if err != nil {
-		return nil, runtimeScopeError(err)
-	}
-	o.runtimeMu.RLock()
-	runtime := o.runtimeByScope[scope]
-	o.runtimeMu.RUnlock()
-	if runtime != nil {
-		return runtime, nil
-	}
-	runtime, err = builder(binding)
-	if err != nil {
-		return nil, err
-	}
-	o.runtimeMu.Lock()
-	if _, err := o.runtimeScopes.Resolve(runtimescopes.Reference(scope.String())); err != nil {
-		o.runtimeMu.Unlock()
-		return nil, runtimeScopeError(err)
-	}
-	if existing := o.runtimeByScope[scope]; existing != nil {
-		runtime = existing
-	} else {
-		o.runtimeByScope[scope] = runtime
-	}
-	o.runtimeMu.Unlock()
-	return runtime, nil
-}
-
-func newRuntimeWithHostEdges(
-	scope models.RuntimeScopeRef,
-	runtimeConfig models.RuntimeConfigLoader,
-	logger *zap.Logger,
-	now func() time.Time,
-	pullMetrics modelseffects.PullMetricsRecorder,
-	hostLogger modelseffects.HostDiagnosticLogger,
-	hostMetrics modelseffects.HostMetricsRecorder,
-	hooks modelseffects.LocalRuntimeHooks,
-	assetPuller localmodels.AssetPuller,
-	localRuntime localmodels.Runtime,
-	runtimeHost runtimehost.Service,
-	host modelhost.Host,
-) (models.Service, error) {
-	if assetPuller == nil {
-		return nil, missingDependencyError("model asset puller")
-	}
-	if localRuntime == nil {
-		return nil, missingDependencyError("local model runtime")
-	}
-	manager, err := localmodels.NewManagedRuntime(assetPuller, localRuntime, hooks, now)
-	if err != nil {
-		return nil, err
-	}
-	resources, err := localmodels.NewResourceLimiter(hooks, now)
-	if err != nil {
-		return nil, err
-	}
-	modelHost := host
-	if modelHost == nil {
-		gateway := modelhost.NewLocalAssetGateway(assetPuller)
-		modelHost, err = modelhost.NewScopedCompatHost(
-			scope,
-			runtimeHost,
-			gateway,
-			modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-			modelhost.Diagnostics{Logger: hostLogger, Metrics: hostMetrics},
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
-	modelService, err := NewService(
-		runtimeConfig,
-		modelHost,
-		assetPuller,
-		logger,
-		now,
-		pullMetrics,
-	)
-	if err != nil {
-		return nil, err
-	}
-	localExecutor, err := newLocalExecutor(
-		runtimeConfig,
-		modelHost,
-		assetPuller,
-		localRuntime,
-		manager,
-		resources,
-		hooks,
-		now,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &runtimeService{Service: modelService, local: localExecutor}, nil
-}
-
-type runtimeService struct {
-	*Service
-	local *localExecutor
-}
-
-var _ models.Service = (*runtimeService)(nil)
-
-func (s *runtimeService) OpenRuntimeScope(
-	context.Context,
-	models.OpenRuntimeScopeRequest,
-) (models.OpenRuntimeScopeResult, error) {
-	return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *runtimeService) CloseRuntimeScope(
-	context.Context,
-	models.CloseRuntimeScopeRequest,
-) (models.CloseRuntimeScopeResult, error) {
-	return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *runtimeService) PrepareModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
-) (models.PrepareModelAssetsResult, error) {
-	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *runtimeService) ResolveModelReference(
-	context.Context,
-	models.ResolveModelReferenceRequest,
-) (models.ResolveModelReferenceResult, error) {
-	return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *runtimeService) PullModelForScope(
-	ctx context.Context,
-	request models.PullModelRequest,
-) (models.PullResult, error) {
-	if err := models.ValidatePullModelRequest(request); err != nil {
-		return models.PullResult{}, err
-	}
-	return s.PullModel(ctx, request.Name)
-}
-
-func (s *runtimeService) InspectModelAssets(
-	context.Context,
-	models.InspectModelAssetsRequest,
-) (models.InspectModelAssetsResult, error) {
-	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *runtimeService) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
-) (models.RemoveModelAssetsResult, error) {
-	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *runtimeService) InvokeModel(
-	context.Context,
-	models.InvokeModelRequest,
-) (models.InvokeModelResult, error) {
-	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
-}
-
-func (s *runtimeService) InvokeLocal(ctx context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
-	if err := models.ValidateLocalInvocationRequest(request); err != nil {
-		return models.LocalInvocationResult{}, err
-	}
-	return s.local.InvokeLocal(ctx, request)
 }

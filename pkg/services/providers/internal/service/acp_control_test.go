@@ -34,6 +34,7 @@ type acpAwareGeneration struct {
 // outcome the real ACP session/cancel path normalizes StopReasonCancelled to
 // once Cancel names its exact attempt while cancelable.
 type acpAwareAttempt struct {
+	unavailableACPContinuation
 	provider providers.ID
 
 	started          chan struct{}
@@ -135,6 +136,7 @@ func (a *acpAwareAttempt) TryCancel(_ context.Context, generation acp.Generation
 // identity, so cross-provider isolation can be exercised through one root
 // Service the way two configured ACP integrations would be in production.
 type multiACPService struct {
+	unavailableACPContinuation
 	byProvider map[providers.ID]*acpAwareAttempt
 }
 
@@ -177,7 +179,7 @@ func (m *multiACPService) TryCancel(ctx context.Context, generation acp.Generati
 
 func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) *providerservice.Service {
 	t.Helper()
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -185,7 +187,7 @@ func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) *provi
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -315,6 +317,7 @@ func TestControlAttempt_ACPTerminateAndPauseAreNeverSupportedAndLeaveAttemptRunn
 // TestControlAttempt_BlocksUntilSignaledNativeAttemptReturns proves it for
 // the native control path.
 type blockingACPAttempt struct {
+	unavailableACPContinuation
 	started        chan struct{}
 	cancelledSeen  chan struct{}
 	releaseAttempt chan struct{}
@@ -384,7 +387,7 @@ func TestControlAttempt_ACPBlocksUntilSignaledAttemptReturns(t *testing.T) {
 	t.Parallel()
 
 	fake := newBlockingACPAttempt()
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -392,7 +395,7 @@ func TestControlAttempt_ACPBlocksUntilSignaledAttemptReturns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{}, fake)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -449,7 +452,7 @@ func TestControlAttempt_ACPCrossProviderIdentityIsolation(t *testing.T) {
 		"cursor-acp": target,
 		"claude-acp": bystander,
 	}}
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -457,7 +460,7 @@ func TestControlAttempt_ACPCrossProviderIdentityIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, multi, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, multi, nil, logging.NoopLogger{}, multi)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -541,7 +544,7 @@ func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClear
 	fake := newACPAwareAttempt("cursor-acp")
 	failing := &failingCancelACPService{acpAwareAttempt: fake, cancelErr: errors.New("broken acp connection")}
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -550,7 +553,7 @@ func TestControlAttempt_ACPSignalFailureIsDistinguishableFromUnsupportedAndClear
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	logger := &recordingControlLogger{}
-	root, err := providerservice.NewWithACP(catalogService, executionService, failing, nil, logger)
+	root, err := providerservice.NewWithACP(catalogService, executionService, failing, nil, logger, failing)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -639,7 +642,7 @@ func TestControlAttempt_ACPClaimedControlLosingRaceToNaturalCompletionReturnsUns
 	fake := newACPAwareAttempt("cursor-acp")
 	racing := &raceLostACPService{acpAwareAttempt: fake}
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -647,7 +650,7 @@ func TestControlAttempt_ACPClaimedControlLosingRaceToNaturalCompletionReturnsUns
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, racing, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, racing, nil, logging.NoopLogger{}, racing)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -710,6 +713,7 @@ type sequentialGeneration struct {
 // releases", "generation B opens with the same identity", and "A's delayed
 // signal resumes" without any sleep-based timing.
 type sequentialACPService struct {
+	unavailableACPContinuation
 	provider providers.ID
 
 	mu         sync.Mutex
@@ -865,7 +869,7 @@ func TestControlAttempt_ACPDelayedControlCannotRedirectToReplacementGenerationAf
 	const identity = "acp-identity-reused"
 	fake := newSequentialACPService("cursor-acp")
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -873,7 +877,7 @@ func TestControlAttempt_ACPDelayedControlCannotRedirectToReplacementGenerationAf
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, fake, nil, logging.NoopLogger{}, fake)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}

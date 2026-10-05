@@ -80,7 +80,7 @@ func mustNegotiatedCapabilityRootService(
 	acpService *negotiatedCapabilityACPService,
 ) *providerservice.Service {
 	t.Helper()
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
@@ -88,7 +88,7 @@ func mustNegotiatedCapabilityRootService(
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{}, acpService)
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}

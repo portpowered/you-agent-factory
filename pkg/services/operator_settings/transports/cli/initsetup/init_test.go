@@ -14,11 +14,11 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestConfigurerRequiresSuppliedProviderBeforePersistence(t *testing.T) {
@@ -196,10 +196,7 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 }
 
 func testConfigService() operatorsettings.Service {
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		panic(err)
-	}
+	providersRoot := internaltestproviders.StandardCatalog()
 	files := platformfilesystem.Local{}
 	createTemp := operatorsettings.CreateTemporaryFile(func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 		return os.CreateTemp(dir, pattern)

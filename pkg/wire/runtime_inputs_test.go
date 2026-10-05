@@ -327,7 +327,7 @@ func TestWorkRequestEffectsUseExplicitEdgesOrProcessDefaults(t *testing.T) {
 func TestProvideWorkServiceConstructsThroughWorkWireBridge(t *testing.T) {
 	t.Parallel()
 
-	staging, err := provideWorkContentStagingService(serviceedges.Edges{})
+	staging, err := provideWorkContentStagingService(serviceedges.Edges{}, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("provideWorkContentStagingService() error = %v", err)
 	}
@@ -729,11 +729,11 @@ func (clock metricsNowOnlyClock) Now() time.Time { return clock.at }
 
 func TestFactoryRuntimeEffectProvidersDefaultCommandRunnersWhenUnset(t *testing.T) {
 	t.Parallel()
-	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(serviceedges.Edges{})
+	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provider command runner: %v", err)
 	}
-	scriptRunner, err := provideFactoryRuntimeScriptCommandRunner(serviceedges.Edges{})
+	scriptRunner, err := provideFactoryRuntimeScriptCommandRunner(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("script command runner: %v", err)
 	}
@@ -939,7 +939,7 @@ func TestRuntimeObservabilityOwnerRejectsUnwritableDestination(t *testing.T) {
 
 func TestWatchReconnectWaitOwnsTimerAndCancellation(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"elapsed", "canceled", "already canceled", "zero"} {
+	for _, mode := range []string{"elapsed", "canceled", "already canceled", "zero", "negative"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithCancel(context.Background())
@@ -959,15 +959,17 @@ func TestWatchReconnectWaitOwnsTimerAndCancellation(t *testing.T) {
 				want = context.Canceled
 			case "zero":
 				delay = 0
+			case "negative":
+				delay = -time.Second
 			}
-			wait := bindWatchReconnectWait(scheduler)
+			wait := provideWatchReconnectWait(scheduler)
 			if scheduler.calls != 0 {
 				t.Fatal("construction started timer")
 			}
 			if err := wait(ctx, delay); !errors.Is(err, want) {
 				t.Fatalf("wait error=%v want=%v", err, want)
 			}
-			if mode == "zero" || mode == "already canceled" {
+			if delay <= 0 || mode == "already canceled" {
 				if scheduler.calls != 0 || timer.stopped {
 					t.Fatal("wait created an unnecessary timer")
 				}
@@ -983,6 +985,89 @@ type watchWaitScheduler struct {
 	calls    int
 	delay    time.Duration
 	onCreate func()
+}
+
+func TestWatchReconnectPendingWaitsRemainIndependent(t *testing.T) {
+	t.Parallel()
+	for _, cancelFirst := range []bool{false, true} {
+		t.Run(strconv.FormatBool(cancelFirst), func(t *testing.T) {
+			t.Parallel()
+			scheduler := &pendingWatchScheduler{created: make(chan *pendingWatchTimer, 2)}
+			wait := provideWatchReconnectWait(scheduler)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			firstResult, secondResult := make(chan error, 1), make(chan error, 1)
+			go func() { firstResult <- wait(ctx, time.Second) }()
+			first := awaitPendingWatchTimer(t, scheduler)
+			go func() { secondResult <- wait(t.Context(), time.Second) }()
+			second := awaitPendingWatchTimer(t, scheduler)
+			select {
+			case err := <-firstResult:
+				t.Fatalf("wait completed before delivery: %v", err)
+			default:
+			}
+			var want error
+			if cancelFirst {
+				cancel()
+				want = context.Canceled
+			} else {
+				first.ticks <- time.Unix(1, 0)
+			}
+			select {
+			case err := <-firstResult:
+				if !errors.Is(err, want) || !first.stopped.Load() {
+					t.Fatalf("first error=%v stopped=%t want=%v", err, first.stopped.Load(), want)
+				}
+			case <-time.After(30 * time.Second):
+				t.Fatal("pending first wait did not finish")
+			}
+			select {
+			case err := <-secondResult:
+				t.Fatalf("peer wait completed without delivery: %v", err)
+			default:
+			}
+			second.ticks <- time.Unix(2, 0)
+			select {
+			case err := <-secondResult:
+				if err != nil || !second.stopped.Load() {
+					t.Fatalf("peer error=%v stopped=%t", err, second.stopped.Load())
+				}
+			case <-time.After(30 * time.Second):
+				t.Fatal("pending peer wait did not finish")
+			}
+		})
+	}
+}
+
+type pendingWatchScheduler struct{ created chan *pendingWatchTimer }
+
+func (*pendingWatchScheduler) Now() time.Time { return time.Unix(0, 0) }
+func (s *pendingWatchScheduler) After(delay time.Duration) <-chan time.Time {
+	return s.NewTimer(delay).C()
+}
+func (s *pendingWatchScheduler) NewTimer(time.Duration) platformclock.Timer {
+	timer := &pendingWatchTimer{ticks: make(chan time.Time, 1)}
+	s.created <- timer
+	return timer
+}
+
+type pendingWatchTimer struct {
+	ticks   chan time.Time
+	stopped atomic.Bool
+}
+
+func (t *pendingWatchTimer) C() <-chan time.Time { return t.ticks }
+func (t *pendingWatchTimer) Stop() bool          { return !t.stopped.Swap(true) }
+
+func awaitPendingWatchTimer(t *testing.T, s *pendingWatchScheduler) *pendingWatchTimer {
+	t.Helper()
+	select {
+	case timer := <-s.created:
+		return timer
+	case <-time.After(30 * time.Second):
+		t.Fatal("wait did not create timer")
+		return nil
+	}
 }
 
 func (*watchWaitScheduler) Now() time.Time { return time.Unix(0, 0) }

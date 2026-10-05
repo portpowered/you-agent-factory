@@ -3753,8 +3753,10 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	noProvider := newObservationRegistry(nil, nil)
 	noProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	noProvider.observations["worker-1"] = observationMetadata()
-	if _, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("GetObservation(without provider service) error = %v", err)
+	gotProvider, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref})
+	if err != nil || gotProvider.WorkerSessionID != "worker-1" || gotProvider.State != workersessions.StateRunning ||
+		!gotProvider.ProviderSessionAvailable || gotProvider.ProviderSession != ref || gotProvider.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("GetObservation(without provider service) = %#v, %v, want retained running identity", gotProvider, err)
 	}
 	noReference := newObservationRegistry(nil, nil)
 	noReference.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}
@@ -3791,8 +3793,8 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	projectionFailure := newObservationRegistry(observationProjectorFake{err: errors.New("projection failed")}, nil)
 	projectionFailure.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	projectionFailure.observations["worker-1"] = observationMetadata()
-	if _, err := projectionFailure.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-1"}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("ListObservations(projection failure) error = %v", err)
+	if got, err := projectionFailure.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-1"}); err != nil || len(got.Observations) != 1 || !got.Observations[0].ProviderSessionAvailable || got.Observations[0].Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("ListObservations(optional projection failure) = %#v, %v; want retained live facts", got, err)
 	}
 	if _, _, ok := registry.loadObservationState("missing"); ok {
 		t.Fatal("loadObservationState(missing) = ok, want false")

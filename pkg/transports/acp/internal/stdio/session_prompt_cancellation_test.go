@@ -217,7 +217,7 @@ func TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel(t *testing.
 	base, session, turn := newActiveBoundControlSession(t, "fs-control-1")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{cancelEntered: make(chan struct{}), cancelRelease: make(chan struct{})}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
+	server := New(testLogger(), chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil, testInvocationScope)
 	env := cancelNotificationEnvelope(t, "cancel-control-1", session.ID)
 
 	done := make(chan struct{})
@@ -274,7 +274,7 @@ func TestHandleSessionCancelCompletionRaceResolvesNoopWithoutFactoryEffect(t *te
 	release := make(chan struct{})
 	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
+	server := New(testLogger(), chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil, testInvocationScope)
 	env := cancelNotificationEnvelope(t, "cancel-noop-1", session.ID)
 
 	done := make(chan struct{})
@@ -311,7 +311,7 @@ func TestHandleSessionCancelSupersededRaceCannotReachReplacementTurn(t *testing.
 	release := make(chan struct{})
 	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
+	server := New(testLogger(), chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil, testInvocationScope)
 	env := cancelNotificationEnvelope(t, "cancel-superseded-1", session.ID)
 
 	done := make(chan struct{})
@@ -358,7 +358,7 @@ func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *tes
 	base, session, _ := newActiveBoundControlSession(t, "fs-control-repeat")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, testStartResolver)
+	server := New(testLogger(), chatSessions, nil, factoryTarget, nil, nil, nil, nil, testStartResolver, testInvocationScope)
 	env := cancelNotificationEnvelope(t, "cancel-repeat-1", session.ID)
 
 	server.handleSessionCancel(context.Background(), env)
@@ -478,7 +478,7 @@ func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
 	for index, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			factoryTarget := &fakeFactoryTargetService{}
-			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
+			server := New(testLogger(), test.chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil, testInvocationScope)
 			server.handleSessionCancel(context.Background(), cancelNotificationEnvelope(t, fmt.Sprintf("cancel-safety-%d", index), current.Session.ID))
 
 			factoryTarget.mu.Lock()
@@ -503,7 +503,7 @@ func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
 func TestHandleSessionCancelRejectsUncorrelatedIdentityWithoutEffects(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
+	server := New(testLogger(), chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil, testInvocationScope)
 
 	server.handleSessionCancel(context.Background(), envelope.Envelope{
 		Params: json.RawMessage(`{"sessionId":"session-cancel-identity"}`),
@@ -772,7 +772,7 @@ func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *te
 	base, session, turn := newActiveBoundControlSession(t, "fs-cancel-failure")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{cancelErr: errors.New("provider secret at /unsafe/path")}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
+	server := New(testLogger(), chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil, testInvocationScope)
 	env := cancelNotificationEnvelope(t, "cancel-failure-1", session.ID)
 	cancelCtx := contextWithCancelFlights(context.Background(), &promptFlightRegistry{})
 

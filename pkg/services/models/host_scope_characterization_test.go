@@ -599,3 +599,34 @@ func assertHostLegacyRequestContracts(t *testing.T) {
 		t.Fatal("empty ReleaseLeaseRequest returned nil")
 	}
 }
+
+func TestScopedHostValidationPreservesErrorPrecedenceAndSentinels(t *testing.T) {
+	t.Parallel()
+	scope, err := (models.RuntimeScopeRef{}).Parse("validation-scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range []interface{ Validate() error }{
+		models.InspectModelHostRequest{}, models.AcquireModelLeaseRequest{},
+		models.GetModelLeaseRequest{}, models.ReleaseModelLeaseRequest{},
+	} {
+		if err := request.Validate(); err != models.ErrRuntimeScopeInvalid {
+			t.Fatalf("%T: error=%v, want exact scope error before other fields", request, err)
+		}
+	}
+	for _, request := range []interface{ Validate() error }{
+		models.InspectModelHostRequest{Scope: scope, Name: " "},
+		models.AcquireModelLeaseRequest{Scope: scope, Name: " "},
+	} {
+		if err := request.Validate(); !errors.Is(err, models.ErrNotFound) || err.Error() != models.ErrNotFound.Error()+": empty model name" {
+			t.Fatalf("%T: error=%v, want existing empty-name classification and text", request, err)
+		}
+	}
+	for _, request := range []interface{ Validate() error }{
+		models.GetModelLeaseRequest{Scope: scope}, models.ReleaseModelLeaseRequest{Scope: scope},
+	} {
+		if err := request.Validate(); err != models.ErrHostLeaseNotFound {
+			t.Fatalf("%T: error=%v, want exact unwrapped lease error", request, err)
+		}
+	}
+}

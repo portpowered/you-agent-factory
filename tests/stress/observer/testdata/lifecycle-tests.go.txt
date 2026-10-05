@@ -1,0 +1,352 @@
+package observer_test
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
+	"github.com/portpowered/infinite-you/pkg/services/edges"
+	sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+)
+
+type smokeObserver struct {
+	artifact      artifactIdentity
+	sessionID     string
+	bootstrap     []string
+	generations   []string
+	runtimeID     string
+	reports       []checkpointReport
+	barrier       string
+	complete      bool
+	cleanupErrors []string
+}
+
+// This dedicated diagnostic is sequential: process-wide goroutines and retained
+// owner callbacks require one isolated observation window, not functional lanes.
+func TestInProcessOwnerLifecycleSmoke(t *testing.T) {
+	if testing.Short() {
+		t.Skip("explicit owner lifecycle diagnostic only")
+	}
+	observer := &smokeObserver{artifact: smokeArtifact(t), barrier: "construction"}
+	baselineobservation.Close()
+	defer baselineobservation.Close()
+	defer observer.emit(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	home, folder := t.TempDir(), smokeFactory(t)
+	ready := make(chan struct{})
+	process, err := root.BuildProcess(ctx, edges.Edges{
+		FactorySessionIDGenerator: uuid.NewString,
+		BrowserOpener:             func(context.Context, string) error { return nil },
+		ProviderCommandRunner:     smokeCommandRunner{},
+		APIServerStarter: func(ctx context.Context, req platformhttpserver.StartRequest) error {
+			server := httptest.NewServer(req.Handler)
+			if req.OnBound != nil {
+				req.OnBound(platformhttpserver.Binding{Port: req.Port})
+			}
+			close(ready)
+			<-ctx.Done()
+			server.CloseClientConnections()
+			server.Close()
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, ok := process.FactorySessions().FactorySessions().(sessions.Service)
+	if !ok {
+		t.Fatal("public Factory Sessions capability unavailable")
+	}
+	defer func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
+		defer stop()
+		if err := process.Close(cleanup); err != nil {
+			observer.cleanupErrors = append(observer.cleanupErrors, err.Error())
+			t.Error(err)
+		}
+	}()
+	observer.capture(t, "Q0", "inert BuildProcess returned; no admission")
+	hostCtx, stopHost := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		done <- process.Execute(root.Input{
+			Args: []string{"you", "run", "--factory", filepath.Join(folder, "factory.json"), "--continuously", "--with-server", "--quiet", "--no-record"},
+			Env:  []string{"HOME=" + home, "USERPROFILE=" + home}, Context: hostCtx, WorkingDirectory: folder, Stdout: io.Discard, Stderr: io.Discard,
+		})
+	}()
+	joined := false
+	defer func() {
+		if !joined {
+			stopHost()
+			observer.join(t, done)
+		}
+	}()
+	observer.barrier = "host transport readiness"
+	select {
+	case <-ready:
+	case err := <-done:
+		joined = true
+		t.Fatalf("host exited before readiness: %v", err)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	observer.lifecycle(t, ctx, service, home, folder)
+	stopHost()
+	observer.barrier = "Process.Execute/server/sidecar join"
+	if !observer.join(t, done) {
+		joined = true
+		t.Fatal("host cleanup did not join successfully")
+	}
+	joined = true
+	observer.barrier = "process cleanup"
+	if err := process.Close(ctx); err != nil {
+		observer.cleanupErrors = append(observer.cleanupErrors, err.Error())
+		t.Fatal(err)
+	}
+	observer.capture(t, "Q2", "explicit close returned; Execute and server joined; Process.Close returned")
+	observer.complete = !t.Failed()
+}
+
+func (observer *smokeObserver) lifecycle(t *testing.T, ctx context.Context, service sessions.Service, home, folder string) {
+	observer.barrier = "bootstrap inventory"
+	listed, err := service.List(ctx, sessions.SessionListRequest{Mode: sessions.SessionOperationModeLive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, session := range listed.Sessions {
+		observer.bootstrap = append(observer.bootstrap, session.SessionID)
+	}
+	observer.sessionID = uuid.NewString()
+	request := sessions.SessionStartRequest{SessionID: observer.sessionID, Mode: sessions.SessionOperationModeLive, FolderPath: folder, ActivationOnly: true,
+		Correlation:      sessions.SessionOperationCorrelation{RequestID: "observer-open"},
+		RuntimeSelection: &sessions.SessionRuntimeSelection{Mode: sessions.SessionRuntimeModeService, SystemConfigHome: home, RuntimeInstanceID: uuid.NewString()},
+	}
+	observer.barrier = "explicit session open"
+	opened, err := service.Start(ctx, request)
+	if err != nil || opened.SessionID != observer.sessionID {
+		t.Fatalf("open: %#v %v", opened, err)
+	}
+	defer func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
+		defer stop()
+		if _, err := service.Control(cleanup, sessions.SessionControlRequest{SessionID: observer.sessionID, Mode: sessions.SessionOperationModeLive, Operation: sessions.SessionControlClose}); err != nil && !errors.Is(err, sessions.ErrSessionNotFound) {
+			observer.cleanupErrors = append(observer.cleanupErrors, err.Error())
+			t.Error(err)
+		}
+	}()
+	prior := observer.generation(t, ctx, service)
+	observer.invoke(t, ctx, service, "observer-before-replace")
+	observer.barrier = "cancel before terminal replacement"
+	canceled, err := service.Control(ctx, sessions.SessionControlRequest{SessionID: observer.sessionID, Mode: sessions.SessionOperationModeLive, Operation: sessions.SessionControlCancel, Correlation: sessions.SessionOperationCorrelation{RequestID: "observer-cancel"}})
+	if err != nil || canceled.Status != sessions.LifecycleStatusSucceeded {
+		t.Fatalf("cancel: %#v %v", canceled, err)
+	}
+	observer.barrier = "terminal replacement commit and prior cleanup"
+	request.Correlation.RequestID = "observer-replace"
+	request.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+	replaced, err := service.Start(ctx, request)
+	if err != nil || replaced.SessionID != observer.sessionID {
+		t.Fatalf("replace: %#v %v", replaced, err)
+	}
+	current := observer.generation(t, ctx, service)
+	if current == prior {
+		t.Fatal("replacement did not advance runtime generation")
+	}
+	observer.generations = []string{current}
+	observer.runtimeID = request.RuntimeSelection.RuntimeInstanceID
+	if !strings.HasPrefix(current, observer.runtimeID+"-") {
+		t.Fatalf("generation %q does not attribute runtime %q", current, observer.runtimeID)
+	}
+	observer.invoke(t, ctx, service, "observer-after-replace")
+	observer.capture(t, "Q1", "replacement Start returned after prior close; replacement Work Invoke returned terminal")
+	observer.barrier = "explicit session close"
+	closed, err := service.Control(ctx, sessions.SessionControlRequest{SessionID: observer.sessionID, Mode: sessions.SessionOperationModeLive, Operation: sessions.SessionControlClose})
+	if err != nil || !closed.Closed {
+		t.Fatalf("close: %#v %v", closed, err)
+	}
+}
+
+func (observer *smokeObserver) generation(t *testing.T, ctx context.Context, service sessions.Service) string {
+	projection, err := service.GetFactorySession(ctx, observer.sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.Runtime.StreamIdentity == nil || projection.Runtime.StreamIdentity.StreamGenerationID == "" {
+		t.Fatal("runtime generation unavailable")
+	}
+	return projection.Runtime.StreamIdentity.StreamGenerationID
+}
+
+func (observer *smokeObserver) invoke(t *testing.T, ctx context.Context, service sessions.Service, id string) {
+	observer.barrier = "Work terminal acknowledgment: " + id
+	result, err := service.Invoke(ctx, sessions.SessionInvokeRequest{SessionID: observer.sessionID, Correlation: sessions.SessionOperationCorrelation{RequestID: id},
+		Input: &work.PreparedInvocationInput{Source: work.InputSourcePositionalText, ResolvedInput: &work.ResolvedInput{Source: work.InputSourcePositionalText, Text: id}},
+		Wait:  sessions.SessionOperationWait{TimeoutMillis: 30000},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RequestID != id || result.Status != sessions.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation completion: %#v", result)
+	}
+	t.Logf("Work terminal outcome: %#v", result)
+}
+
+func (observer *smokeObserver) join(t *testing.T, done <-chan error) bool {
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			observer.cleanupErrors = append(observer.cleanupErrors, err.Error())
+			t.Error(err)
+			return false
+		}
+		return true
+	case <-time.After(30 * time.Second):
+		observer.cleanupErrors = append(observer.cleanupErrors, "Execute/server join ceiling reached")
+		t.Error("Execute/server join ceiling reached")
+		return false
+	}
+}
+
+func (observer *smokeObserver) capture(t *testing.T, checkpoint, barrier string) {
+	observer.barrier = checkpoint + " owner capture"
+	owners, err := baselineobservation.Capture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint == "Q1" {
+		matches := 0
+		for _, owner := range owners {
+			if owner.Host != nil {
+				for _, handle := range owner.Host.Handles {
+					if handle.Key == observer.runtimeID {
+						matches++
+					}
+				}
+			}
+		}
+		if matches != 1 {
+			t.Fatalf("current replacement runtime %q has %d real handle entries", observer.runtimeID, matches)
+		}
+	}
+	report := checkpointReport{Checkpoint: checkpoint, Timestamp: time.Now().UTC().Format(time.RFC3339Nano), FixtureScope: "one root process; controlled Codex; no model/remote effects", Artifact: observer.artifact,
+		Owners: owners, OwnerInventoryComplete: true, LiveGoroutines: runtime.NumGoroutine(), Barriers: []string{barrier}, RuntimeGenerationIDs: append([]string{}, observer.generations...), BootstrapSessionIDs: append([]string{}, observer.bootstrap...),
+		Findings: []string{"controlled Models activity only; RQ-2-COMPOSED-CAPACITY, T27/T22-P01, I01 and VAL01 unproven"},
+	}
+	if observer.sessionID != "" {
+		report.FactorySessionID = &observer.sessionID
+	}
+	for _, kind := range []string{"instance_host", "models_leases"} {
+		discovery := ownerDiscovery{Kind: kind, Status: "registered", Provenance: "actual instrumented constructors; retained through process cleanup"}
+		for _, owner := range owners {
+			if owner.Kind == kind {
+				discovery.OwnerIdentities = append(discovery.OwnerIdentities, owner.OwnerIdentity)
+			}
+			totals, err := validateOwner(owner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if owner.Kind == kind {
+				report.Totals.HandleCount += totals.HandleCount
+				report.Totals.LeaseRecordCount += totals.LeaseRecordCount
+				report.Totals.CapacityHoldersTotal += totals.CapacityHoldersTotal
+			}
+		}
+		report.OwnerDiscovery = append(report.OwnerDiscovery, discovery)
+	}
+	if err := validateReport(report); err != nil {
+		t.Fatal(err)
+	}
+	observer.reports = append(observer.reports, report)
+}
+
+func (observer *smokeObserver) emit(t *testing.T) {
+	payload, err := json.MarshalIndent(struct {
+		Complete      bool               `json:"complete"`
+		Barrier       string             `json:"lastBarrier"`
+		CleanupErrors []string           `json:"cleanupErrors"`
+		Checkpoints   []checkpointReport `json:"checkpoints"`
+	}{observer.complete && !t.Failed() && len(observer.cleanupErrors) == 0, observer.barrier, observer.cleanupErrors, observer.reports}, "", "  ")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	t.Log(string(payload))
+	if path := os.Getenv("OBSERVER_REPORT"); path != "" {
+		if err := os.WriteFile(path, payload, 0600); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+func smokeArtifact(t *testing.T) artifactIdentity {
+	data, err := os.ReadFile(os.Getenv("OBSERVER_MANIFEST"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct{ SourceCommit, ToolSourceCommit, GoVersion, BuildCommand string }
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(data)
+	artifact := artifactIdentity{SourceCommit: manifest.SourceCommit, ToolSourceCommit: manifest.ToolSourceCommit, GoVersion: manifest.GoVersion, BuildCommand: manifest.BuildCommand, OverlayManifestSHA256: hex.EncodeToString(hash[:]), TestArtifactSHA256: os.Getenv("OBSERVER_ARTIFACT_SHA256")}
+	if artifact.TestArtifactSHA256 == "" {
+		t.Fatal("prebuilt artifact SHA256 required")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bytes, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executableHash := sha256.Sum256(bytes)
+	if hex.EncodeToString(executableHash[:]) != artifact.TestArtifactSHA256 {
+		t.Fatal("running test artifact does not match declared SHA256")
+	}
+	return artifact
+}
+
+func smokeFactory(t *testing.T) string {
+	dir := t.TempDir()
+	config := `{"name":"owner-observer","workTypes":[{"name":"task","handlingBehavior":["DEFAULT"],"states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"workers":[{"name":"worker-a"}],"workstations":[{"name":"process","worker":"worker-a","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	worker := filepath.Join(dir, "workers", "worker-a")
+	if err := os.MkdirAll(worker, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worker, "AGENTS.md"), []byte("---\ntype: MODEL_WORKER\nmodel: gpt-5-codex\nmodelProvider: codex\nstopToken: COMPLETE\n---\nProcess the input task.\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+type smokeCommandRunner struct{}
+
+func (smokeCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if req.Command != "codex" {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected external command: %q", req.Command)
+	}
+	return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"observer\",\"type\":\"agent_message\",\"text\":\"Observed. COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")}, nil
+}

@@ -21,7 +21,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -160,22 +159,7 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		return nil, err
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
-	unsupportedProvider, err := providerswire.NewService(
-		providerswire.WithCommandRunner(route),
-		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
-			Provider:     providers.IDCodex,
-			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
-		}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build unsupported continuation provider: %w", err)
-	}
-	for index := range setup.scenarios {
-		if setup.scenarios[index].name == "unsupported-provider" {
-			setup.scenarios[index].unsupportedProvider = unsupportedProvider
-		}
-	}
-	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route, unsupportedProvider)
+	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route)
 	if err != nil {
 		return nil, err
 	}
@@ -604,4 +588,35 @@ func copyInvokeContinueDirectory(sourceDir, targetDir string) error {
 		}
 		return os.WriteFile(targetPath, data, info.Mode().Perm())
 	})
+}
+
+// invokeContinueProviderRunner projects this controlled external route into the
+// public Providers effect without importing a peer construction package.
+type invokeContinueProviderRunner struct {
+	runner platformprocess.CommandRunner
+}
+
+func (runner invokeContinueProviderRunner) Run(ctx context.Context, request providers.CommandRequest) (providers.CommandResult, error) {
+	result, err := runner.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
+		Env: request.Env, WorkDir: request.WorkDir,
+		ExecutionScopeID: request.FactorySessionID, ExecutionLogger: request.ExecutionLogger,
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	return providers.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner invokeContinueProviderRunner) RunStreaming(ctx context.Context, request providers.CommandRequest, observe providers.OutputChunkObserver) (providers.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providers.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (runner invokeContinueProviderRunner) commandEffect() providers.CommandRunner {
+	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }

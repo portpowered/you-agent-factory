@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 )
 
@@ -50,12 +50,12 @@ func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			effect := claude.NewCommandEffect(claudeCommandRunnerStub{
-				result: platformprocess.CommandResult{
+			effect := claude.NewCommandEffect((claudeCommandRunnerStub{
+				result: providerservice.CommandResult{
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
-			}, platformclock.Real{})
+			}).commandEffect(), platformclock.Real{})
 			_, err := newClaudeRoot(t, effect).Execute(t.Context(), claudeFailureRequest())
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {
@@ -69,9 +69,24 @@ func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 }
 
 type claudeCommandRunnerStub struct {
-	result platformprocess.CommandResult
+	result providerservice.CommandResult
 }
 
-func (stub claudeCommandRunnerStub) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (stub claudeCommandRunnerStub) Run(_ context.Context, _ providerservice.CommandRequest) (providerservice.CommandResult, error) {
 	return stub.result, nil
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (stub claudeCommandRunnerStub) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := stub.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (stub claudeCommandRunnerStub) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: stub.Run, RunStreaming: stub.RunStreaming}
 }
