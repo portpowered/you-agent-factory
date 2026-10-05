@@ -178,7 +178,19 @@ func requestDiagnosticSecrets(request providers.ExecuteRequest, extraSecrets ...
 		request.WorkingDirectory,
 		request.Worktree,
 	}
-	return append(secrets, extraSecrets...)
+	// Sensitive environment keys classify their values as secrets too. An
+	// adapter may echo one inside ordinary tool/progress text or a safe-keyed
+	// diagnostic, where filtering metadata keys alone cannot protect it.
+	for key, value := range request.EnvVars {
+		if containsSensitiveMetadataTerm(key) {
+			secrets = append(secrets, value)
+		}
+	}
+	secrets = append(secrets, extraSecrets...)
+	// Redact a containing value before its substring; map iteration order must
+	// not leave part of a longer classified value in diagnostics.
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	return secrets
 }
 
 func containsSensitiveMetadataTerm(key string) bool {
