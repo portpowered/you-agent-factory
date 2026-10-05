@@ -104,6 +104,31 @@ func (s *Service) Prepare(ctx context.Context, defaults BuildDefaults, values Se
 	}, nil
 }
 
+// PrepareSpec derives scoped build data directly through the fixed preparation
+// owner. Selections already belong to this opening; preparation neither binds
+// another service nor substitutes its clock, logger, or execution effects.
+func (s *Service) PrepareSpec(
+	ctx context.Context,
+	defaults BuildDefaults,
+	values SessionBuildValues,
+	selections SessionBuildSpec,
+) (SessionBuildSpec, error) {
+	prepared, err := s.Prepare(ctx, defaults, values)
+	if err != nil {
+		return SessionBuildSpec{}, err
+	}
+	selections.Dir = prepared.Dir
+	selections.FolderPath = prepared.FolderPath
+	selections.SessionID = prepared.SessionID
+	selections.ExecutionBaseDir = prepared.ExecutionBaseDir
+	selections.RuntimeInstanceID = prepared.RuntimeInstanceID
+	selections.LoadedFactoryCfg = prepared.LoadedFactoryCfg
+	selections.RecordPath = prepared.RecordPath
+	selections.WorkflowID = prepared.WorkflowID
+	selections.SubmissionHooks = append([]factory.SubmissionHook(nil), selections.SubmissionHooks...)
+	return selections, nil
+}
+
 // CompatibilityBuild retains T15 activation and effect selection until its caller migration.
 type CompatibilityBuild struct {
 	preparation           *Service
@@ -181,33 +206,23 @@ func (s *CompatibilityBuild) BuildSpec(
 	if s == nil || s.build == nil {
 		return SessionBuildSpec{}, fmt.Errorf("runtime build service is required")
 	}
-	prepared, err := s.preparation.Prepare(ctx, s.defaults, SessionBuildValues{
+	spec, err := s.preparation.PrepareSpec(ctx, s.defaults, SessionBuildValues{
 		Dir: dir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
 		LoadedFactoryCfg: loadedFactoryCfg, RuntimeInstanceID: runtimeInstanceID,
 		PreserveCompatibilityDefaultRecordPath: preserveCompatibilityDefaultRecordPath,
+	}, SessionBuildSpec{
+		BaseLogger: s.baseLogger, Clock: s.clock,
+		ProviderOverride:    providerOverrideForMode(s.providerOverride, replayProvider),
+		ReplayCommandRunner: replayCommandRunner,
+		SubmissionHooks:     submissionHooks, CompletionPlanner: completionPlanner,
+		PetriMutationRecorder: s.petriMutationRecorder,
 	})
 	if err != nil {
 		return SessionBuildSpec{}, err
 	}
-	return SessionBuildSpec{
-		Dir:                   dir,
-		FolderPath:            folderPath,
-		SessionID:             sessionID,
-		ExecutionBaseDir:      executionBaseDir,
-		LoadedFactoryCfg:      prepared.LoadedFactoryCfg,
-		BaseLogger:            s.baseLogger,
-		RuntimeInstanceID:     prepared.RuntimeInstanceID,
-		Clock:                 s.clock,
-		RecordPath:            prepared.RecordPath,
-		WorkflowID:            prepared.WorkflowID,
-		ProviderOverride:      providerOverrideForMode(s.providerOverride, replayProvider),
-		ProviderCommandRunner: providerCommandRunnerForMode(s.mockWorkersConfig, s.providerCommandRunner, prepared.LoadedFactoryCfg, s.newMockCommandRunner),
-		CommandRunnerOverride: commandRunnerOverrideForMode(s.mockWorkersConfig, s.scriptCommandRunner, prepared.LoadedFactoryCfg, replayCommandRunner, s.newMockCommandRunner),
-		ReplayCommandRunner:   replayCommandRunner,
-		SubmissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
-		CompletionPlanner:     completionPlanner,
-		PetriMutationRecorder: s.petriMutationRecorder,
-	}, nil
+	spec.ProviderCommandRunner = providerCommandRunnerForMode(s.mockWorkersConfig, s.providerCommandRunner, spec.LoadedFactoryCfg, s.newMockCommandRunner)
+	spec.CommandRunnerOverride = commandRunnerOverrideForMode(s.mockWorkersConfig, s.scriptCommandRunner, spec.LoadedFactoryCfg, replayCommandRunner, s.newMockCommandRunner)
+	return spec, nil
 }
 
 // BuildReplacementSpec loads runtime config from factoryDir and derives a build
