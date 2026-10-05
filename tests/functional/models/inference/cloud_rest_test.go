@@ -30,11 +30,7 @@ func TestModelRESTDiscoversAndInvokesConfiguredCloudModel(t *testing.T) {
 		t.Fatalf("model detail = %#v, want configured cloud model and worker", detail)
 	}
 	listed := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
-	found := false
-	for _, model := range listed.Results {
-		found = found || model.Name == modelName
-	}
-	if !found {
+	if _, found := findModelSummary(listed.Results, modelName); !found {
 		t.Fatalf("configured model omitted from catalog: %#v", listed)
 	}
 	pull, err := http.Post(server.URL()+"/models/"+modelName+"/pull", "application/json", nil)
@@ -56,6 +52,11 @@ func TestModelRESTDiscoversAndInvokesConfiguredCloudModel(t *testing.T) {
 		Operation: "OMNI", Content: &content, Options: &factoryapi.ModelInvocationOptions{ResponseMode: &mode},
 		Bindings: &[]factoryapi.WorkstationOperationBinding{{Slot: "prompt", Selector: &factoryapi.WorkstationOperationBindingSelector{Type: &contentType}}},
 	}, "invoke configured cloud model")
+	assertCloudModelInvocation(t, modelName, result)
+}
+
+func assertCloudModelInvocation(t *testing.T, modelName string, result factoryapi.ModelInvocationResponse) {
+	t.Helper()
 	if result.ModelName != modelName || result.Worker != "cloud-worker" || result.ProviderLocality != factoryapi.WorkerModelLocalityCloud || len(result.Content) != 1 || len(result.Bindings) != 1 || result.Bindings[0].Slot != "prompt" {
 		t.Fatalf("named invocation = %#v, want configured cloud result and prompt binding", result)
 	}

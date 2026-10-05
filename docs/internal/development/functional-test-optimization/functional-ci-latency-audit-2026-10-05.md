@@ -956,3 +956,38 @@ This establishes a passing local result below five minutes; the complete lane
 is still **11.29s above three minutes**. Hosted CI of the pushed head remains
 required before the first merge checkpoint. The two subsequent binary removals
 are not included here. Evidence is under `.artifacts/latency-audit/linux-link-opt/`.
+
+### Follow-up isolation and unsuccessful repeat
+
+The next full four-CPU run, including the two binary removals, took **203.55s**
+overall and 189.668s for the test invocation. It failed: 1,014 passed, two skipped
+and three failed across 140 packages and 1,019 top-level tests. Coverage gates
+were not evaluated. CPU consumption was 618.79s user and 131.39s system.
+This result is not a passing latency checkpoint. Evidence is retained under
+`.artifacts/latency-audit/linux-next-checkpoint/`.
+
+The failures remain customer-visible promises: restarting an automation session
+returned HTTP 504; a deleted packaged-loop session remained readable; and
+CC-12 observed session event sequence 6 before 5. These assertions must remain.
+Increasing polling timeouts or deleting these journeys would hide unresolved
+lifecycle or ordering behavior and would not establish a reliable fast lane.
+
+The preceding passing run identified two avoidable model stalls: the built-in
+readiness/unknown-model case took 30.580s and custom CLI model discovery took
+18.150s. Their asset HTTP clients were uncontrolled; the reusable CLI process
+also used default model-cache resolution. Both now reject unavailable fixture
+asset downloads immediately. The CLI process resolves its cache into its own
+temporary home and the custom-model invocation uses the shared isolated-home
+environment helper. Three Linux repetitions of the focused cases pass in
+**1.154s total** for readiness and **0.226s total** for CLI discovery. These
+focused, uncovered measurements identify unnecessary network/cache exposure;
+they are not a full coverage-lane forecast.
+
+Hosted lint at `630fb269c5` found two new model-test complexity violations.
+The built-in route test now retains public audio and readiness responses while
+removing internal launch/protocol/network call-count assertions. Cloud REST
+discovery uses the existing model lookup helper, and its invocation response
+assertions are separated from fixture setup. The retired
+`ValidateLocalInvocationRequest` service-root lint allowance is also deleted;
+its stale entry failed packaged-factory verification. Hosted validation remains
+required after these corrections.

@@ -21,8 +21,18 @@ import (
 var modelListProcess support.ApplicationProcess
 
 func TestMain(m *testing.M) {
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	cacheHome, err := os.MkdirTemp("", "functional-model-cli-cache-")
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "create models CLI cache home: %v\n", err)
+		os.Exit(1)
+	}
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ModelAssetResolveHomeDirectory: func() (string, error) { return cacheHome, nil },
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetHTTPClient:           modelListAssetHTTP{},
+	})
+	if err != nil {
+		_ = os.RemoveAll(cacheHome)
 		fmt.Fprintf(os.Stderr, "build models CLI process: %v\n", err)
 		os.Exit(1)
 	}
@@ -35,7 +45,17 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "close models CLI process: %v\n", err)
 		exitCode = 1
 	}
+	if err := os.RemoveAll(cacheHome); err != nil {
+		fmt.Fprintf(os.Stderr, "remove models CLI cache home: %v\n", err)
+		exitCode = 1
+	}
 	os.Exit(exitCode)
+}
+
+type modelListAssetHTTP struct{}
+
+func (modelListAssetHTTP) Do(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("model catalog fixture has no downloadable assets")
 }
 
 // TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON proves list routing and JSON catalog output.
@@ -88,7 +108,7 @@ func TestProcessModelsCatalogDiscoversCustomOperatorModel(t *testing.T) {
 		t.Helper()
 		inputs := support.FakeInputs(t.Context(), args)
 		inputs.Input.WorkingDirectory = workingDirectory
-		inputs.Input.Env = append(inputs.Input.Env, "USERPROFILE="+home, "HOME="+home)
+		inputs.Input.Env = support.IsolatedHomeEnvironment(home)
 		if err := modelListProcess.Execute(inputs.Input); err != nil {
 			t.Fatalf("Process.Execute(%v) error = %v\nstderr=%s", args, err, inputs.Stderr())
 		}

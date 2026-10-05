@@ -2792,7 +2792,6 @@ service-root-exported-function|pkg/services/models|pkg/services/models/host_cont
 service-root-exported-function|pkg/services/models|pkg/services/models/host_contract.go#ValidateInspectRuntimeRequest
 service-root-exported-function|pkg/services/models|pkg/services/models/host_contract.go#ValidateReleaseLeaseRequest
 service-root-exported-function|pkg/services/models|pkg/services/models/local_execution_contract.go#PrepareGenericInvocation
-service-root-exported-function|pkg/services/models|pkg/services/models/local_execution_contract.go#ValidateLocalInvocationRequest
 service-root-exported-function|pkg/services/models|pkg/services/models/managed_runtime_contract.go#IsManagedRuntimeBackend
 service-root-exported-function|pkg/services/models|pkg/services/models/managed_runtime_contract.go#NormalizeGenericInvocationOutputs
 service-root-exported-function|pkg/services/operator_settings|pkg/services/operator_settings/acp_agent_profile.go#DefaultACPAgentProfile
