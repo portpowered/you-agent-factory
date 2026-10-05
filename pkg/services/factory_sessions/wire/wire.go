@@ -216,6 +216,30 @@ func NewSessionHost(state *SessionState, control SessionScopeControl, identitySe
 	return sessionservice.SessionServiceHost(state, nil, control, nil, "", identityService, clock, projector, checkpoints, logger)
 }
 
+// NewGateway constructs the stable process gateway from completed owner roles.
+func NewGateway(
+	host sessionservice.Host,
+	streams *GatewayStreams,
+	reconnects factorysessions.ReconnectCursorValidator,
+	results factoryruntime.SessionResultProjectionOperation,
+	responses ResponseStreams,
+	liveChange factorysessioncontracts.LiveChangeCoordinator,
+	durable DurableExecutionService,
+	history RecordedHistory,
+	invoker InvocationService,
+	activate NamedFactoryActivator,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
+) roles.SessionGateway {
+	gateway := sessionservice.NewWithLiveChangeCoordinator(
+		host, streams, reconnects, results, responses, liveChange, history,
+		durable, invoker, activate, activationGateway,
+	)
+	if gateway == nil {
+		return nil
+	}
+	return gateway
+}
+
 // NamedFactoryActivator addresses the selected session at each activation.
 type NamedFactoryActivator func(context.Context, string) error
 
@@ -231,6 +255,7 @@ func NewKeyedDefinitionActivationGateway(state *SessionState, clock factoryrunti
 // used by peer roots while canonical Wire completes the rest of the process
 // graph. It is an assembly capability, not a second published Service root.
 func NewRuntimeAssembly(
+	gateway roles.SessionGateway,
 	registry SessionRegistry,
 	state *SessionState,
 	streams StreamManager,
@@ -256,10 +281,27 @@ func NewRuntimeAssembly(
 	namedFactoryActivator NamedFactoryActivator,
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 ) (RuntimeAssembly, error) {
-	assembly, err := factorysessionroot.NewAssembly(
+	if activation == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
+	}
+	if control == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: scoped control is required")
+	}
+	if invoker == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: invocation owner is required")
+	}
+	if err := validateRootDependencies(sessionResultProjection, eventIDs, sessionIDs, resolveHome, directoryInspection, namedPaths, initialWorkFiles, identityService, responseStreams); err != nil {
+		return nil, err
+	}
+	if err := validateRootRuntimeDependencies(clock, liveChangeCoordinator); err != nil {
+		return nil, err
+	}
+	assembly := sessionservice.NewAssembly(
+		gateway,
 		registry, state, streams, invoker, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
+		clock,
 		eventIDs,
 		sessionIDs,
 		resolveHome,
@@ -268,7 +310,6 @@ func NewRuntimeAssembly(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
-		clock,
 		liveChangeCoordinator,
 		recordedHistory,
 		gatewayStreams,
@@ -277,12 +318,6 @@ func NewRuntimeAssembly(
 		namedFactoryActivator,
 		definitionActivationGateway,
 	)
-	if err != nil {
-		return nil, err
-	}
-	if assembly == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
-	}
 	return assembly, nil
 }
 
@@ -380,4 +415,58 @@ func NewProcessDurableExecution(
 		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
 	}
 	return execution, nil
+}
+
+func validateRootDependencies(
+	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	sessionIDs factorysessions.SessionIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	directoryInspection roles.DirectoryInspection,
+	namedPaths factorydefinitions.NamedPathResolver,
+	initialWorkFiles fileeffects.InitialWorkReader,
+	identityService identity.Service,
+	responseStreams responsestreamservice.Service,
+) error {
+	if sessionResultProjection == nil {
+		return fmt.Errorf("construct Factory Sessions: session result projection is required")
+	}
+	if eventIDs == nil {
+		return fmt.Errorf("construct Factory Sessions: response event ID generator is required")
+	}
+	if sessionIDs == nil {
+		return fmt.Errorf("construct Factory Sessions: session ID generator is required")
+	}
+	if resolveHome == nil {
+		return fmt.Errorf("construct Factory Sessions: home directory resolver is required")
+	}
+	if directoryInspection == nil {
+		return fmt.Errorf("construct Factory Sessions: directory inspection is required")
+	}
+	if namedPaths == nil {
+		return fmt.Errorf("construct Factory Sessions: named path resolver is required")
+	}
+	if initialWorkFiles == nil {
+		return fmt.Errorf("construct Factory Sessions: initial Work reader is required")
+	}
+	if identityService == nil {
+		return fmt.Errorf("construct Factory Sessions: identity service is required")
+	}
+	if responseStreams == nil {
+		return fmt.Errorf("construct Factory Sessions: response-stream service is required")
+	}
+	return nil
+}
+
+func validateRootRuntimeDependencies(
+	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) error {
+	if clock == nil {
+		return fmt.Errorf("construct Factory Sessions: clock is required")
+	}
+	if liveChangeCoordinator == nil {
+		return fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
+	return nil
 }

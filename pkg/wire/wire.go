@@ -248,6 +248,8 @@ var servicesSet = wire.NewSet(
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
 	factorysessionwire.NewRuntimeAssembly,
+	factorysessionwire.NewGateway,
+	provideFactorySessionReconnectValidator,
 	factorysessionwire.NewSessionHost,
 	factorysessionwire.NewNamedFactoryActivator,
 	factorysessionwire.NewKeyedDefinitionActivationGateway,

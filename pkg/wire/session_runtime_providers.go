@@ -578,6 +578,11 @@ func provideFactorySessionResponseEventRetentionLimits(
 	return edges.FactorySessionResponseEventRetentionLimits
 }
 
+// provideFactorySessionReconnectValidator preserves Recordings cursor validation.
+func provideFactorySessionReconnectValidator(projections recordings.ProjectionService) factorysessions.ReconnectCursorValidator {
+	return projections.ValidateReconnectReplay
+}
+
 // provideInvocationWorldStateProjector binds the already-injected Recordings projection.
 func provideInvocationWorldStateProjector(projections recordings.ProjectionService) factoryruntime.WorldStateProjector {
 	return projections.ReconstructFactoryWorldState

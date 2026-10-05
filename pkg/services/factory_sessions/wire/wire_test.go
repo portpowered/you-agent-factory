@@ -57,6 +57,8 @@ func TestNewRuntimeAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "named path resolver", mutate: func(in *newServiceInputs) { in.namedPaths = nil }},
 		{name: "initial Work reader", mutate: func(in *newServiceInputs) { in.initialWorkFiles = nil }},
 		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
+		{name: "identity service", mutate: func(in *newServiceInputs) { in.omitIdentity = true }},
+		{name: "response-stream service", mutate: func(in *newServiceInputs) { in.omitResponses = true }},
 		{name: "events root", mutate: func(in *newServiceInputs) { in.eventsService = nil }},
 		{name: "clock", mutate: func(in *newServiceInputs) { in.clock = nil }},
 		{name: "live-change coordinator", mutate: func(in *newServiceInputs) { in.liveChangeCoordinator = nil }},
@@ -284,6 +286,7 @@ func (resultProjector) ProjectSessionResults(factoryruntime.SessionResultInput) 
 }
 
 type newServiceInputs struct {
+	omitIdentity, omitResponses  bool
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService
@@ -337,7 +340,16 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 	}
 	state := NewSessionState(registry, responseRegistry, in.clock, in.eventIDs, in.sessionIDs, responses)
 	streams := NewStreamManager(state, NewStreamObserver(), responseRegistry, responses)
+	assemblyIdentity, assemblyResponses := identity, responses
+	if in.omitIdentity {
+		assemblyIdentity = nil
+	}
+	if in.omitResponses {
+		assemblyResponses = nil
+	}
+
 	return NewRuntimeAssembly(
+		NewGateway(NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, in.clock, nil, in.newJavaScriptCheckpointStore, zap.NewNop()), streams, nil, in.sessionResultProjection, responses, in.liveChangeCoordinator, nil, nil, nil, NewNamedFactoryActivator(state), NewKeyedDefinitionActivationGateway(state, in.clock)),
 		registry, state, streams, sessioninvocation.NewSessionOwner(NewInvocationAuthority(state, platformclock.Real{}, nil), NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), NewScopeControl(state, nil, zap.NewNop()), NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
@@ -347,8 +359,8 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		in.directoryInspection,
 		in.namedPaths,
 		in.initialWorkFiles,
-		identity,
-		responses,
+		assemblyIdentity,
+		assemblyResponses,
 		in.clock,
 		in.liveChangeCoordinator,
 		nil,
@@ -645,5 +657,111 @@ func TestProcessDurableOwnerPreservesConstructionFailureCauses(t *testing.T) {
 	var validation *execution.ValidationError
 	if result != nil || !errors.As(err, &validation) || validation.Field != "persistence" || !strings.Contains(err.Error(), failure.Error()) {
 		t.Fatalf("persistence construction result=%v error=%v", result, err)
+	}
+}
+
+type gatewayOwnerInvocation struct {
+	InvocationService
+	sessionID, requestID string
+	err                  error
+}
+
+func (owner *gatewayOwnerInvocation) InvokeFactorySession(_ context.Context, sessionID string, request factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error) {
+	owner.sessionID = sessionID
+	owner.requestID = ""
+	if request.RequestID != nil {
+		owner.requestID = *request.RequestID
+	}
+	return factorydefinitions.FactoryInvocationResult{SessionID: sessionID, RequestID: owner.requestID, WorkID: "selected-work"}, owner.err
+}
+
+type gatewayOwnerHistory struct{ err error }
+
+func (history gatewayOwnerHistory) ListSessions(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return factorysessions.ListSessionsResult{Scope: request.Scope, RecordedSessions: []factorysessions.RecordedSessionListSummary{{SessionID: "recorded", ArtifactReference: "recorded.jsonl"}}}, history.err
+}
+
+type gatewayOwnerDurable struct {
+	DurableExecutionService
+	request factorysessions.ListSessionsRequest
+	err     error
+}
+
+func (owner *gatewayOwnerDurable) ListSessions(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	owner.request = request
+	return factorysessions.ListSessionsResult{Scope: request.Scope, DurableSessions: []factorysessions.DurableSessionListSummary{{SessionID: "persisted"}}}, owner.err
+}
+
+func newOwnerGatewayFixture(t *testing.T, durable DurableExecutionService, history RecordedHistory, invoker InvocationService, activate NamedFactoryActivator) roles.SessionGateway {
+	t.Helper()
+	inputs := validNewServiceInputs()
+	identity, err := NewIdentity(inputs.resolveSymlinks, inputs.resolveHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses, err := NewResponseStreams(inputs.eventIDs, nil, inputs.eventsService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := NewResponseStreamRegistry(responses, inputs.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := NewSessionState(NewSessionRegistry(), registry, inputs.clock, inputs.eventIDs, inputs.sessionIDs, responses)
+	host := NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, inputs.clock, nil, inputs.newJavaScriptCheckpointStore, zap.NewNop())
+	streams := NewStreamManager(state, NewStreamObserver(), registry, responses)
+	return NewGateway(host, streams, nil, inputs.sessionResultProjection, responses, inputs.liveChangeCoordinator, durable, history, invoker, activate, NewKeyedDefinitionActivationGateway(state, inputs.clock))
+}
+
+func TestOwnerGatewayPreservesInjectedInvocationAndActivation(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("selected invocation failure")
+	invoker := &gatewayOwnerInvocation{}
+	var activationName string
+	activationFailure := errors.New("selected activation failure")
+	gateway := newOwnerGatewayFixture(t, nil, nil, invoker, func(_ context.Context, name string) error { activationName = name; return activationFailure })
+	for _, id := range []string{"selected", "peer"} {
+		requestID := "request-" + id
+		result, err := gateway.InvokeFactorySession(t.Context(), id, factorysessions.InvocationRequest{RequestID: &requestID})
+		if err != nil || result.SessionID != id || result.RequestID != "request-"+id || result.WorkID != "selected-work" || invoker.sessionID != id || invoker.requestID != result.RequestID {
+			t.Fatalf("invocation %s = %+v, %v", id, result, err)
+		}
+	}
+	invoker.err = failure
+	if _, err := gateway.InvokeFactorySession(t.Context(), "selected", factorysessions.InvocationRequest{}); !errors.Is(err, failure) {
+		t.Fatalf("invocation error = %v", err)
+	}
+	if err := gateway.ActivateNamedFactory(t.Context(), "owned-factory"); !errors.Is(err, activationFailure) || activationName != "owned-factory" {
+		t.Fatalf("activation = %q, %v", activationName, err)
+	}
+	if _, err := gateway.GetFactorySession(t.Context(), "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing live session = %v", err)
+	}
+}
+
+func TestOwnerGatewayPreservesInjectedHistoryAndDurableFailures(t *testing.T) {
+	t.Parallel()
+	durable := &gatewayOwnerDurable{}
+	gateway := newOwnerGatewayFixture(t, durable, gatewayOwnerHistory{}, nil, nil)
+	request := factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll, Filters: factorysessions.SessionListFilters{ProjectBoundary: "selected-project"}}
+	result, err := gateway.ListSessions(t.Context(), request)
+	if err != nil || len(result.RecordedSessions) != 1 || result.RecordedSessions[0].SessionID != "recorded" || len(result.DurableSessions) != 1 || result.DurableSessions[0].SessionID != "persisted" || durable.request.Filters.ProjectBoundary != "selected-project" {
+		t.Fatalf("combined inventory = %+v, %v", result, err)
+	}
+	durable.err = errors.New("selected persistence read failure")
+	if _, err := gateway.ListSessions(t.Context(), request); !errors.Is(err, durable.err) {
+		t.Fatalf("durable failure = %v", err)
+	}
+	failure := errors.New("selected history failure")
+	gateway = newOwnerGatewayFixture(t, nil, gatewayOwnerHistory{err: failure}, nil, nil)
+	if _, err := gateway.ListSessions(t.Context(), factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeHistory}); !errors.Is(err, failure) {
+		t.Fatalf("history failure = %v", err)
+	}
+}
+
+func TestOwnerGatewayPreservesUnavailableRequiredCollaborators(t *testing.T) {
+	t.Parallel()
+	if gateway := NewGateway(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); gateway != nil {
+		t.Fatal("unavailable host and streams returned a non-nil gateway capability")
 	}
 }

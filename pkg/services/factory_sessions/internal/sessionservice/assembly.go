@@ -73,6 +73,7 @@ type StreamManager interface {
 
 // NewAssembly constructs an empty live-session directory.
 func NewAssembly(
+	gateway roles.SessionGateway,
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams StreamManager,
@@ -99,7 +100,7 @@ func NewAssembly(
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 ) roles.RuntimeAssembly {
 	return &Assembly{
-		SessionGateway:               &Service{durable: processDurable},
+		SessionGateway:               gateway,
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
