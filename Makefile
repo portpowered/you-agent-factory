@@ -213,7 +213,6 @@ PACKAGE_BOUNDARY_BASE_REF ?=
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-RETIRED_SURFACE_CHECK_ROOT ?= .
 # "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
 # Entries are keyed by source content, never by checkout path, so a fresh worktree
 # reuses checkers another worktree compiled. Set a path to opt out.
@@ -241,7 +240,7 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci-lint-run repolint lint-migration-smoke retired-surface-check fmt-check contracts-check
+LINT_TARGETS_BASE := vet pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -320,7 +319,7 @@ endef
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
 .PHONY: lint-full pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
-.PHONY: retired-surface-check readme-check deadcode dashboard-verify
+.PHONY: readme-check deadcode dashboard-verify
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
@@ -1031,7 +1030,8 @@ else
 GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository
 endif
 
-# The module plugin is staged before retiring the standalone enforcement path.
+# Repository source diagnostics run through the supported module plugin.
+# Standalone baseline/owner enforcement remains until its shared-analyzer port.
 .PHONY: golangci-build repository-lint-run
 ifeq ($(GOLANGCI_PREBUILT),1)
 golangci-build:
@@ -1056,9 +1056,9 @@ else
 REPOLINT_BIN := $(REPOLINT_DIR)/repolint
 endif
 
-# golangci runs both halves: the built-in golangci-lint linters and the
-# repository's go/analysis analyzers (cmd/repolint) through go vet -vettool.
-golangci: golangci-lint-run repolint
+# golangci runs built-in and strict custom diagnostics. The temporary repolint
+# dependency retains baseline growth/compiler-owner checks during migration.
+golangci: golangci-lint-run repository-lint-run repolint
 
 LINT_MIGRATION_COHORT ?= all
 
@@ -1088,9 +1088,6 @@ lint-baseline-growth: repolint-build
 	git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base" || exit 1; \
 	"$(REPOLINT_BIN)" -baseline-growth="$(REPOLINT_DIR)/baseline.base"
 
-
-retired-surface-check:
-	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")
 
 deadcode:
 	$(call run_lint_checker,./cmd/deadcodecheck,)

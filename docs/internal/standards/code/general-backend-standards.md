@@ -200,8 +200,12 @@ Default review thresholds:
 
 Repository Go size and complexity enforcement:
 
-- `make golangci` runs pinned golangci-lint v2.11.4 and the shared `repolint`
-  analyzer. Its built-in size rules apply to handwritten Go under `cmd/`,
+- `make golangci` runs pinned golangci-lint v2.11.4 and shared analyzers through
+  its supported module plugin. The strict repository configurations preserve
+  exact-debt diagnostics independently of built-in changed-line filtering.
+  During migration, its `repolint` dependency also retains standalone baseline
+  growth and compiler-owner enforcement until those checks move into analyzers.
+  Its built-in size rules apply to handwritten Go under `cmd/`,
   `internal/`, `pkg/`, and `tests/`, including `_test.go` files.
 - Revive `file-length-limit` allows 1000 lines after excluding comment and
   blank lines. Revive `function-length` allows 100 physical lines inside a

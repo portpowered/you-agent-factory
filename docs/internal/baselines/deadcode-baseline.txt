@@ -172,8 +172,6 @@ internal/functionaltestmetadata/record.go: unreachable func: CustomerScenarioCou
 internal/packagedfactorycatalog/definition_catalog.go: unreachable func: DefinitionCatalog.Lookup
 internal/packagedfactorycatalog/definition_catalog.go: unreachable func: DefinitionCatalog.Names
 internal/packagedfactorycatalog/manifest.go: unreachable func: GenerateManifest
-internal/retiredsurfaceguard/inventory.go: unreachable func: SettledRetiredCLIPaths
-internal/retiredsurfaceguard/inventory.go: unreachable func: SettledRetiredDocsTopics
 internal/testpath/testpath.go: unreachable func: MustRepoPathFromCaller
 internal/testpath/testpath.go: unreachable func: MustRepoRootFromCaller
 internal/testpath/testpath.go: unreachable func: isRepoRoot
