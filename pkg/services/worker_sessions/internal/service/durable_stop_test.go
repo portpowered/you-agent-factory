@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -238,5 +240,74 @@ func TestControlDurableStopFailureIsAbsorbingAndSafe(t *testing.T) {
 	}
 	if _, err := r.Cancel(t.Context(), req); !errors.Is(err, workersessions.ErrInvalidState) || calls != 1 {
 		t.Fatalf("failed replay repeated effect: calls %d, %v", calls, err)
+	}
+}
+
+// The store acknowledgement is an asynchronous boundary: a natural terminal
+// winner during that boundary must survive both the stop and its durable result.
+func TestControlDurableStopNaturalWinnerDuringIntent(t *testing.T) {
+	t.Parallel()
+	for _, action := range []workersessions.ControlAction{workersessions.ControlActionCancel, workersessions.ControlActionTerminate} {
+		for _, state := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed} {
+			t.Run(string(action)+"/"+string(state), func(t *testing.T) {
+				t.Parallel()
+				r, s, store := newDurableStopFixture(t)
+				calls := 0
+				s.installCancel(func() { calls++ })
+				store.begin = func(context.Context, recordings.WorkerControlOperationRecord) error {
+					r.commitTerminal("worker", state, workersessions.TerminalResult{})
+					s.signalDone()
+					return nil
+				}
+				result, err := r.cancelControl(t.Context(), workersessions.ControlRequest{ID: "worker"}, action, true)
+				if err != nil || calls != 0 || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != state {
+					t.Fatalf("natural winner stop=%#v calls=%d error=%v", result, calls, err)
+				}
+				if len(store.records) != 2 || store.records[1].Operation.Phase != "COMPLETED" {
+					t.Fatalf("natural winner history=%#v", store.records)
+				}
+				var saved workersessions.ControlResult
+				if err := json.Unmarshal(store.records[1].Result, &saved); err != nil || saved.Outcome != workersessions.ControlOutcomeNoop || saved.Session.State != state {
+					t.Fatalf("durable natural winner=%#v error=%v", saved, err)
+				}
+				if cause := committedStopCause(store.records, store.records[0].Target, state); cause != nil {
+					t.Fatalf("natural NOOP granted operator cause=%v", cause)
+				}
+			})
+		}
+	}
+}
+
+func TestControlDurableStopResultExcludesExecutionAndProviderContent(t *testing.T) {
+	t.Parallel()
+	r, _, store := newDurableStopFixture(t)
+	target, err := r.freezeControlTarget("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := stopIntent(workersessions.ControlRequest{ID: "worker"}, workersessions.ControlActionCancel, target)
+	store.records = append(store.records, intent)
+	private := "control-result-private-sentinel"
+	result := workersessions.ControlResult{
+		Action: workersessions.ControlActionCancel, Outcome: workersessions.ControlOutcomeApplied, DispatchID: "attempt",
+		Session: workersessions.Session{
+			ID: "worker", State: workersessions.StateCanceled, Model: &private, ReasoningEffort: &private,
+			PredecessorWorkerSessionID: private, SuccessorWorkerSessionID: private,
+			Result:                     &workersessions.TerminalResult{Cause: &workersessions.FailureCause{Detail: private}},
+			ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{Reference: providers.SessionRef{ID: private}},
+		},
+	}
+	if err := r.commitStopResult(t.Context(), intent, result, nil); err != nil {
+		t.Fatal(err)
+	}
+	var saved workersessions.ControlResult
+	if err := json.Unmarshal(store.records[1].Result, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(store.records[1].Result), private) || saved.Session.Result != nil || saved.Session.ProviderSessionAssociation != nil {
+		t.Fatal("control result persisted private execution or provider content")
+	}
+	if saved.Session.ID != "worker" || saved.Session.State != workersessions.StateCanceled || saved.Action != result.Action || saved.Outcome != result.Outcome || saved.DispatchID != "attempt" {
+		t.Fatalf("safe control result lost replay facts=%#v", saved)
 	}
 }
