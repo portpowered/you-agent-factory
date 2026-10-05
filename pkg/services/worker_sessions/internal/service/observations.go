@@ -101,7 +101,7 @@ func decodeObservationListCursor(value string) (string, error) {
 	}
 	// A snapshot token is not a compatibility last-identity cursor. Reject the
 	// structured token rather than silently treating its JSON as a Worker ID.
-	if cursor, err := decodeHistoryCursor(value); err == nil && cursor.Signature != "" {
+	if IsHistoryCursor(value) {
 		return "", workersessions.ErrInvalidObservationPagination
 	}
 	return string(decoded), nil

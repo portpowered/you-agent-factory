@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -21,7 +23,7 @@ func TestFleetObservationServiceCharacterizesPagedOrderAndCursor(t *testing.T) {
 	t.Parallel()
 
 	firstSources := newInterleavedFleetSources()
-	firstService := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	firstService := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{firstSources[2], firstSources[0], firstSources[1]}, nil
 	})
 	firstPage, firstTokens := listFleetObservationPages(t, firstService, workersessions.ListWorkerSessionObservationsRequest{
@@ -37,7 +39,7 @@ func TestFleetObservationServiceCharacterizesPagedOrderAndCursor(t *testing.T) {
 	}
 
 	secondSources := newInterleavedFleetSources()
-	secondService := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	secondService := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{secondSources[1], secondSources[2], secondSources[0]}, nil
 	})
 	secondPage, _ := listFleetObservationPages(t, secondService, workersessions.ListWorkerSessionObservationsRequest{
@@ -62,7 +64,7 @@ func TestFleetObservationServiceCharacterizesPagedOrderAndCursor(t *testing.T) {
 func TestFleetObservationServiceResolvesWorkerSessionIdentityAcrossSources(t *testing.T) {
 	t.Parallel()
 	wanted := workersessions.Observation{WorkerSessionID: "worker-fleet-2", FactorySessionID: "factory-2"}
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{
 			newFleetObservationSource("first", workersessions.Observation{WorkerSessionID: "worker-fleet-1"}),
 			newFleetObservationSource("second", wanted),
@@ -91,7 +93,7 @@ func TestFleetObservationServiceUsesOneLookaheadReadPerFleetPage(t *testing.T) {
 		wantIDs = append(wantIDs, workerSessionID)
 	}
 	source := newFleetObservationSource("bounded", inventory...)
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{source}, nil
 	})
 
@@ -153,7 +155,7 @@ func TestFleetObservationServiceMergesComplementaryFactsWithoutOverwriting(t *te
 
 	primarySource := newFleetObservationSource("primary", primary)
 	secondarySource := newFleetObservationSource("secondary", complementary)
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{primarySource, secondarySource}, nil
 	})
 
@@ -188,7 +190,7 @@ func TestFleetObservationServiceRejectsMalformedSourcePages(t *testing.T) {
 				return test.result, nil
 			}
 			later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
-			service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+			service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 				return []workersessions.Service{bad, later}, nil
 			})
 
@@ -380,7 +382,7 @@ func TestFleetObservationServiceStopsOnUnavailableProjectionAndCancellation(t *t
 		unavailable := newFleetObservationSource("unavailable")
 		unavailable.err = workersessions.ErrObservationProjectionUnavailable
 		later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
-		service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 			return []workersessions.Service{available, unavailable, later}, nil
 		})
 
@@ -405,7 +407,7 @@ func TestFleetObservationServiceStopsOnUnavailableProjectionAndCancellation(t *t
 			}}, nil
 		}
 		later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
-		service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 			return []workersessions.Service{first, later}, nil
 		})
 
@@ -421,7 +423,7 @@ func TestFleetObservationServiceStopsOnUnavailableProjectionAndCancellation(t *t
 	t.Run("catalog failure", func(t *testing.T) {
 		t.Parallel()
 		catalogErr := errors.New("catalog unavailable")
-		service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 			return nil, catalogErr
 		})
 
@@ -443,7 +445,7 @@ func TestFleetObservationServiceCharacterizesFiltersFactsAndDetachment(t *testin
 	for index, source := range sources {
 		initialInventories[index] = source.inventorySnapshot()
 	}
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{sources[0], sources[1], sources[2], sources[3]}, nil
 	})
 	states := []workersessions.State{
@@ -544,7 +546,7 @@ func assertFilteredFleetScopes(
 func TestFleetObservationServicePreservesOptionalProjectionFacts(t *testing.T) {
 	source := newFleetObservationSource("projection", fleetObservation("worker-base", true, workersessions.StateFailed))
 	source.err = workersessions.ErrObservationProjectionUnavailable
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{source}, nil
 	})
 
@@ -560,7 +562,7 @@ func TestFleetObservationServicePreservesOptionalProjectionFacts(t *testing.T) {
 
 func TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput(t *testing.T) {
 	empty := newFleetObservationSource("empty")
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{empty}, nil
 	})
 	result, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{})
@@ -583,8 +585,8 @@ func TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput(t *test
 		})
 	}
 
-	if NewFleetObservationService(nil) != nil {
-		t.Fatal("NewFleetObservationService(nil) returned a service")
+	if newLegacyFleetFixture(nil) != nil {
+		t.Fatal("newLegacyFleetFixture(nil) returned a service")
 	}
 	var unavailable *FleetObservationService
 	if _, err := unavailable.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
@@ -993,4 +995,36 @@ func (source *fleetObservationSource) inventorySnapshot() []workersessions.Obser
 		result = append(result, observation.Clone())
 	}
 	return result
+}
+
+// These fixtures exercise the omitted-selector compatibility path with an older
+// injected writer that has no durable read capability.
+func newLegacyFleetFixture(catalog ObservationServiceCatalog) *FleetObservationService {
+	return NewFleetObservationService(catalog, nil, platformclock.Real{}, logging.NoopLogger{})
+}
+
+func TestFleetHistoryUsesScopedSnapshotInsteadOfCompatibilityCursor(t *testing.T) {
+	t.Parallel()
+	rows := []workersessions.Observation{
+		{WorkerSessionID: "same-id", FactorySessionID: "factory-a", AttemptID: "attempt-a", State: workersessions.StateRunning, DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable},
+		{WorkerSessionID: "same-id", FactorySessionID: "factory-b", AttemptID: "attempt-b", State: workersessions.StateRunning, DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable},
+	}
+	first, second := newFleetObservationSource("first", rows[0]), newFleetObservationSource("second", rows[1])
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{first, second}, nil
+	})
+	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
+	one, err := service.ListWorkerSessionObservations(t.Context(), req)
+	if err != nil || len(one.Observations) != 1 || one.NextToken == "" {
+		t.Fatalf("first=%+v err=%v", one, err)
+	}
+	req.NextToken = one.NextToken
+	two, err := service.ListWorkerSessionObservations(t.Context(), req)
+	if err != nil || len(two.Observations) != 1 || two.Observations[0].FactorySessionID == one.Observations[0].FactorySessionID || two.NextToken != "" {
+		t.Fatalf("second=%+v err=%v", two, err)
+	}
+	req.History = ""
+	if _, err := service.ListWorkerSessionObservations(t.Context(), req); err == nil {
+		t.Fatal("history snapshot accepted as compatibility cursor")
+	}
 }

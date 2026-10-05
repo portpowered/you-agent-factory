@@ -205,3 +205,10 @@ func decodeHistoryCursor(token string) (historyCursor, error) {
 	}
 	return cursor, nil
 }
+
+// IsHistoryCursor distinguishes a signed snapshot envelope from the legacy
+// last-identity cursor so every fleet entry point rejects mixed pagination.
+func IsHistoryCursor(token string) bool {
+	cursor, err := decodeHistoryCursor(token)
+	return err == nil && cursor.Signature != ""
+}

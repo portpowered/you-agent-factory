@@ -10,7 +10,7 @@ import (
 func TestFleetObservationServiceRoutesTranscriptAndEventsToOwningSource(t *testing.T) {
 	t.Parallel()
 	wanted := workersessions.Observation{WorkerSessionID: "worker-fleet-2", FactorySessionID: "factory-2"}
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{
 			newFleetObservationSource("first", workersessions.Observation{WorkerSessionID: "worker-fleet-1"}),
 			newFleetObservationSource("second", wanted),

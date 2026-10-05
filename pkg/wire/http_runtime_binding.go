@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/costs"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
@@ -24,6 +26,7 @@ import (
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -99,12 +102,14 @@ func provideHTTPRuntimeBindingWithMetrics(
 	metricsQuery factoryvisualization.RuntimeMetricsQuery,
 	costsQuery costs.CostsQuery,
 	logs workersessions.Service,
+	writer recordings.WorkerRecordingWriter,
+	clock factoryruntime.Clock,
 ) (httpRuntimeBinding, error) {
 	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
 	return func(root *factorysessionwire.Root, sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
-		return newHTTPRuntimeHandlerWithMetrics(root, sessionID, cancellation, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery, logs)
+		return newHTTPRuntimeHandlerWithMetrics(root, sessionID, cancellation, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery, logs, writer, clock)
 	}, nil
 }
 
@@ -121,6 +126,8 @@ func newHTTPRuntimeHandlerWithMetrics(
 	metricsQuery factoryvisualization.RuntimeMetricsQuery,
 	costsQuery costs.CostsQuery,
 	logs workersessions.Service,
+	writer recordings.WorkerRecordingWriter,
+	clock factoryruntime.Clock,
 ) (http.Handler, error) {
 	if root == nil {
 		return nil, errors.New("bind HTTP mappings: Factory Sessions root is required")
@@ -148,7 +155,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 		return nil, err
 	}
 	recordingsAdapter := newHTTPRecordingsAdapter(root, presentation)
-	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, presentation, logs)
+	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, presentation, logs, writer, clock)
 	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(root)
 	if metricsScopeResolver == nil {
 		return nil, errors.New("bind HTTP runtime: Factory Sessions metrics scope resolver is unavailable")
@@ -263,6 +270,8 @@ func newHTTPWorkerSessionsHandler(
 	root *factorysessionwire.Root,
 	presentation factorysessionwire.SessionPresentation,
 	logs workersessions.Service,
+	writer recordings.WorkerRecordingWriter,
+	clock platformclock.Source,
 ) *workersessionshttp.Handler {
 	if presentation.WorkerSessions == nil {
 		return nil
@@ -280,9 +289,10 @@ func newHTTPWorkerSessionsHandler(
 	if adapter == nil {
 		return nil
 	}
+	captured, _ := writer.(recordings.WorkerCapturedActivityReader)
 	fleet := workersessionswire.NewFleetObservationService(func(ctx context.Context) ([]workersessions.Service, error) {
 		return workerSessionObservationSources(ctx, root, presentation.WorkerSessions)
-	})
+	}, captured, clock, logging.NewZapLogger(presentation.Logger, false))
 	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), presentation.Logger)
 }
 
