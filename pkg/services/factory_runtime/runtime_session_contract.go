@@ -55,6 +55,10 @@ type RuntimeLifecycle interface {
 	PublishReplacement(context.Context, RuntimeRun, RuntimeRecord) error
 }
 
+// RuntimeStopOperation stops one addressed run and finalizes its artifacts
+// using the selected session fact clock over the process's keyed authority.
+type RuntimeStopOperation func(RuntimeRun, Clock) error
+
 // RuntimeSidecars owns the runtime-scoped listener and automation phase. Its
 // implementation is selected by Factory Runtime and remains behind this
 // neutral edge for Factory Sessions startup orchestration.

@@ -137,6 +137,32 @@ func TestShowByWorkerSessionIDUsesTopLevelIdentityRoute(t *testing.T) {
 	}
 }
 
+func TestShowByWorkerSessionIDUsesExplicitSessionRoute(t *testing.T) {
+	t.Parallel()
+	for _, sessionID := range []string{"711643f3-1b2e-48e8-8cad-e24ebf6a80a0", "~default"} {
+		t.Run(sessionID, func(t *testing.T) {
+			t.Parallel()
+			var gotPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				if r.URL.RawQuery != "" {
+					t.Errorf("unexpected provider query: %s", r.URL.RawQuery)
+				}
+				_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{WorkerSessionId: "worker-1"})
+			}))
+			defer server.Close()
+			var output bytes.Buffer
+			err := NewShow(testHTTPProtocol(t))(ShowConfig{
+				Context: context.Background(), Server: server.URL, SessionID: sessionID,
+				WorkerSessionID: "worker-1", OutputFormat: "json", Output: &output,
+			})
+			if err != nil || gotPath != "/factory-sessions/"+sessionID+"/worker-sessions/worker-1" {
+				t.Fatalf("selected show path=%q error=%v", gotPath, err)
+			}
+		})
+	}
+}
+
 func TestShowRejectsMixedIdentityModes(t *testing.T) {
 	var output bytes.Buffer
 	err := NewShow(testHTTPProtocol(t))(ShowConfig{

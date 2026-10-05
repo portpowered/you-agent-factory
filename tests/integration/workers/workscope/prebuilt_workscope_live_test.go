@@ -520,6 +520,11 @@ $reader = [System.IO.StreamReader]::new($stream)
 $writer = [System.IO.StreamWriter]::new($stream)
 $writer.AutoFlush = $true
 $null = [Console]::In.ReadToEnd()
+if ($env:FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_SESSION_ID) {
+    [Console]::Out.WriteLine('{"type":"thread.started","thread_id":"' + $env:FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_SESSION_ID + '"}')
+    [Console]::Out.WriteLine('{"type":"item.started","item":{"id":"selected-observation-tool","type":"command_execution","command":"echo selected-observation","status":"in_progress"}}')
+    [Console]::Out.Flush()
+}
 $writer.WriteLine("started")
 if ($reader.ReadLine() -ne "release") { throw "controlled Codex provider did not receive release" }
 [Console]::Out.WriteLine('{"type":"turn.started"}')
@@ -539,6 +544,10 @@ control_host=${control%:*}
 control_port=${control##*:}
 cat >/dev/null
 exec 3<>"/dev/tcp/$control_host/$control_port"
+if [ -n "${FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_SESSION_ID:-}" ]; then
+  printf '{"type":"thread.started","thread_id":"%s"}\n' "$FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_SESSION_ID"
+  printf '%s\n' '{"type":"item.started","item":{"id":"selected-observation-tool","type":"command_execution","command":"echo selected-observation","status":"in_progress"}}'
+fi
 printf '%s\n' started >&3
 IFS= read -r control_command <&3
 [ "$control_command" = release ]

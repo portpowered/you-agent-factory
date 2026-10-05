@@ -3,7 +3,9 @@ package runtime_metrics_test
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -250,6 +252,14 @@ func queryCostsReport(
 	var report generatedclient.CostsReport
 	if err := json.Unmarshal([]byte(inputs.Stdout()), &report); err != nil {
 		t.Fatalf("decode public metrics costs JSON: %v\nstdout=%s\nstderr=%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	endpoint := server.URL() + "/metrics/costs"
+	if sessionID != "" {
+		endpoint += "?session_id=" + url.QueryEscape(sessionID)
+	}
+	apiReport := support.GetJSON[generatedclient.CostsReport](t, endpoint)
+	if !reflect.DeepEqual(report, apiReport) {
+		t.Fatalf("Costs CLI/HTTP parity differs: CLI=%#v HTTP=%#v", report, apiReport)
 	}
 	return report, inputs.Stdout()
 }

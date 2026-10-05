@@ -314,6 +314,9 @@ func provideFactoryRuntimeDispatchRecorder(edges serviceedges.Edges) recordings.
 }
 
 func provideFactorySessionInvocationMetricsRecorder(edges serviceedges.Edges) factorysessionwire.InvocationMetricsRecorder {
+	if edges.InvocationMetricsRecorder == nil {
+		return factorysessionwire.DisabledInvocationMetricsRecorder{}
+	}
 	return edges.InvocationMetricsRecorder
 }
 
@@ -374,18 +377,13 @@ func provideAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocato
 }
 
 func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
-	clock := edges.AgyPTYClock
-	if clock == nil {
-		clock = edges.Clock
-	}
-	if clock == nil {
-		clock = platformclock.Real{}
-	}
-	scheduler, ok := clock.(platformclock.TimerSource)
-	if !ok {
-		scheduler, ok = edges.Clock.(platformclock.TimerSource)
-		if !ok {
-			scheduler = platformclock.Real{}
+	clock, scheduler := edges.Clock, edges.ProcessScheduler
+	// BuildProcess normalizes the default pair once. A specialized clock
+	// replaces only the capabilities it supplies, preserving explicit waits.
+	if edges.AgyPTYClock != nil {
+		clock = edges.AgyPTYClock
+		if specialized, ok := edges.AgyPTYClock.(platformclock.TimerSource); ok {
+			scheduler = specialized
 		}
 	}
 	host := edges.AgyPTYHost
@@ -628,9 +626,8 @@ func (resolver workerSessionsFactorySessionScopeResolver) WorkerSessionsObservat
 }
 
 // provideWatchReconnectWait selects the scheduler once without starting timers.
-// T21 adopts the normalized process scheduler at this composition boundary.
-func provideWatchReconnectWait() workcli.ReconnectWait {
-	return bindWatchReconnectWait(platformclock.Real{})
+func provideWatchReconnectWait(scheduler platformclock.TimerSource) workcli.ReconnectWait {
+	return bindWatchReconnectWait(scheduler)
 }
 
 func bindWatchReconnectWait(scheduler platformclock.TimerSource) workcli.ReconnectWait {

@@ -5,8 +5,6 @@
 # Established rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
 application-graph-test|tests/integration/models_test|pkg/wire
-domain-transport-test|pkg/services/costs/internal/service|pkg/transports/http/client
-domain-transport-test|pkg/services/costs/internal/service|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/apitypes
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping
@@ -114,7 +112,6 @@ service-subpackage-test|tests/functional/workers/inference_test|pkg/services/rec
 service-subpackage|tests/functional/internal/support|pkg/services/factory_sessions/transports/http
 service-subpackage|tests/functional/internal/support|pkg/services/operator_settings/transports/globalconfig
 service-construction-test|pkg/services/factory_sessions/internal/invocation|pkg/services/work.NewInvocationPolicyService
-service-construction-test|pkg/services/factory_sessions/internal/services/invocation/internal/service|pkg/services/work.NewInvocationPolicyService
 service-construction-test|pkg/services/factory_sessions/internal/service|pkg/services/factory_runtime.NewSessionResultProjectionOperation
 service-construction-test|pkg/services/factory_sessions_test|pkg/services/work.NewInvocationPolicyService
 service-construction-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire.NewProjectionService
@@ -130,7 +127,6 @@ service-construction-test|tests/functional/sessions_test|pkg/services/factory_se
 service-construction-test|tests/functional/workers/inference_test|pkg/services/recordings/wire.NewWorkerRecordingFileWriter
 service-construction|pkg/services/factory_runtime/internal|pkg/services/worker_sessions.NewProviderSessionObservationPublisher
 service-construction|pkg/services/factory_sessions/internal/execution|pkg/services/factory_runtime.NewWorkflowSourceReader
-service-construction|pkg/services/factory_sessions/internal/sessionservice|pkg/services/work.NewInvocationPolicyService
 transport-concurrency|pkg/transports/acp/internal/stdio|make(chan)
 transport-concurrency|pkg/transports/acp/internal/stdio|sync.Mutex
 transport-lifecycle|pkg/transports/acp/internal/stdio|time.NewTimer
@@ -866,17 +862,6 @@ petri-public|pkg/services/factory_sessions/internal/service|Root|pkg/services/fa
 petri-public|pkg/services/factory_sessions/internal/service|Root|pkg/services/factory_runtime/internal/orchestrators/petri.Place
 petri-public|pkg/services/factory_sessions/internal/service|Root|pkg/services/factory_runtime/internal/orchestrators/petri.Transition
 petri-public|pkg/services/factory_sessions/internal/service|Root|pkg/services/factory_runtime/internal/orchestrators/petri.TransitionType
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.Arc
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.ArcCardinality
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.ArcDirection
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.CardinalityMode
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.Guard
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.MarkingSnapshot
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.ParentChildRegistrationProjection
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.ParentChildRegistrationSet
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.Place
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.Transition
-petri-public|pkg/services/factory_sessions/internal/services/invocation/wire|NewOperation|pkg/services/factory_runtime/internal/orchestrators/petri.TransitionType
 petri-public|pkg/services/factory_sessions/internal/sessionprojection_test|ProjectRuntime|pkg/services/factory_runtime/internal/orchestrators/petri.Arc
 petri-public|pkg/services/factory_sessions/internal/sessionprojection_test|ProjectRuntime|pkg/services/factory_runtime/internal/orchestrators/petri.ArcCardinality
 petri-public|pkg/services/factory_sessions/internal/sessionprojection_test|ProjectRuntime|pkg/services/factory_runtime/internal/orchestrators/petri.ArcDirection
@@ -1086,17 +1071,6 @@ petri-public|pkg/services/factory_sessions/internal/sessionservice|NewDefinition
 petri-public|pkg/services/factory_sessions/internal/sessionservice|NewDefinitionActivationGateway|pkg/services/factory_runtime/internal/orchestrators/petri.Place
 petri-public|pkg/services/factory_sessions/internal/sessionservice|NewDefinitionActivationGateway|pkg/services/factory_runtime/internal/orchestrators/petri.Transition
 petri-public|pkg/services/factory_sessions/internal/sessionservice|NewDefinitionActivationGateway|pkg/services/factory_runtime/internal/orchestrators/petri.TransitionType
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.Arc
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.ArcCardinality
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.ArcDirection
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.CardinalityMode
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.Guard
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.MarkingSnapshot
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.ParentChildRegistrationProjection
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.ParentChildRegistrationSet
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.Place
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.Transition
-petri-public|pkg/services/factory_sessions/internal/sessionservice|NewInvocationOwner|pkg/services/factory_runtime/internal/orchestrators/petri.TransitionType
 petri-public|pkg/services/factory_sessions/internal/sessionservice|NewSessionRuntime|pkg/services/factory_runtime/internal/orchestrators/petri.Arc
 petri-public|pkg/services/factory_sessions/internal/sessionservice|NewSessionRuntime|pkg/services/factory_runtime/internal/orchestrators/petri.ArcCardinality
 petri-public|pkg/services/factory_sessions/internal/sessionservice|NewSessionRuntime|pkg/services/factory_runtime/internal/orchestrators/petri.ArcDirection
@@ -1871,8 +1845,6 @@ testsleep-deadline-test|pkg/platform/metrics|pkg/platform/metrics/runtime_metric
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_cancellation_unix_test.go::TestExecCommandRunner_ContextCancelReturnsWhenDescendantKeepsPipeOpen::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes::deadline::2
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::1
-testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_cleanup_grace_test.go::TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic::deadline::2
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_process_grace_unix_test.go::reapCommandHelperLeader::deadline::1
 testsleep-deadline-test|pkg/platform/process|pkg/platform/process/command_test.go::TestExecCommandRunner_ContextDeadlineReturnsSystemError::deadline::1
 testsleep-deadline-test|pkg/platform/taskgroup|pkg/platform/taskgroup/task_group_test.go::TestGroupDoneClosesAfterEveryTaskReturnsRegardlessOfOutcome::deadline::1

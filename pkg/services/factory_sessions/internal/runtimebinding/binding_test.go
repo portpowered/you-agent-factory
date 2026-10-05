@@ -107,6 +107,15 @@ type lifecycleFake struct{}
 
 type canceledReadinessLifecycle struct{ lifecycleFake }
 
+type startupReadinessLifecycle struct {
+	lifecycleFake
+	readiness func(context.Context, factory.RuntimeRun) error
+}
+
+func (l startupReadinessLifecycle) WaitForStart(ctx context.Context, run factory.RuntimeRun) error {
+	return l.readiness(ctx, run)
+}
+
 func (canceledReadinessLifecycle) WaitForStart(ctx context.Context, _ factory.RuntimeRun) error {
 	return ctx.Err()
 }
@@ -204,6 +213,34 @@ func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
 	}
 }
 
+func TestStopSessionPreservesReplacementPublishedDuringStop(t *testing.T) {
+	t.Parallel()
+	state := newRuntimeBindingState()
+	old := registerTestSession(state, "a")
+	peer := registerTestSession(state, "b")
+	var active runtimebinding.State
+	active.SetActive(context.Background(), old.ID, runtimebinding.HandleFromSession(old))
+	var replacement *livesession.LiveSession
+	err := runtimebinding.StopSession(state, &active, old.ID, func(handle factory.RuntimeRun) error {
+		if handle != runtimebinding.HandleFromSession(old) {
+			t.Fatal("stop targeted the replacement")
+		}
+		replacement = registerTestSession(state, "a")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StopSession: %v", err)
+	}
+	if state.Resolve("a") != replacement || state.Resolve("b") != peer {
+		t.Fatal("old retirement removed the replacement or peer")
+	}
+	if _, err := state.ResponseStreams().Streams("a").Subscribe("next", 0); err != nil {
+		t.Fatalf("replacement response stream was closed: %v", err)
+	}
+	state.Unregister("a")
+	state.Unregister("b")
+}
+
 func TestStopSessionRetiresSessionWhenRuntimeAlreadyStopped(t *testing.T) {
 	t.Parallel()
 
@@ -222,6 +259,72 @@ func TestStopSessionRetiresSessionWhenRuntimeAlreadyStopped(t *testing.T) {
 			}
 			if state.Resolve(session.ID) != nil {
 				t.Fatalf("session remains registered after %v cleanup", stopErr)
+			}
+		})
+	}
+}
+
+func TestStopSessionFailedCleanupPreservesSelectionForRetry(t *testing.T) {
+	t.Parallel()
+	state := newRuntimeBindingState()
+	session := registerTestSession(state, "a")
+	peer := registerTestSession(state, "b")
+	t.Cleanup(func() { state.Unregister("a"); state.Unregister("b") })
+	var active runtimebinding.State
+	active.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
+	failure := errors.New("owned stop failed")
+	if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error { return failure }); !errors.Is(err, failure) {
+		t.Fatalf("failed stop = %v, want original failure", err)
+	}
+	if state.Resolve("a") != session || state.Resolve("b") != peer {
+		t.Fatal("failed cleanup lost its retryable record or peer")
+	}
+	if got := active.Current(nil); got != runtimebinding.HandleFromSession(session).RuntimeInstance() {
+		t.Fatal("failed cleanup redirected current runtime away from retryable session")
+	}
+	if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error { return nil }); err != nil {
+		t.Fatalf("retry stop = %v", err)
+	}
+	if state.Resolve("a") != nil || active.Current(nil) != runtimebinding.HandleFromSession(peer).RuntimeInstance() {
+		t.Fatal("successful retry did not retire A and select its live peer")
+	}
+}
+
+func TestStopSessionCleanupKeepsNewActiveSelection(t *testing.T) {
+	t.Parallel()
+	for _, selection := range []string{"replacement", "peer", "unselected replacement"} {
+		t.Run(selection, func(t *testing.T) {
+			t.Parallel()
+			state := newRuntimeBindingState()
+			old := registerTestSession(state, "a")
+			peer := registerTestSession(state, "b")
+			t.Cleanup(func() { state.Unregister("a"); state.Unregister("b") })
+			var active runtimebinding.State
+			active.SetActive(context.Background(), old.ID, runtimebinding.HandleFromSession(old))
+			var expected *livesession.LiveSession
+			selectedContext, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			err := runtimebinding.StopSession(state, &active, old.ID, func(factory.RuntimeRun) error {
+				expected = registerTestSession(state, "a")
+				if selection == "peer" {
+					expected = peer
+				}
+				if selection != "unselected replacement" {
+					active.SetActive(selectedContext, expected.ID, runtimebinding.HandleFromSession(expected))
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("stop = %v", err)
+			}
+			if active.Current(nil) != runtimebinding.HandleFromSession(expected).RuntimeInstance() {
+				t.Fatal("old cleanup replaced the new active runtime selection")
+			}
+			if selection != "unselected replacement" && active.Active().Context != selectedContext {
+				t.Fatal("old cleanup replaced the new selection's context")
+			}
+			if state.Resolve("a") == old || state.Resolve("a") == nil || state.Resolve("b") != peer {
+				t.Fatal("old cleanup retired a replacement or peer")
 			}
 		})
 	}
@@ -306,6 +409,46 @@ func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 		!stopped[runtimebinding.HandleFromSession(first)] ||
 		!stopped[runtimebinding.HandleFromSession(second)] {
 		t.Fatalf("stopped handles = %#v", stopped)
+	}
+}
+
+func TestShutdownOtherLiveSessionsKeepsReplacementsPublishedDuringStop(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"same session", "later session", "stop failure"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			state := newRuntimeBindingState()
+			keep := registerTestSession(state, "keep")
+			first := registerTestSession(state, "a")
+			later := registerTestSession(state, "b")
+			firstRun := runtimebinding.HandleFromSession(first)
+			laterRun := runtimebinding.HandleFromSession(later)
+			keepRun := runtimebinding.HandleFromSession(keep)
+			stopErr := errors.New("owned stop failed")
+			var replacement *livesession.LiveSession
+			err := runtimebinding.ShutdownOtherLiveSessions(state, keepRun, func(run factory.RuntimeRun) error {
+				if run != firstRun && run != laterRun {
+					t.Fatal("shutdown stopped a replacement or the excluded peer")
+				}
+				if run == firstRun {
+					id := first.ID
+					if phase == "later session" {
+						id = later.ID
+					}
+					replacement = registerTestSession(state, id)
+				}
+				run.CancelRun()
+				if err := run.Wait(); err != nil {
+					return err
+				}
+				if run == firstRun && phase == "stop failure" {
+					return stopErr
+				}
+				return nil
+			})
+			assertShutdownCapturedGenerations(t, state, keep, replacement, firstRun, laterRun, keepRun, phase, err, stopErr)
+
+		})
 	}
 }
 
@@ -735,6 +878,26 @@ func assertStartupCleanupBeforeRetirement(t *testing.T, ctx context.Context, han
 	}
 }
 
+func TestFailStartupLeavesSelectedPeerUsable(t *testing.T) {
+	t.Parallel()
+	sessions := newRuntimeBindingState()
+	failed := registerTestSession(sessions, "a")
+	peer := registerTestSession(sessions, "b")
+	var active runtimebinding.State
+	active.SetActive(t.Context(), peer.ID, runtimebinding.HandleFromSession(peer))
+	startupErr := errors.New("startup failed")
+	err := runtimebinding.FailStartup(sessions, &active, failed.ID, runtimebinding.HandleFromSession(failed), func(run factory.RuntimeRun) error {
+		run.CancelRun()
+		return run.Wait()
+	}, startupErr)
+	if !errors.Is(err, startupErr) || sessions.Resolve("a") != nil || sessions.Resolve("b") != peer {
+		t.Fatalf("failed startup retirement = %v, want only A removed", err)
+	}
+	if selected := active.Active(); selected == nil || selected.Handle != runtimebinding.HandleFromSession(peer) || selected.Context != t.Context() {
+		t.Fatalf("peer lost active selection: %#v", selected)
+	}
+}
+
 type streamGenerationService struct {
 	factory.Service
 	streamGenerationID string
@@ -841,5 +1004,44 @@ func TestLegacyObservationHelpersResolveMigrationCapabilities(t *testing.T) {
 	snapshotProvider, eventSource, err := runtimebinding.LegacyInvocationSourcesForService(combined)
 	if err != nil || snapshotProvider == nil || eventSource == nil {
 		t.Fatalf("LegacyInvocationSourcesForService = (%v, %v, %v)", snapshotProvider, eventSource, err)
+	}
+}
+
+func assertShutdownCapturedGenerations(t *testing.T, state *sessionruntime.Service, keep, replacement *livesession.LiveSession, firstRun, laterRun, keepRun factory.RuntimeRun, phase string, err, stopErr error) {
+	t.Helper()
+	if errors.Is(err, stopErr) != (phase == "stop failure") || (err != nil && phase != "stop failure") {
+		t.Fatalf("shutdown error = %v, want only the injected owned stop error", err)
+	}
+	if !firstRun.Completed() || !laterRun.Completed() {
+		t.Fatal("shutdown did not join both captured generations")
+	}
+	if state.Resolve(replacement.ID) != replacement || state.Resolve(keep.ID) != keep || state.Registry().Count() != 2 {
+		t.Fatal("shutdown retired a replacement or peer, or retained an old generation")
+	}
+	if keepRun.Completed() || runtimebinding.HandleFromSession(replacement).Completed() {
+		t.Fatal("surviving replacement or peer was canceled")
+	}
+	if _, err := state.ResponseStreams().Streams(replacement.ID).Subscribe("next", 0); err != nil {
+		t.Fatalf("replacement response stream is unusable: %v", err)
+	}
+	assertNextShutdownRetiresReplacement(t, state, keep, replacement, keepRun)
+
+}
+
+func assertNextShutdownRetiresReplacement(t *testing.T, state *sessionruntime.Service, keep, replacement *livesession.LiveSession, keepRun factory.RuntimeRun) {
+	t.Helper()
+	// A subsequent shutdown owns the replacement; the captured-generation
+	// fence must protect it only from the earlier shutdown window.
+	if err := runtimebinding.ShutdownOtherLiveSessions(state, keepRun, func(run factory.RuntimeRun) error {
+		if run != runtimebinding.HandleFromSession(replacement) {
+			t.Fatal("next shutdown selected a foreign generation")
+		}
+		run.CancelRun()
+		return run.Wait()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if state.Resolve(replacement.ID) != nil || !runtimebinding.HandleFromSession(replacement).Completed() || state.Resolve(keep.ID) != keep {
+		t.Fatal("next shutdown did not retire only its owned replacement")
 	}
 }

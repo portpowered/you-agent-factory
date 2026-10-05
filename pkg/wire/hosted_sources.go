@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -24,7 +25,20 @@ func provideAutomationHostedClock(edges serviceedges.Edges) automations.HostedLi
 	if edges.HostedClock != nil {
 		return edges.HostedClock
 	}
-	return clockwork.NewRealClock()
+	return processWallSchedulingClock{wall: edges.Clock, scheduler: edges.ProcessScheduler}
+}
+
+// processWallSchedulingClock projects the normalized process effects into
+// consumers whose observations and waits may deliberately use separate sources.
+type processWallSchedulingClock struct {
+	wall      platformclock.Source
+	scheduler platformclock.TimerSource
+}
+
+func (c processWallSchedulingClock) Now() time.Time { return c.wall.Now() }
+
+func (c processWallSchedulingClock) After(delay time.Duration) <-chan time.Time {
+	return c.scheduler.After(delay)
 }
 func provideAutomationHostedHTTPClient(edges serviceedges.Edges) automations.HostedLinearHTTPDoer {
 	if edges.HostedHTTPClient != nil {
@@ -94,12 +108,11 @@ func provideFactoryWebhookSecretResolver(edges serviceedges.Edges) webhooks.Secr
 	}
 }
 
-// T21 owns adoption of the canonical process clock; preserve current selection.
 func provideFactoryWebhookClock(edges serviceedges.Edges) webhookswire.Clock {
 	if edges.FactoryWebhookClock != nil {
 		return edges.FactoryWebhookClock
 	}
-	return platformclock.Real{}
+	return processWallSchedulingClock{wall: edges.Clock, scheduler: edges.ProcessScheduler}
 }
 
 func provideFactoryWebhookDeadLetterAppender(edges serviceedges.Edges) webhooks.DeadLetterAppender {

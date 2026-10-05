@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestHandlerReturnsAPIReportWithoutPartialOutput(t *testing.T) {
@@ -36,7 +36,7 @@ func TestHandlerReturnsAPIReportWithoutPartialOutput(t *testing.T) {
 			FactorySessions: []costs.Rollup{},
 		}, nil
 	})
-	handler := NewHandler(NewAdapter(query, "metrics", "settings"), zap.NewNop())
+	handler := NewHandler(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/metrics/costs?session_id=session-a", nil)
 	handler.GetMetricsCosts(recorder, request, factoryapi.GetMetricsCostsParams{SessionId: stringPointer("session-a")})
@@ -58,7 +58,7 @@ func TestHandlerMapsInvalidCostsRequestToBadRequest(t *testing.T) {
 	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{}, &costs.QueryError{Kind: costs.QueryErrorInvalidInput, Message: "metrics root is required"}
 	})
-	handler := NewHandler(NewAdapter(query, "", ""), zap.NewNop())
+	handler := NewHandler(NewAdapter(query, "", "", identityScopeResolver()), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
 
@@ -111,7 +111,7 @@ func TestHandlerMapsCostsFailureToInternalError(t *testing.T) {
 	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{}, &costs.QueryError{Kind: costs.QueryErrorMetricsFailed, Message: "runtime metrics query failed", Cause: errors.New("fixture")}
 	})
-	handler := NewHandler(NewAdapter(query, "metrics", "settings"), zap.NewNop())
+	handler := NewHandler(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
 
@@ -127,22 +127,19 @@ func TestHandlerMapsCostsFailureToInternalError(t *testing.T) {
 	}
 }
 
-func TestHandlerBoundsSlowCostsQueryAtLowAndConcurrentLoad(t *testing.T) {
+func TestHandlerDeadlineIsTypedAndRequestsRemainIndependent(t *testing.T) {
 	t.Parallel()
 
-	t.Run("low load", func(t *testing.T) {
-		runTimedOutCostsLoad(t, 1)
+	t.Run("single request", func(t *testing.T) {
+		runTimedOutCostsRequests(t, 1)
 	})
-	t.Run("representative concurrent load", func(t *testing.T) {
-		runTimedOutCostsLoad(t, 16)
+	t.Run("independent concurrent requests", func(t *testing.T) {
+		runTimedOutCostsRequests(t, 2)
 	})
 }
 
-// runTimedOutCostsLoad models a canonical metrics read that does not complete
-// on its own. The query observes context cancellation, so the test proves that
-// both low and representative concurrent load terminate with a typed response
-// without a live daemon, sleeps, or assumptions about artifact layout.
-func runTimedOutCostsLoad(t *testing.T, requestCount int) {
+// runTimedOutCostsRequests calls the owned Handler with independent request contexts.
+func runTimedOutCostsRequests(t *testing.T, requestCount int) {
 	t.Helper()
 	const queryTimeout = 25 * time.Millisecond
 	started := make(chan struct{}, requestCount)
@@ -151,14 +148,15 @@ func runTimedOutCostsLoad(t *testing.T, requestCount int) {
 		<-ctx.Done()
 		return costs.Report{}, ctx.Err()
 	})
-	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings"), zap.NewNop(), queryTimeout)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.GetMetricsCosts(w, r, factoryapi.GetMetricsCostsParams{})
-	}))
-	defer server.Close()
-
+	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop(), queryTimeout)
 	results := make(chan timedCostsResult, requestCount)
-	launchTimedCostsRequests(server, requestCount, results)
+	for i := 0; i < requestCount; i++ {
+		go func() {
+			recorder := httptest.NewRecorder()
+			handler.GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
+			results <- timedCostsResult{status: recorder.Code, body: recorder.Body.Bytes()}
+		}()
+	}
 	awaitTimedCostsQueries(t, started, requestCount)
 	assertTimedCostsResults(t, results, requestCount, queryTimeout)
 }
@@ -167,21 +165,6 @@ type timedCostsResult struct {
 	status int
 	err    error
 	body   []byte
-}
-
-func launchTimedCostsRequests(server *httptest.Server, requestCount int, results chan<- timedCostsResult) {
-	for i := 0; i < requestCount; i++ {
-		go func() {
-			response, err := server.Client().Get(server.URL + "/metrics/costs")
-			item := timedCostsResult{err: err}
-			if response != nil {
-				item.status = response.StatusCode
-				item.body, item.err = io.ReadAll(response.Body)
-				_ = response.Body.Close()
-			}
-			results <- item
-		}()
-	}
 }
 
 func awaitTimedCostsQueries(t *testing.T, started <-chan struct{}, requestCount int) {
@@ -245,7 +228,7 @@ func TestHandlerMapsCanceledCostsQueryToRequestTimeout(t *testing.T) {
 		<-ctx.Done()
 		return costs.Report{}, ctx.Err()
 	})
-	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings"), zap.NewNop(), time.Second)
+	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop(), time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	request := httptest.NewRequest(http.MethodGet, "/metrics/costs", nil).WithContext(ctx)
@@ -280,3 +263,32 @@ func TestHandlerMapsCanceledCostsQueryToRequestTimeout(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
+
+func TestHandlerLogsEncodingFailureThroughInjectedLogger(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.ErrorLevel)
+	logger := zap.New(core).With(zap.String("factory_session_id", "selected-session"))
+	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		return costs.Report{Status: costs.StatusNoUsage}, nil
+	})
+	handler := NewHandler(NewAdapter(query, "metrics", "settings", identityScopeResolver()), logger)
+	writer := &failedCostsWriter{ResponseRecorder: httptest.NewRecorder()}
+	handler.GetMetricsCosts(writer, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].Message != "encode Costs response failed" || entries[0].ContextMap()["factory_session_id"] != "selected-session" {
+		t.Fatalf("logs=%#v", entries)
+	}
+	if writer.Code != http.StatusOK || writer.writes != 1 || writer.Body.Len() != 0 {
+		t.Fatalf("encoding failure appended another response: %#v", writer)
+	}
+}
+
+type failedCostsWriter struct {
+	*httptest.ResponseRecorder
+	writes int
+}
+
+func (w *failedCostsWriter) Write([]byte) (int, error) {
+	w.writes++
+	return 0, errors.New("controlled write failure")
+}

@@ -2,7 +2,6 @@ package process_test
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -25,9 +24,7 @@ func TestBuiltCLIRunDirectorySelectionIgnoresOpenStdin(t *testing.T) {
 	factoryPath := writeStdinRunFactory(t, session.WorkDir)
 	factoryDir := filepath.Dir(factoryPath)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	binaryPath := buildYouBinary(t, ctx, testutil.MustRepoRoot(t))
+	binaryPath := quietShutdownArtifact(t)
 
 	baseArgs := append([]string{}, session.RuntimeLogDirFlags()...)
 	baseArgs = append(baseArgs, session.ServerFlags()...)
@@ -60,6 +57,7 @@ func TestBuiltCLIRunDirectorySelectionIgnoresOpenStdin(t *testing.T) {
 			if openErr != nil || open.ExitCode != 0 {
 				t.Fatalf("open-stdin %s run: result=%#v err=%v", test.name, open, openErr)
 			}
+			assertQuietShutdownStderr(t, closed, open)
 			if open != closed {
 				t.Fatalf("open-stdin %s result=%#v differs from closed-stdin control=%#v", test.name, open, closed)
 			}
@@ -163,4 +161,41 @@ func runBuiltCLIWithStdin(
 		Stdout:   stdout.String(),
 		Stderr:   stderr.String(),
 	}, runErr
+}
+
+func assertQuietShutdownStderr(t *testing.T, results ...builtcliacceptance.RunResult) {
+	t.Helper()
+	for _, result := range results {
+		if result.Stderr != "" {
+			t.Fatalf("successful quiet shutdown emitted stderr: %q", result.Stderr)
+		}
+	}
+}
+
+// CI supplies the already built deliverable; this regression never compiles it.
+func quietShutdownArtifact(t *testing.T) string {
+	t.Helper()
+	path := os.Getenv("INFINITE_YOU_INTEGRATION_BINARY")
+	if path == "" {
+		path = os.Getenv("INFINITE_YOU_PREBUILT_ARTIFACT")
+	}
+	if path == "" {
+		if os.Getenv("INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT") == "1" {
+			t.Fatal("quiet shutdown requires the prebuilt CLI artifact")
+		}
+		t.Skip("set INFINITE_YOU_INTEGRATION_BINARY to run quiet shutdown proof")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.IsDir() || info.Size() == 0 {
+		t.Fatal("prebuilt CLI artifact is empty or a directory")
+	}
+	t.Logf("prebuilt quiet shutdown artifact=%s", abs)
+	return abs
 }

@@ -48,6 +48,11 @@ func NewInstanceHost(clock factoryruntime.Clock, scheduler platformclock.TimerSo
 	return instancehostwire.New(clock, scheduler, lifecycle)
 }
 
+// NewRuntimeStopOperation exposes the keyed host's clock-aware stop capability.
+func NewRuntimeStopOperation(host InstanceHost) factoryruntime.RuntimeStopOperation {
+	return host.StopWithClock
+}
+
 // NewDispatchPlanning constructs the inert dispatch planner.
 func NewDispatchPlanning(publisher WorkersPublisher, canceler WorkersCanceler) DispatchPlanning {
 	return dispatchplanningwire.New(dispatchplanning.WorkersPublisher(publisher), dispatchplanning.WorkersCanceler(canceler))

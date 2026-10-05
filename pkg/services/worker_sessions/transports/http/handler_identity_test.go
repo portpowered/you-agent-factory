@@ -97,7 +97,7 @@ func TestListWorkerSessionsBySessionIDAcceptsDefaultObservationForAliasAndExplic
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
-			if len(response.Sessions) != 1 || response.Sessions[0].FactorySessionId == nil || *response.Sessions[0].FactorySessionId != selector {
+			if len(response.Sessions) != 1 || response.Sessions[0].FactorySessionId == nil || *response.Sessions[0].FactorySessionId != resolvedID {
 				t.Fatalf("response = %#v, want one session scoped to %q", response.Sessions, selector)
 			}
 		})

@@ -337,8 +337,8 @@ func assertRouteCharacterizationRead(
 	}
 
 	restResponse := support.ListDefaultSessionWorkerSessions(t, server.URL(), expected.workID)
-	assertRouteCharacterizationObservation(t, "CLI", cliResponse, expected)
-	assertRouteCharacterizationObservation(t, "REST", restResponse, expected)
+	assertRouteCharacterizationObservation(t, "CLI", cliResponse, expected, support.GetDefaultSession(t, server.URL()).Id)
+	assertRouteCharacterizationObservation(t, "REST", restResponse, expected, support.GetDefaultSession(t, server.URL()).Id)
 	if !reflect.DeepEqual(cliResponse, restResponse) {
 		t.Fatalf("CLI and REST Worker Session responses for Work %q differ:\nCLI: %#v\nREST: %#v", expected.workID, cliResponse, restResponse)
 	}
@@ -384,6 +384,7 @@ func assertRouteCharacterizationAttemptList(
 	if len(restResponse.Sessions) != len(expected) {
 		t.Fatalf("Worker Sessions for Work %q = %#v, want exactly %d attempts", workID, restResponse.Sessions, len(expected))
 	}
+	factorySessionID := support.GetDefaultSession(t, server.URL()).Id
 	for index, want := range expected {
 		got := restResponse.Sessions[index]
 		if got.WorkerSessionId != want.dispatch.workerSessionID || got.AttemptId != want.dispatch.dispatchID {
@@ -396,7 +397,7 @@ func assertRouteCharacterizationAttemptList(
 		} else if got.State != want.state {
 			t.Fatalf("Work %q Worker Session state = %q, want %q", workID, got.State, want.state)
 		}
-		if got.FactorySessionId == nil || *got.FactorySessionId != factorysessions.DefaultSessionID ||
+		if got.FactorySessionId == nil || *got.FactorySessionId != factorySessionID ||
 			got.WorkId == nil || *got.WorkId != workID || !reflect.DeepEqual(got.WorkIds, []string{workID}) {
 			t.Fatalf("Work %q Worker Session attribution = session:%v work:%v workIds:%v, want exact Factory Session and Work", workID, got.FactorySessionId, got.WorkId, got.WorkIds)
 		}
@@ -457,6 +458,7 @@ func assertRouteCharacterizationObservation(
 	transport string,
 	response factoryapi.ListWorkerSessionsResponse,
 	expected routeCharacterizationDispatch,
+	factorySessionID string,
 ) {
 	t.Helper()
 	if len(response.Sessions) != 1 {
@@ -468,8 +470,8 @@ func assertRouteCharacterizationObservation(
 		observation.State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("%s Worker Session identity for Work %q = %#v, want worker=%q attempt=%q state=COMPLETED", transport, expected.workID, observation, expected.workerSessionID, expected.dispatchID)
 	}
-	if observation.FactorySessionId == nil || *observation.FactorySessionId != factorysessions.DefaultSessionID {
-		t.Fatalf("%s Factory Session identity for Work %q = %#v, want %q", transport, expected.workID, observation.FactorySessionId, factorysessions.DefaultSessionID)
+	if observation.FactorySessionId == nil || *observation.FactorySessionId != factorySessionID {
+		t.Fatalf("%s Factory Session identity for Work %q = %#v, want %q", transport, expected.workID, observation.FactorySessionId, factorySessionID)
 	}
 	if observation.WorkId == nil || *observation.WorkId != expected.workID ||
 		!reflect.DeepEqual(observation.WorkIds, []string{expected.workID}) {

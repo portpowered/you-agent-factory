@@ -8,6 +8,10 @@ import (
 	"testing"
 	"time"
 
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
+	"go.uber.org/zap"
+
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -24,6 +28,7 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -162,7 +167,6 @@ func TestNewRootFromAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "home directory resolver", mutate: func(in *rootTestInputs) { in.resolveHome = nil }},
 		{name: "directory inspection", mutate: func(in *rootTestInputs) { in.directoryInspection = nil }},
 		{name: "named path resolver", mutate: func(in *rootTestInputs) { in.namedPaths = nil }},
-		{name: "invocation input reader", mutate: func(in *rootTestInputs) { in.invocationInputFiles = nil }},
 		{name: "initial Work reader", mutate: func(in *rootTestInputs) { in.initialWorkFiles = nil }},
 		{name: "identity service", mutate: func(in *rootTestInputs) { in.identity = nil }},
 		{name: "response-stream service", mutate: func(in *rootTestInputs) { in.responseStreams = nil }},
@@ -273,7 +277,7 @@ func (in rootTestInputs) call() (*Root, error) {
 }
 
 func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
-	if err := validateRootDependencies(in.sessionResultProjection, in.eventIDs, in.sessionIDs, in.resolveHome, in.directoryInspection, in.namedPaths, in.invocationInputFiles, in.initialWorkFiles, in.identity, in.responseStreams); err != nil {
+	if err := validateRootDependencies(in.sessionResultProjection, in.eventIDs, in.sessionIDs, in.resolveHome, in.directoryInspection, in.namedPaths, in.initialWorkFiles, in.identity, in.responseStreams); err != nil {
 		return nil, err
 	}
 	registry := sessionregistry.New()
@@ -284,18 +288,14 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 	state := sessionruntime.NewWithResponseService(registry, responses, nil, in.clock, in.eventIDs, in.sessionIDs, in.responseStreams)
 	streams := stream.NewManagerWithResponseService(state, sessionruntime.NewResponseStreamObserver(nil), responses, in.responseStreams)
 	return NewAssembly(
-		registry, state, streams,
+		registry, state, streams, sessioninvocation.NewSessionOwner(legacyservice.NewInvocationAuthority(state, platformclock.Real{}, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), legacyservice.NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
-		in.interpolation,
-		in.invocationWorkTypes,
-		in.ttsObservability,
 		in.eventIDs,
 		in.sessionIDs,
 		in.resolveHome,
 		in.directoryInspection,
 		in.namedPaths,
-		in.invocationInputFiles,
 		in.initialWorkFiles,
 		in.identity,
 		in.responseStreams,

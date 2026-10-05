@@ -1,0 +1,20 @@
+
+func observeBaselineLeases(s *service) {
+	identity := fmt.Sprintf("models_leases:%p", s)
+	baselineobservation.Register("models_leases", identity, "leases.New", func() baselineobservation.OwnerSnapshot {
+		s.mu.Lock()
+		records := make([]baselineobservation.LeaseRecord, 0, len(s.leases))
+		for key, record := range s.leases {
+			records = append(records, baselineobservation.LeaseRecord{Key: key, Scope: record.lease.Scope.String(), ModelName: record.lease.ModelName, Status: string(record.lease.Status), Claimed: record.claimed})
+		}
+		holders := make(map[string]int, len(s.capacityHolders))
+		total := 0
+		for key, count := range s.capacityHolders {
+			holders[key] = count
+			total += count
+		}
+		s.mu.Unlock()
+		sort.Slice(records, func(i, j int) bool { return records[i].Key < records[j].Key })
+		return baselineobservation.OwnerSnapshot{Kind: "models_leases", OwnerIdentity: identity, Source: "leases.New", Leases: &baselineobservation.LeaseSnapshot{LeaseRecords: records, LeaseRecordCount: len(records), CapacityHolders: holders, CapacityHoldersTotal: total}}
+	})
+}

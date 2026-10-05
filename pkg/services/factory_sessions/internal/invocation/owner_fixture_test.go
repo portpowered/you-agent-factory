@@ -42,21 +42,10 @@ func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
 	if workService == nil {
 		workService = testInvocationWorkService()
 	}
-	owner := NewSessionOwner(
-		fixture.FactoryConfig,
-		fixture.SubmitWork,
-		fixture.Observe,
-		fixture.WaitNext,
-		fixture.WaitSession,
-		fixture.Telemetry,
-		fixture.SpecialCase,
-		interpolation,
-		workTypes,
-		inputFiles,
-		workService,
+	return NewSessionOwner(
+		fixtureAuthority{fixture}, fixtureControls{fixture.CancelOnTimeout},
+		fixture.Telemetry, fixture.SpecialCase, interpolation, workTypes, inputFiles, workService,
 	)
-	owner.BindCancelOnTimeout(fixture.CancelOnTimeout)
-	return owner
 }
 
 type staticInvocationWorkType string
@@ -85,4 +74,42 @@ func rejectingInvocationInterpolation(parameter string) interfaces.InvocationInt
 
 func testInvocationWorkService() work.Service {
 	return work.NewInvocationPolicyService()
+}
+
+// Controlled authority keeps the owner isolated from Runtime and subscriptions.
+type fixtureAuthority struct{ fixture sessionOwnerFixture }
+
+func (a fixtureAuthority) FactoryConfig(id string) (*interfaces.FactoryConfig, error) {
+	return a.fixture.FactoryConfig(id)
+}
+func (a fixtureAuthority) SubmitWork(ctx context.Context, id string, req work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+	return a.fixture.SubmitWork(ctx, id, req)
+}
+func (a fixtureAuthority) Observe(ctx context.Context, id string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+	return a.fixture.Observe(ctx, id, input)
+}
+func (a fixtureAuthority) WaitSession(ctx context.Context, id string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter) {
+	if a.fixture.WaitSession != nil {
+		if waiter, release := a.fixture.WaitSession(ctx, id); waiter != nil {
+			if release == nil {
+				release = func() {}
+			}
+			return waiter, release
+		}
+	}
+	if a.fixture.WaitNext != nil {
+		return a.fixture.WaitNext, func() {}
+	}
+	return func(ctx context.Context) error { return ctx.Err() }, func() {}
+}
+
+type fixtureControls struct {
+	cancel func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+}
+
+func (c fixtureControls) CancelLiveFactorySession(ctx context.Context, id string, req factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if c.cancel == nil {
+		return factorysessions.LifecycleControlResult{}, nil
+	}
+	return c.cancel(ctx, id, req)
 }

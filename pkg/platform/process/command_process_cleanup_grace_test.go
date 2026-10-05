@@ -42,48 +42,98 @@ func TestPostRunCleanupGracePeriod_TestHookOverridesDefault(t *testing.T) {
 }
 
 type deterministicCommandTimerClock struct {
-	now   time.Time
-	timer chan time.Time
+	wall       platformclock.Source
+	scheduler  platformclock.TimerSource
+	registered chan time.Duration
+	timer      <-chan time.Time
 }
 
-func (clock *deterministicCommandTimerClock) Now() time.Time {
-	return clock.now
-}
+func (clock *deterministicCommandTimerClock) Now() time.Time { return clock.wall.Now() }
 
-func (clock *deterministicCommandTimerClock) After(time.Duration) <-chan time.Time {
+func (clock *deterministicCommandTimerClock) After(duration time.Duration) <-chan time.Time {
+	clock.timer = clock.scheduler.After(duration)
+	clock.registered <- duration
 	return clock.timer
 }
 
-func (clock *deterministicCommandTimerClock) Advance(duration time.Duration) {
-	clock.now = clock.now.Add(duration)
-	clock.timer <- clock.now
+func TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic(t *testing.T) {
+	t.Parallel()
+	for _, earlyExit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("early exit %t", earlyExit), func(t *testing.T) {
+			t.Parallel()
+			wall := platformclock.NewDeterministic(time.Unix(42, 0), time.Second)
+			scheduler := platformclock.NewDeterministic(time.Unix(100, 0), time.Second)
+			clock := &deterministicCommandTimerClock{wall: wall, scheduler: scheduler, registered: make(chan time.Duration, 1)}
+			waitCh := make(chan error, 1)
+			result := make(chan bool, 1)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				result <- waitForCommandExit(waitCh, clock, defaultPostRunCleanupGracePeriod)
+			}()
+			t.Cleanup(func() {
+				close(waitCh)
+				scheduler.SetTick(10)
+				select {
+				case <-done:
+				case <-time.After(30 * time.Second):
+					t.Error("cleanup wait goroutine did not join")
+				}
+				select {
+				case <-clock.timer:
+				default:
+				}
+			})
+			select {
+			case duration := <-clock.registered:
+				if duration != defaultPostRunCleanupGracePeriod {
+					t.Fatalf("duration = %v", duration)
+				}
+			case <-time.After(30 * time.Second):
+				t.Fatal("cleanup timer was not registered")
+			}
+			wall.SetTick(100)
+			scheduler.SetTick(9)
+			select {
+			case <-clock.timer:
+				t.Fatal("cleanup timer delivered before scheduler grace")
+			default:
+			}
+			select {
+			case got := <-result:
+				t.Fatalf("wait returned %t before scheduler grace", got)
+			default:
+			}
+			if earlyExit {
+				waitCh <- nil
+			} else {
+				scheduler.SetTick(10)
+			}
+			select {
+			case got := <-result:
+				if got != earlyExit {
+					t.Fatalf("wait result = %t, want %t", got, earlyExit)
+				}
+			case <-time.After(30 * time.Second):
+				t.Fatal("cleanup wait did not observe completion or grace")
+			}
+		})
+	}
 }
 
-func TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic(t *testing.T) {
-	clock := &deterministicCommandTimerClock{
-		now:   time.Unix(42, 0),
-		timer: make(chan time.Time, 1),
-	}
-	waitCh := make(chan error)
-	result := make(chan bool, 1)
-	go func() {
-		result <- waitForCommandExit(waitCh, clock, time.Second)
-	}()
-
-	select {
-	case got := <-result:
-		t.Fatalf("waitForCommandExit returned %t before injected timer advanced", got)
-	case <-time.After(50 * time.Millisecond):
-	}
-
-	clock.Advance(time.Second)
-	select {
-	case got := <-result:
-		if got {
-			t.Fatal("waitForCommandExit returned true after injected grace timer fired")
+func TestWaitForCommandExitNonpositiveGrace(t *testing.T) {
+	t.Parallel()
+	for _, grace := range []time.Duration{0, -time.Second} {
+		for _, completed := range []bool{false, true} {
+			waitCh := make(chan error)
+			if completed {
+				close(waitCh)
+			}
+			// A nil clock proves nonpositive grace never registers a timer.
+			if got := waitForCommandExit(waitCh, nil, grace); got != completed {
+				t.Fatalf("grace %v, completed %t: result = %t", grace, completed, got)
+			}
 		}
-	case <-time.After(time.Second):
-		t.Fatal("waitForCommandExit did not observe the injected grace timer")
 	}
 }
 

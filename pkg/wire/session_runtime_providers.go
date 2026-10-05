@@ -1,5 +1,3 @@
-// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package wire
 
 import (
@@ -21,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
@@ -45,10 +42,8 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	"go.uber.org/zap"
 )
 
 // providerOverrideService keeps an optional edge replacement distinct from
@@ -582,20 +577,24 @@ func provideFactorySessionResponseEventRetentionLimits(
 	return edges.FactorySessionResponseEventRetentionLimits
 }
 
+// provideInvocationWorldStateProjector binds the already-injected Recordings projection.
+func provideInvocationWorldStateProjector(projections recordings.ProjectionService) factoryruntime.WorldStateProjector {
+	return projections.ReconstructFactoryWorldState
+}
+
 func provideFactorySessionsAssembly(
 	registry factorysessionwire.SessionRegistry,
 	state *factorysessionwire.SessionState,
 	streams factorysessionwire.StreamManager,
+	invoker factorysessionwire.InvocationService,
+	control factorysessionwire.SessionScopeControl,
+	activation factorysessionwire.SessionScopeActivation,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directories factorysessionwire.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	identity factorysessionwire.Identity,
 	responseStreams factorysessionwire.ResponseStreams,
@@ -603,9 +602,9 @@ func provideFactorySessionsAssembly(
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, func() factoryruntime.JavaScriptCheckpointStore {
+	return factorysessionwire.NewRuntimeAssembly(registry, state, streams, invoker, control, activation, func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
+	}, sessionResultProjection, eventIDs, sessionIDs, resolveHome, directories, namedPaths, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
 }
 
 func provideFactorySessionsService(
@@ -684,9 +683,6 @@ func provideCostsQuery(
 func provideCostsQueryCapability(
 	query costs.CostsQuery,
 ) (processcontract.RuntimeCostsQueryCapability, error) {
-	if query == nil {
-		return nil, errors.New("construct runtime costs query capability: query is required")
-	}
 	return runtimeCostsQueryCapability{query: query}, nil
 }
 
@@ -823,340 +819,4 @@ func provideRecordingFilesystemEffects(
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
 	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
-}
-
-func provideWorkersWorktree(
-	edges serviceedges.Edges,
-) (workers.FactoryWorktreePreparer, error) {
-	worktreeFileSystem := edges.WorkersWorktreeFileSystem
-	if worktreeFileSystem == nil {
-		worktreeFileSystem = platformfilesystem.Local{}
-	}
-	worktreeGit := edges.WorkersWorktreeGit
-	if worktreeGit == nil {
-		processRunner, err := providePlatformProcessCommandRunner(edges)
-		if err != nil {
-			return nil, err
-		}
-		adapter, err := workerswire.NewPlatformGitCommander(processRunner)
-		if err != nil {
-			return nil, err
-		}
-		worktreeGit = adapter
-	}
-	worktreePreparer, err := workerswire.NewWorktree(worktreeFileSystem, worktreeGit)
-	if err != nil {
-		return nil, err
-	}
-	return worktreePreparer, nil
-}
-
-type factoryWorktreeReleaser interface {
-	Release(context.Context, workers.FactoryWorktreePreparation) error
-}
-
-func provideWorkersWorktreeRelease(
-	worktreePreparer workers.FactoryWorktreePreparer,
-) func(context.Context, workers.FactoryWorktreePreparation) error {
-	releaser, ok := worktreePreparer.(factoryWorktreeReleaser)
-	if !ok {
-		return nil
-	}
-	return releaser.Release
-}
-
-// provideStatelessWorkersService composes the process-scoped Execute owner.
-// It is deliberately independent of Factory Runtime and Factory Session
-// opening: a caller can execute one detached target before either lifecycle is
-// opened, while the legacy runtime root receives this same owner below.
-func provideStatelessWorkersService(
-	providersService providers.Service,
-	modelsService models.Service,
-	contentMaterializer work.ContentMaterializer,
-	mediaFiles platformfilesystem.ReadOpener,
-	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
-	factoryDocsFileSystem platformfilesystem.ReadFileTree,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride providerOverrideService,
-	agentToolFileSystem workers.AgentToolFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-) (workers.Service, error) {
-	return provideStatelessWorkersServiceWithMock(
-		providersService,
-		modelsService,
-		contentMaterializer,
-		mediaFiles,
-		scriptCommandRunner,
-		factoryDocsFileSystem,
-		clock,
-		logger,
-		worktreePreparer,
-		worktreeRelease,
-		temporaryFiles,
-		providerOverride,
-		agentToolFileSystem,
-		decisionEnvelopes,
-		nil,
-	)
-}
-
-func provideStatelessWorkersServiceWithMock(
-	providersService providers.Service,
-	modelsService models.Service,
-	contentMaterializer work.ContentMaterializer,
-	mediaFiles platformfilesystem.ReadOpener,
-	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
-	factoryDocsFileSystem platformfilesystem.ReadFileTree,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride providerOverrideService,
-	agentToolFileSystem workers.AgentToolFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	mockWorkers *workers.MockWorkersConfig,
-) (workers.Service, error) {
-	if clock == nil {
-		return nil, fmt.Errorf("construct stateless Workers: clock is required")
-	}
-	factoryDocs, err := workerswire.NewFactoryDocsLoader(factoryDocsFileSystem)
-	if err != nil {
-		return nil, fmt.Errorf("construct stateless Workers: %w", err)
-	}
-	scriptRunner := scriptCommandRunner
-	agentDependencies := workerswire.AgentDependencies{
-		Providers: providersService,
-		Publish:   func(workers.ProgressFragment) {},
-		// Decision-envelope interpretation belongs to Factory Definitions.
-		// The detached Execute path routes envelope output through this
-		// injected owner instead of re-implementing the contract.
-		DecisionEnvelopes: decisionEnvelopes,
-	}
-	scriptConfig := workerswire.ScriptConfig{RequestSelected: true}
-	scriptDependencies := workerswire.ScriptDependencies{
-		CommandRunner: scriptRunner,
-		FactoryDocs:   factoryDocs,
-		Now:           clock.Now,
-		Publish:       func(workers.ProgressFragment) {},
-		Record:        func(workers.ScriptEvent) {},
-	}
-	inferenceConfig := workerswire.InferenceConfig{
-		Worker: models.LocalWorker{
-			Name: "request-selected-inference",
-			Type: factorydefinitions.WorkerTypeInference,
-		},
-	}
-	inferenceDependencies := workerswire.InferenceDependencies{
-		Models: modelsService, ContentMaterializer: contentMaterializer, MediaFiles: mediaFiles,
-	}
-	loggerValue := logging.NewZapLogger(logger, false)
-	if mockWorkers != nil {
-		return workerswire.NewMockService(
-			agentDependencies,
-			scriptConfig,
-			scriptDependencies,
-			inferenceConfig,
-			inferenceDependencies,
-			mockWorkers,
-			workerswire.MockDependencies{},
-			nil,
-			loggerValue,
-			clock.Now,
-			worktreePreparer,
-			worktreeRelease,
-			temporaryFiles,
-			agentToolFileSystem,
-			providerOverride,
-		)
-	}
-	return workerswire.NewService(
-		agentDependencies,
-		scriptConfig,
-		scriptDependencies,
-		inferenceConfig,
-		inferenceDependencies,
-		nil,
-		loggerValue,
-		clock.Now,
-		worktreePreparer,
-		worktreeRelease,
-		temporaryFiles,
-		agentToolFileSystem,
-		providerOverride,
-	)
-}
-
-func provideWorkersRetryRandomSource(edges serviceedges.Edges) platformrandom.Source {
-	if edges.WorkersRetryRandomSource != nil {
-		return edges.WorkersRetryRandomSource
-	}
-	return platformrandom.CryptoSource{}
-}
-
-func provideWorkersWorkstationFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileInspector {
-	if edges.WorkersWorkstationFileSystem != nil {
-		return edges.WorkersWorkstationFileSystem
-	}
-	return platformfilesystem.Local{}
-}
-
-func provideWorkersInferenceMediaFileReader(edges serviceedges.Edges) platformfilesystem.ReadOpener {
-	if edges.WorkersInferenceMediaFileReader != nil {
-		return edges.WorkersInferenceMediaFileReader
-	}
-	return platformfilesystem.Local{}
-}
-
-func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platformfilesystem.TemporaryFileSystem {
-	if edges.WorkersProviderTemporaryFileSystem != nil {
-		return edges.WorkersProviderTemporaryFileSystem
-	}
-	return platformfilesystem.Local{}
-}
-
-// provideProvidersAgyPTYEffect completes the native adapter before root assembly.
-func provideProvidersAgyPTYEffect(edges serviceedges.Edges) (providerswire.AgyEffect, error) {
-	allocator, err := provideProvidersAgyPTYAllocator(edges)
-	if err != nil {
-		return nil, err
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	return providerswire.NewAgyPTYEffect(
-		allocator, executableLocator, executableInspector,
-		effectiveProviderCommandClock(edges), providerswire.AgyPTYPolicy{},
-	), nil
-}
-
-func provideWorkersFactoryDocsFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileTree {
-	if edges.WorkersFactoryDocsFileSystem != nil {
-		return edges.WorkersFactoryDocsFileSystem
-	}
-	return platformfilesystem.Local{}
-}
-
-func provideWorkerProcessEnvironment() func() []string {
-	return os.Environ
-}
-
-func provideWorkersAgentToolFileSystem(edges serviceedges.Edges) workers.AgentToolFileSystem {
-	if edges.WorkersAgentToolFileSystem != nil {
-		return edges.WorkersAgentToolFileSystem
-	}
-	return platformfilesystem.Local{}
-}
-
-func provideWorkerCurrentWorkingDirectory() func() (string, error) {
-	return os.Getwd
-}
-
-func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
-	return func(
-		config *workers.MockWorkersConfig,
-		runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
-		next platformprocess.CommandRunner,
-	) platformprocess.CommandRunner {
-		return workerswire.NewMockCommandRunner(
-			config,
-			runtimeConfig,
-			next,
-			platformfilesystem.Local{},
-		)
-	}
-}
-
-func provideConductorInvocationWithProgressFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
-	allocator providerswire.PTYAllocator,
-) factorysessionwire.ConductorInvocationWithProgressFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(
-		selectedProviders providers.Service,
-		runner platformprocess.CommandRunner,
-		publisher workers.ProgressPublisher,
-	) (workers.InvocationExecutor, error) {
-		if selectedProviders == nil {
-			selectedProviders = providersService
-		}
-		return workerswire.NewConductorInvocationWithProgress(
-			selectedProviders,
-			runner,
-			commandClock,
-			allocator,
-			resolveSymlinks,
-			executableLocator,
-			executableInspector,
-			executableFiles,
-			operatingSystem,
-			publisher,
-			temporaryFiles,
-		)
-	}
-}
-
-func provideProviderFromCommandRunnerFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
-) factorysessionwire.ProviderFromCommandRunnerFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner platformprocess.CommandRunner) (providers.Service, error) {
-		return workerswire.NewProviderFromCommandRunner(
-			providersService, runner, commandClock, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
-		)
-	}
 }
