@@ -42,12 +42,6 @@ type InputFileSystem interface {
 
 // NewRuntimeFactory constructs a hosted runtime bundle factory.
 func NewRuntimeFactory(
-	quorumPolicy factorydefinitions.QuorumPolicyService,
-	outputShaping factorydefinitions.InvocationOutputShapingService,
-	workPropagation factorydefinitions.WorkPropagationPolicyService,
-	workService work.Service,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	invocationInterpolation factorydefinitions.InvocationInterpolationService,
 	baseLogger *zap.Logger,
 	loggerFactory factoryruntime.RuntimeLoggerFactory,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
@@ -58,17 +52,11 @@ func NewRuntimeFactory(
 	inputFiles InputFileSystem,
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
-	providerSessions providersessions.Service,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper *DefinitionMapper,
+	engineOpening *EngineOpening,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
-		quorumPolicy,
-		outputShaping,
-		workPropagation,
-		workService,
-		decisionEnvelopes,
-		invocationInterpolation,
 		baseLogger,
 		loggerFactory,
 		runtimeLogs,
@@ -79,9 +67,9 @@ func NewRuntimeFactory(
 		inputFiles,
 		inputDirectoryWalker,
 		orchestrationCompilation,
-		providerSessions,
 		workerAttemptScheduler,
 		definitionMapper,
+		engineOpening,
 	)
 }
 
@@ -136,4 +124,22 @@ func NewWorkstationRequestExecutor(service workers.Service,
 ) *WorkstationRequestExecutor {
 	return runtime.NewWorkstationRequestExecutor(service, interpolation, invocationFiles, newID,
 		prompts, templateFields, invocationFiles, progress, expectedArtifacts, logger)
+}
+
+// EngineOpening owns the reusable engine collaborators; each Open owns fresh state.
+type EngineOpening = runtime.EngineOpening
+
+func NewEngineOpening(
+	interpolation factorydefinitions.InvocationInterpolationService,
+	providerSessions providersessions.Service,
+	quorumPolicy factorydefinitions.QuorumPolicyService,
+	outputShaping factorydefinitions.InvocationOutputShapingService,
+	workPropagation factorydefinitions.WorkPropagationPolicyService,
+	workService work.Service,
+	workRequestIDs work.RequestIDGenerator,
+	newID factoryruntime.IDGenerator,
+	runtimeDirs factoryruntime.RuntimeDirectoryFileSystem,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+) *EngineOpening {
+	return runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping, workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes)
 }

@@ -3,6 +3,7 @@ package internal_test
 import (
 	"context"
 	"errors"
+	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"io"
 	"os"
@@ -704,11 +705,11 @@ func testDefinitionMapper() *definitionmapping.Mapper {
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
+		zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
-		nil,
 		platformclock.Real{}, testDefinitionMapper(),
+		runtimeopening.NewEngineOpening(nil, nil, nil, nil, outputAsPayloadPolicy(), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil),
 	)
 }
 
@@ -730,12 +731,12 @@ func testRuntimeFactoryWithSinkCallbacks(
 
 func testRuntimeFactoryWithOwners(logOwner factory.RuntimeLogOwner, metricsOwner factory.RuntimeMetricsOwner) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory,
+		zap.NewNop(), testRuntimeLoggerFactory,
 		logOwner, metricsOwner,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
-		nil,
 		platformclock.Real{}, testDefinitionMapper(),
+		runtimeopening.NewEngineOpening(nil, nil, nil, nil, outputAsPayloadPolicy(), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil),
 	)
 }
 

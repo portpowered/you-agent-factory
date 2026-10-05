@@ -348,6 +348,7 @@ var servicesSet = wire.NewSet(
 	provideEditableFactoryValidator,
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewRuntimeFactory,
+	factoryruntimewire.NewEngineOpening,
 	factoryruntimewire.NewDefinitionMapper,
 	provideRuntimePreparationWorkstationLoader,
 	factoryruntimewire.NewRuntimePreparation,

@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -993,5 +995,63 @@ func TestNew_WithClockStampsDispatchesDeterministically(t *testing.T) {
 	}
 	if !completed.EndTime.Equal(want) {
 		t.Fatalf("dispatch end = %s, want %s", completed.EndTime, want)
+	}
+}
+
+func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
+	t.Parallel()
+	var identities atomic.Int64
+	newID := func() string { return fmt.Sprintf("opening-%d", identities.Add(1)) }
+	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil,
+		interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
+			return interfaces.WorkPropagationModeOutputAsPayload
+		}), testRuntimeWorkService{}, newID, newID, nil, nil)
+	selectOpening := func(cfg *testFactoryConfig) { cfg.engineOpening = opening }
+	if _, err := newTestFactory(selectOpening); err == nil {
+		t.Fatal("opening without a net succeeded")
+	}
+	base := time.Date(2026, time.October, 5, 12, 0, 0, 0, time.UTC)
+	open := func(at time.Time) factoryhost.Engine {
+		t.Helper()
+		net := buildSimpleNet()
+		resource := &state.ResourceDef{ID: "opening-slot", Name: "Opening slot", Capacity: 1}
+		place, _ := state.GenerateResourcePlaces(resource, at)
+		net.Resources = map[string]*state.ResourceDef{resource.ID: resource}
+		net.Places[place.ID] = place
+		engine, err := newTestFactory(selectOpening, withNet(net), withClock(platformclock.NewDeterministic(at, time.Second)))
+		if err != nil {
+			t.Fatalf("open after failed admission: %v", err)
+		}
+		return engine
+	}
+	first, peer := open(base), open(base.Add(time.Hour))
+	peerBefore, err := peer.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range peerBefore.Marking.Tokens {
+		if !token.CreatedAt.Equal(base.Add(time.Hour)) {
+			t.Fatalf("peer resource clock = %s", token.CreatedAt)
+		}
+	}
+	firstBefore, err := first.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range firstBefore.Marking.Tokens {
+		if !token.CreatedAt.Equal(base) {
+			t.Fatalf("first resource clock = %s", token.CreatedAt)
+		}
+	}
+	if err := first.(TickableFactory).Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	firstAfter, err := first.GetEngineStateSnapshot(context.Background())
+	if err != nil || firstAfter.TickCount <= firstBefore.TickCount {
+		t.Fatalf("first runtime did not advance: before=%d after=%d err=%v", firstBefore.TickCount, firstAfter.TickCount, err)
+	}
+	peerAfter, err := peer.GetEngineStateSnapshot(context.Background())
+	if err != nil || !reflect.DeepEqual(peerBefore, peerAfter) {
+		t.Fatalf("advancing first runtime mutated peer: %v", err)
 	}
 }

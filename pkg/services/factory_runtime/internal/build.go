@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -42,12 +41,6 @@ type inputFileSystem interface {
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 
 type RuntimeFactory struct {
-	quorumPolicy             interfaces.QuorumPolicyService
-	outputShaping            interfaces.InvocationOutputShapingService
-	workPropagation          interfaces.WorkPropagationPolicyService
-	workService              work.Service
-	decisionEnvelopes        interfaces.DecisionEnvelopeService
-	invocationInterpolation  interfaces.InvocationInterpolationService
 	baseLogger               *zap.Logger
 	loggerFactory            factory.RuntimeLoggerFactory
 	runtimeLogs              factory.RuntimeLogOwner
@@ -58,18 +51,12 @@ type RuntimeFactory struct {
 	inputFiles               inputFileSystem
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
+	engineOpening            *runtime.EngineOpening
 	definitionMapper         *definitionmapping.Mapper
-	providerSessions         providersessions.Service
 	workerAttemptScheduler   platformclock.TimerSource
 }
 
 func NewRuntimeFactory(
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
-	workService work.Service,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
-	invocationInterpolation interfaces.InvocationInterpolationService,
 	baseLogger *zap.Logger,
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogOwner,
@@ -80,17 +67,11 @@ func NewRuntimeFactory(
 	inputFiles inputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
-	providerSessions providersessions.Service,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper *definitionmapping.Mapper,
+	engineOpening *runtime.EngineOpening,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
-		quorumPolicy:             quorumPolicy,
-		outputShaping:            outputShaping,
-		workPropagation:          workPropagation,
-		workService:              workService,
-		decisionEnvelopes:        decisionEnvelopes,
-		invocationInterpolation:  invocationInterpolation,
 		baseLogger:               baseLogger,
 		loggerFactory:            loggerFactory,
 		runtimeLogs:              runtimeLogs,
@@ -101,9 +82,9 @@ func NewRuntimeFactory(
 		inputFiles:               inputFiles,
 		inputDirectoryWalker:     inputDirectoryWalker,
 		orchestrationCompilation: orchestrationCompilation,
-		providerSessions:         providerSessions,
 		workerAttemptScheduler:   workerAttemptScheduler,
 		definitionMapper:         definitionMapper,
+		engineOpening:            engineOpening,
 	}
 }
 
@@ -321,19 +302,11 @@ func (f *RuntimeFactory) Build(
 		mockWorkersConfig,
 		workerSessions,
 		workerAttempts,
-		f.providerSessions,
 		f.workerAttemptScheduler,
-		f.workService,
-		f.quorumPolicy,
-		f.outputShaping,
-		f.workPropagation,
 		f.workRequestIDs,
-		f.newID,
-		f.runtimeDirs,
 		f.inputFiles,
 		f.inputDirectoryWalker,
-		f.decisionEnvelopes,
-		f.invocationInterpolation,
+		f.engineOpening,
 	)
 	if err != nil {
 		return nil, err
@@ -398,19 +371,11 @@ func assembleRuntimeBundle(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
-	providerSessions providersessions.Service,
 	workerAttemptScheduler platformclock.TimerSource,
-	workService work.Service,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
 	workRequestIDs work.RequestIDGenerator,
-	newID factory.IDGenerator,
-	runtimeDirs factory.RuntimeDirectoryFileSystem,
 	inputFiles inputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
-	invocationInterpolation interfaces.InvocationInterpolationService,
+	engineOpening *runtime.EngineOpening,
 ) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, sessionID, strings.TrimSpace(backendScopeID),
@@ -443,14 +408,13 @@ func assembleRuntimeBundle(
 	if submissionRecorder != nil {
 		effectiveSubmissionRecorder = submissionRecorder
 	}
-	activeFactory, err := runtime.New(
+	activeFactory, err := engineOpening.Open(
 		net,
 		runtimeScheduler,
 		workerService,
 		workerSessions,
 		workerAttempts,
 		loadedFactoryCfg,
-		invocationInterpolation,
 		invocationFileReader(inputFiles),
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), canonicalSessionID),
 		sessionID,
@@ -465,7 +429,6 @@ func assembleRuntimeBundle(
 		worldStateProjector,
 		restoredWorldState,
 		skipRestoredDispatchReconciliation,
-		providerSessions,
 		effectiveSubmissionRecorder,
 		factoryEventRecorder,
 		submissionHooks,
@@ -473,14 +436,6 @@ func assembleRuntimeBundle(
 		bundle.RecordCompletionMetrics,
 		petriMutationRecorder,
 		completionPlanner,
-		quorumPolicy,
-		outputShaping,
-		workPropagation,
-		workService,
-		workRequestIDs,
-		newID,
-		runtimeDirs,
-		decisionEnvelopes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)

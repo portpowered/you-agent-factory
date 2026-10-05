@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -164,11 +165,11 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	}
 	workflows := cutoverJavaScriptWorkflows()
 	bundle, err := factoryinternal.NewRuntimeFactory(
-		nil, nil, nil, nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
+		zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows)),
-		nil,
 		platformclock.Real{}, testDefinitionMapper(),
+		runtimeopening.NewEngineOpening(nil, nil, nil, nil, nil, nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil),
 	).Build(
 		context.Background(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
