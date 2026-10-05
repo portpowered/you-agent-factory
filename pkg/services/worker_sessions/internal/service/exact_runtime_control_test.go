@@ -104,14 +104,18 @@ func TestControlFrozenRuntimeRefusesReplacementAfterWait(t *testing.T) {
 			r, id, a, calls := newFrozenRuntimeControlFixture(t)
 			a.controlPending = true
 			a.controlDone = make(chan struct{})
-			claimed, wait, completed, err := r.claimFrozenRuntimeControl(id, a)
+			target, err := r.freezeControlTarget(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			claimed, wait, completed, err := r.claimFrozenRuntimeControl(id, target)
 			if claimed || wait != a.controlDone || completed != nil || err != nil {
 				t.Fatalf("pending control claim = %t, %v, %v, %v", claimed, wait, completed, err)
 			}
 			replaceFrozenRuntimeOwner(r, id, a, replacement)
 			a.resolveControl(workersessions.ControlActionCancel, "", errors.New("prior control failed"))
 			<-wait
-			result, complete, err := r.awaitRuntimeAttemptControl(id, workersessions.ControlActionTerminate, a)
+			result, complete, err := r.awaitRuntimeAttemptControl(id, workersessions.ControlActionTerminate, target)
 			if !complete || !errors.Is(err, workersessions.ErrInvalidState) || result.Outcome != workersessions.ControlOutcomeFailed || *calls != 0 || a.controlPending {
 				t.Fatalf("stale control after wait = %#v, %t, %v, calls %d", result, complete, err, *calls)
 			}
@@ -122,19 +126,23 @@ func TestControlFrozenRuntimeRefusesReplacementAfterWait(t *testing.T) {
 func TestControlFrozenRuntimeNaturalCompletionKeepsNoop(t *testing.T) {
 	t.Parallel()
 	r, id, a, calls := newFrozenRuntimeControlFixture(t)
+	target, err := r.freezeControlTarget(id)
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.completing = true
 	a.completed = make(chan struct{})
 	close(a.completed)
 	r.sessions[id] = workersessions.Session{ID: publicWorkerID(id), State: workersessions.StateCompleted}
 	delete(r.runtimeAttemptControls, id)
 	delete(r.runtimeAttemptOwners, a.key)
-	result, complete, err := r.awaitRuntimeAttemptControl(id, workersessions.ControlActionTerminate, a)
+	result, complete, err := r.awaitRuntimeAttemptControl(id, workersessions.ControlActionTerminate, target)
 	if !complete || err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCompleted || *calls != 0 {
 		t.Fatalf("natural winner = %#v, %t, %v", result, complete, err)
 	}
 	otherID := scopedWorkerAddress(publicWorkerID(id), "factory-b")
 	r.sessions[otherID] = r.sessions[id]
-	if _, _, _, err := r.claimFrozenRuntimeControl(otherID, a); !errors.Is(err, workersessions.ErrInvalidState) {
+	if _, _, _, err := r.claimFrozenRuntimeControl(otherID, target); !errors.Is(err, workersessions.ErrInvalidState) {
 		t.Fatalf("completed handle granted cross-scope authority: %v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -14,21 +15,29 @@ type frozenControlTarget struct {
 	supervision *supervision
 	runtime     *runtimeAttempt
 	dispatchID  string
+	publication *publication
+	capture     recordings.WorkerControlTarget
 }
 
 func (r *registry) freezeControlTarget(id string) (frozenControlTarget, error) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	if _, exists := r.sessions[id]; !exists {
+		r.mu.RUnlock()
 		return frozenControlTarget{}, workersessions.ErrSessionNotFound
 	}
-	target := frozenControlTarget{supervision: r.supervisions[id], runtime: r.runtimeAttemptControls[id]}
+	target := frozenControlTarget{supervision: r.supervisions[id], runtime: r.runtimeAttemptControls[id], publication: r.publications[id]}
 	if target.supervision != nil {
 		target.supervision.mu.Lock()
 		target.dispatchID = target.supervision.dispatchID
 		target.supervision.mu.Unlock()
 	} else if target.runtime != nil {
 		target.dispatchID = target.runtime.dispatchID
+	}
+	r.mu.RUnlock()
+	if target.publication != nil {
+		target.publication.mu.Lock()
+		target.capture = target.publication.capture
+		target.publication.mu.Unlock()
 	}
 	return target, nil
 }
@@ -39,6 +48,14 @@ func (r *registry) freezeControlTarget(id string) (frozenControlTarget, error) {
 func (r *registry) claimFrozenCancellation(
 	id string, action workersessions.ControlAction, target frozenControlTarget,
 ) (workersessions.Session, cancellationAttempt, error) {
+	unlock, err := r.lockFrozenCapture(id, target)
+	if err != nil {
+		r.mu.RLock()
+		session := cloneSession(r.sessions[id])
+		r.mu.RUnlock()
+		return session, cancellationAttempt{}, err
+	}
+	defer unlock()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	session, exists := r.sessions[id]
@@ -72,7 +89,13 @@ func (r *registry) claimFrozenCancellation(
 
 // Registry ownership and the attempt's control claim use the admission lock
 // order. A wait never grants a stale handle authority over a replacement.
-func (r *registry) claimFrozenRuntimeControl(id string, attempt *runtimeAttempt) (bool, <-chan struct{}, <-chan struct{}, error) {
+func (r *registry) claimFrozenRuntimeControl(id string, target frozenControlTarget) (bool, <-chan struct{}, <-chan struct{}, error) {
+	unlock, err := r.lockFrozenCapture(id, target)
+	if err != nil {
+		return false, nil, nil, err
+	}
+	defer unlock()
+	attempt := target.runtime
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if err := r.frozenRuntimeOwnerLocked(id, attempt); err != nil {
@@ -110,7 +133,13 @@ func (r *registry) frozenRuntimeOwnerLocked(id string, attempt *runtimeAttempt) 
 
 // The control claim pins normal completion. Recheck the registry after history
 // publication, then release all locks before invoking the external stop edge.
-func (r *registry) frozenRuntimeCancel(id string, attempt *runtimeAttempt) (func(context.Context) (workers.WorkstationDispatchCancelOutcome, error), error) {
+func (r *registry) frozenRuntimeCancel(id string, target frozenControlTarget) (func(context.Context) (workers.WorkstationDispatchCancelOutcome, error), error) {
+	unlock, err := r.lockFrozenCapture(id, target)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	attempt := target.runtime
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if err := r.frozenRuntimeOwnerLocked(id, attempt); err != nil {

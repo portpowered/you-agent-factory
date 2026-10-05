@@ -3469,7 +3469,11 @@ func TestCancelControlWaitsForConcurrentControl(t *testing.T) {
 	close(supervision.controlDone)
 	r.supervisions[sessionID] = supervision
 
-	result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: sessionID}, workersessions.ControlActionCancel, false, frozenControlTarget{supervision: supervision, dispatchID: supervision.dispatchID})
+	target, err := r.freezeControlTarget(sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: sessionID}, workersessions.ControlActionCancel, false, target)
 	if err != nil || !retry || result != (workersessions.ControlResult{}) {
 		t.Fatalf("cancelControlIteration(concurrent control) = %#v, %t, %v, want retry", result, retry, err)
 	}

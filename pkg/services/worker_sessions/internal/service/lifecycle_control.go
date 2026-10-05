@@ -322,7 +322,7 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	if target.runtime != nil {
-		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, target.runtime)
+		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, target)
 	}
 	reservation, err := r.beginFrozenControlHistory(ctx, req.ID, action, req.RequestID, target)
 	if err != nil {
