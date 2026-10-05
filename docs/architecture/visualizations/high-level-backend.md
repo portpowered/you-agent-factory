@@ -18,7 +18,7 @@ flowchart TB
   end
   subgraph execution["Execution"]
     s_services_models["models<br/>39272 LOC · 5 subservices"]
-    s_services_provider_sessions["provider sessions<br/>5382 LOC · 2 subservices"]
+    s_services_provider_sessions["provider sessions<br/>5380 LOC · 2 subservices"]
     s_services_providers["providers<br/>14772 LOC · 3 subservices"]
     s_services_worker_sessions["worker sessions<br/>18390 LOC · 0 subservices"]
     s_services_workers["workers<br/>22145 LOC · 2 subservices"]
@@ -132,7 +132,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`factory_visualization`](services/factory_visualization.md) | (subservice) activation lifecycle (444 LOC)<br/>(subservice) live view projection (530 LOC)<br/>(subservice) response event presentation (329 LOC) |
 | [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (738 LOC)<br/>(subservice) resolution (302 LOC) |
-| [`provider_sessions`](services/provider_sessions.md) | (subservice) codex reader (1518 LOC)<br/>(subservice) cursor reader (2914 LOC) |
+| [`provider_sessions`](services/provider_sessions.md) | (subservice) codex reader (1474 LOC)<br/>(subservice) cursor reader (2914 LOC) |
 | [`providers`](services/providers.md) | (subservice) acp (2745 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (5568 LOC) |
 | [`recordings`](services/recordings.md) | (subservice) artifacts export (592 LOC)<br/>(subservice) canonical ledger (479 LOC)<br/>(subservice) historical query (611 LOC)<br/>(subservice) projection query (261 LOC)<br/>(subservice) recorded session inventory (307 LOC)<br/>(subservice) recording lifecycle (784 LOC)<br/>(subservice) replay (368 LOC)<br/>(subservice) worker capture (2607 LOC) |
 | [`system_initialization`](services/system_initialization.md) | — |
