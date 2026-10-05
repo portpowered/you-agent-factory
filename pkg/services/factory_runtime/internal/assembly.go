@@ -40,7 +40,7 @@ func NewAssembly(
 	preparation *runtimebuild.Service,
 ) (*Assembly, error) {
 	if bundleOpening == nil {
-		return nil, fmt.Errorf("Factory Runtime bundle opening is required")
+		return nil, fmt.Errorf("factory runtime bundle opening is required")
 	}
 	return &Assembly{
 		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,

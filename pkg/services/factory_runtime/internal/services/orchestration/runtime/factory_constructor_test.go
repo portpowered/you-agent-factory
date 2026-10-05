@@ -1021,7 +1021,7 @@ func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
 	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil,
 		interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
-		}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening)
+		}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening.Open)
 	selectOpening := func(cfg *testFactoryConfig) { cfg.engineOpening = opening }
 	if _, err := newTestFactory(selectOpening); err == nil {
 		t.Fatal("opening without a net succeeded")

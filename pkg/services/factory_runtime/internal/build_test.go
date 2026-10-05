@@ -704,7 +704,7 @@ func assertReplacementSelections(t *testing.T, initial, replacement factory.Runt
 	if replacement.LoadedRuntimeConfig() == initial.LoadedRuntimeConfig() || replacement.RecordingLedger() == initial.RecordingLedger() {
 		t.Fatal("replacement shares candidate or history with the initial generation")
 	}
-	if initial.StartTime() == replacement.StartTime() || initial.StreamGeneration() != "initial-runtime" {
+	if initial.StartTime().Equal(replacement.StartTime()) || initial.StreamGeneration() != "initial-runtime" {
 		t.Fatal("replacement changed the initial generation's clock or identity")
 	}
 }

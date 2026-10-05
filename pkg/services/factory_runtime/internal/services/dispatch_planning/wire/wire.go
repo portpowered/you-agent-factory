@@ -8,7 +8,7 @@ import (
 
 // NewOpening selects reusable opening behavior without allocating an outbox.
 func NewOpening() dispatchplanning.OutboxOpening {
-	return internalservice.NewOpening()
+	return internalservice.NewOpening().Open
 }
 
 // New constructs a dispatch-planning capability over the Workers publication

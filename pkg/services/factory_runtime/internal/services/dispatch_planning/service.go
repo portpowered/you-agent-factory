@@ -102,8 +102,11 @@ type WorkersCanceler func(
 
 // OutboxOpening allocates independently owned publication state over the
 // runtime's attempt callbacks. Reusable opening behavior is injected once.
-type OutboxOpening interface {
-	Open(WorkersPublisher, WorkersCanceler) Service
+type OutboxOpening func(WorkersPublisher, WorkersCanceler) Service
+
+// Open invokes the selected behavior with this runtime's attempt callbacks.
+func (opening OutboxOpening) Open(publisher WorkersPublisher, canceler WorkersCanceler) Service {
+	return opening(publisher, canceler)
 }
 
 // PublicationOutcome describes whether an outbox intent was newly accepted or

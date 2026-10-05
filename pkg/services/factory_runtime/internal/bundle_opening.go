@@ -36,13 +36,13 @@ func NewBundleOpening(
 	requestResolver *runtime.WorkstationRequestExecutor,
 ) (*BundleOpening, error) {
 	if runtimeFactory == nil {
-		return nil, fmt.Errorf("Factory Runtime factory is required")
+		return nil, fmt.Errorf("factory runtime factory is required")
 	}
 	if workerSessions == nil {
 		return nil, fmt.Errorf("worker sessions service is required")
 	}
 	if workerService == nil {
-		return nil, fmt.Errorf("Workers service is required")
+		return nil, fmt.Errorf("workers service is required")
 	}
 	return &BundleOpening{runtimeFactory: runtimeFactory, workerService: workerService,
 		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver}, nil

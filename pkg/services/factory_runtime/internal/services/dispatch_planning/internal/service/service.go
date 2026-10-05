@@ -41,8 +41,6 @@ var _ dispatchplanning.Service = (*Planner)(nil)
 // the selected runtime's outbox state and retains its attempt callbacks.
 type Opening struct{}
 
-var _ dispatchplanning.OutboxOpening = (*Opening)(nil)
-
 func NewOpening() *Opening {
 	return &Opening{}
 }

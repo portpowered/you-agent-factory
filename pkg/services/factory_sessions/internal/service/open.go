@@ -112,7 +112,7 @@ func (r *Root) prepareRuntimeOpening(
 	replayInput *recordings.LoadReplayInputResult,
 ) (*sessionRuntimeOpening, error) {
 	if session == nil {
-		return nil, fmt.Errorf("Factory Session runtime selection is required")
+		return nil, fmt.Errorf("factory session runtime selection is required")
 	}
 	if r.recordingsService == nil {
 		return nil, fmt.Errorf("construct runtime scope: Recordings service is required")

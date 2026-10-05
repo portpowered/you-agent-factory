@@ -508,3 +508,39 @@ func TestPrepareWarningsPreserveSessionFieldsAndTargetOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestPrepareSpecWarningsUseSelectedOpeningLogger(t *testing.T) {
+	t.Parallel()
+	processCore, processLogs := observer.New(zap.WarnLevel)
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.New(processCore))
+	for _, id := range []string{"session-a", "session-b"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			core, logs := observer.New(zap.WarnLevel)
+			selectedLogger := zap.New(core).With(zap.String("invocation_id", "invocation-"+id))
+			clock := &platformclock.Real{}
+			candidate := newSelectedBuildFixture(t).loaded
+			candidate.replacements = []factorydefinitions.PortableBundledFileReplacement{{TargetPath: "selected-target"}}
+			spec, err := preparation.PrepareSpec(t.Context(), runtimebuild.BuildDefaults{}, runtimebuild.SessionBuildValues{
+				SessionID: id, FolderPath: "/folder/" + id, LoadedFactoryCfg: candidate,
+			}, runtimebuild.SessionBuildSpec{BaseLogger: selectedLogger, Clock: clock})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.BaseLogger != selectedLogger || spec.Clock != clock {
+				t.Fatal("preparation changed the opening logger or clock")
+			}
+			entries := logs.All()
+			if len(entries) != 1 {
+				t.Fatalf("selected opening warnings = %d, want 1", len(entries))
+			}
+			fields := entries[0].ContextMap()
+			if fields["session_id"] != id || fields["invocation_id"] != "invocation-"+id || fields["folder_path"] != "/folder/"+id {
+				t.Fatalf("warning lost opening attribution: %#v", fields)
+			}
+			if processLogs.Len() != 0 {
+				t.Fatalf("selected opening logged through the process constructor: %#v", processLogs.All())
+			}
+		})
+	}
+}

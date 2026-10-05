@@ -68,6 +68,10 @@ func New(
 // Prepare preserves candidate identity; callers discard a failed candidate.
 // It starts no resources and retains the existing downstream cancellation policy.
 func (s *Service) Prepare(ctx context.Context, defaults BuildDefaults, values SessionBuildValues) (PreparedSessionValues, error) {
+	return s.prepare(ctx, defaults, values, s.baseLogger)
+}
+
+func (s *Service) prepare(ctx context.Context, defaults BuildDefaults, values SessionBuildValues, baseLogger *zap.Logger) (PreparedSessionValues, error) {
 	loaded := values.LoadedFactoryCfg
 	if loaded == nil {
 		var err error
@@ -76,7 +80,7 @@ func (s *Service) Prepare(ctx context.Context, defaults BuildDefaults, values Se
 			return PreparedSessionValues{}, fmt.Errorf("load factory config: %w", err)
 		}
 	}
-	logger := NewSessionLogger(s.baseLogger, values.SessionID, values.FolderPath, loaded.FactoryDir())
+	logger := NewSessionLogger(baseLogger, values.SessionID, values.FolderPath, loaded.FactoryDir())
 	WarnPortableBundledReplacementReport(logger, "named factory activation replaced portable bundled files", loaded.PortableBundledFileReplacements())
 	loaded.SetRuntimeBaseDir(values.ExecutionBaseDir)
 	if defaults.ApplyOperatorDefaults {
@@ -108,7 +112,7 @@ func (s *Service) PrepareSpec(
 	values SessionBuildValues,
 	selections SessionBuildSpec,
 ) (SessionBuildSpec, error) {
-	prepared, err := s.Prepare(ctx, defaults, values)
+	prepared, err := s.prepare(ctx, defaults, values, selections.BaseLogger)
 	if err != nil {
 		return SessionBuildSpec{}, err
 	}

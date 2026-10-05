@@ -302,7 +302,7 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 
 func TestNewBundleOpeningRequiresWireConstructedRuntimeFactory(t *testing.T) {
 	opening, err := NewBundleOpening(nil, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
+	if err == nil || !strings.Contains(err.Error(), "factory runtime factory is required") {
 		t.Fatalf("NewBundleOpening(nil) error = %v, want required dependency", err)
 	}
 	if opening != nil {
@@ -324,7 +324,7 @@ func TestNewBundleOpeningRequiresWorkerSessionsService(t *testing.T) {
 func TestNewBundleOpeningRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	opening, err := NewBundleOpening(runtimeFactory, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
+	if err == nil || !strings.Contains(err.Error(), "workers service is required") {
 		t.Fatalf("NewBundleOpening(nil Workers service) error = %v, want required dependency", err)
 	}
 	if opening != nil {
