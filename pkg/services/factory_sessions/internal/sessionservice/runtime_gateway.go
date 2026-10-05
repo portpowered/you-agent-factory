@@ -11,8 +11,10 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
@@ -239,13 +241,6 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	return err
 }
 
-func (fs *SessionRuntime) durableExecutionService() durableexecution.Service {
-	if fs == nil {
-		return nil
-	}
-	return fs.durableExecution
-}
-
 var _ roles.SessionGateway = (*Service)(nil)
 
 // AttachSessionGateway installs the Wire-constructed gateway used by all
@@ -271,34 +266,29 @@ func (fs *SessionRuntime) ReconnectCursorValidator() factorysessions.ReconnectCu
 	return fs.reconnectCursorValidator
 }
 
-// SessionServiceHost exposes the runtime's lifecycle callbacks to the bounded
-// Session gateway.
-func SessionServiceHost(runtime *SessionRuntime) Host {
-	if runtime == nil {
-		return dependencyHost{}
-	}
-	routing := sessionIdentityReader{
-		state: runtime.sessionState, active: &runtime.runtimeState,
-		backendScope: runtime.backendScopeID, identity: runtime.identity,
-	}
-	projection := runtime.projectionReader()
-	lifecycle := sessionLifecycleReader{
-		state: runtime.sessionState, active: &runtime.runtimeState,
-		lifecycle: runtime.runtimeLifecycle, releaseAdmission: runtime.releaseWorkAdmissionProjection,
-		logger: runtime.logger,
-	}
+// SessionServiceHost constructs keyed gateway reads and lifecycle effects from
+// explicit collaborators. Active record facts remain the T15 compatibility bridge.
+func SessionServiceHost(
+	state *sessionruntime.Service,
+	active *runtimebinding.State,
+	lifecycle factoryruntime.RuntimeLifecycle,
+	releaseAdmission func(string),
+	durable durableexecution.Service,
+	backendScope string,
+	identityService identity.Service,
+	clock factoryruntime.Clock,
+	projector factoryruntime.WorldStateProjector,
+	checkpoints factoryruntime.JavaScriptCheckpointStoreFactory,
+	logger *zap.Logger,
+) Host {
+	routing := sessionIdentityReader{state: state, active: active, backendScope: backendScope, identity: identityService}
+	projection := sessionProjectionReader{state: state, backendScope: backendScope, identity: identityService, clock: clock, projector: projector, checkpoints: checkpoints}
+	lifecycleReader := sessionLifecycleReader{state: state, active: active, lifecycle: lifecycle, releaseAdmission: releaseAdmission, logger: logger}
 	return newSessionHost(
-		runtime.sessionState,
-		projection.BuildSessionProjectionContext,
-		routing.ResolveSyncPreflightTarget,
-		routing.BackendScopeID,
-		routing.LogicalSessionKeyID,
-		runtimebinding.StreamGenerationID,
-		lifecycle.WorkerSessionsObservationForSession,
-		lifecycle.StopLiveSession,
-		lifecycle.ObserveLiveLifecycleControl,
-		runtime.durableExecutionService,
-		runtime.newJavaScriptCheckpointStore,
+		state, projection.BuildSessionProjectionContext, routing.ResolveSyncPreflightTarget,
+		routing.BackendScopeID, routing.LogicalSessionKeyID, runtimebinding.StreamGenerationID,
+		lifecycleReader.WorkerSessionsObservationForSession, lifecycleReader.StopLiveSession,
+		lifecycleReader.ObserveLiveLifecycleControl, durable, checkpoints,
 	)
 }
 

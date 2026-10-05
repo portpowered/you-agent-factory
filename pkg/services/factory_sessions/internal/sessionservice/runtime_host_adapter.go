@@ -91,7 +91,7 @@ func newSessionHost(
 	workerSessionsObservation func(string) workersessions.ObservationService,
 	stopLiveSession func(string) error,
 	observeLiveLifecycleControl func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error),
-	durableExecution func() durableexecution.Service,
+	durableExecution durableexecution.Service,
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory,
 ) Host {
 	host := dependencyHost{
@@ -101,7 +101,7 @@ func newSessionHost(
 		streamGenerationID:        streamGenerationID,
 		workerSessionsObservation: workerSessionsObservation,
 		stopLiveSession:           stopLiveSession, observeLiveLifecycleControl: observeLiveLifecycleControl,
-		durableExecution: durableExecution,
+		durableExecution: func() durableexecution.Service { return durableExecution },
 	}
 	if state != nil {
 		host.requireSession = func(sessionID string) (*livesession.LiveSession, error) {

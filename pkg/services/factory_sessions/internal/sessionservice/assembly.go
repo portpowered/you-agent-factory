@@ -461,7 +461,12 @@ func (a *Assembly) Complete(
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
 	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
 	gateway := NewWithLiveChangeCoordinator(
-		SessionServiceHost(runtime),
+		SessionServiceHost(
+			runtime.sessionState, &runtime.runtimeState, runtime.runtimeLifecycle,
+			runtime.releaseWorkAdmissionProjection, runtime.durableExecution, runtime.backendScopeID,
+			runtime.identity, runtime.clock, runtime.worldStateProjector,
+			runtime.newJavaScriptCheckpointStore, runtime.logger,
+		),
 		a.state,
 		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
 		a.state.ResponseStreams(),

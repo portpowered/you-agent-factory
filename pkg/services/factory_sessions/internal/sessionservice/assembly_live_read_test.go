@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	sessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -89,17 +90,15 @@ func TestSessionHostLifecyclePreservesFailedStopRetryAndPeers(t *testing.T) {
 	failure := errors.New("injected addressed stop failure")
 	lifecycle := &hostLifecycleStub{err: failure}
 	var released []string
-	reader := sessionLifecycleReader{
-		state: state, active: active, lifecycle: lifecycle,
-		releaseAdmission: func(id string) { released = append(released, id) },
-	}
+	host := SessionServiceHost(state, active, lifecycle,
+		func(id string) { released = append(released, id) }, nil, "", nil, nil, nil, nil, nil)
 	for _, id := range []string{"first", "peer"} {
 		run := invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}}
 		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Handle: run}}, id == "first")
 	}
 	selected := state.Resolve("first")
 	active.SetActive(context.Background(), selected.ID, runtimebinding.HandleFromSession(selected))
-	if err := reader.StopLiveSession("first"); !errors.Is(err, failure) {
+	if err := host.StopLiveSession("first"); !errors.Is(err, failure) {
 		t.Fatalf("failed stop = %v", err)
 	}
 	if !reflect.DeepEqual(state.Registry().IDs(), []string{"first", "peer"}) || len(released) != 0 || active.Active().SessionID != "first" {
@@ -109,7 +108,7 @@ func TestSessionHostLifecyclePreservesFailedStopRetryAndPeers(t *testing.T) {
 		t.Fatal("stop effect targeted a peer run")
 	}
 	lifecycle.err = nil
-	if err := reader.StopLiveSession("first"); err != nil {
+	if err := host.StopLiveSession("first"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runtimebinding.RequireLiveSession(state, "first"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
@@ -121,7 +120,7 @@ func TestSessionHostLifecyclePreservesFailedStopRetryAndPeers(t *testing.T) {
 	if !reflect.DeepEqual(released, []string{"first"}) || active.Active().SessionID != "peer" {
 		t.Fatalf("retirement effects = %v, active = %#v", released, active.Active())
 	}
-	if err := reader.StopLiveSession("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) || len(released) != 1 {
+	if err := host.StopLiveSession("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) || len(released) != 1 {
 		t.Fatalf("missing stop = %v, releases = %v", err, released)
 	}
 }
@@ -148,11 +147,8 @@ func TestSessionHostWorkerReadsPreserveAddressedAndStartupFallback(t *testing.T)
 	if first.requested != "first" || peer.requested != "peer" || startup.requested != "missing" {
 		t.Fatal("worker observation lost the requested public identity")
 	}
-	// The production host captures the reader, so changing the legacy wrapper
-	// afterwards cannot redirect an existing host to a different registry.
-	runtime := &SessionRuntime{sessionState: state, runtimeLifecycle: &hostLifecycleStub{}}
-	host := SessionServiceHost(runtime)
-	runtime.sessionState = newWorkResolverSessionState()
+	// Construct without an opening owner or gateway and retain addressed reads.
+	host := SessionServiceHost(state, active, nil, nil, nil, "", nil, nil, nil, nil, nil)
 	got, err := host.(dependencyHost).WorkerSessionsObservationForSession("peer").ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "requested"})
 	if err != nil || len(got.Observations) != 1 || !reflect.DeepEqual(got.Observations[0].WorkIDs, []string{"peer-work"}) {
 		t.Fatalf("captured production host worker read = %#v, %v", got, err)
@@ -214,6 +210,36 @@ func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
 	}
 }
 
+type hostDurableRead struct {
+	durableexecution.Service
+	err error
+}
+
+func (d *hostDurableRead) GetSession(_ context.Context, id string) (factorysessions.SessionReadResult, error) {
+	return factorysessions.SessionReadResult{SessionID: id, Status: factorysessions.LifecycleStatusPaused}, d.err
+}
+
+func TestSessionHostRetainsDirectDurableReadsAndErrors(t *testing.T) {
+	t.Parallel()
+	durable := &hostDurableRead{}
+	host := SessionServiceHost(newWorkResolverSessionState(), nil, nil, nil, durable, "", nil, nil, nil, nil, nil)
+	for _, id := range []string{"selected", "peer"} {
+		got, err := host.DurableExecution().GetSession(context.Background(), id)
+		if err != nil || got.SessionID != id || got.Status != factorysessions.LifecycleStatusPaused {
+			t.Fatalf("durable read %s = %#v, %v", id, got, err)
+		}
+	}
+	failure := errors.New("selected durable read failure")
+	durable.err = failure
+	if _, err := host.DurableExecution().GetSession(context.Background(), "selected"); !errors.Is(err, failure) {
+		t.Fatalf("durable error = %v", err)
+	}
+	optional := SessionServiceHost(newWorkResolverSessionState(), nil, nil, nil, nil, "", nil, nil, nil, nil, nil)
+	if optional.DurableExecution() != nil {
+		t.Fatal("optional durable service unexpectedly configured")
+	}
+}
+
 type projectionIdentityStub struct {
 	sessionidentity.Service
 	err error
@@ -266,12 +292,9 @@ func TestSessionProjectionReaderUsesAddressedFactsAndErrors(t *testing.T) {
 	if err != nil || len(got.JavaScriptCheckpoints) != 0 || got.Session.FolderPath != "peer" {
 		t.Fatalf("isolated peer projection = %#v, %v", got, err)
 	}
-	// The production adapter must read checkpoints without an attached gateway.
-	runtime := &SessionRuntime{
-		sessionState: state, backendScopeID: "selected-backend", identity: reader.identity,
-		clock: reader.clock, newJavaScriptCheckpointStore: reader.checkpoints,
-	}
-	got, err = SessionServiceHost(runtime).BuildSessionProjectionContext(ctx, first)
+	// The production adapter reads checkpoints without an opening owner or gateway.
+	host := SessionServiceHost(state, nil, nil, nil, nil, "selected-backend", reader.identity, reader.clock, nil, reader.checkpoints, nil)
+	got, err = host.BuildSessionProjectionContext(ctx, first)
 	if err != nil || got.BackendScopeID != "selected-backend" || len(got.JavaScriptCheckpoints) != 1 {
 		t.Fatalf("host projection without gateway = %#v, %v", got, err)
 	}
@@ -939,7 +962,7 @@ func assertDefaultSuccessor(t *testing.T, reader sessionIdentityReader, wantID s
 
 func assertHostLogicalRemapping(t *testing.T, reader sessionIdentityReader) {
 	t.Helper()
-	host := SessionServiceHost(&SessionRuntime{sessionState: reader.state, backendScopeID: reader.backendScope, identity: reader.identity})
+	host := SessionServiceHost(reader.state, reader.active, nil, nil, nil, reader.backendScope, reader.identity, nil, nil, nil, nil)
 	got, err := host.ResolveSyncPreflightTarget("old", &factorydefinitions.FactorySessionLogicalResolveHint{
 		BackendScopeID: "selected-backend", LogicalSessionKeyID: "peer",
 	})
