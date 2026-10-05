@@ -91,3 +91,41 @@ func TestBaselineGrowthRejectsEstablishedRuleKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestBaselineGrowthInterfaceMemberReplacement(t *testing.T) {
+	t.Parallel()
+	const prefix = "service-root-interface-count|pkg/services/factory_runtime|"
+	const clock = "pkg/services/factory_runtime/clock.go:Clock"
+	const opener = "pkg/services/factory_runtime/composition_contracts.go:WorkerAttemptOpener"
+	const retained = "pkg/services/factory_runtime/clock.go:LogicalClock"
+	base := prefix + clock + "," + retained
+	for _, tc := range []struct {
+		name      string
+		base      string
+		head      string
+		wantError bool
+	}{
+		{"single member swap", base, prefix + retained + "," + opener, false},
+		{"member growth", base, base + "," + opener, true},
+		{"foreign package", base, "service-root-interface-count|pkg/services/other|" + retained + "," + opener, true},
+		{"extra allowance", base, base + "\n" + prefix + retained + "," + opener, true},
+		{"duplicate member hides growth", base, prefix + opener + "," + opener + "," + retained, true},
+		{"empty member", base, prefix + opener + ",", true},
+		{"multiple member replacements", base, prefix + opener + ",other.go:Other", true},
+		{"other rule stays deletion only", "old|unit|a,b", "old|unit|a,c", true},
+		{"swap cannot offset another violation", base + "\nold|unit|a", prefix + retained + "," + opener + "\nold|unit|b", true},
+		{"ambiguous prior allowance", base + "\n" + prefix + retained + ",other.go:Other", prefix + retained + "," + opener, true},
+		{"allowance deletion", base, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			seeds, err := CompareBaselineGrowth(tc.base, tc.head)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("seeds=%v err=%v, wantError=%v", seeds, err, tc.wantError)
+			}
+			if err == nil && len(seeds) != 0 {
+				t.Fatalf("replacement seeded new rule IDs: %v", seeds)
+			}
+		})
+	}
+}
