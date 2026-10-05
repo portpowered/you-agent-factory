@@ -106,6 +106,13 @@ func runRealHostInterrupt(t *testing.T, process support.Process) {
 		t.Fatalf("interrupt created unexpected fleet: %v", listed)
 	}
 	assertProviderCallCount(t, runner, 2)
+	source := getHost(t, host.URL()+"/worker-sessions/source").(map[string]any)
+	successor := getHost(t, host.URL()+"/worker-sessions/successor").(map[string]any)
+	if source["successorWorkerSessionId"] != "successor" || successor["predecessorWorkerSessionId"] != "source" || source["provider"] != "codex" || successor["provider"] != "codex" {
+		t.Fatalf("admitted lineage/provider lost: source=%v successor=%v", source, successor)
+	}
+	assertRuntimeObservationParity(t, source, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": "source"})["result"].(map[string]any)["session"])
+	assertFactoryCLIParity(t, host, "successor", successor)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "successor", "operation": "TERMINATE"})
 }
 

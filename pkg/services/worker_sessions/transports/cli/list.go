@@ -205,31 +205,34 @@ type listJSONResponse struct {
 }
 
 type listJSONObservation struct {
-	AttemptID                string                                              `json:"attemptId"`
-	Direct                   bool                                                `json:"direct"`
-	DurationBasis            factoryapi.WorkerSessionObservationDurationBasis    `json:"durationBasis"`
-	DurationMillis           *int64                                              `json:"durationMillis"`
-	EndedAt                  *time.Time                                          `json:"endedAt"`
-	FactorySessionID         *string                                             `json:"factorySessionId"`
-	Failure                  *factoryapi.WorkerSessionFailure                    `json:"failure"`
-	Model                    *string                                             `json:"model"`
-	Parse                    factoryapi.WorkerSessionParseDiagnostics            `json:"parse"`
-	ProviderSession          *factoryapi.WorkerSessionProviderSessionRef         `json:"providerSession"`
-	ProviderSessionAvailable bool                                                `json:"providerSessionAvailable"`
-	ReasoningEffort          *string                                             `json:"reasoningEffort"`
-	RecordingHealth          *factoryapi.WorkerSessionObservationRecordingHealth `json:"recordingHealth"`
-	RecordingHealthReason    *string                                             `json:"recordingHealthReason"`
-	StartedAt                *time.Time                                          `json:"startedAt"`
-	State                    factoryapi.WorkerSessionObservationState            `json:"state"`
-	ConfirmationState        factoryapi.ConfirmationState                        `json:"confirmationState"`
-	TokenUsage               *listJSONTokenUsage                                 `json:"tokenUsage"`
-	TurnUsage                *listJSONTurnUsage                                  `json:"turnUsage,omitempty"`
-	Transcript               factoryapi.WorkerSessionObservationTranscript       `json:"transcript"`
-	TurnID                   *string                                             `json:"turnId"`
-	WorkID                   *string                                             `json:"workId"`
-	WorkIDs                  []string                                            `json:"workIds"`
-	WorkName                 *string                                             `json:"workName"`
-	WorkerSessionID          string                                              `json:"workerSessionId"`
+	Provider                   *string                                             `json:"provider,omitempty"`
+	PredecessorWorkerSessionID *string                                             `json:"predecessorWorkerSessionId,omitempty"`
+	SuccessorWorkerSessionID   *string                                             `json:"successorWorkerSessionId,omitempty"`
+	AttemptID                  string                                              `json:"attemptId"`
+	Direct                     bool                                                `json:"direct"`
+	DurationBasis              factoryapi.WorkerSessionObservationDurationBasis    `json:"durationBasis"`
+	DurationMillis             *int64                                              `json:"durationMillis"`
+	EndedAt                    *time.Time                                          `json:"endedAt"`
+	FactorySessionID           *string                                             `json:"factorySessionId"`
+	Failure                    *factoryapi.WorkerSessionFailure                    `json:"failure"`
+	Model                      *string                                             `json:"model"`
+	Parse                      factoryapi.WorkerSessionParseDiagnostics            `json:"parse"`
+	ProviderSession            *factoryapi.WorkerSessionProviderSessionRef         `json:"providerSession"`
+	ProviderSessionAvailable   bool                                                `json:"providerSessionAvailable"`
+	ReasoningEffort            *string                                             `json:"reasoningEffort"`
+	RecordingHealth            *factoryapi.WorkerSessionObservationRecordingHealth `json:"recordingHealth"`
+	RecordingHealthReason      *string                                             `json:"recordingHealthReason"`
+	StartedAt                  *time.Time                                          `json:"startedAt"`
+	State                      factoryapi.WorkerSessionObservationState            `json:"state"`
+	ConfirmationState          factoryapi.ConfirmationState                        `json:"confirmationState"`
+	TokenUsage                 *listJSONTokenUsage                                 `json:"tokenUsage"`
+	TurnUsage                  *listJSONTurnUsage                                  `json:"turnUsage,omitempty"`
+	Transcript                 factoryapi.WorkerSessionObservationTranscript       `json:"transcript"`
+	TurnID                     *string                                             `json:"turnId"`
+	WorkID                     *string                                             `json:"workId"`
+	WorkIDs                    []string                                            `json:"workIds"`
+	WorkName                   *string                                             `json:"workName"`
+	WorkerSessionID            string                                              `json:"workerSessionId"`
 }
 
 type listJSONTokenUsage struct {
@@ -482,7 +485,7 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		return err
 	}
 	for _, session := range result.Sessions {
-		provider, kind, providerSessionID := "-", "-", "-"
+		provider, kind, providerSessionID := stringOrDash(session.Provider), "-", "-"
 		if session.ProviderSession != nil && session.ProviderSessionAvailable {
 			provider = session.ProviderSession.Provider
 			kind = session.ProviderSession.Kind

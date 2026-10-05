@@ -308,7 +308,10 @@ func (c ObservationCursor) Clone() ObservationCursor { return c }
 // show. Optional values stay nil when the owning source cannot provide them;
 // callers must not infer zero usage or zero duration from absence.
 type Observation struct {
-	WorkerSessionID            string
+	WorkerSessionID string
+	// Provider is the admitted binding, independent of a Provider Session reference.
+	// Empty means no provider identity was recorded.
+	Provider                   string
 	PredecessorWorkerSessionID string
 	SuccessorWorkerSessionID   string
 	// Model and ReasoningEffort are the optional resolved execution facts

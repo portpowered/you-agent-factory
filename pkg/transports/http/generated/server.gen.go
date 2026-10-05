@@ -9156,8 +9156,14 @@ type WorkerSessionObservation struct {
 	Failure          *WorkerSessionFailure `json:"failure,omitempty"`
 
 	// Model Model identifier resolved for the provider invocation, when recorded.
-	Model           *string                          `json:"model,omitempty"`
-	Parse           WorkerSessionParseDiagnostics    `json:"parse"`
+	Model *string                       `json:"model,omitempty"`
+	Parse WorkerSessionParseDiagnostics `json:"parse"`
+
+	// PredecessorWorkerSessionId Source Worker Session when this session was admitted by continue or interrupt.
+	PredecessorWorkerSessionId *string `json:"predecessorWorkerSessionId,omitempty"`
+
+	// Provider Provider identity bound to this attempt, available before any Provider Session reference.
+	Provider        *string                          `json:"provider,omitempty"`
 	ProviderSession *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
 
 	// ProviderSessionAvailable Whether a provider-session identity is available for this attempt.
@@ -9170,11 +9176,14 @@ type WorkerSessionObservation struct {
 	RecordingHealth *WorkerSessionObservationRecordingHealth `json:"recordingHealth,omitempty"`
 
 	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
-	RecordingHealthReason *string                            `json:"recordingHealthReason,omitempty"`
-	StartedAt             *time.Time                         `json:"startedAt"`
-	State                 WorkerSessionObservationState      `json:"state"`
-	TokenUsage            *ProviderSessionTokenUsage         `json:"tokenUsage,omitempty"`
-	Transcript            WorkerSessionObservationTranscript `json:"transcript"`
+	RecordingHealthReason *string                       `json:"recordingHealthReason,omitempty"`
+	StartedAt             *time.Time                    `json:"startedAt"`
+	State                 WorkerSessionObservationState `json:"state"`
+
+	// SuccessorWorkerSessionId Successor admitted from this session by continue or interrupt, when known.
+	SuccessorWorkerSessionId *string                            `json:"successorWorkerSessionId,omitempty"`
+	TokenUsage               *ProviderSessionTokenUsage         `json:"tokenUsage,omitempty"`
+	Transcript               WorkerSessionObservationTranscript `json:"transcript"`
 
 	// TurnId Optional turn correlation identifier.
 	TurnId *string `json:"turnId"`

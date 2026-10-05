@@ -1801,6 +1801,12 @@ export interface components {
       /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
       recordingHealthReason?: string;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+      /** @description Source Worker Session when this session was admitted by continue or interrupt. */
+      predecessorWorkerSessionId?: string;
+      /** @description Successor admitted from this session by continue or interrupt, when known. */
+      successorWorkerSessionId?: string;
+      /** @description Provider identity bound to this attempt, available before any Provider Session reference. */
+      provider?: string;
     };
     /** @description Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics. */
     WorkerSessionTurnUsage: {

@@ -383,6 +383,7 @@ func runRealHostHistory(t *testing.T, process support.Process) {
 	for _, value := range active["sessions"].([]any) {
 		worker := value.(map[string]any)
 		if worker["direct"] == false {
+			assertRecordedProviderBeforeAssociation(t, worker)
 			factoryCount++
 			if worker["factorySessionId"] != opened.Session.Id {
 				t.Fatalf("Factory attribution = %v", worker)
@@ -414,6 +415,13 @@ func runRealHostHistory(t *testing.T, process support.Process) {
 	assertToolError(t, callTool(t, ctx, session, "you.worker_session.list", map[string]any{"history": "archived", "scope": "direct", "nextToken": token}), "worker_session.invalid_request", false)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "history-c", "operation": "TERMINATE"})
 	waitControlSignal(t, laterDone)
+}
+
+func assertRecordedProviderBeforeAssociation(t *testing.T, worker map[string]any) {
+	t.Helper()
+	if worker["provider"] != "codex" || worker["providerSessionAvailable"] != false {
+		t.Fatalf("provider binding before association lost: %v", worker)
+	}
 }
 
 func historyParityPage(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, history, scope, token string) map[string]any {
@@ -488,6 +496,7 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 		t.Fatalf("restart omitted captured siblings: %v", archived)
 	}
 	factoryArchive := historyParityPage(t, recoveredCtx, recoveredSession, reopened, "archived", "factory", "")
+	assertArchivedProviderRecovery(t, reopened, recoveredCtx, recoveredSession, factoryArchive)
 	if workers := factoryArchive["sessions"].([]any); len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != factoryID || workers[0].(map[string]any)["factorySessionId"] != opened.Session.Id {
 		t.Fatalf("restart lost Factory capture attribution: %v", factoryArchive)
 	}
@@ -518,6 +527,21 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	page := callWorker(t, recoveredCtx, recoveredSession, "list", map[string]any{"history": "archived", "limit": 1})["result"].(map[string]any)
 	token := page["paginationContext"].(map[string]any)["nextToken"].(string)
 	assertToolError(t, callTool(t, foreignCtx, foreignSession, "you.worker_session.list", map[string]any{"history": "archived", "nextToken": token}), "worker_session.invalid_request", false)
+}
+
+func assertArchivedProviderRecovery(t *testing.T, host *support.FunctionalAPIServer, ctx context.Context, session *mcp.ClientSession, page map[string]any) {
+	t.Helper()
+	for _, value := range page["sessions"].([]any) {
+		observation := value.(map[string]any)
+		if observation["provider"] != "codex" {
+			t.Fatalf("restart lost recorded provider: %v", observation)
+		}
+		id := observation["workerSessionId"].(string)
+		selected := getHost(t, host.URL()+"/worker-sessions/"+url.PathEscape(id))
+		assertJSONEqual(t, observation, selected)
+		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
+		assertFactoryCLIParity(t, host, id, selected)
+	}
 }
 
 func seedHistoryCrashCapture(t *testing.T, ctx context.Context, store recordings.WorkerRecordingStore) {

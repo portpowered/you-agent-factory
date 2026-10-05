@@ -558,6 +558,7 @@ func observationFactoryScopeMatches(metadata *observation, factorySessionIDs ...
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
 		WorkerSessionID:            publicWorkerID(id),
+		Provider:                   metadata.provider,
 		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
 		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
 		Model:                      cloneOptionalExecutionFact(session.Model),

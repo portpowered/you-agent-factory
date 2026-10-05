@@ -3938,6 +3938,15 @@ components:
           description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
         parse:
           $ref: '#/components/schemas/WorkerSessionParseDiagnostics'
+        predecessorWorkerSessionId:
+          type: string
+          description: Source Worker Session when this session was admitted by continue or interrupt.
+        successorWorkerSessionId:
+          type: string
+          description: Successor admitted from this session by continue or interrupt, when known.
+        provider:
+          type: string
+          description: Provider identity bound to this attempt, available before any Provider Session reference.
     WorkerSessionTurnUsage:
       type: object
       additionalProperties: false

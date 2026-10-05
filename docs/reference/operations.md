@@ -354,6 +354,11 @@ identity, start time, usage, and capture health. Unknown end times and durations
 remain absent. A history without a captured terminal remains readable through
 `read --view logs`, but its summary is unavailable.
 
+Session summaries include the recorded `provider` even before a Provider Session
+reference is available. Recorded continuation links appear as
+`predecessorWorkerSessionId` and `successorWorkerSessionId`; missing legacy facts
+remain omitted.
+
 Logs pages include the recording generation, committed position, capture
 health, and ordered events. New committed events include `capturedAt`, the
 host capture time. Older events omit this field. Capture health describes the

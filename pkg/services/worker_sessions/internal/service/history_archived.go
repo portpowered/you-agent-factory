@@ -135,12 +135,47 @@ func capturedHistoryIdentity(item recordings.WorkerCapturedCatalogItem, owners m
 	for _, record := range item.MetadataRecords {
 		var draft workers.Draft
 		if json.Unmarshal(record.Payload, &draft) == nil {
+			applyCapturedSessionFacts(&observation, draft)
 			if usage, _, ok := usageProjectionFromDraft(draft); ok {
 				observation.TokenUsage = usage
 			}
 		}
 	}
 	return &observation, observation.Validate()
+}
+
+func applyCapturedSessionFacts(observation *workersessions.Observation, draft workers.Draft) {
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseUpdated {
+		return
+	}
+	var payload workers.SessionPayload
+	if json.Unmarshal(draft.Payload, &payload) != nil || payload.WorkerSessionID != observation.WorkerSessionID ||
+		(draft.DispatchID != "" && draft.DispatchID != observation.AttemptID) ||
+		(payload.FactorySessionID != "" && payload.FactorySessionID != observation.FactorySessionID) ||
+		(payload.AttemptID != "" && payload.AttemptID != observation.AttemptID) {
+		return
+	}
+	if draft.Provenance.Provider != "" {
+		observation.Provider = draft.Provenance.Provider
+	}
+	if payload.Model != "" {
+		observation.Model = &payload.Model
+	}
+	if payload.ReasoningEffort != "" {
+		observation.ReasoningEffort = &payload.ReasoningEffort
+	}
+	applyCapturedLineage(observation, payload)
+}
+
+func applyCapturedLineage(observation *workersessions.Observation, payload workers.SessionPayload) {
+	if payload.Lineage != nil {
+		if payload.Lineage.PredecessorWorkerSessionID != "" {
+			observation.PredecessorWorkerSessionID = payload.Lineage.PredecessorWorkerSessionID
+		}
+		if payload.Lineage.SuccessorWorkerSessionID != "" {
+			observation.SuccessorWorkerSessionID = payload.Lineage.SuccessorWorkerSessionID
+		}
+	}
 }
 
 func historyOpening(item recordings.WorkerCapturedCatalogItem) (workers.SessionPayload, error) {
