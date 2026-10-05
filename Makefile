@@ -213,17 +213,9 @@ PACKAGE_BOUNDARY_BASE_REF ?=
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-# "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
-# Entries are keyed by source content, never by checkout path, so a fresh worktree
-# reuses checkers another worktree compiled. Set a path to opt out.
-LINT_CHECKER_CACHE_DIR ?= auto
 # Memoizes the package-boundary base-tree scan per base commit and checker build.
 # Empty disables it.
 PACKAGE_BOUNDARY_BASELINE_CACHE_DIR ?= auto
-# Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
-LINT_CHECKER_FALLBACK ?= 0
-LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
-LINT_CHECKER_DRIVER ?=
 # Optional CI outputs can be defined but blank. Use the canonical lane budget
 # for blank handoffs; report setup rejects invalid nonblank overrides.
 LINT_JOBS ?= $(GO_LANE_BUDGET)
@@ -243,10 +235,6 @@ LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
 LINT_UI_CHANGED = $(shell base=$$(git merge-base HEAD origin/main 2>/dev/null) && { git diff --quiet $$base -- ui && test -z "$$(git ls-files --others --exclude-standard ui)" || echo 1; } || echo 1)
 LINT_TARGETS ?= $(if $(or $(strip $(CI)),$(strip $(LINT_FULL)),$(strip $(LINT_UI_CHANGED))),$(LINT_TARGETS_UI) )$(LINT_TARGETS_BASE)$(if $(or $(strip $(CI)),$(strip $(LINT_FULL))), $(LINT_TARGETS_CI_ONLY))
-
-define run_lint_checker
-$(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
-endef
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -1021,13 +1009,13 @@ architecture:
 	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
 
 pkg-boundary:
-	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
+	$(GO) run ./cmd/pkgboundarycheck -root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,)
 
 service-cycle-check:
-	$(call run_lint_checker,./cmd/servicecyclecheck,-root ".")
+	$(GO) run ./cmd/servicecyclecheck -root "."
 
 packaged-factory-source-check:
-	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
+	$(GO) run ./cmd/packagedfactorysourcecheck -root "."
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
@@ -1036,7 +1024,7 @@ provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
 provider-catalog-check:
-	$(call run_lint_checker,./cmd/providercatalogcheck,-root ".")
+	$(GO) run ./cmd/providercatalogcheck -root "."
 
 model-provider-package-generate:
 	node scripts/model-provider-package.mjs generate
