@@ -120,9 +120,10 @@ func (service *Service) StartWorkerSessionRecording(
 		return nil, fmt.Errorf("%w: %w", recordings.ErrWorkerRecordingCanceled, err)
 	}
 	subscription, err := service.events.Subscribe(ctx, events.SubscribeRequest{
-		Topic: request.Topic,
-		From:  events.Cursor{Topic: request.Topic},
-		Limit: service.limit,
+		Topic:           request.Topic,
+		From:            events.Cursor{Topic: request.Topic},
+		Limit:           service.limit,
+		MaxPendingBytes: 8 << 20,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w: topic %q", recordings.ErrWorkerRecordingSubscribe, err, request.Topic)

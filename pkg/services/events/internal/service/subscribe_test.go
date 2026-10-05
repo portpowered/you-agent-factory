@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +21,103 @@ func mustSubscribe(t *testing.T, st *Store, ctx context.Context, req events.Subs
 		t.Fatalf("Subscribe() error = %v", err)
 	}
 	return sub
+}
+
+func TestSubscribe_ByteBudgetBoundsCatchupAndInFlight(t *testing.T) {
+	t.Parallel()
+	for _, catchup := range []bool{false, true} {
+		t.Run(fmt.Sprint("catchup=", catchup), func(t *testing.T) {
+			st := New(logging.NoopLogger{})
+			ctx := context.Background()
+			req := validAppendRequest()
+			req.Topic = subscribeTestTopic
+			appendRecord := func(sequence int) events.Record {
+				req.SourceSequence = events.SourceSequence(sequence)
+				req.SourceEventID = events.SourceEventID(fmt.Sprint(sequence))
+				result, err := st.Append(ctx, req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return result.Record
+			}
+			// The bound includes fixed envelope and variable identity bytes.
+			rec := events.Record{ID: events.RecordID{Topic: req.Topic}, SourceType: req.SourceType,
+				SourceID: req.SourceID, SourceEventID: "1", SchemaID: req.SchemaID, Payload: req.Payload}
+			if catchup {
+				appendRecord(1)
+				appendRecord(2)
+			}
+			sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: req.Topic,
+				From: events.Cursor{Topic: req.Topic}, Limit: 100, MaxPendingBytes: recordBytes(rec)})
+			if !catchup {
+				appendRecord(1)
+			}
+			first := sub.Next(ctx)
+			if first.Kind != events.DeliveryRecord || first.Record.ID.Position != 1 {
+				t.Fatalf("first delivery = %+v", first)
+			}
+			if !catchup {
+				// Removing a record from the channel does not release its budget:
+				// the consumer is still processing it until its next Next call.
+				appendRecord(2)
+			}
+			if got := sub.Next(ctx); got.Kind != events.DeliveryBackpressure {
+				t.Fatalf("after bounded prefix = %+v, want backpressure", got)
+			}
+			read, err := st.Read(ctx, events.ReadRequest{Topic: req.Topic,
+				From: events.Cursor{Topic: req.Topic}, Limit: 10})
+			if err != nil || len(read.Records) != 2 {
+				t.Fatalf("subscriber pressure altered source: %+v, %v", read, err)
+			}
+		})
+	}
+}
+
+func TestSubscribe_ByteBudgetReleasesProcessedRecord(t *testing.T) {
+	t.Parallel()
+	st := New(logging.NoopLogger{})
+	ctx := context.Background()
+	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic,
+		From: events.Cursor{Topic: subscribeTestTopic}, Limit: 100, MaxPendingBytes: 1024})
+	for sequence := 1; sequence <= 20; sequence++ {
+		appendOne(t, st, ctx, subscribeTestTopic, sequence)
+		got := sub.Next(ctx)
+		if got.Kind != events.DeliveryRecord || got.Record.ID.Position != events.AggregateSequence(sequence) {
+			t.Fatalf("delivery %d = %+v", sequence, got)
+		}
+	}
+}
+
+func TestSubscribe_ByteBudgetRejectsOversizedAndCombinedPendingRecords(t *testing.T) {
+	t.Parallel()
+	for _, payloadBytes := range []int{512, 8 << 20} {
+		t.Run(fmt.Sprint(payloadBytes), func(t *testing.T) {
+			st := New(logging.NoopLogger{})
+			ctx := context.Background()
+			req := validAppendRequest()
+			req.Payload = []byte(`"` + strings.Repeat("x", payloadBytes) + `"`)
+			first, err := st.Append(ctx, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: req.Topic,
+				From: events.Cursor{Topic: req.Topic}, Limit: 100, MaxPendingBytes: 1024})
+			if payloadBytes < 1024 {
+				// Undrained catch-up and a live arrival share the same allowance.
+				req.SourceSequence++
+				req.SourceEventID = "second"
+				if _, err := st.Append(ctx, req); err != nil {
+					t.Fatal(err)
+				}
+				if got := sub.Next(ctx); got.Kind != events.DeliveryRecord || got.Record.ID != first.Record.ID {
+					t.Fatalf("bounded prefix = %+v", got)
+				}
+			}
+			if got := sub.Next(ctx); got.Kind != events.DeliveryBackpressure {
+				t.Fatalf("overflow = %+v", got)
+			}
+		})
+	}
 }
 
 func TestSubscribe_LiveOnlyFromCurrentHeadDoesNotReplayRetainedRecords(t *testing.T) {
