@@ -95,6 +95,8 @@ func NewAssembly(
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
 	worldStateProjector factoryruntime.WorldStateProjector,
+	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
+	completionFactory func(string) func(string),
 ) (*Assembly, error) {
 	return factoryruntimeinternal.NewAssembly(bundleOpening,
 		sidecars,
@@ -105,7 +107,7 @@ func NewAssembly(
 		submissionRecorder,
 		dispatchRecorder,
 		automationService,
-		worldStateProjector)
+		worldStateProjector, progressFactory, completionFactory)
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening

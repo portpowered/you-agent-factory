@@ -56,6 +56,7 @@ func provideFactoryRuntimeAssembly(
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
 	worldStateProjector factoryruntime.WorldStateProjector,
+	streams factorysessionwire.RuntimeAssembly,
 ) (*factoryruntimewire.Assembly, error) {
 	return factoryruntimewire.NewAssembly(bundleOpening,
 		sidecars,
@@ -66,7 +67,7 @@ func provideFactoryRuntimeAssembly(
 		submissionRecorder,
 		dispatchRecorder,
 		automationService,
-		worldStateProjector)
+		worldStateProjector, streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory())
 }
 
 func provideWorkersMockWorkersConfigFileSystem(

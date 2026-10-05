@@ -33,6 +33,8 @@ type Assembly struct {
 	dispatchRecorder       recordings.DispatchRecorder
 	automationService      automations.Service
 	worldStateProjector    factoryruntime.WorldStateProjector
+	progressFactory        func(*zap.Logger) func(string) workers.ProgressPublisher
+	completionFactory      func(string) func(string)
 }
 
 // NewAssembly constructs the inert compatibility assembly selected by Wire.
@@ -49,6 +51,8 @@ func NewAssembly(
 	dispatchRecorder recordings.DispatchRecorder,
 	automationService automations.Service,
 	worldStateProjector factoryruntime.WorldStateProjector,
+	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
+	completionFactory func(string) func(string),
 ) (*Assembly, error) {
 	if bundleOpening == nil {
 		return nil, fmt.Errorf("factory runtime bundle opening is required")
@@ -62,6 +66,7 @@ func NewAssembly(
 		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot,
 		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder,
 		automationService: automationService, worldStateProjector: worldStateProjector,
+		progressFactory: progressFactory, completionFactory: completionFactory,
 	}, nil
 }
 
@@ -96,8 +101,7 @@ func (a *Assembly) Assemble(
 	invocationSkipPermissionsOverride *bool,
 	clock factoryruntime.Clock,
 	baseLogger *zap.Logger,
-	progressFactory func(string) workers.ProgressPublisher,
-	completionFactory func(string) func(string),
+	publishRuntimeStreams bool,
 	observations factoryruntime.SessionObservations,
 	dir string,
 	factoryRootDir string,
@@ -176,10 +180,10 @@ func (a *Assembly) Assemble(
 	// The callback retains this session's selections, not a secondary service
 	// graph. Both initial and replacement resources use the fixed opening owner.
 	open := func(ctx context.Context, spec factoryruntime.SessionBuildSpec) (factoryruntime.RuntimeRecord, error) {
-		progressPublisher := a.sessionProgressPublisher(spec.SessionID, progressFactory, observations)
+		progressPublisher := a.sessionProgressPublisher(spec.SessionID, baseLogger, publishRuntimeStreams, observations)
 		var dispatchCompleted func(string)
-		if completionFactory != nil {
-			dispatchCompleted = completionFactory(spec.SessionID)
+		if publishRuntimeStreams && a.completionFactory != nil {
+			dispatchCompleted = a.completionFactory(spec.SessionID)
 		}
 		return a.bundleOpening(
 			ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
@@ -223,12 +227,15 @@ func (a *Assembly) Assemble(
 // Runtime publication precedes durable observation, preserving event ordering.
 func (a *Assembly) sessionProgressPublisher(
 	sessionID string,
-	publishers func(string) workers.ProgressPublisher,
+	logger *zap.Logger,
+	publishRuntimeStreams bool,
 	observations factoryruntime.SessionObservations,
 ) workers.ProgressPublisher {
 	var next workers.ProgressPublisher
-	if publishers != nil {
-		next = publishers(sessionID)
+	if publishRuntimeStreams && a.progressFactory != nil {
+		if publishers := a.progressFactory(logger); publishers != nil {
+			next = publishers(sessionID)
+		}
 	}
 	if observations == nil {
 		return next

@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 type stubAssemblyWorkerSessions struct {
@@ -851,14 +852,14 @@ func TestNewAssemblyRetainsSelectedBundleOpening(t *testing.T) {
 	opening := &BundleOpening{}
 	sidecars := NewSidecarOpening(nil, platformclock.Real{})
 	assembly, err := NewAssembly(opening.Open, sidecars, nil, nil,
-		&assemblyWorldStateOpening{}, nil, nil, nil, nil, nil)
+		&assemblyWorldStateOpening{}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil || assembly.bundleOpening == nil {
 		t.Fatalf("NewAssembly = %#v, %v; want selected opening", assembly, err)
 	}
-	if assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+	if assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
 		t.Fatalf("NewAssembly without recordings = %#v, %v; want required dependency failure", assembly, err)
 	}
-	if assembly, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+	if assembly, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
 		t.Fatalf("NewAssembly without opening = %#v, %v; want required dependency failure", assembly, err)
 	}
 }
@@ -1035,15 +1036,24 @@ func TestAssemblyObservationProgressPreservesScopedOwnerAndPublicationOrder(t *t
 					}
 				}
 			}
-			firstPublisher := (&Assembly{}).sessionProgressPublisher("first-runtime", factory, first)
-			secondPublisher := (&Assembly{}).sessionProgressPublisher("second-runtime", factory, second)
+			logger := zap.NewNop().With(zap.String("selection", "opening"))
+			assembly := &Assembly{progressFactory: func(selected *zap.Logger) func(string) workers.ProgressPublisher {
+				if selected != logger {
+					t.Fatal("progress substituted opening-selected logger")
+				}
+				return factory
+			}}
+			firstPublisher := assembly.sessionProgressPublisher("first-runtime", logger, true, first)
+			secondPublisher := assembly.sessionProgressPublisher("second-runtime", logger, true, second)
 			fragment := workers.ProgressFragment{DispatchID: "dispatch", Payload: "output"}
 			// Creating a peer publisher must not retarget an already-opened session.
 			firstPublisher(fragment)
 			secondPublisher(fragment)
-			want := []string{"first:output", "second:output"}
+			// Replay suppresses runtime streams while retaining its durable observation.
+			assembly.sessionProgressPublisher("replay-runtime", logger, false, first)(fragment)
+			want := []string{"first:output", "second:output", "first:output"}
 			if !withoutRuntimePublisher {
-				want = []string{"first-runtime:output", "first:output", "second-runtime:output", "second:output"}
+				want = []string{"first-runtime:output", "first:output", "second-runtime:output", "second:output", "first:output"}
 			}
 			if !reflect.DeepEqual(order, want) {
 				t.Fatalf("progress publication = %v, want %v", order, want)

@@ -131,7 +131,7 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 		t.Fatal(err)
 	}
 	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil),
-		&testRuntimeScopeServiceStub{}, nil, nil, nil, nil, nil)
+		&testRuntimeScopeServiceStub{}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 		t.Fatal(err)
 	}
 	resources := &observationResourceOpening{failure: errors.New("controlled resource failure")}
-	sessions := &stubWorkerSessionsService{}
+	sessions := &observationWorkerSessions{}
 	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 		return loadedFactoryFixture(path)
 	}
 	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, provider, script, decorate),
-		&testRuntimeScopeServiceStub{}, nil, submit, dispatch, nil, projector)
+		&testRuntimeScopeServiceStub{}, nil, submit, dispatch, nil, projector, fixedTestProgress(t, &effects), fixedTestCompletion(&effects))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,9 +219,29 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 		resources.submissions[index](work.FactorySubmissionRecord{})
 		resources.dispatches[index](recordings.FactoryDispatchRecord{})
 		assertSelectedOpeningProjection(t, resources.projectors[index], index+1)
+		resources.progress[index](workers.ProgressFragment{Payload: "output"})
+		resources.completions[index]("dispatch-id")
 	}
-	if decorations != 4 || !reflect.DeepEqual(effects, []string{"submission", "dispatch", "submission", "dispatch"}) {
+	if decorations != 4 || !reflect.DeepEqual(effects, []string{"submission", "dispatch", "candidate:output", "candidate:dispatch-id", "submission", "dispatch", "successor:output", "successor:dispatch-id"}) {
 		t.Fatalf("fixed effects = %v, decorations = %d; want both openings", effects, decorations)
+	}
+}
+
+func fixedTestProgress(t *testing.T, effects *[]string) func(*zap.Logger) func(string) workers.ProgressPublisher {
+	t.Helper()
+	return func(logger *zap.Logger) func(string) workers.ProgressPublisher {
+		if logger == nil {
+			t.Fatal("fixed progress behavior lost selected logger")
+		}
+		return func(sessionID string) workers.ProgressPublisher {
+			return func(fragment workers.ProgressFragment) { *effects = append(*effects, sessionID+":"+fragment.Payload) }
+		}
+	}
+}
+
+func fixedTestCompletion(effects *[]string) func(string) func(string) {
+	return func(sessionID string) func(string) {
+		return func(dispatchID string) { *effects = append(*effects, sessionID+":"+dispatchID) }
 	}
 }
 
@@ -287,6 +307,7 @@ type observationResourceOpening struct {
 	submissions []recordings.SubmissionRecorder
 	dispatches  []recordings.DispatchRecorder
 	projectors  []factory.WorldStateProjector
+	completions []func(string)
 }
 
 func (opening *observationResourceOpening) Open(
@@ -320,13 +341,14 @@ func (opening *observationResourceOpening) Open(
 	worker workers.Service,
 	_ workersessions.Service,
 	_ factory.WorkerAttemptOpener,
-	_ func(string),
+	completion func(string),
 	_ ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
 	opening.mutations = append(opening.mutations, mutations)
 	opening.submissions = append(opening.submissions, submission)
 	opening.dispatches = append(opening.dispatches, dispatch)
 	opening.projectors = append(opening.projectors, projector)
+	opening.completions = append(opening.completions, completion)
 	opening.progress = append(opening.progress, worker.(interface {
 		RuntimeProgressPublisher() workers.ProgressPublisher
 	}).RuntimeProgressPublisher())
@@ -872,7 +894,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -983,8 +1005,7 @@ func assembleTestInitialOpening(
 		nil,
 		clock,
 		zap.NewNop(),
-		nil,
-		nil,
+		true,
 		observe,
 		dir,
 		dir,
@@ -1031,7 +1052,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		snapshots = append(snapshots, source)
 		return nil, nil
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, snapshot, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, snapshot, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
