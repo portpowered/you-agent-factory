@@ -1027,9 +1027,9 @@ const (
 
 // Defines values for OrchestratorPhaseStatus.
 const (
-	OrchestratorPhaseStatusACTIVE    OrchestratorPhaseStatus = "ACTIVE"
-	OrchestratorPhaseStatusCOMPLETED OrchestratorPhaseStatus = "COMPLETED"
-	OrchestratorPhaseStatusSKIPPED   OrchestratorPhaseStatus = "SKIPPED"
+	ACTIVE    OrchestratorPhaseStatus = "ACTIVE"
+	COMPLETED OrchestratorPhaseStatus = "COMPLETED"
+	SKIPPED   OrchestratorPhaseStatus = "SKIPPED"
 )
 
 // Defines values for PromptTemplateDiagnosticKind.
@@ -1540,13 +1540,13 @@ const (
 
 // Defines values for WorkerSessionObservationTerminalCause.
 const (
-	WorkerSessionObservationTerminalCauseCOMPLETED         WorkerSessionObservationTerminalCause = "COMPLETED"
-	WorkerSessionObservationTerminalCauseFAILED            WorkerSessionObservationTerminalCause = "FAILED"
-	WorkerSessionObservationTerminalCauseOPERATORCANCEL    WorkerSessionObservationTerminalCause = "OPERATOR_CANCEL"
-	WorkerSessionObservationTerminalCauseOPERATORINTERRUPT WorkerSessionObservationTerminalCause = "OPERATOR_INTERRUPT"
-	WorkerSessionObservationTerminalCauseOPERATORKILL      WorkerSessionObservationTerminalCause = "OPERATOR_KILL"
-	WorkerSessionObservationTerminalCauseOPERATORTERMINATE WorkerSessionObservationTerminalCause = "OPERATOR_TERMINATE"
-	WorkerSessionObservationTerminalCauseOWNERLOST         WorkerSessionObservationTerminalCause = "OWNER_LOST"
+	WorkerSessionTerminalCauseCompleted         WorkerSessionObservationTerminalCause = "COMPLETED"
+	WorkerSessionTerminalCauseFailed            WorkerSessionObservationTerminalCause = "FAILED"
+	WorkerSessionTerminalCauseOperatorCancel    WorkerSessionObservationTerminalCause = "OPERATOR_CANCEL"
+	WorkerSessionTerminalCauseOperatorInterrupt WorkerSessionObservationTerminalCause = "OPERATOR_INTERRUPT"
+	WorkerSessionTerminalCauseOperatorKill      WorkerSessionObservationTerminalCause = "OPERATOR_KILL"
+	WorkerSessionTerminalCauseOperatorTerminate WorkerSessionObservationTerminalCause = "OPERATOR_TERMINATE"
+	WorkerSessionTerminalCauseOwnerLost         WorkerSessionObservationTerminalCause = "OWNER_LOST"
 )
 
 // Defines values for WorkerSessionObservationTranscript.

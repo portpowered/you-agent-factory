@@ -10621,13 +10621,13 @@ export const WorkerSessionObservationRecordingHealth = {
 export type WorkerSessionObservationRecordingHealth =
   (typeof WorkerSessionObservationRecordingHealth)[keyof typeof WorkerSessionObservationRecordingHealth];
 export const WorkerSessionObservationTerminalCause = {
-  COMPLETED: "COMPLETED",
-  FAILED: "FAILED",
-  OPERATOR_CANCEL: "OPERATOR_CANCEL",
-  OPERATOR_TERMINATE: "OPERATOR_TERMINATE",
-  OPERATOR_KILL: "OPERATOR_KILL",
-  OPERATOR_INTERRUPT: "OPERATOR_INTERRUPT",
-  OWNER_LOST: "OWNER_LOST",
+  WorkerSessionTerminalCauseCompleted: "COMPLETED",
+  WorkerSessionTerminalCauseFailed: "FAILED",
+  WorkerSessionTerminalCauseOperatorCancel: "OPERATOR_CANCEL",
+  WorkerSessionTerminalCauseOperatorTerminate: "OPERATOR_TERMINATE",
+  WorkerSessionTerminalCauseOperatorKill: "OPERATOR_KILL",
+  WorkerSessionTerminalCauseOperatorInterrupt: "OPERATOR_INTERRUPT",
+  WorkerSessionTerminalCauseOwnerLost: "OWNER_LOST",
 } as const;
 export type WorkerSessionObservationTerminalCause =
   (typeof WorkerSessionObservationTerminalCause)[keyof typeof WorkerSessionObservationTerminalCause];
