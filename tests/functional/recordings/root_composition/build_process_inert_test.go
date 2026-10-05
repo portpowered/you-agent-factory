@@ -35,11 +35,16 @@ type cancellationRecordingRunner struct {
 	started  chan struct{}
 	canceled chan error
 	once     sync.Once
+	finished atomic.Bool
 }
 
-func (runner *cancellationRecordingRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (runner *cancellationRecordingRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if runner.finished.Load() {
+		return support.NewStaticSuccessCommandRunner("post-cancellation peer COMPLETE").Run(ctx, request)
+	}
 	runner.once.Do(func() { close(runner.started) })
 	<-ctx.Done()
+	runner.finished.Store(true)
 	runner.canceled <- ctx.Err()
 	return platformprocess.CommandResult{}, ctx.Err()
 }
@@ -67,10 +72,16 @@ func runExecuteCancellationRecording(t *testing.T, failFinal bool) {
 	release := func() { releaseOnce.Do(func() { close(releaseWrite) }) }
 	defer release()
 	var service recordings.Service
+	var nextInstance atomic.Uint32
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		Clock: cancellationRecordingClock{at: at}, ProviderCommandRunner: runner,
-		FactorySessionRuntimeInstanceIDGenerator: func() string { return string(id) },
-		RecordingsRootObserver:                   func(root recordings.Service) { service = root },
+		FactorySessionRuntimeInstanceIDGenerator: func() string {
+			if nextInstance.Add(1) == 1 {
+				return string(id)
+			}
+			return "019a07c0-0000-7000-8000-000000000033"
+		},
+		RecordingsRootObserver: func(root recordings.Service) { service = root },
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			if request.OnBound != nil {
 				request.OnBound(platformhttpserver.Binding{Port: request.Port})
@@ -144,6 +155,39 @@ func runExecuteCancellationRecording(t *testing.T, failFinal bool) {
 	assertCanceledRecordingStatus(t, service, id, at, prefix.Status, failFinal, writeErr)
 	assertCanceledRecordingHistory(t, service, id, path, failFinal)
 	assertPeerFinalizesAfterCanceledWrite(t, service, peer, peerFirst, at)
+	assertInvocationAfterCanceledRecording(t, process, service, id, path, failFinal)
+}
+
+// Current Factory ownership requires sequential local invocations. Reuse the
+// same process after the selected command joins, with a distinct profile,
+// Factory directory, recording destination and runtime identity.
+func assertInvocationAfterCanceledRecording(t *testing.T, process support.Process, service recordings.Service, selected recordings.RecordingID, selectedPath string, failFinal bool) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "invocation-peer.json")
+	inputs := cancellationRecordingInputs(t, path)
+	ctx, cancel := context.WithTimeout(inputs.Context, 30*time.Second)
+	defer cancel()
+	inputs.Context = ctx
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("peer invocation after canceled recording: %v", err)
+	}
+	if inputs.Stdout() != "Batch completed successfully.\n" {
+		t.Fatalf("peer invocation output = %q", inputs.Stdout())
+	}
+	id := recordings.RecordingID("019a07c0-0000-7000-8000-000000000033")
+	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: id})
+	if err != nil || status.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("peer invocation recording = (%#v, %v)", status, err)
+	}
+	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: id,
+			Artifact: recordings.RecordingArtifactReference(path),
+			Scope:    recordings.CanonicalEventScope{FactorySessionID: "~default"}},
+	})
+	if err != nil || len(history.Dispatches) != 1 || history.Dispatches[0].Status != recordings.FactoryDispatchStatusCompleted {
+		t.Fatalf("peer invocation persisted dispatch = (%#v, %v)", history, err)
+	}
+	assertCanceledRecordingHistory(t, service, selected, selectedPath, failFinal)
 }
 
 func assertPeerFinalizesAfterCanceledWrite(t *testing.T, service recordings.Service, peer recordings.RecordingStatusFacts, first recordings.CanonicalEvent, at time.Time) {
