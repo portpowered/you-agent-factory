@@ -476,6 +476,9 @@ Missing or corrupt captured input, or a stored control
 result containing provider metadata or private diagnostics, reports persistence
 unavailable without returning that content, stopping a Worker Session, or
 admitting a successor.
+If a phase write loses its acknowledgement, the host reloads the journal and
+proceeds only when the exact attempted phase and snapshot are confirmed durable.
+This check does not repeat source cancellation or successor admission.
 An incomplete durable operation reports execution unavailable
 until its prior ownership and admission can be reconciled safely; submitting
 the same request does not blindly repeat its effects. If a joined source or

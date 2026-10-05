@@ -15,6 +15,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -231,6 +232,9 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		"manager-interrupt-disconnect",
 		"manager-interrupt-failure",
 		"unsafe-recipe",
+		"interrupt-ack-source",
+		"interrupt-ack-admission",
+		"interrupt-ack-completion",
 	} {
 		if err := appendInvokeContinueInterruptScenario(t, rootDir, &setup.scenarios, &setup.routes, name, stdout); err != nil {
 			return invokeContinueScenarioSetup{}, err
@@ -283,7 +287,12 @@ func startInvokeContinuePackageProcess(
 	apiStarts := &atomic.Int32{}
 	processBuilds := &atomic.Int32{}
 	processBuilds.Add(1)
+	ackStore := &interruptPhaseAckStore{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: ackStore,
+		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
+			ackStore.WorkerRecordingStore = store
+		},
 		FactorySessionsWorkingDirectory: invokeContinueRecordingDirectory(hostDir),
 		// This route is complete before root construction and has no registration
 		// or session-based fallback after the process starts.

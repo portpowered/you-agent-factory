@@ -169,10 +169,26 @@ func (r *registry) advanceInterruptPhase(ctx context.Context, operation *recordi
 	next.Revision++
 	next.Operation.Phase = phase
 	accepted, err := r.operations.AdvanceWorkerControlOperation(ctx, next, operation.Revision)
+	if err != nil {
+		// Advance may have synced the row before losing its acknowledgement.
+		// Load reconciles uncertain journal bytes through the same sync boundary.
+		// Only the exact attempted snapshot licenses proceeding; never re-append
+		// a stage or infer admission from an opening/current session alone.
+		loaded, loadErr := r.operations.LoadWorkerControlOperation(ctx, interruptOperationKey(next))
+		if loadErr == nil && sameInterruptPhaseRecord(loaded, next) {
+			accepted, err = loaded, nil
+		}
+	}
 	if err == nil {
 		*operation = accepted
 	}
 	return err
+}
+
+func sameInterruptPhaseRecord(record, expected recordings.WorkerControlOperationRecord) bool {
+	return record.Target == expected.Target && record.Revision == expected.Revision &&
+		record.Operation == expected.Operation && record.InputArtifactRef == expected.InputArtifactRef &&
+		record.FailureCode == expected.FailureCode && bytes.Equal(record.Result, expected.Result)
 }
 
 func (r *registry) commitInterruptResult(ctx context.Context, operation *recordings.WorkerControlOperationRecord, result workersessions.InterruptResult, interruptErr error) error {
