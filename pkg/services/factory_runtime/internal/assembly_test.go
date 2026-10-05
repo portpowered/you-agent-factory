@@ -861,3 +861,155 @@ func TestNewAssemblyRetainsSelectedBundleOpening(t *testing.T) {
 		t.Fatalf("NewAssembly without opening = %#v, %v; want required dependency failure", assembly, err)
 	}
 }
+
+func TestInitialRuntimeOpeningOwnsPartialRecordAndRetriesRelease(t *testing.T) {
+	t.Parallel()
+	clock := clockwork.NewFakeClock()
+	cleanup := initialRuntimeCloser(nil, clock)
+	openingErr := errors.New("session result validation failed")
+	finalizeErr := errors.New("recording finalization failed")
+	closeErr := errors.New("artifact release failed")
+	record := &openingRecordCleanupFake{finalizeErr: finalizeErr, closeErr: closeErr}
+	if err := cleanup(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	opening, err := initialRuntimeOpening(record, factoryruntime.SessionBuildSpec{}, nil, clock, openingErr)
+	if !errors.Is(err, openingErr) || opening.Activation.Service != nil || opening.Activation.WorkAndEventIngress != nil {
+		t.Fatalf("partial opening = %#v, %v; want original error and cleanup without publication", opening, err)
+	}
+	cleanup = opening.Activation.Close
+	err = errors.Join(openingErr, cleanup(t.Context()))
+	for _, expected := range []error{openingErr, finalizeErr, closeErr} {
+		if !errors.Is(err, expected) {
+			t.Fatalf("opening failure cleanup = %v, missing cause %v", err, expected)
+		}
+	}
+	if !record.finalizedAt.Equal(clock.Now().UTC()) {
+		t.Fatalf("finalized at %v, want selected clock", record.finalizedAt)
+	}
+	if !reflect.DeepEqual(record.events, []string{"finalize", "artifacts"}) {
+		t.Fatalf("failed release order = %v", record.events)
+	}
+	record.finalizeErr, record.closeErr = nil, nil
+	if err := cleanup(t.Context()); err != nil {
+		t.Fatalf("retry Close() = %v", err)
+	}
+	if err := cleanup(t.Context()); err != nil {
+		t.Fatalf("released Close() = %v", err)
+	}
+	if !reflect.DeepEqual(record.events, []string{"finalize", "artifacts", "finalize", "artifacts"}) {
+		t.Fatalf("release events = %v, want one successful retry", record.events)
+	}
+}
+
+type openingRecordCleanupFake struct {
+	factoryruntime.RuntimeRecord
+	events      []string
+	finalizedAt time.Time
+	finalizeErr error
+	closeErr    error
+}
+
+func TestInitialRuntimeOpeningDoesNotRepeatSuccessfulRecordRelease(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name          string
+		finalizeFails bool
+		want          []string
+	}{
+		{name: "finalization", finalizeFails: true, want: []string{"finalize", "artifacts", "finalize"}},
+		{name: "artifacts", want: []string{"finalize", "artifacts", "artifacts"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			closeErr := errors.New("release failed")
+			record := &openingRecordCleanupFake{}
+			if test.finalizeFails {
+				record.finalizeErr = closeErr
+			} else {
+				record.closeErr = closeErr
+			}
+			clock := clockwork.NewFakeClock()
+			cleanup := initialRuntimeCloser(record, clock)
+			if err := cleanup(t.Context()); !errors.Is(err, closeErr) {
+				t.Fatalf("Close() = %v, want %v", err, closeErr)
+			}
+			record.finalizeErr, record.closeErr = nil, nil
+			if err := cleanup(t.Context()); err != nil {
+				t.Fatalf("retry Close() = %v", err)
+			}
+			if !reflect.DeepEqual(record.events, test.want) {
+				t.Fatalf("release events = %v, want %v", record.events, test.want)
+			}
+		})
+	}
+}
+
+func (record *openingRecordCleanupFake) FinalizeRecording(at time.Time) error {
+	record.events = append(record.events, "finalize")
+	record.finalizedAt = at
+	return record.finalizeErr
+}
+
+func (record *openingRecordCleanupFake) CloseArtifacts() error {
+	record.events = append(record.events, "artifacts")
+	return record.closeErr
+}
+
+func TestInitialRuntimeOpeningDeclaresIngressOrRetainsValidationFailureCleanup(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		service factoryruntime.Service
+		valid   bool
+	}{
+		{name: "missing service"},
+		{name: "missing ingress", service: &boundControlRuntimeFake{}},
+		{name: "declared ingress", service: &wideOperationRuntimeFake{}, valid: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			record := &initialPublicationRecord{service: test.service}
+			opening, err := initialRuntimeOpening(record, factoryruntime.SessionBuildSpec{}, nil, clockwork.NewFakeClock(), nil)
+			if (err == nil) != test.valid || record.closes != 0 {
+				t.Fatalf("publication = %v, closes %d; want valid %v without release", err, record.closes, test.valid)
+			}
+			if test.valid {
+				if opening.Activation.Service != test.service {
+					t.Fatal("publication substituted selected service")
+				}
+				if _, err := opening.Activation.WorkAndEventIngress.SubmitWorkRequest(t.Context(), work.WorkRequest{}); err != nil {
+					t.Fatal(err)
+				}
+				if test.service.(*wideOperationRuntimeFake).submitCalls != 1 {
+					t.Fatal("declared ingress did not receive Work")
+				}
+			} else if opening.Activation.Service != nil || opening.Activation.WorkAndEventIngress != nil {
+				t.Fatal("validation failure published a candidate")
+			}
+			for range 2 {
+				if err := opening.Activation.Close(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if record.closes != 1 {
+				t.Fatalf("resource closes = %d, want one release", record.closes)
+			}
+		})
+	}
+}
+
+type initialPublicationRecord struct {
+	factoryruntime.RuntimeRecord
+	service factoryruntime.Service
+	closes  int
+}
+
+func (record *initialPublicationRecord) RuntimeService() factoryruntime.Service {
+	return record.service
+}
+
+func (record *initialPublicationRecord) CloseArtifacts() error {
+	record.closes++
+	return nil
+}

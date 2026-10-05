@@ -111,12 +111,12 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{events: &events, closeErr: ownerErr}
 	cleanup := newPortableReplayRuntimeCleanup()
 	cleanup.SetOwner(owner)
-	cleanup.Set(&portableReplayRuntimeRecord{
+	cleanup.Set(portableReplayCleanupOpening(&portableReplayRuntimeRecord{
 		closeArtifacts: func() error {
 			events = append(events, "runtime-artifacts-close")
 			return artifactErr
 		},
-	})
+	}))
 
 	err := cleanup.Close()
 	if !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
@@ -725,15 +725,15 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	[]factorydefinitions.FactoryEvent,
 	automations.Service,
 	bool,
-) (
-	runtimeports.RuntimeReplacementBuilder,
-	runtimeports.RuntimeInstance,
-	factoryruntime.SessionBuildSpec,
-	runtimeports.RuntimeLifecycle,
-	runtimeports.RuntimeSidecarService,
-	error,
-) {
-	return nil, assembler.runtime, factoryruntime.SessionBuildSpec{}, nil, nil, assembler.err
+) (*factoryruntime.RuntimeInitialOpening, error) {
+	return &factoryruntime.RuntimeInitialOpening{Record: assembler.runtime,
+		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error {
+			if assembler.runtime == nil {
+				return nil
+			}
+			return assembler.runtime.CloseArtifacts()
+		}},
+	}, assembler.err
 }
 
 var _ durableexecution.Service = (*portableReplayRuntimeOwner)(nil)
@@ -818,5 +818,11 @@ func assertResumeRecoveryMetadata(
 		metadata.SuccessorRecordingID != recoveryRecordingID("runtime-1") ||
 		!metadata.PreviousRecordedAt.Equal(want.PreviousRecordedAt) {
 		t.Fatalf("opened resume recovery metadata = %#v, want selected source and successor identities", metadata)
+	}
+}
+
+func portableReplayCleanupOpening(record runtimeports.RuntimeInstance) *factoryruntime.RuntimeInitialOpening {
+	return &factoryruntime.RuntimeInitialOpening{Record: record,
+		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error { return record.CloseArtifacts() }},
 	}
 }

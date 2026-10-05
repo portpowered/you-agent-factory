@@ -835,14 +835,11 @@ func assembleCleanupTestRuntime(
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (*factory.RuntimeActivation, error) {
-	_, record, _, err := assembleTestRuntimeRecord(ctx, assembly, dir, loaded, clock, request)
-	if record == nil {
+	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request)
+	if opening == nil {
 		return nil, err
 	}
-	return &factory.RuntimeActivation{Service: record.RuntimeService(), Close: func(context.Context) error {
-		finalizer := record.(interface{ FinalizeRecording(time.Time) error })
-		return errors.Join(finalizer.FinalizeRecording(clock.Now()), record.CloseArtifacts())
-	}}, err
+	return opening.Activation, err
 }
 
 func assembleTestRuntimeRecord(
@@ -850,7 +847,19 @@ func assembleTestRuntimeRecord(
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (factory.RuntimeReplacementBuilder, factory.RuntimeRecord, factory.SessionBuildSpec, error) {
-	builder, record, spec, _, _, err := assembly.Assemble(
+	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request)
+	if opening == nil {
+		return nil, nil, factory.SessionBuildSpec{}, err
+	}
+	return opening.ReplacementBuilder, opening.Record, opening.Spec, err
+}
+
+func assembleTestInitialOpening(
+	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
+	loaded interfaces.MutableLoadedFactorySource,
+	clock factory.Clock, request factory.RuntimeActivationRequest,
+) (*factory.RuntimeInitialOpening, error) {
+	return assembly.Assemble(
 		ctx, "", "", false, "recording.json", "", request.FactorySessionID, request.FactorySessionID,
 		nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
@@ -858,7 +867,6 @@ func assembleTestRuntimeRecord(
 		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, nil, nil,
 		dir, dir, dir, loaded, request.RuntimeID, nil, nil, nil, nil, nil, false,
 	)
-	return builder, record, spec, err
 }
 
 func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) {

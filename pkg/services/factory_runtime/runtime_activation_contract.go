@@ -114,6 +114,18 @@ type SessionObservations interface {
 	PublishWorkerProgress(workers.ProgressFragment)
 }
 
+// RuntimeInitialOpening carries one scoped opening and its publication value.
+// Activation.Close owns cleanup, including resources returned with a failure.
+// The remaining fields preserve the existing session completion handoff.
+type RuntimeInitialOpening struct {
+	Record             RuntimeRecord
+	Activation         *RuntimeActivation
+	Spec               SessionBuildSpec
+	ReplacementBuilder RuntimeReplacementBuilder
+	Lifecycle          RuntimeLifecycle
+	Sidecars           RuntimeSidecars
+}
+
 // RuntimeActivationResult reports the identity and state of a successful
 // activation.
 type RuntimeActivationResult struct {

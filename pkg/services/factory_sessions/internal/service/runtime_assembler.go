@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -116,12 +115,5 @@ type FactoryRuntimeAssembler interface {
 		[]factorydefinitions.FactoryEvent,
 		automations.Service,
 		bool,
-	) (
-		runtimeports.RuntimeReplacementBuilder,
-		runtimeports.RuntimeInstance,
-		factoryruntime.SessionBuildSpec,
-		runtimeports.RuntimeLifecycle,
-		runtimeports.RuntimeSidecarService,
-		error,
-	)
+	) (*factoryruntime.RuntimeInitialOpening, error)
 }

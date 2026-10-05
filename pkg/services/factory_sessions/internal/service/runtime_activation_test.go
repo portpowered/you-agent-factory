@@ -508,6 +508,43 @@ func TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress(t *tes
 	}
 }
 
+func TestRuntimeActivationConsumesDeclaredOpeningAndKeepsSessionCleanup(t *testing.T) {
+	t.Parallel()
+	ingress := &activationServiceFake{}
+	service := controlOnlyEngineFake{}
+	var releases []string
+	initial := &factoryruntime.RuntimeActivation{
+		Service: service, WorkAndEventIngress: ingress,
+		Close: func(context.Context) error {
+			releases = append(releases, "runtime")
+			return nil
+		},
+	}
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.Add(func() error { return initial.Close(t.Context()) })
+	cleanup.Add(func() error { releases = append(releases, "session"); return nil })
+	activation, err := newRuntimeActivation(runtimeProducts{
+		activation: initial, closeArtifacts: cleanup.Close,
+	})
+	if err != nil || activation.Service != service {
+		t.Fatalf("declared activation = %#v, %v; want selected service", activation, err)
+	}
+	if _, err := activation.WorkAndEventIngress.SubmitWorkRequest(t.Context(), work.WorkRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if ingress.submitCalls.Load() != 1 || len(releases) != 0 {
+		t.Fatal("declared ingress did not receive Work or publication released resources")
+	}
+	for range 2 {
+		if err := activation.Close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(releases, []string{"session", "runtime"}) {
+		t.Fatalf("releases = %v; want one session-before-runtime release", releases)
+	}
+}
+
 func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

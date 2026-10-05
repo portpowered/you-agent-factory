@@ -72,6 +72,11 @@ func newRuntimeActivation(products runtimeProducts) (*factoryruntime.RuntimeActi
 			return products.closeArtifacts()
 		},
 	}
+	if products.activation != nil {
+		activation.Service = products.activation.Service
+		activation.WorkAndEventIngress = products.activation.WorkAndEventIngress
+		return activation, nil
+	}
 	service := runtimeEngineService(products)
 	if service == nil {
 		return activation, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")

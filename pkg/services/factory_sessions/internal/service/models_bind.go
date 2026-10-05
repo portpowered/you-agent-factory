@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
@@ -65,30 +63,6 @@ func (cleanup *runtimeOpeningCleanup) OwnModelsScope(
 	cleanup.mu.Lock()
 	cleanup.models = append(cleanup.models, closeScope)
 	cleanup.mu.Unlock()
-}
-
-// OwnRuntimeRecord registers partial opening ownership before validating the
-// session result. Recording finalization precedes artifact release on each
-// attempt; failed releases remain owned by this cleanup.
-func (cleanup *runtimeOpeningCleanup) OwnRuntimeRecord(record factoryruntime.RuntimeRecord, clock factoryruntime.Clock) {
-	if record == nil {
-		return
-	}
-	finalized, artifactsClosed := false, false
-	cleanup.Add(func() error {
-		var finalizationErr, artifactsErr error
-		if !finalized {
-			if finalizer, ok := record.(interface{ FinalizeRecording(time.Time) error }); ok {
-				finalizationErr = finalizer.FinalizeRecording(clock.Now().UTC())
-			}
-			finalized = finalizationErr == nil
-		}
-		if !artifactsClosed {
-			artifactsErr = record.CloseArtifacts()
-			artifactsClosed = artifactsErr == nil
-		}
-		return errors.Join(finalizationErr, artifactsErr)
-	})
 }
 
 func (cleanup *runtimeOpeningCleanup) Close() error {

@@ -2,8 +2,10 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -107,16 +109,9 @@ func (a *Assembly) Assemble(
 	restoredEventHistory []factorydefinitions.FactoryEvent,
 	automationService automations.Service,
 	serviceMode bool,
-) (
-	factoryruntime.RuntimeReplacementBuilder,
-	factoryruntime.RuntimeRecord,
-	factoryruntime.SessionBuildSpec,
-	factoryruntime.RuntimeLifecycle,
-	factoryruntime.RuntimeSidecars,
-	error,
-) {
+) (*factoryruntime.RuntimeInitialOpening, error) {
 	if a == nil || a.bundleOpening == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
+		return nil,
 			fmt.Errorf("Factory Runtime assembly service is required")
 	}
 	// Replay hooks consume the same detached event history as world-state
@@ -129,7 +124,7 @@ func (a *Assembly) Assemble(
 		replayExecutionArtifact,
 	)
 	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		return nil, err
 	}
 	// Recordings owns replay as a platform process effect. Factory Runtime keeps
 	// that low-level effect at the composition boundary and Workers adapts it
@@ -149,7 +144,7 @@ func (a *Assembly) Assemble(
 	}, providerOverride, providerCommandRunner, scriptCommandRunner, mockWorkersConfig,
 		runtimebuild.MockCommandRunnerFactory(mockCommandRunnerFactory))
 	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		return nil, err
 	}
 	spec.MetricsSessionID = firstNonEmptySessionID(metricsSessionID, defaultSessionID)
 	if resumeInput != nil {
@@ -169,7 +164,7 @@ func (a *Assembly) Assemble(
 		restoredEventHistory,
 		a.recordingsRuntime,
 	); err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+		return nil, err
 	}
 	// The callback retains this session's selections, not a secondary service
 	// graph. Both initial and replacement resources use the fixed opening owner.
@@ -207,24 +202,14 @@ func (a *Assembly) Assemble(
 		return open(ctx, replacementSpec)
 	})
 	instance, err := open(ctx, spec)
+	result, err := initialRuntimeOpening(instance, spec, builder, clock, err)
 	if err != nil {
-		// Preserve partial resource ownership for Sessions even though no
-		// lifecycle or runnable generation can be published.
-		return builder, instance, spec, nil, nil, err
-	}
-	if instance == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, fmt.Errorf(
-			"default runtime instance is required",
-		)
+		return result, err
 	}
 	attachInvocationScheduleFactory(ctx, automationService, instance)
-	lifecycle := a.instanceHost.Scope(clock)
-	return builder,
-		instance,
-		spec,
-		lifecycle,
-		a.sidecars.Scope(serviceMode),
-		nil
+	result.Lifecycle = a.instanceHost.Scope(clock)
+	result.Sidecars = a.sidecars.Scope(serviceMode)
+	return result, nil
 }
 
 // runtimeReplacementOperation is one session's addressed replacement capability.
@@ -444,4 +429,59 @@ func isDaemonRestartInterruption(event factorydefinitions.FactoryEvent) bool {
 
 func isRestoredLogicalClockBoundary(event factorydefinitions.FactoryEvent) bool {
 	return isDaemonRestartInterruption(event) || event.Type == factorydefinitions.FactoryEventTypeSessionResumed
+}
+
+// initialRuntimeOpening declares publication and retains partial ownership
+// before inspecting the opening error. No failed candidate exposes a service.
+func initialRuntimeOpening(record factoryruntime.RuntimeRecord, spec factoryruntime.SessionBuildSpec,
+	builder factoryruntime.RuntimeReplacementBuilder, clock factoryruntime.Clock, openingErr error,
+) (*factoryruntime.RuntimeInitialOpening, error) {
+	result := &factoryruntime.RuntimeInitialOpening{
+		Record: record, Spec: spec, ReplacementBuilder: builder,
+		Activation: &factoryruntime.RuntimeActivation{},
+	}
+	result.Activation.Close = initialRuntimeCloser(record, clock)
+	if openingErr != nil {
+		return result, openingErr
+	}
+	if record == nil {
+		return result, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
+	}
+	service := record.RuntimeService()
+	if service == nil {
+		return result, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
+	}
+	ingress, ok := service.(factoryruntime.APIFactory)
+	if !ok {
+		return result, fmt.Errorf("activate Factory Runtime: opened runtime Work submission and event subscription are required until Recordings migration")
+	}
+	result.Activation.Service = service
+	result.Activation.WorkAndEventIngress = ingress
+	return result, nil
+}
+
+// initialRuntimeCloser serializes cleanup, remembers successful releases and
+// retains failed releases for the addressed activation's next cleanup attempt.
+func initialRuntimeCloser(record factoryruntime.RuntimeRecord, clock factoryruntime.Clock) func(context.Context) error {
+	var mu sync.Mutex
+	finalized, artifactsClosed := false, false
+	return func(context.Context) error {
+		mu.Lock()
+		defer mu.Unlock()
+		if record == nil {
+			return nil
+		}
+		var finalizationErr, artifactsErr error
+		if !finalized {
+			if finalizer, ok := record.(interface{ FinalizeRecording(time.Time) error }); ok {
+				finalizationErr = finalizer.FinalizeRecording(clock.Now().UTC())
+			}
+			finalized = finalizationErr == nil
+		}
+		if !artifactsClosed {
+			artifactsErr = record.CloseArtifacts()
+			artifactsClosed = artifactsErr == nil
+		}
+		return errors.Join(finalizationErr, artifactsErr)
+	}
 }

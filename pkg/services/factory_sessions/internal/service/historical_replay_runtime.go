@@ -14,7 +14,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -101,11 +100,11 @@ func (owner *portableReplayDurableOwner) Close() error {
 }
 
 type portableReplayRuntimeCleanup struct {
-	mu       sync.Mutex
-	owner    interface{ Close() error }
-	runtime  runtimeports.RuntimeInstance
-	closed   bool
-	closeErr error
+	mu           sync.Mutex
+	owner        interface{ Close() error }
+	closeRuntime func(context.Context) error
+	closed       bool
+	closeErr     error
 }
 
 func newPortableReplayRuntimeCleanup() *portableReplayRuntimeCleanup {
@@ -125,17 +124,17 @@ func (cleanup *portableReplayRuntimeCleanup) SetOwner(owner interface{ Close() e
 	cleanup.owner = owner
 }
 
-func (cleanup *portableReplayRuntimeCleanup) Set(runtime runtimeports.RuntimeInstance) {
-	if cleanup == nil || runtime == nil {
+func (cleanup *portableReplayRuntimeCleanup) Set(opening *factoryruntime.RuntimeInitialOpening) {
+	if cleanup == nil || opening == nil || opening.Activation == nil || opening.Activation.Close == nil {
 		return
 	}
 	cleanup.mu.Lock()
 	defer cleanup.mu.Unlock()
 	if cleanup.closed {
-		cleanup.closeErr = errors.Join(cleanup.closeErr, runtime.CloseArtifacts())
+		cleanup.closeErr = errors.Join(cleanup.closeErr, opening.Activation.Close(context.Background()))
 		return
 	}
-	cleanup.runtime = runtime
+	cleanup.closeRuntime = opening.Activation.Close
 }
 
 func (cleanup *portableReplayRuntimeCleanup) Close() error {
@@ -152,9 +151,9 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.owner.Close())
 		cleanup.owner = nil
 	}
-	if cleanup.runtime != nil {
-		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.runtime.CloseArtifacts())
-		cleanup.runtime = nil
+	if cleanup.closeRuntime != nil {
+		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.closeRuntime(context.Background()))
+		cleanup.closeRuntime = nil
 	}
 	return cleanup.closeErr
 }
@@ -260,8 +259,8 @@ func preparePortableReplayRuntime(
 	dispatchRecorder recordings.DispatchRecorder,
 	recordingsRuntime recordings.RuntimeScopeService,
 	automationService automations.Service,
-) (runtimeports.RuntimeInstance, error) {
-	runtime, err := assemblePortableReplayRuntime(
+) (*factoryruntime.RuntimeInitialOpening, error) {
+	opening, err := assemblePortableReplayRuntime(
 		ctx,
 		configured,
 		root,
@@ -279,8 +278,9 @@ func preparePortableReplayRuntime(
 		automationService,
 	)
 	if err != nil {
-		return runtime, err
+		return opening, err
 	}
+	runtime := opening.Record
 	runtimeService := runtime.RuntimeService()
 	var resourceLeaseAdmission factoryruntime.ResourceCapacityLeaseAdmission
 	if admission, ok := runtimeService.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
@@ -301,9 +301,9 @@ func preparePortableReplayRuntime(
 		runtimeProgressPublisher(runtime),
 		runtimeWorkerAttemptStarter(runtime),
 	); err != nil {
-		return runtime, err
+		return opening, err
 	}
-	return runtime, nil
+	return opening, nil
 }
 
 func constructPortableReplayDurableOwner(
@@ -364,7 +364,7 @@ func assemblePortableReplayRuntime(
 	dispatchRecorder recordings.DispatchRecorder,
 	recordingsRuntime recordings.RuntimeScopeService,
 	automationService automations.Service,
-) (runtimeports.RuntimeInstance, error) {
+) (*factoryruntime.RuntimeInitialOpening, error) {
 	if factoryRuntimeAssembler == nil {
 		return nil, fmt.Errorf("construct portable replay runtime: Factory Runtime assembler is required")
 	}
@@ -389,7 +389,7 @@ func assemblePortableReplayRuntime(
 		observe = owner.PublishWorkerProgress
 	}
 	progressFactory := fanOutWorkerProgress(nil, observe)
-	_, runtime, _, _, _, err := factoryRuntimeAssembler.Assemble(
+	opening, err := factoryRuntimeAssembler.Assemble(
 		ctx,
 		configured.OperatorDefaults.WorkerModelProvider,
 		configured.OperatorDefaults.WorkerModel,
@@ -439,12 +439,12 @@ func assemblePortableReplayRuntime(
 		false,
 	)
 	if err != nil {
-		return runtime, fmt.Errorf("construct portable replay runtime: %w", err)
+		return opening, fmt.Errorf("construct portable replay runtime: %w", err)
 	}
-	if runtime == nil {
-		return nil, fmt.Errorf("construct portable replay runtime: runtime instance is required")
+	if opening == nil || opening.Record == nil {
+		return opening, fmt.Errorf("construct portable replay runtime: runtime instance is required")
 	}
-	return runtime, nil
+	return opening, nil
 }
 
 func bindDurableExecutionCapabilities(

@@ -96,6 +96,7 @@ type sessionRuntimeOpening struct {
 	startupSpec                 factoryruntime.SessionBuildSpec
 	runtimeLifecycle            runtimeports.RuntimeLifecycle
 	runtimeSidecars             runtimeports.RuntimeSidecarService
+	activation                  *factoryruntime.RuntimeActivation
 }
 
 func (r *Root) prepareRuntimeOpening(
@@ -385,7 +386,6 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 }
 
 func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
-	var err error
 	if r.factoryRuntimeAssembler == nil {
 		return fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
 	}
@@ -393,7 +393,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		return err
 	}
 
-	opening.runtimebuildService, opening.startupRuntime, opening.startupSpec, opening.runtimeLifecycle, opening.runtimeSidecars, err =
+	initial, err :=
 		r.factoryRuntimeAssembler.Assemble(
 			ctx,
 			opening.configured.OperatorDefaults.WorkerModelProvider,
@@ -446,7 +446,17 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			r.automationService,
 			opening.configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)
-	cleanup.OwnRuntimeRecord(opening.startupRuntime, opening.clock)
+	if initial != nil {
+		opening.runtimebuildService = initial.ReplacementBuilder
+		opening.startupRuntime = initial.Record
+		opening.startupSpec = initial.Spec
+		opening.runtimeLifecycle = initial.Lifecycle
+		opening.runtimeSidecars = initial.Sidecars
+		opening.activation = initial.Activation
+		if initial.Activation != nil && initial.Activation.Close != nil {
+			cleanup.Add(func() error { return initial.Activation.Close(context.WithoutCancel(ctx)) })
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -641,7 +651,8 @@ func (r *Root) bindSessionOpeningProducts(
 		cleanup.Close,
 		opening.sessionID,
 	)
-	opened.engine = opening.startupRuntime.RuntimeService()
+	opened.engine = opening.activation.Service
+	opened.activation = opening.activation
 	opened.clock = opening.clock
 	opened.recordings = r.recordingsService
 	opened.orderlyStop = newOrderlyRecordingFlush(
