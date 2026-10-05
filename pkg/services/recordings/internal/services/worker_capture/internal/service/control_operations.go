@@ -131,6 +131,11 @@ func (writer *FileWriter) BeginWorkerControlOperation(ctx context.Context, recor
 	if err := entry.validateControlTarget(record.Target); err != nil {
 		return recordings.WorkerControlOperationRecord{}, false, err
 	}
+	// A new intent cannot acquire authority over an affirmatively dead
+	// supervisor. Existing keyed results above remain readable and replayable.
+	if session := entry.sessions[key.WorkerSessionID]; session.projection.ExecutionTerminal == nil && writer.ownerDeathWitness(session.ownerEpoch) {
+		return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerControlConflict
+	}
 	if record.InputArtifactRef != "" {
 		if err := writer.validateControlInput(ctx, entry, record); err != nil {
 			return recordings.WorkerControlOperationRecord{}, false, err
