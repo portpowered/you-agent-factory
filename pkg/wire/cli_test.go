@@ -396,13 +396,12 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 	routes := make(chan string, 1)
 	publishers := make(chan workers.ProgressPublisher, 1)
 	workerService := localBoundaryWorkersService{routes: routes, publishers: publishers}
-	boundary, err := provideLocalWorkerSessionsBoundary(
-		eventsService,
-		localBoundaryProviderSessions{},
-		logging.NoopLogger{},
-		workerService,
-		nil,
-	)
+	service, err := provideWorkerSessionsService(workerService, eventsService, localBoundaryProviderSessions{},
+		logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundary, err := provideLocalWorkerSessionsBoundary(service)
 	if err != nil {
 		t.Fatalf("provideLocalWorkerSessionsBoundary() error = %v", err)
 	}
@@ -449,18 +448,11 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 	}
 }
 
-func TestProvideLocalWorkerSessionsBoundaryRequiresWorkersService(t *testing.T) {
+func TestProvideWorkerAttemptOpenerRequiresCapability(t *testing.T) {
 	t.Parallel()
-
-	_, err := provideLocalWorkerSessionsBoundary(
-		nil,
-		nil,
-		logging.NoopLogger{},
-		nil,
-		nil,
-	)
-	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
-		t.Fatalf("provideLocalWorkerSessionsBoundary(nil Workers service) error = %v, want required-service diagnostic", err)
+	_, err := provideWorkerAttemptOpener(struct{ workersessions.Service }{})
+	if err == nil || !strings.Contains(err.Error(), "runtime attempt capability is required") {
+		t.Fatalf("provideWorkerAttemptOpener() = %v, want missing capability", err)
 	}
 }
 

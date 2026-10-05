@@ -105,7 +105,7 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
 	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
 	f := &factoryImpl{
-		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 		eventHistory: ledger,
 	}
 	request := detachedTargetRequest()
@@ -123,6 +123,12 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 	if got := sessions.request.Execution.Execution.Dispatch.DispatchID; got != "dispatch-begin" {
 		t.Fatalf("Worker Session dispatch ID = %q, want dispatch-begin", got)
+	}
+	if sessions.cancel == nil {
+		t.Fatal("Worker Session opened without its Runtime cancellation resource")
+	}
+	if outcome, err := sessions.cancel(context.Background()); outcome != "" || !errors.Is(err, ErrAttemptLifecycleUnavailable) {
+		t.Fatalf("cancellation without a Runtime lifecycle = %q, %v, want exact unavailable error", outcome, err)
 	}
 
 	result := workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
@@ -142,7 +148,7 @@ func TestBeginWorkerAttemptPreparationFailureDoesNotPublishOrphanAssociation(t *
 		beginErr: beginErr,
 	}
 	f := &factoryImpl{
-		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 		eventHistory: ledger,
 	}
 	request := detachedTargetRequest()
@@ -199,7 +205,7 @@ func TestBeginWorkerAttemptCompletesEveryTerminalExitExactlyOnce(t *testing.T) {
 			ledger := &recordingfixtures.ScriptedRuntimeLedger{}
 			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
 			f := &factoryImpl{
-				cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+				cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 				eventHistory: ledger,
 			}
 
@@ -234,7 +240,7 @@ func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *
 		},
 	}
 	f := &factoryImpl{
-		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 		eventHistory: ledger,
 	}
 	request := detachedTargetRequest()
@@ -291,46 +297,6 @@ func detachedTargetRequest() workers.ExecuteRequest {
 			Workspace:       workers.WorkspacePolicy{WorkingDirectory: "/default"},
 		},
 	}
-}
-
-type beginRuntimeAttemptService struct {
-	workersessions.Service
-	request       workersessions.RuntimeAttemptRequest
-	completed     *workers.WorkstationDispatchResult
-	completeErr   error
-	completeCalls int
-	beginErr      error
-	existing      workersessions.Session
-	getErr        error
-}
-
-func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
-	if service.getErr != nil {
-		return workersessions.Session{}, service.getErr
-	}
-	return service.existing, nil
-}
-
-func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
-	_ context.Context,
-	request workersessions.RuntimeAttemptRequest,
-) (workersessions.RuntimeAttempt, error) {
-	service.request = request
-	if service.beginErr != nil {
-		return nil, service.beginErr
-	}
-	return workersessions.RuntimeAttempt(func(
-		_ context.Context,
-		result workers.WorkstationDispatchResult,
-		err error,
-	) error {
-		service.completeCalls++
-		if service.completed == nil {
-			service.completed = &result
-			service.completeErr = err
-		}
-		return nil
-	}), nil
 }
 
 func TestCaptureAssociatedWorkerSessionTargets_IsolatesFactorySessionLedgersAndEmptyTurns(t *testing.T) {

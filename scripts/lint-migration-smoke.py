@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import tempfile
 
@@ -68,6 +69,7 @@ class SizeFixtures:
         root = self.artifacts / name
         root.mkdir()
         write(root, "go.mod", "module lintfixture\n\ngo 1.25.0\n")
+        shutil.copytree(ROOT / "scripts/testdata/packagedfactorycatalog/packages", root / "packages")
         config = self.config if ratchet else self.config.replace(
             "  new-from-merge-base: origin/main\n", "")
         write(root, ".golangci.yml", config)
@@ -301,7 +303,7 @@ class PkgFixtures(SizeFixtures):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "provider-catalog", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "provider-catalog", "catalog", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
@@ -374,6 +376,67 @@ def main() -> None:
             write(outside, "internal/unrelated/source.go", "package unrelated\n")
             checked(["git", "init", "-q"], outside)
             fixtures.lint(outside, "provider-unrelated-owner", [])
+        if args.cohort in ("catalog", "all"):
+            fixtures.config = (ROOT / ".golangci-repository.yml").read_text(encoding="utf-8")
+            root = fixtures.module("catalog-publication")
+            write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/transports/fixture/source.go", "package fixture\n")
+            write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
+            write(root, "internal/lint/analyzers/baseline.txt", "")
+            checked(["git", "init", "-q"], root)
+            checked(["git", "config", "core.longpaths", "true"], root)
+            checked(["git", "add", "."], root)
+            fixtures.commit(root)
+            checked(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], root)
+            package = root / "packages/packaged-factories"
+            # The same Go sources/cache survive every non-Go mutation.
+            before = {p.relative_to(package): p.read_bytes() for p in package.rglob("*") if p.is_file()}
+            fixtures.lint(root, "catalog-clean", [])
+            assert before == {p.relative_to(package): p.read_bytes() for p in package.rglob("*") if p.is_file()}
+            manifest = package / "generated/manifest.json"
+            manifest.write_text("{}\n", encoding="utf-8")
+            fixtures.lint(root, "catalog-stale-cached", [("repolint", "stale: generated/manifest.json")])
+            manifest.write_bytes(before[Path("generated/manifest.json")])
+            artifact = package / "generated/factories/example/factory.yaml"
+            artifact.unlink()
+            fixtures.lint(root, "catalog-missing-artifact-cached", [("repolint", "missing: generated/factories/example/factory.yaml")])
+            artifact.write_bytes(before[Path("generated/factories/example/factory.yaml")])
+            notice = package / "generated/README.md"
+            notice.write_text("Edited publication prose\n", encoding="utf-8")
+            (package / "factories/empty").mkdir()
+            fixtures.lint(root, "catalog-prose-empty-directory", [])
+            notice.unlink()
+            fixtures.lint(root, "catalog-missing-notice", [("repolint", "missing: generated/README.md")])
+            notice.write_bytes(before[Path("generated/README.md")])
+            write(root, ".gitignore", "packages/packaged-factories/generated/ignored file.json\n")
+            extra = package / "generated/ignored file.json"
+            extra.write_text("{}\n", encoding="utf-8")
+            fixtures.lint(root, "catalog-ignored-output-cached", [("repolint", "unexpected: generated/ignored file.json")])
+            extra.unlink()
+            source = package / "factories/example/factory.js"
+            source.write_text("return {};\n", encoding="utf-8")
+            fixtures.lint(root, "catalog-projection-cached", [("repolint", "projection failed:")])
+            source.write_bytes(before[Path("factories/example/factory.js")])
+            schema = package / "schemas/factory.schema.json"
+            schema.unlink()
+            fixtures.lint(root, "catalog-missing-schema-cached", [("repolint", "projection failed:")])
+            schema.write_bytes(before[Path("schemas/factory.schema.json")])
+            write(root, "packages/packaged-factories/factories/empty/note.md", "missing root\n")
+            fixtures.lint(root, "catalog-file-backed-missing-root", [("repolint", "no root Factory document")])
+            (package / "factories/empty/note.md").unlink()
+            fixtures.lint(root, "catalog-restored-cached", [])
+            git_directory = root / ".git"
+            saved_git = root / ".saved-git"
+            git_directory.rename(saved_git)
+            try:
+                write(root, ".git", "gitdir: missing-catalog-git-directory\n")
+                fixtures.lint(root, "catalog-git-input-failure", [
+                    ("repolint", "baseline-growth:"),
+                    ("repolint", "compiler-ownership:"),
+                    ("repolint", "input failure:")])
+            finally:
+                git_directory.unlink()
+                saved_git.rename(git_directory)
         if args.cohort in ("owners", "all"):
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("compiler-owners")

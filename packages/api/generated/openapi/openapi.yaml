@@ -7754,6 +7754,11 @@ components:
           items:
             $ref: '#/components/schemas/FactorySessionRecordedSummary'
           description: Read-only recorded Factory Session summaries when scope is HISTORY or ALL.
+        warnings:
+          type: array
+          description: Recording artifacts omitted from history because they could not be read or decoded.
+          items:
+            $ref: '#/components/schemas/FactorySessionRecordingWarning'
     FactorySessionListScope:
       type: string
       description: Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
@@ -15709,6 +15714,26 @@ components:
         spawnedBy:
           type: string
           description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    FactorySessionRecordingWarning:
+      type: object
+      additionalProperties: false
+      required:
+        - artifactReference
+        - code
+        - reason
+      properties:
+        artifactReference:
+          type: string
+          minLength: 1
+          description: Recording-root-relative artifact path. This value does not grant filesystem access.
+        code:
+          type: string
+          enum:
+            - UNREADABLE_RECORDING
+        reason:
+          type: string
+          minLength: 1
+          description: Safe explanation that excludes recording content and absolute host paths.
     DispatchCancellation:
       type: object
       additionalProperties: false

@@ -237,7 +237,7 @@ func factorySessionDurableReadModelSchema() map[string]any {
 
 func listFactorySessionsResponseSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"scope": enumStringProperty("Session list scope.", "live", "persisted", "all"),
+		"scope": enumStringProperty("Session list scope.", "live", "persisted", "history", "all"),
 		"sessions": map[string]any{
 			"type": "array",
 			"items": objectSchema(map[string]any{
@@ -252,6 +252,23 @@ func listFactorySessionsResponseSchema() map[string]any {
 				"orchestratorKind": orchestratorKindSchema(),
 				"resolvedSource":   resolvedSourceIdentitySchema(),
 			}, "sessionId", "status", "orchestratorKind", "resolvedSource"),
+		},
+		"recordedSessions": map[string]any{
+			"type": "array",
+			"items": objectSchema(map[string]any{
+				"sessionId":         stringProperty("Canonical Factory Session identifier."),
+				"source":            enumStringProperty("History source.", "recorded-history"),
+				"artifactReference": stringProperty("Recording-root-relative artifact path."),
+				"format":            enumStringProperty("Recording format.", "V1_JSON", "V2_JSONL"),
+			}, "sessionId", "source", "artifactReference", "format"),
+		},
+		"warnings": map[string]any{
+			"type": "array",
+			"items": objectSchema(map[string]any{
+				"artifactReference": stringProperty("Recording-root-relative artifact path."),
+				"code":              enumStringProperty("Recording diagnostic code.", "UNREADABLE_RECORDING"),
+				"reason":            stringProperty("Safe explanation without recording content or absolute host paths."),
+			}, "artifactReference", "code", "reason"),
 		},
 	})
 }

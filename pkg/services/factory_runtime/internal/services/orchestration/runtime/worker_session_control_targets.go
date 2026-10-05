@@ -36,7 +36,7 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	request := workstationDispatchRequestFromExecute(executeRequest)
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
 	initialSessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
-	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID)
+	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID, executeRequest.Correlation.FactorySessionID)
 	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, allowRetry)
 	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
 	if prepare == nil {
@@ -91,6 +91,7 @@ func terminalWorkerSessionRequiresRetry(
 	ctx context.Context,
 	service workersessions.Service,
 	sessionID string,
+	factorySessionIDs ...string,
 ) bool {
 	if service == nil || strings.TrimSpace(sessionID) == "" {
 		return false
@@ -98,7 +99,11 @@ func terminalWorkerSessionRequiresRetry(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	session, err := service.Get(context.WithoutCancel(ctx), workersessions.GetRequest{ID: sessionID})
+	scope := ""
+	if len(factorySessionIDs) > 0 {
+		scope = strings.TrimSpace(factorySessionIDs[0])
+	}
+	session, err := service.Get(context.WithoutCancel(ctx), workersessions.GetRequest{ID: sessionID, FactorySessionID: scope})
 	return err == nil && session.Terminal()
 }
 
@@ -854,9 +859,9 @@ func runtimeRecordingRequest(cfg *runtimeConfig, request workers.WorkstationDisp
 }
 
 // capturedWorkerSessionControlTargets is the immutable set one committed
-// Factory-turn control owns. The Factory Session identity is represented by
-// the session-scoped canonical ledger captured below; associations from a
-// different Factory Session must therefore be read from a different ledger.
+// Factory-turn control owns. Production captures the Factory Session identity
+// with the session-scoped ledger so fan-out can address the canonical shared
+// supervisor without reaching another Factory Session's retained Worker.
 //
 // The later fan-out stories retain this value with the committed control. They
 // must not call captureAssociatedWorkerSessionTargets again on a retry, or a
@@ -864,6 +869,7 @@ func runtimeRecordingRequest(cfg *runtimeConfig, request workers.WorkstationDisp
 type capturedWorkerSessionControlTargets struct {
 	turnID           string
 	workerSessionIDs []string
+	factorySessionID string
 }
 
 // workerSessionIDsSnapshot returns a detached deterministic target order.

@@ -34,8 +34,19 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *testing.T) {
 	command := &liveSessionProvidersFake{initialSessionObserved: make(chan struct{})}
 	providerService := command
-	bridge := workersessions.NewProviderSessionObservationPublisher(nil)
-	runner, err := New(providerService, bridge.Publish)
+	bridge := &workersessions.ProviderSessionObservationPublisher{}
+	var sessions workersessions.Service
+	runner, err := New(providerService, func(fragment workers.ProgressFragment) {
+		if fragment.Correlation.DispatchID == "" {
+			fragment.Correlation.DispatchID = fragment.DispatchID
+		}
+		if fragment.Correlation.AttemptID == "" {
+			fragment.Correlation.AttemptID = fragment.DispatchID
+		}
+		if err := bridge.PublishWorkerSessionProgress(context.Background(), sessions, "worker-live-provider-session", fragment); err != nil {
+			t.Errorf("publish live progress: %v", err)
+		}
+	})
 	if err != nil {
 		t.Fatalf("agent New() error = %v", err)
 	}
@@ -44,11 +55,10 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 		t.Fatalf("events wire NewService() error = %v", err)
 	}
 	service := newLiveSessionService(runner)
-	sessions, err := workersessionswire.NewService(service, eventsService, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	sessions, err = workersessionswire.NewService(service, eventsService, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("Worker Sessions wire NewService() error = %v", err)
 	}
-	bridge.Bind(sessions)
 
 	type startOutcome struct {
 		result workersessions.InvokeSessionResult

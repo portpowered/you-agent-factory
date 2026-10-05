@@ -1,7 +1,8 @@
 """Prove production host reachability without exempting plugin dead functions.
 
-This static fixture consumes a prebuilt deadcodecheck. The pinned external
-deadcode tool loads real Go main packages; no tests are reachability roots.
+This static fixture uses the same report adapter and upstream command as Make.
+The pinned external deadcode tool loads real Go main packages; no tests are
+reachability roots.
 """
 
 import argparse
@@ -9,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 
 
 MODULE = "github.com/portpowered/infinite-you"
@@ -20,10 +22,10 @@ def write(root, name, text):
     target.write_text(text, encoding="utf-8")
 
 
-def invoke(checker, root, expected, diagnostic):
+def invoke(reporter, upstream, root, expected, diagnostic):
     environment = dict(os.environ, GOWORK="off")
     result = subprocess.run(
-        [str(checker)], cwd=root, env=environment,
+        [sys.executable, str(reporter), "--"] + upstream, cwd=root, env=environment,
         text=True, capture_output=True, timeout=180,
     )
     output = result.stdout + result.stderr
@@ -33,9 +35,11 @@ def invoke(checker, root, expected, diagnostic):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checker", required=True, type=Path)
+    parser.add_argument("--reporter", required=True, type=Path)
+    parser.add_argument("upstream", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    checker = args.checker.resolve(strict=True)
+    reporter = args.reporter.resolve(strict=True)
+    upstream = args.upstream[1:] if args.upstream[:1] == ["--"] else args.upstream
     with tempfile.TemporaryDirectory(prefix="deadcode-host-smoke-") as directory:
         base = Path(directory)
         root, host = base / "repository", base / "host"
@@ -78,7 +82,7 @@ func main() {{ golangcilintplugin.New() }}
             "tools/golangcilintplugin/plugin.go: unreachable func: Abandoned",
         ]) + "\n"
         write(root, "docs/internal/baselines/deadcode-baseline.txt", baseline)
-        invoke(checker, root, 0, "baseline matches")
+        invoke(reporter, upstream, root, 0, "baseline matches")
         assert (root / "bin/deadcode-current.txt").read_text() == baseline
         print("PASS: real host calls are live; abandoned analyzer/plugin and test-only functions remain dead")
 
@@ -88,11 +92,12 @@ func New() {{ analyzers.Live() }}
 func Abandoned() {{}}
 func NewDeadFunction() {{}}
 ''')
-        invoke(checker, root, 1, "baseline drift")
+        invoke(reporter, upstream, root, 1, "baseline drift")
         assert "NewDeadFunction" in (root / "bin/deadcode-current.txt").read_text()
+        assert (root / "docs/internal/baselines/deadcode-baseline.txt").read_text() == baseline
         print("PASS: a new unused plugin function fails the unchanged baseline")
         (root / pointer).unlink()
-        invoke(checker, root, 1, "read generated golangci host")
+        invoke(reporter, upstream, root, 1, "read generated golangci host")
         print("PASS: absent production host fails closed")
     return 0
 

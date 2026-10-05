@@ -20,130 +20,52 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// startThroughWorkerSessions reserves identity and preserves the dispatch shape.
-func startThroughWorkerSessions(
-	ctx context.Context,
-	cfg *runtimeConfig,
-	eventHistory recordings.RuntimeLedger,
-	request workers.WorkstationDispatchRequest,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	if strings.TrimSpace(request.Execution.RecordingID) == "" && cfg != nil {
-		request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
-	}
-	dispatchID := request.Execution.Dispatch.DispatchID
-	sessionID := dispatchID
-	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
-		recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch)
-		if found {
-			sessionID = recordedSessionID
-		}
-	}
-	if _, err := cfg.workerSessions.Reserve(
-		context.WithoutCancel(ctx),
-		workersessions.ReserveRequest{ID: sessionID},
-	); err != nil {
-		return err
-	}
-	recordDispatchWorkerSessionAssociation(
-		eventHistory,
-		request.Execution.Dispatch.Execution.DispatchCreatedTick,
-		dispatchID,
-		sessionID,
-		request.Execution.Dispatch.Execution.RequestID,
-		recordings.DispatchWorkerSessionExecutionFacts{
-			Model:           request.Execution.Model,
-			ReasoningEffort: request.Execution.ReasoningEffort,
-		},
-		cfg.clock.Now(),
-	)
-	execute := func() {
-		// Petri dispatch remains one attempt; retryability is classified outward.
-		startResult, startErr := cfg.workerSessions.InvokeSession(
-			context.WithoutCancel(ctx),
-			workersessions.InvokeSessionRequest{ID: sessionID, Execution: request},
-		)
-		result, dispatchErr := workerSessionDispatchOutcome(request, startResult, startErr)
-		accept(context.Background(), request, result, dispatchErr)
-	}
-	async := !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil
-	if async {
-		go execute()
-		return nil
-	}
-	execute()
-	return nil
-}
-
 func runtimeAttemptPreparation(
 	cfg *runtimeConfig,
 	request workers.WorkstationDispatchRequest,
 	executeRequest workers.ExecuteRequest,
 	allowRetry bool,
 ) attemptPreparation {
-	if cfg == nil || cfg.workerSessions == nil {
+	if cfg == nil || cfg.workerAttempts == nil {
 		return nil
 	}
-	recorder, ok := cfg.workerSessions.(interface {
-		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
-	})
-	if !ok || recorder == nil {
-		return nil
-	}
+	recorder := cfg.workerAttempts
+	lifecycle := cfg.attempts
+	clock := cfg.clock
+	execution := cfg.workerExecution
+	scheduler := cfg.workerAttemptScheduler
+	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
 	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
 		admissionRequest := request
 		if strings.TrimSpace(request.WorkstationName) != workers.ProviderInvocationRoute {
 			admissionRequest = runtimeAttemptAdmissionRequest(request, executeRequest)
 		}
+		if strings.TrimSpace(admissionRequest.Execution.RuntimeID) == "" {
+			admissionRequest.Execution.RuntimeID = strings.TrimSpace(executeRequest.Correlation.RuntimeID)
+		}
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
-				ID:        sessionID,
-				AttemptID: executeRequest.Correlation.AttemptID,
-				Execution: admissionRequest,
+				Key:                         workersessions.RuntimeAttemptKey{RuntimeID: executeRequest.Correlation.RuntimeID, DispatchID: executeRequest.Correlation.DispatchID},
+				ObservationRuntimeID:        cfg.runtimeID,
+				ObservationFactorySessionID: sessionIDFromFactoryConfig(cfg),
+				ID:                          sessionID,
+				AttemptID:                   executeRequest.Correlation.AttemptID,
+				Execution:                   admissionRequest,
+			},
+			execution,
+			clock,
+			scheduler,
+			func(cancelCtx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+				if lifecycle == nil {
+					return "", ErrAttemptLifecycleUnavailable
+				}
+				return lifecycle.cancel(cancelCtx, dispatchID)
 			},
 		)
 		if err != nil {
 			return nil, err
-		}
-		if binder, ok := cfg.workerSessions.(interface {
-			BindRuntimeAttemptCancellation(
-				string,
-				string,
-				func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
-			) error
-		}); ok {
-			dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
-			bindErr := binder.BindRuntimeAttemptCancellation(
-				sessionID,
-				dispatchID,
-				func(cancelCtx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
-					if cfg.attempts == nil {
-						return "", ErrAttemptLifecycleUnavailable
-					}
-					return cfg.attempts.cancel(cancelCtx, dispatchID)
-				},
-			)
-			if bindErr != nil {
-				bindErr = fmt.Errorf("bind Factory Runtime Worker Session cancellation: %w", bindErr)
-				_ = attempt.Complete(
-					context.Background(),
-					workers.WorkstationDispatchResult{
-						DispatchID:      dispatchID,
-						WorkstationName: request.WorkstationName,
-						TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
-						Result: workers.WorkResult{
-							DispatchID:   dispatchID,
-							TransitionID: request.Execution.Dispatch.TransitionID,
-							Outcome:      workers.OutcomeFailed,
-							Error:        bindErr.Error(),
-						},
-					},
-					bindErr,
-				)
-				return nil, bindErr
-			}
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
 			result = normalizeAttemptResult(
@@ -263,7 +185,7 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 	if reader, ok := f.cfg.workerSessions.(recordings.WorkerRecordingReader); ok {
 		workerRecordingReader = reader
 	}
-	return newRecordedWorkerSessionObservationWithRestoredState(
+	view := newRecordedWorkerSessionObservationWithRestoredState(
 		f.cfg.workerSessions,
 		f.eventHistory,
 		f.cfg.worldStateProjector,
@@ -276,23 +198,28 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 		f.cfg.restoredEventPrefix,
 		factorySessionID,
 	)
+	view.runtimeID = strings.TrimSpace(f.cfg.runtimeID)
+	view.executionFactorySessionID = canonicalSessionIDFromFactoryConfig(f.cfg)
+	return view
 }
 
 // recordedWorkerSessionObservation adapts the runtime ledger and projector to
 // the detached Worker Session observation vocabulary.
 type recordedWorkerSessionObservation struct {
 	workersessions.Service
-	ledger              recordings.RuntimeLedger
-	durability          recordings.CompletedFlushWatermarkReader
-	projector           factory.WorldStateProjector
-	clock               factory.Clock
-	providerSessions    providersessions.Service
-	replayEvents        []interfaces.FactoryEvent
-	restoredWorldState  *interfaces.FactoryWorldState
-	restoredEventPrefix []interfaces.FactoryEvent
-	recordingID         string
-	recordingReader     recordings.WorkerRecordingReader
-	factorySessionID    string
+	ledger                    recordings.RuntimeLedger
+	durability                recordings.CompletedFlushWatermarkReader
+	projector                 factory.WorldStateProjector
+	clock                     factory.Clock
+	providerSessions          providersessions.Service
+	replayEvents              []interfaces.FactoryEvent
+	restoredWorldState        *interfaces.FactoryWorldState
+	restoredEventPrefix       []interfaces.FactoryEvent
+	recordingID               string
+	recordingReader           recordings.WorkerRecordingReader
+	factorySessionID          string
+	executionFactorySessionID string
+	runtimeID                 string
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
@@ -539,6 +466,7 @@ func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
 	if s == nil || s.Service == nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
+	req.RuntimeID = s.runtimeID
 	result, err := s.Service.ListWorkerSessionObservations(ctx, req)
 	if err == nil || errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		if healthErr := s.applyLiveRecordingHealth(ctx, result.Observations); healthErr != nil {
@@ -711,6 +639,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	scope, err := s.observationReadScope(req.FactorySessionID)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	req.FactorySessionID = scope
 	if s != nil && s.Service != nil {
 		observation, err := s.Service.GetObservation(ctx, req)
 		if err == nil {
@@ -759,6 +692,11 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if err := req.Validate(); err != nil {
 		return workersessions.Observation{}, err
 	}
+	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	req.FactorySessionID = scope
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
@@ -887,6 +825,11 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if err := req.Validate(); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
+	if err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	req.FactorySessionID = scope
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
@@ -1036,4 +979,40 @@ func historicalTranscriptResult(
 		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate historical Worker Session transcript: %w", err)
 	}
 	return result, nil
+}
+
+// observationReadScopeForWorker preserves caller-supplied direct correlation.
+// Runtime aliases translate Factory Workers only; a direct Worker remains at
+// its process-owned address, with explicit foreign selectors rejected first.
+func (s *recordedWorkerSessionObservation) observationReadScopeForWorker(ctx context.Context, workerSessionID, requested string) (string, error) {
+	scope, err := s.observationReadScope(requested)
+	if err != nil || s == nil || s.Service == nil || strings.TrimSpace(workerSessionID) == "" {
+		return scope, err
+	}
+	observation, lookupErr := s.Service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
+	if lookupErr != nil {
+		if errors.Is(lookupErr, context.Canceled) || errors.Is(lookupErr, context.DeadlineExceeded) {
+			return "", lookupErr
+		}
+		// Live identity is optional for retained history and unavailable storage.
+		return scope, nil
+	}
+	if !observation.Direct {
+		return scope, nil
+	}
+	actual := strings.TrimSpace(observation.FactorySessionID)
+	requested = strings.TrimSpace(requested)
+	if !s.directObservationScopeMatches(observation, requested, scope) {
+		return "", workersessions.ErrObservationSessionNotFound
+	}
+	return actual, nil
+}
+
+func (s *recordedWorkerSessionObservation) directObservationScopeMatches(observation workersessions.Observation, requested, scope string) bool {
+	actual := strings.TrimSpace(observation.FactorySessionID)
+	if actual != "" {
+		return requested == "" || actual == requested || actual == scope || actual == strings.TrimSpace(s.factorySessionID)
+	}
+	return requested == "" || requested == "~default" || scope == "~default" ||
+		(s.runtimeID != "" && observation.RuntimeID == s.runtimeID)
 }

@@ -14,6 +14,9 @@ import (
 // workstation and worker taxonomy, prompt, provider target, and tool policy, so
 // this entry point reads no Factory definition and keeps no workstation state.
 type DetachedRequest struct {
+	// Correlation is the immutable admitted execution identity, including the
+	// physical attempt. Final observations must retain it alongside the draft.
+	Correlation workerexecution.ExecutionCorrelation
 	// Attempt is the resolved provider request that every harness turn runs.
 	Attempt workerexecution.RunnerExecutionRequest
 	// ProgressPublisher receives the request-scoped canonical final-message
@@ -88,6 +91,7 @@ func ExecuteDetached(
 	publishAgentFinalMessage(
 		request.ProgressPublisher,
 		request.Attempt.Dispatch.DispatchID,
+		request.Correlation,
 		finalContent,
 	)
 	return result, nil

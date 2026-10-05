@@ -13,6 +13,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
@@ -22,31 +23,33 @@ import (
 )
 
 type orderedWorkerSessionsLifecycle struct {
+	factory.WorkerAttemptOpener
 	workersessions.Service
 	order *[]string
 }
 
 func (s *orderedWorkerSessionsLifecycle) Stop(context.Context) error {
-	*s.order = append(*s.order, "worker-sessions")
+	*s.order = append(*s.order, "process-stop")
+	return errors.New("runtime stopped the process supervisor")
+}
+
+func (s *orderedWorkerSessionsLifecycle) CloseRuntimeAttempts(_ context.Context, runtimeID string) error {
+	*s.order = append(*s.order, runtimeID)
 	return nil
 }
 
-func TestFactoryRuntimeShutdownStopsWorkerSessionsBeforeWorkers(t *testing.T) {
+func TestWorkerSessionRuntimeShutdownClosesOwnedScopesWithoutStoppingSupervisor(t *testing.T) {
+	t.Parallel()
 	order := make([]string, 0, 2)
-	f := &factoryImpl{
-		cfg: &runtimeConfig{
-			workerSessions: &orderedWorkerSessionsLifecycle{
-				Service: &fakeWorkerSessionsService{},
-				order:   &order,
-			},
-		},
+	sessions := &orderedWorkerSessionsLifecycle{order: &order}
+	for _, runtimeID := range []string{"owned-runtime", "peer-runtime"} {
+		f := &factoryImpl{cfg: &runtimeConfig{workerSessions: struct{ workersessions.Service }{sessions}, workerAttempts: sessions, runtimeID: runtimeID}}
+		if err := f.stopDispatchRuntimeLocked(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
+			t.Fatalf("stop runtime %q = %v, want nil", runtimeID, err)
+		}
 	}
-
-	if err := f.stopDispatchRuntimeLocked(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
-		t.Fatalf("stopDispatchRuntimeLocked() error = %v, want nil", err)
-	}
-	if got, want := strings.Join(order, ","), "worker-sessions"; got != want {
-		t.Fatalf("shutdown order = %q, want %q", got, want)
+	if got, want := strings.Join(order, ","), "owned-runtime,peer-runtime"; got != want {
+		t.Fatalf("supervisor controls = %q, want only scoped closes %q", got, want)
 	}
 }
 
