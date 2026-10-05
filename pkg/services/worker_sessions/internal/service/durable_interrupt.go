@@ -178,7 +178,7 @@ func (r *registry) commitInterruptResult(ctx context.Context, operation *recordi
 	safe := result.Clone()
 	safe.Source = workersessions.Session{ID: result.Source.ID, State: result.Source.State}
 	safe.Successor = workersessions.Session{ID: result.Successor.ID, State: result.Successor.State}
-	operation.Result, _ = json.Marshal(safe)
+	operation.Result, _ = json.Marshal(durableInterruptOutcome{InterruptResult: safe, FailureCauses: interruptFailureCodes(interruptErr)})
 	phase := "COMPLETED"
 	if interruptErr != nil {
 		phase = "FAILED"

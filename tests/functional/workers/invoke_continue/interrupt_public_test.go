@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -193,6 +194,61 @@ func TestInterruptRace(t *testing.T) {
 	scenario.runner.release(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
 	_ = replayS8RemoteWorker(t, ctx, scenario.manager, env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
 	assertS8WorkNotAdvanced(t, fixture, scenario.session.id, ids.workA)
+	scenario.close(t)
+}
+
+// The real HTTP host retains its synced operation after the caller disconnects.
+// A scenario-owned command gate separates cancellation from callback return,
+// making the interrupted wait observable without sleeps or shared host locks.
+func TestInterruptCallerDisconnectRetainsOneHostOwnedSuccessor(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	scenario := newS8InterruptScenario(t, ctx, "manager-interrupt-disconnect")
+	defer scenario.runner.releaseAll()
+	ids := scenario.ids
+	callbackReturn := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseCallback := func() { releaseOnce.Do(func() { close(callbackReturn) }) }
+	t.Cleanup(releaseCallback)
+	call := scenario.runner.callFor(scenario.repositoryA.path, s8InterruptCallAInitial)
+	call.cancellationReturn = callbackReturn
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+	})
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
+	callerCtx, disconnect := context.WithCancel(ctx)
+	defer disconnect()
+	callerDone := make(chan error, 1)
+	go func() {
+		_, _, _, err := sendS8InterruptHTTP(callerCtx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+		callerDone <- err
+	}()
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	disconnect()
+	select {
+	case err := <-callerDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("disconnected caller error=%v, want context cancellation", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("disconnected HTTP caller did not return")
+	}
+	if scenario.runner.CallCount() != 1 {
+		t.Fatal("successor admitted before source callback joined")
+	}
+	releaseCallback()
+	first := postS8Interrupt(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	assertS8APIInterruptAdmission(t, first, ids)
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor, scenario.fixture.router.requests)
+	cli := interruptS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+	if !reflect.DeepEqual(cli, s8InterruptResultFromAPI(first)) || scenario.runner.CallCount() != 2 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 1 {
+		t.Fatalf("disconnected retry=%#v, want one cancellation and one successor matching %#v", cli, first)
+	}
+	scenario.runner.release(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
+	_ = replayS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
+	assertS8WorkNotAdvanced(t, scenario.fixture, scenario.session.id, ids.workA)
 	scenario.close(t)
 }
 

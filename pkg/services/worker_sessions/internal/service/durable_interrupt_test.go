@@ -124,6 +124,10 @@ func TestInterruptDurableIntentRechecksAttemptAfterSync(t *testing.T) {
 	if len(store.records) != 2 || store.records[1].Operation.Phase != "FAILED" || store.records[1].Target.ExpectedAttemptID != plan.dispatchID {
 		t.Fatalf("stale facts=%#v", store.records)
 	}
+	replayed, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+	if !found || !errors.Is(replayErr, workersessions.ErrInterruptSourceConflict) || !reflect.DeepEqual(replayed, result) || calls != 0 {
+		t.Fatalf("stale failure replay=%#v found=%v err=%v effects=%d", replayed, found, replayErr, calls)
+	}
 }
 
 func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
@@ -286,4 +290,118 @@ func mutateInterruptReplayFixture(scenario string, req *workersessions.Interrupt
 		record.FailureCode = "untrusted-private-diagnostic"
 	}
 	return recordings.ErrWorkerRecordingPersistence
+}
+
+func TestInterruptJournalReplayPreservesTypedFailureWithoutPrivateDiagnostics(t *testing.T) {
+	t.Parallel()
+	for _, identity := range interruptFailureIdentities() {
+		t.Run(identity.code, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseValidation, false)
+			original := newInterruptError(result.Phase, result, errors.Join(identity.cause, errors.New("private-provider-secret")))
+			if err := r.commitInterruptResult(t.Context(), operation, result, original); err != nil {
+				t.Fatal(err)
+			}
+			replayed, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+			var typed *workersessions.InterruptError
+			if !found || !errors.Is(replayErr, identity.cause) || !errors.As(replayErr, &typed) || !reflect.DeepEqual(replayed, result) || !reflect.DeepEqual(typed.Result, result) {
+				t.Fatalf("failure replay=%#v found=%v err=%v", replayed, found, replayErr)
+			}
+			if strings.Contains(replayErr.Error(), "private-provider-secret") || strings.Contains(string(store.records[len(store.records)-1].Result), "private-provider-secret") {
+				t.Fatal("private diagnostics reached durable failure replay")
+			}
+			assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
+		})
+	}
+}
+
+func TestInterruptJournalReplayRejectsInconsistentCommittedFacts(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"unknown-cause", "duplicate-cause", "unknown-phase", "wrong-source", "source-not-stopped", "wrong-successor", "unknown-state", "successor-not-admitted", "success-with-failure", "success-with-code"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome := durableInterruptOutcome{InterruptResult: interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, true)}
+			outcome.Source = workersessions.Session{ID: "worker", State: workersessions.StateCanceled}
+			outcome.Successor = workersessions.Session{ID: "successor", State: workersessions.StateRunning}
+			operation.Operation.Phase = "COMPLETED"
+			mutateCommittedInterruptFacts(scenario, &outcome, operation)
+			operation.Result, _ = json.Marshal(outcome)
+			store.records = []recordings.WorkerControlOperationRecord{operation.Detached()}
+			calls := 0
+			plan.supervision.installCancel(func() { calls++ })
+			result, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+			if !found || !errors.Is(replayErr, recordings.ErrWorkerRecordingPersistence) || result.Accepted || calls != 0 {
+				t.Fatalf("invalid committed replay=%#v found=%v err=%v effects=%d", result, found, replayErr, calls)
+			}
+			assertNoSuccessor(t, r, "successor")
+		})
+	}
+}
+
+func TestInterruptJournalReplayRetainsJoinedAdmissionCausesAndLegacyFailure(t *testing.T) {
+	t.Parallel()
+	r, plan, store := newDurableInterruptFixture(t)
+	operation, err := r.beginInterruptIntent(t.Context(), plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.advanceInterruptPhase(t.Context(), operation, "SOURCE_STOPPED"); err != nil {
+		t.Fatal(err)
+	}
+	result := interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+	result.Source = workersessions.Session{ID: "worker", State: workersessions.StateCanceled}
+	cause := errors.Join(workersessions.ErrInterruptSuccessorAdmissionFailed, workersessions.ErrContinuationSuccessorConflict, errors.New("private-provider-secret"))
+	if err := r.commitInterruptResult(t.Context(), operation, result, newInterruptError(result.Phase, result, cause)); err != nil {
+		t.Fatal(err)
+	}
+	replayed, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+	if !found || !reflect.DeepEqual(replayed, result) || !errors.Is(replayErr, workersessions.ErrInterruptSuccessorAdmissionFailed) || !errors.Is(replayErr, workersessions.ErrContinuationSuccessorConflict) || strings.Contains(replayErr.Error(), "private-provider-secret") {
+		t.Fatalf("joined admission replay=%#v found=%v err=%v", replayed, found, replayErr)
+	}
+	// Pre-extension journals have only the safe result and stable phase.
+	store.records[len(store.records)-1].Result, _ = json.Marshal(result)
+	replayed, found, replayErr = r.replayDurableInterrupt(t.Context(), plan.request)
+	if !found || !reflect.DeepEqual(replayed, result) || !errors.Is(replayErr, workersessions.ErrInterruptSuccessorAdmissionFailed) {
+		t.Fatalf("legacy admission replay=%#v found=%v err=%v", replayed, found, replayErr)
+	}
+	assertNoSuccessor(t, r, "successor")
+}
+
+func mutateCommittedInterruptFacts(scenario string, outcome *durableInterruptOutcome, operation *recordings.WorkerControlOperationRecord) {
+	switch scenario {
+	case "unknown-cause", "duplicate-cause":
+		operation.Operation.Phase = "FAILED"
+		operation.FailureCode = string(outcome.Phase)
+		outcome.Accepted = false
+		outcome.FailureCauses = []string{"SOURCE_CONFLICT", "SOURCE_CONFLICT"}
+		if scenario == "unknown-cause" {
+			outcome.FailureCauses = []string{"private-untrusted-diagnostic"}
+		}
+	case "unknown-phase":
+		outcome.Phase = "UNKNOWN"
+	case "wrong-source":
+		outcome.Source.ID = "other"
+	case "source-not-stopped":
+		outcome.Source.State = workersessions.StateRunning
+	case "wrong-successor":
+		outcome.Successor.ID = "other"
+	case "unknown-state":
+		outcome.Successor.State = "UNKNOWN"
+	case "successor-not-admitted":
+		outcome.Successor.State = workersessions.StateReserved
+	case "success-with-failure":
+		outcome.FailureCauses = []string{"SOURCE_CONFLICT"}
+	case "success-with-code":
+		operation.FailureCode = string(outcome.Phase)
+	}
 }

@@ -228,6 +228,7 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		"manager-interrupt-single-successor",
 		"manager-interrupt-parity",
 		"manager-interrupt-race",
+		"manager-interrupt-disconnect",
 		"manager-interrupt-failure",
 	} {
 		if err := appendInvokeContinueInterruptScenario(t, rootDir, &setup.scenarios, &setup.routes, name, stdout); err != nil {

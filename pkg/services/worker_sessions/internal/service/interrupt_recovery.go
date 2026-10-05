@@ -76,11 +76,13 @@ func decodeInterruptOutcome(req workersessions.InterruptRequest, record recordin
 	if record.Operation.Phase != "COMPLETED" && record.Operation.Phase != "FAILED" {
 		return result, newInterruptError(result.Phase, result, workersessions.ErrInterruptExecutionUnavailable)
 	}
-	if json.Unmarshal(record.Result, &result) != nil || result.RequestID != req.RequestID || result.SourceWorkerSessionID != req.SourceWorkerSessionID || result.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
+	var outcome durableInterruptOutcome
+	if json.Unmarshal(record.Result, &outcome) != nil || !validInterruptOutcome(req, outcome.InterruptResult) {
 		result = interruptResult(req, workersessions.InterruptPhaseValidation, false)
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
-	if record.Operation.Phase == "COMPLETED" && committedInterruptSucceeded(req, result) {
+	result = outcome.InterruptResult
+	if record.Operation.Phase == "COMPLETED" && committedInterruptSucceeded(req, result) && len(outcome.FailureCauses) == 0 && record.FailureCode == "" {
 		return result, nil
 	}
 	if record.Operation.Phase == "COMPLETED" || record.FailureCode != string(result.Phase) {
@@ -94,11 +96,19 @@ func decodeInterruptOutcome(req workersessions.InterruptRequest, record recordin
 	case workersessions.InterruptPhaseSuccessorAdmission:
 		cause = workersessions.ErrInterruptSuccessorAdmissionFailed
 	}
+	if len(outcome.FailureCauses) > 0 {
+		var err error
+		cause, err = interruptFailureCause(outcome.FailureCauses)
+		if err != nil {
+			result = interruptResult(req, workersessions.InterruptPhaseValidation, false)
+			return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
+		}
+	}
 	return result, newInterruptError(result.Phase, result, cause)
 }
 
 func committedInterruptSucceeded(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {
 	return result.Accepted && result.Phase == workersessions.InterruptPhaseSuccessorAdmission &&
 		result.Source.ID == req.SourceWorkerSessionID && result.Source.State == workersessions.StateCanceled &&
-		result.Successor.ID == req.SuccessorWorkerSessionID
+		result.Successor.ID == req.SuccessorWorkerSessionID && interruptSuccessorAdmittedState(result.Successor.State)
 }
