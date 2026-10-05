@@ -1,0 +1,276 @@
+package observer_test
+
+import (
+ "context"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "strings"
+ "testing"
+ "time"
+
+ "github.com/google/uuid"
+ "github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+ sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+ "github.com/portpowered/infinite-you/pkg/services/work"
+)
+
+type profileCycle struct {
+ Ordinal int `json:"cycle"`
+ SessionID string `json:"factorySessionID"`
+ Generations []string `json:"runtimeGenerationIDs"`
+ RuntimeIDs []string `json:"runtimeInstanceIDs"`
+ Complete bool `json:"complete"`
+ Barriers []profileBarrier `json:"barriers"`
+ Errors []string `json:"errors"`
+ Checkpoints []profileCheckpoint `json:"checkpoints"`
+}
+
+// These callbacks are the driver's unit boundary. They return observations,
+// not testing.Fatal, so a failure always reaches fresh-context owned cleanup.
+type cycleOperations struct {
+ Open func(context.Context,*profileCycle,bool)(string,string,error)
+ Work func(context.Context,*profileCycle,string)error
+ Cancel func(context.Context,*profileCycle)error
+ Close func(context.Context,*profileCycle)error
+ Capture func(*profileCycle,string)(profileCheckpoint,error)
+}
+
+func driveProfileCycles(ctx context.Context,count int,newID func()string,ops cycleOperations,last *string,cleanupErrors *[]string)([]profileCycle,error) {
+ cycles:=[]profileCycle{}
+ if count<1 || count>100{return cycles,fmt.Errorf("unsupported cycle count: %d",count)}
+ seen:=map[string]bool{}
+ for i:=1;i<=count;i++ {
+  c:=profileCycle{Ordinal:i,SessionID:newID(),Generations:[]string{},RuntimeIDs:[]string{},Barriers:[]profileBarrier{},Errors:[]string{},Checkpoints:[]profileCheckpoint{}}
+  if c.SessionID=="" || seen[c.SessionID]{return cycles,fmt.Errorf("missing/duplicate allocated cycle session")}
+  seen[c.SessionID]=true
+  err:=driveProfileCycle(ctx,&c,ops,last,cleanupErrors)
+  cycles=append(cycles,c) // Keep the failed cycle; never replace it with a retry.
+  if err!=nil{return cycles,err}
+ }
+ return cycles,validateProfileCycles(cycles,count)
+}
+
+func driveProfileCycle(ctx context.Context,c *profileCycle,ops cycleOperations,last *string,cleanupErrors *[]string)(result error) {
+ closed:=false
+ defer func(){
+  if !closed {
+   cleanup,stop:=context.WithTimeout(context.Background(),30*time.Second);defer stop()
+   *last="cycle owned cleanup Close"
+   if err:=cycleBarrier(c,*last,func()error{return ops.Close(cleanup,c)});err!=nil{
+    *cleanupErrors=append(*cleanupErrors,err.Error());result=errors.Join(result,err)
+   }
+  }
+  if result!=nil{c.Errors=append(c.Errors,result.Error())}
+  c.Complete=result==nil
+ }()
+ open:=func(replace bool)error {
+  generation,runtimeID,err:=ops.Open(ctx,c,replace)
+  if err!=nil{return err}
+  if generation=="" || runtimeID=="" || !strings.HasPrefix(generation,runtimeID+"-"){return fmt.Errorf("unattributed runtime generation")}
+  if replace && (generation==c.Generations[0] || runtimeID==c.RuntimeIDs[0]){return fmt.Errorf("replacement did not advance runtime identity")}
+  c.Generations=append(c.Generations,generation);c.RuntimeIDs=append(c.RuntimeIDs,runtimeID)
+  return nil
+ }
+ steps:=[]struct{name,stage string;run func()error}{
+  {"explicit Start","",func()error{return open(false)}},
+  {"terminal Work before replacement","CYCLE_OPEN",func()error{return ops.Work(ctx,c,"before-replace")}},
+  {"Cancel terminal acknowledgment","",func()error{return ops.Cancel(ctx,c)}},
+  {"replacement Start and prior cleanup","",func()error{return open(true)}},
+  {"terminal Work after replacement","CYCLE_REPLACED",func()error{return ops.Work(ctx,c,"after-replace")}},
+  {"explicit Close and owned stop","CYCLE_CLOSED",func()error{err:=ops.Close(ctx,c);closed=err==nil;return err}},
+ }
+ for _,step:=range steps {
+  *last=step.name
+  if err:=cycleBarrier(c,step.name,step.run);err!=nil{return err}
+  if step.stage!="" {
+   *last=step.stage+" owner capture"
+   checkpoint,err:=ops.Capture(c,step.stage)
+   if err!=nil{return fmt.Errorf("%s: %w",*last,err)}
+   c.Checkpoints=append(c.Checkpoints,checkpoint)
+   if err=validateCycleCheckpoint(*c,checkpoint);err!=nil{return err}
+  }
+ }
+ return nil
+}
+
+func cycleBarrier(c *profileCycle,name string,run func()error)error {
+ err:=run();b:=profileBarrier{Name:name,Joined:err==nil}
+ if err!=nil{message:=err.Error();b.Error=&message}
+ c.Barriers=append(c.Barriers,b)
+ if err!=nil{return fmt.Errorf("%s: %w",name,err)}
+ return nil
+}
+
+func validateCycleCheckpoint(c profileCycle,checkpoint profileCheckpoint)error {
+ if err:=validateReport(checkpoint.Report);err!=nil{return err}
+ if len(checkpoint.Barriers)==0{return fmt.Errorf("missing cycle checkpoint barrier")}
+ for _,b:=range checkpoint.Barriers{if b.Name=="" || !b.Joined || b.Error!=nil{return fmt.Errorf("failed cycle checkpoint join")}}
+ report:=checkpoint.Report
+ if report.FactorySessionID==nil || *report.FactorySessionID!=c.SessionID{return fmt.Errorf("missing cycle session attribution")}
+ n:=1
+ if checkpoint.Stage=="CYCLE_REPLACED" || checkpoint.Stage=="CYCLE_CLOSED"{n=2}else if checkpoint.Stage!="CYCLE_OPEN"{return fmt.Errorf("invalid cycle stage")}
+ if len(c.Generations)<n || len(c.RuntimeIDs)<n || len(report.RuntimeGenerationIDs)!=n{return fmt.Errorf("missing cycle runtime attribution")}
+ for i:=0;i<n;i++{if report.RuntimeGenerationIDs[i]!=c.Generations[i]{return fmt.Errorf("checkpoint generation mismatch")}}
+ matches:=map[string]int{}
+ for _,owner:=range report.Owners{if owner.Host!=nil{for _,handle:=range owner.Host.Handles{matches[handle.Key]++}}}
+ for i:=0;i<n;i++ {
+  expected:=0;if checkpoint.Stage!="CYCLE_CLOSED" && i==n-1{expected=1}
+  if matches[c.RuntimeIDs[i]]!=expected{return fmt.Errorf("%s runtime %q: got %d handles, require %d",checkpoint.Stage,c.RuntimeIDs[i],matches[c.RuntimeIDs[i]],expected)}
+ }
+ return nil
+}
+
+func validateProfileCycles(cycles []profileCycle,expected int)error {
+ if expected<1 || expected>100 || len(cycles)!=expected{return fmt.Errorf("incomplete cycle workload")}
+ sessionsSeen,runtimes,generations:=map[string]bool{},map[string]bool{},map[string]bool{}
+ for i,c:=range cycles {
+  if c.Ordinal!=i+1 || c.SessionID=="" || sessionsSeen[c.SessionID] || !c.Complete || c.Errors==nil || len(c.Errors)!=0{return fmt.Errorf("failed/duplicate/out-of-order cycle")}
+  sessionsSeen[c.SessionID]=true
+  if len(c.Generations)!=2 || len(c.RuntimeIDs)!=2 || len(c.Checkpoints)!=3 || len(c.Barriers)!=6{return fmt.Errorf("incomplete cycle identities or barriers")}
+  for j,g:=range c.Generations {
+   id:=c.RuntimeIDs[j]
+   if id=="" || !strings.HasPrefix(g,id+"-") || generations[g] || runtimes[id]{return fmt.Errorf("duplicate/unattributed generation")}
+   runtimes[id]=true;generations[g]=true
+  }
+  names:=[]string{"explicit Start","terminal Work before replacement","Cancel terminal acknowledgment","replacement Start and prior cleanup","terminal Work after replacement","explicit Close and owned stop"}
+  for j,b:=range c.Barriers{if b.Name!=names[j] || !b.Joined || b.Error!=nil{return fmt.Errorf("failed/out-of-order cycle join")}}
+  for j,stage:=range []string{"CYCLE_OPEN","CYCLE_REPLACED","CYCLE_CLOSED"} {
+   if c.Checkpoints[j].Stage!=stage{return fmt.Errorf("out-of-order cycle checkpoint")}
+   if err:=validateCycleCheckpoint(c,c.Checkpoints[j]);err!=nil{return err}
+  }
+ }
+ return nil
+}
+
+func (r *sampleProfile) runCycles(t *testing.T,ctx context.Context,service sessions.Service,home,folder string,artifact artifactIdentity,bootstrap []string,count int) {
+ ops:=publicCycleOperations(service,home,folder)
+ ops.Capture=func(c *profileCycle,stage string)(profileCheckpoint,error){
+  var checkpoint profileCheckpoint
+  passed:=t.Run(fmt.Sprintf("cycle-%03d-%s",c.Ordinal,stage),func(t *testing.T){
+   a:=&profileAttempt{SessionID:&c.SessionID,Generations:c.Generations}
+   checkpoint=r.capture(t,artifact,stage,a,bootstrap)
+  })
+  if !passed{return checkpoint,fmt.Errorf("owner capture failed; retain raw output")}
+  return checkpoint,nil
+ }
+ cycles,err:=driveProfileCycles(ctx,count,uuid.NewString,ops,&r.LastBarrier,&r.CleanupErrors)
+ r.Cycles=append(r.Cycles,cycles...)
+ if err!=nil{r.Errors=append(r.Errors,err.Error());t.Error(err)}
+}
+
+func publicCycleOperations(service sessions.Service,home,folder string)cycleOperations {
+ return cycleOperations{
+  Open:func(ctx context.Context,c *profileCycle,replace bool)(string,string,error){
+   runtimeID:=uuid.NewString();label:="open";if replace{label="replace"}
+   result,err:=service.Start(ctx,sessions.SessionStartRequest{SessionID:c.SessionID,Mode:sessions.SessionOperationModeLive,FolderPath:folder,ActivationOnly:true,
+    Correlation:sessions.SessionOperationCorrelation{RequestID:c.SessionID+"-"+label},RuntimeSelection:&sessions.SessionRuntimeSelection{Mode:sessions.SessionRuntimeModeService,SystemConfigHome:home,RuntimeInstanceID:runtimeID}})
+   if err!=nil{return "",runtimeID,err};if result.SessionID!=c.SessionID{return "",runtimeID,fmt.Errorf("Start session mismatch")}
+   projection,err:=service.GetFactorySession(ctx,c.SessionID);if err!=nil{return "",runtimeID,err}
+   if projection.Runtime.StreamIdentity==nil{return "",runtimeID,fmt.Errorf("missing runtime stream identity")}
+   return projection.Runtime.StreamIdentity.StreamGenerationID,runtimeID,nil
+  },
+  Work:func(ctx context.Context,c *profileCycle,label string)error{
+   id:=c.SessionID+"-"+label
+   result,err:=service.Invoke(ctx,sessions.SessionInvokeRequest{SessionID:c.SessionID,Correlation:sessions.SessionOperationCorrelation{RequestID:id},Input:&work.PreparedInvocationInput{Source:work.InputSourcePositionalText,ResolvedInput:&work.ResolvedInput{Source:work.InputSourcePositionalText,Text:id}},Wait:sessions.SessionOperationWait{TimeoutMillis:30000}})
+   if err!=nil{return err};if result.RequestID!=id || result.Status!=sessions.InvocationTerminalStatusCompleted{return fmt.Errorf("Work did not complete: %#v",result)}
+   return nil
+  },
+  Cancel:func(ctx context.Context,c *profileCycle)error{
+   result,err:=service.Control(ctx,sessions.SessionControlRequest{SessionID:c.SessionID,Mode:sessions.SessionOperationModeLive,Operation:sessions.SessionControlCancel,Correlation:sessions.SessionOperationCorrelation{RequestID:c.SessionID+"-cancel"}})
+   if err!=nil{return err};if result.Status!=sessions.LifecycleStatusSucceeded{return fmt.Errorf("Cancel did not acknowledge terminal stop: %#v",result)}
+   return nil
+  },
+  Close:func(ctx context.Context,c *profileCycle)error{
+   result,err:=service.Control(ctx,sessions.SessionControlRequest{SessionID:c.SessionID,Mode:sessions.SessionOperationModeLive,Operation:sessions.SessionControlClose})
+   if errors.Is(err,sessions.ErrSessionNotFound) && len(c.Generations)==0{return nil}
+   if err!=nil{return err};if !result.Closed{return fmt.Errorf("Close did not acknowledge owned stop: %#v",result)}
+   return nil
+  },
+ }
+}
+
+// Unit fixtures exercise only driver sequencing/accounting. They do not claim
+// a public application or Models acquisition; real evidence is the capability.
+func fakeCycleOperations()cycleOperations {
+ return cycleOperations{
+  Open:func(_ context.Context,c *profileCycle,_ bool)(string,string,error){id:=fmt.Sprintf("runtime-%s-%d",c.SessionID,len(c.RuntimeIDs));return id+"-generation",id,nil},
+  Work:func(context.Context,*profileCycle,string)error{return nil},
+  Cancel:func(context.Context,*profileCycle)error{return nil},Close:func(context.Context,*profileCycle)error{return nil},
+  Capture:func(c *profileCycle,stage string)(profileCheckpoint,error){
+   report:=validObserverReport();report.FactorySessionID=&c.SessionID;report.RuntimeGenerationIDs=append([]string{},c.Generations...)
+   host:=&baselineobservation.HostSnapshot{Handles:[]baselineobservation.HandleEntry{}}
+   if stage!="CYCLE_CLOSED"{host.Handles=append(host.Handles,baselineobservation.HandleEntry{Key:c.RuntimeIDs[len(c.RuntimeIDs)-1],HandleIdentity:"detached-handle"});host.HandleCount=1}
+   report.Owners=append(report.Owners,baselineobservation.OwnerSnapshot{Kind:"instance_host",OwnerIdentity:"host",Source:"unit",Host:host});report.Totals.HandleCount=host.HandleCount
+   report.OwnerDiscovery[1].Status="registered";report.OwnerDiscovery[1].OwnerIdentities=[]string{"host"}
+   return profileCheckpoint{Report:report,Stage:stage,Barriers:[]profileBarrier{{Name:"unit joined",Joined:true}}},nil
+  },
+ }
+}
+
+func TestLifecycleProfileDriverCycles(t *testing.T) {
+ t.Parallel()
+ next:=0;last:="";cleanup:=[]string{}
+ cycles,err:=driveProfileCycles(context.Background(),100,func()string{next++;return fmt.Sprint(next)},fakeCycleOperations(),&last,&cleanup)
+ if err!=nil || len(cycles)!=100 || len(cleanup)!=0{t.Fatalf("ordered 100-cycle accounting: %v %d %v",err,len(cycles),cleanup)}
+ for _,c:=range cycles{if c.Checkpoints[2].Report.Owners[0].Leases.LeaseRecords[0].Status!="RELEASED" || c.Checkpoints[2].Report.Totals.CapacityHoldersTotal!=2{t.Fatal("observer erased retained records or multiplicity")}}
+ for _,count:=range []int{0,101}{if _,err=driveProfileCycles(context.Background(),count,uuid.NewString,fakeCycleOperations(),&last,&cleanup);err==nil{t.Fatal("unsupported workload accepted")}}
+}
+
+func TestLifecycleProfileDriverCycleFailures(t *testing.T) {
+ t.Parallel()
+ for _,failAt:=range []string{"open","work-before","cancel","replace","work-after","close","capture"} {
+  t.Run(failAt,func(t *testing.T){
+   ops:=fakeCycleOperations();fault:=errors.New("controlled "+failAt);closed:=0;last:="";cleanup:=[]string{}
+   open:=ops.Open;ops.Open=func(ctx context.Context,c *profileCycle,replace bool)(string,string,error){if (failAt=="open" && !replace) || (failAt=="replace" && replace){return "","",fault};return open(ctx,c,replace)}
+   ops.Work=func(_ context.Context,_ *profileCycle,label string)error{if failAt=="work-before" && label=="before-replace" || failAt=="work-after" && label=="after-replace"{return fault};return nil}
+   ops.Cancel=func(context.Context,*profileCycle)error{if failAt=="cancel"{return fault};return nil}
+   ops.Close=func(ctx context.Context,_ *profileCycle)error{closed++;if ctx.Err()!=nil{t.Error("cleanup inherited canceled context")};if failAt=="close"{return fault};return nil}
+   if failAt=="capture"{ops.Capture=func(*profileCycle,string)(profileCheckpoint,error){return profileCheckpoint{},fault}}
+   cycles,err:=driveProfileCycles(context.Background(),100,uuid.NewString,ops,&last,&cleanup)
+   if !errors.Is(err,fault) || len(cycles)!=1 || cycles[0].Complete || len(cycles[0].Errors)==0 || closed==0 || validateProfileCycles(cycles,100)==nil{t.Fatalf("lost aborted cycle: %v %#v closes=%d",err,cycles,closed)}
+   if failAt=="close" && (closed!=2 || len(cleanup)!=1){t.Fatal("failed stop must retry cleanup and retain both failures")}
+  })
+ }
+}
+
+func TestLifecycleProfileDriverCancellationAndCleanup(t *testing.T) {
+ t.Parallel()
+ ctx,cancel:=context.WithCancel(context.Background());ops:=fakeCycleOperations();cleanupFault:=errors.New("cleanup stop failure");last:="";cleanup:=[]string{}
+ ops.Work=func(ctx context.Context,_ *profileCycle,_ string)error{cancel();return ctx.Err()}
+ ops.Close=func(ctx context.Context,_ *profileCycle)error{if ctx.Err()!=nil{t.Fatal("cleanup context already canceled")};return cleanupFault}
+ cycles,err:=driveProfileCycles(ctx,100,uuid.NewString,ops,&last,&cleanup)
+ if !errors.Is(err,context.Canceled) || !errors.Is(err,cleanupFault) || len(cleanup)!=1 || len(cycles)!=1 || cycles[0].Complete || last!="cycle owned cleanup Close"{t.Fatalf("lost cancellation/join cause: %v %#v",err,cycles)}
+}
+
+func TestLifecycleProfileReportCycleConservation(t *testing.T) {
+ t.Parallel()
+ fresh:=func()[]profileCycle{last:="";cleanup:=[]string{};cycles,err:=driveProfileCycles(context.Background(),1,func()string{return "session"},fakeCycleOperations(),&last,&cleanup);if err!=nil{t.Fatal(err)};return cycles}
+ cases:=[]func([]profileCycle){
+  func(c []profileCycle){c[0].Errors=nil},func(c []profileCycle){c[0].Barriers[0].Joined=false},
+  func(c []profileCycle){c[0].Checkpoints[1].Report.OwnerInventoryComplete=false},
+  func(c []profileCycle){c[0].Checkpoints[1].Report.Owners[1].Host.Handles[0].Key=c[0].RuntimeIDs[0]},
+  func(c []profileCycle){c[0].Checkpoints[0].Report.FactorySessionID=nil},
+  func(c []profileCycle){c[0].Checkpoints[2].Stage="CYCLE_OPEN"},
+  func(c []profileCycle){c[0].Generations[1]=c[0].Generations[0]},
+  func(c []profileCycle){c[0].Checkpoints[2].Barriers=nil},
+  func(c []profileCycle){c[0].Barriers[0].Name="wrong acknowledgment"},
+ }
+ for i,change:=range cases{cycles:=fresh();change(cycles);if validateProfileCycles(cycles,1)==nil{t.Errorf("invalid cycle %d accepted",i)}}
+ cycles:=fresh();cycles=append(cycles,cycles[0]);cycles[1].Ordinal=2
+ if validateProfileCycles(cycles,2)==nil{t.Fatal("duplicate session cycle accepted")}
+ if validateProfileCycles(fresh(),100)==nil{t.Fatal("one diagnostic cycle claimed 100")}
+}
+
+func TestLifecycleProfileDriverRetainsCompletedPrefix(t *testing.T) {
+ t.Parallel()
+ ops:=fakeCycleOperations();next:=0;last:="";cleanup:=[]string{};fault:=errors.New("third cycle aborted")
+ ops.Work=func(_ context.Context,c *profileCycle,_ string)error{if c.Ordinal==3{return fault};return nil}
+ cycles,err:=driveProfileCycles(context.Background(),100,func()string{next++;return fmt.Sprint(next)},ops,&last,&cleanup)
+ if !errors.Is(err,fault) || len(cycles)!=3 || !cycles[0].Complete || !cycles[1].Complete || cycles[2].Complete || len(cycles[2].Checkpoints)!=0{t.Fatalf("lost ordered raw prefix: %v %#v",err,cycles)}
+ if err=validateProfileCycles(cycles[:2],2);err!=nil{t.Fatal(err)}
+ data,err:=json.Marshal(cycles);if err!=nil{t.Fatal(err)}
+ var raw []map[string]json.RawMessage;if err=json.Unmarshal(data,&raw);err!=nil{t.Fatal(err)}
+ for _,field:=range []string{"runtimeGenerationIDs","runtimeInstanceIDs","barriers","errors","checkpoints"}{if string(raw[2][field])=="null" || len(raw[2][field])==0{t.Fatalf("lost known-empty collection %s: %s",field,data)}}
+ if string(raw[2]["checkpoints"])!="[]"{t.Fatal("aborted pre-checkpoint attempt guessed a snapshot")}
+}

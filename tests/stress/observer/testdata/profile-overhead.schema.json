@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Detached lifecycle profile serialization and write receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "reportPath", "reportSHA256", "serializationOutsideSpanNs", "reportWriteOutsideSpanNs", "totalOutsideSpanNs", "receiptSpan"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "reportPath": {"type": "string", "minLength": 1},
+    "reportSHA256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "serializationOutsideSpanNs": {"type": "integer", "minimum": 0},
+    "reportWriteOutsideSpanNs": {"type": "integer", "minimum": 0},
+    "totalOutsideSpanNs": {"type": "integer", "minimum": 0},
+    "receiptSpan": {"const": "receipt encoding/write and raw test logging excluded; outside lifecycle spans"}
+  }
+}
