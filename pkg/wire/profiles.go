@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,10 +111,26 @@ func provideBrowserOpener(edges serviceedges.Edges) platformbrowser.Opener {
 	return provideBrowserOpenerWith(
 		edges,
 		os.LookupEnv,
-		func() platformbrowser.Opener {
-			return platformbrowser.NewHost(runtime.GOOS).Open
-		},
+		hostBrowserOpener,
 	)
+}
+
+var errBrowserLaunchInTestBinary = errors.New(
+	"refusing to launch a real browser from a test binary: inject Edges.BrowserOpener",
+)
+
+// hostBrowserOpener selects the real host browser launcher. A test binary can
+// never reach it: tests that build the process without injecting a
+// BrowserOpener edge get a refusing opener instead of a tab on the desktop.
+func hostBrowserOpener() platformbrowser.Opener {
+	return hostBrowserOpenerFor(testing.Testing(), runtime.GOOS)
+}
+
+func hostBrowserOpenerFor(inTestBinary bool, goos string) platformbrowser.Opener {
+	if inTestBinary {
+		return func(context.Context, string) error { return errBrowserLaunchInTestBinary }
+	}
+	return platformbrowser.NewHost(goos).Open
 }
 
 const browserOpenOptOutEnvironment = "YOU_NO_BROWSER_OPEN"
