@@ -122,6 +122,10 @@ func TestWireSelectionCacheIdentityAndIsolation(t *testing.T) {
 	if first.Name != stable.Name {
 		t.Fatal("caller mutation altered existing snapshot")
 	}
+	result, err := first.Run(&analysis.Pass{Pkg: types.NewPackage(modulePrefix+"pkg/platform/clock", "clock")})
+	if err != nil || !result.(wireChoices).selected["m/pkg/platform/clock.Real"] {
+		t.Fatal("caller mutation altered frozen selection result")
+	}
 }
 
 func TestWireSelectionMetadataFailureDiagnostic(t *testing.T) {

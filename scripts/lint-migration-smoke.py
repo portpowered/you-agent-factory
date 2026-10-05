@@ -463,7 +463,10 @@ def main() -> None:
             fixtures.lint(root, "owners-malformed-debt", [("repolint", "malformed timing baseline key")])
             write(root, "internal/lint/analyzers/baseline.txt", "")
             (root / "pkg/wire/wire.go").unlink()
-            fixtures.lint(root, "wire-missing-compiler-source-cached", [("repolint", "wire-selection-metadata:")])
+            fixtures.lint(root, "wire-missing-compiler-source-cached", [
+            ("repolint", "wire-selection-metadata:"),
+            ("repolint", "package-boundary-metadata:"),
+        ])
             write(root, "pkg/wire/wire.go", "package wire\n")
             fixtures.lint(root, "wire-restored-compiler-source", [])
         if args.cohort in ("baseline", "all"):

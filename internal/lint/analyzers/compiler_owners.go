@@ -116,6 +116,11 @@ func compilerOwnedKeys(text string) ([]string, error) {
 			}
 		}
 		seen[key] = true
+		if parts[0] == "production-default" {
+			if err := validateProductionDefaultKey(parts); err != nil {
+				return nil, err
+			}
+		}
 		if constructionSiteRules[parts[0]] {
 			if err := validateConstructionSiteKey(parts); err != nil {
 				return nil, err
@@ -140,7 +145,7 @@ func ownsCompilerMetadata(rule string) bool {
 			return true
 		}
 	}
-	return rule == "service-container-go-file" || rule == "test-cross-owner-policy" || rule == "test-transport-owner-policy" || rule == "petri-reference" || constructionSiteRules[rule]
+	return rule == "production-default" || rule == "service-container-go-file" || rule == "test-cross-owner-policy" || rule == "test-transport-owner-policy" || rule == "petri-reference" || constructionSiteRules[rule]
 }
 
 func validateTimingOwnerKey(parts []string) error {

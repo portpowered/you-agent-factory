@@ -10,6 +10,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -21,14 +22,20 @@ import (
 // WireSelection validates the compiler input for canonical production choices.
 // The plugin replaces it with an invocation-local snapshot before cache lookup.
 var WireSelection = &analysis.Analyzer{
-	Name: "wireselection",
-	Doc:  "require compiler metadata for canonical Wire production selections",
+	Name:       "wireselection",
+	Doc:        "require compiler metadata for canonical Wire production selections",
+	ResultType: reflect.TypeOf(wireChoices{}),
 	Run: func(pass *analysis.Pass) (any, error) {
-		if unit, ok := unitKey(pass); !ok || unit != "internal/lint/analyzers" {
-			return nil, nil
+		if len(pass.Files) == 0 {
+			return wireChoices{}, nil
 		}
 		return WireSelectionForDirectory(filepath.Dir(pass.Fset.Position(pass.Files[0].Package).Filename)).Run(pass)
 	},
+}
+
+type wireChoices struct {
+	selected map[string]bool
+	err      error
 }
 
 // WireSelectionForDirectory binds compiler-selected files and resolved objects
@@ -149,14 +156,19 @@ func wireSelectionSnapshot(selections map[string]bool, identity string, err erro
 	sort.Strings(symbols)
 	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%v", identity, strings.Join(symbols, "\n"), err)))
 	copy := analysis.Analyzer{
-		Name: fmt.Sprintf("wireselection_%x", digest[:12]),
-		Doc:  "require compiler metadata for canonical Wire production selections",
+		Name:       fmt.Sprintf("wireselection_%x", digest[:12]),
+		Doc:        "require compiler metadata for canonical Wire production selections",
+		ResultType: reflect.TypeOf(wireChoices{}),
+	}
+	frozen := map[string]bool{}
+	for _, symbol := range symbols {
+		frozen[symbol] = true
 	}
 	copy.Run = func(pass *analysis.Pass) (any, error) {
 		if unit, ok := unitKey(pass); ok && unit == "internal/lint/analyzers" && err != nil {
 			pass.Reportf(pass.Files[0].Package, "wire-selection-metadata: %s; restore canonical Wire compiler inputs", err)
 		}
-		return nil, nil
+		return wireChoices{selected: frozen, err: err}, nil
 	}
 	return &copy
 }

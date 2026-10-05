@@ -40,7 +40,10 @@ func New(raw any) (register.LinterPlugin, error) {
 		deferred[name] = true
 	}
 	result := &plugin{}
+	var wire *analysis.Analyzer
+	var boundary *analysis.Analyzer
 	for _, original := range analyzers.All() {
+		isWire := original == analyzers.WireSelection
 		if original == analyzers.BaselineGrowth {
 			original = analyzers.BaselineGrowthForDirectory(".", strings.Join(config.DeferStale, ","))
 		}
@@ -57,7 +60,16 @@ func New(raw any) (register.LinterPlugin, error) {
 		copy.Flags = *flag.NewFlagSet(original.Name, flag.ContinueOnError)
 		copy.Flags.Bool("check-stale", !deferred[original.Name], "reject stale exact debt entries")
 		delete(deferred, original.Name)
+		if isWire {
+			wire = &copy
+		}
+		if original == analyzers.PackageBoundary {
+			boundary = &copy
+		}
 		result.analyzers = append(result.analyzers, &copy)
+	}
+	if boundary != nil {
+		boundary.Requires = []*analysis.Analyzer{wire}
 	}
 	for name := range deferred {
 		return nil, fmt.Errorf("repolint: unknown deferred analyzer %q", name)
