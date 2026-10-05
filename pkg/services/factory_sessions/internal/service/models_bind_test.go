@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -144,6 +145,12 @@ type earlyOpeningDurableExecution struct {
 	events   *[]string
 }
 
+func (*earlyOpeningDurableExecution) RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error {
+	return nil
+}
+
+func (*earlyOpeningDurableExecution) PublishWorkerProgress(workers.ProgressFragment) {}
+
 func (execution *earlyOpeningDurableExecution) Close() error {
 	execution.closes++
 	*execution.events = append(*execution.events, "durable-close")
@@ -204,6 +211,49 @@ func TestRuntimeOpeningRetainsEarlyScopeCleanupBeforeReturningFailure(t *testing
 		})
 	}
 }
+
+// An invalid observation owner must be rejected while its cleanup is already
+// registered, before opening any resources that depend on those observations.
+func TestRuntimeOpeningRejectsMissingObservationsBeforeModelsAndRetainsCleanup(t *testing.T) {
+	t.Parallel()
+	closeErr := errors.New("durable release failed")
+	var events []string
+	closer := &earlyOpeningDurableExecution{closeErr: closeErr, events: &events}
+	execution := &mutationOnlyClosableOpeningOwner{closer: closer}
+	modelsService := &recordingModelsService{events: &events}
+	root := earlyScopeOpeningRoot(execution, modelsService, nil, false)
+	session := factorysessions.SessionStartRequest{
+		SessionID: "invalid-observations", RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			BackendScopeID: "scope", SystemConfigPath: "/operator.json",
+		},
+	}
+	opened, err := root.openRuntimeWithOptions(t.Context(),
+		factorydefinitions.RuntimeSelection{Directory: "/factory", SourcePath: "/factory/factory.json"},
+		factoryruntime.RuntimeSelection{RuntimeInstanceID: "invalid-runtime"}, &session, false,
+		workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorconfig.ResolvedDefaults{},
+		zap.NewNop(), nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "must record mutations and publish worker progress") || !errors.Is(err, closeErr) {
+		t.Fatalf("invalid observation opening = %v, want capability and release failures", err)
+	}
+	if opened.engine != nil || opened.closeArtifacts == nil || len(modelsService.openRequests) != 0 {
+		t.Fatalf("invalid owner opened downstream resources or lost cleanup: %+v, Models=%d", opened, len(modelsService.openRequests))
+	}
+	for range 2 {
+		if err := opened.closeArtifacts(); err != nil {
+			t.Fatalf("retry owned durable cleanup: %v", err)
+		}
+	}
+	if !slices.Equal(events, []string{"durable-close", "durable-close"}) {
+		t.Fatalf("cleanup effects = %v, want failed release plus one successful retry", events)
+	}
+}
+
+type mutationOnlyClosableOpeningOwner struct {
+	mutationOnlyOpeningOwner
+	closer *earlyOpeningDurableExecution
+}
+
+func (owner *mutationOnlyClosableOpeningOwner) Close() error { return owner.closer.Close() }
 
 func earlyScopeOpeningRoot(execution durableexecution.Service, modelService models.Service, openingErr error, durableFailure bool) *Root {
 	recordingRoot := &recordingsRootConstructionStub{}

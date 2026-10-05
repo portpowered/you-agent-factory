@@ -85,6 +85,7 @@ type sessionRuntimeOpening struct {
 	recordingProjections        recordings.ProjectionService
 	providerForDurable          providers.Service
 	durableExecution            DurableExecution
+	observations                factoryruntime.SessionObservations
 	modelsBind                  modelsRuntimeBind
 	resumeInput                 *recordings.LoadResumeInputResult
 	restoredWorldState          *factorydefinitions.FactoryWorldState
@@ -288,6 +289,9 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	if err != nil {
 		return err
 	}
+	if err := opening.bindSessionObservations(); err != nil {
+		return err
+	}
 	setPersistenceWarningLogger(opening.durableExecution.Service, opening.logger)
 	if r.factorySessionsRuntimeAssembly == nil {
 		return fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
@@ -319,6 +323,20 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	if r.automationService == nil {
 		return fmt.Errorf("construct runtime scope: Automations service is required")
 	}
+	return nil
+}
+
+// bindSessionObservations resolves the required scoped handoff while the
+// durable owner is acquired, before any Models or engine resources open.
+// Only this opening retains it; the reusable Root never stores observations.
+func (opening *sessionRuntimeOpening) bindSessionObservations() error {
+	observations, ok := opening.durableExecution.Service.(factoryruntime.SessionObservations)
+	if !ok {
+		return fmt.Errorf(
+			"compose runtime: durable execution owner must record mutations and publish worker progress",
+		)
+	}
+	opening.observations = observations
 	return nil
 }
 
@@ -370,12 +388,6 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 
 func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	var err error
-	observations, ok := opening.durableExecution.Service.(factoryruntime.SessionObservations)
-	if !ok {
-		return fmt.Errorf(
-			"compose runtime: durable execution owner must record mutations and publish worker progress",
-		)
-	}
 	if r.factoryRuntimeAssembler == nil {
 		return fmt.Errorf("construct runtime scope: Factory Runtime assembler is required")
 	}
@@ -421,10 +433,10 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			r.workersMockCommandRunnerFactory,
 			fanOutWorkerProgress(
 				r.factorySessionsRuntimeAssembly.InferenceProgressPublisherFactory(opening.logger),
-				observations.PublishWorkerProgress,
+				opening.observations.PublishWorkerProgress,
 			),
 			r.factorySessionsRuntimeAssembly.DispatchCompletionObserverFactory(),
-			observations.RecordPetriTokenMutations,
+			opening.observations.RecordPetriTokenMutations,
 			opening.recordingProjections.ReconstructFactoryWorldState,
 			r.recordingsRuntime,
 			r.initialFactorySnapshotFactory,
