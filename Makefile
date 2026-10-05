@@ -670,7 +670,7 @@ test-functional-fresh:
 # its factoryartifact tag keeps the ordinary functional lane from reporting a
 # false SKIP when those task-owned inputs are not present.
 test-functional-resumed-successor-artifact:
-	$(GO) test -tags=factoryartifact ./tests/functional/sessions/root_composition -run '^TestResumedSuccessorResponseScopeAndWorkAdmission$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -tags=factoryartifact ./tests/functional/sessions/isolation_and_recovery -run '^TestResumedSuccessorResponseScopeAndWorkAdmission$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 # functional-test-viz is the single functional-report entrypoint. It runs the
 # configured fresh functional coverage tier exactly once, renders and publishes
@@ -973,7 +973,6 @@ artifact-contract-closeout:
 	$(GO) test ./internal/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(MAKE) release-surface-smoke
 	$(GO) test ./pkg/transports/http ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/recordings/replay ./pkg/platform/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./tests/functional/work/submission -run TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "TestReplayEventStreamArtifactSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)

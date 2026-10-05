@@ -251,7 +251,7 @@ jobs:
         timeout-minutes: 8
         run: |
           go test -race -v -p 1 -count=1 -timeout 3m \
-            ./tests/functional/models/root_composition \
+            ./tests/functional/models/local_inference \
             -run 'TestModelsFixedLeaves|TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess'
 
   backend-coverage:

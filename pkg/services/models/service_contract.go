@@ -91,14 +91,6 @@ type Service interface {
 	// cancellation and explicit cancellation converge on the same cancelled
 	// invocation status and released-capacity facts.
 	CancelInvocation(context.Context, CancelInvocationRequest) (CancelInvocationResult, error)
-	// InvokeLocal accepts or declines local/direct invocation and returns a
-	// Models-owned LocalInvocationResult (Handled/not-handled). Missing,
-	// loading, failed, and unsupported readiness fail with distinct typed
-	// outcomes (ErrMissing, ErrLoading, ErrFailed, ErrUnsupported /
-	// InvocationError). Unsupported response modes fail with
-	// ErrUnsupportedResponseMode. Infer stays on this singular root Service;
-	// peers do not import a nested invoker or local-execution gateway.
-	InvokeLocal(context.Context, LocalInvocationRequest) (LocalInvocationResult, error)
 }
 
 // RuntimeBinding is the plain runtime-scope binding request consumed by the

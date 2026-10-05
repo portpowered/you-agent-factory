@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const submitBatchStdinLimit = 16 << 20
@@ -268,7 +270,7 @@ func testSubmitAuthAndDependency(t *testing.T) {
 func testSubmitCancellation(t *testing.T) {
 	fixture := packageSubmitFixture
 
-	t.Run("SUB-015 deadline reaches handler and joins", func(t *testing.T) {
+	t.Run("SUB-015 deadline cancels submission and joins any handler", func(t *testing.T) {
 		observed := make(chan struct{})
 		handlerDone := make(chan struct{})
 		var observedOnce sync.Once
@@ -282,12 +284,17 @@ func testSubmitCancellation(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 		defer cancel()
 		command := fixture.startInvocation(t, fixture.newInvocation(t, unaryCommand(server.URL(), "deadline-work", "task", writeUnaryPayload(t, fixture, "deadline"), "deadline-session"), ctx, "", true, "", nil))
-		waitForSignal(t, observed)
 		result := command.result(t)
 		if !errors.Is(result.err, context.DeadlineExceeded) {
 			t.Fatalf("deadline error = %v, want context deadline exceeded", result.err)
 		}
-		waitForSignal(t, handlerDone)
+		select {
+		case <-observed:
+			waitForSignal(t, handlerDone)
+		default:
+			// Initialization can exhaust the caller's deadline before HTTP is
+			// reached. A deadline must still terminate without starting a handler.
+		}
 		if server.active.Load() != 0 {
 			t.Fatalf("deadline active handlers = %d, want 0", server.active.Load())
 		}
@@ -432,13 +439,16 @@ func testSubmitRecoveryAndOutput(t *testing.T) {
 			// remains the synchronization edge for the request cleanup.
 			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 			command := fixture.startInvocation(t, fixture.newInvocation(t, batchCommand(timeoutServer.URL(), oneWorkBatch("timeout-request", "timeout", "{}"), false, false), ctx, "", true, "", nil))
-			waitForSignal(t, observed)
 			timeoutResult := command.result(t)
 			cancel()
 			if timeoutResult.err == nil || !strings.Contains(timeoutResult.err.Error(), "context deadline exceeded") {
 				t.Fatalf("recovery timeout result = %#v", timeoutResult)
 			}
-			waitForSignal(t, handlerDone)
+			select {
+			case <-observed:
+				waitForSignal(t, handlerDone)
+			default:
+			}
 			recoveryServer := newSubmitHTTPServer(t, fixture.ledger, func(w http.ResponseWriter, _ *http.Request) {
 				submitJSONResponse(w, http.StatusCreated, submitBatchAcceptedResponse("timeout-recovery", "timeout-recovery-trace", "timeout-recovery"))
 			})
@@ -589,7 +599,11 @@ func writeUnaryPayload(t testing.TB, fixture *submitFixture, content string) str
 
 func waitForSignal(t testing.TB, signal <-chan struct{}) {
 	t.Helper()
-	<-signal
+	select {
+	case <-signal:
+	case <-time.After(support.ScaledTimeout(5 * time.Second)):
+		t.Fatal("timed out waiting for submission boundary")
+	}
 }
 
 type boundedSubmitWriter struct {

@@ -182,10 +182,6 @@ func (stub ownedCoverageModelsRoot) ReleaseLease(context.Context, modelinference
 	return modelinference.ErrUnsupportedOperation
 }
 
-func (stub ownedCoverageModelsRoot) InvokeLocal(context.Context, modelinference.LocalInvocationRequest) (modelinference.LocalInvocationResult, error) {
-	return modelinference.LocalInvocationResult{}, modelinference.ErrUnsupportedOperation
-}
-
 type ownedCoverageHTTPClock struct{}
 
 func (ownedCoverageHTTPClock) Now() time.Time { return time.Unix(1, 0) }

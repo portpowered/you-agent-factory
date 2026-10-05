@@ -170,10 +170,6 @@ func (stub compositionModelsRoot) ReleaseLease(context.Context, modelinference.R
 	return modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) InvokeLocal(context.Context, modelinference.LocalInvocationRequest) (modelinference.LocalInvocationResult, error) {
-	return modelinference.LocalInvocationResult{}, modelinference.ErrUnsupportedOperation
-}
-
 type compositionInvocation struct {
 	root      modelinference.Service
 	openScope func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error)

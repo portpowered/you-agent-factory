@@ -89,15 +89,11 @@ func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	localRuntime, err := provideModelLocalRuntime(runner, provideModelRuntimeHTTP(edges), inspect, temp, create)
-	if err != nil {
-		return nil, err
-	}
 	resources, err := provideModelResourceLimiter(now)
 	if err != nil {
 		return nil, err
 	}
-	execution, err := provideModelScopedLocalExecution(scopes, assets, host, localRuntime, resources, now)
+	execution, err := provideModelScopedLocalExecution(scopes, assets)
 	if err != nil {
 		return nil, err
 	}

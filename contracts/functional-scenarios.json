@@ -1364,7 +1364,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/models/root_composition/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
+          "test": "tests/functional/models/local_inference/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
           "boundary": "rest"
         }
       ]

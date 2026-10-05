@@ -1,4 +1,4 @@
-package root_composition_test
+package batch_test
 
 import (
 	"encoding/json"

@@ -228,13 +228,6 @@ func (fake *recordingModelsService) ReleaseLease(
 	return models.ErrUnsupportedOperation
 }
 
-func (fake *recordingModelsService) InvokeLocal(
-	context.Context,
-	models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	return models.LocalInvocationResult{}, models.ErrUnsupportedOperation
-}
-
 func TestBindModelsRuntimeScopeOpensDetachedScope(t *testing.T) {
 	t.Parallel()
 

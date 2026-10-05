@@ -752,15 +752,11 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	localRuntime, err := NewLocalRuntime(runtimeRunner, runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile)
-	if err != nil {
-		return nil, err
-	}
 	resources, err := NewResourceLimiter(localHooks, now)
 	if err != nil {
 		return nil, err
 	}
-	execution, err := NewScopedLocalExecution(runtimeScopes, assetService, runtimeHost, localRuntime, resources, localHooks, now)
+	execution, err := NewScopedLocalExecution(runtimeScopes, assetService)
 	if err != nil {
 		return nil, err
 	}

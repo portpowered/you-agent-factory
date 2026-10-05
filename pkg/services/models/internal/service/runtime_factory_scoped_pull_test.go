@@ -11,8 +11,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
-	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
@@ -40,7 +39,7 @@ func TestRootPullModelForScopeValidatesBeforeRuntimeResolution(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: scopedHandleRequest(t, "cancelled").Scope, Name: "voice"}); !errors.Is(err, context.Canceled) {
+	if _, err := root.PullModelForScope(ctx, models.PullModelRequest{Scope: cancelledPullScope(t), Name: "voice"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled pull error = %v, want context.Canceled", err)
 	}
 }
@@ -938,36 +937,6 @@ func TestKnownRealtimeVoiceReferenceFailsBeforeBackendActivation(t *testing.T) {
 	}
 }
 
-func newLocalExecutor(
-	host modelhost.Host,
-	runtime localmodels.Runtime,
-	resources *localmodels.ResourceLimiter,
-	hooks modelseffects.LocalRuntimeHooks,
-	now func() time.Time,
-) (*localExecutor, error) {
-	if isNilDependency(host) {
-		return nil, missingDependencyError("local executor model host")
-	}
-	return newLocalExecutorWithLeases(
-		func(ctx context.Context, _ models.RuntimeScopeRef, config *models.RuntimeConfig, name, holder string) (modelhost.Lease, error) {
-			return host.AcquireLease(ctx, config, name, modelhost.LeaseOptions{Holder: holder})
-		},
-		func(ctx context.Context, _ models.RuntimeScopeRef, id string) error {
-			return host.ReleaseLease(ctx, id)
-		},
-		runtime, resources, hooks, now,
-	)
-}
-
-func newLocalExecutionFixture(config models.RuntimeConfigLoader, host modelhost.Host,
-	assets localmodels.AssetPuller, runtime localmodels.Runtime, resources *localmodels.ResourceLimiter) (*localExecutionFixture, error) {
-	executor, err := newLocalExecutor(host, runtime, resources, modelseffects.LocalRuntimeHooks{}, time.Now)
-	if err != nil {
-		return nil, err
-	}
-	return &localExecutionFixture{runtimeConfig: config, assetPuller: assets, local: executor}, nil
-}
-
 // prepareJoinedAssetFixture supplies selected operation data to the canonical asset planner.
 func prepareJoinedAssetFixture(
 	request models.InvokeModelRequest,
@@ -980,4 +949,13 @@ func prepareJoinedAssetFixture(
 		Backend: strings.TrimSpace(resolved.Definition.Backend),
 	}
 	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
+}
+
+func cancelledPullScope(t *testing.T) models.RuntimeScopeRef {
+	t.Helper()
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:cancelled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scope
 }

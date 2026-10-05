@@ -22,8 +22,7 @@ const (
 	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
 )
 
-// PullModelForScope uses the same fixed owner as local invocation. Only detached
-// configuration and a scope adapter are selected here; no service graph is built.
+// PullModelForScope selects detached configuration and a scoped asset adapter.
 func (s *scopedLocalExecution) PullModelForScope(ctx context.Context, request models.PullModelRequest) (models.PullResult, error) {
 	if err := models.ValidatePullModelRequest(request); err != nil {
 		return models.PullResult{}, err
@@ -43,7 +42,7 @@ func (s *scopedLocalExecution) PullModelForScope(ctx context.Context, request mo
 	if _, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String())); err != nil {
 		return models.PullResult{}, runtimeScopeError(err)
 	}
-	if err := s.executor.admitInvocation(ctx, request.Scope); err != nil {
+	if err := s.admitInvocation(ctx, request.Scope); err != nil {
 		return models.PullResult{}, err
 	}
 	if config == nil {
@@ -56,7 +55,7 @@ func (s *scopedLocalExecution) PullModelForScope(ctx context.Context, request mo
 	result, err := localmodels.PullModelWithOptions(assets, ctx, config, request.Name, localmodels.PullOptions{
 		RuntimeCacheInspector: assets, SourceResolver: localmodels.DefaultManagedRuntimeSourceResolver(),
 	})
-	if closedErr := s.executor.admitInvocation(ctx, request.Scope); closedErr != nil {
+	if closedErr := s.admitInvocation(ctx, request.Scope); closedErr != nil {
 		return models.PullResult{}, closedErr
 	}
 	return result, err

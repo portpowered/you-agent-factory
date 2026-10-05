@@ -2,6 +2,17 @@
 
 `tests/functional/` is the behavior-first home for functional coverage.
 
+Tests here exercise customer use cases through CLI, MCP, REST, event streams,
+or files produced by those operations. Constructor effect counts, service-contract
+value tests, fixture self-tests, source-file inspections, and CI/Make wiring checks
+belong outside this lane. CI tooling checks live under `tests/tooling/verification`.
+
+Packages name the customer behavior: `models/local_inference`, `models/cli`,
+`sessions/isolation_and_recovery`, `sessions/chat_sessions/acp`,
+`operator_settings/configuration`, `recordings/lifecycle`, `work/admission`, and
+`factory_runtime/execution`. Independent packaged invocation journeys share
+`factory/packaged/invocation` and run in parallel to avoid serializing them.
+
 ## Commands
 
 - Default non-long lane: `make test-functional` (cache-aware developer feedback)
@@ -133,6 +144,9 @@ reject new root-level `providers/*_test.go` aggregate files.
   API smoke coverage for `/status`, `/models`, session routes, and factory
   activation should prefer that seam over hand-built HTTP doubles when the
   goal is startup-path parity.
+- Default API fixtures own a temporary home and model cache. Tests that supply
+  `Env` explicitly must select their scenario-owned cache; cache-override tests
+  remain responsible for their deliberate selection.
 - Provider functional packages must obtain executable processes through
   `tests/functional/internal/support.BuildProcess`; they must not import
   `pkg/root`, `pkg/wire`, initializer or runtime composition internals, service
