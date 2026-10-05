@@ -1031,15 +1031,15 @@ GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository
 endif
 
 # Repository source diagnostics run through the supported module plugin.
-# Standalone baseline/owner enforcement remains until its shared-analyzer port.
 .PHONY: golangci-build repository-lint-run
 ifeq ($(GOLANGCI_PREBUILT),1)
 golangci-build:
 	@test -f "$(GOLANGCI_REPOSITORY)"
+	@test -f "$(GOLANGCI_DIR)/host-path.txt"
 else
 golangci-build:
-	$(GO) test ./tools/golangcilintplugin
-	$(GOLANGCI_LINT) custom --destination "$(GOLANGCI_DIR)"
+	$(GO) test ./internal/lint/analyzers ./tools/golangcilintplugin
+	$(PYTHON) scripts/build-golangci.py --destination "$(GOLANGCI_DIR)" -- $(GOLANGCI_LINT) custom --destination "$(GOLANGCI_DIR)"
 endif
 
 repository-lint-run: golangci-build
@@ -1061,8 +1061,8 @@ golangci-lint-run:
 	@git merge-base HEAD origin/main
 	$(GOLANGCI_LINT) run ./...
 
-deadcode:
-	$(call run_lint_checker,./cmd/deadcodecheck,)
+deadcode: golangci-build
+	$(call run_lint_checker,./cmd/deadcodecheck,-golangci-host-file "$(GOLANGCI_DIR)/host-path.txt")
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode

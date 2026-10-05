@@ -62,35 +62,97 @@ func TestMainRoutesThroughCommandMain(t *testing.T) {
 }
 
 func TestRunDeadcodeExcludesTestExecutablesAndUsesGoTypesAliasEnvironment(t *testing.T) {
+	prepareGeneratedHost(t)
 	restoreExecCommand(t)
 	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
 	t.Setenv("DEADCODECHECK_HELPER_STDOUT", "pkg/foo.go: Example\n")
 	t.Setenv("GODEBUG", "gocachehash=1,gotypesalias=0")
 
-	var captured *exec.Cmd
+	var captured []*exec.Cmd
 	execCommand = func(name string, args ...string) *exec.Cmd {
-		captured = fakeDeadcodecheckCommand(name, args...)
-		return captured
+		cmd := fakeDeadcodecheckCommand(name, args...)
+		captured = append(captured, cmd)
+		return cmd
 	}
+	report, err := runDeadcode(hostPathFile)
+	if err != nil || report != "pkg/foo.go: Example\n" {
+		t.Fatalf("runDeadcode() report=%q error=%v", report, err)
+	}
+	if len(captured) != 3 {
+		t.Fatalf("commands = %d, want repository analysis, host analysis and compiler ownership", len(captured))
+	}
+	for i, cmd := range captured {
+		if slices.Contains(cmd.Args, "-test") {
+			t.Fatalf("tests must not be reachability roots: %v", cmd.Args)
+		}
+		if !envContains(cmd.Env, "GODEBUG=gocachehash=1,gotypesalias=1") || !envContains(cmd.Env, "GOWORK=off") {
+			t.Fatalf("command %d environment missing compiler policy: %v", i, cmd.Env)
+		}
+		if cmd.Dir != mustWorkingDirectory(t) {
+			t.Fatalf("command directory = %q, want fixture module", cmd.Dir)
+		}
+	}
+	for i, pattern := range []string{"./...", "./cmd/golangci-lint"} {
+		args := captured[i].Args
+		if args[len(args)-1] != pattern || !slices.Contains(args, deadcodeTool) || !slices.Contains(args, "-filter=^github\\.com/portpowered/infinite-you(/|$)") {
+			t.Fatalf("production analysis args = %v", args)
+		}
+	}
+	if !slices.Contains(captured[2].Args, "list") || !slices.Contains(captured[2].Args, "-deps") {
+		t.Fatalf("ownership must come from compiler dependencies: %v", captured[2].Args)
+	}
+}
 
-	report, err := runDeadcode()
-	if err != nil {
-		t.Fatalf("runDeadcode() error = %v, want nil", err)
+func TestRunDeadcodeFailsWithoutGeneratedHost(t *testing.T) {
+	chdirForTest(t, t.TempDir())
+	if _, err := runDeadcode(hostPathFile); err == nil || !strings.Contains(err.Error(), "read generated golangci host") {
+		t.Fatalf("missing host error = %v", err)
 	}
-	if report != "pkg/foo.go: Example\n" {
-		t.Fatalf("runDeadcode() report = %q, want helper stdout", report)
+	if err := os.WriteFile("host.txt", []byte("relative/host"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if captured == nil {
-		t.Fatal("runDeadcode() did not create a subprocess command")
+	if _, err := runDeadcode("host.txt"); err == nil || !strings.Contains(err.Error(), "must be absolute") {
+		t.Fatalf("relative host error = %v", err)
 	}
-	if got := captured.Args; len(got) < 6 || got[len(got)-4] != "go" || got[len(got)-3] != "run" || got[len(got)-2] != deadcodeTool || got[len(got)-1] != "./..." {
-		t.Fatalf("runDeadcode() args = %v, want go run %s ./...", captured.Args, deadcodeTool)
+}
+
+func TestValidateHostModuleRejectsMissingMalformedAndWrongCheckout(t *testing.T) {
+	root := t.TempDir()
+	host := t.TempDir()
+	for _, data := range []string{
+		"not a go module", "module example.test/other\n",
+		"module github.com/golangci/golangci-lint/v2\n",
+		"module github.com/golangci/golangci-lint/v2\nreplace " + repositoryModule + " => " + filepath.ToSlash(host) + "\n",
+	} {
+		if err := os.WriteFile(filepath.Join(host, "go.mod"), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := validateHostModule(host, root); err == nil {
+			t.Fatalf("accepted invalid host module %q", data)
+		}
 	}
-	if slices.Contains(captured.Args, "-test") {
-		t.Fatalf("runDeadcode() args = %v, must not treat tests as production reachability roots", captured.Args)
+	if err := validateHostModule(t.TempDir(), root); err == nil {
+		t.Fatal("accepted absent host module")
 	}
-	if !envContains(captured.Env, "GODEBUG=gocachehash=1,gotypesalias=1") {
-		t.Fatalf("runDeadcode() env = %v, want gotypesalias enabled", captured.Env)
+}
+
+func TestRepositoryPositionsPreservesDeadAnalyzerAndPluginFunctions(t *testing.T) {
+	root := t.TempDir()
+	host := t.TempDir()
+	for _, source := range []string{"internal/lint/analyzers/rule.go", "tools/golangcilintplugin/plugin.go", "pkg/product.go"} {
+		relative, err := filepath.Rel(host, filepath.Join(root, source))
+		if err != nil {
+			t.Fatal(err)
+		}
+		report, err := repositoryPositions(relative+":12:4: unreachable func: Abandoned\n", host, root)
+		if err != nil || normalizeReport(report) != source+": unreachable func: Abandoned\n" {
+			t.Fatalf("finding %q: report=%q error=%v", source, report, err)
+		}
+	}
+	for _, report := range []string{"malformed", filepath.Join(host, "outside.go") + ":1:2: unreachable func: Outside"} {
+		if _, err := repositoryPositions(report, host, root); err == nil {
+			t.Fatalf("accepted invalid report %q", report)
+		}
 	}
 }
 
@@ -245,6 +307,7 @@ func TestRunBaselineDriftReportsCurrentAndBaselinePaths(t *testing.T) {
 }
 
 func TestRunDeadcodeFailurePreservesContextAndToolStderr(t *testing.T) {
+	prepareGeneratedHost(t)
 	restoreExecCommand(t)
 	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
 	t.Setenv("DEADCODECHECK_HELPER_STDERR", "fake deadcode stderr\n")
@@ -264,7 +327,7 @@ func TestRunDeadcodeFailurePreservesContextAndToolStderr(t *testing.T) {
 	}
 
 	errOutput := stderr.String()
-	if !strings.Contains(errOutput, "run deadcode:") {
+	if !strings.Contains(errOutput, "run deadcode in ") {
 		t.Fatalf("run() stderr = %q, want run deadcode context", errOutput)
 	}
 	if !strings.Contains(errOutput, "fake deadcode stderr") {
@@ -279,9 +342,8 @@ func TestRunSuccessfulDeadcodePassesThroughToolStderr(t *testing.T) {
 	t.Setenv("DEADCODECHECK_HELPER_STDERR", "fake deadcode stderr\n")
 	execCommand = fakeDeadcodecheckCommand
 
-	tempDir := t.TempDir()
-	writeDeadcodeBaseline(t, tempDir, "pkg/foo.go: Example\n")
-	chdirForTest(t, tempDir)
+	prepareGeneratedHost(t)
+	writeDeadcodeBaseline(t, mustWorkingDirectory(t), "pkg/foo.go: Example\n")
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -318,8 +380,8 @@ func TestRunSuccessfulDeadcodePassesThroughToolStderr(t *testing.T) {
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty command stderr on successful passthrough", got)
 	}
-	if got := string(passthroughStderr); got != "fake deadcode stderr\n" {
-		t.Fatalf("passthrough stderr = %q, want helper stderr", got)
+	if got := string(passthroughStderr); got != "fake deadcode stderr\nfake deadcode stderr\n" {
+		t.Fatalf("passthrough stderr = %q, want stderr from both production analyses", got)
 	}
 }
 
@@ -469,7 +531,11 @@ func TestDeadcodecheckHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_DEADCODECHECK_HELPER") != "1" {
 		return
 	}
-	fmt.Fprint(os.Stdout, os.Getenv("DEADCODECHECK_HELPER_STDOUT"))
+	if slices.Contains(os.Args, "list") {
+		fmt.Fprint(os.Stdout, os.Getenv("DEADCODECHECK_HELPER_PACKAGES"))
+	} else {
+		fmt.Fprint(os.Stdout, os.Getenv("DEADCODECHECK_HELPER_STDOUT"))
+	}
 	fmt.Fprint(os.Stderr, os.Getenv("DEADCODECHECK_HELPER_STDERR"))
 	if os.Getenv("DEADCODECHECK_HELPER_FAIL") == "1" {
 		os.Exit(1)
@@ -481,7 +547,7 @@ func stubDeadcodecheckCommand(t *testing.T, report string, err error) func() {
 	t.Helper()
 
 	original := runDeadcodeCommand
-	runDeadcodeCommand = func() (string, error) {
+	runDeadcodeCommand = func(_ string) (string, error) {
 		return report, err
 	}
 	return func() {
@@ -541,4 +607,59 @@ func envContains(env []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func prepareGeneratedHost(t *testing.T) {
+	t.Helper()
+	root := t.TempDir()
+	chdirForTest(t, root)
+	if err := os.MkdirAll(filepath.Dir(hostPathFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hostPathFile, []byte(root+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	module := "module github.com/golangci/golangci-lint/v2\nreplace " + repositoryModule + " => " + filepath.ToSlash(root) + "\n"
+	if err := os.WriteFile("go.mod", []byte(module), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("DEADCODECHECK_HELPER_PACKAGES", filepath.Join(root, "internal/lint/analyzers")+"\n"+filepath.Join(root, "tools/golangcilintplugin")+"\n"+filepath.Join(root, "pkg"))
+
+}
+
+func mustWorkingDirectory(t *testing.T) string {
+	t.Helper()
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestReconcileProductionReportsKeepsUnreachableFunctionsInEveryPackage(t *testing.T) {
+	repository := "internal/lint/analyzers/rule.go:1:2: unreachable func: LiveInHost\n" +
+		"internal/lint/analyzers/rule.go:3:4: unreachable func: Abandoned\n" +
+		"tools/golangcilintplugin/plugin.go:5:6: unreachable func: New\n" +
+		"tools/golangcilintplugin/plugin.go:7:8: unreachable func: Abandoned\n" +
+		"pkg/product.go:9:10: unreachable func: TestsOnly\n"
+	host := "internal/lint/analyzers/rule.go:3:4: unreachable func: Abandoned\n" +
+		"tools/golangcilintplugin/plugin.go:7:8: unreachable func: Abandoned\n"
+	packages := map[string]bool{"internal/lint/analyzers": true, "tools/golangcilintplugin": true}
+	want := normalizeReport(host + "pkg/product.go:9:10: unreachable func: TestsOnly\n")
+	if got := reconcileProductionReports(repository, host, packages); got != want {
+		t.Fatalf("reconciled report = %q, want %q", got, want)
+	}
+}
+
+func TestHostRepositoryPackagesRejectsIncompleteCompilerGraph(t *testing.T) {
+	prepareGeneratedHost(t)
+	restoreExecCommand(t)
+	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
+	t.Setenv("DEADCODECHECK_HELPER_PACKAGES", filepath.Join(mustWorkingDirectory(t), "tools/golangcilintplugin"))
+	execCommand = fakeDeadcodecheckCommand
+	root := mustWorkingDirectory(t)
+	if _, err := hostRepositoryPackages(root, root); err == nil || !strings.Contains(err.Error(), "does not compile") {
+		t.Fatalf("incomplete graph error = %v", err)
+	}
 }

@@ -183,6 +183,13 @@ Backend quality **MUST** be enforced mechanically wherever possible.
 Rules:
 
 - Formatting, linting, vetting, and dead-code checks **MUST** pass before merge.
+- Production dead-code analysis includes both repository entrypoints and the
+  actual generated golangci module host retained by `make golangci-build`.
+  Each program uses its own production module graph; compiler-declared host
+  package ownership reconciles the two reachability reports.
+  Tests are not reachability roots; unreachable plugin/analyzer functions
+  remain findings. Missing host metadata fails closed, and baseline updates
+  remain deletion-only for checker retirement.
 - The repository **SHOULD** maintain static rules for prohibited patterns rather than relying on tribal knowledge.
 - Repository checks **SHOULD** enforce constructor placement, prohibit dependency-container grab bags, and detect operational package-level functions as these rules become mechanically identifiable.
 - Magic values **SHOULD NOT** appear inline when a named constant, type, or helper would communicate intent better.
