@@ -3469,7 +3469,7 @@ func TestCancelControlWaitsForConcurrentControl(t *testing.T) {
 	close(supervision.controlDone)
 	r.supervisions[sessionID] = supervision
 
-	result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: sessionID}, workersessions.ControlActionCancel, false)
+	result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: sessionID}, workersessions.ControlActionCancel, false, frozenControlTarget{supervision: supervision, dispatchID: supervision.dispatchID})
 	if err != nil || !retry || result != (workersessions.ControlResult{}) {
 		t.Fatalf("cancelControlIteration(concurrent control) = %#v, %t, %v, want retry", result, retry, err)
 	}
@@ -6426,7 +6426,7 @@ func TestPauseAndCancelIterationRejectMissingControlTargets(t *testing.T) {
 	if result, retry, err := r.pauseIteration(context.Background(), workersessions.ControlRequest{ID: "missing"}); retry || !errors.Is(err, workersessions.ErrSessionNotFound) || result.Outcome != workersessions.ControlOutcomeFailed {
 		t.Fatalf("pauseIteration(missing) = %#v, %t, %v, want failed missing target", result, retry, err)
 	}
-	if result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: "missing"}, workersessions.ControlActionCancel, false); retry || !errors.Is(err, workersessions.ErrSessionNotFound) || result.Outcome != workersessions.ControlOutcomeFailed {
+	if result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: "missing"}, workersessions.ControlActionCancel, false, frozenControlTarget{}); retry || !errors.Is(err, workersessions.ErrSessionNotFound) || result.Outcome != workersessions.ControlOutcomeFailed {
 		t.Fatalf("cancelControlIteration(missing) = %#v, %t, %v, want failed missing target", result, retry, err)
 	}
 }

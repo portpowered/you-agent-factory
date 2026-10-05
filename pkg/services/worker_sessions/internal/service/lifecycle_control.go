@@ -230,7 +230,8 @@ func (r *registry) prepareContinuation(
 	if !supervision.accepted || supervision.dispatchID == "" ||
 		association.DispatchID != supervision.dispatchID || association.AttemptID != supervision.dispatchID ||
 		strings.TrimSpace(association.TurnID) != strings.TrimSpace(supervision.turnID) ||
-		supervision.continuing || supervision.publishing {
+		supervision.continuing || supervision.publishing || supervision.controlActive ||
+		supervision.requestedAction != "" || supervision.controlAction != "" {
 		return workers.WorkstationDispatchRequest{}, "", false
 	}
 	previousDispatchID := supervision.dispatchID
@@ -319,12 +320,16 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 	if attempt := r.runtimeAttemptFor(req.ID); attempt != nil {
 		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, attempt)
 	}
+	target, err := r.freezeControlTarget(req.ID)
+	if err != nil {
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
 	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
 	if err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	for {
-		result, retry, iterationErr := r.cancelControlIteration(ctx, req, action, detachContext)
+		result, retry, iterationErr := r.cancelControlIteration(ctx, req, action, detachContext, target)
 		if !retry {
 			r.finishControlHistory(reservation, controlResultOutcome(result, iterationErr), result.DispatchID, result.Session.State)
 			return result, iterationErr
@@ -337,10 +342,13 @@ func (r *registry) cancelControlIteration(
 	req workersessions.ControlRequest,
 	action workersessions.ControlAction,
 	detachContext bool,
+	target frozenControlTarget,
 ) (workersessions.ControlResult, bool, error) {
-	session, supervision, err := r.controlTarget(req.ID)
+	session, attempt, err := r.claimFrozenCancellation(req.ID, action, target)
+	supervision := target.supervision
 	if err != nil {
-		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, false, err
+		r.logger.Warn("worker session control refused", "sessionID", publicWorkerID(req.ID), "attemptID", target.dispatchID, "action", string(action), "outcome", string(workersessions.ControlOutcomeFailed))
+		return workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: target.dispatchID}, false, err
 	}
 	if session.Terminal() {
 		return r.controlNoop(req.ID, action, session, supervision), false, nil
@@ -352,15 +360,14 @@ func (r *registry) cancelControlIteration(
 		final, _ := r.commitControlTerminal(req.ID, controlTerminalState(action))
 		return r.controlApplied(req.ID, action, final, nil), false, nil
 	}
-	if session.State == workersessions.StatePaused {
+	if attempt.kind == cancellationAttemptPaused {
 		return r.terminalizePausedControl(req.ID, action, supervision), false, nil
 	}
 
-	attempt := supervision.beginCancellation(action)
 	r.logger.Info(
 		"worker session control claimed",
 		"sessionID", publicWorkerID(req.ID),
-		"attemptID", supervision.dispatchID,
+		"attemptID", target.dispatchID,
 		"action", string(action),
 		"attempt", cancellationAttemptName(attempt.kind),
 	)
@@ -633,6 +640,7 @@ const (
 	cancellationAttemptWait
 	cancellationAttemptBeforeAdmission
 	cancellationAttemptBoundary
+	cancellationAttemptPaused
 )
 
 type cancellationAttempt struct {
@@ -792,6 +800,10 @@ func (s *supervision) clearDeadlineExceeded() {
 func (s *supervision) beginCancellation(action workersessions.ControlAction) cancellationAttempt {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.beginCancellationLocked(action)
+}
+
+func (s *supervision) beginCancellationLocked(action workersessions.ControlAction) cancellationAttempt {
 	if s.interrupting {
 		return cancellationAttempt{kind: cancellationAttemptWait, wait: s.interruptDone}
 	}
