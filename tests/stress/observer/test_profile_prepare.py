@@ -1,15 +1,57 @@
 """Preparation failure behavior; no repository topology assertions."""
 import argparse
+import json
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 import unittest
 from unittest.mock import patch
 import prepare
+import profile_prepare
 from preparation_environment import owned_paths, child_environment, seed_inputs
 
 
 class ProfilePreparationTests(unittest.TestCase):
+    def test_handoff_publishes_supported_absolute_profile_invocation(self):
+        # Component contract: fake compilation, inspect the emitted validator handoff.
+        # Owned files exercise serialization/hashing without Go or application builds.
+        with tempfile.TemporaryDirectory(prefix='profile handoff ') as tmp:
+            root = Path(tmp)
+            tool, output = root / 'tool', root / 'output'
+            output.mkdir()
+            (tool / 'testdata').mkdir(parents=True)
+            for name in ('lifecycle-tests.go.txt', 'profile-tests.go.txt',
+                         'profile-cycles.go.txt', 'profile-report.go.txt',
+                         'profile-model-gate.go.txt'):
+                (tool / 'testdata' / name).write_text('fixture')
+            (tool / 'testdata/profile-manifest.schema.json').write_text('{}')
+            (output / 'overlay.json').write_text('{}')
+            (output / 'manifest.json').write_text('{}')
+            manifest = dict(sourceCommit=prepare.PIN, sourceStatus='',
+                            toolSourceCommit='1' * 40, goVersion='go1.25.0')
+
+            def compile_artifact(command, **kwargs):
+                Path(command[command.index('-o') + 1]).write_bytes(b'prebuilt fixture')
+                return subprocess.CompletedProcess(command, 0)
+
+            for mode in ('pin', 'candidate'):
+                with self.subTest(mode=mode), patch.object(profile_prepare.subprocess, 'run', side_effect=compile_artifact), patch.object(profile_prepare.subprocess, 'check_output', side_effect=['go1.25.0 build info', '2' * 40]):
+                    profile_prepare.build_profile(root / 'source', output, tool,
+                                                  manifest, [], mode, {}, 'go', {}, [])
+                report = json.loads((output / 'profile-manifest.json').read_text())
+                artifact = Path(report['identity']['artifactPath'])
+                self.assertTrue(artifact.is_absolute())
+                self.assertEqual(report['identity']['artifactSHA256'], profile_prepare.sha(artifact))
+                self.assertEqual(report['identity']['mode'], mode)
+                self.assertEqual(report['profileCommand'], subprocess.list2cmdline([
+                    str(artifact), '-test.run=^TestLifecycleProfile$', '-test.short=false',
+                    '-test.count=1', '-test.timeout=10m', '-test.v']))
+                self.assertEqual(report['capabilityCommand'], subprocess.list2cmdline([
+                    str(artifact), '-test.run=^TestLifecycleProfileCapability$',
+                    '-test.short=false', '-test.count=1', '-test.timeout=5m', '-test.v']))
+                self.assertEqual((output / 'profile-manifest.schema.json').read_text(), '{}')
+
     def arguments(self, root):
         return argparse.Namespace(source_workspace=str(root / 'source'), output=str(root / 'output'), mode='pin', build_profile=True)
 

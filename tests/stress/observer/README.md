@@ -331,6 +331,14 @@ open/replace/close cycles and three composed Models scenarios. It requires the
 operator's explicit no-co-tenant window authority before any construction. Only
 in that confirmed window, run the supplied prebuilt artifact (no build):
 
+The handoff's `profileCommand` contains the absolute artifact invocation with the
+exact full selector, `-test.short=false`, one run and a 10-minute timeout. Before
+running it, apply the manifest's owned `childPaths` environment as above, set
+`OBSERVER_PROFILE_MANIFEST` and the absolute `OBSERVER_REPORT` destination, and
+set `OBSERVER_HOST_WINDOW_REFERENCE` to the operator's confirmed no-co-tenant
+window authority. The command alone does not authorize a measurement window;
+without that reference the selector refuses before construction.
+
 ```powershell
 $env:OBSERVER_HOST_WINDOW_REFERENCE = '<absolute operator authority record or approved window ID>'
 $env:OBSERVER_PROFILE_MANIFEST = Join-Path $pinOutput 'profile-manifest.json'

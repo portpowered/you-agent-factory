@@ -14,7 +14,7 @@ def sha(path):
 
 def build_profile(source, output, tool, manifest, files, mode,
                   env, go_command, preparation_paths, seed_records):
-    artifact = output / ("observer.test.exe" if os.name == "nt" else "observer.test")
+    artifact = (output / ("observer.test.exe" if os.name == "nt" else "observer.test")).resolve()
     command = [go_command, "test", "-c", "-overlay", str(output / "overlay.json"),
                "-p", "1", "-o", str(artifact), "./tests/stress/observer"]
     with (output / "build.stdout.txt").open("w") as stdout, (output / "build.stderr.txt").open("w") as stderr:
@@ -57,6 +57,6 @@ def build_profile(source, output, tool, manifest, files, mode,
                       name.encode() + b"\0" + (tool / "testdata" / name).read_bytes() + b"\0"
                       for name in ("profile-tests.go.txt", "profile-cycles.go.txt", "profile-report.go.txt", "profile-model-gate.go.txt"))).hexdigest(),
                   instrumentation=instrumentation,
-                  profileCommand="unsupported until composed public Models capacity is implemented; joined cycle driver supplied",
+                  profileCommand=subprocess.list2cmdline([str(artifact), "-test.run=^TestLifecycleProfile$", "-test.short=false", "-test.count=1", "-test.timeout=10m", "-test.v"]),
                   capabilityCommand=subprocess.list2cmdline([str(artifact), "-test.run=^TestLifecycleProfileCapability$", "-test.short=false", "-test.count=1", "-test.timeout=5m", "-test.v"]))
     (output / "profile-manifest.json").write_text(json.dumps(report, indent=2) + "\n")
