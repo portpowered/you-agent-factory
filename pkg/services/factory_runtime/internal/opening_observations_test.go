@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
@@ -13,7 +14,6 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -103,7 +103,7 @@ func (effect *observationOpeningEffect) Open(
 	_ *definitions.FactorySnapshot, _ *definitions.FactoryWorldState, _ bool,
 	_ []factory.SubmissionHook, _ factory.CompletionDeliveryPlanner,
 	mutation factory.PetriMutationRecorder,
-	_ recordings.RuntimeScopeService, worker workers.Service, _ workersessions.Service,
+	_ time.Duration, _ []definitions.FactoryEvent, worker workers.Service, _ workersessions.Service,
 	_ factory.WorkerAttemptOpener, _ func(string), _ ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
 	effect.calls = append(effect.calls, observationOpeningCall{mutation: mutation, worker: worker})

@@ -68,6 +68,7 @@ func NewRuntimeFactory(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	worldStateProjector factoryruntime.WorldStateProjector,
+	recordingsRuntime recordings.RuntimeScopeService,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
 		loggerFactory,
@@ -82,7 +83,7 @@ func NewRuntimeFactory(
 		workerAttemptScheduler,
 		definitionMapper,
 		engineOpening,
-		submissionRecorder, dispatchRecorder, worldStateProjector,
+		submissionRecorder, dispatchRecorder, worldStateProjector, recordingsRuntime,
 	)
 }
 

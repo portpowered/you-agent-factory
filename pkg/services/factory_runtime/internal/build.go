@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sync"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -57,6 +58,7 @@ type RuntimeFactory struct {
 	submissionRecorder       recordings.SubmissionRecorder
 	dispatchRecorder         recordings.DispatchRecorder
 	worldStateProjector      factory.WorldStateProjector
+	recordingsRuntime        recordings.RuntimeScopeService
 }
 
 func NewRuntimeFactory(
@@ -75,6 +77,7 @@ func NewRuntimeFactory(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	worldStateProjector factory.WorldStateProjector,
+	recordingsRuntime recordings.RuntimeScopeService,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		loggerFactory:            loggerFactory,
@@ -92,6 +95,7 @@ func NewRuntimeFactory(
 		submissionRecorder:       submissionRecorder,
 		dispatchRecorder:         dispatchRecorder,
 		worldStateProjector:      worldStateProjector,
+		recordingsRuntime:        recordingsRuntime,
 	}
 }
 
@@ -129,7 +133,8 @@ func (f *RuntimeFactory) Build(
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
-	recordingsRuntime recordings.RuntimeScopeService,
+	recordFlushInterval time.Duration,
+	resumeCanonicalEvents []interfaces.FactoryEvent,
 	workerService workers.Service,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
@@ -233,7 +238,7 @@ func (f *RuntimeFactory) Build(
 	}
 
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(runnerID, loadedFactoryCfg.FactoryConfig())
-	if recordingsRuntime == nil {
+	if f.recordingsRuntime == nil {
 		return nil, fmt.Errorf("Recordings runtime opening is required")
 	}
 	loaded, ok := loadedFactoryCfg.(interfaces.LoadedFactorySource)
@@ -254,8 +259,10 @@ func (f *RuntimeFactory) Build(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
+	opened, openErr := f.recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
 		Topology:           net,
+		FlushInterval:      recordFlushInterval,
+		ReplayEvents:       cloneFactoryEvents(resumeCanonicalEvents),
 		Definitions:        loadedFactoryCfg,
 		LoadedFactory:      loaded,
 		Now:                clock.Now,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -210,21 +209,6 @@ func (service runtimeWorkersServiceWithProgress) ResolveTemplateFields(
 	return resolver.ResolveTemplateFields(
 		workingDirectory, environment, tokens, workflowContext, worktree,
 	)
-}
-
-type runtimeScopeWithFlush struct {
-	recordings.RuntimeScopeService
-	flushInterval         time.Duration
-	resumeCanonicalEvents []factorydefinitions.FactoryEvent
-}
-
-func (opening runtimeScopeWithFlush) OpenRuntime(
-	ctx context.Context,
-	request recordings.RuntimeScopeRequest,
-) (recordings.RuntimeScopeResult, error) {
-	request.FlushInterval = opening.flushInterval
-	request.ReplayEvents = cloneFactoryEvents(opening.resumeCanonicalEvents)
-	return opening.RuntimeScopeService.OpenRuntime(ctx, request)
 }
 
 func newRuntimeWorkersService(
