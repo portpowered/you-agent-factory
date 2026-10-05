@@ -45,6 +45,16 @@ func TestProviderCatalogDiagnostics(t *testing.T) {
 		{"stale", "stale: .*catalog.json", func(s fstest.MapFS) { s[providercatalog.CatalogPath].Data = []byte("stale") }},
 		{"schema", "components.schemas is missing", func(s fstest.MapFS) { s["api/openapi.yaml"].Data = []byte("{}") }},
 		{"manifest", "parse authored provider", func(s fstest.MapFS) { s[providerInputs+"/claude/provider.yaml"].Data = []byte("[") }},
+		{"alias-collision", "identity collision.*codex", func(s fstest.MapFS) {
+			s[providerInputs+"/claude/provider.yaml"].Data = bytes.Replace(s[providerInputs+"/claude/provider.yaml"].Data, []byte("aliases: []"), []byte("aliases: [codex]"), 1)
+		}},
+		{"impossible-streaming", "requires nativeStreaming", func(s fstest.MapFS) {
+			s[providerInputs+"/claude/provider.yaml"].Data = bytes.Replace(s[providerInputs+"/claude/provider.yaml"].Data, []byte("nativeStreaming: true"), []byte("nativeStreaming: false"), 1)
+		}},
+		{"schema-privacy", "schema validation failed", func(s fstest.MapFS) {
+			s[providerInputs+"/claude/provider.yaml"].Data = append(s[providerInputs+"/claude/provider.yaml"].Data, []byte("\ncredentialValue: secret\n")...)
+		}},
+		{"acp-harness", "requires harness.yaml", func(s fstest.MapFS) { delete(s, providerInputs+"/cursor/harness.yaml") }},
 		{"populated-directory", "new/provider.yaml", func(s fstest.MapFS) {
 			s[providerInputs+"/new/ignored.txt"] = &fstest.MapFile{Data: []byte("populated")}
 		}},
