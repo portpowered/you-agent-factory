@@ -1238,4 +1238,4 @@ jobs:
           body_file="$RUNNER_TEMP/backend-architecture-pr.md"
           printf 'Generated from measured coverage in [main CI run](%s/%s/actions/runs/%s) at source commit %s.\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_SHA" > "$body_file"
           pr_url=$(gh pr create --base main --head "$bot_branch" --title "docs: refresh backend architecture visualizations" --body-file "$body_file")
-          gh pr merge "$pr_url" --auto --merge --delete-branch
+          gh pr merge "$pr_url" --auto
