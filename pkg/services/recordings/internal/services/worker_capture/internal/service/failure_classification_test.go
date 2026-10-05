@@ -165,6 +165,12 @@ func TestWorkerRecordingFailureMarkerErrorUsesSafeStructuredDiagnostics(t *testi
 
 	capture.fail(fmt.Errorf("%w: secret payload must not be logged", recordings.ErrWorkerRecordingPersistence))
 
+	for _, fields := range logger.fields {
+		if strings.Contains(fmt.Sprint(fields), "secret") {
+			t.Fatalf("capture diagnostic leaked raw failure detail: %#v", fields)
+		}
+	}
+
 	markerIndex := -1
 	for index, message := range logger.messages {
 		if message == "Worker recording failure persistence failed" {

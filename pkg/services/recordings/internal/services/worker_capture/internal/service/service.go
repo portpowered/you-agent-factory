@@ -334,7 +334,7 @@ func (capture *capture) fail(err error) {
 	}
 	capture.mu.Unlock()
 	capture.persistFailureMarker()
-	capture.logger.Warn("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code, "error", err.Error())
+	capture.logger.Warn("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code)
 }
 
 // persistFailureMarker writes the safe capture-loss fact at most once for a
