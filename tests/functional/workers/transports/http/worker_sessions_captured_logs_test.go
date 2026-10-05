@@ -37,12 +37,29 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	runner.waitCompleted(t)
 	ended := waitCapturedTerminal(t, server.URL(), "captured-worker")
 	assertCapturedLogsCLIHTTPParity(t, server, "captured-worker")
+	assertCapturedSummaryUsage(t, server, "captured-worker")
 	if ended.CommittedPosition <= active.CommittedPosition || !ended.Events[0].Event.CapturedAt.Equal(*active.Events[0].Event.CapturedAt) {
 		t.Fatal("terminal logs lost the active captured prefix")
 	}
 	assertCapturedPages(t, server, ended)
 	assertCapturedReplayTimes(t, server.URL(), ended)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")
+}
+
+func assertCapturedSummaryUsage(t *testing.T, server *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+url.PathEscape(id))
+	if shown.TokenUsage == nil || shown.TokenUsage.InputTokens == nil || *shown.TokenUsage.InputTokens != 1 || shown.TokenUsage.OutputTokens == nil || *shown.TokenUsage.OutputTokens != 1 {
+		t.Fatalf("canonical summary lost committed fixture usage: %+v", shown.TokenUsage)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "show", "--worker-session-id", id, "--server", server.URL(), "--output", "json"})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI captured summary: %v %s", err, inputs.Stderr())
+	}
+	var cli factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil || !reflect.DeepEqual(cli.TokenUsage, shown.TokenUsage) {
+		t.Fatalf("CLI/HTTP committed usage differ: %+v %+v %v", cli.TokenUsage, shown.TokenUsage, err)
+	}
 }
 
 // Recordings commits asynchronously after Events publication. Its public logs

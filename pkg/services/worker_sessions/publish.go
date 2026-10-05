@@ -831,10 +831,8 @@ func progressDraftPayload(
 	}
 }
 
-// canonicalUsageDraftPayload preserves token-class presence while accepting
-// the camel-case canonical payload emitted by mock workers. Provider-native
-// usage details remain on their existing adapter path and continue to use the
-// ACP used_tokens fallback above.
+// canonicalUsageDraftPayload preserves token-class presence from canonical
+// payloads and native Codex usage observations before durable publication.
 type canonicalUsagePayload struct {
 	InputTokens           *int64 `json:"inputTokens,omitempty"`
 	CachedInputTokens     *int64 `json:"cachedInputTokens,omitempty"`
@@ -851,6 +849,22 @@ func canonicalUsageDraftPayload(detail string) (canonicalUsagePayload, bool) {
 	var payload canonicalUsagePayload
 	if err := json.Unmarshal([]byte(detail), &payload); err != nil {
 		return canonicalUsagePayload{}, false
+	}
+	if payload.InputTokens == nil && payload.CachedInputTokens == nil &&
+		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil {
+		var native struct {
+			InputTokens           *int64 `json:"input_tokens"`
+			CachedInputTokens     *int64 `json:"cached_input_tokens"`
+			OutputTokens          *int64 `json:"output_tokens"`
+			ReasoningOutputTokens *int64 `json:"reasoning_output_tokens"`
+		}
+		if json.Unmarshal([]byte(detail), &native) != nil {
+			return canonicalUsagePayload{}, false
+		}
+		payload.InputTokens = native.InputTokens
+		payload.CachedInputTokens = native.CachedInputTokens
+		payload.OutputTokens = native.OutputTokens
+		payload.ReasoningOutputTokens = native.ReasoningOutputTokens
 	}
 	if strings.TrimSpace(payload.Model) == "" &&
 		payload.InputTokens == nil && payload.CachedInputTokens == nil &&

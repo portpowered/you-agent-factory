@@ -413,13 +413,14 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
-	// Provider detail is optional enrichment. Preserve the live identity and
-	// lifecycle when its native transcript cannot be projected.
-	projected, err := r.projectObservation(ctx, req.WorkerSessionID)
+	// Canonical ID inspection uses owned identity and committed capture facts.
+	// Native transcript enrichment remains on the compatibility provider lookup.
+	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID)
 	if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
 		return workersessions.Observation{}, err
 	}
+	projected.TokenUsage = r.capturedObservationUsage(ctx, req.WorkerSessionID)
 	r.logger.Info("worker session observation get by Worker Session", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
 	return projected, nil
 }

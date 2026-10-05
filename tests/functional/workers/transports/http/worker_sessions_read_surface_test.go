@@ -99,6 +99,7 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 		t.Fatalf("completed Worker Session state = %q, want COMPLETED", completed.Sessions[0].State)
 	}
 	endedLogs := assertCapturedLogsCLIHTTPParity(t, server, completed.Sessions[0].WorkerSessionId)
+	assertCapturedSummaryUsage(t, server, completed.Sessions[0].WorkerSessionId)
 	if endedLogs.CommittedPosition <= activeLogs.CommittedPosition {
 		t.Fatalf("ended capture did not advance: active=%d ended=%d", activeLogs.CommittedPosition, endedLogs.CommittedPosition)
 	}
