@@ -476,7 +476,10 @@ func configureRuntimeDispatch(
 ) {
 	var resultHook *dispatchPlanningResultHook
 	publisher := func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
-		return startThroughStatelessWorkers(ctx, cfg, request, resultHook.acceptWorkersResult)
+		// Accepted planned dispatches belong to Runtime. Resume can drain this
+		// outbox from an HTTP control request whose context ends with its response;
+		// only the Runtime cancellation edge may stop the admitted execution.
+		return startThroughStatelessWorkers(context.WithoutCancel(ctx), cfg, request, resultHook.acceptWorkersResult)
 	}
 	canceler := func(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 		return cancelStatelessAttempt(ctx, cfg, request)
