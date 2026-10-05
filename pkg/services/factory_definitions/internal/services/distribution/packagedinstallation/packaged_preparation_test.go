@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -39,7 +40,7 @@ func TestInstallPackagedFactory_CreateAndReplaceUseExplicitPackagedPreparation(t
 	persistence := &recordingPackagedFactoryPersistence{
 		PackagedFactoryPersistence: packagedInstallationTestPersistence(),
 	}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir)
+	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	root := t.TempDir()
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,

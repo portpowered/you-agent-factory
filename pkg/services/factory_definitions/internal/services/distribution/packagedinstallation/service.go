@@ -63,18 +63,14 @@ func New(
 	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
-	loggers ...logging.Logger,
+	logger logging.Logger,
 ) *Service {
-	var logger logging.Logger
-	if len(loggers) > 0 {
-		logger = loggers[0]
-	}
 	return &Service{
 		persistence:      persistence,
 		fileSystem:       fileSystem,
 		directoryCreator: directoryCreator,
 		ownerProbe:       localOwnerProbe{},
-		logger:           logging.EnsureLogger(logger),
+		logger:           logger,
 	}
 }
 
@@ -83,9 +79,9 @@ func newWithOwnerProbe(
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	probe ownerProbe,
-	loggers ...logging.Logger,
+	logger logging.Logger,
 ) *Service {
-	service := New(persistence, fileSystem, directoryCreator, loggers...)
+	service := New(persistence, fileSystem, directoryCreator, logger)
 	if probe != nil {
 		service.ownerProbe = probe
 	}
