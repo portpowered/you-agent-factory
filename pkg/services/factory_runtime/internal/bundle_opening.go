@@ -105,15 +105,15 @@ type BundleOpening struct {
 }
 
 func NewBundleOpening(
-	runtimeFactory *RuntimeFactory,
+	runtimeBuild runtimeResourceOpening,
 	workerAttemptScheduler platformclock.TimerSource,
 	workerService workers.Service,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
 	requestResolver *runtime.WorkstationRequestExecutor,
 ) (*BundleOpening, error) {
-	if runtimeFactory == nil {
-		return nil, fmt.Errorf("factory runtime factory is required")
+	if runtimeBuild == nil {
+		return nil, fmt.Errorf("factory runtime resource opening is required")
 	}
 	if workerSessions == nil {
 		return nil, fmt.Errorf("worker sessions service is required")
@@ -121,7 +121,7 @@ func NewBundleOpening(
 	if workerService == nil {
 		return nil, fmt.Errorf("workers service is required")
 	}
-	return &BundleOpening{runtimeBuild: runtimeFactory.Build, workerAttemptScheduler: workerAttemptScheduler, workerService: workerService,
+	return &BundleOpening{runtimeBuild: runtimeBuild, workerAttemptScheduler: workerAttemptScheduler, workerService: workerService,
 		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver}, nil
 }
 

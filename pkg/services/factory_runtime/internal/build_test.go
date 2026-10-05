@@ -36,10 +36,85 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := clockwork.NewFakeClock()
+	logger := zap.NewNop()
+	spec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, SessionID: "candidate",
+		RuntimeInstanceID: "candidate-runtime", LoadedFactoryCfg: loaded, Clock: clock, BaseLogger: logger}
+	openingErr := errors.New("selected resource opening failed")
+	partial := &factoryhost.Bundle{FactorySessionID: spec.SessionID, RuntimeInstanceID: spec.RuntimeInstanceID}
+	calls := 0
+	selected := func(
+		ctx context.Context,
+		baseLogger *zap.Logger,
+		_, _ string,
+		sessionID string,
+		_, _ string,
+		_ interfaces.RuntimeMode,
+		_ bool,
+		_ factory.Scheduler,
+		_ bool,
+		_ recordings.SubmissionRecorder,
+		_ recordings.DispatchRecorder,
+		_ string,
+		_ factory.RuntimeLogStorageConfig,
+		_ factory.RuntimeFileLoggingPolicy,
+		_ factory.RuntimeMetricsPolicy,
+		_ string,
+		_ factory.RuntimeMetricsStorageConfig,
+		_ factory.LoadedConfig,
+		runtimeInstanceID string,
+		_ string,
+		clock factory.Clock,
+		_ string,
+		_ *interfaces.FactorySnapshot,
+		_ *interfaces.FactoryWorldState,
+		_ bool,
+		_ []factory.SubmissionHook,
+		_ factory.CompletionDeliveryPlanner,
+		_ factory.PetriMutationRecorder,
+		_ factory.WorldStateProjector,
+		_ recordings.RuntimeScopeService,
+		_ workers.Service,
+		_ workersessions.Service,
+		_ factory.WorkerAttemptOpener,
+		_ func(string),
+		_ ...*workers.MockWorkersConfig,
+	) (*factoryhost.Bundle, error) {
+		calls++
+		if ctx != t.Context() || baseLogger != logger || clock != spec.Clock || sessionID != spec.SessionID || runtimeInstanceID != spec.RuntimeInstanceID {
+			t.Fatal("resource opening substituted admitted context, logger, clock or identity")
+		}
+		return partial, openingErr
+	}
+	sessions := &stubWorkerSessionsService{}
+	opening, err := factoryinternal.NewBundleOpening(selected, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatal("constructor executed resource opening")
+	}
+	result, err := openTestBundle(t.Context(), opening.Open, spec, &testRuntimeScopeServiceStub{})
+	if !errors.Is(err, openingErr) || result != partial || calls != 1 {
+		t.Fatalf("opening = %p, %v, calls %d; want selected partial record %p and failure", result, err, calls, partial)
+	}
+	if result.RuntimeService() != nil {
+		t.Fatal("partial failure published a runnable service")
+	}
+}
+
 func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T) {
 	t.Parallel()
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +238,7 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 		t.Fatal(err)
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,7 +642,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	loader := func(string, interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loaded, nil
 	}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +745,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		return loadedFactoryFixture(path)
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

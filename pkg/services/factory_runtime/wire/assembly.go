@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"fmt"
 	"io/fs"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -106,7 +107,10 @@ func NewBundleOpening(
 	workerAttempts factoryruntime.WorkerAttemptOpener,
 	requestResolver *WorkstationRequestExecutor,
 ) (BundleOpening, error) {
-	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver)
+	if runtimeFactory == nil {
+		return nil, fmt.Errorf("factory runtime factory is required")
+	}
+	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver)
 	if err != nil {
 		return nil, err
 	}
