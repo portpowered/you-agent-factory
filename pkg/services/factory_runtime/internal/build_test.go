@@ -111,6 +111,136 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 	}
 }
 
+// The resource boundary retains callbacks just as an opened engine does. Emit
+// after both admissions, so a reusable owner's latest-session substitution
+// would route the first session's observations into its peer.
+func TestBundleOpeningKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources := &observationResourceOpening{failure: errors.New("stop at controlled resource boundary")}
+	sessions := &observationWorkerSessions{}
+	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations := [2]*openingSessionObservations{{}, {}}
+	for index, sessionID := range []string{"candidate", "peer"} {
+		spec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, LoadedFactoryCfg: loaded,
+			SessionID: sessionID, RuntimeInstanceID: "runtime-" + sessionID,
+			Clock: clockwork.NewFakeClock(), BaseLogger: zap.NewNop(),
+			PetriMutationRecorder: observations[index].RecordPetriTokenMutations}
+		result, openErr := openTestBundle(t.Context(), opening.Open, spec, &testRuntimeScopeServiceStub{}, observations[index].PublishWorkerProgress)
+		if result != nil || !errors.Is(openErr, resources.failure) {
+			t.Fatalf("opening %s = %#v, %v; want unpublished controlled failure", sessionID, result, openErr)
+		}
+	}
+	for index, sessionID := range []string{"candidate", "peer"} {
+		mutation := interfaces.TokenMutationRecord{}
+		if err := resources.mutations[index](sessionID, []interfaces.TokenMutationRecord{mutation}); err != nil {
+			t.Fatal(err)
+		}
+		resources.progress[index](workers.ProgressFragment{Kind: workers.ProgressFragmentKind, Payload: sessionID})
+		if index == 0 && (len(observations[1].sessions) != 0 || len(observations[1].progress) != 0) {
+			t.Fatal("candidate callback reached the peer's observation owner")
+		}
+	}
+	for index, sessionID := range []string{"candidate", "peer"} {
+		assertScopedOpeningObservations(t, observations[index], sessionID)
+	}
+	if !reflect.DeepEqual(sessions.runtimeIDs, []string{"runtime-candidate", "runtime-peer"}) {
+		t.Fatalf("progress supervision identities = %v; want each admitted runtime", sessions.runtimeIDs)
+	}
+}
+
+func assertScopedOpeningObservations(t *testing.T, observations *openingSessionObservations, sessionID string) {
+	t.Helper()
+	if !reflect.DeepEqual(observations.sessions, []string{sessionID}) ||
+		!reflect.DeepEqual(observations.progress, []string{sessionID}) || observations.mutationCount != 1 {
+		t.Fatalf("%s observations = %#v; want exactly its own mutation and progress", sessionID, observations)
+	}
+}
+
+type openingSessionObservations struct {
+	sessions      []string
+	progress      []string
+	mutationCount int
+}
+
+var _ factory.SessionObservations = (*openingSessionObservations)(nil)
+
+func (observations *openingSessionObservations) RecordPetriTokenMutations(sessionID string, mutations []interfaces.TokenMutationRecord) error {
+	observations.sessions = append(observations.sessions, sessionID)
+	observations.mutationCount += len(mutations)
+	return nil
+}
+
+func (observations *openingSessionObservations) PublishWorkerProgress(fragment workers.ProgressFragment) {
+	observations.progress = append(observations.progress, fragment.Payload)
+}
+
+type observationWorkerSessions struct {
+	stubWorkerSessionsService
+	runtimeIDs []string
+}
+
+func (sessions *observationWorkerSessions) PublishRuntimeProgress(_ context.Context, key workersessions.RuntimeAttemptKey, fragment workers.ProgressFragment, next workers.ProgressPublisher) error {
+	sessions.runtimeIDs = append(sessions.runtimeIDs, key.RuntimeID)
+	next(fragment)
+	return nil
+}
+
+type observationResourceOpening struct {
+	failure   error
+	mutations []factory.PetriMutationRecorder
+	progress  []workers.ProgressPublisher
+}
+
+func (opening *observationResourceOpening) Open(
+	_ context.Context,
+	_ *zap.Logger,
+	_, _, _, _, _ string,
+	_ interfaces.RuntimeMode,
+	_ bool,
+	_ factory.Scheduler,
+	_ bool,
+	_ recordings.SubmissionRecorder,
+	_ recordings.DispatchRecorder,
+	_ string,
+	_ factory.RuntimeLogStorageConfig,
+	_ factory.RuntimeFileLoggingPolicy,
+	_ factory.RuntimeMetricsPolicy,
+	_ string,
+	_ factory.RuntimeMetricsStorageConfig,
+	_ factory.LoadedConfig,
+	_, _ string,
+	_ factory.Clock,
+	_ string,
+	_ *interfaces.FactorySnapshot,
+	_ *interfaces.FactoryWorldState,
+	_ bool,
+	_ []factory.SubmissionHook,
+	_ factory.CompletionDeliveryPlanner,
+	mutations factory.PetriMutationRecorder,
+	_ factory.WorldStateProjector,
+	_ recordings.RuntimeScopeService,
+	worker workers.Service,
+	_ workersessions.Service,
+	_ factory.WorkerAttemptOpener,
+	_ func(string),
+	_ ...*workers.MockWorkersConfig,
+) (*factoryhost.Bundle, error) {
+	opening.mutations = append(opening.mutations, mutations)
+	opening.progress = append(opening.progress, worker.(interface {
+		RuntimeProgressPublisher() workers.ProgressPublisher
+	}).RuntimeProgressPublisher())
+	return nil, opening.failure
+}
+
 func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T) {
 	t.Parallel()
 	sessions := &stubWorkerSessionsService{}
@@ -217,10 +347,14 @@ func assertBundleOpeningLogAttribution(t *testing.T, candidate, peer *factoryhos
 	}
 }
 
-func openTestBundle(ctx context.Context, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService) (*factoryhost.Bundle, error) {
+func openTestBundle(ctx context.Context, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService, progress ...workers.ProgressPublisher) (*factoryhost.Bundle, error) {
+	var publisher workers.ProgressPublisher
+	if len(progress) > 0 {
+		publisher = progress[0]
+	}
 	record, err := opening(ctx, spec, "", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
 		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0, spec.SessionID,
-		interfaces.RuntimeModeBatch, nil, false, nil, nil, "", "", false, false, nil, nil, nil, nil, nil, scopes, nil)
+		interfaces.RuntimeModeBatch, nil, false, nil, nil, "", "", false, false, nil, nil, publisher, nil, nil, scopes, nil)
 	if record == nil {
 		return nil, err
 	}
