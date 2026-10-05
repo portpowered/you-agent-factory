@@ -288,9 +288,10 @@ func assertPendingInterruptPhaseFacts(t *testing.T, req workersessions.Interrupt
 		return
 	}
 	pending, pendingErr := decodeInterruptOutcome(req, record)
-	if !errors.Is(pendingErr, workersessions.ErrInterruptExecutionUnavailable) || pending.Source.State != workersessions.StateCanceled || pending.Phase != workersessions.InterruptPhaseSuccessorAdmission {
+	if pending.Source.State != workersessions.StateCanceled || pending.Phase != workersessions.InterruptPhaseSuccessorAdmission {
 		t.Fatalf("synced phase lost joined source: phase=%s result=%#v err=%v", record.Operation.Phase, pending, pendingErr)
 	}
+	assertInterruptPendingReplayError(t, record.Operation.Phase, pending, pendingErr)
 	if (record.Operation.Phase == "SUCCESSOR_ADMITTED") != pending.Accepted {
 		t.Fatalf("synced admission fact differs from phase: phase=%s result=%#v", record.Operation.Phase, pending)
 	}
@@ -456,19 +457,31 @@ func TestInterruptJournalReplayPreservesCommittedPendingFactsWithoutEffects(t *t
 			before := len(store.records)
 			for range 2 {
 				replayed, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
-				if !found || !errors.Is(replayErr, workersessions.ErrInterruptExecutionUnavailable) || !reflect.DeepEqual(replayed, result) {
+				if !found || !reflect.DeepEqual(replayed, result) {
 					t.Fatalf("pending facts=%#v found=%v err=%v want=%#v", replayed, found, replayErr, result)
 				}
-				var typed *workersessions.InterruptError
-				if !errors.As(replayErr, &typed) || !reflect.DeepEqual(typed.Result, result) || typed.Phase != result.Phase {
-					t.Fatalf("pending error lost facts: %#v", typed)
-				}
+				assertInterruptPendingReplayError(t, phase, result, replayErr)
 			}
 			if calls != 0 || len(store.records) != before {
 				t.Fatalf("pending recovery repeated effects: cancel=%d rows=%d", calls, len(store.records))
 			}
 			assertNoSuccessor(t, r, "successor")
 		})
+	}
+}
+
+func assertInterruptPendingReplayError(t *testing.T, phase string, result workersessions.InterruptResult, err error) {
+	t.Helper()
+	if phase == "SUCCESSOR_ADMITTED" {
+		if err != nil {
+			t.Fatalf("synced admission lost success: %v", err)
+		}
+		return
+	}
+	var typed *workersessions.InterruptError
+	if !errors.Is(err, workersessions.ErrInterruptExecutionUnavailable) || !errors.As(err, &typed) ||
+		!reflect.DeepEqual(typed.Result, result) || typed.Phase != result.Phase {
+		t.Fatalf("pending error lost facts: %v", err)
 	}
 }
 

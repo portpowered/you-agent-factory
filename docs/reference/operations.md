@@ -489,13 +489,14 @@ admitting a successor.
 If an intent or phase write loses its acknowledgement, the host reloads the
 journal and proceeds only when the exact attempted record is confirmed durable.
 This check does not repeat source cancellation or successor admission.
-An incomplete durable operation reports execution unavailable
+An operation with only a pending intent or joined source reports execution unavailable
 until its prior ownership and admission can be reconciled safely; submitting
-the same request does not blindly repeat its effects. If a joined source or
-admitted successor snapshot was committed before interruption, the error
-includes those saved facts. An admitted successor remains accepted even when
-the final operation result is unavailable. Inspect that session before taking
-further action.
+the same request does not blindly repeat its effects. If a joined
+source snapshot was committed before interruption, the error
+includes those saved facts. A committed accepted successor snapshot returns
+success even when the final operation result is unavailable. Replay preserves
+that admission snapshot without another stop or admission. Inspect the successor
+to read its current state.
 
 Use the direct Worker Session controls when the same admitted session should
 be paused, resumed, canceled, or terminated. Each command accepts one stable

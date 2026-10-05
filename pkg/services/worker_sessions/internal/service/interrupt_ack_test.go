@@ -14,10 +14,11 @@ import (
 // the acknowledgement. Load supplies either the exact row or a disputed fact.
 type interruptAckStore struct {
 	interruptInputStore
-	failPhase string
-	mutate    func(*recordings.WorkerControlOperationRecord)
-	loadErr   error
-	loads     int
+	failPhase        string
+	mutate           func(*recordings.WorkerControlOperationRecord)
+	loadErr          error
+	loads            int
+	rejectCompletion bool
 }
 
 func (s *interruptAckStore) BeginWorkerControlOperation(ctx context.Context, intent recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
@@ -29,11 +30,69 @@ func (s *interruptAckStore) BeginWorkerControlOperation(ctx context.Context, int
 }
 
 func (s *interruptAckStore) AdvanceWorkerControlOperation(ctx context.Context, next recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
+	if s.rejectCompletion && next.Operation.Phase == "COMPLETED" {
+		return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
+	}
 	accepted, err := s.interruptInputStore.AdvanceWorkerControlOperation(ctx, next, expected)
 	if err == nil && next.Operation.Phase == s.failPhase {
 		return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
 	}
 	return accepted, err
+}
+
+// Only the coordinator is real. Its store and execution collaborators are
+// controlled; a delivered host restart belongs to I-T4, not this component.
+func TestInterruptSyncedAdmissionSurvivesMissingCompletionAndReplayCache(t *testing.T) {
+	t.Parallel()
+	fixture := newInterruptRaceCharacterizationFixture(t, "missing-completion", false)
+	r := fixture.registry.(*registry)
+	store := &interruptAckStore{rejectCompletion: true}
+	r.operations = store
+	capture := exactCaptureIdentity()
+	capture.WorkerSessionID, capture.FactorySessionID = fixture.sourceID, ""
+	pub := r.publicationFor(fixture.sourceID)
+	pub.mu.Lock()
+	pub.capture = capture
+	pub.mu.Unlock()
+	req := workersessions.InterruptRequest{RequestID: "missing-completion", SourceWorkerSessionID: fixture.sourceID, SuccessorWorkerSessionID: fixture.successorID, ReplacementMessage: "replacement"}
+	outcomes := startInterruptCharacterization(t, fixture.registry, req)
+	fixture.boundary.waitCancellation(t, fixture.sourceDispatch)
+	assertBoundaryEffects(t, fixture.boundary, 1, 1, "source join barrier")
+	fixture.boundary.releaseCancellation(fixture.sourceDispatch)
+	fixture.boundary.waitReturned(t, fixture.sourceDispatch)
+	outcome := <-outcomes
+	source := <-fixture.sourceResult
+	if !errors.Is(outcome.err, recordings.ErrWorkerRecordingPersistence) || !outcome.result.Accepted || len(store.records) != 3 {
+		t.Fatalf("missing completion outcome=%#v err=%v rows=%d", outcome.result, outcome.err, len(store.records))
+	}
+	// Join the fake successor before removing live handles; the durable reply
+	// must retain its admission state even though it has since completed.
+	completed := outcome
+	completed.err = nil
+	assertInterruptWins(t, fixture, completed, source)
+	want, err := decodeInterruptOutcome(req, store.records[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.mu.Lock()
+	r.interruptReplays = nil
+	delete(r.publications, fixture.sourceID)
+	delete(r.sessions, fixture.sourceID)
+	delete(r.supervisions, fixture.sourceID)
+	delete(r.sessions, fixture.successorID)
+	r.mu.Unlock()
+	r.logs = &LogReader{reader: &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
+		RecordingID: capture.RecordingID, WorkerSessionID: capture.WorkerSessionID,
+		RecordingGenerationID: capture.RecordingGenerationID, OwnerEpoch: capture.OwnerEpoch,
+	}}}
+	for range 2 {
+		replayed, err := r.Interrupt(t.Context(), req)
+		if err != nil || !reflect.DeepEqual(replayed, want) || len(store.records) != 3 {
+			t.Fatalf("durable admission replay=%#v err=%v rows=%d", replayed, err, len(store.records))
+		}
+		replayed.Source.SuccessorWorkerSessionID = "caller-mutation"
+	}
+	assertBoundaryEffects(t, fixture.boundary, 2, 1, "admission replay without cache")
 }
 
 func (s *interruptAckStore) LoadWorkerControlOperation(ctx context.Context, key recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {

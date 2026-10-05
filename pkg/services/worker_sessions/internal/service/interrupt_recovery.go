@@ -143,6 +143,12 @@ func decodePendingInterruptOutcome(req workersessions.InterruptRequest, record r
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
 	result = outcome.InterruptResult
+	// SUCCESSOR_ADMITTED already synced the complete accepted response after
+	// source join and admission. A missing final bookkeeping row cannot erase
+	// that success or license a second admission. Replay stays read-only.
+	if record.Operation.Phase == "SUCCESSOR_ADMITTED" {
+		return result, nil
+	}
 	return result, newInterruptError(result.Phase, result, workersessions.ErrInterruptExecutionUnavailable)
 }
 
