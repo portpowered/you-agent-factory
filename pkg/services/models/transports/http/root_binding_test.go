@@ -130,6 +130,37 @@ func (w *diagnosticFailingWriter) Write(body []byte) (int, error) {
 	return 0, w.err
 }
 
+func selectedDiagnosticBinding(t *testing.T, operation string, failure error, calls *int) RootBinding {
+	t.Helper()
+	binding := testRootBinding(&rootFake{})
+	root := binding.Models.(*rootFake)
+	root.listCatalog = func(_ context.Context, request models.ListModelsRequest) (models.ListModelsResult, error) {
+		*calls++
+		if request.Scope != binding.Scope {
+			t.Errorf("list scope = %v", request.Scope)
+		}
+		if operation == "writer" {
+			return models.ListModelsResult{}, nil
+		}
+		return models.ListModelsResult{}, failure
+	}
+	root.getCatalog = func(_ context.Context, request models.GetModelRequest) (models.GetModelResult, error) {
+		*calls++
+		if request.Scope != binding.Scope || request.Name != "voice" {
+			t.Errorf("get request = %+v", request)
+		}
+		return models.GetModelResult{}, failure
+	}
+	binding.Invoker = invokeInvokerFake{invoke: func(_ context.Context, name string, request models.Request) (models.Result, error) {
+		*calls++
+		if name != "voice" || request.Operation != "TTS" || len(request.Content) != 1 || request.Content[0].Text != "private-payload-marker" {
+			t.Errorf("invocation = %s %+v", name, request)
+		}
+		return models.Result{}, failure
+	}}
+	return binding
+}
+
 func TestHandlerFromRootSelectedDiagnostics(t *testing.T) {
 	t.Parallel()
 	for _, quiet := range []bool{false, true} {
@@ -141,33 +172,8 @@ func TestHandlerFromRootSelectedDiagnostics(t *testing.T) {
 				if operation == "invoke" {
 					failure = errors.New("open /internal/model.bin: controlled failure")
 				}
-				binding := testRootBinding(&rootFake{})
 				calls := 0
-				root := binding.Models.(*rootFake)
-				root.listCatalog = func(_ context.Context, request models.ListModelsRequest) (models.ListModelsResult, error) {
-					calls++
-					if request.Scope != binding.Scope {
-						t.Errorf("list scope = %v", request.Scope)
-					}
-					if operation == "writer" {
-						return models.ListModelsResult{}, nil
-					}
-					return models.ListModelsResult{}, failure
-				}
-				root.getCatalog = func(_ context.Context, request models.GetModelRequest) (models.GetModelResult, error) {
-					calls++
-					if request.Scope != binding.Scope || request.Name != "voice" {
-						t.Errorf("get request = %+v", request)
-					}
-					return models.GetModelResult{}, failure
-				}
-				binding.Invoker = invokeInvokerFake{invoke: func(_ context.Context, name string, request models.Request) (models.Result, error) {
-					calls++
-					if name != "voice" || request.Operation != "TTS" || len(request.Content) != 1 || request.Content[0].Text != "private-payload-marker" {
-						t.Errorf("invocation = %s %+v", name, request)
-					}
-					return models.Result{}, failure
-				}}
+				binding := selectedDiagnosticBinding(t, operation, failure, &calls)
 				handler := NewHandlerFromRoot(binding, logger)
 				recorder := httptest.NewRecorder()
 				message := "failed to list models"
