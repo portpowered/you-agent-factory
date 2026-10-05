@@ -1,4 +1,4 @@
-package subagent
+package invocation_test
 
 import (
 	"context"

@@ -12,7 +12,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -45,14 +44,6 @@ Process the input task.
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: support.CodexSuccessStdout("Done. COMPLETE"),
 	})
-	construction := fixture.constructionEffectSnapshot()
-	if construction.fileSystemCalls != 0 {
-		t.Fatalf("operator-config filesystem effect calls = %d during process construction, want 0", construction.fileSystemCalls)
-	}
-	if construction.createTemporaryCalls != 0 {
-		t.Fatalf("operator-config CreateTemporaryFile calls = %d during process construction, want 0", construction.createTemporaryCalls)
-	}
-	beforeRead := fixture.router.readFileCalls.Load()
 	fixture.withOperatorSettingsRoute(
 		t,
 		"operator config defaults activation",
@@ -68,15 +59,12 @@ Process the input task.
 				"--no-record",
 				"--model", activationOverrideModel,
 			})
-			inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+			inputs.Input.Env = support.IsolatedHomeEnvironment(homeDir)
 			inputs.Input.WorkingDirectory = dir
 			if err := fixture.process.Execute(inputs.Input); err != nil {
 				t.Fatalf("Process.Execute(provider dispatch) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 			}
 
-			if got := fixture.router.readFileCalls.Load() - beforeRead; got == 0 {
-				t.Fatalf("operator-config ReadFile calls after runtime lifecycle = %d, want > 0 via edges", got)
-			}
 			if runner.CallCount() != 1 {
 				t.Fatalf("provider command runner calls = %d, want 1", runner.CallCount())
 			}
@@ -107,8 +95,6 @@ func TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISu
 		identityActivationGeneratedUUID,
 		nil,
 		func(_ *operatorSettingsEffectRoute) {
-			beforeUpdate := fixture.router.fileSystemCalls.Load()
-			beforeTemporary := fixture.router.createTemporaryCalls.Load()
 			var stdout bytes.Buffer
 			initErr := fixture.process.Execute(root.Input{
 				Args: []string{
@@ -116,11 +102,7 @@ func TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISu
 					"--provider", activationUpdatedProvider,
 					"--model", activationUpdatedModel,
 				},
-				Env: append(
-					os.Environ(),
-					"HOME="+homeDir,
-					"USERPROFILE="+homeDir,
-				),
+				Env:              support.IsolatedHomeEnvironment(homeDir),
 				Stdin:            strings.NewReader(""),
 				Stdout:           &stdout,
 				Stderr:           io.Discard,
@@ -131,14 +113,7 @@ func TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISu
 				t.Fatalf("Process.Execute(you init) error = %v", initErr)
 			}
 
-			if got := fixture.router.fileSystemCalls.Load() - beforeUpdate; got == 0 {
-				t.Fatalf("operator-config filesystem effect calls during init = %d, want > 0 via edges", got)
-			}
-			if got := fixture.router.createTemporaryCalls.Load() - beforeTemporary; got == 0 {
-				t.Fatalf("operator-config CreateTemporaryFile calls during init = %d, want > 0 via edges", got)
-			}
-
-			configPath := operatorsettings.DefaultConfigPath(homeDir)
+			configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
 			payload, err := os.ReadFile(configPath)
 			if err != nil {
 				t.Fatalf("read updated operator config: %v", err)

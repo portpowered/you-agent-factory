@@ -152,7 +152,7 @@ func assertLocalAIConfiguredServerCallerCancellation(
 	}
 	select {
 	case <-blockingBackend.Canceled():
-	case <-time.After(2 * time.Second):
+	case <-time.After(2 * time.Second): //nolint:testsleep // Failure bound while awaiting the backend's observed request cancellation.
 		t.Fatal("withheld-header backend did not observe caller cancellation")
 	}
 	t.Logf("withheld-header characterization: err=%v stdout=%q stderr=%q", result.Err, result.Stdout, result.Stderr)

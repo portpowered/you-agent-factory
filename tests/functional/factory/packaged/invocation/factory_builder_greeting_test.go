@@ -1,4 +1,4 @@
-package factory_builder
+package invocation_test
 
 import (
 	"bytes"
@@ -58,6 +58,7 @@ func (runner *greetingCommandRunner) snapshot() (routing int, help, build []stri
 }
 
 func TestFactoryBuilder(t *testing.T) {
+	t.Parallel()
 	fixture := newFactoryBuilderSharedFixture(t)
 	// The shared host keeps the production application alive while each child
 	// uses its own explicit session. Session invocations use the public API's

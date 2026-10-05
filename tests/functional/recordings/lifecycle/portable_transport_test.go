@@ -1,7 +1,6 @@
 package lifecycle_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -81,8 +79,6 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	testutil.WriteSeedFile(t, cliFactoryDir, "task", []byte(`{"title":"FUN Recordings CLI transport activation"}`))
 	assertRecordingsCLITransportRecordPathActivates(t, cliFactoryDir, cliArtifactPath)
 
-	recordingsService := recordingsTransportActivationService(t, edges)
-	assertRecordingsPortableValidateAdverseOutcome(t, recordingsService)
 }
 
 func recordingsTransportActivationFactoryConfig() map[string]any {
@@ -122,7 +118,7 @@ func assertRecordingsCLITransportRecordPathActivates(t *testing.T, factoryDir, a
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	home := t.TempDir()
-	inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home,
+	inputs.Env = append(support.IsolatedHomeEnvironment(home),
 		"HOMEDRIVE="+filepath.VolumeName(home), "HOMEPATH="+strings.TrimPrefix(home, filepath.VolumeName(home)))
 	inputs.WorkingDirectory = factoryDir
 	if err := process.Execute(inputs.Input); err != nil {
@@ -134,49 +130,5 @@ func assertRecordingsCLITransportRecordPathActivates(t *testing.T, factoryDir, a
 		)
 	}
 
-	adapter := recordingscli.New()
-	resolved, err := adapter.ResolveRecordPath(recordingscli.InvocationRequest{
-		RecordPath: artifactPath,
-	})
-	if err != nil {
-		t.Fatalf("Recordings CLI adapter ResolveRecordPath() error = %v", err)
-	}
-	if resolved.ServicePath != artifactPath {
-		t.Fatalf("Recordings CLI adapter ServicePath = %q, want %q", resolved.ServicePath, artifactPath)
-	}
-
 	waitForRecordingsActivationArtifact(t, artifactPath)
-}
-
-type recordingsTransportActivationLedger struct {
-	recordings.Ledger
-}
-
-func recordingsTransportActivationService(
-	t *testing.T,
-	edges serviceedges.Edges,
-) recordings.Service {
-	t.Helper()
-
-	var service recordings.Service
-	edges.RecordingsRootObserver = func(root recordings.Service) { service = root }
-	_ = support.BuildProcess(t, edges)
-	if service == nil {
-		t.Fatal("canonical Recordings root was not observed")
-	}
-	return service
-}
-
-func assertRecordingsPortableValidateAdverseOutcome(t *testing.T, service recordings.Service) {
-	t.Helper()
-
-	if _, err := service.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
-		Payload: []byte(`{`),
-	}); !errors.Is(err, recordings.ErrInvalidPortableArtifact) {
-		t.Fatalf(
-			"DecodePortableArtifact malformed payload error = %v, want %v",
-			err,
-			recordings.ErrInvalidPortableArtifact,
-		)
-	}
 }

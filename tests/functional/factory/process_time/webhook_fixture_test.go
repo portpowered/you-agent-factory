@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -86,6 +88,23 @@ func openWebhookSession(t *testing.T, c *timeCohort, key string) string {
 	case <-time.After(30 * time.Second):
 		t.Fatal("webhook secret activation not observed")
 	}
+	// Secret resolution precedes runtime startup. Observe this exact session's
+	// public readiness before submitting work, including on a busy CI host.
+	if _, err := support.WaitForObservation(5*time.Second, func() (factoryapi.StatusResponse, error) {
+		response, err := http.Get(c.url + "/factory-sessions/" + id + "/status")
+		if err != nil {
+			return factoryapi.StatusResponse{}, err
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return factoryapi.StatusResponse{}, fmt.Errorf("session status: HTTP %d", response.StatusCode)
+		}
+		var status factoryapi.StatusResponse
+		err = json.NewDecoder(response.Body).Decode(&status)
+		return status, err
+	}, func(status factoryapi.StatusResponse) bool { return status.FactoryState == "RUNNING" }); err != nil {
+		t.Fatalf("webhook session %s (%s) did not start: %v", id, key, err)
+	}
 	return id
 }
 
@@ -93,7 +112,7 @@ func executeWebhookCommand(t *testing.T, c *timeCohort, id string, args ...strin
 	t.Helper()
 	out, err := tryWebhookCommand(t, c, id, args...)
 	if err != nil {
-		t.Fatalf("webhook command: %v", err)
+		t.Fatalf("webhook command %v in session %s: %v", args, id, err)
 	}
 	return out
 }

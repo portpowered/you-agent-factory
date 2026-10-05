@@ -1,4 +1,4 @@
-package planexecute
+package invocation_test
 
 import (
 	"bytes"
@@ -27,6 +27,7 @@ var planExecuteWorkName = regexp.MustCompile(`tasks/todo/([^` + "`" + `]+)\.md`)
 // TestPackagedPlanExecute groups the package's plan-and-execute behavior under
 // one reusable root-built process.
 func TestPackagedPlanExecute(t *testing.T) {
+	t.Parallel()
 	fixture := newPlanExecuteSharedFixture(t)
 	t.Run("TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults", func(t *testing.T) {
 		testPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(t, fixture)

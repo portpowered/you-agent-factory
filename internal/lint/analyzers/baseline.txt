@@ -2260,7 +2260,6 @@ testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional
 testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/package_cli_api_test.go::pollPackagedGoalAPIInspectionUntilCLICompletes::deadline::1
 testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/package_cli_api_test.go::tryGetRetainedFactoryEvents::deadline::1
 testsleep-deadline-test|tests/functional/factory/packaged/cross|tests/functional/factory/packaged/cross/package_cli_api_test.go::waitForSessionWorkEndpoint::deadline::1
-testsleep-deadline-test|tests/functional/factory/packaged/quorum|tests/functional/factory/packaged/quorum/helpers_test.go::packagedQuorumGatedCommandRunner.waitForBranchStarts::deadline::1
 testsleep-deadline-test|tests/functional/factory/packaged/tts|tests/functional/factory/packaged/tts/shared_fixture_test.go::packagedTTSSharedFixture.close::deadline::1
 testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/failure_isolation_test.go::TestMetricsSessionCancellationDoesNotCorruptConcurrentReport::deadline::1
 testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/failure_isolation_test.go::TestMetricsSessionTimeoutReturnsNoPartialReport::deadline::1
@@ -2309,7 +2308,6 @@ testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functi
 testsleep-deadline-test|tests/functional/transport/http/server_test|tests/functional/transport/http/server/startup_shutdown_test.go::startActiveBlockingInvocation::deadline::1
 testsleep-deadline-test|tests/functional/transport/submit_test|tests/functional/transport/submit/matrix_test.go::testSubmitCancellation::deadline::1
 testsleep-deadline-test|tests/functional/transport/submit_test|tests/functional/transport/submit/matrix_test.go::testSubmitRecoveryAndOutput::deadline::1
-testsleep-deadline-test|tests/functional/work/submission_test|tests/functional/work/submission/legacy_unary_test.go::waitForFakeClockWaiters::deadline::1
 testsleep-deadline-test|tests/functional/work/transports/cli_test|tests/functional/work/transports/cli/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerCommand::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerLines::deadline::1

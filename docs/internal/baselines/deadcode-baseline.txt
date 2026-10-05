@@ -2460,6 +2460,7 @@ tests/functional/internal/support/short.go: unreachable func: SkipLongFunctional
 tests/functional/internal/support/standard_inputs.go: unreachable func: CapturedInputs.Stderr
 tests/functional/internal/support/standard_inputs.go: unreachable func: CapturedInputs.Stdout
 tests/functional/internal/support/standard_inputs.go: unreachable func: FakeInputs
+tests/functional/internal/support/standard_inputs.go: unreachable func: IsolatedHomeEnvironment
 tests/functional/internal/support/standard_inputs.go: unreachable func: testStreamIsTerminal
 tests/functional/internal/support/timeout_scale.go: unreachable func: ScaledTimeout
 tests/functional/internal/support/tokens.go: unreachable func: FirstInputPayload

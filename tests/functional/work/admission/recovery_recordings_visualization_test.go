@@ -225,7 +225,7 @@ func waitForRecoveryActivationWorkAtState(
 				return
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) //nolint:testsleep // Poll the public work listing until replay recovery exposes the requested customer state.
 	}
 	listed := support.ListDefaultSessionWork(t, baseURL)
 	t.Fatalf(

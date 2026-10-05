@@ -1,4 +1,4 @@
-package quorum
+package invocation_test
 
 import (
 	"testing"
@@ -9,6 +9,7 @@ import (
 )
 
 func TestPackagedQuorum(t *testing.T) {
+	t.Parallel()
 	fixture := newPackagedQuorumSharedFixture(t)
 	t.Run("TestPackagedQuorumRequiredInputCompletes", func(t *testing.T) {
 		testPackagedQuorumRequiredInputCompletes(t, fixture)
@@ -56,7 +57,7 @@ func testPackagedQuorumRequiredInputCompletes(
 		}
 	}
 
-	assertMergedQuorumPrimaryResult(t, invocationPrimaryResultText(t, response), requestText)
+	assertMergedQuorumPrimaryResult(t, quorum_invocationPrimaryResultText(t, response), requestText)
 	assertPromptIncludes(
 		t,
 		runner.capturedMergePrompt(),
@@ -107,7 +108,7 @@ func testPackagedQuorumOptionalMemberSettingsReachWorkers(
 		}
 	}
 
-	assertMergedQuorumPrimaryResult(t, invocationPrimaryResultText(t, response), requestText)
+	assertMergedQuorumPrimaryResult(t, quorum_invocationPrimaryResultText(t, response), requestText)
 	assertPromptIncludes(
 		t,
 		runner.capturedMergePrompt(),
@@ -154,7 +155,7 @@ func testPackagedQuorumGatesMergeUntilBothBranchesComplete(
 		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 			t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
 		}
-		assertMergedQuorumPrimaryResult(t, invocationPrimaryResultText(t, response), requestText)
+		assertMergedQuorumPrimaryResult(t, quorum_invocationPrimaryResultText(t, response), requestText)
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for gated quorum invocation to complete")
 	}
@@ -212,7 +213,7 @@ func testPackagedQuorumReusesProcessAfterInsufficientMembers(
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v, want completed invocation after prior quorum failure", response)
 	}
-	assertMergedQuorumPrimaryResult(t, invocationPrimaryResultText(t, response), requestText)
+	assertMergedQuorumPrimaryResult(t, quorum_invocationPrimaryResultText(t, response), requestText)
 	for _, workstation := range []string{
 		packagedQuorumBranchAWorkstation,
 		packagedQuorumBranchBWorkstation,

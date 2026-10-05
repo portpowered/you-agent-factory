@@ -1,4 +1,4 @@
-package quorum
+package invocation_test
 
 import (
 	"bytes"
@@ -236,7 +236,7 @@ func assertPackagedQuorumInsufficientSuccessfulMembersFailed(
 	}
 }
 
-func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
+func quorum_invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
 	t.Helper()
 
 	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
@@ -352,7 +352,7 @@ func (runner *packagedQuorumGatedCommandRunner) waitForBranchStarts(t *testing.T
 	for _, started := range []<-chan struct{}{runner.startedA, runner.startedB} {
 		select {
 		case <-started:
-		case <-time.After(5 * time.Second):
+		case <-time.After(5 * time.Second): //nolint:testsleep // Failure bound on observed provider starts before releasing the customer quorum journey.
 			t.Fatal("timed out waiting for both quorum branches to start")
 		}
 	}

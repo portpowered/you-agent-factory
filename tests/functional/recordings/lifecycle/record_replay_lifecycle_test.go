@@ -168,7 +168,7 @@ func waitForRecordingsActivationArtifact(t *testing.T, artifactPath string) {
 				return
 			}
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(25 * time.Millisecond) //nolint:testsleep // Poll the customer recording file until its atomic publication contains the completed dispatch.
 	}
 	t.Fatalf("timed out waiting for completed portable recording at %s", artifactPath)
 }

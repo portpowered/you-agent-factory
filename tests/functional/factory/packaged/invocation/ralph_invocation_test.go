@@ -1,4 +1,4 @@
-package ralph
+package invocation_test
 
 import (
 	"bytes"
@@ -34,6 +34,7 @@ var packagedRalphPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.js
 // plan, repeats an incomplete iteration, and returns the final iterator output
 // only after the plan's story is marked complete.
 func TestPackagedRalph(t *testing.T) {
+	t.Parallel()
 	fixture := newRalphSharedFixture(t)
 	t.Run("TestPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI", func(t *testing.T) {
 		testPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI(t, fixture)

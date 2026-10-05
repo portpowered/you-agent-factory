@@ -821,3 +821,43 @@ The Linux snapshot contained the initial measured runtime plus subsequent
 patches. It did not incorporate the intervening main-branch dead-code tooling
 change; its snapshot commit identity is not the PR head identity. Hosted
 verification of the exact rebased PR head remains the merge authority.
+
+### Complete supervisor measurement and subsequent cleanup
+
+An exact tracked-source archive of `ac9dc75bef` was measured with the same
+four-CPU affinity, warm build/module caches, fresh execution and package budget.
+The complete CI supervisor ran coverage/reporting concurrently with the real
+quarantine validator. It took **255.84s (4m15.84s)** overall. Quarantine passed
+in **22.294s**; the coverage child took **255.828s**, including **234.580s**
+for its test invocation. It observed 146 packages and 1,021 top-level tests:
+1,018 passed, two skipped and one failed. The Models HTTP floor was not evaluated
+because execution failed. This is not a passing checkpoint. Setup-only attempts
+that lacked required validator metadata or `jq` were terminated and excluded
+from these results.
+
+The failure was the specialized webhook-time journey's submission returning
+HTTP 500. Three focused Linux repetitions of the complete two-cohort journey
+passed in 15.283s total. The fixture observed secret resolution before submitting
+Work; that effect precedes completed runtime startup. It now additionally awaits
+the exact session's public `RUNNING` status and includes command/session identity
+in failures. Verification of the updated fixture under full covered load is
+still required. Evidence is under `.artifacts/latency-audit/linux-ac9dc/`.
+
+Five further packaged-Factory suites—Quorum, Subagent, Ralph, Plan Execute and
+Factory Builder—now share `factory/packaged/invocation`, saving five additional
+test binaries. Each independently owned top-level cohort runs in parallel;
+stateful sequences within a cohort retain their ordering. Their owned-home
+environments also discard inherited model-cache overrides. The combined suite
+passes locally in 14.491s and compiles with `functionallong`; a full-lane latency
+result is needed to establish the saving.
+
+Hosted lint on `b80e2127e6` identified remaining internal adapter construction,
+operator-path policy calls, stale timing/construction baseline entries and the
+missing maintenance-lane assignment for moved tooling tests. The recordings
+journey now retains actual CLI recording files and REST artifacts without its
+internal adapter/decoder checks. Operator settings retains CLI output, dispatched
+model arguments and the persisted customer config file without constructor or
+filesystem call-count assertions. Tooling tests have an explicit maintenance
+lane. The dead-code baseline records the new test-support-only home-environment
+helper, consistent with its existing helpers excluded from production reachability;
+no new unreachable production code is accepted.

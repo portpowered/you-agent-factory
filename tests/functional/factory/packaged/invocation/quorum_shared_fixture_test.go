@@ -1,4 +1,4 @@
-package quorum
+package invocation_test
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package subagent
+package invocation_test
 
 import (
 	"bytes"
@@ -25,6 +25,7 @@ const packagedSubagentChildPrimaryResult = "mock worker accepted"
 // primary agent response instead of echoing the submitted request text,
 // including hermetic no-server success without starting an HTTP listener.
 func TestPackagedSubagent(t *testing.T) {
+	t.Parallel()
 	fixture := newSubagentSharedFixture(t)
 	t.Run("TestPackagedSubagentReturnsChildResult", func(t *testing.T) {
 		testPackagedSubagentReturnsChildResult(t, fixture)
@@ -65,7 +66,7 @@ func testPackagedSubagentReturnsChildResult(t *testing.T, fixture *subagentShare
 		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 			t.Fatalf("status = %q, want COMPLETED; response = %#v", response.Status, response)
 		}
-		if got := invocationPrimaryResultText(t, response); got != packagedSubagentChildPrimaryResult {
+		if got := subagent_invocationPrimaryResultText(t, response); got != packagedSubagentChildPrimaryResult {
 			t.Fatalf("primaryResult = %q, want %q", got, packagedSubagentChildPrimaryResult)
 		}
 		if strings.Contains(invocationResponseJSON(t, response), requestText) {
@@ -116,7 +117,7 @@ func testPackagedSubagentStreamsChildResponseEvents(t *testing.T, fixture *subag
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
 	}
-	if got := invocationPrimaryResultText(t, response); got != packagedSubagentChildPrimaryResult {
+	if got := subagent_invocationPrimaryResultText(t, response); got != packagedSubagentChildPrimaryResult {
 		t.Fatalf("primaryResult = %q, want %q", got, packagedSubagentChildPrimaryResult)
 	}
 	assertPackagedSubagentChildResponseEvents(t, responseEvents)
@@ -452,7 +453,7 @@ func invocationPrimaryResultPresent(response factoryapi.InvocationResponse) bool
 	return response.PrimaryResult != nil && len(*response.PrimaryResult) > 0
 }
 
-func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
+func subagent_invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
 	t.Helper()
 
 	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {

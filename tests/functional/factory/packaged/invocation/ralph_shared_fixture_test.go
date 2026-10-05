@@ -1,4 +1,4 @@
-package ralph
+package invocation_test
 
 import (
 	"context"
