@@ -183,6 +183,13 @@ Backend quality **MUST** be enforced mechanically wherever possible.
 Rules:
 
 - Formatting, linting, vetting, and dead-code checks **MUST** pass before merge.
+- Production dead-code analysis includes both repository entrypoints and the
+  actual generated golangci module host retained by `make golangci-build`.
+  Each program uses its own production module graph; compiler-declared host
+  package ownership reconciles the two reachability reports.
+  Tests are not reachability roots; unreachable plugin/analyzer functions
+  remain findings. Missing host metadata fails closed, and baseline updates
+  remain deletion-only for checker retirement.
 - The repository **SHOULD** maintain static rules for prohibited patterns rather than relying on tribal knowledge.
 - Repository checks **SHOULD** enforce constructor placement, prohibit dependency-container grab bags, and detect operational package-level functions as these rules become mechanically identifiable.
 - Magic values **SHOULD NOT** appear inline when a named constant, type, or helper would communicate intent better.
@@ -200,8 +207,14 @@ Default review thresholds:
 
 Repository Go size and complexity enforcement:
 
-- `make golangci` runs pinned golangci-lint v2.11.4 and the shared `repolint`
-  analyzer. Its built-in size rules apply to handwritten Go under `cmd/`,
+- `make golangci` runs pinned golangci-lint v2.11.4 and shared analyzers through
+  its supported module plugin. The strict repository configurations preserve
+  exact-debt diagnostics independently of built-in changed-line filtering.
+  Shared baseline-growth and compiler-owner analyzers reject established debt
+  growth and vanished owners/sources using Git objects and compiler metadata.
+  Ordinary and complete-tag runs retain default-only and tagged source coverage;
+  platform-inactive debt owners resolve through supported GOOS metadata.
+  Its built-in size rules apply to handwritten Go under `cmd/`,
   `internal/`, `pkg/`, and `tests/`, including `_test.go` files.
 - Revive `file-length-limit` allows 1000 lines after excluding comment and
   blank lines. Revive `function-length` allows 100 physical lines inside a
@@ -400,7 +413,7 @@ Fixed sleeps and short fixed deadlines are the dominant source of CI-load flakes
 - Tests **MUST** wait for an event, channel, or observable condition, not for elapsed time. Poll a condition (for example the functional `WaitFor...` support helpers) instead of `time.Sleep`.
 - Code under test that depends on time **MUST** take the injectable `pkg/platform/clock` source, and tests **SHOULD** use `clock.Deterministic` so time advances only when the test says so.
 - A timeout in a test is a failure ceiling, not an expectation. It **MUST** be generous (tens of seconds or more) so a loaded host does not trip it, and a test **MUST NOT** assert that elapsed time falls inside a tight window.
-- `make golangci` (part of `make lint`) runs the compiler-backed `testsleep` analyzer through `cmd/repolint`. It ratchets `time.Sleep`, literal deadlines of five seconds or less (`time.After`, `time.NewTimer`, `time.AfterFunc`, `context.WithTimeout`/`WithDeadline`), and elapsed-time comparisons in tests and test helpers. Exact debt in `internal/lint/analyzers/baseline.txt` retains file, declaration, kind and occurrence; moving lines preserves debt, new sites fail, and removing sites requires deleting stale keys. Compiler metadata also rejects allowances for vanished package owners. Only a newly migrated rule may seed existing observed debt once; established rules cannot gain keys. A genuinely necessary site may be exempted inline with `//nolint:testsleep // reason`; the reason is mandatory.
+- `make golangci` (part of `make lint`) runs the compiler-backed `testsleep` analyzer through the supported golangci module plugin. It ratchets `time.Sleep`, literal deadlines of five seconds or less (`time.After`, `time.NewTimer`, `time.AfterFunc`, `context.WithTimeout`/`WithDeadline`), and elapsed-time comparisons in tests and test helpers. Exact debt in `internal/lint/analyzers/baseline.txt` retains file, declaration, kind and occurrence; moving lines preserves debt, new sites fail, and removing sites requires deleting stale keys. Compiler metadata also rejects allowances for vanished package owners. Only a newly migrated rule may seed existing observed debt once; established rules cannot gain keys. A genuinely necessary site may be exempted inline with `//nolint:testsleep // reason`; the reason is mandatory.
 
 ### 8. CI/CD and Automated Enforcement
 
