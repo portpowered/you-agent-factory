@@ -207,15 +207,9 @@ FUNCTIONAL_TEST_GO ?= $(GO)
 # can be reported by its compact terminal verdict step. An unset path preserves
 # the historical fail-fast target behavior.
 FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
-PACKAGE_BOUNDARY_ROOT ?= .
-PACKAGE_BOUNDARY_ALL ?= 0
-PACKAGE_BOUNDARY_BASE_REF ?=
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-# Memoizes the package-boundary base-tree scan per base commit and checker build.
-# Empty disables it.
-PACKAGE_BOUNDARY_BASELINE_CACHE_DIR ?= auto
 # Optional CI outputs can be defined but blank. Use the canonical lane budget
 # for blank handoffs; report setup rejects invalid nonblank overrides.
 LINT_JOBS ?= $(GO_LANE_BUDGET)
@@ -229,7 +223,7 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet pkg-boundary service-cycle-check packaged-factory-source-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
+LINT_TARGETS_BASE := vet service-cycle-check packaged-factory-source-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -302,7 +296,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: lint-full pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-catalog-generate provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
+.PHONY: lint-full service-cycle-check packaged-factory-source-check packaged-factory-catalog-generate provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: readme-check deadcode dashboard-verify
 
@@ -1007,9 +1001,6 @@ backend-dependency-graph:
 # locally and required by the CI publisher after both measured lanes pass.
 architecture:
 	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
-
-pkg-boundary:
-	$(GO) run ./cmd/pkgboundarycheck -root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)),-baseline-cache-dir "$(PACKAGE_BOUNDARY_BASELINE_CACHE_DIR)",) $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,)
 
 service-cycle-check:
 	$(GO) run ./cmd/servicecyclecheck -root "."

@@ -136,7 +136,6 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	// runtime log, metrics, and ACP transcript openers. Keep these as exact
 	// file/operation allowances so a new ambient effect elsewhere still fails.
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.currentTime", symbol: "time.Now", wireSymbol: "pkg/platform/logging.NewRuntimeLogOpener"},
-	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.nextBackupPath", symbol: "os.Lstat", wireSymbol: "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openExistingOrNew", symbol: "os.OpenFile", wireSymbol: "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openExistingOrNew", symbol: "os.Stat", wireSymbol: "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.MkdirAll", wireSymbol: "pkg/platform/logging.NewRuntimeLogOpener"},

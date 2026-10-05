@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -21,11 +22,12 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def execute(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
+def execute(command: list[str], cwd: Path, compiler_env: dict | None = None) -> subprocess.CompletedProcess:
     # Isolate git fixtures from caller identity, hooks, signing, and global config.
     env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
     for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
         env.pop(key, None)
+    env.update(compiler_env or {})
     return subprocess.run(command, cwd=cwd, env=env, capture_output=True,
                           text=True, encoding="utf-8", errors="replace", timeout=180)
 
@@ -76,11 +78,12 @@ class SizeFixtures:
         return root
 
     def lint(self, root: Path, label: str, expected: list[tuple[str, str]],
-             error: str = "", tags: str = "") -> list[dict]:
+             error: str = "", flags: tuple[str, ...] = (),
+             compiler_env: dict | None = None, tags: str = "") -> list[dict]:
         output = root / f"{label}.json"
         command = self.tool + ["run", "--concurrency=2", "--allow-parallel-runners",
                                "--uniq-by-line=false",
-                               "--output.json.path", str(output), "./..."]
+                               "--output.json.path", str(output), *flags, "./..."]
         if tags:
             command += ["--build-tags", tags]
         # Match the canonical Make prerequisite even when lint finds no issues.
@@ -88,9 +91,9 @@ class SizeFixtures:
         if "  new-from-merge-base: origin/main\n" in (root / ".golangci.yml").read_text():
             result = execute(["git", "merge-base", "HEAD", "origin/main"], root)
             if result.returncode == 0:
-                result = execute(command, root)
+                result = execute(command, root, compiler_env)
         else:
-            result = execute(command, root)
+            result = execute(command, root, compiler_env)
         write(root, f"{label}.log", result.stdout + result.stderr)
         if error:
             assert result.returncode != 0, f"{label}: missing failure"
@@ -225,6 +228,112 @@ class SizeFixtures:
         print(f"PASS invalid-config: exit={result.returncode}", flush=True)
 
 
+class BoundaryFixtures(SizeFixtures):
+    """Seven grouped witnesses through the compiled plugin, including cache reuse."""
+
+    effect_source = 'package effects\nimport "time"\nfunc Run() { _ = time.Now() }\n'
+    # Exercise an existing embedded production key; fixture text cannot change
+    # the delivered host's tolerance, and this lane never adds fixture debt.
+    debt_unit = "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
+    debt_path = debt_unit + "/resolver.go"
+    effect_key = ("production-default|" + debt_unit + "|" + debt_path +
+                  "#LocalFactoryNameResolver#filesystem#os.ReadFile::count=1\n")
+    debt_source = ('package scaffoldfacts\nimport "os"\n'
+                   'func LocalFactoryNameResolver() { _, _ = os.ReadFile("fixture") }\n')
+
+    def prepared(self, name: str, sources: dict[str, str], debt: str = "") -> Path:
+        root = self.module(name)
+        write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+        write(root, "pkg/wire/wire.go", "package wire\n")
+        write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
+        write(root, "internal/lint/analyzers/baseline.txt", debt)
+        for name, source in sources.items():
+            write(root, name, source)
+        checked(["git", "init", "-q"], root)
+        checked(["git", "config", "core.longpaths", "true"], root)
+        checked(["git", "add", "internal"], root)
+        self.commit(root)
+        checked(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], root)
+        return root
+
+    def allowed_and_selection(self) -> None:
+        root = self.prepared("A-D-selection", {
+            "pkg/platform/clock/clock.go": 'package clock\nimport "time"\ntype Real struct{}\nfunc (Real) Now() time.Time { return time.Now() }\n',
+        })
+        selection = ('package wire\nimport "github.com/portpowered/infinite-you/pkg/platform/clock"\n'
+                     'var _ = clock.Real{}\n')
+        write(root, "pkg/wire/wire.go", selection)
+        self.lint(root, "A-exact-selected-leaf", [])
+        expected = [("repolint", "Real.Now#clock#time.Now::count=1")]
+        write(root, "pkg/wire/wire.go", "package wire\n")
+        self.lint(root, "D-removed-selection-cached", expected)
+        write(root, "pkg/wire/wire.go", "package wire\n// clock.Real{} is only a comment\n")
+        self.lint(root, "D-fake-selection-cached", expected)
+        write(root, "pkg/wire/wire.go", selection)
+        self.lint(root, "D-restored-selection", [])
+
+    def new_violations(self) -> None:
+        root = self.prepared("B-new-violations", {
+            "pkg/services/fixture/wire/source.go": "package fixture\nfunc NewService() {}\n",
+            "cmd/fixture/source.go": ('package fixture\n'
+                'import "github.com/portpowered/infinite-you/pkg/services/fixture/wire"\n'
+                'func Run() { fixture.NewService() }\n'),
+            "pkg/platform/effects/source.go": self.effect_source,
+        })
+        issues = self.lint(root, "B-qualified-construction-and-effect", [
+            ("repolint", "construction: service-construction:"),
+            ("repolint", "packageboundary: production-default:"),
+        ])
+        assert any("pkg/services/fixture/wire.NewService" in issue["Text"] for issue in issues)
+        assert any("Run#clock#time.Now::count=1" in issue["Text"] for issue in issues)
+        assert all("inject" in issue["Text"] and "pkg/wire" in issue["Text"] for issue in issues)
+
+    def counted_debt(self) -> None:
+        root = self.prepared("C-counted-debt", {self.debt_path: self.debt_source}, self.effect_key)
+        self.lint(root, "C-exact-count", [])
+        write(root, self.debt_path, self.debt_source.replace("func Local", "\n// line motion\nfunc Local"))
+        self.lint(root, "C-line-motion", [])
+        write(root, self.debt_path, self.debt_source.replace('_, _ = os.ReadFile("fixture")',
+            '_, _ = os.ReadFile("fixture"); _, _ = os.ReadFile("fixture")'))
+        self.lint(root, "C-extra-occurrence", [
+            ("repolint", "LocalFactoryNameResolver#filesystem#os.ReadFile::count=2"),
+            ("repolint", "stale baseline entry"),
+        ])
+
+    def stale_debt(self) -> None:
+        root = self.prepared("E-stale-debt", {self.debt_path: self.debt_source}, self.effect_key)
+        write(root, self.debt_path, "package scaffoldfacts\n")
+        self.lint(root, "E-removed-use", [("repolint", "stale baseline entry")])
+        (root / self.debt_path).unlink()
+        self.lint(root, "E-vanished-owner", [("repolint", "compiler-ownership:")])
+        write(root, "internal/lint/analyzers/baseline.txt", "")
+        self.lint(root, "E-deleted-resolved-key", [])
+
+    def missing_inputs(self) -> None:
+        root = self.prepared("F-missing-inputs", {"pkg/platform/effects/source.go": "package effects\n"})
+        (root / "pkg/wire/wire.go").unlink()
+        self.lint(root, "F-missing-wire", [
+            ("repolint", "wire-selection-metadata:"),
+            ("repolint", "package-boundary-metadata:"),
+        ])
+        write(root, "pkg/wire/wire.go", "package wire\n")
+        checked(["git", "update-ref", "-d", "refs/remotes/origin/main"], root)
+        self.lint(root, "F-missing-history", [("repolint", "origin/main")])
+
+    def compiler_context(self) -> None:
+        root = self.prepared("G-compiler-context", {
+            "pkg/platform/effects/plain.go": "package effects\n",
+            "pkg/platform/effects/source_windows.go": "//go:build integration\n\n" + self.effect_source,
+            "pkg/platform/effects/source_linux.go": "//go:build integration\n\n" + self.effect_source,
+        })
+        self.lint(root, "G-inactive-tag", [], compiler_env={"GOOS": "windows"})
+        tags = ("--build-tags=integration,functionallong,backendconformance,factoryartifact,managed_process_integration",)
+        for platform in ("windows", "linux"):
+            issues = self.lint(root, "G-active-" + platform,
+                [("repolint", "Run#clock#time.Now::count=1")], flags=tags, compiler_env={"GOOS": platform})
+            assert issues[0]["Pos"]["Filename"].endswith("source_" + platform + ".go")
+
+
 class PkgFixtures(SizeFixtures):
     # Each witness exercises the real pinned linter, including type resolution.
     witnesses = {
@@ -352,7 +461,7 @@ def consumption(fixtures: SizeFixtures) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "catalog", "consumption", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "catalog", "consumption", "package-boundary", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
@@ -431,6 +540,15 @@ def main() -> None:
                 saved_git.rename(git_directory)
         if args.cohort in ("consumption", "all"):
             consumption(fixtures)
+        if args.cohort in ("package-boundary", "all"):
+            boundary = BoundaryFixtures(tool, artifacts, (ROOT / ".golangci-repository.yml").read_text(encoding="utf-8"))
+            boundary.results = fixtures.results
+            boundary.allowed_and_selection()
+            boundary.new_violations()
+            boundary.counted_debt()
+            boundary.stale_debt()
+            boundary.missing_inputs()
+            boundary.compiler_context()
         if args.cohort in ("owners", "all"):
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("compiler-owners")
@@ -464,9 +582,9 @@ def main() -> None:
             write(root, "internal/lint/analyzers/baseline.txt", "")
             (root / "pkg/wire/wire.go").unlink()
             fixtures.lint(root, "wire-missing-compiler-source-cached", [
-            ("repolint", "wire-selection-metadata:"),
-            ("repolint", "package-boundary-metadata:"),
-        ])
+                ("repolint", "wire-selection-metadata:"),
+                ("repolint", "package-boundary-metadata:"),
+            ])
             write(root, "pkg/wire/wire.go", "package wire\n")
             fixtures.lint(root, "wire-restored-compiler-source", [])
         if args.cohort in ("baseline", "all"):
@@ -520,8 +638,8 @@ func execute(command *shape.Command) { command.Flags().String("name", "", "help"
             write(root, "pkg/transports/cli/root_work.go", "package cli\ntype SessionFamilyBindings struct{}\n")
             fixtures.lint(root, "manifest-mirror-storage", [("repolint", "CLI-shape mirror")])
             write(root, "pkg/transports/cli/root_work.go", "package cli\n")
-            write(root, ".golangci.yml", fixtures.config.replace(
-                "[layering, behavior, construction, petripublic, serviceshape, functionalshape]", "[missing]"))
+            write(root, ".golangci.yml", re.sub(
+                r"defer-stale: \[[^\]]*\]", "defer-stale: [missing]", fixtures.config))
             fixtures.lint(root, "manifest-invalid-settings", [], error="unknown deferred analyzer")
             write(root, ".golangci.yml", fixtures.config.replace("repolint", "missing"))
             fixtures.lint(root, "manifest-unregistered-plugin", [], error="not found")

@@ -12,7 +12,7 @@ import (
 // vocabulary. Marking, topology, tokens, and enabled transitions are
 // intentionally omitted from the peer-facing result. This helper lives under
 // factory_runtime/internal so raw engine-snapshot types stay off the public
-// Runtime package surface enforced by pkg-boundary.
+// Runtime package surface enforced by shared analyzers through make golangci.
 func Project(
 	snap *legacysnapshot.Snapshot,
 	scope factory.ObservationScope,
