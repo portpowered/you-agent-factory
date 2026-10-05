@@ -846,6 +846,8 @@ jobs:
             go.mod
             go.sum
             .github/workflows/ci.yml
+      - name: Exercise packaged Markdown enforcement
+        run: python3 scripts/lint-migration-smoke.py markdown
       - name: Check Go formatting
         run: make fmt-check
       - name: Race-check shared lint components
@@ -941,6 +943,7 @@ jobs:
             .artifacts/backend-lint/report.json
             .artifacts/backend-lint/lint.log
             .artifacts/backend-lint/comment.md
+            .artifacts/lint-migration-smoke/markdown-*/
             bin/deadcode-current.txt
           if-no-files-found: warn
           retention-days: 14

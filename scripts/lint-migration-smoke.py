@@ -521,11 +521,191 @@ def consumption(fixtures: SizeFixtures) -> None:
     fixtures.lint(root, "consumption-invalid-config", [], error="unknown deferred analyzer")
 
 
+class MarkdownFixtures:
+    """Static enforcement scenarios use the real Make recipe and prepared tools."""
+
+    def __init__(self, artifacts: Path):
+        self.artifacts = artifacts
+        self.results: list[dict] = []
+        self.cache = (ROOT / '.cache/docs-markdown-lint').resolve()
+        checked(['make', 'docs-reference-check'], ROOT)
+        self.makefile = (ROOT / 'Makefile').read_text(encoding='utf-8')
+        self.config = (ROOT / '.gomarklint-docs.json').read_text(encoding='utf-8')
+        self.schema = (ROOT / '.gomarklint-docs.schema.json').read_text(encoding='utf-8')
+        tool = self.cache / 'bin' / ('gomarklint.exe' if os.name == 'nt' else 'gomarklint')
+        version = checked([str(tool), '--version'], ROOT)
+        identity = checked(['go', 'version', '-m', str(tool)], ROOT)
+        assert 'github.com/shinagawa-web/gomarklint/v3\tv3.3.1' in identity, identity
+        write(artifacts, 'markdown-tools.txt', identity + version +
+              (ROOT / 'scripts/docs-markdown-lint-requirements.txt').read_text())
+        print(version.strip(), flush=True)
+
+    def root(self, label: str) -> Path:
+        root = self.artifacts / label
+        root.mkdir()
+        write(root, 'Makefile', self.makefile)
+        write(root, '.gomarklint-docs.json', self.config)
+        write(root, '.gomarklint-docs.schema.json', self.schema)
+        write(root, 'docs/README.md', '# Valid\n')
+        write(root, 'docs/reference/valid.md', '# Valid\n')
+        return root
+
+    def run(self, root: Path, label: str, expected: tuple[str, ...] = (),
+            variables: tuple[str, ...] = (), env: dict | None = None) -> None:
+        # The explicit fixture inputs are the observer; no source inventory check.
+        paths = ['docs/README.md', 'docs/reference/valid.md', 'docs/reference/nested/.hidden/notes.MD']
+        before = {p: (root / p).read_bytes() for p in paths if (root / p).is_file() and os.access(root / p, os.R_OK)}
+        result = execute(['make', '-o', self.cache.as_posix() + '/ready',
+                          'docs-reference-check', 'DOCS_MARKDOWN_CACHE=' + self.cache.as_posix(),
+                          *variables], root, env)
+        output = result.stdout + result.stderr
+        write(root, label + '.log', output)
+        assert (result.returncode != 0) == bool(expected), f'{label}: exit {result.returncode}\n{output}'
+        for message in expected:
+            assert message in output, f'{label}: missing {message}\n{output}'
+        for path, content in before.items():
+            assert (root / path).read_bytes() == content, f'{label}: modified {path}'
+        self.results.append({'case': label, 'exit': result.returncode, 'expected': expected})
+        print(f'PASS {label}: exit={result.returncode}', flush=True)
+
+    def content(self) -> None:
+        root = self.root('M02-scope')
+        nested = root / 'docs/reference/nested/.hidden/notes.MD'
+        nested.parent.mkdir(parents=True)
+        nested.write_bytes(b'# Hidden\n')
+        write(root, 'docs/reference/space name.md', '# Space\n')
+        write(root, 'docs/reference/ignored.txt', 'no newline')
+        self.run(root, 'M02-valid')
+        nested.write_bytes(b'```\n')
+        self.run(root, 'M02-hidden-invalid', ('docs/reference/nested/.hidden/notes.MD', 'Unclosed code block'))
+        for label, content, diagnostic in (
+            ('M03-backtick', b'```go\ntext\n', 'Unclosed code block'),
+            ('M03-tilde', b'~~~\ntext\n', 'Unclosed code block'),
+            ('M03-mismatch', b'```\ntext\n~~~\n', 'Unclosed code block'),
+            ('M03-short', b'````\ntext\n```\n', 'Unclosed code block'),
+            ('M04-newline', b'# Title', 'MD047'),
+            ('M04-frontmatter', b'---\ntitle: Example\n---', 'MD047'),
+            ('M05-encoding', b'\xff\n', 'iconv'),
+            ('M11-CR-only', b'# Title\r', 'Missing final blank line'),
+        ):
+            root = self.root(label)
+            (root / 'docs/README.md').write_bytes(content)
+            self.run(root, label, ('docs/README.md', diagnostic))
+        for label, content in (
+            ('empty', b''), ('backtick', b'```go\ntext\n```\n'),
+            ('tilde', b'~~~\ntext\n~~~\n'), ('CRLF', b'# Title\r\n'),
+            ('long-line', b'a' * 70000 + b'\n'),
+            ('outer-fence', b'````\n```literal\n````\n'),
+        ):
+            root = self.root('M10-' + label)
+            (root / 'docs/README.md').write_bytes(content)
+            self.run(root, 'M10-' + label)
+
+    def inputs(self) -> None:
+        for operand in ('docs/README.md', 'docs/reference'):
+            root = self.root('M06-' + Path(operand).name)
+            path = root / operand
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            self.run(root, 'M06-missing', (operand, 'find'))
+        if os.name == 'nt' or os.geteuid() == 0:
+            self.results.append({'case': 'M07-permissions', 'unavailable':
+                                 'Requires nonprivileged POSIX identity; hosted Backend Lint owns proof'})
+            print('UNAVAILABLE M07: requires nonprivileged POSIX identity', flush=True)
+        else:
+            for operand in ('docs/README.md', 'docs/reference/nested'):
+                root = self.root('M07-' + Path(operand).name)
+                path = root / operand
+                if operand.endswith('nested'):
+                    write(root, operand + '/guide.md', '# Valid\n')
+                path.chmod(0)
+                try:
+                    self.run(root, 'M07-unreadable', (operand, 'Permission denied'))
+                finally:
+                    path.chmod(0o700)
+
+    def configuration(self) -> None:
+        for label, content in (
+            ('malformed', '{'), ('unknown', self.config.replace('final-blank-line', 'unknown')),
+            ('disabled', self.config.replace('"error"', '"off"')),
+            ('missing-rule', '{"default":false,"output":"text","rules":{}}'),
+        ):
+            root = self.root('M08-' + label)
+            write(root, '.gomarklint-docs.json', content)
+            self.run(root, 'M08-' + label, ('.gomarklint-docs.json',))
+        for name in ('.gomarklint-docs.json', '.gomarklint-docs.schema.json'):
+            root = self.root('M08-missing-' + name)
+            (root / name).unlink()
+            self.run(root, 'M08-missing', (name,))
+        root = self.root('M08-malformed-schema')
+        write(root, '.gomarklint-docs.schema.json', '{')
+        self.run(root, 'M08-malformed-schema', ('.gomarklint-docs.schema.json',))
+        root = self.root('M08-pin')
+        write(root, 'scripts/docs-markdown-lint-requirements.txt', 'pymarkdownlnt==invalid-version\n')
+        # Force the real preparation recipe offline, with an impossible exact pin.
+        write(root, 'Makefile', self.makefile.replace('github.com/shinagawa-web/gomarklint/v3@v3.3.1',
+                                                    'github.com/shinagawa-web/gomarklint/v3@v999.999.999'))
+        result = execute(['make', 'docs-reference-check',
+                          'DOCS_MARKDOWN_CACHE=' + (root / 'cache').as_posix()], root,
+                         {'GOPROXY': 'off'})
+        output = result.stdout + result.stderr
+        write(root, 'go-pin.log', output)
+        assert result.returncode and 'v999.999.999' in output, output
+        self.results.append({'case': 'M08-go-pin', 'exit': result.returncode})
+        write(root, 'Makefile', self.makefile)
+        self.run(root, 'M08-python-pin', ('invalid-version',),
+                 ('DOCS_MARKDOWN_CACHE=' + (root / 'cache').as_posix(), 'GO=true'),
+                 {'PIP_NO_INDEX': '1'})
+
+    def unavailable(self) -> None:
+        for command in ('find', 'iconv'):
+            root = self.root('M09-' + command)
+            write(root, 'Makefile', self.makefile.replace(command + ' ', 'missing-' + command + ' '))
+            self.run(root, 'M09-' + command, ('missing-' + command,))
+        for variable in ('PYTHON', 'GO'):
+            root = self.root('M09-' + variable)
+            overrides = (variable + '=missing-' + variable,)
+            if variable == 'GO':
+                overrides += ('DOCS_MARKDOWN_CACHE=' + (root / 'cache').as_posix(),)
+                write(root, 'scripts/docs-markdown-lint-requirements.txt', '')
+            self.run(root, 'M09-' + variable, ('missing-' + variable,), overrides)
+        root = self.root('M09-pip')
+        write(root, 'scripts/docs-markdown-lint-requirements.txt', '')
+        self.run(root, 'M09-pip', ('No module named pip',),
+                 ('GO=true', 'PYTHON=python -S', 'DOCS_MARKDOWN_CACHE=' + (root / 'cache').as_posix()))
+        root = self.root('M09-linter')
+        write(root, 'Makefile', self.makefile.replace('/gomarklint$(if', '/missing-gomarklint$(if'))
+        self.run(root, 'M09-linter', ('missing-gomarklint',))
+
+    def scenarios(self) -> None:
+        self.results.append({'case': 'M01-current-docs', 'exit': 0})
+        self.content()
+        self.inputs()
+        self.configuration()
+        self.unavailable()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "service-cycle", "provider-catalog", "catalog", "consumption", "package-boundary", "packaged-source", "all"))
-    parser.add_argument("--golangci", required=True)
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "service-cycle", "provider-catalog", "catalog", "consumption", "package-boundary", "packaged-source", "markdown", "all"))
+    parser.add_argument("--golangci")
     args = parser.parse_args()
+    if args.cohort != "markdown" and not args.golangci:
+        parser.error("--golangci is required except for markdown")
+    if args.cohort in ("markdown", "all"):
+        parent = ROOT / ".artifacts/lint-migration-smoke"
+        parent.mkdir(parents=True, exist_ok=True)
+        artifacts = Path(tempfile.mkdtemp(prefix="markdown-", dir=parent))
+        markdown = MarkdownFixtures(artifacts)
+        try:
+            markdown.scenarios()
+        finally:
+            write(artifacts, "results.json", json.dumps(markdown.results, indent=2) + "\n")
+        print(f"PASS markdown: {len(markdown.results)} scenarios; artifacts: {artifacts}", flush=True)
+        if args.cohort == "markdown":
+            return
     tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
             else shlex.split(args.golangci))
     version = checked(tool + ["version"], ROOT)
