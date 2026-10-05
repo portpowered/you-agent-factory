@@ -1909,3 +1909,32 @@ package stub after its customer cases moved to Product customer journeys. The
 obsolete `doc.go` stub is removed rather than adding a shape exception. The
 new nine-suite consolidation and customer file-failure cases are the next hosted
 candidate. No checkpoint merge is claimed from this revision.
+
+### Consolidated API smoke selector correction
+
+Hosted run `37344044590` finds three Make targets still selecting the retired
+HTTP server package. The API contract job fails before running the customer
+case (`no Go files`), so this is a package-routing failure rather than a failed
+REST assertion. `api-smoke`, the focused HTTP baseline, and the related contract
+target now select `product/cli_rest_journeys` and the exact nested
+`TestRESTServerJourneys/TestGeneratedClientAndServerSchemaStayAligned` case.
+The dollar anchor is escaped for Make. Native Go JSON confirms that the moved
+case and its fixture-owning parent run and pass (1.550s package elapsed).
+Scenario projection defaults now reference the executable CLI/REST parents;
+the reviewed 160-decision manifest remains unchanged. The scenario package's
+unit tests pass in 0.164s.
+
+### Memory-limited monolith experiments
+
+The retired private single-binary sources are temporarily restored under their
+original functional path for measurement, then moved back outside discovery.
+An initial attempt to run them under `.artifacts/` fails immediately because Go
+correctly forbids importing the functional internal REST client from there.
+It supplies no latency evidence. The first correctly located `GOMEMLIMIT=3GiB`
+sample takes 130.68s command wall and peaks at 3,463,308 KiB (3.30 GiB), but
+fails evidence-declaration checks because the native lane had restored its
+current registry while these older generated sources require their original
+exact nested aliases. This failed sample cannot establish behavior equivalence
+or a checkpoint. A repeat installs the corresponding source revision's registry
+and exact mapped aliases only for the private run, restoring the current native
+registry in cleanup. The memory limit is a Go GC target, not a hard RSS ceiling.
