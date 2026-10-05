@@ -7,6 +7,44 @@ import (
 	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 )
 
+func TestVerifyCatalogToolIdentities_RejectsMalformedDiscovery(t *testing.T) {
+	t.Parallel()
+	canonical := mcpfactorycatalog.CatalogToolIdentity{
+		ID:   "mcp.tool.you.example.first",
+		Name: "you.example.first",
+	}
+	tests := []struct {
+		name       string
+		discovered []mcpfactorycatalog.CatalogToolIdentity
+		wantError  string
+	}{
+		{
+			name:       "duplicate public name",
+			discovered: []mcpfactorycatalog.CatalogToolIdentity{canonical, canonical},
+			wantError:  `duplicate discovered public name "you.example.first"`,
+		},
+		{
+			name: "invalid stable ID",
+			discovered: []mcpfactorycatalog.CatalogToolIdentity{{
+				ID:   "mcp.tool.you.example.wrong",
+				Name: canonical.Name,
+			}},
+			wantError: `discovered tool "you.example.first" has invalid stable ID "mcp.tool.you.example.wrong"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := mcpfactorycatalog.VerifyCatalogToolIdentities(
+				[]mcpfactorycatalog.CatalogToolIdentity{canonical}, tt.discovered,
+			)
+			if err == nil || err.Error() != tt.wantError {
+				t.Fatalf("VerifyCatalogToolIdentities() error = %v, want %q", err, tt.wantError)
+			}
+		})
+	}
+}
+
 func TestVerifyCatalogToolIdentities_PassesForAuthoredCatalogShape(t *testing.T) {
 	discovered := []mcpfactorycatalog.CatalogToolIdentity{{ID: "mcp.tool.you.example.first", Name: "you.example.first"}, {ID: "mcp.tool.you.example.second", Name: "you.example.second"}}
 	catalog := make([]mcpfactorycatalog.CatalogToolIdentity, 0, len(discovered))
