@@ -18,6 +18,13 @@ type interruptPhaseAckStore struct {
 	recordings.WorkerRecordingStore
 }
 
+func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if strings.HasPrefix(record.WorkerSessionID, "interrupt-admission-failure-") {
+		return errors.New("private-successor-opening-detail")
+	}
+	return store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+}
+
 func (store *interruptPhaseAckStore) PersistWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
 	if strings.Contains(key.RequestID, "interrupt-input-write-failure") {
 		return "", errors.New("private-input-write-detail")
@@ -36,7 +43,19 @@ func (store *interruptPhaseAckStore) BeginWorkerControlOperation(ctx context.Con
 	if record.Operation.Action == "interrupt" && strings.Contains(record.Operation.RequestID, "interrupt-intent-failure") {
 		return recordings.WorkerControlOperationRecord{}, false, errors.New("private-intent-detail")
 	}
-	return store.WorkerRecordingStore.BeginWorkerControlOperation(ctx, record)
+	accepted, created, err := store.WorkerRecordingStore.BeginWorkerControlOperation(ctx, record)
+	if err == nil && strings.Contains(record.Operation.RequestID, "interrupt-ack-intent") {
+		return recordings.WorkerControlOperationRecord{}, false, errors.New("private-intent-acknowledgement-detail")
+	}
+	return accepted, created, err
+}
+
+func (store *interruptPhaseAckStore) LoadWorkerControlOperation(ctx context.Context, key recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	record, err := store.WorkerRecordingStore.LoadWorkerControlOperation(ctx, key)
+	if err == nil && strings.Contains(key.RequestID, "interrupt-ack-intent-disputed") {
+		record.Operation.InputDigest = strings.Repeat("0", 64)
+	}
+	return record, err
 }
 
 func (store *interruptPhaseAckStore) AdvanceWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
@@ -56,7 +75,7 @@ func (store *interruptPhaseAckStore) AdvanceWorkerControlOperation(ctx context.C
 
 func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"interrupt-ack-source", "interrupt-ack-admission", "interrupt-ack-completion"} {
+	for _, name := range []string{"interrupt-ack-intent", "interrupt-ack-source", "interrupt-ack-admission", "interrupt-ack-completion"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)

@@ -72,20 +72,35 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 		return nil, recordings.ErrWorkerRecordingPersistence
 	}
 	intent.InputArtifactRef = ref
-	accepted, created, err := r.operations.BeginWorkerControlOperation(ctx, intent)
+	accepted, err := r.commitInterruptIntent(ctx, intent)
 	if err != nil {
-		return nil, safeInterruptStoreError(err)
-	}
-	if !created {
-		// Recovery must reconcile a committed stage, never rediscover authority
-		// or blindly repeat cancellation/admission after memory was lost.
-		return nil, workersessions.ErrInterruptSourceConflict
+		return nil, err
 	}
 	r.logger.Info("worker session interrupt intent", "sessionID", publicWorkerID(plan.request.SourceWorkerSessionID), "attemptID", plan.dispatchID, "phase", "INTENT", "outcome", "committed")
 	if err := r.validateInterruptFence(plan, target); err != nil {
 		return &accepted, err
 	}
 	return &accepted, nil
+}
+
+func (r *registry) commitInterruptIntent(ctx context.Context, intent recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, error) {
+	accepted, created, err := r.operations.BeginWorkerControlOperation(ctx, intent)
+	if err != nil {
+		// A lost acknowledgement licenses effects only after Load confirms the
+		// exact synced INTENT. A conflict or later phase belongs to recovery;
+		// neither may authorize repeating cancellation or admission here.
+		if !errors.Is(err, recordings.ErrWorkerControlConflict) {
+			loaded, loadErr := r.operations.LoadWorkerControlOperation(ctx, interruptOperationKey(intent))
+			if loadErr == nil && sameInterruptPhaseRecord(loaded, intent) {
+				return loaded, nil
+			}
+		}
+		return recordings.WorkerControlOperationRecord{}, safeInterruptStoreError(err)
+	}
+	if !created {
+		return recordings.WorkerControlOperationRecord{}, workersessions.ErrInterruptSourceConflict
+	}
+	return accepted, nil
 }
 
 func (r *registry) validateInterruptFence(plan interruptPlan, target frozenControlTarget) error {

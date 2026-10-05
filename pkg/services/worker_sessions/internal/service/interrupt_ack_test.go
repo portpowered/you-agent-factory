@@ -20,6 +20,14 @@ type interruptAckStore struct {
 	loads     int
 }
 
+func (s *interruptAckStore) BeginWorkerControlOperation(ctx context.Context, intent recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	accepted, created, err := s.interruptInputStore.BeginWorkerControlOperation(ctx, intent)
+	if err == nil && s.failPhase == "INTENT" {
+		return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerRecordingPersistence
+	}
+	return accepted, created, err
+}
+
 func (s *interruptAckStore) AdvanceWorkerControlOperation(ctx context.Context, next recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
 	accepted, err := s.interruptInputStore.AdvanceWorkerControlOperation(ctx, next, expected)
 	if err == nil && next.Operation.Phase == s.failPhase {
@@ -42,7 +50,7 @@ func (s *interruptAckStore) LoadWorkerControlOperation(ctx context.Context, key 
 
 func TestInterruptUncertainPhaseAcknowledgementJoinsAndAdmitsOnce(t *testing.T) {
 	t.Parallel()
-	for _, phase := range []string{"SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED"} {
+	for _, phase := range []string{"INTENT", "SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED"} {
 		t.Run(phase, func(t *testing.T) {
 			t.Parallel()
 			fixture := newInterruptRaceCharacterizationFixture(t, "uncertain-"+phase, false)
@@ -105,6 +113,65 @@ func TestInterruptUncertainPhaseRefusesDisputedReload(t *testing.T) {
 			assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
 		})
 	}
+}
+
+func TestInterruptUncertainIntentRefusesDisputedReloadBeforeEffects(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"unavailable", "recording", "worker", "scope", "generation", "epoch", "attempt", "revision", "phase", "digest", "request", "successor", "mode", "input-ref", "result", "failure"} {
+		t.Run(field, func(t *testing.T) {
+			t.Parallel()
+			r, plan, original := newDurableInterruptFixture(t)
+			store := &interruptAckStore{interruptInputStore: *original, failPhase: "INTENT"}
+			if field == "unavailable" {
+				store.loadErr = recordings.ErrWorkerRecordingPersistence
+			} else {
+				store.mutate = func(record *recordings.WorkerControlOperationRecord) { disputeInterruptPhase(field, record) }
+			}
+			r.operations = store
+			calls := 0
+			plan.supervision.installCancel(func() { calls++ })
+			result, err := r.runInterrupt(plan)
+			if !errors.Is(err, recordings.ErrWorkerRecordingPersistence) || result.Phase != workersessions.InterruptPhaseValidation || result.Accepted || calls != 0 || store.loads != 1 || len(store.records) != 1 {
+				t.Fatalf("disputed intent %s: result=%#v err=%v cancels=%d loads=%d rows=%d", field, result, err, calls, store.loads, len(store.records))
+			}
+			if result.Source.State != workersessions.StateRunning {
+				t.Fatalf("uncertain intent stopped source: %#v", result.Source)
+			}
+			assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
+		})
+	}
+}
+
+func TestInterruptIntentConflictDoesNotReloadOrAuthorizeEffects(t *testing.T) {
+	t.Parallel()
+	r, plan, original := newDurableInterruptFixture(t)
+	store := &interruptAckStore{interruptInputStore: *original}
+	store.begin = func(context.Context, recordings.WorkerControlOperationRecord) error {
+		return recordings.ErrWorkerControlConflict
+	}
+	r.operations = store
+	result, err := r.runInterrupt(plan)
+	if !errors.Is(err, workersessions.ErrInterruptRequestIDConflict) || result.Source.State != workersessions.StateRunning || store.loads != 0 || len(store.records) != 0 {
+		t.Fatalf("conflict gained authority: result=%#v err=%v loads=%d rows=%d", result, err, store.loads, len(store.records))
+	}
+	assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
+}
+
+func TestInterruptReconciledIntentRechecksAttemptBeforeEffects(t *testing.T) {
+	t.Parallel()
+	r, plan, original := newDurableInterruptFixture(t)
+	store := &interruptAckStore{interruptInputStore: *original, failPhase: "INTENT"}
+	store.mutate = func(*recordings.WorkerControlOperationRecord) {
+		plan.supervision.dispatchID = "later-attempt"
+	}
+	r.operations = store
+	calls := 0
+	plan.supervision.installCancel(func() { calls++ })
+	result, err := r.runInterrupt(plan)
+	if !errors.Is(err, workersessions.ErrInterruptSourceConflict) || result.Phase != workersessions.InterruptPhaseValidation || calls != 0 || len(store.records) != 2 || store.records[1].Operation.Phase != "FAILED" {
+		t.Fatalf("reconciled intent lost fence: result=%#v err=%v cancels=%d rows=%d", result, err, calls, len(store.records))
+	}
+	assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
 }
 
 func disputeInterruptPhase(field string, record *recordings.WorkerControlOperationRecord) {
