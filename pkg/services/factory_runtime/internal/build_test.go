@@ -1058,11 +1058,7 @@ func TestBuild_InitialOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(t
 		})
 	start := func(ctx context.Context, request factory.RuntimeActivationRequest) (*factory.RuntimeActivation, error) {
 		attempts++
-		opening, err := initial.Open(ctx, request, nil)
-		if opening == nil {
-			return nil, err
-		}
-		return opening.Activation, err
+		return openTestInitialActivation(ctx, initial, request)
 	}
 	result, err := root.Activate(t.Context(), request, start)
 	assertOpeningFailureWithoutPublication(t, result, err, openingErr, cleanupErr)
@@ -1086,6 +1082,16 @@ func TestBuild_InitialOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(t
 	if _, err := root.Deactivate(t.Context(), factory.RuntimeDeactivationRequest{Binding: result.Binding}); err != nil {
 		t.Fatalf("close retried generation: %v", err)
 	}
+}
+
+func openTestInitialActivation(ctx context.Context, initial *factoryinternal.InitialActivation,
+	request factory.RuntimeActivationRequest,
+) (*factory.RuntimeActivation, error) {
+	opening, err := initial.Open(ctx, request, nil)
+	if opening == nil {
+		return nil, err
+	}
+	return opening.Activation, err
 }
 
 func assertOpeningFailureWithoutPublication(t *testing.T, result factory.RuntimeActivationResult, err, openingErr, cleanupErr error) {
