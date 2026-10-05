@@ -782,3 +782,42 @@ Full hosted verification of this follow-up, restored Models HTTP coverage, and
 a passing supervised latency measurement are still required before merging.
 Raw local evidence is under `.artifacts/latency-audit/linux-8a09/`,
 `linux-next/`, `ci-functional/`, and the focused validation logs.
+
+### Fresh execution after the follow-up fixes
+
+The next four-CPU Linux run passed all **1,018 selected top-level tests**:
+1,016 passed, two skipped, zero failed, across 145 packages. Its covered test
+invocation took **202.455s (3m22.455s)**; the complete `gocoveragecheck` command
+took **220.85s (3m40.85s)**. This diagnostic command excludes the outer
+`functionaltestviz` supervisor and its separate quarantine validation. The
+populated compilation caches were reused, while `-count=1` forced execution.
+It is neither a cold CI measurement nor a verified hosted checkpoint.
+
+The command consumed 655.76s user CPU and 139.92s system CPU. Instrumentation
+recorded 144 linker invocations consuming **204.122s CPU**, 40 compiler
+invocations consuming **15.308s CPU**, and nine vet invocations consuming
+0.227s CPU. Linker active wall intervals covered 185.106s; summed child wall
+time was 704.149s. Those overlapping intervals must not be added to elapsed
+test time. The largest linker wall times were HTTP status (9.180s), CLI
+session resume (8.898s), and docs (8.711s), each using about 1.5–1.6s CPU.
+Reducing repeated application links remains material even with warm caches.
+
+This run still failed the Models HTTP coverage floor: 405/798 statements,
+50.7519%, against 58.27%. Current cloud-model REST discovery, invocation and
+unsupported local-pull behavior now share one owned server. The malformed
+request table also covers invalid text, media location, metadata and generic
+JSON envelopes through actual REST calls. Together these focused tests pass
+in 1.170s locally. A diagnostic union with the Linux profile reaches
+465/798 statements (58.2707%); only a fresh complete covered run can confirm
+the package floor. No coverage threshold was lowered.
+
+The customer inference package is now `tests/functional/models/inference`,
+because it covers both local and configured cloud models. Earlier measurements
+retain the historical `models/local_inference` path. Workflow and scenario
+manifest references follow the new path; all 156 reviewed scenario records
+validate. Evidence for this run is under `.artifacts/latency-audit/linux-current/`.
+
+The Linux snapshot contained the initial measured runtime plus subsequent
+patches. It did not incorporate the intervening main-branch dead-code tooling
+change; its snapshot commit identity is not the PR head identity. Hosted
+verification of the exact rebased PR head remains the merge authority.

@@ -7,7 +7,7 @@ or files produced by those operations. Constructor effect counts, service-contra
 value tests, fixture self-tests, source-file inspections, and CI/Make wiring checks
 belong outside this lane. CI tooling checks live under `tests/tooling/verification`.
 
-Packages name the customer behavior: `models/local_inference`, `models/cli`,
+Packages name the customer behavior: `models/inference`, `models/cli`,
 `sessions/isolation_and_recovery`, `sessions/chat_sessions/acp`,
 `operator_settings/configuration`, `recordings/lifecycle`, `work/admission`, and
 `factory/execution`. Independent packaged invocation journeys share
