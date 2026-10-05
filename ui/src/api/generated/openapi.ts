@@ -1521,7 +1521,7 @@ export interface components {
       total: number;
     };
     ListWorkerSessionsResponse: {
-      /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
+      /** @description Deterministically ordered Worker Session observations. Work-scoped queries return observations correlated with the requested Work. Top-level fleet pages use captured metadata without reading native provider files. Fleet token usage appears only when captured during execution. Fleet rows omit native-only turn usage and return unavailable transcript status and empty parse diagnostics. Show and detail queries retain provider inspection when available. */
       sessions: components["schemas"]["WorkerSessionObservation"][];
       /** @description Bounded pagination context for top-level Worker Session observation queries. */
       paginationContext?: components["schemas"]["PaginationContext"];

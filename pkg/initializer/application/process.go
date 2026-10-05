@@ -2,8 +2,11 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/portpowered/infinite-you/pkg/initializer"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 )
@@ -195,7 +198,7 @@ func (p *Process) Execute(input Input) error {
 		return fmt.Errorf("execute application process: initializer returned an invalid process context")
 	}
 	defer stop()
-	ctx, cancel := context.WithCancel(processCtx)
+	ctx, cancel := context.WithCancel(initializer.WithCancellationOrigin(processCtx, normalized.context))
 	defer cancel()
 	cancellation := &invocationCancellation{cancel: cancel}
 	if p.commandFactory == nil {
@@ -208,11 +211,15 @@ func (p *Process) Execute(input Input) error {
 	ctx = processcontract.WithStdinTTY(ctx, normalized.stdinIsTTY)
 	ctx = processcontract.WithStdoutTTY(ctx, normalized.stdoutIsTTY)
 	ctx = processcontract.WithStderrTTY(ctx, normalized.stderrIsTTY)
-	return p.commandFactory.ExecuteCommand(processcontract.CommandInvocation{
+	err = p.commandFactory.ExecuteCommand(processcontract.CommandInvocation{
 		Arguments: normalized.argumentsCopy(), Stdin: normalized.stdin,
 		Stdout: normalized.stdout, Stderr: normalized.stderr, Context: ctx,
 		Cancellation: cancellation,
 		HomeDir:      func() (string, error) { return homeDir(normalized) },
 		LookupEnv:    normalized.lookupEnv, Initializer: p.initializer,
 	})
+	if errors.Is(normalized.context.Err(), context.Canceled) && !errors.Is(err, context.Canceled) {
+		return errors.Join(err, context.Canceled)
+	}
+	return err
 }

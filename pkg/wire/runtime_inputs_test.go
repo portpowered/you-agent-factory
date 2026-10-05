@@ -234,6 +234,7 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 	output := &strings.Builder{}
 	sessions := &canonicalStdioSessionsStub{}
 	var selectedRoot string
+	var selectedHost string
 	var selectedInput, selectedOutput any
 	ran := false
 	handler, err := provideStdioHandler(
@@ -246,8 +247,9 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 			selectedInput, selectedOutput = in, out
 			return testStdioApplication{}, nil
 		},
-		func(projectRoot string, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
+		func(projectRoot, serverURL string, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
 			selectedRoot = projectRoot
+			selectedHost = serverURL
 			if bound != sessions {
 				t.Fatalf("MCP root = %T, want process root", bound)
 			}
@@ -263,6 +265,7 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 	}
 	if err := handler(t.Context(), processcontract.MCPIntent{
 		ProjectRoot: "/project",
+		ServerURL:   "http://selected-host:7437",
 		Stdin:       input,
 		Stdout:      output,
 	}); err != nil {
@@ -271,7 +274,7 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 	if !ran {
 		t.Fatal("handler() did not run the lifecycle-ready application")
 	}
-	if selectedRoot != "/project" || selectedInput != input || selectedOutput != output {
+	if selectedRoot != "/project" || selectedHost != "http://selected-host:7437" || selectedInput != input || selectedOutput != output {
 		t.Fatalf("stdio mapping = root:%q input:%T output:%T", selectedRoot, selectedInput, selectedOutput)
 	}
 }

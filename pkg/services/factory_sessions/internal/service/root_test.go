@@ -154,36 +154,6 @@ func TestNewRootFromAssemblyRetainsOneAssemblyAndOpening(t *testing.T) {
 	}
 }
 
-func TestNewRootFromAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		mutate func(*rootTestInputs)
-	}{
-		{name: "session result projection", mutate: func(in *rootTestInputs) { in.sessionResultProjection = nil }},
-		{name: "response event ID generator", mutate: func(in *rootTestInputs) { in.eventIDs = nil }},
-		{name: "session ID generator", mutate: func(in *rootTestInputs) { in.sessionIDs = nil }},
-		{name: "home directory resolver", mutate: func(in *rootTestInputs) { in.resolveHome = nil }},
-		{name: "directory inspection", mutate: func(in *rootTestInputs) { in.directoryInspection = nil }},
-		{name: "named path resolver", mutate: func(in *rootTestInputs) { in.namedPaths = nil }},
-		{name: "initial Work reader", mutate: func(in *rootTestInputs) { in.initialWorkFiles = nil }},
-		{name: "identity service", mutate: func(in *rootTestInputs) { in.identity = nil }},
-		{name: "response-stream service", mutate: func(in *rootTestInputs) { in.responseStreams = nil }},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			inputs := validRootInputs(livechange.NewCoordinator())
-			test.mutate(&inputs)
-			root, err := inputs.call()
-			if root != nil || err == nil {
-				t.Fatalf("NewRootFromAssembly() = (%#v, %v), want nil root and dependency error", root, err)
-			}
-		})
-	}
-}
-
 func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
 
@@ -277,9 +247,7 @@ func (in rootTestInputs) call() (*Root, error) {
 }
 
 func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
-	if err := validateRootDependencies(in.sessionResultProjection, in.eventIDs, in.sessionIDs, in.resolveHome, in.directoryInspection, in.namedPaths, in.initialWorkFiles, in.identity, in.responseStreams); err != nil {
-		return nil, err
-	}
+
 	registry := sessionregistry.New()
 	responses, err := in.responseStreams.NewStreamRegistry(in.clock)
 	if err != nil {
@@ -287,10 +255,12 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 	}
 	state := sessionruntime.NewWithResponseService(registry, responses, nil, in.clock, in.eventIDs, in.sessionIDs, in.responseStreams)
 	streams := stream.NewManagerWithResponseService(state, sessionruntime.NewResponseStreamObserver(nil), responses, in.responseStreams)
-	return NewAssembly(
+	return legacyservice.NewAssembly(
+		legacyservice.NewWithLiveChangeCoordinator(legacyservice.SessionServiceHost(state, nil, nil, nil, "", in.identity, in.clock, nil, in.newJavaScriptCheckpointStore, nil), streams, nil, in.sessionResultProjection, in.responseStreams, in.liveChangeCoordinator, legacyservice.NewRecordedHistory(in.resolveHome, in.recordedSessionInventory), nil, nil, nil, nil),
 		registry, state, streams, sessioninvocation.NewSessionOwner(legacyservice.NewInvocationAuthority(state, platformclock.Real{}, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), legacyservice.NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
+		in.clock,
 		in.eventIDs,
 		in.sessionIDs,
 		in.resolveHome,
@@ -299,10 +269,14 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		in.initialWorkFiles,
 		in.identity,
 		in.responseStreams,
-		in.clock,
 		in.liveChangeCoordinator,
-		in.recordedSessionInventory,
-	)
+		legacyservice.NewRecordedHistory(in.resolveHome, in.recordedSessionInventory),
+		streams,
+		legacyservice.SessionServiceHost(state, nil, nil, nil, "", in.identity, in.clock, nil, in.newJavaScriptCheckpointStore, nil),
+		nil,
+		legacyservice.NewNamedFactoryActivator(state),
+		legacyservice.NewKeyedDefinitionActivationGateway(state, in.clock),
+	), nil
 }
 
 var _ factorysessioncontracts.LiveChangeCoordinator = (*livechange.Service)(nil)

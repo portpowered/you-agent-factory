@@ -2,21 +2,15 @@ package service_test
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
+	"reflect"
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
-
-type countingDurableHost struct {
-	durableLifecycleGatewayHost
-	durableAccessors int
-}
-
-func (h *countingDurableHost) DurableExecution() factorysessionexecution.Service {
-	h.durableAccessors++
-	return h.execution
-}
 
 type routingExecution struct {
 	outerBoundaryExecution
@@ -118,57 +112,41 @@ func TestDurableCapabilityDoesNotTouchCollidingLiveSession(t *testing.T) {
 	}
 }
 
-func TestDurableCallSitesRouteThroughOwnerCapabilityNotHostAccessor(t *testing.T) {
+func TestDirectDurableCapabilityPreservesAddressedResumeAndPauseOutcomes(t *testing.T) {
 	t.Parallel()
 
 	execution := &routingExecution{}
-	host := &countingDurableHost{
-		durableLifecycleGatewayHost: durableLifecycleGatewayHost{execution: execution},
-	}
-	gateway := newServiceTestGateway(host)
-	if host.durableAccessors != 1 {
-		t.Fatalf("host DurableExecution accessors during construction = %d, want 1", host.durableAccessors)
-	}
+	host := &durableLifecycleGatewayHost{}
+	registry := responsestream.NewRegistry(newServiceTestResponseStream, serviceTestClock)
+	gateway := factorysessionservice.NewWithLiveChangeCoordinator(host, stream.NewManagerWithDependencies(host, host, registry), nil, nil, nil, nil, nil, execution, nil, nil, nil)
 
 	ctx := context.Background()
-	if _, err := gateway.StartAsync(ctx, factorysessionexecution.StartRequest{RequestID: "request-route"}); err != nil {
-		t.Fatalf("StartAsync: %v", err)
+	if got, err := gateway.StartAsync(ctx, factorysessionexecution.StartRequest{RequestID: "request-route"}); err != nil || got.SessionID != "dur-sess-outer" {
+		t.Fatalf("StartAsync: %#v, %v", got, err)
 	}
-	if _, err := gateway.ResumeInterruptedSession(
+	if got, err := gateway.ResumeInterruptedSession(
 		ctx,
 		"dur-sess-outer",
 		factorysessionexecution.ResumeSessionRequest{RequestID: "resume-route"},
-	); err != nil {
-		t.Fatalf("ResumeInterruptedSession: %v", err)
+	); err != nil || got.SessionID != "dur-sess-outer" {
+		t.Fatalf("ResumeInterruptedSession: %#v, %v", got, err)
 	}
-	if _, err := gateway.GetSession(ctx, "dur-sess-outer"); err != nil {
-		t.Fatalf("GetSession: %v", err)
+	if got, err := gateway.GetSession(ctx, "dur-sess-outer"); err != nil || got.SessionID != "dur-sess-outer" {
+		t.Fatalf("GetSession: %#v, %v", got, err)
 	}
-	if _, err := gateway.Pause(ctx, "dur-sess-outer", factorysessionexecution.ControlRequest{}); err != nil {
-		t.Fatalf("Pause: %v", err)
+	if got, err := gateway.Pause(ctx, "dur-sess-outer", factorysessionexecution.ControlRequest{}); err != nil || got.SessionID != "dur-sess-outer" || got.Status != factorysessions.LifecycleStatusPaused {
+		t.Fatalf("Pause: %#v, %v", got, err)
 	}
-	if _, err := gateway.Pause(
+	if got, err := gateway.Pause(
 		ctx,
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
-	); err != nil {
-		t.Fatalf("Pause: %v", err)
+	); err != nil || got.SessionID != "dur-sess-js-run-n-001" || got.Status != factorysessions.LifecycleStatusPaused {
+		t.Fatalf("Pause: %#v, %v", got, err)
 	}
 
-	if host.durableAccessors != 1 {
-		t.Fatalf(
-			"host DurableExecution accessors after durable operations = %d, want 1 (construction only)",
-			host.durableAccessors,
-		)
-	}
-	if execution.calls != 5 {
-		t.Fatalf("owner execution calls = %d, want start/resume/inspect/pause/control routing", execution.calls)
-	}
-	if execution.resumeCalls != 1 || execution.pauseCalls != 2 {
-		t.Fatalf(
-			"resume calls = %d pause calls = %d, want 1 resume and 2 pause paths",
-			execution.resumeCalls,
-			execution.pauseCalls,
-		)
+	if !reflect.DeepEqual(execution.resumeSessionIDs, []string{"dur-sess-outer"}) ||
+		!reflect.DeepEqual(execution.pauseSessionIDs, []string{"dur-sess-outer", "dur-sess-js-run-n-001"}) {
+		t.Fatalf("addressed durable effects: resume=%v pause=%v", execution.resumeSessionIDs, execution.pauseSessionIDs)
 	}
 }

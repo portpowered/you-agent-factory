@@ -12,7 +12,7 @@ linters:
         type: module
         description: Shared repository go/analysis rules
         settings:
-          defer-stale: [layering, behavior, construction, petripublic, serviceshape, functionalshape]
+          defer-stale: [layering, behavior, construction, petripublic, serviceshape, functionalshape, packageboundary]
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

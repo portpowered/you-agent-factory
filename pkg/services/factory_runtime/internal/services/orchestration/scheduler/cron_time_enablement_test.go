@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -67,7 +68,7 @@ func TestEnablementEvaluator_CronTimeEnablementUsesSharedTimePlace(t *testing.T)
 				tokens[token.ID] = token
 			}
 			snapshot := makeTestSnapshot(tokens)
-			enabled := NewEnablementEvaluator(nil, func() time.Time { return now }, nil).
+			enabled := NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return now }, nil).
 				FindEnabledTransitions(context.Background(), net, &snapshot)
 			cron := findEnabledTransition(enabled, "daily-refresh")
 			if (cron != nil) != tt.want {
@@ -96,7 +97,7 @@ func TestEnablementEvaluator_DefaultExpiryTargetsExpiredTokenCronCannotUse(t *te
 		tokenMap[token.ID] = token
 	}
 	snapshot := makeTestSnapshot(tokenMap)
-	enabled := NewEnablementEvaluator(nil, func() time.Time { return now }, nil).
+	enabled := NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return now }, nil).
 		FindEnabledTransitions(context.Background(), schedulerCronNet(), &snapshot)
 
 	if cron := findEnabledTransition(enabled, "daily-refresh"); cron != nil {

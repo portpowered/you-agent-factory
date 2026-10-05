@@ -22,6 +22,7 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -36,16 +37,18 @@ type Assembly struct {
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
+	projectionReader             runtimebinding.SessionProjectionOwner
+	namedFactoryActivator        func(context.Context, string) error
+	definitionActivationGateway  factorydefinitions.DefinitionActivationGateway
 	invoker                      roles.InvocationService
 	scopeControl                 SessionScopeControl
 	scopeActivation              SessionScopeActivation
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
-	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
-	recordedSessionInventory     recordings.RecordedSessionInventory
+	recordedHistory              RecordedHistory
 	directoryInspection          roles.DirectoryInspection
 	namedPaths                   factorydefinitions.NamedPathResolver
 	initialWorkFiles             fileeffects.InitialWorkReader
@@ -68,6 +71,7 @@ type StreamManager interface {
 
 // NewAssembly constructs an empty live-session directory.
 func NewAssembly(
+	gateway roles.SessionGateway,
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams StreamManager,
@@ -86,23 +90,30 @@ func NewAssembly(
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-	recordedSessionInventory recordings.RecordedSessionInventory,
+	recordedHistory RecordedHistory,
+	gatewayStreams *stream.Manager,
+	projectionReader runtimebinding.SessionProjectionOwner,
+	processDurable durableexecution.Service,
+	namedFactoryActivator func(context.Context, string) error,
+	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 ) roles.RuntimeAssembly {
 	return &Assembly{
-		SessionGateway:               &Service{},
+		SessionGateway:               gateway,
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
+		projectionReader:             projectionReader,
+		namedFactoryActivator:        namedFactoryActivator,
+		definitionActivationGateway:  definitionActivationGateway,
 		invoker:                      invoker,
 		scopeControl:                 control,
 		scopeActivation:              activation,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
-		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
 		eventIDs:                     eventIDs,
 		sessionIDs:                   sessionIDs,
 		resolveHome:                  resolveHome,
-		recordedSessionInventory:     recordedSessionInventory,
+		recordedHistory:              recordedHistory,
 		directoryInspection:          directoryInspection,
 		namedPaths:                   namedPaths,
 		initialWorkFiles:             initialWorkFiles,
@@ -446,6 +457,7 @@ func (a *Assembly) Complete(
 		a.namedPaths,
 		a.initialWorkFiles,
 		a.identity,
+		a.SessionGateway,
 	)
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
@@ -455,31 +467,17 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Session runtime state is required")
 	}
 	bound.Owner = runtime
+	bound.Clock = clock
+	bound.ProjectionBackendScope = backendScopeID
 	bound.Logger = logger
 	runtime.startupSessionID = identity.id
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
 	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
-	gateway := NewWithLiveChangeCoordinator(
-		SessionServiceHost(runtime),
-		a.state,
-		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
-		a.state.ResponseStreams(),
-		runtime.ReconnectCursorValidator(),
-		a.sessionResultProjection,
-		a.responseStreams,
-		a.liveChangeCoordinator,
-	)
-	gateway = runtime.AttachSessionGateway(gateway)
-	gateway.bindRecordedSessionHistory(a.ListSessions)
 	invoker := a.invoker
 	bound.Invoker = invoker
 	a.registry.Upsert(session, true)
-	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
-	// The per-runtime gateway is returned to the operation caller. The
-	// process-scoped assembly keeps its original stable service slot so
-	// concurrent session completions cannot replace or race the shared root.
-	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
+	return runtime, a.SessionGateway, invoker, definitionHost{runtime: runtime}, a.definitionActivationGateway, nil
 }
 
 type completionSessionIdentity struct {
@@ -635,24 +633,10 @@ func (a *Assembly) InvokeFactorySession(ctx context.Context, sessionID string, r
 }
 
 func (a *Assembly) ActivateNamedFactory(ctx context.Context, name string) error {
-	if a == nil || a.state == nil {
+	if a == nil || a.namedFactoryActivator == nil {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
-	session := a.state.Current()
-	if session == nil {
-		return factorysessions.ErrSessionNotFound
-	}
-	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil {
-		return factorysessions.ErrRuntimeNotAvailable
-	}
-	owner, ok := bound.Owner.(interface {
-		ActivateNamedFactory(context.Context, string) error
-	})
-	if !ok || owner == nil {
-		return fmt.Errorf("%w: session activation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
-	}
-	return owner.ActivateNamedFactory(ctx, name)
+	return a.namedFactoryActivator(ctx, name)
 }
 
 func (a *Assembly) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.SessionProjection, error) {
@@ -661,21 +645,6 @@ func (a *Assembly) GetFactorySession(ctx context.Context, sessionID string) (fac
 
 func (a *Assembly) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
 	return controlplane.ListLiveFactorySessions(ctx, a)
-}
-
-func (a *Assembly) recordingRoot() (string, error) {
-	if a == nil || a.resolveHome == nil {
-		return "", fmt.Errorf("recorded session home directory resolver is required")
-	}
-	home, err := a.resolveHome()
-	if err != nil {
-		return "", fmt.Errorf("resolve recorded session home directory: %w", err)
-	}
-	home = strings.TrimSpace(home)
-	if home == "" {
-		return "", fmt.Errorf("resolve recorded session home directory: empty path")
-	}
-	return filepath.Join(home, ".you-agent-factory", "recordings"), nil
 }
 
 func (a *Assembly) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

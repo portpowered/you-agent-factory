@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/initializer"
 )
 
 func TestEntrypointHandlersPreserveTypedInputsAndResult(t *testing.T) {
@@ -56,3 +58,19 @@ func TestEntrypointHandlersInitializeSystemWhenConfigured(t *testing.T) {
 }
 
 type lifecycleContextKey struct{}
+
+func TestCancellationOriginSurvivesLocalCleanup(t *testing.T) {
+	t.Parallel()
+	parent, cancelParent := context.WithCancel(t.Context())
+	defer cancelParent()
+	child, cancelChild := context.WithCancel(initializer.WithCancellationOrigin(parent, parent))
+	cancelChild()
+	origin := initializer.CancellationOrigin(child)
+	if origin == nil || origin.Err() != nil {
+		t.Fatalf("local cleanup changed parent cancellation: %v", origin)
+	}
+	cancelParent()
+	if origin.Err() != context.Canceled {
+		t.Fatalf("parent cancellation = %v", origin.Err())
+	}
+}

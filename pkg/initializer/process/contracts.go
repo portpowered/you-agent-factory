@@ -75,6 +75,7 @@ type RunIntent struct {
 
 type MCPIntent struct {
 	ProjectRoot string
+	ServerURL   string
 	Stdin       io.Reader
 	Stdout      io.Writer
 }

@@ -105,6 +105,14 @@ func TestWorkerSessionsFleetListBoundedRootPages(t *testing.T) {
 	assertNormalizedFleetJSONEqual(t, "first page", firstCLI.raw, firstHTTP.raw)
 	assertNormalizedFleetJSONEqual(t, "continuation page", secondCLI.raw, secondHTTP.raw)
 	assertBoundedFleetCompleteSelection(t, firstHTTP.list, secondHTTP.list, expected)
+	// These command fixtures publish no usage draft. Native usage remains
+	// available on a selected Work/detail read, independently of fleet summary.
+	for _, want := range expected {
+		if want.State == "COMPLETED" {
+			assertSuccessfulWorkerSessionWithProvider(t, ctx, process, env, factoryDir, baseURL, want.FactorySessionID, want.WorkID, want.ProviderSessionID)
+			break
+		}
+	}
 
 	assertBoundedFleetNoMatch(t, ctx, process, env, factoryDir, baseURL)
 	assertBoundedFleetMalformedToken(t, ctx, process, env, factoryDir, baseURL)
@@ -289,8 +297,8 @@ func assertBoundedFleetObservation(t *testing.T, label string, session workerSes
 	if session.AttemptID == "" || session.StartedAt == nil || session.EndedAt == nil || session.DurationMillis == nil || *session.DurationMillis < 0 || session.DurationBasis != "RECORDED_TIMESTAMPS" {
 		t.Fatalf("%s row %q omitted recorded timing facts: %#v", label, session.WorkerSessionID, session)
 	}
-	if session.Transcript != "AVAILABLE" || session.ConfirmationState != "UNCONFIRMED" || session.Parse.EventCount == 0 {
-		t.Fatalf("%s row %q omitted transcript/recording/parse facts: transcript=%q confirmation=%q parse=%#v", label, session.WorkerSessionID, session.Transcript, session.ConfirmationState, session.Parse)
+	if session.Transcript != "UNAVAILABLE" || session.ConfirmationState != "UNCONFIRMED" || session.Parse.EventCount != 0 || session.Parse.MalformedLineCount != 0 || session.Parse.UnknownEventCount != 0 || len(session.Parse.Errors) != 0 {
+		t.Fatalf("%s row %q invented native transcript/recording/parse facts: transcript=%q confirmation=%q parse=%#v", label, session.WorkerSessionID, session.Transcript, session.ConfirmationState, session.Parse)
 	}
 	if !containsString(session.WorkIDs, want.WorkID) {
 		t.Fatalf("%s row %q Work IDs=%v, want %q", label, session.WorkerSessionID, session.WorkIDs, want.WorkID)
@@ -299,8 +307,8 @@ func assertBoundedFleetObservation(t *testing.T, label string, session workerSes
 		if session.Failure != nil && string(session.Failure) != "null" {
 			t.Fatalf("%s successful row %q has failure=%s", label, session.WorkerSessionID, session.Failure)
 		}
-		if session.TokenUsage == nil || session.TokenUsage.InputTokens == nil || *session.TokenUsage.InputTokens != 8 || session.TokenUsage.OutputTokens == nil || *session.TokenUsage.OutputTokens != 12 || session.TokenUsage.TotalTokens == nil || *session.TokenUsage.TotalTokens != 20 {
-			t.Fatalf("%s successful row %q token usage=%#v, want 8/12/20", label, session.WorkerSessionID, session.TokenUsage)
+		if session.TokenUsage != nil {
+			t.Fatalf("%s successful row %q invented uncaptured token usage=%#v", label, session.WorkerSessionID, session.TokenUsage)
 		}
 		return
 	}

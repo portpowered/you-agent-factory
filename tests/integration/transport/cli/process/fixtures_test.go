@@ -187,11 +187,24 @@ func interruptAndAssertCancellationExit(t testing.TB, command *builtcliacceptanc
 	}()
 	select {
 	case err := <-waitResult:
-		if err != nil && !strings.Contains(err.Error(), "context canceled") {
-			t.Fatalf("canceled root process exit = %v, want clean cancellation", err)
-		}
+		assertOnlyCancellation(t, err)
 	case <-time.After(waitTimeout):
 		t.Fatalf("canceled root process did not exit within %s", waitTimeout)
+	}
+}
+
+func assertOnlyCancellation(t testing.TB, err error) {
+	t.Helper()
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled root process error = %v, want context.Canceled", err)
+	}
+	switch wrapped := err.(type) {
+	case interface{ Unwrap() []error }:
+		for _, cause := range wrapped.Unwrap() {
+			assertOnlyCancellation(t, cause)
+		}
+	case interface{ Unwrap() error }:
+		assertOnlyCancellation(t, wrapped.Unwrap())
 	}
 }
 

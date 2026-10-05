@@ -7,6 +7,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts"
@@ -22,6 +23,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
@@ -41,6 +43,7 @@ import (
 	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewRequestPreparation constructs the private request-normalization
@@ -186,15 +189,73 @@ func NewStreamObserver() StreamObserver {
 	return sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle)
 }
 
+// GatewayStreams is the complete stream role supplied directly to the gateway.
+type GatewayStreams = sessionstream.Manager
+
 // NewStreamManager constructs reusable streams over the supplied authority and response owner.
-func NewStreamManager(state *SessionState, observer StreamObserver, responseRegistry *ResponseStreamRegistry, responses ResponseStreams) StreamManager {
+func NewStreamManager(state *SessionState, observer StreamObserver, responseRegistry *ResponseStreamRegistry, responses ResponseStreams) *GatewayStreams {
 	return sessionstream.NewManagerWithResponseService(state, observer, responseRegistry, responses)
+}
+
+// ProcessDurableScope supplies independent project and resume queries.
+type ProcessDurableScope = sessionservice.ProcessDurableScope
+
+func NewProcessDurableScope(state *SessionState) ProcessDurableScope {
+	return sessionservice.NewProcessDurableScope(state)
+}
+
+// RecordedHistory supplies independent recorded-session inventory reads.
+type RecordedHistory = sessionservice.RecordedHistory
+
+func NewRecordedHistory(resolveHome factorysessions.HomeDirectoryResolver, inventory recordings.RecordedSessionInventory) RecordedHistory {
+	return sessionservice.NewRecordedHistory(resolveHome, inventory)
+}
+
+// NewSessionHost constructs independent keyed reads over the live authority.
+func NewSessionHost(state *SessionState, control SessionScopeControl, identityService Identity, clock factoryruntime.Clock, projector factoryruntime.WorldStateProjector, checkpoints factoryruntime.JavaScriptCheckpointStoreFactory, logger *zap.Logger) sessionservice.Host {
+	return sessionservice.SessionServiceHost(state, nil, control, nil, "", identityService, clock, projector, checkpoints, logger)
+}
+
+// NewGateway constructs the stable process gateway from completed owner roles.
+func NewGateway(
+	host sessionservice.Host,
+	streams *GatewayStreams,
+	reconnects factorysessions.ReconnectCursorValidator,
+	results factoryruntime.SessionResultProjectionOperation,
+	responses ResponseStreams,
+	liveChange factorysessioncontracts.LiveChangeCoordinator,
+	durable DurableExecutionService,
+	history RecordedHistory,
+	invoker InvocationService,
+	activate NamedFactoryActivator,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
+) roles.SessionGateway {
+	gateway := sessionservice.NewWithLiveChangeCoordinator(
+		host, streams, reconnects, results, responses, liveChange, history,
+		durable, invoker, activate, activationGateway,
+	)
+	if gateway == nil {
+		return nil
+	}
+	return gateway
+}
+
+// NamedFactoryActivator addresses the selected session at each activation.
+type NamedFactoryActivator func(context.Context, string) error
+
+func NewNamedFactoryActivator(state *SessionState) NamedFactoryActivator {
+	return sessionservice.NewNamedFactoryActivator(state)
+}
+
+func NewKeyedDefinitionActivationGateway(state *SessionState, clock factoryruntime.Clock) factorydefinitions.DefinitionActivationGateway {
+	return sessionservice.NewKeyedDefinitionActivationGateway(state, clock)
 }
 
 // NewRuntimeAssembly builds the one owner-private Factory Sessions assembly
 // used by peer roots while canonical Wire completes the rest of the process
 // graph. It is an assembly capability, not a second published Service root.
 func NewRuntimeAssembly(
+	gateway roles.SessionGateway,
 	registry SessionRegistry,
 	state *SessionState,
 	streams StreamManager,
@@ -213,12 +274,34 @@ func NewRuntimeAssembly(
 	responseStreams ResponseStreams,
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-	recordedSessionInventory recordings.RecordedSessionInventory,
+	recordedHistory RecordedHistory,
+	gatewayStreams *GatewayStreams,
+	host sessionservice.Host,
+	processDurable durableexecution.Service,
+	namedFactoryActivator NamedFactoryActivator,
+	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 ) (RuntimeAssembly, error) {
-	assembly, err := factorysessionroot.NewAssembly(
+	if activation == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
+	}
+	if control == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: scoped control is required")
+	}
+	if invoker == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: invocation owner is required")
+	}
+	if err := validateRootDependencies(sessionResultProjection, eventIDs, sessionIDs, resolveHome, directoryInspection, namedPaths, initialWorkFiles, identityService, responseStreams); err != nil {
+		return nil, err
+	}
+	if err := validateRootRuntimeDependencies(clock, liveChangeCoordinator); err != nil {
+		return nil, err
+	}
+	assembly := sessionservice.NewAssembly(
+		gateway,
 		registry, state, streams, invoker, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
+		clock,
 		eventIDs,
 		sessionIDs,
 		resolveHome,
@@ -227,16 +310,14 @@ func NewRuntimeAssembly(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
-		clock,
 		liveChangeCoordinator,
-		recordedSessionInventory,
+		recordedHistory,
+		gatewayStreams,
+		host,
+		processDurable,
+		namedFactoryActivator,
+		definitionActivationGateway,
 	)
-	if err != nil {
-		return nil, err
-	}
-	if assembly == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
-	}
 	return assembly, nil
 }
 
@@ -286,4 +367,106 @@ func NewDurableExecution(
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
 		liveChangeCoordinator,
 	)
+}
+
+// NewProcessDurableExecution constructs the complete process durable owner.
+// Legacy runtime-backed opening remains a separate T17 compatibility path.
+func NewProcessDurableExecution(
+	resolveHome factorysessions.HomeDirectoryResolver,
+	childExecutorMode string,
+	stores RuntimePersistenceStoreFactory,
+	clock factoryruntime.Clock,
+	syncWaits factorysessionexecution.SyncWaitScheduler,
+	summaries factoryruntime.JavaScriptCheckpointSummaries,
+	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
+	writer recordings.PortableRecordingWriter,
+	sessionIDs factorysessions.SessionIDGenerator,
+	responseIDs factorysessions.ResponseEventIDGenerator,
+	responses ResponseStreams,
+	liveChange factorysessioncontracts.LiveChangeCoordinator,
+	scope ProcessDurableScope,
+	workerService workers.Service,
+	providerOverride ProviderOverrideService,
+	logger *zap.Logger,
+) (durableexecution.Service, error) {
+	home, err := resolveHome()
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: resolve home: %w", err)
+	}
+	var storeForRoot func(string) (runtimepersist.Store, error)
+	if stores != nil {
+		storeForRoot = func(root string) (runtimepersist.Store, error) { return stores(root) }
+	}
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
+		factorysessions.PersistencePolicyEnabled, home, storeForRoot,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
+	}
+	execution, err := factorysessionexecution.NewProcessDurableExecutionService(
+		home, childExecutorMode, nil, persistence, clock, syncWaits,
+		summaries, workflows, orchestration, workflows,
+		nil, factoryruntime.JavaScriptWorkerSettings{}, writer, sessionIDs, responseIDs,
+		responses, liveChange, storeForRoot, scope.CurrentProjectRoot, scope.ResumeRuntimeScope,
+		workerService, providerOverride, logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
+	}
+	return execution, nil
+}
+
+func validateRootDependencies(
+	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	sessionIDs factorysessions.SessionIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	directoryInspection roles.DirectoryInspection,
+	namedPaths factorydefinitions.NamedPathResolver,
+	initialWorkFiles fileeffects.InitialWorkReader,
+	identityService identity.Service,
+	responseStreams responsestreamservice.Service,
+) error {
+	if sessionResultProjection == nil {
+		return fmt.Errorf("construct Factory Sessions: session result projection is required")
+	}
+	if eventIDs == nil {
+		return fmt.Errorf("construct Factory Sessions: response event ID generator is required")
+	}
+	if sessionIDs == nil {
+		return fmt.Errorf("construct Factory Sessions: session ID generator is required")
+	}
+	if resolveHome == nil {
+		return fmt.Errorf("construct Factory Sessions: home directory resolver is required")
+	}
+	if directoryInspection == nil {
+		return fmt.Errorf("construct Factory Sessions: directory inspection is required")
+	}
+	if namedPaths == nil {
+		return fmt.Errorf("construct Factory Sessions: named path resolver is required")
+	}
+	if initialWorkFiles == nil {
+		return fmt.Errorf("construct Factory Sessions: initial Work reader is required")
+	}
+	if identityService == nil {
+		return fmt.Errorf("construct Factory Sessions: identity service is required")
+	}
+	if responseStreams == nil {
+		return fmt.Errorf("construct Factory Sessions: response-stream service is required")
+	}
+	return nil
+}
+
+func validateRootRuntimeDependencies(
+	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) error {
+	if clock == nil {
+		return fmt.Errorf("construct Factory Sessions: clock is required")
+	}
+	if liveChangeCoordinator == nil {
+		return fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
+	return nil
 }

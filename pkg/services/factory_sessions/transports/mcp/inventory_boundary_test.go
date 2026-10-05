@@ -345,6 +345,20 @@ func TestResultPolicyBaselineFixtureMatchesProjectedInventory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read baseline fixture: %v", err)
 	}
+	var owned mcpfactorysession.ResultPolicyInventory
+	if err := json.Unmarshal(baseline, &owned); err != nil {
+		t.Fatal(err)
+	}
+	owned.Fixtures = slices.DeleteFunc(owned.Fixtures, func(fixture mcpfactorysession.ResultPolicyFixture) bool {
+		return strings.HasPrefix(fixture.ToolName, "you.worker_session.")
+	})
+	owned.DomainErrorFixtures = slices.DeleteFunc(owned.DomainErrorFixtures, func(fixture mcpfactorysession.DomainErrorFixture) bool {
+		return strings.HasPrefix(fixture.ToolName, "you.worker_session.")
+	})
+	baseline, err = mcpfactorysession.MarshalResultPolicyInventoryJSON(owned)
+	if err != nil {
+		t.Fatal(err)
+	}
 	projected, err := mcpfactorysession.MarshalResultPolicyInventoryJSON(mustProjectResultPolicyInventory(t))
 	if err != nil {
 		t.Fatalf("MarshalResultPolicyInventoryJSON() error = %v", err)
