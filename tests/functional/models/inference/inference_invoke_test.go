@@ -27,10 +27,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
-// TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration proves the built-in
+// TestModelCLIValidatesBuiltinTTSWithoutFactoryWorker proves the built-in
 // tts definition reaches the joined kernel through root.BuildProcess and
 // Process.Execute without a redundant Factory resource or worker declaration.
-func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
+func TestModelCLIValidatesBuiltinTTSWithoutFactoryWorker(t *testing.T) {
 	t.Parallel()
 
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -139,10 +139,10 @@ func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryap
 	return factoryapi.ModelSummary{}, false
 }
 
-// TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess proves the
+// TestModelRESTInvokesBuiltinTTSWithNamedAudioOutput proves the
 // registered generic HTTP route uses the live Models scope and returns named
 // output from the joined root rather than the legacy model-invocation envelope.
-func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T) {
+func TestModelRESTInvokesBuiltinTTSWithNamedAudioOutput(t *testing.T) {
 	t.Parallel()
 
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -210,7 +210,7 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 // public invocation routes use the same effective built-in definition when no
 // Factory worker is declared. The generic route keeps its slot-named output
 // contract; the named route keeps its legacy worker/content response shape.
-func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T) {
+func TestModelRESTBuiltinInvocationRoutesReturnTheirPublicResults(t *testing.T) {
 	t.Parallel()
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
@@ -308,11 +308,11 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	}
 }
 
-// TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker proves the
+// TestModelRESTReportsBuiltinReadinessAndUnknownModels proves the
 // named route uses the discovered built-in definition even when the Factory
 // declares no matching inference worker, and preserves actionable readiness
 // and unknown-reference failures.
-func TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker(t *testing.T) {
+func TestModelRESTReportsBuiltinReadinessAndUnknownModels(t *testing.T) {
 	t.Parallel()
 
 	dir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
@@ -395,7 +395,7 @@ func postNamedBuiltinFailure(t *testing.T, serverURL, modelName, operation strin
 	return namedBuiltinFailure{StatusCode: response.StatusCode, Body: failure}
 }
 
-func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
+func TestModelCLIProducesInferenceOutputModes(t *testing.T) {
 	runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t)
 }
 
@@ -630,7 +630,7 @@ func multiOutputModelFactoryConfig(endpoint string) map[string]any {
 	return config
 }
 
-func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
+func TestModelCLIRejectsUnsupportedPinnedBackend(t *testing.T) {
 	runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t)
 }
 

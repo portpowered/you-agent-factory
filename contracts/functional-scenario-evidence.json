@@ -20,7 +20,7 @@
       ]
     },
     {
-      "test": "tests/functional/models/inference/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
+      "test": "tests/functional/models/inference/inference_invoke_test.go::TestModelRESTInvokesBuiltinTTSWithNamedAudioOutput",
       "stableIds": [
         "rest/invokeGenericModel"
       ]

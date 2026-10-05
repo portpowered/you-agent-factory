@@ -28,7 +28,6 @@ func TestModelsEmbedInvocationOutputsAndFailures(t *testing.T) {
 	t.Run("zero-configuration", testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess)
 	t.Run("large-file", testModelsEmbedLargeFileInputReachesBackendThroughRootBuildProcess)
 	t.Run("invalid-vector", testModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease)
-	t.Run("named-generic-http-parity", testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution)
 }
 
 func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T) {

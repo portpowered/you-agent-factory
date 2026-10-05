@@ -11,8 +11,8 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-const genericLLMFixtureSource = "hf://fixture/root-composition/gemma-4-E4B-it-Q4_K_M.gguf@0000000000000000000000000000000000000000"
-const genericASRFixtureSource = "hf://fixture/root-composition/qwen3-asr-0.6b-q8_0.gguf@0000000000000000000000000000000000000000"
+const genericLLMFixtureSource = "hf://fixture/customer-inference/gemma-4-E4B-it-Q4_K_M.gguf@0000000000000000000000000000000000000000"
+const genericASRFixtureSource = "hf://fixture/customer-inference/qwen3-asr-0.6b-q8_0.gguf@0000000000000000000000000000000000000000"
 
 func genericModelFixtureSource(t *testing.T, home, source string) string {
 	t.Helper()

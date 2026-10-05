@@ -861,3 +861,11 @@ filesystem call-count assertions. Tooling tests have an explicit maintenance
 lane. The dead-code baseline records the new test-support-only home-environment
 helper, consistent with its existing helpers excluded from production reachability;
 no new unreachable production code is accepted.
+
+Model test names now describe customer outcomes: built-in CLI validation,
+REST audio output, readiness errors, CLI output modes and unsupported pinned
+backends. The TTS named/generic REST journey runs as its own test rather than
+inside the embedding suite. The complete model package passes in 12.548s
+locally; its scenario evidence references were updated and all 156 reviewed
+records validate. Fixture source identities use `customer-inference` rather
+than the retired `root-composition` label.
