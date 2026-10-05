@@ -350,6 +350,12 @@ health, and ordered events. New committed events include `capturedAt`, the
 host capture time. Older events omit this field. Capture health describes the
 recorded history independently of execution success.
 
+Script Worker output appears as progress records labelled `stdout` or `stderr`,
+preserving each captured chunk. If capture loses a record, logs return only
+the committed prefix. Health remains `INCOMPLETE` while the execution outcome
+is unknown and becomes `DEGRADED` when the terminal outcome is known.
+Live cancellation remains available after capture loss.
+
 The default page size is 100 events. Use `--limit` to select 1 through 1000
 events. If the response includes `nextToken`, pass it with `--next-token` to
 read the next page from the same committed head. At the head of an unfinished

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,6 +16,42 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
+
+func TestFileWriterCapturedActiveLossPreservesIncompletePrefix(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	record := journalRecord(t, "active-loss-recording", "active-loss-worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerCapturedActivityRequest{WorkerSessionID: record.WorkerSessionID}
+	prefix, err := writer.ReadWorkerCapturedActivity(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.PersistWorkerRecordingFailure(t.Context(), recordings.WorkerRecordingFailure{
+		RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Topic: record.Record.ID.Topic, Code: "PERSISTENCE_FAILED",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, current := range []recordings.WorkerCapturedActivityReader{writer, reader} {
+		page, err := current.ReadWorkerCapturedActivity(t.Context(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.Health != recordings.WorkerRecordingStatusIncomplete || page.HealthReason != "PERSISTENCE_FAILED" || page.Terminal != nil || page.NextToken == "" {
+			t.Fatalf("capture loss hid its health or fabricated terminal: %+v", page)
+		}
+		if page.Catalog.CommittedPosition != prefix.Catalog.CommittedPosition || !reflect.DeepEqual(page.Records, prefix.Records) {
+			t.Fatal("capture loss changed committed records/time/watermark")
+		}
+	}
+}
 
 type captureTimeProbe struct {
 	now   time.Time

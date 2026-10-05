@@ -703,6 +703,12 @@ func isFinalOnlyProviderLifecycle(provider, nativeType string) bool {
 func progressFactVocabulary(fragment workers.ProgressFragment) (workers.Kind, workers.Phase, bool) {
 	rawKind := strings.ToLower(strings.TrimSpace(fragment.Metadata["kind"]))
 	rawPhase := strings.ToLower(strings.TrimSpace(fragment.Type))
+	// Script output names the command stream instead of a provider fact. Keep
+	// the exact chunk as labelled progress; require the runner's stream marker
+	// so unrelated bare event types do not become fabricated observations.
+	if rawKind == "" && (rawPhase == "stdout" || rawPhase == "stderr") && fragment.Metadata["stream"] == rawPhase {
+		return workers.KindProgress, workers.PhaseUpdated, true
+	}
 
 	// The native adapters put "noun.phase" in Type. Splitting it here keeps
 	// both vocabularies converging on one Kind/Phase resolution below rather
