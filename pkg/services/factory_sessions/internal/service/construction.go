@@ -231,7 +231,10 @@ func NewDurableExecution(
 		append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
 	)
 	if err != nil {
-		return DurableExecution{}, fmt.Errorf("compose durable session persistence: %w", err)
+		// The opener can acquire an owner before failing. Sessions registers
+		// its cleanup before checking this error, so preserve that partial
+		// ownership without publishing successful execution settings.
+		return DurableExecution{Service: execution}, fmt.Errorf("compose durable session persistence: %w", err)
 	}
 	return DurableExecution{
 		Service: execution,

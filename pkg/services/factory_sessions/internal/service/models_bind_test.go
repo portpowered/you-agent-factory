@@ -274,14 +274,23 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 		newSessionLogger:  func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger },
 		recordingsService: recordingRoot, recordingsRuntime: recordingRoot,
 		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
-		durableExecutionFactory: func(factorydefinitions.RuntimeSelection, factorysessions.PersistencePolicy,
-			string, string, operatorconfig.ResolvedDefaults, RuntimeRoot, factoryruntime.Clock,
-			providers.Service, *workers.MockWorkersConfig, FactorySessionExecutionFactory,
-			factorysessions.ProviderIdentityResolver) (DurableExecution, error) {
-			if durableFailure {
-				return DurableExecution{Service: execution}, openingErr
-			}
-			return DurableExecution{Service: execution}, nil
+		durableExecutionFactory: func(definition factorydefinitions.RuntimeSelection, persistence factorysessions.PersistencePolicy,
+			home, configPath string, defaults operatorconfig.ResolvedDefaults, root RuntimeRoot, clock factoryruntime.Clock,
+			provider providers.Service, mock *workers.MockWorkersConfig, _ FactorySessionExecutionFactory,
+			_ factorysessions.ProviderIdentityResolver) (DurableExecution, error) {
+			return NewDurableExecution(
+				func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
+				definition, persistence, home, configPath, defaults, root, clock, provider, mock,
+				func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock,
+					map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig,
+					[]operatorconfig.ACPIntegration) (durableexecution.Service, error) {
+					if durableFailure {
+						return execution, openingErr
+					}
+					return execution, nil
+				},
+				func(identity string) (string, error) { return identity, nil },
+			)
 		},
 	}
 }
