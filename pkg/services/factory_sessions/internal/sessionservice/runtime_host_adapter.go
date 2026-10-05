@@ -58,6 +58,15 @@ func (r sessionLifecycleReader) cleanupFacts(session *livesession.LiveSession) (
 			}
 			if release == nil {
 				release = owner.releaseWorkAdmissionProjection
+				if owner.retireWorkAdmissionProjection != nil && bound.Handle != nil {
+					// The owner shares Assembly's ID-wide release with replacements.
+					// Capture the generation before stopping can publish its successor.
+					runtime, record := session.Runtime, bound.Handle.RuntimeInstance()
+					retire := owner.retireWorkAdmissionProjection
+					release = func(id string) {
+						retire(id, runtime, record)
+					}
+				}
 			}
 		}
 	}
