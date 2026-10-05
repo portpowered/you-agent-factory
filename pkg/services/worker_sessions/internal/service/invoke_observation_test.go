@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -105,6 +107,97 @@ func observationMetadata() *observation {
 		turnID:    "turn-1",
 		attemptID: "attempt-1",
 		startedAt: time.Date(2026, 8, 8, 11, 59, 58, 0, time.UTC),
+	}
+}
+
+type countingNativeProjector struct {
+	providersessions.Service
+	path  string
+	opens int
+}
+
+func (p *countingNativeProjector) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	p.opens++
+	file, err := os.Open(p.path)
+	if err != nil {
+		return providersessions.ProjectResult{}, err
+	}
+	defer func() { _ = file.Close() }()
+	return providersessions.ProjectResult{Detail: providersessions.Detail{Parse: providersessions.ParseSummary{EventCount: 1}}}, nil
+}
+
+func TestFleetList200SessionsUsesCapturedFactsWithoutNativeOpens(t *testing.T) {
+	t.Parallel()
+	p := &countingNativeProjector{path: filepath.Join(t.TempDir(), "native.jsonl")}
+	if err := os.WriteFile(p.path, []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	r := newObservationRegistry(p, nil)
+	for i := range 200 {
+		id := fmt.Sprintf("worker-%03d", i)
+		r.sessions[id] = observationSession(id, workersessions.StateCompleted)
+		metadata := observationMetadata()
+		tokens := i + 1
+		metadata.tokenUsage = &workersessions.TokenUsage{TotalTokens: &tokens}
+		metadata.usageModel = "captured-model"
+		r.observations[id] = metadata
+	}
+	for _, size := range []int{10, 50, 200} {
+		for range 2 {
+			token, seen := "", 0
+			for {
+				page, err := r.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: size, NextToken: token})
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, row := range page.Observations {
+					assertCapturedFleetRow(t, row, seen)
+					*row.TokenUsage.TotalTokens = -1 // Returned usage must be detached.
+					seen++
+				}
+				token = page.NextToken
+				if token == "" {
+					break
+				}
+			}
+			if seen != 200 || p.opens != 0 {
+				t.Fatalf("seen=%d native opens=%d", seen, p.opens)
+			}
+		}
+	}
+	assertCountedSelectedDetail(t, r, p)
+	if err := os.Remove(p.path); err != nil {
+		t.Fatal(err)
+	}
+	page, err := r.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 200})
+	if err != nil || len(page.Observations) != 200 || p.opens != 1 {
+		t.Fatalf("missing native page=%d error=%v opens=%d", len(page.Observations), err, p.opens)
+	}
+}
+
+func assertCountedSelectedDetail(t *testing.T, r *registry, p *countingNativeProjector) {
+	t.Helper()
+	show, err := r.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-000"})
+	if err != nil || p.opens != 1 || show.Transcript != workersessions.TranscriptAvailabilityAvailable || show.Parse.EventCount != 1 {
+		t.Fatalf("detail=%#v error=%v opens=%d", show, err, p.opens)
+	}
+}
+
+func assertCapturedFleetRow(t *testing.T, row workersessions.Observation, index int) {
+	t.Helper()
+	if row.WorkerSessionID != fmt.Sprintf("worker-%03d", index) || !row.ProviderSessionAvailable || row.AttemptID != "attempt-1" || row.StartedAt == nil || row.State != workersessions.StateCompleted {
+		t.Fatalf("captured identity %d = %#v", index, row)
+	}
+	if row.TokenUsage == nil || row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != index+1 || row.Model == nil || *row.Model != "captured-model" {
+		t.Fatalf("captured usage %d = %#v", index, row)
+	}
+	assertFleetHasNoNativeEnrichment(t, row)
+}
+
+func assertFleetHasNoNativeEnrichment(t *testing.T, row workersessions.Observation) {
+	t.Helper()
+	if row.Transcript != workersessions.TranscriptAvailabilityUnavailable || row.TurnUsage != nil || row.Parse.EventCount != 0 || len(row.Parse.Errors) != 0 {
+		t.Fatalf("fleet invented native enrichment: %#v", row)
 	}
 }
 

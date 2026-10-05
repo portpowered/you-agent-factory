@@ -6017,7 +6017,7 @@ type ListWorkResponse struct {
 type ListWorkerSessionsResponse struct {
 	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
 
-	// Sessions Deterministically ordered Worker Session observations correlated with the requested Work.
+	// Sessions Deterministically ordered Worker Session observations. Work-scoped queries return observations correlated with the requested Work. Top-level fleet pages use captured metadata without reading native provider files. Fleet token usage appears only when captured during execution. Fleet rows omit native-only turn usage and return unavailable transcript status and empty parse diagnostics. Show and detail queries retain provider inspection when available.
 	Sessions []WorkerSessionObservation `json:"sessions"`
 }
 

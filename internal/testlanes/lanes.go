@@ -65,7 +65,8 @@ func ForImportPath(importPath string) (lane Lane, ok bool) {
 		return LaneFunctional, true
 	case importPath == ModulePath+"/tests/integration" || strings.HasPrefix(importPath, ModulePath+"/tests/integration/"):
 		return LaneIntegration, true
-	case importPath == ModulePath+"/tests/stress" || strings.HasPrefix(importPath, ModulePath+"/tests/stress/"):
+	case importPath == ModulePath+"/tests/stress" || strings.HasPrefix(importPath, ModulePath+"/tests/stress/") ||
+		importPath == ModulePath+"/tests/load" || strings.HasPrefix(importPath, ModulePath+"/tests/load/"):
 		return LaneStress, true
 	case importPath == ModulePath+"/tests/release" || strings.HasPrefix(importPath, ModulePath+"/tests/release/"):
 		return LaneRelease, true

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -164,6 +165,9 @@ func (a *Adapter) resolveWorkAttribution(
 	observations []workersessions.Observation,
 ) (map[string]workerSessionWorkAttribution, error) {
 	attribution := make(map[string]workerSessionWorkAttribution, len(observations))
+	// Each session read clones its runtime snapshot. Share that read only within
+	// this request, including failed reads, and keep session identities separate.
+	namesBySession := make(map[string]map[string]string)
 	for _, observation := range observations {
 		if len(observation.WorkIDs) == 0 || strings.TrimSpace(observation.WorkIDs[0]) == "" {
 			continue
@@ -173,17 +177,40 @@ func (a *Adapter) resolveWorkAttribution(
 		if sessionID == "" {
 			sessionID = workers.DefaultSessionID
 		}
-		workModel, err := a.work.GetWork(ctx, sessionID, workID)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		names, loaded := namesBySession[sessionID]
+		if !loaded {
+			names = make(map[string]string)
+			if a.work != nil {
+				// No filters or pagination: include superseded Work just as GetWork
+				// does, so optional names do not depend on the current Work state.
+				result, err := a.work.ListWork(ctx, sessionID, work.ListOptions{
+					IncludeSuperseded: true, MaxResults: math.MaxInt,
+				})
+				if err == nil {
+					for _, model := range result.Results {
+						if _, exists := names[model.WorkID]; !exists {
+							names[model.WorkID] = model.Name
+						}
+					}
+					// Exact cursor identity takes precedence over Work identity,
+					// matching the Work service's selected-read lookup.
+					for _, model := range result.Results {
+						if model.CursorID != "" {
+							names[model.CursorID] = model.Name
+						}
+					}
+				}
 			}
-			attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID}
-			continue
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			namesBySession[sessionID] = names
 		}
 		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{
-			WorkID:   workID,
-			WorkName: workModel.Name,
+			WorkID: workID, WorkName: names[workID],
 		}
 	}
 	return attribution, nil
