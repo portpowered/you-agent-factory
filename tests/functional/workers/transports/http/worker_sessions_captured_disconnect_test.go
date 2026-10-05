@@ -67,6 +67,7 @@ func TestWorkerSessionCapturedLogsObserverCancellation(t *testing.T) {
 	// The same process still owns the captured history; selecting a stopped
 	// host must fail rather than silently switching to that local recording.
 	server.Close(t)
+	assertCapturedFollowFailure(t, server, "observer-worker", "", "FACTORY_UNREACHABLE", nil)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "read", "--worker-session-id", "observer-worker", "--view", "logs", "--server", server.URL(), "--output", "json"})
 	err := server.Execute(t, inputs.Input)
 	if err == nil || !strings.Contains(inputs.Stderr()+inputs.Stdout(), "FACTORY_UNREACHABLE") || strings.Contains(inputs.Stdout(), "recordingGenerationId") {

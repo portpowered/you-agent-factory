@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -21,6 +22,22 @@ type capturedFollowOutput struct {
 	bytes.Buffer
 	release func()
 	once    sync.Once
+}
+
+func assertCapturedFollowFailure(t *testing.T, server *support.FunctionalAPIServer, id, token, code string, prefix []factoryapi.WorkerSessionEvent) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	inputs := support.FakeInputs(ctx, []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--follow", "--next-token", token, "--server", server.URL(), "--output", "json"})
+	err := server.Execute(t, inputs.Input)
+	var failure interface{ CLIErrorCode() string }
+	if !errors.As(err, &failure) || failure.CLIErrorCode() != code || ctx.Err() != nil {
+		t.Fatalf("follow failure: want %s, got %v; diagnostics=%s", code, err, inputs.Stderr())
+	}
+	got := decodeCapturedFollow(t, inputs.Stdout())
+	if len(got) != len(prefix) || (len(got) > 0 && !reflect.DeepEqual(got, prefix)) {
+		t.Fatalf("failed follow changed committed prefix: got=%+v want=%+v", got, prefix)
+	}
 }
 
 func (w *capturedFollowOutput) Write(data []byte) (int, error) {

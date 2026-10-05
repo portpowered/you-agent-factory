@@ -137,7 +137,11 @@ func observeLogsEvents(ctx context.Context, config ReadConfig, position int64, w
 		return err
 	}
 	query := endpoint.Query()
-	query.Set("after_position", strconv.FormatInt(position, 10))
+	// An at-head durable token can yield no events in this invocation. Zero
+	// means no known Events position, not a valid exclusive Events cursor.
+	if position > 0 {
+		query.Set("after_position", strconv.FormatInt(position, 10))
+	}
 	endpoint.RawQuery = query.Encode()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
@@ -157,6 +161,11 @@ func observeLogsEvents(ctx context.Context, config ReadConfig, position int64, w
 		var cliErr *CLIError
 		if errors.As(err, &cliErr) && cliErr.Code == "WORKER_SESSION_EVENT_CURSOR_STALE" {
 			return nil // Durable polling backfills the evicted Events prefix.
+		}
+		if errors.As(err, &cliErr) && cliErr.Code == "WORKER_SESSION_NOT_FOUND" {
+			// drain already established a captured prefix. Missing live Events
+			// ownership cannot make that retained history nonexistent or complete.
+			return newCLIError("WORKER_SESSION_LOGS_GAP", "Worker Session captured history is incomplete", nil)
 		}
 		return err
 	}

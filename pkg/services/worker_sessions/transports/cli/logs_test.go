@@ -252,6 +252,82 @@ func TestReadLogsFollowRequiresLogsAndExcludesArtifacts(t *testing.T) {
 	}
 }
 
+func TestReadLogsFollowRetainedPrefixWithoutLiveOwner(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"code":"WORKER_SESSION_NOT_FOUND","message":"no live owner"}`)
+			return
+		}
+		page := followTestPage(1, 1, "1")
+		page.Health = factoryapi.INCOMPLETE
+		if r.URL.Query().Get("nextToken") != "" {
+			page.Events = nil
+		}
+		if err := json.NewEncoder(w).Encode(page); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	var output bytes.Buffer
+	err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: &output})
+	var failure *CLIError
+	if !errors.As(err, &failure) || failure.Code != "WORKER_SESSION_LOGS_GAP" || ctx.Err() != nil {
+		t.Fatalf("retained incomplete prefix lost its meaning: %v", err)
+	}
+	var event factoryapi.WorkerSessionEvent
+	decoder := json.NewDecoder(&output)
+	if err := decoder.Decode(&event); err != nil || event.Event.Position != 1 {
+		t.Fatalf("retained prefix lost: %+v %v", event, err)
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		t.Fatalf("prefix duplicated or error emitted as an event: %v", err)
+	}
+}
+
+func TestReadLogsFollowResumesEmptyLiveHead(t *testing.T) {
+	t.Parallel()
+	var committed atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			if r.URL.Query().Has("after_position") {
+				t.Errorf("empty durable head invented Events position: %s", r.URL)
+			}
+			committed.Store(true)
+			writeLogsFollowSource(t, w, "terminal")
+			return
+		}
+		page := followTestPage(1, 1, "1")
+		page.Events = nil
+		page.Health = factoryapi.INCOMPLETE
+		if committed.Load() {
+			page = followTestPage(2, 2, "")
+		}
+		if err := json.NewEncoder(w).Encode(page); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	var output bytes.Buffer
+	err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, NextToken: "1", Output: &output})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event factoryapi.WorkerSessionEvent
+	decoder := json.NewDecoder(&output)
+	if err := decoder.Decode(&event); err != nil || event.Event.Position != 2 {
+		t.Fatalf("resume lost its committed tail: %+v %v", event, err)
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		t.Fatalf("resume repeated its acknowledged prefix: %v", err)
+	}
+}
+
 func TestReadLogsCancellationIsInterrupted(t *testing.T) {
 	t.Parallel()
 	for _, ref := range []string{"", "worker/2"} {

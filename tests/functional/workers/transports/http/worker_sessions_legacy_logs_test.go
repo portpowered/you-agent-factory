@@ -43,6 +43,27 @@ func assertLegacyCapturedLogsRecovery(t *testing.T, config support.FunctionalAPI
 		t.Fatal("legacy recovery changed generation, payload, time omission or watermark")
 	}
 	assertCapturedSummaryUsage(t, reopened, current.WorkerSessionId)
+	reopened.Close(t)
+	assertIncompleteCapturedFollow(t, config, current)
+}
+
+// A clean host has no admitted owner for this retained opening. A resumable
+// durable token does not turn the incomplete archive into a live execution.
+func assertIncompleteCapturedFollow(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	root := t.TempDir()
+	prefix := current
+	prefix.Events = current.Events[:1]
+	prefix.CommittedPosition = 1
+	writeLegacyCapturedFixture(t, root, prefix)
+	config.Edges.FactorySessionsWorkingDirectory = capturedRecordingDirectory(root)
+	server := support.StartFunctionalAPIServer(t, config)
+	page := assertLegacyLogsCLIHTTPParity(t, server, current.WorkerSessionId)
+	if page.Health != factoryapi.INCOMPLETE || page.NextToken == nil || len(page.Events) != 1 {
+		t.Fatalf("owner-lost prefix not truthfully resumable: %+v", page)
+	}
+	assertCapturedFollowFailure(t, server, current.WorkerSessionId, "", "WORKER_SESSION_LOGS_GAP", page.Events)
+	assertCapturedFollowFailure(t, server, current.WorkerSessionId, *page.NextToken, "WORKER_SESSION_LOGS_GAP", nil)
 }
 
 func assertLegacyLogsCLIHTTPParity(t *testing.T, server *support.FunctionalAPIServer, id string) factoryapi.WorkerSessionLogPage {

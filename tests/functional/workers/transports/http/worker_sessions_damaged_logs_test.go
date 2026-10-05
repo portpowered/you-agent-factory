@@ -112,4 +112,5 @@ func assertUnavailableCapturedRead(t *testing.T, server *support.FunctionalAPISe
 	if err := server.Execute(t, inputs.Input); err == nil || inputs.Stdout() != "" {
 		t.Fatalf("CLI fabricated a damaged page: error=%v output=%s", err, inputs.Stdout())
 	}
+	assertCapturedFollowFailure(t, server, id, "", "WORKER_SESSION_RECORDING_UNAVAILABLE", nil)
 }
