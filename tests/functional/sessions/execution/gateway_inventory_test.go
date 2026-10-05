@@ -2,10 +2,15 @@ package execution_test
 
 import (
 	"context"
+	"errors"
+	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -25,12 +30,14 @@ func TestGatewaySessionInventoriesPreserveIdentityAndHistory(t *testing.T) {
 	acquireExecutionFixtureSlot(t)
 	dir := scaffoldFSCP03ProbeFactory(t)
 	home := t.TempDir()
+	directories := &gatewayHistoryDirectoryFault{root: filepath.Join(home, ".you-agent-factory", "recordings")}
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir,
 		Env:        append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
 		Edges: serviceedges.Edges{
 			FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
 			BrowserOpener:                      func(context.Context, string) error { return nil },
+			RecordingReadDirectory:             directories.readDirectory,
 		},
 		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
 			for _, name := range []string{"second.json", "first.json"} {
@@ -64,6 +71,82 @@ func TestGatewaySessionInventoriesPreserveIdentityAndHistory(t *testing.T) {
 	if !sameGatewayLiveInventory(all.Sessions, live.Sessions) || !reflect.DeepEqual(all.DurableSessions, persisted.DurableSessions) || !reflect.DeepEqual(all.RecordedSessions, history.RecordedSessions) {
 		t.Fatalf("all inventory lost or changed owner rows: %#v", all)
 	}
+	assertGatewayHistoryFailureRecovery(t, server.URL(), directories, live, history, durable.SessionId)
+	assertGatewayEmptyHistoryKeepsPeers(t, server.URL(), home, live, persisted)
+}
+
+func assertGatewayEmptyHistoryKeepsPeers(t *testing.T, baseURL, home string, live, persisted factoryapi.ListFactorySessionsResponse) {
+	t.Helper()
+	// Remove only the two completed scenario-owned artifacts. The real dated
+	// directory remains, so this crosses the empty-directory boundary rather
+	// than substituting an empty inventory or a missing-directory error.
+	for _, name := range []string{"first.json", "second.json"} {
+		path := filepath.Join(home, ".you-agent-factory", "recordings", "2026", "10", "05", name)
+		if err := os.Remove(path); err != nil {
+			t.Fatalf("remove completed scenario recording: %v", err)
+		}
+	}
+	history := gatewayInventory(t, baseURL, "history")
+	if len(history.Sessions) != 0 || history.DurableSessions != nil || history.RecordedSessions != nil && len(*history.RecordedSessions) != 0 {
+		t.Fatalf("empty history inventory = %#v, want no owner rows", history)
+	}
+	all := gatewayInventory(t, baseURL, "all")
+	if !sameGatewayLiveInventory(all.Sessions, live.Sessions) || !reflect.DeepEqual(all.DurableSessions, persisted.DurableSessions) || all.RecordedSessions != nil && len(*all.RecordedSessions) != 0 {
+		t.Fatalf("empty history changed live/durable peer rows: %#v", all)
+	}
+}
+
+func assertGatewayHistoryFailureRecovery(t *testing.T, baseURL string, directories *gatewayHistoryDirectoryFault, live, history factoryapi.ListFactorySessionsResponse, peerID string) {
+	t.Helper()
+	directories.setFailure(true)
+	for _, scope := range []string{"history", "all"} {
+		status, body := gatewaySnapshotRequest(t, http.MethodGet, baseURL+"/factory-sessions?scope="+scope, nil)
+		// The HTTP boundary sanitizes the wrapped filesystem cause.
+		if status != http.StatusInternalServerError || !strings.Contains(string(body), `"code":"INTERNAL_ERROR"`) || !strings.Contains(string(body), `"message":"failed to list factory sessions"`) {
+			t.Fatalf("failed %s inventory = %d %s, want visible history read error", scope, status, body)
+		}
+		if strings.Contains(string(body), `"sessions":`) || strings.Contains(string(body), `"durableSessions":`) {
+			t.Fatalf("failed %s inventory returned partial success: %s", scope, body)
+		}
+	}
+	if !sameGatewayLiveInventory(gatewayInventory(t, baseURL, "live").Sessions, live.Sessions) {
+		t.Fatal("history read failure changed the live peer inventory")
+	}
+	assertGatewaySnapshotResult(t, baseURL, peerID)
+	assertGatewaySnapshotInventory(t, baseURL, peerID)
+	directories.setFailure(false)
+	recovered := gatewayInventory(t, baseURL, "history")
+	if !reflect.DeepEqual(recovered.RecordedSessions, history.RecordedSessions) {
+		t.Fatalf("history recovery = %#v, want retained rows %#v", recovered, history)
+	}
+	all := gatewayInventory(t, baseURL, "all")
+	if !sameGatewayLiveInventory(all.Sessions, live.Sessions) || !reflect.DeepEqual(all.RecordedSessions, history.RecordedSessions) {
+		t.Fatalf("combined inventory recovery lost peer/history rows: %#v", all)
+	}
+}
+
+// Only the scenario-owned history root fails. The switch is synchronized with
+// concurrent server reads; clearing it restores the same real artifacts.
+type gatewayHistoryDirectoryFault struct {
+	root string
+	mu   sync.Mutex
+	fail bool
+}
+
+func (d *gatewayHistoryDirectoryFault) readDirectory(path string) ([]fs.DirEntry, error) {
+	d.mu.Lock()
+	fail := d.fail && filepath.Clean(path) == d.root
+	d.mu.Unlock()
+	if fail {
+		return nil, errors.New("injected history directory read failure")
+	}
+	return os.ReadDir(path)
+}
+
+func (d *gatewayHistoryDirectoryFault) setFailure(fail bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.fail = fail
 }
 
 func assertGatewayLiveInventory(t *testing.T, defaultList, live factoryapi.ListFactorySessionsResponse, dir string) {
