@@ -19,6 +19,10 @@ type capturedActivityFake struct {
 	request recordings.WorkerCapturedActivityRequest
 }
 
+func (f *capturedActivityFake) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("finite logs must not enumerate the fleet")
+}
+
 func (f *capturedActivityFake) LookupWorkerSessionCapture(context.Context, string) (recordings.WorkerSessionCatalogEntry, error) {
 	panic("finite logs must use the atomic page read")
 }

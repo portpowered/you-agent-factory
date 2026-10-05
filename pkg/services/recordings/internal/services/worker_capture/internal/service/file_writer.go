@@ -35,6 +35,7 @@ type FileWriter struct {
 	catalogMu     sync.Mutex
 	catalog       map[string]recordings.WorkerSessionCatalogEntry
 	unavailable   map[string]struct{}
+	ambiguous     map[string]struct{}
 	catalogLoaded bool
 	rebuildMu     sync.Mutex
 }

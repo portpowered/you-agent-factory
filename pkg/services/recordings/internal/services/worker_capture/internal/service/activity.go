@@ -49,7 +49,7 @@ func (writer *FileWriter) indexSession(session *recordingSession) {
 	entry := writer.catalogEntry(session)
 	writer.catalogMu.Lock()
 	_, indexed := writer.catalog[entry.WorkerSessionID]
-	writer.catalog[entry.WorkerSessionID] = entry
+	writer.acceptCatalogEntry(entry)
 	writer.catalogMu.Unlock()
 	if indexed || entry.CommittedPosition != 1 {
 		return
@@ -74,7 +74,11 @@ func (writer *FileWriter) LookupWorkerSessionCapture(ctx context.Context, id str
 	}
 	writer.catalogMu.Lock()
 	cached, indexed := writer.catalog[id]
+	_, ambiguous := writer.ambiguous[id]
 	writer.catalogMu.Unlock()
+	if ambiguous {
+		return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
+	}
 	if indexed {
 		return cached, nil
 	}
@@ -84,9 +88,10 @@ func (writer *FileWriter) LookupWorkerSessionCapture(ctx context.Context, id str
 	writer.catalogMu.Lock()
 	entry, ok := writer.catalog[id]
 	_, unavailable := writer.unavailable[id]
+	_, ambiguous = writer.ambiguous[id]
 	writer.catalogMu.Unlock()
 	if !ok {
-		if unavailable {
+		if unavailable || ambiguous {
 			return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
 		}
 		return recordings.WorkerSessionCatalogEntry{}, os.ErrNotExist
@@ -163,9 +168,7 @@ func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) 
 		}
 		indexed := writer.catalogEntry(session)
 		writer.catalogMu.Lock()
-		if current, ok := writer.catalog[indexed.WorkerSessionID]; !ok || current.CommittedPosition < indexed.CommittedPosition {
-			writer.catalog[indexed.WorkerSessionID] = indexed
-		}
+		writer.acceptCatalogEntry(indexed)
 		writer.catalogMu.Unlock()
 	}
 	return nil

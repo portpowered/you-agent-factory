@@ -58,6 +58,112 @@ type captureTimeProbe struct {
 	calls int
 }
 
+func TestFileWriterCatalogEnumerationSurvivesRestart(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	for _, id := range []string{"z", "a", "m"} {
+		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "recording-"+id, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	token := ""
+	for {
+		page, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{Limit: 1, NextToken: token})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range page.Entries {
+			ids = append(ids, entry.WorkerSessionID)
+			if entry.OwnerEpoch == "reopened" || entry.CommittedPosition != 1 {
+				t.Fatalf("invented restarted ownership or watermark: %+v", entry)
+			}
+		}
+		token = page.NextToken
+		if token == "" {
+			break
+		}
+	}
+	if !reflect.DeepEqual(ids, []string{"a", "m", "z"}) {
+		t.Fatalf("catalog IDs = %v", ids)
+	}
+}
+
+func TestFileWriterCatalogEnumerationFencesMembershipAndProfile(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	for _, id := range []string{"a", "b"} {
+		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, id, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{Limit: 1})
+	if err != nil || first.NextToken == "" {
+		t.Fatalf("first page = %+v, %v", first, err)
+	}
+	other := journalWriter(t, local)
+	for _, id := range []string{"a", "b"} {
+		if err := other.PersistWorkerRecord(t.Context(), journalRecord(t, id, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := other.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{NextToken: first.NextToken}); !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+		t.Fatalf("cross-profile cursor: %v", err)
+	}
+	if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "c", "c")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{NextToken: first.NextToken}); !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+		t.Fatalf("changed membership cursor: %v", err)
+	}
+	for _, req := range []recordings.WorkerCapturedCatalogRequest{{Limit: -1}, {Limit: 1001}, {NextToken: "bad"}} {
+		if _, err := writer.ListWorkerSessionCaptures(t.Context(), req); !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+			t.Fatalf("invalid request %+v: %v", req, err)
+		}
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := writer.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled enumeration: %v", err)
+	}
+}
+
+func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	for _, id := range []string{"first", "second"} {
+		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, id, "collision")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "healthy", "healthy")); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, store := range []recordings.WorkerCapturedActivityReader{writer, reopened} {
+		page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+		if err != nil || len(page.Entries) != 1 || page.Entries[0].WorkerSessionID != "healthy" {
+			t.Fatalf("ambiguous enumeration = %+v, %v", page, err)
+		}
+		if _, err := store.LookupWorkerSessionCapture(t.Context(), "collision"); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+			t.Fatalf("ambiguous lookup = %v", err)
+		}
+		if _, err := store.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: "collision"}); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+			t.Fatalf("ambiguous logs = %v", err)
+		}
+	}
+}
+
 func TestFileWriterCatalogKeepsDamagedCaptureUnavailable(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)
