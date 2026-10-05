@@ -93,6 +93,14 @@
       ]
     },
     {
+      "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
+      "stableIds": [
+        "mcp/mcp.tool.you.worker_session.control",
+        "mcp/mcp.tool.you.worker_session.list",
+        "mcp/mcp.tool.you.worker_session.read"
+      ]
+    },
+    {
       "test": "tests/functional/work/recovery/manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
       "stableIds": [
         "rest/moveWorkBySessionId"

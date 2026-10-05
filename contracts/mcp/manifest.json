@@ -418,6 +418,124 @@
         "type": "object"
       },
       "handler": "mcp.handler.you.subagent"
+    },
+    {
+      "id": "mcp.tool.you.worker_session.list",
+      "name": "you.worker_session.list",
+      "handler": "mcp.handler.you.worker_session.list",
+      "description": "List Worker Session observations on the selected host. Maps to GET /worker-sessions.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "factory",
+              "all"
+            ]
+          },
+          "state": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "RESERVED",
+                "STARTING",
+                "RUNNING",
+                "PAUSED",
+                "COMPLETED",
+                "FAILED",
+                "CANCELED",
+                "TERMINATED"
+              ]
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nextToken": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "mcp.tool.you.worker_session.read",
+      "name": "you.worker_session.read",
+      "handler": "mcp.handler.you.worker_session.read",
+      "description": "Read one Worker Session: its observation plus an optional transcript or retained-event view. Maps to GET /worker-sessions/{worker_session_id} and, by view, GET /worker-sessions/{worker_session_id}/transcript or GET /worker-sessions/{worker_session_id}/events?replayOnly=true.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workerSessionId"
+        ],
+        "properties": {
+          "workerSessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "transcript",
+              "events"
+            ],
+            "default": "summary"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
+          }
+        }
+      }
+    },
+    {
+      "id": "mcp.tool.you.worker_session.control",
+      "name": "you.worker_session.control",
+      "handler": "mcp.handler.you.worker_session.control",
+      "description": "Apply one Worker Session control. Maps to POST /worker-sessions/{worker_session_id}/{cancel|terminate|interrupt}.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workerSessionId",
+          "operation"
+        ],
+        "properties": {
+          "workerSessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "CANCEL",
+              "TERMINATE",
+              "INTERRUPT"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "successorWorkerSessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replacementMessage": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
     }
   ],
   "resources": [

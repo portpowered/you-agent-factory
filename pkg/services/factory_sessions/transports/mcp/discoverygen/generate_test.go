@@ -11,7 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
+	workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
 )
 
 type testFileSystem struct{}
@@ -34,7 +36,7 @@ func testArtifactStore() generatedartifacts.LocalStore {
 	return store
 }
 
-const canonicalFactorySessionToolCount = 11
+const canonicalToolCount = 14
 
 func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 	repositoryRoot := testutil.MustRepoPath(t, ".")
@@ -47,17 +49,17 @@ func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 		t.Fatalf("ProjectDiscoveryFromCatalogDocument() error = %v", err)
 	}
 
-	if got := len(metadata.Tools); got != canonicalFactorySessionToolCount {
-		t.Fatalf("generated tool count = %d, want %d", got, canonicalFactorySessionToolCount)
+	if got := len(metadata.Tools); got != canonicalToolCount {
+		t.Fatalf("generated tool count = %d, want %d", got, canonicalToolCount)
 	}
-	if err := discoverygen.VerifyDiscoveryToolIdentityCompleteness(metadata, mcpfactorysession.DiscoverTools()); err != nil {
+	if err := discoverygen.VerifyDiscoveryToolIdentityCompleteness(metadata, canonicalIdentities()); err != nil {
 		t.Fatalf("generated discovery identity completeness: %v", err)
 	}
 	for id, tool := range metadata.Tools {
 		if tool.ID != id {
 			t.Errorf("tool map key %q does not match stable id %q", id, tool.ID)
 		}
-		if !strings.HasPrefix(tool.Name, "you.factory_session.") && tool.Name != mcpfactorysession.ToolSubagent {
+		if !strings.HasPrefix(tool.Name, "you.factory_session.") && tool.Name != mcpfactorysession.ToolSubagent && !strings.HasPrefix(tool.Name, "you.worker_session.") {
 			t.Errorf("tool %q name = %q, want canonical Factory Session name", id, tool.Name)
 		}
 		if strings.TrimSpace(tool.Description) == "" {
@@ -75,8 +77,8 @@ func TestProductionManifestProjectsCanonicalToolsAndDeclaredResourcesAndSkills(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Tools) != canonicalFactorySessionToolCount {
-		t.Fatalf("manifest tool count = %d, want %d", len(manifest.Tools), canonicalFactorySessionToolCount)
+	if len(manifest.Tools) != canonicalToolCount {
+		t.Fatalf("manifest tool count = %d, want %d", len(manifest.Tools), canonicalToolCount)
 	}
 	if len(manifest.Resources) != 4 || len(manifest.Skills) != 1 {
 		t.Fatalf("manifest surface sizes = tools:%d resources:%d skills:%d", len(manifest.Tools), len(manifest.Resources), len(manifest.Skills))
@@ -85,7 +87,7 @@ func TestProductionManifestProjectsCanonicalToolsAndDeclaredResourcesAndSkills(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(metadata.Tools) != canonicalFactorySessionToolCount ||
+	if len(metadata.Tools) != canonicalToolCount ||
 		metadata.Tools["mcp.tool.you.subagent"].Name != mcpfactorysession.ToolSubagent ||
 		metadata.Tools["mcp.tool.you.factory_session.list"].Name != mcpfactorysession.ToolListSessions {
 		t.Fatalf("projected tools = %#v", metadata.Tools)
@@ -387,4 +389,15 @@ func readGeneratedArtifact(t *testing.T, root, path string) []byte {
 		t.Fatalf("read generated discovery artifact: %v", err)
 	}
 	return payload
+}
+
+func canonicalIdentities() []mcpfactorycatalog.CatalogToolIdentity {
+	var identities []mcpfactorycatalog.CatalogToolIdentity
+	for _, binding := range mcpfactorysession.ProjectCanonicalToolHandlerBindings() {
+		identities = append(identities, mcpfactorycatalog.CatalogToolIdentity{ID: binding.ToolID, Name: strings.TrimPrefix(binding.ToolID, "mcp.tool.")})
+	}
+	for _, binding := range workersessionmcp.ProjectCanonicalToolHandlerBindings() {
+		identities = append(identities, mcpfactorycatalog.CatalogToolIdentity{ID: binding.ToolID, Name: strings.TrimPrefix(binding.ToolID, "mcp.tool.")})
+	}
+	return identities
 }

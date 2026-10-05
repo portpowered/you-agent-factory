@@ -2,9 +2,7 @@ package factorysession
 
 import (
 	"encoding/json"
-	"fmt"
 	"slices"
-	"strings"
 )
 
 const (
@@ -32,96 +30,9 @@ type ToolInventoryEntry struct {
 	HandlerRegistered bool           `json:"handlerRegistered"`
 }
 
-// ProjectToolInventory builds a sorted inventory document over DiscoverTools.
-// Compatibility aliases are excluded. Input schemas are deep-copied and
-// recursively key-canonicalized so serialization order stays stable.
-func ProjectToolInventory() (ToolInventory, error) {
-	return ProjectToolInventoryFromDiscovered(DiscoverTools())
-}
-
-// ProjectToolInventoryFromDiscovered builds one inventory document from an
-// explicit canonical discovery slice. Production callers should use
-// ProjectToolInventory.
-func ProjectToolInventoryFromDiscovered(discovered []ToolDefinition) (ToolInventory, error) {
-	entries := make([]ToolInventoryEntry, 0, len(discovered))
-	for _, tool := range discovered {
-		inputSchema, err := CanonicalizeInputSchema(tool.InputSchema)
-		if err != nil {
-			return ToolInventory{}, err
-		}
-		entries = append(entries, ToolInventoryEntry{
-			IDCandidate:       deriveToolIDCandidate(tool.Name),
-			Name:              tool.Name,
-			Description:       tool.Description,
-			InputSchema:       inputSchema,
-			HandlerRegistered: IsCanonicalToolHandlerRegistered(tool.Name),
-		})
-	}
-	slices.SortFunc(entries, func(left, right ToolInventoryEntry) int {
-		return strings.Compare(left.Name, right.Name)
-	})
-	return ToolInventory{
-		FormatVersion:   ToolInventoryFormatVersion,
-		ProtocolVersion: ToolInventoryProtocolVersion,
-		Tools:           entries,
-	}, nil
-}
-
 // MarshalToolInventoryJSON encodes one inventory document with stable map key order.
 func MarshalToolInventoryJSON(inventory ToolInventory) ([]byte, error) {
 	return json.Marshal(inventory)
-}
-
-// GenerateToolInventoryJSON projects and verifies the canonical MCP registry
-// before returning the deterministic S-11 JSON payload. Filesystem persistence
-// remains the responsibility of the maintenance command and artifact store.
-func GenerateToolInventoryJSON() ([]byte, error) {
-	inventory, err := ProjectToolInventory()
-	if err != nil {
-		return nil, fmt.Errorf("project MCP tool inventory: %w", err)
-	}
-	return MarshalVerifiedToolInventoryJSON(inventory)
-}
-
-// MarshalVerifiedToolInventoryJSON verifies one projected inventory before
-// serializing it. The value-only form keeps handler verification testable
-// without introducing another registry or persistence boundary.
-func MarshalVerifiedToolInventoryJSON(inventory ToolInventory) ([]byte, error) {
-	if err := VerifyToolInventory(inventory); err != nil {
-		return nil, fmt.Errorf("verify MCP tool inventory: %w", err)
-	}
-	payload, err := MarshalToolInventoryJSON(inventory)
-	if err != nil {
-		return nil, fmt.Errorf("marshal MCP tool inventory: %w", err)
-	}
-	return payload, nil
-}
-
-// VerifyProjectedToolInventory projects the canonical inventory and fails when
-// any discovered tool lacks a registered handler or a compatibility alias
-// appears as a canonical inventory entry.
-func VerifyProjectedToolInventory() error {
-	inventory, err := ProjectToolInventory()
-	if err != nil {
-		return err
-	}
-	return VerifyToolInventory(inventory)
-}
-
-// VerifyToolInventory fails when any inventoried canonical tool lacks handler
-// registration evidence.
-func VerifyToolInventory(inventory ToolInventory) error {
-	for _, tool := range inventory.Tools {
-		if !tool.HandlerRegistered || !IsCanonicalToolHandlerRegistered(tool.Name) {
-			return fmt.Errorf("discovered canonical tool %q has no registered handler", tool.Name)
-		}
-	}
-	return nil
-}
-
-func deriveToolIDCandidate(name string) string {
-	candidate := strings.TrimPrefix(name, "you.")
-	return strings.ReplaceAll(candidate, "_", "-")
 }
 
 // CanonicalizeInputSchema normalizes one JSON Schema object map for stable comparison.
