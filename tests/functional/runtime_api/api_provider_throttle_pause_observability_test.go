@@ -211,7 +211,7 @@ func waitForThrottlePausePublicSession(
 		if match(session) {
 			return session
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 
 	session := server.Session(t)
