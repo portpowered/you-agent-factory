@@ -284,12 +284,12 @@ func SessionServiceHost(
 	routing := sessionIdentityReader{state: state, active: active, backendScope: backendScope, identity: identityService}
 	projection := sessionProjectionReader{state: state, backendScope: backendScope, identity: identityService, clock: clock, projector: projector, checkpoints: checkpoints}
 	lifecycleReader := sessionLifecycleReader{state: state, active: active, lifecycle: lifecycle, releaseAdmission: releaseAdmission, logger: logger}
-	return newSessionHost(
-		state, projection.BuildSessionProjectionContext, routing.ResolveSyncPreflightTarget,
-		routing.BackendScopeID, routing.LogicalSessionKeyID, runtimebinding.StreamGenerationID,
-		lifecycleReader.WorkerSessionsObservationForSession, lifecycleReader.StopLiveSession,
-		lifecycleReader.ObserveLiveLifecycleControl, durable, checkpoints,
-	)
+	return keyedSessionHost{
+		sessionIdentityReader:   routing,
+		sessionProjectionReader: projection,
+		sessionLifecycleReader:  lifecycleReader,
+		state:                   state, durable: durable,
+	}
 }
 
 func (fs *SessionRuntime) requireSessionGateway() sessionGateway {

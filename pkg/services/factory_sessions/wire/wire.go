@@ -186,8 +186,11 @@ func NewStreamObserver() StreamObserver {
 	return sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle)
 }
 
+// GatewayStreams is the complete stream role supplied directly to the gateway.
+type GatewayStreams = sessionstream.Manager
+
 // NewStreamManager constructs reusable streams over the supplied authority and response owner.
-func NewStreamManager(state *SessionState, observer StreamObserver, responseRegistry *ResponseStreamRegistry, responses ResponseStreams) StreamManager {
+func NewStreamManager(state *SessionState, observer StreamObserver, responseRegistry *ResponseStreamRegistry, responses ResponseStreams) *GatewayStreams {
 	return sessionstream.NewManagerWithResponseService(state, observer, responseRegistry, responses)
 }
 

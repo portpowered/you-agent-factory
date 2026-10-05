@@ -72,6 +72,7 @@ var servicesSet = wire.NewSet(
 	provideInvocationWorldStateProjector,
 	factorysessionwire.NewStreamObserver,
 	factorysessionwire.NewStreamManager,
+	wire.Bind(new(factorysessionwire.StreamManager), new(*factorysessionwire.GatewayStreams)),
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,

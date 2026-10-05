@@ -149,7 +149,9 @@ func TestSessionHostWorkerReadsPreserveAddressedAndStartupFallback(t *testing.T)
 	}
 	// Construct without an opening owner or gateway and retain addressed reads.
 	host := SessionServiceHost(state, active, nil, nil, nil, "", nil, nil, nil, nil, nil)
-	got, err := host.(dependencyHost).WorkerSessionsObservationForSession("peer").ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "requested"})
+	got, err := host.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	}).WorkerSessionsObservationForSession("peer").ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "requested"})
 	if err != nil || len(got.Observations) != 1 || !reflect.DeepEqual(got.Observations[0].WorkIDs, []string{"peer-work"}) {
 		t.Fatalf("captured production host worker read = %#v, %v", got, err)
 	}
@@ -237,6 +239,29 @@ func TestSessionHostRetainsDirectDurableReadsAndErrors(t *testing.T) {
 	optional := SessionServiceHost(newWorkResolverSessionState(), nil, nil, nil, nil, "", nil, nil, nil, nil, nil)
 	if optional.DurableExecution() != nil {
 		t.Fatal("optional durable service unexpectedly configured")
+	}
+}
+
+func TestSessionHostWithoutLiveStatePreservesOptionalReads(t *testing.T) {
+	t.Parallel()
+	host := SessionServiceHost(nil, nil, nil, nil, nil, "selected-backend", nil, nil, nil, nil, nil)
+	if host.GetLiveSession("missing") != nil || len(host.ListLiveSessionIDs()) != 0 || host.DurableExecution() != nil {
+		t.Fatal("absent live state published a session or durable service")
+	}
+	for _, selector := range []string{"", "missing"} {
+		if _, err := host.RequireSession(selector); err == nil || err.Error() != "factory service is required" {
+			t.Fatalf("required session %q = %v", selector, err)
+		}
+		if _, err := host.SessionFactory(selector); err == nil || err.Error() != "factory service is required" {
+			t.Fatalf("required runtime %q = %v", selector, err)
+		}
+	}
+	session := &livesession.LiveSession{ID: "detached"}
+	if len(host.LiveSessionEvents(session)) != 0 || host.JavaScriptCheckpointStore(session) != nil {
+		t.Fatal("absent live state exposed detached events or created a checkpoint store")
+	}
+	if host.BackendScopeID() != "selected-backend" {
+		t.Fatal("optional live state discarded selected backend identity")
 	}
 }
 
