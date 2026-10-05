@@ -1424,7 +1424,8 @@
       "args": [
         "factory/scripts/ci-wait.py",
         "{{ (index .Inputs 0).Name }}",
-        "{{ (index .Inputs 0).PreviousOutput }}"
+        "{{ (index .Inputs 0).PreviousOutput }}",
+        "--classification"
       ],
       "command": "python",
       "id": "ci-waiter",
@@ -1943,14 +1944,28 @@
           "workType": "task"
         }
       ],
-      "outputs": [
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "ci-waiter",
+      "classificationRoutes": [
         {
-          "state": "in-review",
-          "workType": "task"
+          "label": "merged",
+          "outputs": [
+            {
+              "state": "to-complete",
+              "workType": "task"
+            }
+          ]
+        },
+        {
+          "label": "review",
+          "outputs": [
+            {
+              "state": "in-review",
+              "workType": "task"
+            }
+          ]
         }
-      ],
-      "type": "SCRIPT_RUN",
-      "worker": "ci-waiter"
+      ]
     },
     {
       "description": {

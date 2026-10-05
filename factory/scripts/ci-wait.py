@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ci-wait.py — Gate a task on current-head checks and merge queue lifecycle.
 
-Usage: python3 factory/scripts/ci-wait.py <lane-name> [process-output]
+Usage: python3 factory/scripts/ci-wait.py <lane-name> [process-output] [--classification]
 
 When bounded process output declares one repository-local pull request, resolves
 that exact PR even if its head branch differs from the lane name. Otherwise it
@@ -11,8 +11,11 @@ or skipped). Verdicts are the reviewer's job: this gate does NOT care whether
 checks passed, only that they finished, so reviewer agent sessions never spend
 time or review-loop visits watching CI.
 
-Outcome contract (script workers signal via exit code only):
-  exit 0 -> task moves to in-review (success output)
+Outcome contract:
+  default mode: exit 0 emits the existing JSON receipt on stdout
+  --classification: exit 0 emits merged or review on stdout and JSON on stderr
+  merged requires prState=MERGED and reason=pr-merged; it routes to to-complete
+  every other successful receipt selects review and routes to in-review
   exit 1 -> task moves to failed for unsafe/missing explicit identity, usage
             error, or five successful legacy branch lookups with no PR
 
@@ -1303,7 +1306,13 @@ def non_terminal_checks(checks):
 
 
 def emit_result(**fields):
-    print(json.dumps({"status": "ready", **fields}, indent=2))
+    receipt = json.dumps({"status": "ready", **fields}, indent=2)
+    if sys.argv[-1:] == ["--classification"]:
+        print(receipt, file=sys.stderr)
+        confirmed_merge = fields.get("prState") == "MERGED" and fields.get("reason") == "pr-merged"
+        print("merged" if confirmed_merge else "review")
+    else:
+        print(receipt)
 
 
 def snapshot_fields(snapshot):
@@ -1330,12 +1339,15 @@ def snapshot_uncertainty(snapshot, reason=None):
 
 
 def main():
-    if len(sys.argv) not in {2, 3}:
-        print(f"Usage: {sys.argv[0]} <lane-name> [process-output]", file=sys.stderr)
+    args = sys.argv[1:]
+    if args[-1:] == ["--classification"]:
+        args = args[:-1]
+    if len(args) not in {1, 2}:
+        print(f"Usage: {sys.argv[0]} <lane-name> [process-output] [--classification]", file=sys.stderr)
         sys.exit(1)
 
-    branch = sys.argv[1]
-    process_output = sys.argv[2] if len(sys.argv) == 3 else None
+    branch = args[0]
+    process_output = args[1] if len(args) == 2 else None
     intent = classify_process_output(process_output)
     if intent.status == PRIntentStatus.INVALID:
         _fail_explicit_identity(
@@ -1352,7 +1364,7 @@ def main():
     repository = pr.get("repository")
 
     if pr_state == "MERGED":
-        log(f"PR #{pr_number} for {branch!r} is already MERGED; releasing to review")
+        log(f"PR #{pr_number} for {branch!r} is already MERGED; releasing confirmed completion")
         emit_result(pr=pr_number, prState=pr_state, reason="pr-merged")
         return
 
