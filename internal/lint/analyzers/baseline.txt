@@ -2770,7 +2770,6 @@ functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrato
 functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/routing|tests/functional/factory_runtime/orchestrators/petri/routing/helpers_test.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/orchestrators/petri/routing|tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/root_composition_test|tests/functional/factory_runtime/root_composition/build_process_inert_test.go
-functional-test-unclassified-domain|tests/functional/factory_runtime/root_composition_test|tests/functional/factory_runtime/root_composition/dispatch_worker_sessions_concurrency_activation_test.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/root_composition_test|tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/root_composition_test|tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go
 functional-test-unclassified-domain|tests/functional/factory_runtime/root_composition|tests/functional/factory_runtime/root_composition/doc.go
@@ -2872,7 +2871,6 @@ service-root-exported-function|pkg/services/work/internal/services/content_mater
 service-root-exported-function|pkg/services/work/internal/services/content_materialization|pkg/services/work/internal/services/content_materialization/url.go#FilesystemPathToContentURL
 service-root-exported-function|pkg/services/work/internal/services/content_materialization|pkg/services/work/internal/services/content_materialization/url.go#ResolveDispatchContentURL
 service-root-exported-function|pkg/services/work/internal/services/content_materialization|pkg/services/work/internal/services/content_materialization/url.go#ValidateContentURL
-service-root-exported-function|pkg/services/worker_sessions|pkg/services/worker_sessions/publish.go#NewProviderSessionObservationPublisher
 service-root-exported-function|pkg/services/worker_sessions|pkg/services/worker_sessions/terminal.go#SanitizeProviderFailureClassification
 service-root-exported-function|pkg/services/worker_sessions|pkg/services/worker_sessions/topic.go#Topic
 service-root-exported-function|pkg/services/workers|pkg/services/workers/execution_context.go#ResolveProjectID

@@ -312,7 +312,7 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 func TestNewAssemblyRequiresWorkerSessionsService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	assembly, err := NewAssembly(runtimeFactory, nil, nil, stubWorkersService{}, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "Worker Sessions service is required") {
+	if err == nil || !strings.Contains(err.Error(), "worker sessions service is required") {
 		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
 	}
 	if assembly != nil {

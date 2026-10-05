@@ -98,7 +98,7 @@ func provideWorkerSessionsService(
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {
 	opener, ok := service.(factoryruntime.WorkerAttemptOpener)
 	if !ok {
-		return nil, fmt.Errorf("Worker Sessions runtime attempt capability is required")
+		return nil, fmt.Errorf("worker sessions runtime attempt capability is required")
 	}
 	return opener, nil
 }
