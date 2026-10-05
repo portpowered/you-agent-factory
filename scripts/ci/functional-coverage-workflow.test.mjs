@@ -20,7 +20,7 @@ function stepSection(job, marker, nextMarker) {
 	return job.slice(start, end >= 0 ? end : job.length);
 }
 
-test("functional coverage keeps only the module cache", () => {
+test("functional coverage keeps the module cache and a deps-only build cache", () => {
 	const workflow = readFileSync(workflowPath, "utf8");
 	const job = jobSection(workflow, "backend-coverage");
 	const unitSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'unit'", "      - uses: actions/setup-go@v5");
@@ -56,13 +56,43 @@ test("functional coverage keeps only the module cache", () => {
 	);
 
 	assert.equal((job.match(/uses: actions\/cache@v4/g) ?? []).length, 1);
-	assert.equal((job.match(/uses: actions\/cache\/restore@v4/g) ?? []).length, 1);
-	assert.equal((job.match(/uses: actions\/cache\/save@v4/g) ?? []).length, 1);
+	assert.equal((job.match(/uses: actions\/cache\/restore@v4/g) ?? []).length, 2);
+	assert.equal((job.match(/uses: actions\/cache\/save@v4/g) ?? []).length, 2);
 	assert.doesNotMatch(job, /functional-coverage-build-|functional-go-build-cache|FUNCTIONAL_COVERAGE_ACTION_CACHE_/);
 	assert.doesNotMatch(job, /functional-coverage-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/);
 });
 
-test("functional coverage carries no Go build cache restore or save", () => {
+test("functional coverage build cache is deps-only, exact-key, and saved only from main", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const job = jobSection(workflow, "backend-coverage");
+	const restore = stepSection(job, "      - name: Restore functional dependency build cache", "      - name: Build functional dependency build cache");
+	const build = stepSection(job, "      - name: Build functional dependency build cache", "      - name: Save functional dependency build cache");
+	const save = stepSection(job, "      - name: Save functional dependency build cache", "      - uses: actions/setup-node@v4");
+
+	assert.match(restore, /uses: actions\/cache\/restore@v4/);
+	assert.match(restore, /id: functional-deps-cache/);
+	assert.match(restore, /path: ~\/\.cache\/go-build/);
+	assert.match(restore, /key: functional-deps-build-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.mod', 'go\.sum'\) \}\}/);
+	assert.doesNotMatch(restore, /restore-keys/);
+	assert.doesNotMatch(restore, /matrix\.suite == 'unit'/);
+
+	// Fill and save happen only on a main push miss, before any other step can
+	// add module-package objects to the cache directory.
+	for (const section of [build, save]) {
+		assert.match(section, /matrix\.suite == 'functional' && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' && steps\.functional-deps-cache\.outputs\.cache-hit != 'true'/);
+	}
+	assert.match(build, /grep -v "\^\$\{module_path\}"/);
+	assert.match(build, /runtime\/coverage/);
+	assert.match(save, /uses: actions\/cache\/save@v4/);
+	assert.match(save, /key: \$\{\{ steps\.functional-deps-cache\.outputs\.cache-primary-key \}\}/);
+	assert.ok(
+		job.indexOf("      - name: Save functional dependency build cache") <
+			job.indexOf("      - name: Run Linux functional coverage with concurrent quarantine verification"),
+		"the deps cache must be saved before module packages are compiled",
+	);
+});
+
+test("functional coverage carries no module-package Go build cache restore or save", () => {
 	const workflow = readFileSync(workflowPath, "utf8");
 	const job = jobSection(workflow, "backend-coverage");
 	assert.doesNotMatch(job, /Restore functional coverage Go build cache/);

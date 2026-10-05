@@ -343,6 +343,35 @@ jobs:
           key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
           restore-keys: |
             unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+      # Deps-only functional build cache: compiled std and third-party
+      # packages only. Coverage instruments just pkg/..., so these objects are
+      # reusable by every instrumented test binary, while module packages stay
+      # cold (they change on every commit; caching them cost a ~4 min restore of
+      # a ~7 GB cache and failed to save). The key is exact, with no
+      # restore-keys, so a go.mod/go.sum or Go version change refills it.
+      # Only pushes to main save it; every other run restores read-only.
+      - name: Restore functional dependency build cache
+        if: matrix.suite == 'functional'
+        id: functional-deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: functional-deps-build-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Build functional dependency build cache
+        if: matrix.suite == 'functional' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.functional-deps-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          module_path="$(go list -m)"
+          mapfile -t dep_packages < <(go list -deps -test -f '{{if not .ForTest}}{{.ImportPath}}{{end}}' ./pkg/... ./tests/functional/... | grep -v "^${module_path}" | grep -v '\.test$' | grep -v '\[' | sort -u)
+          go build -p=4 "${dep_packages[@]}" runtime/coverage
+          du -sh ~/.cache/go-build
+      - name: Save functional dependency build cache
+        if: matrix.suite == 'functional' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.functional-deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.functional-deps-cache.outputs.cache-primary-key }}
       - uses: actions/setup-node@v4
         if: matrix.suite == 'functional'
         with:
