@@ -63,27 +63,31 @@ func runConstruction(pass *analysis.Pass) (any, error) {
 		}
 		test := strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go")
 		hasTests = hasTests || test
+		called := testBoundaryCalls(file)
 		ast.Inspect(file, func(node ast.Node) bool {
 			id, ok := node.(*ast.Ident)
 			if !ok {
 				return true
 			}
-			fn, ok := pass.TypesInfo.Uses[id].(*types.Func)
-			if !ok || fn.Pkg() == nil || fn.Parent() != fn.Pkg().Scope() || !strings.HasPrefix(fn.Pkg().Path(), modulePrefix) {
+			obj := pass.TypesInfo.Uses[id]
+			if obj == nil || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() || !strings.HasPrefix(obj.Pkg().Path(), modulePrefix) || !testBoundaryCallable(obj, called[id]) {
 				return true
 			}
-			target := strings.TrimPrefix(fn.Pkg().Path(), modulePrefix)
-			if constructorAllowed(importer, target) || !serviceConstructorName(fn.Name()) || serviceValueConstructors[target][fn.Name()] {
+			target := strings.TrimPrefix(obj.Pkg().Path(), modulePrefix)
+			if constructorAllowed(importer, target) || !serviceConstructorName(obj.Name()) || serviceValueConstructors[target][obj.Name()] {
 				return true
 			}
 			rule := "service-construction"
+			if _, function := obj.(*types.Func); !function {
+				rule += "-callable"
+			}
 			if test {
 				rule += "-test"
 			}
-			found = append(found, violation{rule: rule, importer: unit, importee: target + "." + fn.Name(), pos: id.Pos(), hint: "inject the constructed service role from pkg/wire"})
+			found = append(found, violation{rule: rule, importer: unit, importee: target + "." + obj.Name(), pos: id.Pos(), hint: "inject the constructed service role from pkg/wire"})
 			return true
 		})
 	}
-	reportAgainstBaseline(pass, unit, setOf("service-construction", "service-construction-test"), found, hasTests)
+	reportAgainstBaseline(pass, unit, setOf("service-construction", "service-construction-test", "service-construction-callable", "service-construction-callable-test"), found, hasTests)
 	return nil, nil
 }
