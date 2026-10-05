@@ -16,9 +16,99 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Filters and history exclusion are public service-contract selections. REST
+// exposes scope alone, so use the service supplied by the canonical process.
+func TestGatewayServiceInventoryExclusionAndFiltersPreservePeers(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+	dir := scaffoldFSCP03ProbeFactory(t)
+	home := t.TempDir()
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		BrowserOpener:                      func(context.Context, string) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("build process: %v", err)
+	}
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--record",
+		filepath.Join(home, ".you-agent-factory", "recordings", "2026", "10", "05", "filter.json")})
+	inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("record Factory: %v\n%s", err, inputs.Stderr())
+	}
+	service, ok := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	if !ok {
+		t.Fatal("process did not expose Factory Sessions service")
+	}
+	success := startGatewayFilteredWorkflow(t, service, dir, "filter-success", "return 'selected success';", factorysessions.LifecycleStatusSucceeded)
+	failed := startGatewayFilteredWorkflow(t, service, dir, "filter-failure", "throw new Error('selected workflow failure');", factorysessions.LifecycleStatusFailed)
+	all := gatewayServiceInventory(t, service, factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll})
+	if len(all.RecordedSessions) != 1 || len(all.DurableSessions) != 2 {
+		t.Fatalf("all inventory = %#v, want recorded history and both durable rows", all)
+	}
+	excluded := gatewayServiceInventory(t, service, factorysessions.ListSessionsRequest{
+		Scope: factorysessions.SessionListScopeAll, ExcludeRecordedHistory: true,
+	})
+	if len(excluded.RecordedSessions) != 0 || !reflect.DeepEqual(excluded.LiveSessions, all.LiveSessions) || !reflect.DeepEqual(excluded.DurableSessions, all.DurableSessions) {
+		t.Fatalf("excluded history changed peer rows: %#v, original %#v", excluded, all)
+	}
+	assertGatewayFilteredInventory(t, service, factorysessions.LifecycleStatusSucceeded, success)
+	assertGatewayFilteredInventory(t, service, factorysessions.LifecycleStatusFailed, failed)
+	assertGatewayFilteredInventory(t, service, factorysessions.LifecycleStatusPaused, "")
+	restored := gatewayServiceInventory(t, service, factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll})
+	if !reflect.DeepEqual(restored, all) {
+		t.Fatalf("filtered reads changed retained inventory: %#v, want %#v", restored, all)
+	}
+}
+
+func startGatewayFilteredWorkflow(t *testing.T, service factorysessions.Service, projectRoot, requestID, source string, status factorysessions.LifecycleStatus) string {
+	t.Helper()
+	result, err := service.StartSync(t.Context(), factorysessions.StartRequest{
+		RequestID: requestID, ProjectRoot: projectRoot, PersistencePolicy: factorysessions.PersistencePolicyEnabled,
+		Source: factorysessions.Source{Kind: "INLINE_WORKFLOW",
+			InlineWorkflow: &factorysessions.InlineWorkflowSource{InlineSource: source}},
+	})
+	if err != nil || result.SessionID == "" || result.Status != string(status) {
+		t.Fatalf("workflow %q = %#v, %v, want %s", requestID, result, err, status)
+	}
+	return result.SessionID
+}
+
+func gatewayServiceInventory(t *testing.T, service factorysessions.Service, request factorysessions.ListSessionsRequest) factorysessions.ListSessionsResult {
+	t.Helper()
+	result, err := service.ListSessions(t.Context(), request)
+	if err != nil {
+		t.Fatalf("list sessions %#v: %v", request, err)
+	}
+	return result
+}
+
+func assertGatewayFilteredInventory(t *testing.T, service factorysessions.Service, status factorysessions.LifecycleStatus, sessionID string) {
+	t.Helper()
+	result := gatewayServiceInventory(t, service, factorysessions.ListSessionsRequest{
+		Scope:   factorysessions.SessionListScopePersisted,
+		Filters: factorysessions.SessionListFilters{Statuses: []factorysessions.LifecycleStatus{status}},
+	})
+	if result.Scope != factorysessions.SessionListScopePersisted || len(result.LiveSessions) != 0 || len(result.RecordedSessions) != 0 {
+		t.Fatalf("persisted filter returned other owner rows: %#v", result)
+	}
+	if sessionID == "" {
+		if len(result.DurableSessions) != 0 {
+			t.Fatalf("unmatched status %s returned rows: %#v", status, result)
+		}
+		return
+	}
+	if len(result.DurableSessions) != 1 || result.DurableSessions[0].SessionID != sessionID || result.DurableSessions[0].Status != status {
+		t.Fatalf("status %s inventory = %#v, want only %q", status, result, sessionID)
+	}
+}
 
 // Inventory is an API-owned contract. One root-built process records two idle
 // Factory runs through Execute, then hosts live and durable sessions. Real
