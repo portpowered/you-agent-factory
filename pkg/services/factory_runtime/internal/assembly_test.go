@@ -301,7 +301,7 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 }
 
 func TestNewBundleOpeningRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	opening, err := NewBundleOpening(nil, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
+	opening, err := NewBundleOpening(nil, nil, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "factory runtime factory is required") {
 		t.Fatalf("NewBundleOpening(nil) error = %v, want required dependency", err)
 	}
@@ -312,7 +312,7 @@ func TestNewBundleOpeningRequiresWireConstructedRuntimeFactory(t *testing.T) {
 
 func TestNewBundleOpeningRequiresWorkerSessionsService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	opening, err := NewBundleOpening(runtimeFactory, stubWorkersService{}, nil, nil, nil)
+	opening, err := NewBundleOpening(runtimeFactory, platformclock.Real{}, stubWorkersService{}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "worker sessions service is required") {
 		t.Fatalf("NewBundleOpening(nil worker sessions) error = %v, want required dependency", err)
 	}
@@ -323,7 +323,7 @@ func TestNewBundleOpeningRequiresWorkerSessionsService(t *testing.T) {
 
 func TestNewBundleOpeningRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	opening, err := NewBundleOpening(runtimeFactory, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
+	opening, err := NewBundleOpening(runtimeFactory, platformclock.Real{}, nil, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "workers service is required") {
 		t.Fatalf("NewBundleOpening(nil Workers service) error = %v, want required dependency", err)
 	}
@@ -332,15 +332,19 @@ func TestNewBundleOpeningRequiresWorkersService(t *testing.T) {
 	}
 }
 
-func TestNewBundleOpeningBindsRuntimeFactory(t *testing.T) {
+func TestNewBundleOpeningRetainsSelectedResourceBehavior(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	workerService := stubWorkersService{}
-	opening, err := NewBundleOpening(runtimeFactory, workerService, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
+	timers := platformclock.NewDeterministic(time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC), time.Second)
+	opening, err := NewBundleOpening(runtimeFactory, timers, workerService, &stubAssemblyWorkerSessions{}, &stubAssemblyWorkerSessions{}, nil)
 	if err != nil {
 		t.Fatalf("NewBundleOpening() error = %v", err)
 	}
-	if opening == nil || opening.runtimeFactory != runtimeFactory {
-		t.Fatalf("NewBundleOpening() = %#v, want supplied Runtime Factory", opening)
+	if opening == nil || opening.runtimeBuild == nil {
+		t.Fatalf("NewBundleOpening() = %#v, want selected resource-opening behavior", opening)
+	}
+	if opening.workerAttemptScheduler != timers {
+		t.Fatal("opening substituted the selected worker timer source")
 	}
 	if opening.workerService != workerService {
 		t.Fatalf("NewBundleOpening() worker service = %#v, want supplied service", opening.workerService)

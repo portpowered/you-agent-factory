@@ -6,14 +6,17 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // BundleOpeningOperation is the scoped resource-opening capability consumed by
@@ -47,19 +50,63 @@ type BundleOpeningOperation func(
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (factory.RuntimeRecord, error)
 
+// runtimeResourceOpening is fixed resource-opening behavior selected at construction.
+// Its concrete result stays private; consumers receive RuntimeRecord.
+type runtimeResourceOpening func(
+	ctx context.Context,
+	baseLogger *zap.Logger,
+	dir string,
+	folderPath string,
+	sessionID string,
+	metricsSessionID string,
+	runnerID string,
+	runtimeMode factorydefinitions.RuntimeMode,
+	verbose bool,
+	runtimeScheduler scheduler.Scheduler,
+	inlineDispatch bool,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	runtimeLogDir string,
+	runtimeLogConfig factory.RuntimeLogStorageConfig,
+	runtimeFileLoggingPolicy RuntimeFileLoggingPolicy,
+	runtimeMetricsPolicy RuntimeMetricsPolicy,
+	runtimeMetricsDir string,
+	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
+	loadedFactoryCfg factory.LoadedConfig,
+	runtimeInstanceID string,
+	backendScopeID string,
+	clock factory.Clock,
+	recordPath string,
+	initialFactory *factorydefinitions.FactorySnapshot,
+	restoredWorldState *factorydefinitions.FactoryWorldState,
+	skipRestoredDispatchReconciliation bool,
+	submissionHooks []factory.SubmissionHook,
+	completionPlanner factory.CompletionDeliveryPlanner,
+	petriMutationRecorder factory.PetriMutationRecorder,
+	worldStateProjector factory.WorldStateProjector,
+	recordingsRuntime recordings.RuntimeScopeService,
+	workerService workers.Service,
+	workerSessions workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
+	dispatchCompleted func(string),
+	mockWorkersConfigs ...*workers.MockWorkersConfig,
+) (*factoryhost.Bundle, error)
+
 // BundleOpening retains reusable worker and resource-opening behavior. Each
 // operation owns its selected progress, worker boundary, recording and engine;
 // opening a peer never replaces collaborators or state on this owner.
 type BundleOpening struct {
-	runtimeFactory  *RuntimeFactory
-	workerService   workers.Service
-	workerSessions  workersessions.Service
-	workerAttempts  factory.WorkerAttemptOpener
-	requestResolver *runtime.WorkstationRequestExecutor
+	runtimeBuild           runtimeResourceOpening
+	workerAttemptScheduler platformclock.TimerSource
+	workerService          workers.Service
+	workerSessions         workersessions.Service
+	workerAttempts         factory.WorkerAttemptOpener
+	requestResolver        *runtime.WorkstationRequestExecutor
 }
 
 func NewBundleOpening(
 	runtimeFactory *RuntimeFactory,
+	workerAttemptScheduler platformclock.TimerSource,
 	workerService workers.Service,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
@@ -74,7 +121,7 @@ func NewBundleOpening(
 	if workerService == nil {
 		return nil, fmt.Errorf("workers service is required")
 	}
-	return &BundleOpening{runtimeFactory: runtimeFactory, workerService: workerService,
+	return &BundleOpening{runtimeBuild: runtimeFactory.Build, workerAttemptScheduler: workerAttemptScheduler, workerService: workerService,
 		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver}, nil
 }
 
@@ -122,7 +169,7 @@ func (opening *BundleOpening) Open(
 		skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride,
 		opening.requestResolver, mockWorkersConfig,
 	)
-	bundle, err := opening.runtimeFactory.Build(
+	bundle, err := opening.runtimeBuild(
 		ctx,
 		spec.BaseLogger,
 		spec.Dir,
@@ -159,7 +206,7 @@ func (opening *BundleOpening) Open(
 			resumeCanonicalEvents: cloneFactoryEvents(spec.ResumeCanonicalEvents),
 		},
 		workerServiceWithProgress,
-		runtimeWorkerSessionBoundary{Service: opening.workerSessions, opener: opening.workerAttempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: opening.runtimeFactory.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
+		runtimeWorkerSessionBoundary{Service: opening.workerSessions, opener: opening.workerAttempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: opening.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
 		opening.workerAttempts,
 		dispatchCompleted,
 		mockWorkersConfig,

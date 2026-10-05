@@ -39,7 +39,7 @@ import (
 func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T) {
 	t.Parallel()
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 		t.Fatal(err)
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,7 +567,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	loader := func(string, interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loaded, nil
 	}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +670,7 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		return loadedFactoryFixture(path)
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), testRuntimeWorkers{}, sessions, sessions, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(), platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

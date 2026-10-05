@@ -461,7 +461,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	expectedArtifactFileSystem := provideRuntimeRequestArtifactFiles(inputFileSystem)
 	factoryLogger := provideRuntimeRequestLogger(logger, runtimeLoggerFactory)
 	v117 := wire4.NewWorkstationRequestExecutor(workersService, invocationInterpolationService, fileReader, factoryIDGenerator, v115, v116, progressPublisher, expectedArtifactFileSystem, factoryLogger)
-	v118, err := wire4.NewBundleOpening(v112, workersService, workersessionsService, workerAttemptOpener, v117)
+	v118, err := wire4.NewBundleOpening(v112, timerSource, workersService, workersessionsService, workerAttemptOpener, v117)
 	if err != nil {
 		return nil, err
 	}

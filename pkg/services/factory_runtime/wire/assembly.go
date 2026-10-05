@@ -100,12 +100,13 @@ type BundleOpening = factoryruntimeinternal.BundleOpeningOperation
 // NewBundleOpening constructs the fixed bundle-opening behavior once in Wire.
 func NewBundleOpening(
 	runtimeFactory *RuntimeFactory,
+	workerAttemptScheduler platformclock.TimerSource,
 	workerService workers.Service,
 	workerSessions workersessions.Service,
 	workerAttempts factoryruntime.WorkerAttemptOpener,
 	requestResolver *WorkstationRequestExecutor,
 ) (BundleOpening, error) {
-	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory, workerService, workerSessions, workerAttempts, requestResolver)
+	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver)
 	if err != nil {
 		return nil, err
 	}
