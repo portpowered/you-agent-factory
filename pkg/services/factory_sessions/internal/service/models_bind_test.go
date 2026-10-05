@@ -209,7 +209,10 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 	recordingRoot := &recordingsRootConstructionStub{}
 	return &Root{
 		resolveHome: func() (string, error) { return "/controlled-home", nil },
-		clock:       openingCoordinatorClock{}, resolveClock: func(clock factoryruntime.Clock) factoryruntime.Clock { return clock },
+		clock:       openingCoordinatorClock{},
+		resolveClock: func(factoryruntime.Clock) factoryruntime.Clock {
+			panic("live opening must consume the selected clock directly")
+		},
 		factoryScaffoldInitializer: func(string) error { return nil },
 		editableFactoryValidator: func(context.Context, *factorydefinitions.FactorySnapshot, factorydefinitions.WorkstationLoader) error {
 			return nil

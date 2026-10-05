@@ -147,9 +147,7 @@ func (r *Root) prepareRuntime(
 			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 		}
 	}
-	selectedClock, clockErr := clockForReplay(
-		r.clock, load.ReplayArtifact, r.recordingsRuntime.ReplayClock, r.resolveClock,
-	)
+	selectedClock, clockErr := r.clockForOpening(load.ReplayArtifact)
 	if clockErr != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, clockErr
 	}
@@ -356,14 +354,29 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// Live opening consumes the clock required by construction. Replay retains its
+// compatibility selection when no explicit clock was supplied.
+func (r *Root) clockForOpening(artifact *factorydefinitions.ReplayArtifact) (factoryruntime.Clock, error) {
+	if artifact == nil {
+		return r.clock, nil
+	}
+	return clockForReplay(r.clock, artifact, r.recordingsRuntime.ReplayClock, r.resolveClock)
+}
+
 func clockForReplay(
 	clock factoryruntime.Clock,
 	artifact *factorydefinitions.ReplayArtifact,
 	replayClock func(*factorydefinitions.ReplayArtifact) recordings.Clock,
 	resolveClock factoryruntime.ClockResolver,
 ) (factoryruntime.Clock, error) {
-	if clock == nil && artifact != nil && replayClock != nil {
+	if clock != nil {
+		return clock, nil
+	}
+	if artifact != nil && replayClock != nil {
 		clock = replayClock(artifact)
+	}
+	if clock != nil {
+		return clock, nil
 	}
 	if resolveClock == nil {
 		return nil, fmt.Errorf("Factory Runtime clock resolver is required")
