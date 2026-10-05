@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -56,7 +57,7 @@ func TestDispatcher_CronTransitionDispatchesThroughWorkerPathWithTimeToken(t *te
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
-		nil, nil,
+		logging.NoopLogger{}, nil,
 
 		func() time.Time { return currentTime }, testDispatchID)
 
@@ -154,7 +155,7 @@ func TestDispatcher_RepeatedRunsProduceStableDispatchAndTokenSequences(t *testin
 	wantResourceTokens := []string{"slot-a-1", "slot-b-1"}
 
 	for i := 0; i < 10; i++ {
-		dispatcher := subsystems.NewDispatcher(n, scheduler.NewFIFOScheduler(), nil, nil, nil, time.Now, testDispatchID)
+		dispatcher := subsystems.NewDispatcher(n, scheduler.NewFIFOScheduler(), nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
 		snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 			Marking: petri.MarkingSnapshot{
 				Tokens: map[string]*factorytoken.Token{
@@ -228,7 +229,7 @@ func TestDispatcher_UsesDispatcherClockForCronTimeWindowGuard(t *testing.T) {
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
-		nil, nil,
+		logging.NoopLogger{}, nil,
 
 		func() time.Time { return currentTime }, testDispatchID)
 
@@ -292,7 +293,7 @@ func TestDispatcher_CronLogicalMoveDispatchUsesWorkstationRunnerKey(t *testing.T
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
-		nil, nil,
+		logging.NoopLogger{}, nil,
 
 		func() time.Time { return currentTime }, testDispatchID)
 

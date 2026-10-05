@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -184,7 +185,7 @@ func TestTickWhileAutomaticTicksPaused_SkipsCascadeMutations(t *testing.T) {
 	engine := newTestFactoryEngine(
 		n,
 		marking,
-		[]subsystems.Subsystem{subsystems.NewCascadingFailure(n, nil, time.Now)},
+		[]subsystems.Subsystem{subsystems.NewCascadingFailure(n, logging.NoopLogger{}, time.Now)},
 		WithAutomaticTicksPaused(func() bool { return true }),
 	)
 
