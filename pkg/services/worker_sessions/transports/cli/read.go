@@ -42,11 +42,13 @@ type ReadConfig struct {
 	HTTP            clihttp.Protocol
 }
 
-// NewRead returns the composition-facing transcript operation bound to one
-// HTTP protocol.
-func NewRead(transport clihttp.Protocol) ReadOperation {
+// NewRead binds finite reads and long-lived follow to their HTTP protocols.
+func NewRead(transport, streaming clihttp.Protocol) ReadOperation {
 	return func(config ReadConfig) error {
 		config.HTTP = transport
+		if config.Follow {
+			config.HTTP = streaming
+		}
 		return read(config)
 	}
 }

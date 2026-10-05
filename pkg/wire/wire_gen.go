@@ -738,11 +738,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	visualizeWorkOperation := provideVisualizeWorkOperation(v177)
 	v178 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol)
 	v179 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
-	v180 := provideReadWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	wireStreamingCLIHTTPProtocol, err := provideStreamingCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}
+	v180 := provideReadWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireStreamingCLIHTTPProtocol)
 	v181 := provideStreamWorkerSessionOperation(wireStreamingCLIHTTPProtocol)
 	wireLocalWorkerSessionsBoundary, err := provideLocalWorkerSessionsBoundary(workersessionsService)
 	if err != nil {

@@ -178,12 +178,12 @@ func BindShow(transport clihttp.Protocol) ShowOperation {
 	return NewShow(transport)
 }
 
-// BindRead returns a transcript operation bound to one injected HTTP protocol.
-func BindRead(transport clihttp.Protocol) ReadOperation {
-	if transport == nil {
+// BindRead binds finite reads and follow to their injected HTTP protocols.
+func BindRead(transport, streaming clihttp.Protocol) ReadOperation {
+	if transport == nil || streaming == nil {
 		return nil
 	}
-	return NewRead(transport)
+	return NewRead(transport, streaming)
 }
 
 // BindStream returns a stream operation bound to one injected HTTP protocol.

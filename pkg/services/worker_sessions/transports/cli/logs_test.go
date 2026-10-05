@@ -32,7 +32,7 @@ func TestReadLogsUsesSelectedHostAndFiniteCursor(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, WorkerSessionID: "worker", View: "logs", Limit: 1, NextToken: "cursor", JSON: true, Output: &output})
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, WorkerSessionID: "worker", View: "logs", Limit: 1, NextToken: "cursor", JSON: true, Output: &output})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestReadLogsUsesSelectedHostAndFiniteCursor(t *testing.T) {
 	}
 	server.Close()
 	output.Reset()
-	err = NewRead(testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, WorkerSessionID: "worker", View: "logs", JSON: true, Output: &output})
+	err = NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, WorkerSessionID: "worker", View: "logs", JSON: true, Output: &output})
 	if err == nil {
 		t.Fatal("selected host failure became success")
 	}
@@ -88,7 +88,7 @@ func TestReadLogsFollowCommittedTailAndRingGap(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 			var output bytes.Buffer
-			err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Limit: 1, JSON: true, Output: &output})
+			err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Limit: 1, JSON: true, Output: &output})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -164,7 +164,7 @@ func TestReadLogsFollowCancellationClosesLiveObserver(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
-	readOperation := NewRead(testHTTPProtocol(t))
+	readOperation := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))
 	go func() {
 		done <- readOperation(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: io.Discard})
 	}()
@@ -204,7 +204,7 @@ func TestReadLogsFollowRejectsIncompleteAndNoncontiguousHistory(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 			var output bytes.Buffer
-			err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: t.Context(), Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: &output})
+			err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: t.Context(), Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: &output})
 			var cliErr *CLIError
 			if !errors.As(err, &cliErr) || cliErr.Code != "WORKER_SESSION_LOGS_GAP" || output.Len() == 0 {
 				t.Fatalf("incomplete prefix became complete or disappeared: %v %s", err, output.String())
@@ -273,7 +273,7 @@ func TestReadLogsFollowRetainedPrefixWithoutLiveOwner(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: &output})
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: &output})
 	var failure *CLIError
 	if !errors.As(err, &failure) || failure.Code != "WORKER_SESSION_LOGS_GAP" || ctx.Err() != nil {
 		t.Fatalf("retained incomplete prefix lost its meaning: %v", err)
@@ -314,7 +314,7 @@ func TestReadLogsFollowResumesEmptyLiveHead(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, NextToken: "1", Output: &output})
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, NextToken: "1", Output: &output})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func TestReadLogsCancellationIsInterrupted(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
 			var output bytes.Buffer
-			err := NewRead(testHTTPProtocol(t))(ReadConfig{
+			err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{
 				Context: ctx, Server: "http://127.0.0.1:1", WorkerSessionID: "worker",
 				View: "logs", ArtifactRef: ref, JSON: true, Output: &output,
 			})
@@ -375,7 +375,7 @@ func TestReadLogsArtifactCancellationDuringTransfer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	output := &cancelLogsPayloadWriter{cancel: cancel}
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{
 		Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs",
 		ArtifactRef: "worker/2", JSON: true, Output: output,
 	})

@@ -15,6 +15,34 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+func TestReadSelectsFiniteAndFollowHTTPProtocols(t *testing.T) {
+	t.Parallel()
+	finiteErr := errors.New("finite read protocol")
+	followErr := errors.New("streaming follow protocol")
+	read := NewRead(readFailureProtocol{failure: finiteErr}, readFailureProtocol{failure: followErr})
+	for _, follow := range []bool{false, true} {
+		want := finiteErr
+		if follow {
+			want = followErr
+		}
+		var output bytes.Buffer
+		err := read(ReadConfig{Context: t.Context(), Server: "http://selected-host", WorkerSessionID: "worker",
+			View: "logs", Follow: follow, Output: &output})
+		if !errors.Is(err, want) || output.Len() != 0 {
+			t.Fatalf("follow=%t: error=%v output=%q", follow, err, output.String())
+		}
+	}
+}
+
+type readFailureProtocol struct {
+	clihttp.Protocol
+	failure error
+}
+
+func (protocol readFailureProtocol) GetJSON(context.Context, string, any) (clihttp.Response, error) {
+	return clihttp.Response{}, protocol.failure
+}
+
 func TestReadJSONUsesTranscriptRouteAndPreservesNormalizedEntries(t *testing.T) {
 	var gotPath string
 	var gotQuery map[string]string
@@ -38,7 +66,7 @@ func TestReadJSONUsesTranscriptRouteAndPreservesNormalizedEntries(t *testing.T) 
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{
 		Context: context.Background(), Server: server.URL, SessionID: "session-1",
 		Provider: "codex", Kind: "session_id", ID: "provider-session-1", OutputFormat: "json", Output: &output,
 	})
@@ -64,7 +92,7 @@ func TestReadByWorkerSessionIDUsesTopLevelTranscriptRoute(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{
 		Context: context.Background(), Server: server.URL, WorkerSessionID: "direct-1", OutputFormat: "json", Output: &output,
 	})
 	if err != nil {
@@ -95,7 +123,7 @@ func TestReadByWorkerSessionIDUsesFactorySessionScopedTranscriptRoute(t *testing
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{
 		Context: context.Background(), Server: server.URL, SessionID: "session-1",
 		WorkerSessionID: "worker-1", OutputFormat: "json", Output: &output,
 	})
@@ -159,7 +187,7 @@ func TestReadHumanLabelsTranscriptRolesAndEncryptedContent(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, Provider: "cursor", Kind: "session_id", ID: "cursor-session-1", Output: &output})
+	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, Provider: "cursor", Kind: "session_id", ID: "cursor-session-1", Output: &output})
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
@@ -192,7 +220,7 @@ func TestReadMapsMissingActiveUnavailableAndProjectionFailuresToStableErrors(t *
 			}))
 			defer server.Close()
 			var output bytes.Buffer
-			err := NewRead(testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, Provider: "codex", Kind: "session_id", ID: "session-1", OutputFormat: "json", Output: &output})
+			err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: context.Background(), Server: server.URL, Provider: "codex", Kind: "session_id", ID: "session-1", OutputFormat: "json", Output: &output})
 			if err == nil {
 				t.Fatal("Read() error = nil, want typed failure")
 			}
@@ -217,7 +245,7 @@ func TestReadCancellationReturnsStableInterruptedError(t *testing.T) {
 		t.Fatalf("build canceled read protocol: %v", err)
 	}
 	var output bytes.Buffer
-	err = NewRead(protocol)(ReadConfig{Context: context.Background(), Server: "http://factory.test:7437", Provider: "codex", Kind: "session_id", ID: "session-1", Output: &output})
+	err = NewRead(protocol, protocol)(ReadConfig{Context: context.Background(), Server: "http://factory.test:7437", Provider: "codex", Kind: "session_id", ID: "session-1", Output: &output})
 	var typed *CLIError
 	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_TRANSCRIPT_INTERRUPTED" || !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want interrupted context cancellation", err)
