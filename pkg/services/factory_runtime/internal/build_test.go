@@ -97,14 +97,14 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 		return partial, openingErr
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(selected, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil)
+	opening, err := factoryinternal.NewBundleOpening(selected, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if calls != 0 {
 		t.Fatal("constructor executed resource opening")
 	}
-	result, err := openTestBundle(t.Context(), opening.Open, spec, &testRuntimeScopeServiceStub{})
+	result, err := openTestBundle(t.Context(), opening.Open, spec)
 	if !errors.Is(err, openingErr) || result != partial || calls != 1 {
 		t.Fatalf("opening = %p, %v, calls %d; want selected partial record %p and failure", result, err, calls, partial)
 	}
@@ -126,12 +126,11 @@ func TestAssemblyKeepsMutationAndProgressObservationsScopedAcrossCalls(t *testin
 	}
 	resources := &observationResourceOpening{failure: errors.New("stop at controlled resource boundary")}
 	sessions := &observationWorkerSessions{}
-	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil)
+	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil),
-		&testRuntimeScopeServiceStub{}, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), &testRuntimeScopeServiceStub{}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,12 +191,15 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	loader := func(path string, _ interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loadedFactoryFixture(path)
 	}
-	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, submit, dispatch, projector)
+	scopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "selected-recording"}}
+	var snapshotSources []interfaces.LoadedFactorySource
+	snapshot := &interfaces.FactorySnapshot{}
+	capture := captureSelectedOpeningSnapshot(&snapshotSources, snapshot)
+	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, submit, dispatch, projector, scopes, capture)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, provider, script, decorate),
-		&testRuntimeScopeServiceStub{}, nil, nil, fixedTestProgress(t, &effects), fixedTestCompletion(&effects))
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, provider, script, decorate), &testRuntimeScopeServiceStub{}, nil, fixedTestProgress(t, &effects), fixedTestCompletion(&effects))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,6 +217,7 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	if _, err := initial.ReplacementBuilder.BuildReplacement(t.Context(), dir, dir, "successor", dir); !errors.Is(err, resources.failure) {
 		t.Fatalf("replacement error = %v, want controlled resource failure", err)
 	}
+	assertSelectedOpeningRecordingAndSnapshots(t, resources, scopes, snapshot, snapshotSources)
 	for index := range resources.submissions {
 		resources.submissions[index](work.FactorySubmissionRecord{})
 		resources.dispatches[index](recordings.FactoryDispatchRecord{})
@@ -224,6 +227,31 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	}
 	if decorations != 4 || !reflect.DeepEqual(effects, []string{"submission", "dispatch", "candidate:output", "candidate:dispatch-id", "submission", "dispatch", "successor:output", "successor:dispatch-id"}) {
 		t.Fatalf("fixed effects = %v, decorations = %d; want both openings", effects, decorations)
+	}
+}
+
+func captureSelectedOpeningSnapshot(sources *[]interfaces.LoadedFactorySource, snapshot *interfaces.FactorySnapshot) interfaces.InitialFactorySnapshotFactory {
+	return func(source interfaces.LoadedFactorySource) (*interfaces.FactorySnapshot, error) {
+		*sources = append(*sources, source)
+		return snapshot, nil
+	}
+}
+
+func assertSelectedOpeningRecordingAndSnapshots(t *testing.T, resources *observationResourceOpening, scopes *testRuntimeScopeServiceStub, snapshot *interfaces.FactorySnapshot, sources []interfaces.LoadedFactorySource) {
+	t.Helper()
+	if len(sources) != 2 || sources[0] == sources[1] {
+		t.Fatalf("snapshot sources = %#v; want two detached opening sources", sources)
+	}
+	var captured recordings.RuntimeScopeRequest
+	scopes.capturedRequest = &captured
+	for index, sessionID := range []string{"candidate", "successor"} {
+		if resources.snapshots[index] != snapshot || sources[index].FactoryDir() != sources[0].FactoryDir() {
+			t.Fatal("opening lost selected snapshot behavior or source")
+		}
+		result, err := resources.scopes[index].OpenRuntime(t.Context(), recordings.RuntimeScopeRequest{FactorySessionID: sessionID})
+		if err != nil || result.Ledger != scopes.ledger || captured.FactorySessionID != sessionID {
+			t.Fatalf("selected recording = %#v, %v, captured %q; want %q", result, err, captured.FactorySessionID, sessionID)
+		}
 	}
 }
 
@@ -308,6 +336,8 @@ type observationResourceOpening struct {
 	dispatches  []recordings.DispatchRecorder
 	projectors  []factory.WorldStateProjector
 	completions []func(string)
+	snapshots   []*interfaces.FactorySnapshot
+	scopes      []recordings.RuntimeScopeService
 }
 
 func (opening *observationResourceOpening) Open(
@@ -330,20 +360,22 @@ func (opening *observationResourceOpening) Open(
 	_, _ string,
 	_ factory.Clock,
 	_ string,
-	_ *interfaces.FactorySnapshot,
+	snapshot *interfaces.FactorySnapshot,
 	_ *interfaces.FactoryWorldState,
 	_ bool,
 	_ []factory.SubmissionHook,
 	_ factory.CompletionDeliveryPlanner,
 	mutations factory.PetriMutationRecorder,
 	projector factory.WorldStateProjector,
-	_ recordings.RuntimeScopeService,
+	scopes recordings.RuntimeScopeService,
 	worker workers.Service,
 	_ workersessions.Service,
 	_ factory.WorkerAttemptOpener,
 	completion func(string),
 	_ ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
+	opening.snapshots = append(opening.snapshots, snapshot)
+	opening.scopes = append(opening.scopes, scopes)
 	opening.mutations = append(opening.mutations, mutations)
 	opening.submissions = append(opening.submissions, submission)
 	opening.dispatches = append(opening.dispatches, dispatch)
@@ -358,10 +390,6 @@ func (opening *observationResourceOpening) Open(
 func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T) {
 	t.Parallel()
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	loaded, err := loadedFactoryFixture(dir)
@@ -374,11 +402,6 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	peerSpec := factory.SessionBuildSpec{Dir: dir, FolderPath: dir, SessionID: "peer", MetricsSessionID: "peer-canonical",
 		RuntimeInstanceID: "peer-runtime", LoadedFactoryCfg: loaded, Clock: peerClock, BaseLogger: selectedLogger.With(zap.String("opening_selection", "peer"))}
 	peerScopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "peer-runtime"}}
-	peer, err := openTestBundle(t.Context(), opening.Open, peerSpec, peerScopes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = peer.CloseArtifacts() })
 	clock := clockwork.NewFakeClockAt(peerClock.Now().Add(time.Hour))
 	spec := peerSpec
 	spec.BaseLogger = selectedLogger.With(zap.String("opening_selection", "candidate"))
@@ -389,13 +412,22 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	var captured recordings.RuntimeScopeRequest
 	scopes := &testRuntimeScopeServiceStub{openErr: openingErr, recorder: recorder, capturedRequest: &captured,
 		ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "candidate-runtime"}}
-	failed, err := openTestBundle(t.Context(), opening.Open, spec, scopes)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{bySession: map[string]*testRuntimeScopeServiceStub{"peer": peerScopes, "candidate": scopes}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer, err := openTestBundle(t.Context(), opening.Open, peerSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = peer.CloseArtifacts() })
+	failed, err := openTestBundle(t.Context(), opening.Open, spec)
 	if !errors.Is(err, openingErr) || failed != nil || finalized != 1 {
 		t.Fatalf("failed opening = %#v, %v, finalizations %d; want owned unwind without a runnable record", failed, err, finalized)
 	}
-	assertOpeningRetainsPendingCleanup(t, opening.Open, spec, scopes, recorder, openingErr)
+	assertOpeningRetainsPendingCleanup(t, opening.Open, spec, recorder, openingErr)
 	scopes.openErr = nil
-	candidate, err := openTestBundle(t.Context(), opening.Open, spec, scopes)
+	candidate, err := openTestBundle(t.Context(), opening.Open, spec)
 	if err != nil {
 		t.Fatalf("same-owner, same-identity retry: %v", err)
 	}
@@ -410,11 +442,11 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	}
 }
 
-func assertOpeningRetainsPendingCleanup(t *testing.T, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService, recorder *runtimeRecordingsRecorderStub, openingErr error) {
+func assertOpeningRetainsPendingCleanup(t *testing.T, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, recorder *runtimeRecordingsRecorderStub, openingErr error) {
 	t.Helper()
 	releaseErr := errors.New("candidate recording release failed")
 	recorder.finalizeErr = releaseErr
-	partial, err := openTestBundle(t.Context(), opening, spec, scopes)
+	partial, err := openTestBundle(t.Context(), opening, spec)
 	if !errors.Is(err, openingErr) || !errors.Is(err, releaseErr) || partial == nil {
 		t.Fatalf("partial opening = %#v, %v; want both failures and retained cleanup", partial, err)
 	}
@@ -461,14 +493,14 @@ func assertBundleOpeningLogAttribution(t *testing.T, candidate, peer *factoryhos
 	}
 }
 
-func openTestBundle(ctx context.Context, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, scopes recordings.RuntimeScopeService, progress ...workers.ProgressPublisher) (*factoryhost.Bundle, error) {
+func openTestBundle(ctx context.Context, opening factoryinternal.BundleOpeningOperation, spec factory.SessionBuildSpec, progress ...workers.ProgressPublisher) (*factoryhost.Bundle, error) {
 	var publisher workers.ProgressPublisher
 	if len(progress) > 0 {
 		publisher = progress[0]
 	}
 	record, err := opening(ctx, spec, "", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
 		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0, spec.SessionID,
-		interfaces.RuntimeModeBatch, nil, false, "", "", false, false, nil, nil, publisher, nil, scopes, nil)
+		interfaces.RuntimeModeBatch, nil, false, "", "", false, false, nil, nil, publisher, nil)
 	if record == nil {
 		return nil, err
 	}
@@ -486,10 +518,6 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 		t.Fatal(err)
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	openingErr := errors.New("recording unavailable")
 	for _, canceled := range []bool{false, true} {
 		ctx, cancel := context.WithCancel(t.Context())
@@ -507,7 +535,11 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 			scopes.openErr = openingErr
 			wantErr = openingErr
 		}
-		record, err := openTestBundle(ctx, opening.Open, spec, scopes)
+		opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, scopes, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		record, err := openTestBundle(ctx, opening.Open, spec)
 		cancel()
 		if !errors.Is(err, wantErr) || record != nil {
 			t.Fatalf("canceled=%t opening = (%v, %v), want %v", canceled, record, err, wantErr)
@@ -890,11 +922,11 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 	loader := func(string, interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loaded, nil
 	}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, scopes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1038,10 +1070,6 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		return loadedFactoryFixture(path)
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	var recorded recordings.RuntimeScopeRequest
 	scopes := &testRuntimeScopeServiceStub{capturedRequest: &recorded,
 		ledgerFactory: func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
@@ -1052,7 +1080,11 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 		snapshots = append(snapshots, source)
 		return nil, nil
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, snapshot, nil, nil, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory().Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil, nil, nil, scopes, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1443,6 +1475,7 @@ func testRuntimeScopeService(
 }
 
 type testRuntimeScopeServiceStub struct {
+	bySession       map[string]*testRuntimeScopeServiceStub
 	openErr         error
 	ledger          recordings.RuntimeEventLedger
 	ledgerFactory   func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger
@@ -1452,9 +1485,12 @@ type testRuntimeScopeServiceStub struct {
 }
 
 func (runtimeScopes *testRuntimeScopeServiceStub) OpenRuntime(
-	_ context.Context,
+	ctx context.Context,
 	request recordings.RuntimeScopeRequest,
 ) (recordings.RuntimeScopeResult, error) {
+	if selected := runtimeScopes.bySession[request.FactorySessionID]; selected != nil {
+		return selected.OpenRuntime(ctx, request)
+	}
 	if runtimeScopes.capturedSource != nil {
 		*runtimeScopes.capturedSource = request.Topology
 	}

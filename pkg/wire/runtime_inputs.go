@@ -51,7 +51,6 @@ func provideFactoryRuntimeAssembly(
 	instanceHost factoryruntimewire.InstanceHost,
 	preparation *factoryruntimewire.RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	automationService automations.Service,
 	streams factorysessionwire.RuntimeAssembly,
 ) (*factoryruntimewire.Assembly, error) {
@@ -60,7 +59,6 @@ func provideFactoryRuntimeAssembly(
 		instanceHost,
 		preparation,
 		recordingsRuntime,
-		initialFactorySnapshot,
 		automationService,
 		streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory())
 }

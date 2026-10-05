@@ -23,15 +23,14 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	bundleOpening          BundleOpeningOperation
-	sidecars               *SidecarOpening
-	instanceHost           instancehost.Service
-	preparation            *runtimebuild.Service
-	recordingsRuntime      recordings.RuntimeScopeService
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory
-	automationService      automations.Service
-	progressFactory        func(*zap.Logger) func(string) workers.ProgressPublisher
-	completionFactory      func(string) func(string)
+	bundleOpening     BundleOpeningOperation
+	sidecars          *SidecarOpening
+	instanceHost      instancehost.Service
+	preparation       *runtimebuild.Service
+	recordingsRuntime recordings.RuntimeScopeService
+	automationService automations.Service
+	progressFactory   func(*zap.Logger) func(string) workers.ProgressPublisher
+	completionFactory func(string) func(string)
 }
 
 // NewAssembly constructs the inert compatibility assembly selected by Wire.
@@ -43,7 +42,6 @@ func NewAssembly(
 	instanceHost instancehost.Service,
 	preparation *runtimebuild.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
@@ -57,7 +55,7 @@ func NewAssembly(
 	return &Assembly{
 		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
 		preparation:       preparation,
-		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot,
+		recordingsRuntime: recordingsRuntime,
 		automationService: automationService,
 		progressFactory:   progressFactory, completionFactory: completionFactory,
 	}, nil
@@ -184,7 +182,7 @@ func (a *Assembly) Assemble(
 			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
 			backendScopeID, factoryRunnerID, verbose,
 			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
-			progressPublisher, dispatchCompleted, a.recordingsRuntime, a.initialFactorySnapshot,
+			progressPublisher, dispatchCompleted,
 		)
 	}
 	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {

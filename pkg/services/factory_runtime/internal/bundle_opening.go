@@ -43,8 +43,6 @@ type BundleOpeningOperation func(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	providerSessionProgress workers.ProgressPublisher,
 	dispatchCompleted func(string),
-	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (factory.RuntimeRecord, error)
 
 // runtimeResourceOpening is fixed resource-opening behavior selected at construction.
@@ -102,6 +100,8 @@ type BundleOpening struct {
 	submissionRecorder     recordings.SubmissionRecorder
 	dispatchRecorder       recordings.DispatchRecorder
 	worldStateProjector    factory.WorldStateProjector
+	recordingsRuntime      recordings.RuntimeScopeService
+	initialFactorySnapshot InitialFactorySnapshotFactory
 }
 
 func NewBundleOpening(
@@ -114,6 +114,8 @@ func NewBundleOpening(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	worldStateProjector factory.WorldStateProjector,
+	recordingsRuntime recordings.RuntimeScopeService,
+	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*BundleOpening, error) {
 	if runtimeBuild == nil {
 		return nil, fmt.Errorf("factory runtime resource opening is required")
@@ -126,7 +128,8 @@ func NewBundleOpening(
 	}
 	return &BundleOpening{runtimeBuild: runtimeBuild, workerAttemptScheduler: workerAttemptScheduler, workerService: workerService,
 		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver,
-		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder, worldStateProjector: worldStateProjector}, nil
+		submissionRecorder: submissionRecorder, dispatchRecorder: dispatchRecorder, worldStateProjector: worldStateProjector,
+		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot}, nil
 }
 
 // Open applies fixed opening behavior to one runtime selection. The retained
@@ -153,11 +156,9 @@ func (opening *BundleOpening) Open(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	providerSessionProgress workers.ProgressPublisher,
 	dispatchCompleted func(string),
-	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (factory.RuntimeRecord, error) {
 	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
-		spec, defaultSessionID, recordingsRuntime, initialFactorySnapshot,
+		spec, defaultSessionID, opening.recordingsRuntime, opening.initialFactorySnapshot,
 	)
 	if err != nil {
 		return nil, err
@@ -202,7 +203,7 @@ func (opening *BundleOpening) Open(
 		spec.PetriMutationRecorder,
 		opening.worldStateProjector,
 		runtimeScopeWithFlush{
-			RuntimeScopeService:   recordingsRuntime,
+			RuntimeScopeService:   opening.recordingsRuntime,
 			flushInterval:         recordFlushInterval,
 			resumeCanonicalEvents: cloneFactoryEvents(spec.ResumeCanonicalEvents),
 		},

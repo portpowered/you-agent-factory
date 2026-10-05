@@ -90,7 +90,6 @@ func NewAssembly(
 	instanceHost InstanceHost,
 	preparation *RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
@@ -100,7 +99,6 @@ func NewAssembly(
 		instanceHost,
 		preparation,
 		recordingsRuntime,
-		initialFactorySnapshot,
 		automationService,
 		progressFactory, completionFactory)
 }
@@ -124,11 +122,13 @@ func NewBundleOpening(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	worldStateProjector factoryruntime.WorldStateProjector,
+	recordingsRuntime recordings.RuntimeScopeService,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 ) (BundleOpening, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("factory runtime factory is required")
 	}
-	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver, submissionRecorder, dispatchRecorder, worldStateProjector)
+	opening, err := factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService, workerSessions, workerAttempts, requestResolver, submissionRecorder, dispatchRecorder, worldStateProjector, recordingsRuntime, initialFactorySnapshot)
 	if err != nil {
 		return nil, err
 	}

@@ -32,7 +32,7 @@ func TestBundleOpeningKeepsMutationAndProgressObserversWithTheirOpening(t *testi
 	}
 	effect := &observationOpeningEffect{}
 	sessions := &observationOpeningSessions{stubWorkerSessionsService: &stubWorkerSessionsService{}}
-	opening, err := factoryinternal.NewBundleOpening(effect.Open, platformclock.Real{}, observationOpeningWorker{}, sessions, sessions, nil, nil, nil, nil)
+	opening, err := factoryinternal.NewBundleOpening(effect.Open, platformclock.Real{}, observationOpeningWorker{}, sessions, sessions, nil, nil, nil, nil, &testRuntimeScopeServiceStub{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestBundleOpeningKeepsMutationAndProgressObserversWithTheirOpening(t *testi
 			func(fragment workers.ProgressFragment) {
 				progress = append(progress, cell.identity+":"+fragment.Payload)
 			},
-			nil, &testRuntimeScopeServiceStub{}, nil)
+			nil)
 		if !errors.Is(err, effect.failure) {
 			t.Fatalf("%s opening error = %v, want controlled resource failure", cell.identity, err)
 		}
