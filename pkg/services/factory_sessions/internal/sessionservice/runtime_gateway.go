@@ -321,9 +321,10 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	streamGenerationID := func(session *livesession.LiveSession) string {
 		return runtimebinding.StreamGenerationID(session)
 	}
+	projection := runtime.projectionReader()
 	return newSessionHost(
 		runtime.sessionState,
-		runtime.buildSessionProjectionContext,
+		projection.BuildSessionProjectionContext,
 		resolveSyncPreflightTarget,
 		backendScopeID,
 		logicalSessionKeyID,

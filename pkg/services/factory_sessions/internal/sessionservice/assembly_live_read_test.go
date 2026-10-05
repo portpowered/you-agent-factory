@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -15,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	sessionidentity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -22,6 +24,119 @@ import (
 )
 
 type workerSessionsObservationMarker struct{ workersessions.Service }
+
+type projectionIdentityStub struct {
+	sessionidentity.Service
+	err error
+}
+
+type projectionClockStub struct{ now time.Time }
+
+func (c projectionClockStub) Now() time.Time { return c.now }
+
+func (s projectionIdentityStub) Normalize(_ context.Context, request sessionidentity.NormalizeRequest) (sessionidentity.ResolvedIdentity, error) {
+	return sessionidentity.ResolvedIdentity{LogicalSessionKeyID: "logical-" + request.FolderPath}, s.err
+}
+
+func TestSessionProjectionReaderUsesAddressedFactsAndErrors(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.FixedZone("selected", 3600))
+	reader := sessionProjectionReader{
+		state: state, identity: projectionIdentityStub{}, clock: projectionClockStub{now: now},
+		checkpoints: func() factoryruntime.JavaScriptCheckpointStore {
+			return &canonicalInspectionCheckpointStore{}
+		},
+	}
+	ctx := context.Background()
+	for _, id := range []string{"first", "peer"} {
+		runtime := &observeStubRuntime{result: factoryruntime.ObserveResult{Observation: factoryruntime.Observation{
+			Health: factoryruntime.ObservationHealth{StreamGenerationID: "generation-" + id},
+		}}}
+		state.Registry().Upsert(&livesession.LiveSession{
+			ID: id, IsDefault: id == "first",
+			Handle:       &runtimebinding.SessionState{Handle: invocationQueryRun{record: &generationRuntimeRecord{service: runtime}}},
+			SessionState: livesession.SessionState{FolderPath: id},
+			Runtime: &factorysessions.LiveRuntime{
+				BackendScopeID: "backend-" + id,
+				RuntimeConfig: invocationQueryConfig{config: &factorydefinitions.FactoryConfig{
+					Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{Kind: factorydefinitions.OrchestratorKindJavaScript},
+				}},
+				Factory: runtime,
+			},
+		}, id == "first")
+	}
+	for _, selector := range []string{factorysessions.DefaultSessionID, "peer", "first"} {
+		session := state.Resolve(selector)
+		got, err := reader.BuildSessionProjectionContext(ctx, session)
+		if err != nil || got.FactorySessionID != session.ID || got.Session.IsDefault != session.IsDefault ||
+			got.BackendScopeID != "backend-"+session.ID || got.LogicalSessionKeyID != "logical-"+session.ID ||
+			got.Observation.Health.StreamGenerationID != "generation-"+session.ID || !got.Now.Equal(now) || got.Now.Location() != time.UTC {
+			t.Fatalf("projection %q = %#v, %v", selector, got, err)
+		}
+		got.Session.FolderPath = "detached mutation"
+	}
+	first, peer := state.Resolve("first"), state.Resolve("peer")
+	sessionCheckpointStore(first, nil).Put(factorydefinitions.JavaScriptCheckpointRecord{ID: "first-checkpoint"})
+	got, err := reader.BuildSessionProjectionContext(ctx, first)
+	if err != nil || len(got.JavaScriptCheckpoints) != 1 || got.JavaScriptCheckpoints[0].ID != "first-checkpoint" {
+		t.Fatalf("retained first checkpoint = %#v, %v", got.JavaScriptCheckpoints, err)
+	}
+	got, err = reader.BuildSessionProjectionContext(ctx, peer)
+	if err != nil || len(got.JavaScriptCheckpoints) != 0 || got.Session.FolderPath != "peer" {
+		t.Fatalf("isolated peer projection = %#v, %v", got, err)
+	}
+	// The production adapter must read checkpoints without an attached gateway.
+	runtime := &SessionRuntime{
+		sessionState: state, backendScopeID: "selected-backend", identity: reader.identity,
+		clock: reader.clock, newJavaScriptCheckpointStore: reader.checkpoints,
+	}
+	got, err = SessionServiceHost(runtime).BuildSessionProjectionContext(ctx, first)
+	if err != nil || got.BackendScopeID != "selected-backend" || len(got.JavaScriptCheckpoints) != 1 {
+		t.Fatalf("host projection without gateway = %#v, %v", got, err)
+	}
+	failure := errors.New("addressed observation failed")
+	first.Runtime.Factory.(*observeStubRuntime).err = failure
+	if _, err := reader.BuildSessionProjectionContext(ctx, first); !errors.Is(err, failure) {
+		t.Fatalf("observation error = %v", err)
+	}
+	if _, err := reader.BuildSessionProjectionContext(ctx, peer); err != nil {
+		t.Fatalf("peer after first failure: %v", err)
+	}
+	first.Runtime.Factory.(*observeStubRuntime).err = nil
+	reader.identity = projectionIdentityStub{err: failure}
+	if _, err := reader.BuildSessionProjectionContext(ctx, first); !errors.Is(err, failure) {
+		t.Fatalf("identity error = %v", err)
+	}
+	for _, session := range []*livesession.LiveSession{nil, {ID: "missing"}} {
+		if _, err := reader.BuildSessionProjectionContext(ctx, session); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+			t.Fatalf("missing error = %v", err)
+		}
+	}
+	first.Handle = nil
+	if _, err := reader.BuildSessionProjectionContext(ctx, first); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("gone runtime error = %v", err)
+	}
+}
+
+func TestSessionCheckpointStorePreservesOptionalFactoryAndRetainedRecords(t *testing.T) {
+	t.Parallel()
+	if got := sessionCheckpointStore(nil, nil); got != nil {
+		t.Fatalf("nil session checkpoints = %v", got)
+	}
+	session := &livesession.LiveSession{ID: "chosen"}
+	if got := sessionCheckpointStore(session, nil); got != nil {
+		t.Fatalf("optional absent factory = %v", got)
+	}
+	create := func() factoryruntime.JavaScriptCheckpointStore { return &canonicalInspectionCheckpointStore{} }
+	sessionCheckpointStore(session, create).Put(factorydefinitions.JavaScriptCheckpointRecord{ID: "retained"})
+	for _, factory := range []factoryruntime.JavaScriptCheckpointStoreFactory{nil, create} {
+		records := sessionCheckpointStore(session, factory).List()
+		if len(records) != 1 || records[0].ID != "retained" {
+			t.Fatalf("retained checkpoints = %#v", records)
+		}
+	}
+}
 
 type recordedInventoryStub struct {
 	result recordings.RecordedSessionInventoryResult

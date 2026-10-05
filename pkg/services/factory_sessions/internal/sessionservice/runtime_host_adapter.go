@@ -55,14 +55,18 @@ func newSessionHost(
 			return runtimebinding.FactoryForSession(state, sessionID)
 		}
 		host.javaScriptCheckpointStore = func(session *livesession.LiveSession) factory.JavaScriptCheckpointStore {
-			if session == nil {
-				return nil
-			}
-			if session.JavaScriptCheckpoints == nil && newJavaScriptCheckpointStore != nil {
-				session.JavaScriptCheckpoints = newJavaScriptCheckpointStore()
-			}
-			return session.JavaScriptCheckpoints
+			return sessionCheckpointStore(session, newJavaScriptCheckpointStore)
 		}
 	}
 	return host
+}
+
+func sessionCheckpointStore(session *livesession.LiveSession, create factory.JavaScriptCheckpointStoreFactory) factory.JavaScriptCheckpointStore {
+	if session == nil {
+		return nil
+	}
+	if session.JavaScriptCheckpoints == nil && create != nil {
+		session.JavaScriptCheckpoints = create()
+	}
+	return session.JavaScriptCheckpoints
 }

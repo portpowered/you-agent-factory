@@ -13,6 +13,7 @@ import (
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
@@ -76,14 +77,48 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	ctx context.Context,
 	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
+	return fs.projectionReader().BuildSessionProjectionContext(ctx, session)
+}
+
+// sessionProjectionReader reads keyed runtime facts without retaining a
+// SessionRuntime or re-entering its gateway. RuntimeRecord/Run access remains
+// the compatibility bridge owned by T15.
+type sessionProjectionReader struct {
+	state        *sessionruntime.Service
+	backendScope string
+	identity     identity.Service
+	clock        factoryruntime.Clock
+	projector    factoryruntime.WorldStateProjector
+	checkpoints  factoryruntime.JavaScriptCheckpointStoreFactory
+}
+
+func (fs *SessionRuntime) projectionReader() sessionProjectionReader {
+	return sessionProjectionReader{
+		state: fs.sessionState, backendScope: fs.backendScopeID, identity: fs.identity,
+		clock: fs.clock, projector: fs.worldStateProjector, checkpoints: fs.newJavaScriptCheckpointStore,
+	}
+}
+
+func (r sessionProjectionReader) BuildSessionProjectionContext(
+	ctx context.Context,
+	session *livesession.LiveSession,
+) (factorysessions.ProjectionContext, error) {
 	if session == nil {
 		return factorysessions.ProjectionContext{}, fmt.Errorf("%w", factorysessions.ErrSessionNotFound)
 	}
-	runtimeCfg, err := runtimebinding.RuntimeConfigForSession(fs.sessionState, session.ID)
+	runtimeCfg, err := runtimebinding.RuntimeConfigForSession(r.state, session.ID)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
-	observationResult, err := fs.observeRuntimeForSession(ctx, session.ID, factoryruntime.ObserveRequest{
+	selected, err := runtimebinding.RequireLiveSession(r.state, session.ID)
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
+	}
+	runtime := runtimebinding.ServiceForLiveRuntime(selected.Runtime)
+	if runtime == nil {
+		return factorysessions.ProjectionContext{}, fmt.Errorf("Factory Runtime observation is required")
+	}
+	observationResult, err := runtime.Observe(ctx, factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeFull,
 	})
 	if err != nil {
@@ -111,16 +146,16 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	}
 	var checkpointStore factoryruntime.JavaScriptCheckpointStore
 	if interfaces.IsJavaScriptOrchestratorFactory(runtimeCfg.FactoryConfig()) {
-		checkpointStore = fs.requireSessionGateway().JavaScriptCheckpointStore(session)
+		checkpointStore = sessionCheckpointStore(session, r.checkpoints)
 	}
 	startedAt := time.Time{}
 	backendScopeID := ""
 	if bundle != nil {
 		startedAt = bundle.StartTime()
 	}
-	backendScopeID = runtimebinding.BackendScopeID(fs.backendScopeID, session)
+	backendScopeID = runtimebinding.BackendScopeID(r.backendScope, session)
 	placement := session.Placement()
-	resolvedIdentity, err := fs.identity.Normalize(ctx, identity.NormalizeRequest{
+	resolvedIdentity, err := r.identity.Normalize(ctx, identity.NormalizeRequest{
 		BackendScopeID: backendScopeID, FolderPath: placement.FolderPath, Target: placement.Target,
 	})
 	if err != nil {
@@ -132,7 +167,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
 		CheckpointStore: checkpointStore, SessionProjection: sessionProjectionFacts,
-		WorldStateProjector: fs.worldStateProjector, Now: fs.clock.Now().UTC(),
+		WorldStateProjector: r.projector, Now: r.clock.Now().UTC(),
 	})
 }
 
