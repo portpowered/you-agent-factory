@@ -356,6 +356,10 @@ Live sessions report no terminal cause. Natural outcomes report `COMPLETED` or
 applied control for the exact attempt. Failed persistence or a no-op control
 does not establish an operator cause. Older captures may leave the cause
 unknown. The existing `failure.kind` classification remains available separately.
+Malformed saved stop results, including duplicate or aliased identity fields
+and unexpected private content, leave the operator cause unknown while the
+recorded terminal state remains readable. Factory controls fence the physical
+attempt independently of the logical dispatch ID returned by the control.
 
 Logs pages include the recording generation, committed position, capture
 health, and ordered events. New committed events include `capturedAt`, the

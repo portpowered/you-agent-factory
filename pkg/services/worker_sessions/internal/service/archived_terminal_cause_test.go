@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -25,14 +26,14 @@ func (f *archivedCauseStore) ListWorkerControlOperations(_ context.Context, _ re
 
 func TestTerminalCauseArchivedUsesPhysicalTerminalAttemptAndExactCapture(t *testing.T) {
 	t.Parallel()
-	for _, variant := range []string{"applied", "stale-attempt", "store-loss", "missing-terminal", "wrong-position"} {
+	for _, variant := range []string{"applied", "stale-attempt", "store-loss", "missing-terminal", "wrong-position", "unknown-field", "aliased-id", "duplicate-id"} {
 		t.Run(variant, func(t *testing.T) {
 			t.Parallel()
 			target := exactCaptureIdentity()
 			target.ExpectedAttemptID = "physical-attempt"
 			result := workersessions.ControlResult{Session: workersessions.Session{ID: target.WorkerSessionID, State: workersessions.StateTerminated}, Action: workersessions.ControlActionTerminate, Outcome: workersessions.ControlOutcomeApplied, DispatchID: "logical-dispatch"}
 			payload, _ := json.Marshal(result)
-			fake := &archivedCauseStore{records: []recordings.WorkerControlOperationRecord{{Target: target, Revision: 2, Operation: recordings.WorkerControlOperation{Action: "terminate", Phase: "COMPLETED"}, Result: payload}}}
+			fake := &archivedCauseStore{records: []recordings.WorkerControlOperationRecord{{Target: target, Revision: 2, Operation: recordings.WorkerControlOperation{Version: 1, WorkerSessionID: target.WorkerSessionID, ExpectedAttemptID: target.ExpectedAttemptID, Action: "terminate", Phase: "COMPLETED"}, Result: payload}}}
 			fake.snapshot = recordings.WorkerRecordingSnapshot{RecordingID: target.RecordingID, Sessions: []recordings.WorkerSessionRecordingSnapshot{{WorkerSessionID: target.WorkerSessionID, Records: []events.Record{{
 				ID: events.RecordID{Position: 3}, SourceType: lifecycleSourceType, SourceSequence: terminalSourceSequence, SourceEventID: terminalSourceEventID,
 				Payload: []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"physical-attempt","payload":{"status":"TERMINATED"}}`),
@@ -49,6 +50,12 @@ func TestTerminalCauseArchivedUsesPhysicalTerminalAttemptAndExactCapture(t *test
 				fake.snapshot.Sessions[0].Records = nil
 			case "wrong-position":
 				page.Terminal.Position = 2
+			case "unknown-field":
+				fake.records[0].Result = append([]byte(`{"private":"private-stop-detail",`), payload[1:]...)
+			case "aliased-id":
+				fake.records[0].Result = []byte(strings.Replace(string(payload), `"ID":`, `"id":`, 1))
+			case "duplicate-id":
+				fake.records[0].Result = []byte(strings.Replace(string(payload), `"ID":`, `"ID":"foreign","ID":`, 1))
 			}
 			reader := &LogReader{reader: fake}
 			fake.page = page

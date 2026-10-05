@@ -2,11 +2,65 @@ package service
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+func TestTerminalCausePlainStopRejectsUnsafeRecoveredSnapshots(t *testing.T) {
+	t.Parallel()
+	valid := `{"Session":{"ID":"worker","State":"CANCELED"},"Action":"CANCEL","Outcome":"APPLIED","DispatchID":"logical-dispatch"}`
+	for name, payload := range map[string]string{
+		"logical-dispatch": valid,
+		"unknown":          strings.Replace(valid, `"Action":`, `"private":"private-stop-detail","Action":`, 1),
+		"duplicate":        strings.Replace(valid, `"ID":"worker"`, `"ID":"foreign","ID":"worker"`, 1),
+		"alias":            strings.Replace(valid, `"ID":"worker"`, `"id":"worker"`, 1),
+		"private-result":   strings.Replace(valid, `"State":"CANCELED"`, `"State":"CANCELED","Result":{"Output":"private-stop-detail"}`, 1),
+		"private-model":    strings.Replace(valid, `"State":"CANCELED"`, `"State":"CANCELED","Model":"private-stop-detail"`, 1),
+		"lineage":          strings.Replace(valid, `"State":"CANCELED"`, `"State":"CANCELED","SuccessorWorkerSessionID":"foreign"`, 1),
+		"missing-dispatch": strings.Replace(valid, `"logical-dispatch"`, `""`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, _, _ := newDurableStopFixture(t)
+			target, _ := r.freezeControlTarget("worker")
+			record := stopIntent(workersessions.ControlRequest{ID: "worker"}, workersessions.ControlActionCancel, target)
+			record.Operation.Phase, record.Result = "COMPLETED", []byte(payload)
+			cause := committedStopCause([]recordings.WorkerControlOperationRecord{record}, record.Target, workersessions.StateCanceled)
+			if name == "logical-dispatch" {
+				if cause == nil || *cause != "OPERATOR_CANCEL" {
+					t.Fatalf("logical dispatch must preserve exact physical cause: %v", cause)
+				}
+			} else if cause != nil {
+				t.Fatalf("unsafe saved snapshot granted cause %s", *cause)
+			}
+		})
+	}
+}
+
+func TestTerminalCausePlainStopRequiresMatchingOperationEnvelope(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(*recordings.WorkerControlOperation){
+		"version": func(operation *recordings.WorkerControlOperation) { operation.Version = 2 },
+		"worker":  func(operation *recordings.WorkerControlOperation) { operation.WorkerSessionID = "foreign" },
+		"attempt": func(operation *recordings.WorkerControlOperation) { operation.ExpectedAttemptID = "foreign" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, _, _ := newDurableStopFixture(t)
+			target, _ := r.freezeControlTarget("worker")
+			record := stopIntent(workersessions.ControlRequest{ID: "worker"}, workersessions.ControlActionCancel, target)
+			record.Operation.Phase = "COMPLETED"
+			record.Result = []byte(`{"Session":{"ID":"worker","State":"CANCELED"},"Action":"CANCEL","Outcome":"APPLIED","DispatchID":"attempt"}`)
+			mutate(&record.Operation)
+			if cause := committedStopCause([]recordings.WorkerControlOperationRecord{record}, record.Target, workersessions.StateCanceled); cause != nil {
+				t.Fatalf("incompatible operation claimed cause %s", *cause)
+			}
+		})
+	}
+}
 
 func TestTerminalCauseRequiresCommittedAppliedExactStop(t *testing.T) {
 	t.Parallel()
@@ -20,7 +74,7 @@ func TestTerminalCauseRequiresCommittedAppliedExactStop(t *testing.T) {
 				expected := record.Target
 				record.Revision, record.Operation.Phase = 2, "COMPLETED"
 				state := controlTerminalState(action)
-				result := workersessions.ControlResult{Session: workersessions.Session{ID: "worker", State: state}, Action: action, Outcome: workersessions.ControlOutcomeApplied}
+				result := workersessions.ControlResult{Session: workersessions.Session{ID: "worker", State: state}, Action: action, Outcome: workersessions.ControlOutcomeApplied, DispatchID: "attempt"}
 				mutateCauseEvidence(&record, &result, variant)
 				record.Result, _ = json.Marshal(result)
 				if variant == "malformed" {

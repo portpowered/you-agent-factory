@@ -134,6 +134,65 @@ type exactStopIntentGate struct {
 	commitOnce sync.Once
 }
 
+// The journal and execution remain real. Only this exact worker's returned
+// operation evidence is corrupted at the replaceable recording-store edge.
+func (store *exactStopIntentGate) ListWorkerControlOperations(ctx context.Context, target recordings.WorkerControlTarget) ([]recordings.WorkerControlOperationRecord, error) {
+	records, err := store.WorkerRecordingStore.ListWorkerControlOperations(ctx, target)
+	if target.WorkerSessionID == "corrupt-stop-target" {
+		for index := range records {
+			if records[index].Operation.Phase == "COMPLETED" {
+				records[index].Result = append([]byte(`{"private":"private-stop-detail",`), records[index].Result[1:]...)
+			}
+		}
+	}
+	return records, err
+}
+
+func TestExactStopMalformedEvidenceCannotClaimOperatorCause(t *testing.T) {
+	t.Parallel()
+	runner := newFleetCharacterizationRunner()
+	store := &exactStopIntentGate{committed: make(chan struct{}), proceed: make(chan struct{})}
+	server := startExactNaturalStopServer(t, runner, store, uuid.NewString())
+	id := "corrupt-stop-target"
+	response := postDirectWorkerSession(t, t.Context(), server.URL(), id+"-request", id, id+"-dispatch")
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusAccepted {
+		t.Fatalf("admission status=%d", response.StatusCode)
+	}
+	waitFleetCharacterizationSignal(t, runner.slots[0].started, "corrupt-evidence admission")
+	joinedExactFactoryStop(t, server, runner.slots[0], routeCharacterizationDispatch{workerSessionID: id, dispatchID: id + "-dispatch"}, "cancel", true)
+	for _, action := range []string{"cancel", "terminate"} {
+		repeat, err := executeExactFactoryStop(t, server, t.Context(), id, action, false)
+		if err != nil || string(repeat.Outcome) != "NOOP" || string(repeat.State) != "CANCELED" {
+			t.Fatalf("terminal repeat=%#v error=%v", repeat, err)
+		}
+		shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+id)
+		if string(shown.State) != "CANCELED" || shown.TerminalCause != nil {
+			t.Fatalf("malformed evidence invented cause or hid state: %#v", shown)
+		}
+		encoded, err := json.Marshal(shown)
+		if err != nil || strings.Contains(string(encoded), "private-stop-detail") {
+			t.Fatalf("private evidence leaked: error=%v observation=%s", err, encoded)
+		}
+	}
+	if runner.callCount() != 1 {
+		t.Fatalf("provider calls=%d, want original execution only", runner.callCount())
+	}
+	assertExactStopUnknownCauseCLI(t, server, id)
+}
+
+func assertExactStopUnknownCauseCLI(t *testing.T, server *fleetCharacterizationServer, id string) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", server.URL(), "--json", "worker-sessions", "show", "--worker-session-id", id})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI show error=%v stderr=%s", err, inputs.Stderr())
+	}
+	var shown factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &shown); err != nil || string(shown.State) != "CANCELED" || shown.TerminalCause != nil || strings.Contains(inputs.Stdout()+inputs.Stderr(), "private-stop-detail") {
+		t.Fatalf("CLI malformed-evidence observation=%#v error=%v stdout=%s stderr=%s", shown, err, inputs.Stdout(), inputs.Stderr())
+	}
+}
+
 func (store *exactStopIntentGate) release() { store.once.Do(func() { close(store.proceed) }) }
 
 func (store *exactStopIntentGate) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
