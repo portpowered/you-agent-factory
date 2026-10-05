@@ -240,6 +240,7 @@ func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
 	var phases []string
 	for _, record := range store.records {
 		phases = append(phases, record.Operation.Phase)
+		assertPendingInterruptPhaseFacts(t, req, record)
 	}
 	if !reflect.DeepEqual(phases, []string{"INTENT", "SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED"}) {
 		t.Fatalf("committed phases=%v", phases)
@@ -275,6 +276,49 @@ func TestInterruptDurableOperationJoinsBeforeSuccessorAndReplays(t *testing.T) {
 		t.Fatalf("catalog journal replay=%#v err=%v", replayed, err)
 	}
 	assertBoundaryEffects(t, fixture.boundary, 2, 1, "catalog replay without live handles")
+}
+
+func assertPendingInterruptPhaseFacts(t *testing.T, req workersessions.InterruptRequest, record recordings.WorkerControlOperationRecord) {
+	t.Helper()
+	if record.Operation.Phase != "SOURCE_STOPPED" && record.Operation.Phase != "SUCCESSOR_ADMITTED" {
+		return
+	}
+	pending, pendingErr := decodeInterruptOutcome(req, record)
+	if !errors.Is(pendingErr, workersessions.ErrInterruptExecutionUnavailable) || pending.Source.State != workersessions.StateCanceled || pending.Phase != workersessions.InterruptPhaseSuccessorAdmission {
+		t.Fatalf("synced phase lost joined source: phase=%s result=%#v err=%v", record.Operation.Phase, pending, pendingErr)
+	}
+	if (record.Operation.Phase == "SUCCESSOR_ADMITTED") != pending.Accepted {
+		t.Fatalf("synced admission fact differs from phase: phase=%s result=%#v", record.Operation.Phase, pending)
+	}
+}
+
+func TestInterruptJoinedSourceSnapshotSyncFailurePreventsSuccessorAdmission(t *testing.T) {
+	t.Parallel()
+	fixture := newInterruptRaceCharacterizationFixture(t, "stopped-snapshot-fault", false)
+	r := fixture.registry.(*registry)
+	store := &interruptInputStore{stopOperationStore: stopOperationStore{advanceErr: errors.New("private-sync-path")}}
+	r.operations = store
+	capture := exactCaptureIdentity()
+	capture.WorkerSessionID, capture.FactorySessionID = fixture.sourceID, ""
+	pub := r.publicationFor(fixture.sourceID)
+	pub.mu.Lock()
+	pub.capture = capture
+	pub.mu.Unlock()
+	req := workersessions.InterruptRequest{RequestID: "snapshot-fault", SourceWorkerSessionID: fixture.sourceID, SuccessorWorkerSessionID: fixture.successorID, ReplacementMessage: "replacement"}
+	outcomes := startInterruptCharacterization(t, fixture.registry, req)
+	fixture.boundary.waitCancellation(t, fixture.sourceDispatch)
+	fixture.boundary.releaseCancellation(fixture.sourceDispatch)
+	fixture.boundary.waitReturned(t, fixture.sourceDispatch)
+	outcome := <-outcomes
+	<-fixture.sourceResult
+	if !errors.Is(outcome.err, recordings.ErrWorkerRecordingPersistence) || outcome.result.Accepted || outcome.result.Source.State != workersessions.StateCanceled || outcome.result.Phase != workersessions.InterruptPhaseSuccessorAdmission || strings.Contains(outcome.err.Error(), "private-sync-path") {
+		t.Fatalf("stopped snapshot sync failure=%#v err=%v", outcome.result, outcome.err)
+	}
+	assertNoSuccessor(t, r, fixture.successorID)
+	assertBoundaryEffects(t, fixture.boundary, 1, 1, "stopped snapshot persistence barrier")
+	if len(store.records) != 1 || store.records[0].Operation.Phase != "INTENT" || len(store.records[0].Result) != 0 {
+		t.Fatalf("unacknowledged stopped facts entered committed history: %#v", store.records)
+	}
 }
 
 func TestInterruptDurablePhasesPreserveReservedIdentityAndSafeFailure(t *testing.T) {
@@ -350,6 +394,8 @@ func mutateInterruptReplayFixture(scenario string, req *workersessions.Interrupt
 		return workersessions.ErrInterruptSuccessorAdmissionFailed
 	case "pending":
 		record.Operation.Phase = "SOURCE_STOPPED"
+		record.Result = nil // Legacy phase-only row, with no accepted snapshot.
+		record.FailureCode = ""
 		return workersessions.ErrInterruptExecutionUnavailable
 	case "changed-message":
 		req.ReplacementMessage += " changed"
@@ -374,6 +420,96 @@ func mutateInterruptReplayFixture(scenario string, req *workersessions.Interrupt
 		record.FailureCode = "untrusted-private-diagnostic"
 	}
 	return recordings.ErrWorkerRecordingPersistence
+}
+
+// Only the coordinator is real; each parallel cell owns its operation store,
+// capture and cancel collaborator. Host restart is an integration-owned edge.
+func TestInterruptJournalReplayPreservesCommittedPendingFactsWithoutEffects(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"SOURCE_STOPPED", "SUCCESSOR_ADMITTED"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+			result.Source = workersessions.Session{ID: "worker", State: workersessions.StateCanceled}
+			if err := r.commitInterruptPhase(t.Context(), operation, "SOURCE_STOPPED", result, nil); err != nil {
+				t.Fatal(err)
+			}
+			if phase == "SUCCESSOR_ADMITTED" {
+				result.Accepted = true
+				result.Source.SuccessorWorkerSessionID = "successor"
+				result.Successor = workersessions.Session{ID: "successor", State: workersessions.StateRunning, PredecessorWorkerSessionID: "worker"}
+				if err := r.commitInterruptPhase(t.Context(), operation, phase, result, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			calls := 0
+			plan.supervision.installCancel(func() { calls++ })
+			before := len(store.records)
+			for range 2 {
+				replayed, found, replayErr := r.replayDurableInterrupt(t.Context(), plan.request)
+				if !found || !errors.Is(replayErr, workersessions.ErrInterruptExecutionUnavailable) || !reflect.DeepEqual(replayed, result) {
+					t.Fatalf("pending facts=%#v found=%v err=%v want=%#v", replayed, found, replayErr, result)
+				}
+				var typed *workersessions.InterruptError
+				if !errors.As(replayErr, &typed) || !reflect.DeepEqual(typed.Result, result) || typed.Phase != result.Phase {
+					t.Fatalf("pending error lost facts: %#v", typed)
+				}
+			}
+			if calls != 0 || len(store.records) != before {
+				t.Fatalf("pending recovery repeated effects: cancel=%d rows=%d", calls, len(store.records))
+			}
+			assertNoSuccessor(t, r, "successor")
+		})
+	}
+}
+
+func TestInterruptPendingSnapshotRejectsInconsistentOrPrivateFacts(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"malformed", "running-source", "unexpected-successor", "accepted-before-admission", "wrong-phase", "failure-code", "failure-causes", "private-model", "unaccepted-admission"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			req := workersessions.InterruptRequest{RequestID: "request", SourceWorkerSessionID: "worker", SuccessorWorkerSessionID: "successor"}
+			outcome := durableInterruptOutcome{InterruptResult: interruptResult(req, workersessions.InterruptPhaseSuccessorAdmission, false)}
+			outcome.Source = workersessions.Session{ID: "worker", State: workersessions.StateCanceled}
+			record := recordings.WorkerControlOperationRecord{Operation: recordings.WorkerControlOperation{Phase: "SOURCE_STOPPED"}}
+			mutatePendingInterruptSnapshot(scenario, &record, &outcome)
+			record.Result, _ = json.Marshal(outcome)
+			if scenario == "malformed" {
+				record.Result = json.RawMessage(`{`)
+			}
+			result, err := decodePendingInterruptOutcome(req, record)
+			if !errors.Is(err, recordings.ErrWorkerRecordingPersistence) || result.Accepted || result.Phase != workersessions.InterruptPhaseValidation || strings.Contains(err.Error(), "private-pending-model") {
+				t.Fatalf("invalid pending result=%#v err=%v", result, err)
+			}
+		})
+	}
+}
+
+func mutatePendingInterruptSnapshot(scenario string, record *recordings.WorkerControlOperationRecord, outcome *durableInterruptOutcome) {
+	switch scenario {
+	case "running-source":
+		outcome.Source.State = workersessions.StateRunning
+	case "unexpected-successor":
+		outcome.Successor = workersessions.Session{ID: "successor", State: workersessions.StateRunning}
+	case "accepted-before-admission":
+		outcome.Accepted = true
+	case "wrong-phase":
+		outcome.Phase = workersessions.InterruptPhaseSourceCancellation
+	case "failure-code":
+		record.FailureCode = "private-pending-model"
+	case "failure-causes":
+		outcome.FailureCauses = []string{"EXECUTION_UNAVAILABLE"}
+	case "private-model":
+		private := "private-pending-model"
+		outcome.Source.Model = &private
+	case "unaccepted-admission":
+		record.Operation.Phase = "SUCCESSOR_ADMITTED"
+	}
 }
 
 func TestInterruptJournalReplayPreservesTypedFailureWithoutPrivateDiagnostics(t *testing.T) {

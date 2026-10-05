@@ -173,15 +173,28 @@ func (r *registry) advanceInterruptPhase(ctx context.Context, operation *recordi
 }
 
 func (r *registry) commitInterruptResult(ctx context.Context, operation *recordings.WorkerControlOperationRecord, result workersessions.InterruptResult, interruptErr error) error {
+	phase := "COMPLETED"
+	if interruptErr != nil {
+		phase = "FAILED"
+	}
+	return r.commitInterruptPhase(ctx, operation, phase, result, interruptErr)
+}
+
+// A phase and its detached facts share one sync acknowledgement. Recovery can
+// report a joined source or admitted successor even before the final outcome,
+// without promoting those observations into authority to repeat an effect.
+func (r *registry) commitInterruptPhase(ctx context.Context, operation *recordings.WorkerControlOperationRecord, phase string, result workersessions.InterruptResult, interruptErr error) error {
+	if operation == nil {
+		return nil
+	}
 	// Persist control facts without provider content, terminal diagnostics or
 	// execution secrets. Session/history reads retain their canonical owners.
 	safe := result.Clone()
 	safe.Source = interruptSessionFacts(result.Source)
 	safe.Successor = interruptSessionFacts(result.Successor)
 	operation.Result, _ = json.Marshal(durableInterruptOutcome{InterruptResult: safe, FailureCauses: interruptFailureCodes(interruptErr)})
-	phase := "COMPLETED"
+	operation.FailureCode = ""
 	if interruptErr != nil {
-		phase = "FAILED"
 		operation.FailureCode = string(result.Phase)
 	}
 	return r.advanceInterruptPhase(ctx, operation, phase)

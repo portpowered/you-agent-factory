@@ -96,7 +96,7 @@ func (r *registry) interruptReplayCapture(ctx context.Context, id string) (recor
 func decodeInterruptOutcome(req workersessions.InterruptRequest, record recordings.WorkerControlOperationRecord) (workersessions.InterruptResult, error) {
 	result := interruptResult(req, workersessions.InterruptPhaseValidation, false)
 	if record.Operation.Phase != "COMPLETED" && record.Operation.Phase != "FAILED" {
-		return result, newInterruptError(result.Phase, result, workersessions.ErrInterruptExecutionUnavailable)
+		return decodePendingInterruptOutcome(req, record)
 	}
 	var outcome durableInterruptOutcome
 	if json.Unmarshal(record.Result, &outcome) != nil || !validInterruptOutcome(req, outcome.InterruptResult) {
@@ -127,6 +127,33 @@ func decodeInterruptOutcome(req workersessions.InterruptRequest, record recordin
 		}
 	}
 	return result, newInterruptError(result.Phase, result, cause)
+}
+
+func decodePendingInterruptOutcome(req workersessions.InterruptRequest, record recordings.WorkerControlOperationRecord) (workersessions.InterruptResult, error) {
+	result := interruptResult(req, workersessions.InterruptPhaseValidation, false)
+	// Legacy phase-only records establish no response snapshot.
+	if len(record.Result) == 0 || record.Operation.Phase == "INTENT" {
+		return result, newInterruptError(result.Phase, result, workersessions.ErrInterruptExecutionUnavailable)
+	}
+	var outcome durableInterruptOutcome
+	if json.Unmarshal(record.Result, &outcome) != nil || !validInterruptOutcome(req, outcome.InterruptResult) ||
+		len(outcome.FailureCauses) != 0 || record.FailureCode != "" || !validPendingInterruptSnapshot(req, record.Operation.Phase, outcome.InterruptResult) {
+		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
+	}
+	result = outcome.InterruptResult
+	return result, newInterruptError(result.Phase, result, workersessions.ErrInterruptExecutionUnavailable)
+}
+
+func validPendingInterruptSnapshot(req workersessions.InterruptRequest, phase string, result workersessions.InterruptResult) bool {
+	switch phase {
+	case "SOURCE_STOPPED":
+		return result.Phase == workersessions.InterruptPhaseSuccessorAdmission && result.Source.State == workersessions.StateCanceled &&
+			!result.Accepted && result.Successor.ID == "" && result.Source.SuccessorWorkerSessionID == ""
+	case "SUCCESSOR_ADMITTED":
+		return committedInterruptSucceeded(req, result)
+	default:
+		return false
+	}
 }
 
 func committedInterruptSucceeded(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {

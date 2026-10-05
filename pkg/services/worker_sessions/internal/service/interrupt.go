@@ -636,7 +636,8 @@ func (r *registry) runInterruptExecution(plan interruptPlan, operation *recordin
 	}
 
 	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
-	if err := r.advanceInterruptPhase(boundaryContext, operation, "SOURCE_STOPPED"); err != nil {
+	stopped := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+	if err := r.commitInterruptPhase(boundaryContext, operation, "SOURCE_STOPPED", stopped, nil); err != nil {
 		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
@@ -657,7 +658,7 @@ func (r *registry) runInterruptExecution(plan interruptPlan, operation *recordin
 		return result, newInterruptError(workersessions.InterruptPhaseSuccessorAdmission, result, cause)
 	}
 	result.Accepted = true
-	if err := r.advanceInterruptPhase(boundaryContext, operation, "SUCCESSOR_ADMITTED"); err != nil {
+	if err := r.commitInterruptPhase(boundaryContext, operation, "SUCCESSOR_ADMITTED", result, nil); err != nil {
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
 	r.logger.Info(

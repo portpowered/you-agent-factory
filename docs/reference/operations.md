@@ -472,7 +472,11 @@ unavailable without returning that content, stopping a Worker Session, or
 admitting a successor.
 An incomplete durable operation reports execution unavailable
 until its prior ownership and admission can be reconciled safely; submitting
-the same request does not blindly repeat its effects.
+the same request does not blindly repeat its effects. If a joined source or
+admitted successor snapshot was committed before interruption, the error
+includes those saved facts. An admitted successor remains accepted even when
+the final operation result is unavailable. Inspect that session before taking
+further action.
 
 Use the direct Worker Session controls when the same admitted session should
 be paused, resumed, canceled, or terminated. Each command accepts one stable
