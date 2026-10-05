@@ -2,13 +2,129 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type interruptPendingCaptureReader struct {
+	entry     recordings.WorkerSessionCatalogEntry
+	page      recordings.WorkerCapturedActivityPage
+	lookupErr error
+	readErr   error
+	lookups   []string
+	reads     []recordings.WorkerCapturedActivityRequest
+}
+
+func (f *interruptPendingCaptureReader) LookupWorkerSessionCapture(_ context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
+	f.lookups = append(f.lookups, id)
+	return f.entry, f.lookupErr
+}
+
+func (f *interruptPendingCaptureReader) ReadWorkerCapturedActivity(_ context.Context, req recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	f.reads = append(f.reads, req)
+	return f.page, f.readErr
+}
+
+func TestInterruptPendingAdmissionInspectsExactOpeningWithoutRestoringAuthority(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"missing", "matching", "growing", "lookup-failure", "read-failure", "foreign-worker", "foreign-scope", "foreign-owner", "missing-generation", "changed-generation", "malformed", "wrong-attempt", "wrong-predecessor", "wrong-source-attempt"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := interruptResult(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+			want.Source = workersessions.Session{ID: plan.request.SourceWorkerSessionID, State: workersessions.StateCanceled}
+			if err := r.commitInterruptPhase(t.Context(), operation, "SOURCE_STOPPED", want, nil); err != nil {
+				t.Fatal(err)
+			}
+			reader, cause := pendingInterruptCaptureFixture(scenario, plan, operation.Target)
+			r.logs = &LogReader{reader: reader}
+			calls := 0
+			plan.supervision.installCancel(func() { calls++ })
+			for range 2 {
+				got, found, err := r.replayDurableInterrupt(t.Context(), plan.request)
+				if !found || !errors.Is(err, cause) || !reflect.DeepEqual(got, want) || strings.Contains(err.Error(), "private-capture") {
+					t.Fatalf("pending admission replay=%#v found=%v err=%v want=%v", got, found, err, cause)
+				}
+			}
+			if calls != 0 || len(store.records) != 2 || !reflect.DeepEqual(reader.lookups, []string{plan.request.SuccessorWorkerSessionID, plan.request.SuccessorWorkerSessionID}) {
+				t.Fatalf("recovery repeated effects or crossed identity: cancel=%d rows=%d reads=%v", calls, len(store.records), reader.lookups)
+			}
+			for _, req := range reader.reads {
+				if req.WorkerSessionID != plan.request.SuccessorWorkerSessionID || req.Limit != 1 {
+					t.Fatalf("unbounded/foreign activity read: %#v", req)
+				}
+			}
+			assertNoSuccessor(t, r, plan.request.SuccessorWorkerSessionID)
+		})
+	}
+}
+
+func pendingInterruptCaptureFixture(scenario string, plan interruptPlan, target recordings.WorkerControlTarget) (*interruptPendingCaptureReader, error) {
+	entry := recordings.WorkerSessionCatalogEntry{WorkerSessionID: plan.request.SuccessorWorkerSessionID, RecordingID: "successor-recording", RecordingGenerationID: "successor-generation", OwnerEpoch: target.OwnerEpoch}
+	dispatch := continuationDispatchID(target.ExpectedAttemptID, plan.request.SuccessorWorkerSessionID)
+	opening := workers.SessionPayload{WorkerSessionID: entry.WorkerSessionID, RecordingID: entry.RecordingID, DispatchID: dispatch, AttemptID: dispatch,
+		Lineage: &workers.SessionLineage{PredecessorWorkerSessionID: plan.request.SourceWorkerSessionID, PreviousDispatchID: target.ExpectedAttemptID, PreviousAttemptID: target.ExpectedAttemptID}}
+	f := &interruptPendingCaptureReader{entry: entry, page: recordings.WorkerCapturedActivityPage{Catalog: entry}}
+	cause := workersessions.ErrInterruptExecutionUnavailable
+	switch scenario {
+	case "missing":
+		f.lookupErr = os.ErrNotExist
+	case "growing":
+		f.page.Catalog.CommittedPosition++
+	case "lookup-failure":
+		f.lookupErr = errors.New("private-capture-path")
+		cause = recordings.ErrWorkerRecordingPersistence
+	case "read-failure":
+		f.readErr = errors.New("private-capture-path")
+		cause = recordings.ErrWorkerRecordingPersistence
+	case "foreign-worker":
+		f.entry.WorkerSessionID = "foreign"
+		cause = workersessions.ErrInterruptSourceConflict
+	case "foreign-scope":
+		f.entry.FactorySessionID = "foreign"
+		cause = workersessions.ErrInterruptSourceConflict
+	case "foreign-owner":
+		f.entry.OwnerEpoch = "foreign"
+		cause = workersessions.ErrInterruptSourceConflict
+	case "missing-generation":
+		f.entry.RecordingGenerationID = ""
+		cause = recordings.ErrWorkerRecordingPersistence
+	case "changed-generation":
+		f.page.Catalog.RecordingGenerationID = "later"
+		cause = recordings.ErrWorkerRecordingPersistence
+	case "malformed":
+		cause = recordings.ErrWorkerRecordingPersistence
+	case "wrong-attempt":
+		opening.AttemptID = "later"
+		cause = workersessions.ErrInterruptSourceConflict
+	case "wrong-predecessor":
+		opening.Lineage.PredecessorWorkerSessionID = "foreign"
+		cause = workersessions.ErrInterruptSourceConflict
+	case "wrong-source-attempt":
+		opening.Lineage.PreviousAttemptID = "later"
+		cause = workersessions.ErrInterruptSourceConflict
+	}
+	payload, _ := json.Marshal(opening)
+	draft, _ := json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: payload})
+	if scenario == "malformed" {
+		draft = []byte(`{"private-capture":"corrupt"}`)
+	}
+	f.page.Opening = events.Record{Payload: draft}
+	return f, cause
+}
 
 // The coordinator's store collaborator commits a detached row, then loses
 // the acknowledgement. Load supplies either the exact row or a disputed fact.

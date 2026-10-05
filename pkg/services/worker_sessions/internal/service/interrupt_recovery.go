@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // A committed outcome is read-only authority. Never turn an incomplete stage
@@ -50,8 +51,63 @@ func (r *registry) replayDurableInterrupt(ctx context.Context, req workersession
 		return result, true, newInterruptError(result.Phase, result, err)
 	}
 	replayed, replayErr := decodeInterruptOutcome(req, record)
+	if record.Operation.Phase == "SOURCE_STOPPED" && errors.Is(replayErr, workersessions.ErrInterruptExecutionUnavailable) {
+		if err := r.inspectPendingInterruptSuccessor(ctx, req, record.Target); err != nil {
+			replayErr = newInterruptError(replayed.Phase, replayed, err)
+		}
+	}
 	r.logger.Info("worker session interrupt replay", "sessionID", req.SourceWorkerSessionID, "requestID", req.RequestID, "phase", record.Operation.Phase, "outcome", "read_only")
 	return replayed, true, replayErr
+}
+
+// An opening precedes provider admission. Inspect the reserved identity to
+// distinguish a collision from uncertain admission, but never turn either an
+// opening or its absence into authority to execute again after owner loss.
+func (r *registry) inspectPendingInterruptSuccessor(ctx context.Context, req workersessions.InterruptRequest, target recordings.WorkerControlTarget) error {
+	if r.logs == nil {
+		return nil
+	}
+	entry, err := r.logs.reader.LookupWorkerSessionCapture(ctx, req.SuccessorWorkerSessionID)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	if entry.WorkerSessionID != req.SuccessorWorkerSessionID || entry.FactorySessionID != "" || entry.OwnerEpoch != target.OwnerEpoch {
+		return workersessions.ErrInterruptSourceConflict
+	}
+	if entry.RecordingID == "" || entry.RecordingGenerationID == "" {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	page, err := r.logs.reader.ReadWorkerCapturedActivity(ctx, recordings.WorkerCapturedActivityRequest{WorkerSessionID: req.SuccessorWorkerSessionID, Limit: 1})
+	// The capture may grow between these reads; only identity is immutable.
+	entry.CommittedPosition = page.Catalog.CommittedPosition
+	if err != nil || page.Catalog != entry {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	return validatePendingInterruptOpening(page, req, target.ExpectedAttemptID)
+}
+
+func validatePendingInterruptOpening(page recordings.WorkerCapturedActivityPage, req workersessions.InterruptRequest, sourceAttempt string) error {
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if json.Unmarshal(page.Opening.Payload, &draft) != nil || draft.Kind != workers.KindSession || draft.Phase != workers.PhaseStarted ||
+		json.Unmarshal(draft.Payload, &opening) != nil {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	if opening.WorkerSessionID != req.SuccessorWorkerSessionID || opening.FactorySessionID != "" || opening.RecordingID != page.Catalog.RecordingID {
+		return workersessions.ErrInterruptSourceConflict
+	}
+	expected := continuationDispatchID(sourceAttempt, req.SuccessorWorkerSessionID)
+	if opening.DispatchID != expected || opening.AttemptID != expected || opening.Lineage == nil {
+		return workersessions.ErrInterruptSourceConflict
+	}
+	lineage := opening.Lineage
+	if lineage.PredecessorWorkerSessionID != req.SourceWorkerSessionID || lineage.PreviousDispatchID != sourceAttempt || lineage.PreviousAttemptID != sourceAttempt {
+		return workersessions.ErrInterruptSourceConflict
+	}
+	return nil
 }
 
 // The journal digest identifies the original tuple; the immutable artifact is
